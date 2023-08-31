@@ -1,4 +1,5 @@
 <script lang="ts">
+  export let nip07plugin: boolean = false;
 </script>
 
 <div class="navbar bg-neutral">
@@ -10,7 +11,11 @@
     </h4>
   </div>
   <div class="flex-none gap-4">
-    <div class="btn btn-primary normal-case">Sign up</div>
-    <div class="btn btn-outline normal-case">Login</div>
+    {#if !nip07plugin}
+      <div class="btn btn-primary normal-case">
+        Sign up
+      </div>
+    {/if}
+    <button class="btn btn-outline normal-case">Login</button>
   </div>
 </div>
