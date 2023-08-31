@@ -1,9 +1,7 @@
 <script lang="ts">
-  import Navbar from "$lib/components/navbar.svelte";
   import FeaturedRepos from "$lib/components/featured_repos.svelte";
 </script>
 
-<Navbar />
 <div class="flex flex-row">
   <div class="hero bg-pr h-[calc(100vh-4rem)] md:basis-1/2">
     <div class="hero-content text-center">
