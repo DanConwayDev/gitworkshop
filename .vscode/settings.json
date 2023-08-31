@@ -1,0 +1,6 @@
+{
+      "diffEditor.ignoreTrimWhitespace": false,
+      "editor.formatOnPaste": true,
+      "editor.formatOnSave": true,
+      "svelte.enable-ts-plugin": true
+}
