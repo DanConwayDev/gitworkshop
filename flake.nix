@@ -50,12 +50,18 @@
             pkgs.gitlint
             pkgs.nodejs
             pkgs.yarn
+            pkgs.playwright-test
           ];
+
+          PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
+
           shellHook = ''
             # auto-install git hooks
             dot_git="$(git rev-parse --git-common-dir)"
             if [[ ! -d "$dot_git/hooks" ]]; then mkdir "$dot_git/hooks"; fi
             for hook in git_hooks/* ; do ln -sf "$(pwd)/$hook" "$dot_git/hooks/" ; done
+            # Remove playwright from node_modules, so it will be taken from playwright-test
+            rm node_modules/@playwright/ -R
           '';
         };
       }
