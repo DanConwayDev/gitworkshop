@@ -21,6 +21,7 @@ const config: TestRunnerConfig = {
         expect(image).toMatchImageSnapshot({
             customSnapshotsDir,
             customSnapshotIdentifier: context.id,
+            comparisonMethod: 'ssim',
             failureThresholdType: 'percent',
             failureThreshold: 0.002,
         });
