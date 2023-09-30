@@ -9,7 +9,9 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "test-storybook": "test-storybook",
+    "test-storybook:ci": "concurrently -k -s first -n \"SB,TEST\" -c \"magenta,blue\" \"yarn build-storybook --quiet && npx http-server storybook-static --port 6006 --silent\" \"wait-on tcp:6006 && yarn test-storybook --maxWorkers=2\""
   },
   "devDependencies": {
     "@storybook/addon-a11y": "^7.4.5",
@@ -19,12 +21,16 @@
     "@storybook/blocks": "^7.4.5",
     "@storybook/svelte": "^7.4.5",
     "@storybook/sveltekit": "^7.4.5",
+    "@storybook/test-runner": "^0.13.0",
     "@storybook/testing-library": "^0.2.1",
     "@sveltejs/adapter-auto": "^2.0.0",
     "@sveltejs/adapter-node": "^1.2.3",
     "@sveltejs/kit": "^1.5.0",
     "@tailwindcss/typography": "^0.5.10",
+    "@types/jest-image-snapshot": "^6.2.1",
+    "@types/node": "^20.8.2",
     "autoprefixer": "^10.4.16",
+    "jest-image-snapshot": "^6.2.0",
     "postcss": "^8.4.30",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
