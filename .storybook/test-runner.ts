@@ -15,6 +15,7 @@ const config: TestRunnerConfig = {
             const innerHTML = await elementHandler.innerHTML();
             expect(innerHTML).toMatchSnapshot();
         }
+        else throw "cannot find storybook DOM root to take DOM screenshot"
         // Image Snapshop
         const image = await page.screenshot();
         expect(image).toMatchImageSnapshot({
