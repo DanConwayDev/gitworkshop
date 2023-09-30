@@ -1,0 +1,63 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Repo/Summary/Card Long Details test 1`] = `
+<div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+  <div class="card-body s-LKxYhcdFgLTA">
+    <h2 class="card-title s-LKxYhcdFgLTA">
+      Long Name that goes on and on and on and on a...
+    </h2>
+    <p class="s-LKxYhcdFgLTA">
+      Lorem ipsum dolor sit amet, consectetur adipi...
+    </p>
+  </div>
+</div>
+`;
+
+exports[`Repo/Summary/Card Long and No Spaces test 1`] = `
+<div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+  <div class="card-body s-LKxYhcdFgLTA">
+    <h2 class="card-title s-LKxYhcdFgLTA">
+      LongNameLongNameLongNameLongNameLongNameLongN...
+    </h2>
+    <p class="s-LKxYhcdFgLTA">
+      LoremipsumLoremipsumLoremipsumLoremipsumLorem...
+    </p>
+  </div>
+</div>
+`;
+
+exports[`Repo/Summary/Card No Details test 1`] = `
+<div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+  <div class="card-body s-LKxYhcdFgLTA">
+    <h2 class="card-title s-LKxYhcdFgLTA">
+      Untitled
+    </h2>
+    <p class="s-LKxYhcdFgLTA">
+    </p>
+  </div>
+</div>
+`;
+
+exports[`Repo/Summary/Card Short Details test 1`] = `
+<div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+  <div class="card-body s-LKxYhcdFgLTA">
+    <h2 class="card-title s-LKxYhcdFgLTA">
+      Short Name
+    </h2>
+    <p class="s-LKxYhcdFgLTA">
+      short description
+    </p>
+  </div>
+</div>
+`;
+
+exports[`Repo/Summary/Card loading test 1`] = `
+<div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
+  <div class="card-body s-LKxYhcdFgLTA">
+    <div class="text-center s-LKxYhcdFgLTA">
+      <span class="loading loading-spinner loading-lg s-LKxYhcdFgLTA">
+      </span>
+    </div>
+  </div>
+</div>
+`;

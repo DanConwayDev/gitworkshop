@@ -1,0 +1,151 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Repo/Summary/List Default test 1`] = `
+<div class="space-y-5">
+  <div class="prose">
+    <h3>
+      Featured Repositories
+    </h3>
+  </div>
+  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+    <div class="card-body s-LKxYhcdFgLTA">
+      <h2 class="card-title s-LKxYhcdFgLTA">
+        Short Name
+      </h2>
+      <p class="s-LKxYhcdFgLTA">
+        short description
+      </p>
+    </div>
+  </div>
+  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+    <div class="card-body s-LKxYhcdFgLTA">
+      <h2 class="card-title s-LKxYhcdFgLTA">
+        Long Name that goes on and on and on and on a...
+      </h2>
+      <p class="s-LKxYhcdFgLTA">
+        Lorem ipsum dolor sit amet, consectetur adipi...
+      </p>
+    </div>
+  </div>
+  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+    <div class="card-body s-LKxYhcdFgLTA">
+      <h2 class="card-title s-LKxYhcdFgLTA">
+        LongNameLongNameLongNameLongNameLongNameLongN...
+      </h2>
+      <p class="s-LKxYhcdFgLTA">
+        LoremipsumLoremipsumLoremipsumLoremipsumLorem...
+      </p>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Summary/List Empty test 1`] = `
+<div class="space-y-5">
+  <div class="prose">
+    <h3>
+      Latest
+    </h3>
+  </div>
+  <p class="prose">
+    None
+  </p>
+</div>
+`;
+
+exports[`Repo/Summary/List Loading test 1`] = `
+<div class="space-y-5">
+  <div class="prose">
+    <h3>
+      Latest
+    </h3>
+  </div>
+  <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
+    <div class="card-body s-LKxYhcdFgLTA">
+      <div class="text-center s-LKxYhcdFgLTA">
+        <span class="loading loading-spinner loading-lg s-LKxYhcdFgLTA">
+        </span>
+      </div>
+    </div>
+  </div>
+  <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
+    <div class="card-body s-LKxYhcdFgLTA">
+      <div class="text-center s-LKxYhcdFgLTA">
+        <span class="loading loading-spinner loading-lg s-LKxYhcdFgLTA">
+        </span>
+      </div>
+    </div>
+  </div>
+  <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
+    <div class="card-body s-LKxYhcdFgLTA">
+      <div class="text-center s-LKxYhcdFgLTA">
+        <span class="loading loading-spinner loading-lg s-LKxYhcdFgLTA">
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Summary/List No Title test 1`] = `
+<div class="space-y-5">
+  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+    <div class="card-body s-LKxYhcdFgLTA">
+      <h2 class="card-title s-LKxYhcdFgLTA">
+        Short Name
+      </h2>
+      <p class="s-LKxYhcdFgLTA">
+        short description
+      </p>
+    </div>
+  </div>
+  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+    <div class="card-body s-LKxYhcdFgLTA">
+      <h2 class="card-title s-LKxYhcdFgLTA">
+        Long Name that goes on and on and on and on a...
+      </h2>
+      <p class="s-LKxYhcdFgLTA">
+        Lorem ipsum dolor sit amet, consectetur adipi...
+      </p>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Summary/List Partially Loaded test 1`] = `
+<div class="space-y-5">
+  <div class="prose">
+    <h3>
+      Latest
+    </h3>
+  </div>
+  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+    <div class="card-body s-LKxYhcdFgLTA">
+      <h2 class="card-title s-LKxYhcdFgLTA">
+        Short Name
+      </h2>
+      <p class="s-LKxYhcdFgLTA">
+        short description
+      </p>
+    </div>
+  </div>
+  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+    <div class="card-body s-LKxYhcdFgLTA">
+      <h2 class="card-title s-LKxYhcdFgLTA">
+        Long Name that goes on and on and on and on a...
+      </h2>
+      <p class="s-LKxYhcdFgLTA">
+        Lorem ipsum dolor sit amet, consectetur adipi...
+      </p>
+    </div>
+  </div>
+  <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
+    <div class="card-body s-LKxYhcdFgLTA">
+      <div class="text-center s-LKxYhcdFgLTA">
+        <span class="loading loading-spinner loading-lg s-LKxYhcdFgLTA">
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+`;

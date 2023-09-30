@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ReposFeatured from "$lib/components/ReposFeatured.svelte";
+  import ReposRecent from "$lib/wrappers/ReposRecent.svelte";
 </script>
 
 <div class="flex flex-row">
@@ -13,6 +13,6 @@
     </div>
   </div>
   <div class="hero h-[calc(100vh-4rem)] md:basis-1/2">
-    <ReposFeatured />
+    <ReposRecent />
   </div>
 </div>
