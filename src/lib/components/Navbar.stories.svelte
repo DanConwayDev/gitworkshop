@@ -1,6 +1,6 @@
 <script lang="ts" context="module">
     import type { Meta } from "@storybook/svelte";
-    import Navbar from "$lib/components/navbar.svelte";
+    import Navbar from "$lib/components/Navbar.svelte";
     import { Story, Template } from "@storybook/addon-svelte-csf";
 
     export const meta: Meta<Navbar> = {
