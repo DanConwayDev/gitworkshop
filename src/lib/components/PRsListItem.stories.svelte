@@ -1,0 +1,26 @@
+<script lang="ts" context="module">
+    import type { Meta } from "@storybook/svelte";
+    import PRsListItem from "./PRsListItem.svelte";
+    import { Story, Template } from "@storybook/addon-svelte-csf";
+    import { PRsListItemArgsVectors as vectors } from "./PR.vectors";
+
+    export const meta: Meta<PRsListItem> = {
+        title: "PRs/List/Item",
+        component: PRsListItem,
+        tags: ["autodocs"],
+    };
+</script>
+
+<Template let:args>
+    <PRsListItem {...args} />
+</Template>
+
+<Story name="Short Details" args={vectors.Short} />
+
+<Story name="Long Details" args={vectors.Long} />
+
+<Story name="Long and No Spaces" args={vectors.LongNoSpaces} />
+
+<Story name="No Details" args={{}} />
+
+<Story name="loading" args={{ loading: true }} />
