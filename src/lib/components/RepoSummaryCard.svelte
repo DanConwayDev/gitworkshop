@@ -32,7 +32,7 @@
   >
     <div class="card-body">
       <div class="text-center">
-        <span class="loading loading-spinner loading-lg" />
+        <span class="loading loading-spinner loading-lg text-base-100" />
       </div>
     </div>
   </div>

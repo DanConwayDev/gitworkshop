@@ -63,7 +63,7 @@ exports[`Repo/Summary/List Loading test 1`] = `
   <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
     <div class="card-body s-LKxYhcdFgLTA">
       <div class="text-center s-LKxYhcdFgLTA">
-        <span class="loading loading-spinner loading-lg s-LKxYhcdFgLTA">
+        <span class="loading loading-spinner loading-lg text-base-100 s-LKxYhcdFgLTA">
         </span>
       </div>
     </div>
@@ -71,7 +71,7 @@ exports[`Repo/Summary/List Loading test 1`] = `
   <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
     <div class="card-body s-LKxYhcdFgLTA">
       <div class="text-center s-LKxYhcdFgLTA">
-        <span class="loading loading-spinner loading-lg s-LKxYhcdFgLTA">
+        <span class="loading loading-spinner loading-lg text-base-100 s-LKxYhcdFgLTA">
         </span>
       </div>
     </div>
@@ -79,7 +79,7 @@ exports[`Repo/Summary/List Loading test 1`] = `
   <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
     <div class="card-body s-LKxYhcdFgLTA">
       <div class="text-center s-LKxYhcdFgLTA">
-        <span class="loading loading-spinner loading-lg s-LKxYhcdFgLTA">
+        <span class="loading loading-spinner loading-lg text-base-100 s-LKxYhcdFgLTA">
         </span>
       </div>
     </div>
@@ -142,7 +142,7 @@ exports[`Repo/Summary/List Partially Loaded test 1`] = `
   <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
     <div class="card-body s-LKxYhcdFgLTA">
       <div class="text-center s-LKxYhcdFgLTA">
-        <span class="loading loading-spinner loading-lg s-LKxYhcdFgLTA">
+        <span class="loading loading-spinner loading-lg text-base-100 s-LKxYhcdFgLTA">
         </span>
       </div>
     </div>
