@@ -7,21 +7,24 @@
 
     let repos: Args[] = [];
     let loading: boolean = true;
-    let kind: number = 30017;
+    let kind: number = 30317;
     let sub = ndk.subscribe({
         kinds: [kind],
         limit,
     });
     sub.on("event", (event) => {
         if (repos.length < limit) {
-            if (event.kind == kind)
-                repos = [
-                    ...repos,
-                    {
-                        name: event.tagValue("name") || "",
-                        description: event.tagValue("description") || "",
-                    },
-                ];
+            try {
+                if (event.kind == kind)
+                    repos = [
+                        ...repos,
+                        {
+                            name: event.tagValue("name") || "",
+                            description: event.tagValue("description") || "",
+                            repo_id: event.replaceableDTag(),
+                        },
+                    ];
+            } catch {}
         } else if (loading == true) loading = false;
     });
     sub.on("eose", () => {

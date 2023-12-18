@@ -1,7 +1,9 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`Repo/Summary/Card Long Details test 1`] = `
-<div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+<a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+   href="/repo/"
+>
   <div class="card-body s-LKxYhcdFgLTA">
     <h2 class="card-title s-LKxYhcdFgLTA">
       Long Name that goes on and on and on and on a...
@@ -10,11 +12,13 @@ exports[`Repo/Summary/Card Long Details test 1`] = `
       Lorem ipsum dolor sit amet, consectetur adipi...
     </p>
   </div>
-</div>
+</a>
 `;
 
 exports[`Repo/Summary/Card Long and No Spaces test 1`] = `
-<div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+<a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+   href="/repo/"
+>
   <div class="card-body s-LKxYhcdFgLTA">
     <h2 class="card-title s-LKxYhcdFgLTA">
       LongNameLongNameLongNameLongNameLongNameLongN...
@@ -23,11 +27,13 @@ exports[`Repo/Summary/Card Long and No Spaces test 1`] = `
       LoremipsumLoremipsumLoremipsumLoremipsumLorem...
     </p>
   </div>
-</div>
+</a>
 `;
 
 exports[`Repo/Summary/Card No Details test 1`] = `
-<div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+<a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+   href="/repo/"
+>
   <div class="card-body s-LKxYhcdFgLTA">
     <h2 class="card-title s-LKxYhcdFgLTA">
       Untitled
@@ -35,11 +41,13 @@ exports[`Repo/Summary/Card No Details test 1`] = `
     <p class="s-LKxYhcdFgLTA">
     </p>
   </div>
-</div>
+</a>
 `;
 
 exports[`Repo/Summary/Card Short Details test 1`] = `
-<div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+<a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+   href="/repo/"
+>
   <div class="card-body s-LKxYhcdFgLTA">
     <h2 class="card-title s-LKxYhcdFgLTA">
       Short Name
@@ -48,7 +56,7 @@ exports[`Repo/Summary/Card Short Details test 1`] = `
       short description
     </p>
   </div>
-</div>
+</a>
 `;
 
 exports[`Repo/Summary/Card loading test 1`] = `

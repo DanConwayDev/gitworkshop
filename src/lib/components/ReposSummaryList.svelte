@@ -20,8 +20,8 @@
   {#if repos.length == 0 && !loading}
     <p class="prose">None</p>
   {/if}
-  {#each repos as { name, description }}
-    <RepoSummaryCard {name} {description} />
+  {#each repos as { name, description, repo_id }}
+    <RepoSummaryCard {name} {description} {repo_id} />
   {/each}
   {#if loading}
     <RepoSummaryCard loading={true} />

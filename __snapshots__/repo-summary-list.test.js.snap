@@ -7,7 +7,9 @@ exports[`Repo/Summary/List Default test 1`] = `
       Featured Repositories
     </h3>
   </div>
-  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+     href="/repo/"
+  >
     <div class="card-body s-LKxYhcdFgLTA">
       <h2 class="card-title s-LKxYhcdFgLTA">
         Short Name
@@ -16,8 +18,10 @@ exports[`Repo/Summary/List Default test 1`] = `
         short description
       </p>
     </div>
-  </div>
-  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+  </a>
+  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+     href="/repo/"
+  >
     <div class="card-body s-LKxYhcdFgLTA">
       <h2 class="card-title s-LKxYhcdFgLTA">
         Long Name that goes on and on and on and on a...
@@ -26,8 +30,10 @@ exports[`Repo/Summary/List Default test 1`] = `
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
     </div>
-  </div>
-  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+  </a>
+  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+     href="/repo/"
+  >
     <div class="card-body s-LKxYhcdFgLTA">
       <h2 class="card-title s-LKxYhcdFgLTA">
         LongNameLongNameLongNameLongNameLongNameLongN...
@@ -36,7 +42,7 @@ exports[`Repo/Summary/List Default test 1`] = `
         LoremipsumLoremipsumLoremipsumLoremipsumLorem...
       </p>
     </div>
-  </div>
+  </a>
 </div>
 `;
 
@@ -89,7 +95,9 @@ exports[`Repo/Summary/List Loading test 1`] = `
 
 exports[`Repo/Summary/List No Title test 1`] = `
 <div class="space-y-5">
-  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+     href="/repo/"
+  >
     <div class="card-body s-LKxYhcdFgLTA">
       <h2 class="card-title s-LKxYhcdFgLTA">
         Short Name
@@ -98,8 +106,10 @@ exports[`Repo/Summary/List No Title test 1`] = `
         short description
       </p>
     </div>
-  </div>
-  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+  </a>
+  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+     href="/repo/"
+  >
     <div class="card-body s-LKxYhcdFgLTA">
       <h2 class="card-title s-LKxYhcdFgLTA">
         Long Name that goes on and on and on and on a...
@@ -108,7 +118,7 @@ exports[`Repo/Summary/List No Title test 1`] = `
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
     </div>
-  </div>
+  </a>
 </div>
 `;
 
@@ -119,7 +129,9 @@ exports[`Repo/Summary/List Partially Loaded test 1`] = `
       Latest
     </h3>
   </div>
-  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+     href="/repo/"
+  >
     <div class="card-body s-LKxYhcdFgLTA">
       <h2 class="card-title s-LKxYhcdFgLTA">
         Short Name
@@ -128,8 +140,10 @@ exports[`Repo/Summary/List Partially Loaded test 1`] = `
         short description
       </p>
     </div>
-  </div>
-  <div class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA">
+  </a>
+  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+     href="/repo/"
+  >
     <div class="card-body s-LKxYhcdFgLTA">
       <h2 class="card-title s-LKxYhcdFgLTA">
         Long Name that goes on and on and on and on a...
@@ -138,7 +152,7 @@ exports[`Repo/Summary/List Partially Loaded test 1`] = `
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
     </div>
-  </div>
+  </a>
   <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
     <div class="card-body s-LKxYhcdFgLTA">
       <div class="text-center s-LKxYhcdFgLTA">

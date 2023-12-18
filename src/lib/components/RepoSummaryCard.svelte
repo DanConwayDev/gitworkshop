@@ -2,10 +2,12 @@
   export interface Args {
     name: string;
     description: string;
+    repo_id: string;
     loading?: boolean;
   }
   export const defaults: Args = {
     name: "",
+    repo_id: "",
     description: "",
     loading: false,
   };
@@ -14,7 +16,7 @@
 <script lang="ts">
   import { slide } from "svelte/transition";
 
-  export let { name, description, loading } = defaults;
+  export let { name, description, repo_id: repo_id, loading } = defaults;
   let short_name: string;
   $: {
     if (name.length > 45) short_name = name.slice(0, 45) + "...";
@@ -37,15 +39,16 @@
     </div>
   </div>
 {:else}
-  <div
+  <a
     transition:slide={{ duration: 50 }}
     class="card w-96 bg-primary text-primary-content"
+    href="/repo/{repo_id}"
   >
     <div class="card-body">
       <h2 class="card-title">{short_name}</h2>
       <p>{short_descrption}</p>
     </div>
-  </div>
+  </a>
 {/if}
 
 <style>
