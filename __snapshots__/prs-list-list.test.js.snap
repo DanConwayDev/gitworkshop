@@ -3,9 +3,9 @@
 exports[`PRs/List/List Default test 1`] = `
 <div class>
   <div class="prose">
-    <h3>
+    <h4>
       Open PRs
-    </h3>
+    </h4>
   </div>
   <ul class="divide-y divide-neutral-600">
     <li class="flex p-2 pt-4 hover:bg-neutral-700 cursor-pointer">
@@ -101,9 +101,9 @@ exports[`PRs/List/List Default test 1`] = `
 exports[`PRs/List/List Empty test 1`] = `
 <div class>
   <div class="prose">
-    <h3>
+    <h4>
       Open PRs
-    </h3>
+    </h4>
   </div>
   <p class="prose">
     None
@@ -116,9 +116,9 @@ exports[`PRs/List/List Empty test 1`] = `
 exports[`PRs/List/List Loading test 1`] = `
 <div class>
   <div class="prose">
-    <h3>
+    <h4>
       Open PRs
-    </h3>
+    </h4>
   </div>
   <ul class="divide-y divide-neutral-600">
     <li class="flex p-2 pt-4 ">
@@ -219,9 +219,9 @@ exports[`PRs/List/List No Title test 1`] = `
 exports[`PRs/List/List Partially Loaded test 1`] = `
 <div class>
   <div class="prose">
-    <h3>
+    <h4>
       Open PRs
-    </h3>
+    </h4>
   </div>
   <ul class="divide-y divide-neutral-600">
     <li class="flex p-2 pt-4 hover:bg-neutral-700 cursor-pointer">

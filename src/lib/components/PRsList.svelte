@@ -14,7 +14,7 @@
 <div class="">
     {#if title.length > 0}
         <div class="prose">
-            <h3>{title}</h3>
+            <h4>{title}</h4>
         </div>
     {/if}
     {#if prs.length == 0 && !loading}
