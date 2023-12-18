@@ -1,0 +1,442 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Repo/Details Long Details test 1`] = `
+<div class="max-w-md prose">
+  <h4>
+    description
+  </h4>
+  <p class="text-sm my-2 break-words">
+    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis quis nisl eget turpis congue molestie. Nulla vitae purus nec augue accumsan facilisis sed sed ligula. Vestibulum sed risus lacinia risus lacinia molestie. Ut lorem quam, consequat eget tempus in, rhoncus vel nunc. Duis efficitur a leo vel sodales. Nam id fermentum lacus. Etiam nec placerat velit. Praesent ac consectetur est. Aenean iaculis commodo enim.
+ Lorem ipsum dolor sit amet, con...
+  </p>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <h4>
+      maintainers
+    </h4>
+    <div class="badge badge-accent block my-2">
+      carole
+    </div>
+    <div class="badge badge-accent block my-2">
+      bob
+    </div>
+    <div class="badge badge-accent block my-2">
+      steve
+    </div>
+  </div>
+  <div>
+    <h4>
+      relays
+    </h4>
+    <div class="badge badge-secondary block my-2">
+      relay.damus.io
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relay.snort.social
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relayable.org
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details Long and No Spaces test 1`] = `
+<div class="max-w-md prose">
+  <h4>
+    description
+  </h4>
+  <p class="text-sm my-2 break-words">
+    LoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsum
+  </p>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <h4>
+      maintainers
+    </h4>
+    <div class="badge badge-accent block my-2">
+      carole
+    </div>
+    <div class="badge badge-accent block my-2">
+      bob
+    </div>
+    <div class="badge badge-accent block my-2">
+      steve
+    </div>
+  </div>
+  <div>
+    <h4>
+      relays
+    </h4>
+    <div class="badge badge-secondary block my-2">
+      relay.damus.io
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relay.snort.social
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relayable.org
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details No Description test 1`] = `
+<div class="max-w-md prose">
+  <div>
+  </div>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <h4>
+      maintainers
+    </h4>
+    <div class="badge badge-accent block my-2">
+      carole
+    </div>
+    <div class="badge badge-accent block my-2">
+      bob
+    </div>
+    <div class="badge badge-accent block my-2">
+      steve
+    </div>
+  </div>
+  <div>
+    <h4>
+      relays
+    </h4>
+    <div class="badge badge-secondary block my-2">
+      relay.damus.io
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relay.snort.social
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relayable.org
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details No Maintainers or Relays test 1`] = `
+<div class="max-w-md prose">
+  <h4>
+    description
+  </h4>
+  <p class="text-sm my-2 break-words">
+    short description
+  </p>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <div>
+    </div>
+  </div>
+  <div>
+    <div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details No Maintainers test 1`] = `
+<div class="max-w-md prose">
+  <h4>
+    description
+  </h4>
+  <p class="text-sm my-2 break-words">
+    short description
+  </p>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <div>
+    </div>
+  </div>
+  <div>
+    <h4>
+      relays
+    </h4>
+    <div class="badge badge-secondary block my-2">
+      relay.damus.io
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relay.snort.social
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relayable.org
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details No Name or Description test 1`] = `
+<div class="max-w-md prose">
+  <div>
+  </div>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <h4>
+      maintainers
+    </h4>
+    <div class="badge badge-accent block my-2">
+      carole
+    </div>
+    <div class="badge badge-accent block my-2">
+      bob
+    </div>
+    <div class="badge badge-accent block my-2">
+      steve
+    </div>
+  </div>
+  <div>
+    <h4>
+      relays
+    </h4>
+    <div class="badge badge-secondary block my-2">
+      relay.damus.io
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relay.snort.social
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relayable.org
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details No Relays test 1`] = `
+<div class="max-w-md prose">
+  <h4>
+    description
+  </h4>
+  <p class="text-sm my-2 break-words">
+    short description
+  </p>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <h4>
+      maintainers
+    </h4>
+    <div class="badge badge-accent block my-2">
+      carole
+    </div>
+    <div class="badge badge-accent block my-2">
+      bob
+    </div>
+    <div class="badge badge-accent block my-2">
+      steve
+    </div>
+  </div>
+  <div>
+    <div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details No Tags test 1`] = `
+<div class="max-w-md prose">
+  <h4>
+    description
+  </h4>
+  <p class="text-sm my-2 break-words">
+    short description
+  </p>
+  <div>
+  </div>
+  <div>
+    <h4>
+      maintainers
+    </h4>
+    <div class="badge badge-accent block my-2">
+      carole
+    </div>
+    <div class="badge badge-accent block my-2">
+      bob
+    </div>
+    <div class="badge badge-accent block my-2">
+      steve
+    </div>
+  </div>
+  <div>
+    <h4>
+      relays
+    </h4>
+    <div class="badge badge-secondary block my-2">
+      relay.damus.io
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relay.snort.social
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relayable.org
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details Short Details test 1`] = `
+<div class="max-w-md prose">
+  <h4>
+    description
+  </h4>
+  <p class="text-sm my-2 break-words">
+    short description
+  </p>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <div>
+    </div>
+  </div>
+  <div>
+    <h4>
+      relays
+    </h4>
+    <div class="badge badge-secondary block my-2">
+      relay.damus.io
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relay.snort.social
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relayable.org
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details loading test 1`] = `
+<div class="max-w-md prose">
+  <div class="h-5 my-3 skeleton w-20">
+  </div>
+  <div class="h-4 my-2 skeleton">
+  </div>
+  <div class="h-4 my-2 mb-3 w-2/3 skeleton">
+  </div>
+  <div>
+    <div class="badge skeleton w-20">
+    </div>
+    <div class="badge skeleton w-20">
+    </div>
+  </div>
+  <div>
+    <div class="h-5 my-3 skeleton w-20">
+    </div>
+    <div class="badge skeleton my-2 w-60 block">
+    </div>
+    <div class="badge skeleton my-2 w-40 block">
+    </div>
+  </div>
+  <div>
+    <div class="h-5 my-3 skeleton w-20">
+    </div>
+    <div class="badge skeleton my-2 w-60 block">
+    </div>
+    <div class="badge skeleton my-2 w-40 block">
+    </div>
+  </div>
+</div>
+`;
