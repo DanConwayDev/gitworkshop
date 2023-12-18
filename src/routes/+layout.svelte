@@ -5,4 +5,6 @@
 
 <Navbar />
 
-<slot />
+<div class="mx-auto lg:container">
+  <slot />
+</div>

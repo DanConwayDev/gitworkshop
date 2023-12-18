@@ -1,76 +1,88 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`Navbar Default test 1`] = `
-<div class="navbar bg-neutral">
-  <div class="flex-1">
-    <h4>
-      <span class="primary">
-        git
-      </span>
-      <span class>
-        together
-      </span>
-      <span class>
-        .xyz
-      </span>
-    </h4>
-  </div>
-  <div class="flex-none gap-4">
-    <div class="btn btn-primary normal-case">
-      Sign up
+<div class="bg-neutral">
+  <div class="mx-auto lg:container bg-neutral">
+    <div class="navbar">
+      <div class="flex-1">
+        <h4>
+          <span class="primary">
+            git
+          </span>
+          <span class>
+            together
+          </span>
+          <span class>
+            .xyz
+          </span>
+        </h4>
+      </div>
+      <div class="flex-none gap-4">
+        <div class="btn btn-primary normal-case">
+          Sign up
+        </div>
+        <button class="btn btn-outline normal-case">
+          Login
+        </button>
+      </div>
     </div>
-    <button class="btn btn-outline normal-case">
-      Login
-    </button>
   </div>
 </div>
 `;
 
 exports[`Navbar NIP07Exists test 1`] = `
-<div class="navbar bg-neutral">
-  <div class="flex-1">
-    <h4>
-      <span class="primary">
-        git
-      </span>
-      <span class>
-        together
-      </span>
-      <span class>
-        .xyz
-      </span>
-    </h4>
-  </div>
-  <div class="flex-none gap-4">
-    <button class="btn btn-outline normal-case">
-      Login
-    </button>
+<div class="bg-neutral">
+  <div class="mx-auto lg:container bg-neutral">
+    <div class="navbar">
+      <div class="flex-1">
+        <h4>
+          <span class="primary">
+            git
+          </span>
+          <span class>
+            together
+          </span>
+          <span class>
+            .xyz
+          </span>
+        </h4>
+      </div>
+      <div class="flex-none gap-4">
+        <button class="btn btn-outline normal-case">
+          Login
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 `;
 
 exports[`Navbar NoNIP07 test 1`] = `
-<div class="navbar bg-neutral">
-  <div class="flex-1">
-    <h4>
-      <span class="primary">
-        git
-      </span>
-      <span class>
-        together
-      </span>
-      <span class>
-        .xyz
-      </span>
-    </h4>
-  </div>
-  <div class="flex-none gap-4">
-    <div class="btn btn-primary normal-case">
-      Sign up
+<div class="bg-neutral">
+  <div class="mx-auto lg:container bg-neutral">
+    <div class="navbar">
+      <div class="flex-1">
+        <h4>
+          <span class="primary">
+            git
+          </span>
+          <span class>
+            together
+          </span>
+          <span class>
+            .xyz
+          </span>
+        </h4>
+      </div>
+      <div class="flex-none gap-4">
+        <div class="btn btn-primary normal-case">
+          Sign up
+        </div>
+        <button class="btn btn-outline normal-case">
+          Login
+        </button>
+      </div>
     </div>
-    <button class="btn btn-outline normal-case">
-      Login
-    </button>
   </div>
 </div>
 `;
