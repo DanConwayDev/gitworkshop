@@ -1,11 +1,13 @@
 <script lang="ts" context="module">
+    import type { NDKUserProfile } from "@nostr-dev-kit/ndk";
+
     export interface Args {
         repo_id: string;
         name: string;
         description: string;
         git_server: string;
         tags: string[];
-        maintainers: string[];
+        maintainers: (string | NDKUserProfile)[];
         relays: string[];
         loading?: boolean;
     }
@@ -77,7 +79,21 @@
         {:else}
             <h4>maintainers</h4>
             {#each maintainers as maintainer}
-                <div class="badge badge-accent block my-2">{maintainer}</div>
+                {#if typeof maintainer == "string"}
+                    <div class="badge skeleton my-2 w-40 block"></div>
+                {:else if typeof maintainer.name !== "undefined"}
+                    <div class="badge badge-accent block my-2">
+                        {maintainer.name}
+                    </div>
+                {:else if typeof maintainer.displayName !== "undefined"}
+                    <div class="badge badge-accent block my-2">
+                        {maintainer.displayName}
+                    </div>
+                {:else}
+                    <div class="badge badge-neutral block my-2">
+                        cannot find name
+                    </div>
+                {/if}
             {/each}
         {/if}
     </div>

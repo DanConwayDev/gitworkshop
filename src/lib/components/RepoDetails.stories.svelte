@@ -29,6 +29,21 @@
 
 <Story name="No Maintainers" args={vectors.NoMaintainers} />
 
+<Story
+    name="One Maintainer's Profile Not Loaded"
+    args={vectors.MaintainersOneProfileNotLoaded}
+/>
+
+<Story
+    name="One Maintainer's Profile Only Has displayName But No Name"
+    args={vectors.MaintainersOneProfileDisplayNameWithoutName}
+/>
+
+<Story
+    name="One Maintainer's Profile Has No displayName or Name"
+    args={vectors.MaintainersOneProfileNoNameOrDisplayNameBeingPresent}
+/>
+
 <Story name="No Relays" args={vectors.NoRelays} />
 
 <Story name="No Maintainers or Relays" args={vectors.NoMaintainersOrRelays} />

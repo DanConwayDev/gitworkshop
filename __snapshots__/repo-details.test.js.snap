@@ -365,6 +365,164 @@ exports[`Repo/Details No Tags test 1`] = `
 </div>
 `;
 
+exports[`Repo/Details One Maintainer's Profile Has No displayName or Name test 1`] = `
+<div class="max-w-md prose">
+  <h4>
+    description
+  </h4>
+  <p class="text-sm my-2 break-words">
+    short description
+  </p>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <h4>
+      maintainers
+    </h4>
+    <div class="badge badge-accent block my-2">
+      carole
+    </div>
+    <div class="badge badge-neutral block my-2">
+      cannot find name
+    </div>
+    <div class="badge badge-accent block my-2">
+      steve
+    </div>
+  </div>
+  <div>
+    <h4>
+      relays
+    </h4>
+    <div class="badge badge-secondary block my-2">
+      relay.damus.io
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relay.snort.social
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relayable.org
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details One Maintainer's Profile Not Loaded test 1`] = `
+<div class="max-w-md prose">
+  <h4>
+    description
+  </h4>
+  <p class="text-sm my-2 break-words">
+    short description
+  </p>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <h4>
+      maintainers
+    </h4>
+    <div class="badge badge-accent block my-2">
+      carole
+    </div>
+    <div class="badge skeleton my-2 w-40 block">
+    </div>
+    <div class="badge badge-accent block my-2">
+      steve
+    </div>
+  </div>
+  <div>
+    <h4>
+      relays
+    </h4>
+    <div class="badge badge-secondary block my-2">
+      relay.damus.io
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relay.snort.social
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relayable.org
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name test 1`] = `
+<div class="max-w-md prose">
+  <h4>
+    description
+  </h4>
+  <p class="text-sm my-2 break-words">
+    short description
+  </p>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <h4>
+      maintainers
+    </h4>
+    <div class="badge badge-accent block my-2">
+      carole
+    </div>
+    <div class="badge badge-accent block my-2">
+      bob
+    </div>
+    <div class="badge badge-accent block my-2">
+      steve
+    </div>
+  </div>
+  <div>
+    <h4>
+      relays
+    </h4>
+    <div class="badge badge-secondary block my-2">
+      relay.damus.io
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relay.snort.social
+    </div>
+    <div class="badge badge-secondary block my-2">
+      relayable.org
+    </div>
+  </div>
+</div>
+`;
+
 exports[`Repo/Details Short Details test 1`] = `
 <div class="max-w-md prose">
   <h4>

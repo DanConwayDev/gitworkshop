@@ -1,5 +1,6 @@
 import type { Args as SummaryCardArgs } from "./RepoSummaryCard.svelte";
 import type { Args as DetailsArgs } from "./RepoDetails.svelte";
+import type { NDKUserProfile } from "@nostr-dev-kit/ndk";
 
 export let RepoSummaryCardArgsVectors = {
     Short: {
@@ -29,9 +30,9 @@ let base: DetailsArgs = {
         "relayable.org",
     ],
     maintainers: [
-        "carole",
-        "bob",
-        "steve",
+        { name: "carole" } as NDKUserProfile,
+        { name: "bob" } as NDKUserProfile,
+        { name: "steve" } as NDKUserProfile,
     ],
 };
 
@@ -52,6 +53,40 @@ export let RepoDetailsArgsVectors = {
     NoNameOrDescription: { ...base, name: "", description: "" } as DetailsArgs,
     NoDescription: { ...base, description: "" } as DetailsArgs,
     NoTags: { ...base, tags: [] } as DetailsArgs,
+    MaintainersOneProfileNotLoaded: {
+        ...base, maintainers: [
+            { name: "carole" } as NDKUserProfile,
+            "pubkey",
+            { name: "steve" } as NDKUserProfile,
+
+        ]
+    } as DetailsArgs,
+    MaintainersOneProfileDisplayNameWithoutName: {
+        ...base, maintainers: [
+            { name: "carole" } as NDKUserProfile,
+            { displayName: "bob" } as NDKUserProfile,
+            { name: "steve" } as NDKUserProfile,
+
+        ]
+    } as DetailsArgs,
+    MaintainersOneProfileNameAndDisplayNamePresent: {
+        ...base, maintainers: [
+            { name: "carole" } as NDKUserProfile,
+            {
+                name: "bob", displayName: "shouldnt display"
+            } as NDKUserProfile,
+            { name: "steve" } as NDKUserProfile,
+
+        ]
+    } as DetailsArgs,
+    MaintainersOneProfileNoNameOrDisplayNameBeingPresent: {
+        ...base, maintainers: [
+            { name: "carole" } as NDKUserProfile,
+            {} as NDKUserProfile,
+            { name: "steve" } as NDKUserProfile,
+
+        ]
+    } as DetailsArgs,
     NoMaintainers: { ...base, maintainers: [] } as DetailsArgs,
     NoRelays: { ...base, relays: [] } as DetailsArgs,
     NoMaintainersOrRelays: { ...base, maintainers: [], relays: [] } as DetailsArgs,
