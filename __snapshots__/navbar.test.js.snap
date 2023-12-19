@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`Navbar Default test 1`] = `
+exports[`Navbar Default smoke-test 1`] = `
 <div class="bg-neutral">
   <div class="mx-auto lg:container bg-neutral">
     <div class="navbar">
@@ -30,7 +30,7 @@ exports[`Navbar Default test 1`] = `
 </div>
 `;
 
-exports[`Navbar NIP07Exists test 1`] = `
+exports[`Navbar NIP07Exists smoke-test 1`] = `
 <div class="bg-neutral">
   <div class="mx-auto lg:container bg-neutral">
     <div class="navbar">
@@ -57,7 +57,7 @@ exports[`Navbar NIP07Exists test 1`] = `
 </div>
 `;
 
-exports[`Navbar NoNIP07 test 1`] = `
+exports[`Navbar NoNIP07 smoke-test 1`] = `
 <div class="bg-neutral">
   <div class="mx-auto lg:container bg-neutral">
     <div class="navbar">

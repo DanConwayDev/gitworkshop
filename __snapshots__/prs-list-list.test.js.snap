@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`PRs/List/List Default test 1`] = `
+exports[`PRs/List/List Default smoke-test 1`] = `
 <div class>
   <div class="prose">
     <h4>
@@ -98,7 +98,7 @@ exports[`PRs/List/List Default test 1`] = `
 </div>
 `;
 
-exports[`PRs/List/List Empty test 1`] = `
+exports[`PRs/List/List Empty smoke-test 1`] = `
 <div class>
   <div class="prose">
     <h4>
@@ -113,7 +113,7 @@ exports[`PRs/List/List Empty test 1`] = `
 </div>
 `;
 
-exports[`PRs/List/List Loading test 1`] = `
+exports[`PRs/List/List Loading smoke-test 1`] = `
 <div class>
   <div class="prose">
     <h4>
@@ -155,7 +155,7 @@ exports[`PRs/List/List Loading test 1`] = `
 </div>
 `;
 
-exports[`PRs/List/List No Title test 1`] = `
+exports[`PRs/List/List No Title smoke-test 1`] = `
 <div class>
   <ul class="divide-y divide-neutral-600">
     <li class="flex p-2 pt-4 hover:bg-neutral-700 cursor-pointer">
@@ -216,7 +216,7 @@ exports[`PRs/List/List No Title test 1`] = `
 </div>
 `;
 
-exports[`PRs/List/List Partially Loaded test 1`] = `
+exports[`PRs/List/List Partially Loaded smoke-test 1`] = `
 <div class>
   <div class="prose">
     <h4>

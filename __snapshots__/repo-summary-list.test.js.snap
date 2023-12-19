@@ -1,44 +1,44 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`Repo/Summary/List Default test 1`] = `
+exports[`Repo/Summary/List Default smoke-test 1`] = `
 <div class="space-y-5">
   <div class="prose">
     <h3>
       Featured Repositories
     </h3>
   </div>
-  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+  <a class="card w-96 bg-primary text-primary-content"
      href="/repo/"
   >
-    <div class="card-body s-LKxYhcdFgLTA">
-      <h2 class="card-title s-LKxYhcdFgLTA">
+    <div class="card-body">
+      <h2 class="card-title svelte-jesdj">
         Short Name
       </h2>
-      <p class="s-LKxYhcdFgLTA">
+      <p class="svelte-jesdj">
         short description
       </p>
     </div>
   </a>
-  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+  <a class="card w-96 bg-primary text-primary-content"
      href="/repo/"
   >
-    <div class="card-body s-LKxYhcdFgLTA">
-      <h2 class="card-title s-LKxYhcdFgLTA">
+    <div class="card-body">
+      <h2 class="card-title svelte-jesdj">
         Long Name that goes on and on and on and on a...
       </h2>
-      <p class="s-LKxYhcdFgLTA">
+      <p class="svelte-jesdj">
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
     </div>
   </a>
-  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+  <a class="card w-96 bg-primary text-primary-content"
      href="/repo/"
   >
-    <div class="card-body s-LKxYhcdFgLTA">
-      <h2 class="card-title s-LKxYhcdFgLTA">
+    <div class="card-body">
+      <h2 class="card-title svelte-jesdj">
         LongNameLongNameLongNameLongNameLongNameLongN...
       </h2>
-      <p class="s-LKxYhcdFgLTA">
+      <p class="svelte-jesdj">
         LoremipsumLoremipsumLoremipsumLoremipsumLorem...
       </p>
     </div>
@@ -46,7 +46,7 @@ exports[`Repo/Summary/List Default test 1`] = `
 </div>
 `;
 
-exports[`Repo/Summary/List Empty test 1`] = `
+exports[`Repo/Summary/List Empty smoke-test 1`] = `
 <div class="space-y-5">
   <div class="prose">
     <h3>
@@ -59,33 +59,33 @@ exports[`Repo/Summary/List Empty test 1`] = `
 </div>
 `;
 
-exports[`Repo/Summary/List Loading test 1`] = `
+exports[`Repo/Summary/List Loading smoke-test 1`] = `
 <div class="space-y-5">
   <div class="prose">
     <h3>
       Latest
     </h3>
   </div>
-  <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
-    <div class="card-body s-LKxYhcdFgLTA">
-      <div class="text-center s-LKxYhcdFgLTA">
-        <span class="loading loading-spinner loading-lg text-base-100 s-LKxYhcdFgLTA">
+  <div class="card w-96 bg-neutral text-neutral-focus">
+    <div class="card-body">
+      <div class="text-center">
+        <span class="loading loading-spinner loading-lg text-base-100">
         </span>
       </div>
     </div>
   </div>
-  <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
-    <div class="card-body s-LKxYhcdFgLTA">
-      <div class="text-center s-LKxYhcdFgLTA">
-        <span class="loading loading-spinner loading-lg text-base-100 s-LKxYhcdFgLTA">
+  <div class="card w-96 bg-neutral text-neutral-focus">
+    <div class="card-body">
+      <div class="text-center">
+        <span class="loading loading-spinner loading-lg text-base-100">
         </span>
       </div>
     </div>
   </div>
-  <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
-    <div class="card-body s-LKxYhcdFgLTA">
-      <div class="text-center s-LKxYhcdFgLTA">
-        <span class="loading loading-spinner loading-lg text-base-100 s-LKxYhcdFgLTA">
+  <div class="card w-96 bg-neutral text-neutral-focus">
+    <div class="card-body">
+      <div class="text-center">
+        <span class="loading loading-spinner loading-lg text-base-100">
         </span>
       </div>
     </div>
@@ -93,28 +93,28 @@ exports[`Repo/Summary/List Loading test 1`] = `
 </div>
 `;
 
-exports[`Repo/Summary/List No Title test 1`] = `
+exports[`Repo/Summary/List No Title smoke-test 1`] = `
 <div class="space-y-5">
-  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+  <a class="card w-96 bg-primary text-primary-content"
      href="/repo/"
   >
-    <div class="card-body s-LKxYhcdFgLTA">
-      <h2 class="card-title s-LKxYhcdFgLTA">
+    <div class="card-body">
+      <h2 class="card-title svelte-jesdj">
         Short Name
       </h2>
-      <p class="s-LKxYhcdFgLTA">
+      <p class="svelte-jesdj">
         short description
       </p>
     </div>
   </a>
-  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+  <a class="card w-96 bg-primary text-primary-content"
      href="/repo/"
   >
-    <div class="card-body s-LKxYhcdFgLTA">
-      <h2 class="card-title s-LKxYhcdFgLTA">
+    <div class="card-body">
+      <h2 class="card-title svelte-jesdj">
         Long Name that goes on and on and on and on a...
       </h2>
-      <p class="s-LKxYhcdFgLTA">
+      <p class="svelte-jesdj">
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
     </div>
@@ -122,41 +122,41 @@ exports[`Repo/Summary/List No Title test 1`] = `
 </div>
 `;
 
-exports[`Repo/Summary/List Partially Loaded test 1`] = `
+exports[`Repo/Summary/List Partially Loaded smoke-test 1`] = `
 <div class="space-y-5">
   <div class="prose">
     <h3>
       Latest
     </h3>
   </div>
-  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+  <a class="card w-96 bg-primary text-primary-content"
      href="/repo/"
   >
-    <div class="card-body s-LKxYhcdFgLTA">
-      <h2 class="card-title s-LKxYhcdFgLTA">
+    <div class="card-body">
+      <h2 class="card-title svelte-jesdj">
         Short Name
       </h2>
-      <p class="s-LKxYhcdFgLTA">
+      <p class="svelte-jesdj">
         short description
       </p>
     </div>
   </a>
-  <a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+  <a class="card w-96 bg-primary text-primary-content"
      href="/repo/"
   >
-    <div class="card-body s-LKxYhcdFgLTA">
-      <h2 class="card-title s-LKxYhcdFgLTA">
+    <div class="card-body">
+      <h2 class="card-title svelte-jesdj">
         Long Name that goes on and on and on and on a...
       </h2>
-      <p class="s-LKxYhcdFgLTA">
+      <p class="svelte-jesdj">
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
     </div>
   </a>
-  <div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
-    <div class="card-body s-LKxYhcdFgLTA">
-      <div class="text-center s-LKxYhcdFgLTA">
-        <span class="loading loading-spinner loading-lg text-base-100 s-LKxYhcdFgLTA">
+  <div class="card w-96 bg-neutral text-neutral-focus">
+    <div class="card-body">
+      <div class="text-center">
+        <span class="loading loading-spinner loading-lg text-base-100">
         </span>
       </div>
     </div>

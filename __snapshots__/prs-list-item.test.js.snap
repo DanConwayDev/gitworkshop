@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`PRs/List/Item Long Details test 1`] = `
+exports[`PRs/List/Item Long Details smoke-test 1`] = `
 <li class="flex p-2 pt-4 hover:bg-neutral-700 cursor-pointer">
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 16 16"
@@ -25,7 +25,7 @@ exports[`PRs/List/Item Long Details test 1`] = `
 </li>
 `;
 
-exports[`PRs/List/Item Long and No Spaces test 1`] = `
+exports[`PRs/List/Item Long and No Spaces smoke-test 1`] = `
 <li class="flex p-2 pt-4 hover:bg-neutral-700 cursor-pointer">
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 16 16"
@@ -60,7 +60,7 @@ exports[`PRs/List/Item Long and No Spaces test 1`] = `
 </li>
 `;
 
-exports[`PRs/List/Item No Details test 1`] = `
+exports[`PRs/List/Item No Details smoke-test 1`] = `
 <li class="flex p-2 pt-4 hover:bg-neutral-700 cursor-pointer">
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 16 16"
@@ -84,7 +84,7 @@ exports[`PRs/List/Item No Details test 1`] = `
 </li>
 `;
 
-exports[`PRs/List/Item Short Details test 1`] = `
+exports[`PRs/List/Item Short Details smoke-test 1`] = `
 <li class="flex p-2 pt-4 hover:bg-neutral-700 cursor-pointer">
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 16 16"
@@ -119,7 +119,7 @@ exports[`PRs/List/Item Short Details test 1`] = `
 </li>
 `;
 
-exports[`PRs/List/Item loading test 1`] = `
+exports[`PRs/List/Item loading smoke-test 1`] = `
 <li class="flex p-2 pt-4 ">
   <div class="h-5 w-5 pt-1 flex-none skeleton">
   </div>

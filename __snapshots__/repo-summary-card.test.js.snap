@@ -1,69 +1,69 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`Repo/Summary/Card Long Details test 1`] = `
-<a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+exports[`Repo/Summary/Card Long Details smoke-test 1`] = `
+<a class="card w-96 bg-primary text-primary-content"
    href="/repo/"
 >
-  <div class="card-body s-LKxYhcdFgLTA">
-    <h2 class="card-title s-LKxYhcdFgLTA">
+  <div class="card-body">
+    <h2 class="card-title svelte-jesdj">
       Long Name that goes on and on and on and on a...
     </h2>
-    <p class="s-LKxYhcdFgLTA">
+    <p class="svelte-jesdj">
       Lorem ipsum dolor sit amet, consectetur adipi...
     </p>
   </div>
 </a>
 `;
 
-exports[`Repo/Summary/Card Long and No Spaces test 1`] = `
-<a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+exports[`Repo/Summary/Card Long and No Spaces smoke-test 1`] = `
+<a class="card w-96 bg-primary text-primary-content"
    href="/repo/"
 >
-  <div class="card-body s-LKxYhcdFgLTA">
-    <h2 class="card-title s-LKxYhcdFgLTA">
+  <div class="card-body">
+    <h2 class="card-title svelte-jesdj">
       LongNameLongNameLongNameLongNameLongNameLongN...
     </h2>
-    <p class="s-LKxYhcdFgLTA">
+    <p class="svelte-jesdj">
       LoremipsumLoremipsumLoremipsumLoremipsumLorem...
     </p>
   </div>
 </a>
 `;
 
-exports[`Repo/Summary/Card No Details test 1`] = `
-<a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+exports[`Repo/Summary/Card No Details smoke-test 1`] = `
+<a class="card w-96 bg-primary text-primary-content"
    href="/repo/"
 >
-  <div class="card-body s-LKxYhcdFgLTA">
-    <h2 class="card-title s-LKxYhcdFgLTA">
+  <div class="card-body">
+    <h2 class="card-title svelte-jesdj">
       Untitled
     </h2>
-    <p class="s-LKxYhcdFgLTA">
+    <p class="svelte-jesdj">
     </p>
   </div>
 </a>
 `;
 
-exports[`Repo/Summary/Card Short Details test 1`] = `
-<a class="card w-96 bg-primary text-primary-content s-LKxYhcdFgLTA"
+exports[`Repo/Summary/Card Short Details smoke-test 1`] = `
+<a class="card w-96 bg-primary text-primary-content"
    href="/repo/"
 >
-  <div class="card-body s-LKxYhcdFgLTA">
-    <h2 class="card-title s-LKxYhcdFgLTA">
+  <div class="card-body">
+    <h2 class="card-title svelte-jesdj">
       Short Name
     </h2>
-    <p class="s-LKxYhcdFgLTA">
+    <p class="svelte-jesdj">
       short description
     </p>
   </div>
 </a>
 `;
 
-exports[`Repo/Summary/Card loading test 1`] = `
-<div class="card w-96 bg-neutral text-neutral-focus s-LKxYhcdFgLTA">
-  <div class="card-body s-LKxYhcdFgLTA">
-    <div class="text-center s-LKxYhcdFgLTA">
-      <span class="loading loading-spinner loading-lg text-base-100 s-LKxYhcdFgLTA">
+exports[`Repo/Summary/Card loading smoke-test 1`] = `
+<div class="card w-96 bg-neutral text-neutral-focus">
+  <div class="card-body">
+    <div class="text-center">
+      <span class="loading loading-spinner loading-lg text-base-100">
       </span>
     </div>
   </div>

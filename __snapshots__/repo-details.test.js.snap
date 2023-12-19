@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`Repo/Details Long Details test 1`] = `
+exports[`Repo/Details Long Details smoke-test 1`] = `
 <div class="max-w-md prose">
   <h4>
     description
@@ -54,7 +54,7 @@ exports[`Repo/Details Long Details test 1`] = `
 </div>
 `;
 
-exports[`Repo/Details Long and No Spaces test 1`] = `
+exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
 <div class="max-w-md prose">
   <h4>
     description
@@ -107,7 +107,7 @@ exports[`Repo/Details Long and No Spaces test 1`] = `
 </div>
 `;
 
-exports[`Repo/Details No Description test 1`] = `
+exports[`Repo/Details No Description smoke-test 1`] = `
 <div class="max-w-md prose">
   <div>
   </div>
@@ -156,7 +156,7 @@ exports[`Repo/Details No Description test 1`] = `
 </div>
 `;
 
-exports[`Repo/Details No Maintainers or Relays test 1`] = `
+exports[`Repo/Details No Maintainers or Relays smoke-test 1`] = `
 <div class="max-w-md prose">
   <h4>
     description
@@ -189,7 +189,7 @@ exports[`Repo/Details No Maintainers or Relays test 1`] = `
 </div>
 `;
 
-exports[`Repo/Details No Maintainers test 1`] = `
+exports[`Repo/Details No Maintainers smoke-test 1`] = `
 <div class="max-w-md prose">
   <h4>
     description
@@ -232,7 +232,7 @@ exports[`Repo/Details No Maintainers test 1`] = `
 </div>
 `;
 
-exports[`Repo/Details No Name or Description test 1`] = `
+exports[`Repo/Details No Name or Description smoke-test 1`] = `
 <div class="max-w-md prose">
   <div>
   </div>
@@ -281,7 +281,7 @@ exports[`Repo/Details No Name or Description test 1`] = `
 </div>
 `;
 
-exports[`Repo/Details No Relays test 1`] = `
+exports[`Repo/Details No Relays smoke-test 1`] = `
 <div class="max-w-md prose">
   <h4>
     description
@@ -324,7 +324,7 @@ exports[`Repo/Details No Relays test 1`] = `
 </div>
 `;
 
-exports[`Repo/Details No Tags test 1`] = `
+exports[`Repo/Details No Tags smoke-test 1`] = `
 <div class="max-w-md prose">
   <h4>
     description
@@ -365,7 +365,7 @@ exports[`Repo/Details No Tags test 1`] = `
 </div>
 `;
 
-exports[`Repo/Details One Maintainer's Profile Has No displayName or Name test 1`] = `
+exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-test 1`] = `
 <div class="max-w-md prose">
   <h4>
     description
@@ -418,7 +418,7 @@ exports[`Repo/Details One Maintainer's Profile Has No displayName or Name test 1
 </div>
 `;
 
-exports[`Repo/Details One Maintainer's Profile Not Loaded test 1`] = `
+exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
 <div class="max-w-md prose">
   <h4>
     description
@@ -470,7 +470,7 @@ exports[`Repo/Details One Maintainer's Profile Not Loaded test 1`] = `
 </div>
 `;
 
-exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name test 1`] = `
+exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name smoke-test 1`] = `
 <div class="max-w-md prose">
   <h4>
     description
@@ -523,7 +523,7 @@ exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name 
 </div>
 `;
 
-exports[`Repo/Details Short Details test 1`] = `
+exports[`Repo/Details Short Details smoke-test 1`] = `
 <div class="max-w-md prose">
   <h4>
     description
@@ -566,7 +566,7 @@ exports[`Repo/Details Short Details test 1`] = `
 </div>
 `;
 
-exports[`Repo/Details loading test 1`] = `
+exports[`Repo/Details loading smoke-test 1`] = `
 <div class="max-w-md prose">
   <div class="h-5 my-3 skeleton w-20">
   </div>

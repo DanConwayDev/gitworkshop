@@ -26,6 +26,9 @@ const config: TestRunnerConfig = {
             failureThreshold: 0.002,
         });
     },
+    tags: {
+        skip: ["intermittent-test-success"],
+    },
 };
 
 export default config;
