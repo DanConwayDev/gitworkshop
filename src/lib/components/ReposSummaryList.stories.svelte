@@ -43,7 +43,6 @@
         title: "Latest",
         repos: [],
         loading: true,
-        tags: ["intermittent-test-success"],
     }}
 />
 
@@ -53,6 +52,5 @@
         title: "Latest",
         repos: [vectors.Short, vectors.Long],
         loading: true,
-        tags: ["intermittent-test-success"],
     }}
 />

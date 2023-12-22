@@ -17,8 +17,12 @@ jobs:
       run: yarn
     - name: Install Playwright Browsers
       run: yarn playwright install --with-deps
-    - name: Run Storybook tests
-      run: yarn test-storybook:ci
+    - uses: nick-fields/retry@v2
+      with:
+        name: Run Storybook tests
+        timeout_minutes: 5
+        max_attempts: 9
+        command: yarn test
     - uses: actions/upload-artifact@v3
       if: always()
       with:

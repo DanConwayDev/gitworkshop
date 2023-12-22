@@ -23,7 +23,4 @@
 
 <Story name="No Details" args={{}} />
 
-<Story
-    name="loading"
-    args={{ loading: true, tags: ["intermittent-test-success"] }}
-/>
+<Story name="loading" args={{ loading: true }} />
