@@ -34,7 +34,8 @@
   >
     <div class="card-body">
       <div class="text-center">
-        <span class="loading loading-spinner loading-lg text-base-100" />
+        <div class="h-6 mt-1 mb-3 skeleton w-40"></div>
+        <div class="h-4 mb-1 skeleton w-100"></div>
       </div>
     </div>
   </div>
