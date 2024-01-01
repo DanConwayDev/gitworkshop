@@ -7,7 +7,7 @@
         description: string;
         git_server: string;
         tags: string[];
-        maintainers: (string | NDKUserProfile)[];
+        maintainers: User[];
         relays: string[];
         loading?: boolean;
     }
@@ -19,12 +19,13 @@
         tags: [],
         maintainers: [],
         relays: [],
-        loading: false,
+        loading: true,
     };
 </script>
 
 <script lang="ts">
-    import { each } from "svelte/internal";
+    import type { User } from "./users/type";
+    import UserHeader from "./users/UserHeader.svelte";
 
     export let {
         repo_id,
@@ -79,21 +80,7 @@
         {:else}
             <h4>maintainers</h4>
             {#each maintainers as maintainer}
-                {#if typeof maintainer == "string"}
-                    <div class="badge skeleton my-2 w-40 block"></div>
-                {:else if typeof maintainer.name !== "undefined"}
-                    <div class="badge badge-accent block my-2">
-                        {maintainer.name}
-                    </div>
-                {:else if typeof maintainer.displayName !== "undefined"}
-                    <div class="badge badge-accent block my-2">
-                        {maintainer.displayName}
-                    </div>
-                {:else}
-                    <div class="badge badge-neutral block my-2">
-                        cannot find name
-                    </div>
-                {/if}
+                <UserHeader user={maintainer} />
             {/each}
         {/if}
     </div>

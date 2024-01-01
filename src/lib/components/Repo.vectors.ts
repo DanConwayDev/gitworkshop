@@ -1,6 +1,8 @@
 import type { Args as SummaryCardArgs } from "./RepoSummaryCard.svelte";
 import type { Args as DetailsArgs } from "./RepoDetails.svelte";
 import type { NDKUserProfile } from "@nostr-dev-kit/ndk";
+import type { User } from "./users/type";
+import { UserVectors, withName } from "./users/vectors";
 
 export let RepoSummaryCardArgsVectors = {
     Short: {
@@ -30,9 +32,9 @@ let base: DetailsArgs = {
         "relayable.org",
     ],
     maintainers: [
-        { name: "carole" } as NDKUserProfile,
-        { name: "bob" } as NDKUserProfile,
-        { name: "steve" } as NDKUserProfile,
+        withName(UserVectors.default, "carole"),
+        withName(UserVectors.default, "bob"),
+        withName(UserVectors.default, "steve"),
     ],
 };
 
@@ -55,35 +57,30 @@ export let RepoDetailsArgsVectors = {
     NoTags: { ...base, tags: [] } as DetailsArgs,
     MaintainersOneProfileNotLoaded: {
         ...base, maintainers: [
-            { name: "carole" } as NDKUserProfile,
-            "pubkey",
-            { name: "steve" } as NDKUserProfile,
-
+            { ...base.maintainers[0] },
+            { ...UserVectors.loading },
+            { ...base.maintainers[2] },
         ]
     } as DetailsArgs,
     MaintainersOneProfileDisplayNameWithoutName: {
         ...base, maintainers: [
-            { name: "carole" } as NDKUserProfile,
-            { displayName: "bob" } as NDKUserProfile,
-            { name: "steve" } as NDKUserProfile,
-
+            { ...base.maintainers[0] },
+            { ...UserVectors.display_name_only },
+            { ...base.maintainers[2] },
         ]
     } as DetailsArgs,
     MaintainersOneProfileNameAndDisplayNamePresent: {
         ...base, maintainers: [
-            { name: "carole" } as NDKUserProfile,
-            {
-                name: "bob", displayName: "shouldnt display"
-            } as NDKUserProfile,
-            { name: "steve" } as NDKUserProfile,
-
+            { ...base.maintainers[0] },
+            { ...UserVectors.display_name_and_name },
+            { ...base.maintainers[2] },
         ]
     } as DetailsArgs,
     MaintainersOneProfileNoNameOrDisplayNameBeingPresent: {
         ...base, maintainers: [
-            { name: "carole" } as NDKUserProfile,
-            {} as NDKUserProfile,
-            { name: "steve" } as NDKUserProfile,
+            { ...base.maintainers[0] },
+            { ...UserVectors.no_profile },
+            { ...base.maintainers[2] },
 
         ]
     } as DetailsArgs,
