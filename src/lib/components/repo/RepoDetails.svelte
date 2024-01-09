@@ -1,31 +1,11 @@
 <script lang="ts" context="module">
     import type { NDKUserProfile } from "@nostr-dev-kit/ndk";
-
-    export interface Args {
-        repo_id: string;
-        name: string;
-        description: string;
-        git_server: string;
-        tags: string[];
-        maintainers: User[];
-        relays: string[];
-        loading?: boolean;
-    }
-    export const defaults: Args = {
-        repo_id: "",
-        name: "",
-        description: "",
-        git_server: "",
-        tags: [],
-        maintainers: [],
-        relays: [],
-        loading: true,
-    };
 </script>
 
 <script lang="ts">
-    import type { User } from "./users/type";
-    import UserHeader from "./users/UserHeader.svelte";
+    import type { User } from "$lib/components/users/type";
+    import UserHeader from "$lib/components/users/UserHeader.svelte";
+    import { defaults } from "./type";
 
     export let {
         repo_id,

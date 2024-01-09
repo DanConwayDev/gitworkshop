@@ -7,7 +7,6 @@
 </script>
 
 <script lang="ts">
-    import Name from "./Name.svelte";
     import { getName, type User } from "./type";
 
     export let user: User = defaults;

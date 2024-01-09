@@ -44,7 +44,7 @@
 
 <Story
     name="displayName without name"
-    args={{ user: { ...vectors.no_profile } }}
+    args={{ user: { ...vectors.display_name_only } }}
 />
 
 <Story

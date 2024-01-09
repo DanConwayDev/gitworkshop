@@ -27,14 +27,44 @@ exports[`Repo/Details Long Details smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="badge badge-accent block my-2">
-      carole
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="carole"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        carole
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      bob
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="bob"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        bob
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      steve
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="steve"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        steve
+      </div>
     </div>
   </div>
   <div>
@@ -80,14 +110,44 @@ exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="badge badge-accent block my-2">
-      carole
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="carole"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        carole
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      bob
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="bob"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        bob
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      steve
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="steve"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        steve
+      </div>
     </div>
   </div>
   <div>
@@ -129,14 +189,44 @@ exports[`Repo/Details No Description smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="badge badge-accent block my-2">
-      carole
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="carole"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        carole
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      bob
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="bob"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        bob
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      steve
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="steve"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        steve
+      </div>
     </div>
   </div>
   <div>
@@ -254,14 +344,44 @@ exports[`Repo/Details No Name or Description smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="badge badge-accent block my-2">
-      carole
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="carole"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        carole
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      bob
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="bob"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        bob
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      steve
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="steve"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        steve
+      </div>
     </div>
   </div>
   <div>
@@ -307,14 +427,44 @@ exports[`Repo/Details No Relays smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="badge badge-accent block my-2">
-      carole
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="carole"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        carole
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      bob
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="bob"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        bob
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      steve
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="steve"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        steve
+      </div>
     </div>
   </div>
   <div>
@@ -338,14 +488,44 @@ exports[`Repo/Details No Tags smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="badge badge-accent block my-2">
-      carole
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="carole"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        carole
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      bob
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="bob"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        bob
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      steve
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="steve"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        steve
+      </div>
     </div>
   </div>
   <div>
@@ -391,14 +571,40 @@ exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-
     <h4>
       maintainers
     </h4>
-    <div class="badge badge-accent block my-2">
-      carole
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="carole"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        carole
+      </div>
     </div>
-    <div class="badge badge-neutral block my-2">
-      cannot find name
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded bg-neutral">
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        npub18669...
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      steve
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="steve"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        steve
+      </div>
     </div>
   </div>
   <div>
@@ -444,13 +650,41 @@ exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="badge badge-accent block my-2">
-      carole
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="carole"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        carole
+      </div>
     </div>
-    <div class="badge skeleton my-2 w-40 block">
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded skeleton">
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        <div class="w-24 h-4 skeleton">
+        </div>
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      steve
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="steve"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        steve
+      </div>
     </div>
   </div>
   <div>
@@ -496,14 +730,44 @@ exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name 
     <h4>
       maintainers
     </h4>
-    <div class="badge badge-accent block my-2">
-      carole
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="carole"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        carole
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      bob
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="DanConwayDev"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        DanConwayDev
+      </div>
     </div>
-    <div class="badge badge-accent block my-2">
-      steve
+    <div class="flex my-2">
+      <div class="avatar flex-none">
+        <div class="w-8 h-8 rounded">
+          <img class="my-0"
+               src="../test-profile-image.jpg"
+               alt="steve"
+          >
+        </div>
+      </div>
+      <div class="flex-auto pl-3 m-auto">
+        steve
+      </div>
     </div>
   </div>
   <div>

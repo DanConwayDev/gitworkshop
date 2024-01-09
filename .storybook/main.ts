@@ -13,6 +13,7 @@ const config: StorybookConfig = {
     name: "@storybook/sveltekit",
     options: {},
   },
+  staticDirs: ['test-assets'],
   docs: {
     autodocs: "tag",
   },

@@ -2,7 +2,7 @@
     import type { Meta } from "@storybook/svelte";
     import RepoDetails from "./RepoDetails.svelte";
     import { Story, Template } from "@storybook/addon-svelte-csf";
-    import { RepoDetailsArgsVectors as vectors } from "./Repo.vectors";
+    import { RepoDetailsArgsVectors as vectors } from "./vectors";
 
     export const meta: Meta<RepoDetails> = {
         title: "Repo/Details",

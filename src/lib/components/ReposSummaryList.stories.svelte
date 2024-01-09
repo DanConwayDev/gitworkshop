@@ -2,7 +2,7 @@
     import type { Meta } from "@storybook/svelte";
     import ReposSummaryList from "./ReposSummaryList.svelte";
     import { Story, Template } from "@storybook/addon-svelte-csf";
-    import { RepoSummaryCardArgsVectors as vectors } from "./Repo.vectors";
+    import { RepoSummaryCardArgsVectors as vectors } from "./repo/vectors";
 
     export const meta: Meta<ReposSummaryList> = {
         title: "Repo/Summary/List",

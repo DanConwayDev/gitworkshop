@@ -8,7 +8,7 @@ let base: User = {
     loading: false,
 };
 
-let image = "https://daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg";
+let image = "../test-profile-image.jpg";
 
 export let UserVectors = {
     loading: { ...base, loading: true } as User,

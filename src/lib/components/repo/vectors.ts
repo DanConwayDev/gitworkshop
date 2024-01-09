@@ -1,8 +1,8 @@
-import type { Args as SummaryCardArgs } from "./RepoSummaryCard.svelte";
-import type { Args as DetailsArgs } from "./RepoDetails.svelte";
+import type { Args as SummaryCardArgs } from "../RepoSummaryCard.svelte";
 import type { NDKUserProfile } from "@nostr-dev-kit/ndk";
-import type { User } from "./users/type";
-import { UserVectors, withName } from "./users/vectors";
+import type { User } from "../users/type";
+import { UserVectors, withName } from "../users/vectors";
+import type { Repo } from "./type";
 
 export let RepoSummaryCardArgsVectors = {
     Short: {
@@ -20,7 +20,7 @@ export let RepoSummaryCardArgsVectors = {
             "LoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsum>",
     } as SummaryCardArgs,
 };
-let base: DetailsArgs = {
+let base: Repo = {
     repo_id: "9ee507fc4357d7ee16a5d8901bedcd103f23c17d",
     name: "Short Name",
     description: "short description",
@@ -36,46 +36,47 @@ let base: DetailsArgs = {
         withName(UserVectors.default, "bob"),
         withName(UserVectors.default, "steve"),
     ],
+    loading: false,
 };
 
 export let RepoDetailsArgsVectors = {
-    Short: { ...base, } as DetailsArgs,
+    Short: { ...base, } as Repo,
     Long: {
         ...base,
         name: "Long Name that goes on and on and on and on and on and on and on and on and on",
         description:
             "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis quis nisl eget turpis congue molestie. Nulla vitae purus nec augue accumsan facilisis sed sed ligula. Vestibulum sed risus lacinia risus lacinia molestie. Ut lorem quam, consequat eget tempus in, rhoncus vel nunc. Duis efficitur a leo vel sodales. Nam id fermentum lacus. Etiam nec placerat velit. Praesent ac consectetur est. Aenean iaculis commodo enim.\n Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis quis nisl eget turpis congue molestie.",
-    } as DetailsArgs,
+    } as Repo,
     LongNoSpaces: {
         ...base,
         name: "LongNameLongNameLongNameLongNameLongNameLongNameLongNameLongName",
         description:
             "LoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsum",
-    } as DetailsArgs,
-    NoNameOrDescription: { ...base, name: "", description: "" } as DetailsArgs,
-    NoDescription: { ...base, description: "" } as DetailsArgs,
-    NoTags: { ...base, tags: [] } as DetailsArgs,
+    } as Repo,
+    NoNameOrDescription: { ...base, name: "", description: "" } as Repo,
+    NoDescription: { ...base, description: "" } as Repo,
+    NoTags: { ...base, tags: [] } as Repo,
     MaintainersOneProfileNotLoaded: {
         ...base, maintainers: [
             { ...base.maintainers[0] },
             { ...UserVectors.loading },
             { ...base.maintainers[2] },
         ]
-    } as DetailsArgs,
+    } as Repo,
     MaintainersOneProfileDisplayNameWithoutName: {
         ...base, maintainers: [
             { ...base.maintainers[0] },
             { ...UserVectors.display_name_only },
             { ...base.maintainers[2] },
         ]
-    } as DetailsArgs,
+    } as Repo,
     MaintainersOneProfileNameAndDisplayNamePresent: {
         ...base, maintainers: [
             { ...base.maintainers[0] },
             { ...UserVectors.display_name_and_name },
             { ...base.maintainers[2] },
         ]
-    } as DetailsArgs,
+    } as Repo,
     MaintainersOneProfileNoNameOrDisplayNameBeingPresent: {
         ...base, maintainers: [
             { ...base.maintainers[0] },
@@ -83,8 +84,8 @@ export let RepoDetailsArgsVectors = {
             { ...base.maintainers[2] },
 
         ]
-    } as DetailsArgs,
-    NoMaintainers: { ...base, maintainers: [] } as DetailsArgs,
-    NoRelays: { ...base, relays: [] } as DetailsArgs,
-    NoMaintainersOrRelays: { ...base, maintainers: [], relays: [] } as DetailsArgs,
+    } as Repo,
+    NoMaintainers: { ...base, maintainers: [] } as Repo,
+    NoRelays: { ...base, relays: [] } as Repo,
+    NoMaintainersOrRelays: { ...base, maintainers: [], relays: [] } as Repo,
 };
