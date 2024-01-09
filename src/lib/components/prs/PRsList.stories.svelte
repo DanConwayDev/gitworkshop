@@ -2,7 +2,7 @@
     import type { Meta } from "@storybook/svelte";
     import PRsList from "./PRsList.svelte";
     import { Story, Template } from "@storybook/addon-svelte-csf";
-    import { PRsListItemArgsVectors as vectors } from "./PR.vectors";
+    import { PRsListItemArgsVectors as vectors } from "./vectors";
 
     export const meta: Meta<PRsList> = {
         title: "PRs/List/List",

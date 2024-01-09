@@ -7,6 +7,12 @@ export interface User {
     profile?: NDKUserProfile;
 }
 
+export let defaults: User = {
+    loading: true,
+    hexpubkey: "",
+    npub: "",
+}
+
 export function getName(user: User, fallback_to_pubkey: boolean = false): string {
     return user.profile ? (
         user.profile.name

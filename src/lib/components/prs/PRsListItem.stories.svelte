@@ -2,7 +2,7 @@
     import type { Meta } from "@storybook/svelte";
     import PRsListItem from "./PRsListItem.svelte";
     import { Story, Template } from "@storybook/addon-svelte-csf";
-    import { PRsListItemArgsVectors as vectors } from "./PR.vectors";
+    import { PRsListItemArgsVectors as vectors } from "./vectors";
 
     export const meta: Meta<PRsListItem> = {
         title: "PRs/List/Item",
@@ -21,6 +21,6 @@
 
 <Story name="Long and No Spaces" args={vectors.LongNoSpaces} />
 
-<Story name="No Details" args={{}} />
+<Story name="Author Loading" args={vectors.AuthorLoading} />
 
 <Story name="loading" args={{ loading: true }} />

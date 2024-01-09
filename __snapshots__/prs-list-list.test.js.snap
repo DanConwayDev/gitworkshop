@@ -35,7 +35,7 @@ exports[`PRs/List/List Default smoke-test 1`] = `
             opened 7 days ago
           </li>
           <li class="inline">
-            fred
+            DanConwayDev
           </li>
         </ul>
       </div>
@@ -57,7 +57,7 @@ exports[`PRs/List/List Default smoke-test 1`] = `
             opened a minute ago
           </li>
           <li class="inline">
-            carole
+            DanConwayDev
           </li>
         </ul>
       </div>
@@ -89,7 +89,7 @@ exports[`PRs/List/List Default smoke-test 1`] = `
             opened 3 months ago
           </li>
           <li class="inline">
-            steve
+            DanConwayDev
           </li>
         </ul>
       </div>
@@ -185,7 +185,7 @@ exports[`PRs/List/List No Title smoke-test 1`] = `
             opened 7 days ago
           </li>
           <li class="inline">
-            fred
+            DanConwayDev
           </li>
         </ul>
       </div>
@@ -207,7 +207,7 @@ exports[`PRs/List/List No Title smoke-test 1`] = `
             opened a minute ago
           </li>
           <li class="inline">
-            carole
+            DanConwayDev
           </li>
         </ul>
       </div>
@@ -251,7 +251,7 @@ exports[`PRs/List/List Partially Loaded smoke-test 1`] = `
             opened 7 days ago
           </li>
           <li class="inline">
-            fred
+            DanConwayDev
           </li>
         </ul>
       </div>
@@ -273,7 +273,7 @@ exports[`PRs/List/List Partially Loaded smoke-test 1`] = `
             opened a minute ago
           </li>
           <li class="inline">
-            carole
+            DanConwayDev
           </li>
         </ul>
       </div>

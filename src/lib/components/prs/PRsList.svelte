@@ -2,12 +2,11 @@
     import { fade } from "svelte/transition";
     import { onMount } from "svelte";
 
-    import PRsListItem, {
-        type Args as PRsListItemArgs,
-    } from "$lib/components/PRsListItem.svelte";
+    import PRsListItem from "$lib/components/prs/PRsListItem.svelte";
+    import type { PRSummary } from "./type";
 
     export let title: string = "";
-    export let prs: PRsListItemArgs[] = [];
+    export let prs: PRSummary[] = [];
     export let loading: boolean = false;
 </script>
 
@@ -21,8 +20,8 @@
         <p class="prose">None</p>
     {/if}
     <ul class=" divide-y divide-neutral-600">
-        {#each prs as { title, comments, author, created_at }}
-            <PRsListItem {title} {comments} {author} {created_at} />
+        {#each prs as pr}
+            <PRsListItem {...pr} />
         {/each}
         {#if loading}
             <PRsListItem loading={true} />

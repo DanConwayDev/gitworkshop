@@ -9,12 +9,12 @@
     ensureSelectedRepo(repo_id);
 </script>
 
-<h1>{$selected_repo.name}</h1>
+<h1 class="mx-2 my-4">{$selected_repo.name}</h1>
 <div class="flex">
-    <div class="w-2/3">
+    <div class="w-2/3 mx-2">
         <OpenPRs {repo_id} />
     </div>
-    <div class="w-1/3 prose">
+    <div class="w-1/3 mx-2 prose">
         <RepoDetails {repo_id} />
     </div>
 </div>

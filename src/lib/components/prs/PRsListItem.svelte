@@ -1,35 +1,25 @@
 <script lang="ts" context="module">
-    export interface Args {
-        title: string;
-        comments: number;
-        author: string;
-        created_at: number | undefined;
-        loading?: boolean;
-    }
-    export const defaults: Args = {
-        title: "",
-        comments: 0,
-        author: "",
-        created_at: 0,
-        loading: false,
-    };
 </script>
 
 <script lang="ts">
     import dayjs from "dayjs";
     import relativeTime from "dayjs/plugin/relativeTime";
+    import { defaults } from "./type";
+    import { getName } from "../users/type";
 
     dayjs.extend(relativeTime);
-    export let { title, comments, author, created_at, loading } = defaults;
+    export let { title, id, comments, author, created_at, loading } = defaults;
     let short_title: string;
     let created_at_ago: string;
+    let author_name = "";
+    $: {
+        author_name = getName(author);
+    }
     $: {
         if (title.length > 70) short_title = title.slice(0, 65) + "...";
         else if (title.length == 0) short_title = "Untitled";
         else short_title = title;
         created_at_ago = created_at ? dayjs(created_at * 1000).fromNow() : "";
-    }
-    $: {
     }
 </script>
 
@@ -92,7 +82,11 @@
                     opened {created_at_ago}
                 </li>
                 <li class="inline">
-                    {author}
+                    {#if author.loading}
+                        <div class="skeleton h-3 pb-2 w-20 inline-block"></div>
+                    {:else}
+                        {author_name}
+                    {/if}
                 </li>
             </ul>
         {/if}
