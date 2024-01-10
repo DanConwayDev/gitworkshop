@@ -2,6 +2,7 @@
     import RepoDetails from "$lib/wrappers/RepoDetails.svelte";
     import OpenPRs from "$lib/wrappers/OpenPRs.svelte";
     import { ensureSelectedRepo, selected_repo } from "$lib/stores/repo";
+    import RepoHeader from "$lib/components/repo/RepoHeader.svelte";
 
     export let data: { repo_id: string };
     let repo_id = data.repo_id;
@@ -9,7 +10,7 @@
     ensureSelectedRepo(repo_id);
 </script>
 
-<h1 class="mx-2 my-4">{$selected_repo.name}</h1>
+<RepoHeader {...$selected_repo} />
 <div class="flex">
     <div class="w-2/3 mx-2">
         <OpenPRs {repo_id} />

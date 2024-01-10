@@ -1,0 +1,48 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Repo/Header Long Name smoke-test 1`] = `
+<div class="bg-base-300 py-2 border-b border-accent-content">
+  <div class="mx-auto lg:container">
+    <div class="max-w-md prose px-3">
+      <h4 class="text-sm my-1 break-words">
+        Long Name that goes on and on and on and on a...
+      </h4>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Header No Name smoke-test 1`] = `
+<div class="bg-base-300 py-2 border-b border-accent-content">
+  <div class="mx-auto lg:container">
+    <div class="max-w-md prose px-3">
+      <h4 class="text-sm my-1 break-words">
+        Untitled
+      </h4>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Header Short Name smoke-test 1`] = `
+<div class="bg-base-300 py-2 border-b border-accent-content">
+  <div class="mx-auto lg:container">
+    <div class="max-w-md prose px-3">
+      <h4 class="text-sm my-1 break-words">
+        Short Name
+      </h4>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Header loading smoke-test 1`] = `
+<div class="bg-base-300 py-2 border-b border-accent-content">
+  <div class="mx-auto lg:container">
+    <div class="max-w-md prose px-3">
+      <div class="h-5 my-2 skeleton w-28">
+      </div>
+    </div>
+  </div>
+</div>
+`;
