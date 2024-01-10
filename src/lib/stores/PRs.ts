@@ -2,7 +2,7 @@ import type { NDKEvent } from "@nostr-dev-kit/ndk";
 import { writable, type Unsubscriber, type Writable } from "svelte/store"
 import { ndk } from "./ndk";
 import type { Repo } from "$lib/components/repo/type";
-import { defaults } from "$lib/components/prs/type";
+import { summary_defaults } from "$lib/components/prs/type";
 import type { User } from "$lib/components/users/type";
 import { ensureUser, users } from "./users";
 import type { PRSummaries, PRSummary } from "$lib/components/prs/type";
@@ -56,8 +56,9 @@ export let ensurePRSummaries = (repo_id: string) => {
                         summaries: [
                             ...prs.summaries,
                             {
-                                ...defaults,
+                                ...summary_defaults,
                                 id: event.id,
+                                repo_id: repo_id,
                                 title: event.tagValue("name") || "",
                                 created_at: event.created_at,
                                 comments: 0,

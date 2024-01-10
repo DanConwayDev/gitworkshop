@@ -3,6 +3,7 @@ import { defaults as user_defaults } from "../users/type";
 
 export interface PRSummary {
     title: string;
+    repo_id: string;
     id: string;
     comments: number;
     author: User;
@@ -10,8 +11,9 @@ export interface PRSummary {
     loading: boolean;
 }
 
-export const defaults: PRSummary = {
+export const summary_defaults: PRSummary = {
     title: "",
+    repo_id: "",
     id: "",
     comments: 0,
     author: { ...user_defaults },
