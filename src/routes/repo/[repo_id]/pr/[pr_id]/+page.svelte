@@ -1,6 +1,6 @@
 <script lang="ts">
     import { ensureSelectedRepo, selected_repo } from "$lib/stores/repo";
-    import { ensurePRSummary, selected_pr_summary } from "$lib/stores/PR";
+    import { ensurePRFull, selected_pr_full } from "$lib/stores/PR";
     import PrHeader from "$lib/components/prs/PRHeader.svelte";
     import RepoHeader from "$lib/components/repo/RepoHeader.svelte";
 
@@ -13,11 +13,11 @@
     let pr_id = data.pr_id;
 
     ensureSelectedRepo(repo_id);
-    ensurePRSummary(repo_id, pr_id);
+    ensurePRFull(repo_id, pr_id);
 </script>
 
 <RepoHeader {...$selected_repo} />
-<PrHeader {...$selected_pr_summary} />
+<PrHeader {...$selected_pr_full.summary} />
 
 <div class="flex">
     <div class="w-2/3 mx-2">

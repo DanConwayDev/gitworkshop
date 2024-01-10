@@ -32,3 +32,14 @@ export const summaries_defaults: PRSummaries = {
     summaries: [],
     loading: true,
 };
+
+export interface PRFull {
+    summary: PRSummary;
+    loading: boolean;
+}
+
+export const full_defaults: PRFull = {
+    summary: { ...summary_defaults },
+    loading: true,
+};
+
