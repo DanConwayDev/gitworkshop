@@ -1,5 +1,6 @@
 <script lang="ts">
     import EventWrapper from "$lib/components/events/EventWrapper.svelte";
+    import Kind317 from "$lib/components/events/content/Kind317.svelte";
     import type { User } from "$lib/components/users/type";
     import { defaults as user_defaults } from "$lib/components/users/type";
     import { ensureUser } from "$lib/stores/users";
@@ -18,4 +19,10 @@
     });
 </script>
 
-<EventWrapper author={$author}>{event.content}</EventWrapper>
+<EventWrapper author={$author}>
+    {#if event.kind == 317}
+        <Kind317 content={event.content} tags={event.tags} />
+    {:else}
+        {event.content}
+    {/if}
+</EventWrapper>

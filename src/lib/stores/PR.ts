@@ -54,6 +54,7 @@ export let ensurePRFull = (repo_id: string, pr_id: string) => {
                         summary: {
                             ...full.summary,
                             title: event.tagValue("name") || "",
+                            descritpion: event.tagValue("description") || "",
                             created_at: event.created_at,
                             comments: 0,
                             author: {

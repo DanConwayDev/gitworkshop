@@ -5,6 +5,7 @@ import type { NDKEvent } from "@nostr-dev-kit/ndk";
 
 export interface PRSummary {
     title: string;
+    descritpion: string;
     repo_id: string;
     id: string;
     comments: number;
@@ -15,6 +16,7 @@ export interface PRSummary {
 
 export const summary_defaults: PRSummary = {
     title: "",
+    descritpion: "",
     repo_id: "",
     id: "",
     comments: 0,

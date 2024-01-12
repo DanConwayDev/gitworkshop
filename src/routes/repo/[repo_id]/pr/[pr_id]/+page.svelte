@@ -22,6 +22,9 @@
 
 <div class="flex">
     <div class="w-2/3 mx-2">
+        <div class="prose my-3">
+            {$selected_pr_full.summary.descritpion}
+        </div>
         {#if $selected_pr_full.pr_event}
             <Thread event={$selected_pr_full.pr_event} />
         {/if}

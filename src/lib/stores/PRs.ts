@@ -49,7 +49,6 @@ export let ensurePRSummaries = (repo_id: string) => {
             if (event.kind == pr_kind
                 && event.getMatchingTags("r").find(t => t[1] === `r-${repo_id}`)
             ) {
-                console.log(event);
                 pr_summaries.update(prs => {
                     return {
                         ...prs,
@@ -60,6 +59,7 @@ export let ensurePRSummaries = (repo_id: string) => {
                                 id: event.id,
                                 repo_id: repo_id,
                                 title: event.tagValue("name") || "",
+                                descritpion: event.tagValue("description") || "",
                                 created_at: event.created_at,
                                 comments: 0,
                                 author: {
@@ -76,7 +76,6 @@ export let ensurePRSummaries = (repo_id: string) => {
                 authors_unsubscribers.push(
                     ensureUser(event.pubkey).subscribe((u: User) => {
                         pr_summaries.update(prs => {
-                            console.log('test');
                             return {
                                 ...prs,
                                 summaries: prs.summaries.map(o => ({

@@ -7676,6 +7676,11 @@ parent-module@^1.0.0:
   dependencies:
     callsites "^3.0.0"
 
+parse-diff@^0.11.1:
+  version "0.11.1"
+  resolved "https://registry.yarnpkg.com/parse-diff/-/parse-diff-0.11.1.tgz#d93ca2d225abed280782bccb1476711ca9dd84f0"
+  integrity sha512-Oq4j8LAOPOcssanQkIjxosjATBIEJhCxMCxPhMu+Ci4wdNmAEdx0O+a7gzbR2PyKXgKPvRLIN5g224+dJAsKHA==
+
 parse-json@^5.0.0, parse-json@^5.2.0:
   version "5.2.0"
   resolved "https://registry.yarnpkg.com/parse-json/-/parse-json-5.2.0.tgz#c76fc66dee54231c962b22bcc8a72cf2f99753cd"
