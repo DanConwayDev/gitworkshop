@@ -3,6 +3,7 @@
     import { ensurePRFull, selected_pr_full } from "$lib/stores/PR";
     import PrHeader from "$lib/components/prs/PRHeader.svelte";
     import RepoHeader from "$lib/components/repo/RepoHeader.svelte";
+    import Thread from "$lib/wrappers/Thread.svelte";
 
     export let data: {
         repo_id: string;
@@ -21,8 +22,9 @@
 
 <div class="flex">
     <div class="w-2/3 mx-2">
-        <div>placeholder for PR summary</div>
-        <div>placeholder for all related events</div>
+        {#if $selected_pr_full.pr_event}
+            <Thread event={$selected_pr_full.pr_event} />
+        {/if}
     </div>
     <div class="w-1/3 mx-2 prose">
         <div>placeholder for status, tags, contributors</div>

@@ -50,6 +50,7 @@ export let ensurePRFull = (repo_id: string, pr_id: string) => {
                 selected_pr_full.update(full => {
                     return {
                         ...full,
+                        pr_event: event,
                         summary: {
                             ...full.summary,
                             title: event.tagValue("name") || "",

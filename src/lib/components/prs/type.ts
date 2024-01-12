@@ -1,5 +1,7 @@
 import type { User } from "../users/type";
 import { defaults as user_defaults } from "../users/type";
+import type { Event } from "../events/type";
+import type { NDKEvent } from "@nostr-dev-kit/ndk";
 
 export interface PRSummary {
     title: string;
@@ -35,11 +37,15 @@ export const summaries_defaults: PRSummaries = {
 
 export interface PRFull {
     summary: PRSummary;
+    pr_event: NDKEvent | undefined;
+    events: Event[];
     loading: boolean;
 }
 
 export const full_defaults: PRFull = {
     summary: { ...summary_defaults },
+    pr_event: undefined,
+    events: [],
     loading: true,
 };
 
