@@ -1,9 +1,14 @@
 <script lang="ts">
     import { ensureSelectedRepo, selected_repo } from "$lib/stores/repo";
-    import { ensurePRFull, selected_pr_full } from "$lib/stores/PR";
+    import {
+        ensurePRFull,
+        selected_pr_full,
+        selected_pr_replies,
+    } from "$lib/stores/PR";
     import PrHeader from "$lib/components/prs/PRHeader.svelte";
     import RepoHeader from "$lib/components/repo/RepoHeader.svelte";
     import Thread from "$lib/wrappers/Thread.svelte";
+    import PrDetails from "$lib/components/prs/PRDetails.svelte";
 
     export let data: {
         repo_id: string;
@@ -26,10 +31,18 @@
             {$selected_pr_full.summary.descritpion}
         </div>
         {#if $selected_pr_full.pr_event}
-            <Thread event={$selected_pr_full.pr_event} />
+            <Thread
+                event={$selected_pr_full.pr_event}
+                replies={$selected_pr_replies}
+            />
         {/if}
     </div>
     <div class="w-1/3 mx-2 prose">
-        <div>placeholder for status, tags, contributors</div>
+        <PrDetails
+            summary={$selected_pr_full.summary}
+            status={$selected_pr_full.status}
+            labels={$selected_pr_full.labels}
+            loading={$selected_pr_full.loading}
+        />
     </div>
 </div>

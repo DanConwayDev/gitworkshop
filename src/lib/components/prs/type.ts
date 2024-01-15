@@ -37,9 +37,22 @@ export const summaries_defaults: PRSummaries = {
     loading: true,
 };
 
+export type PRStatus = "Draft" | "Open" | "Merged" | "Closed";
+
+export function isPRStatus(potential_status: string | undefined): potential_status is PRStatus {
+    return !!potential_status
+        && (
+            potential_status == "Draft"
+            || potential_status == "Open"
+            || potential_status == "Merged"
+            || potential_status == "Closed"
+        )
+}
 export interface PRFull {
     summary: PRSummary;
     pr_event: NDKEvent | undefined;
+    status: PRStatus;
+    labels: string[];
     events: Event[];
     loading: boolean;
 }
@@ -47,6 +60,8 @@ export interface PRFull {
 export const full_defaults: PRFull = {
     summary: { ...summary_defaults },
     pr_event: undefined,
+    status: "Open",
+    labels: [],
     events: [],
     loading: true,
 };

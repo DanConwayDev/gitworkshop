@@ -5,9 +5,7 @@ import type { Repo } from "$lib/components/repo/type";
 import { defaults } from "$lib/components/repo/type";
 import type { User } from "$lib/components/users/type";
 import { ensureUser, users } from "./users";
-
-
-let repo_kind: number = 30317;
+import { repo_kind } from "$lib/kinds";
 
 export let selected_repo: Writable<Repo> = writable({ ...defaults });
 let selected_repo_id: string = "";

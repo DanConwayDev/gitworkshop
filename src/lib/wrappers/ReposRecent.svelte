@@ -1,21 +1,21 @@
 <script lang="ts">
     import type { Args } from "$lib/components/RepoSummaryCard.svelte";
     import ReposSummaryList from "$lib/components/ReposSummaryList.svelte";
+    import { repo_kind } from "$lib/kinds";
     import { ndk } from "$lib/stores/ndk";
 
     export let limit: number = 5;
 
     let repos: Args[] = [];
     let loading: boolean = true;
-    let kind: number = 30317;
     let sub = ndk.subscribe({
-        kinds: [kind],
+        kinds: [repo_kind],
         limit,
     });
     sub.on("event", (event) => {
         if (repos.length < limit) {
             try {
-                if (event.kind == kind)
+                if (event.kind == repo_kind)
                     repos = [
                         ...repos,
                         {

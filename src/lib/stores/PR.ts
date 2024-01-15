@@ -3,9 +3,9 @@ import { writable, type Unsubscriber, type Writable } from "svelte/store"
 import { ndk } from "./ndk";
 import type { User } from "$lib/components/users/type";
 import { ensureUser } from "./users";
-import { type PRFull, full_defaults } from "$lib/components/prs/type";
+import { type PRFull, full_defaults, isPRStatus, type PRStatus } from "$lib/components/prs/type";
+import { pr_kind, pr_status_kind } from "$lib/kinds";
 
-let pr_kind: number = 318;
 
 export let selected_pr_full: Writable<PRFull> = writable({ ...full_defaults });
 
@@ -13,12 +13,21 @@ let selected_repo_id: string = "";
 let selected_pr_id: string = "";
 let pr_summary_author_unsubsriber: Unsubscriber | undefined;
 
+export let selected_pr_replies: Writable<NDKEvent[]> = writable([]);
+
+let selected_pr_status_date = 0;
+
 export let ensurePRFull = (repo_id: string, pr_id: string) => {
     if (selected_pr_id == pr_id) return;
-    if (pr_id == "") return selected_pr_full.set({ ...full_defaults });
+    if (pr_id == "") {
+        selected_pr_full.set({ ...full_defaults });
+        return;
+    }
 
     selected_repo_id = repo_id;
     selected_pr_id = pr_id;
+    selected_pr_status_date = 0;
+    selected_pr_replies.set([]);
 
     selected_pr_full.update(full => {
         return {
@@ -90,6 +99,44 @@ export let ensurePRFull = (repo_id: string, pr_id: string) => {
                     ...full.summary,
                     loading: false,
                 },
+            };
+        });
+    });
+
+    let sub_replies = ndk.subscribe({
+        "#e": [pr_id],
+    });
+
+    sub_replies.on("event", (event: NDKEvent) => {
+        if (event.kind == pr_status_kind
+            && event.created_at && selected_pr_status_date < event.created_at
+            && event.getMatchingTags("t").length === 1
+            && event.getMatchingTags("t")[0].length > 1
+        ) {
+            let potential_status = event.getMatchingTags("t")[0][1];
+
+            if (isPRStatus(potential_status)) {
+                selected_pr_status_date = event.created_at;
+                selected_pr_full.update(full => {
+                    return {
+                        ...full,
+                        status: potential_status as PRStatus,
+                    };
+                });
+            }
+        }
+        selected_pr_replies.update(replies => {
+            return [
+                ...replies,
+                event,
+            ];
+        });
+    });
+
+    sub.on("eose", () => {
+        selected_pr_full.update(full => {
+            return {
+                ...full,
                 loading: false,
             };
         });

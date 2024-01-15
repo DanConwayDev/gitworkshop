@@ -7,18 +7,26 @@
     import { onDestroy } from "svelte";
     import EventCard from "./EventCard.svelte";
     import ThreadWrapper from "$lib/components/events/ThreadWrapper.svelte";
+    import { writable } from "svelte/store";
 
     export let event: NDKEvent;
 
-    let replies = ndk.storeSubscribe({
-        "#e": [event.id],
-    });
+    export let replies: NDKEvent[] | undefined = undefined;
+
+    let replies_store = replies
+        ? writable(replies)
+        : ndk.storeSubscribe({
+              "#e": [event.id],
+          });
+    $: {
+        if (replies) replies_store.set(replies);
+    }
 </script>
 
 <EventCard {event} />
 
 <ThreadWrapper>
-    {#each $replies as event}
+    {#each $replies_store as event}
         <EventCard {event} />
     {/each}
 </ThreadWrapper>

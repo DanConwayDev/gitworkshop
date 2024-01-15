@@ -3,6 +3,7 @@
     import Kind317 from "$lib/components/events/content/Kind317.svelte";
     import type { User } from "$lib/components/users/type";
     import { defaults as user_defaults } from "$lib/components/users/type";
+    import { patch_kind } from "$lib/kinds";
     import { ensureUser } from "$lib/stores/users";
     import type { NDKEvent } from "@nostr-dev-kit/ndk";
     import { onDestroy } from "svelte";
@@ -20,7 +21,7 @@
 </script>
 
 <EventWrapper author={$author}>
-    {#if event.kind == 317}
+    {#if event.kind == patch_kind}
         <Kind317 content={event.content} tags={event.tags} />
     {:else}
         {event.content}
