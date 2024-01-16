@@ -1,15 +1,21 @@
 /** @type {import('tailwindcss').Config} */
+
+
 export default {
-    content: [ './src/**/*.{svelte,js,ts}' ],
+  content: ['./src/**/*.{svelte,js,ts}'],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        "base-400": "#16171e",
+      },
+    },
   },
-  plugins: [ 
+  plugins: [
     require('@tailwindcss/typography'),
     require('daisyui'),
   ],
   daisyui: {
-    themes: [ 'dracula'],
+    themes: ['dracula'],
   }
 }
 

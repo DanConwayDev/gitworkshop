@@ -1,29 +1,30 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`Navbar Default smoke-test 1`] = `
-<div class="bg-neutral">
-  <div class="mx-auto lg:container bg-neutral">
-    <div class="navbar">
-      <div class="flex-1">
-        <h4>
-          <span class="primary">
-            git
-          </span>
-          <span class>
-            together
-          </span>
-          <span class>
-            .xyz
-          </span>
-        </h4>
-      </div>
-      <div class="flex-none gap-4">
-        <div class="btn btn-primary normal-case">
-          Sign up
+<div class="bg-base-400">
+  <div class="mx-auto lg:container">
+    <div class="px-3">
+      <div class="navbar">
+        <div class="navbar-start">
         </div>
-        <button class="btn btn-outline normal-case">
-          Login
-        </button>
+        <div class="navbar-center">
+          <h4 class="align-middle text-sm font-mono">
+            <span class="text-primary">
+              git
+            </span>
+            <span class="text-primary">
+              workshop
+            </span>
+            <span class>
+              .net
+            </span>
+          </h4>
+        </div>
+        <div class="navbar-end gap-4">
+          <div class="btn normal-case btn-sm btn-ghost">
+            Sign up
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -31,26 +32,30 @@ exports[`Navbar Default smoke-test 1`] = `
 `;
 
 exports[`Navbar NIP07Exists smoke-test 1`] = `
-<div class="bg-neutral">
-  <div class="mx-auto lg:container bg-neutral">
-    <div class="navbar">
-      <div class="flex-1">
-        <h4>
-          <span class="primary">
-            git
-          </span>
-          <span class>
-            together
-          </span>
-          <span class>
-            .xyz
-          </span>
-        </h4>
-      </div>
-      <div class="flex-none gap-4">
-        <button class="btn btn-outline normal-case">
-          Login
-        </button>
+<div class="bg-base-400">
+  <div class="mx-auto lg:container">
+    <div class="px-3">
+      <div class="navbar">
+        <div class="navbar-start">
+        </div>
+        <div class="navbar-center">
+          <h4 class="align-middle text-sm font-mono">
+            <span class="text-primary">
+              git
+            </span>
+            <span class="text-primary">
+              workshop
+            </span>
+            <span class>
+              .net
+            </span>
+          </h4>
+        </div>
+        <div class="navbar-end gap-4">
+          <button class="btn normal-case btn-sm btn-ghost">
+            Login
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -58,29 +63,30 @@ exports[`Navbar NIP07Exists smoke-test 1`] = `
 `;
 
 exports[`Navbar NoNIP07 smoke-test 1`] = `
-<div class="bg-neutral">
-  <div class="mx-auto lg:container bg-neutral">
-    <div class="navbar">
-      <div class="flex-1">
-        <h4>
-          <span class="primary">
-            git
-          </span>
-          <span class>
-            together
-          </span>
-          <span class>
-            .xyz
-          </span>
-        </h4>
-      </div>
-      <div class="flex-none gap-4">
-        <div class="btn btn-primary normal-case">
-          Sign up
+<div class="bg-base-400">
+  <div class="mx-auto lg:container">
+    <div class="px-3">
+      <div class="navbar">
+        <div class="navbar-start">
         </div>
-        <button class="btn btn-outline normal-case">
-          Login
-        </button>
+        <div class="navbar-center">
+          <h4 class="align-middle text-sm font-mono">
+            <span class="text-primary">
+              git
+            </span>
+            <span class="text-primary">
+              workshop
+            </span>
+            <span class>
+              .net
+            </span>
+          </h4>
+        </div>
+        <div class="navbar-end gap-4">
+          <div class="btn normal-case btn-sm btn-ghost">
+            Sign up
+          </div>
+        </div>
       </div>
     </div>
   </div>

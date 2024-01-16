@@ -9,6 +9,7 @@
     import RepoHeader from "$lib/components/repo/RepoHeader.svelte";
     import Thread from "$lib/wrappers/Thread.svelte";
     import PrDetails from "$lib/components/prs/PRDetails.svelte";
+    import Container from "$lib/components/Container.svelte";
 
     export let data: {
         repo_id: string;
@@ -25,24 +26,26 @@
 <RepoHeader {...$selected_repo} />
 <PrHeader {...$selected_pr_full.summary} />
 
-<div class="flex">
-    <div class="w-2/3 mx-2">
-        <div class="prose my-3">
-            {$selected_pr_full.summary.descritpion}
+<Container>
+    <div class="md:flex">
+        <div class="md:w-2/3 md:mr-2">
+            <div class="prose my-3">
+                {$selected_pr_full.summary.descritpion}
+            </div>
+            {#if $selected_pr_full.pr_event}
+                <Thread
+                    event={$selected_pr_full.pr_event}
+                    replies={$selected_pr_replies}
+                />
+            {/if}
         </div>
-        {#if $selected_pr_full.pr_event}
-            <Thread
-                event={$selected_pr_full.pr_event}
-                replies={$selected_pr_replies}
+        <div class="w-1/3 ml-2 prose hidden md:flex">
+            <PrDetails
+                summary={$selected_pr_full.summary}
+                status={$selected_pr_full.status}
+                labels={$selected_pr_full.labels}
+                loading={$selected_pr_full.loading}
             />
-        {/if}
+        </div>
     </div>
-    <div class="w-1/3 mx-2 prose">
-        <PrDetails
-            summary={$selected_pr_full.summary}
-            status={$selected_pr_full.status}
-            labels={$selected_pr_full.labels}
-            loading={$selected_pr_full.loading}
-        />
-    </div>
-</div>
+</Container>

@@ -1,46 +1,46 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`Repo/Header Long Name smoke-test 1`] = `
-<div class="bg-base-300 py-2 border-b border-accent-content">
+<div class="bg-base-300 border-b border-accent-content">
   <div class="mx-auto lg:container">
-    <div class="max-w-md prose px-3">
-      <h4 class="text-sm my-1 break-words">
-        Long Name that goes on and on and on and on a...
-      </h4>
-    </div>
+    <a href="/repo/9ee507fc4357d7ee16a5d8901bedcd103f23c17d"
+       class="btn btn-ghost text-sm break-words strong mt-0 mb-0 px-3"
+    >
+      Long Name that goes on and on and on and on a...
+    </a>
   </div>
 </div>
 `;
 
 exports[`Repo/Header No Name smoke-test 1`] = `
-<div class="bg-base-300 py-2 border-b border-accent-content">
+<div class="bg-base-300 border-b border-accent-content">
   <div class="mx-auto lg:container">
-    <div class="max-w-md prose px-3">
-      <h4 class="text-sm my-1 break-words">
-        Untitled
-      </h4>
-    </div>
+    <a href="/repo/9ee507fc4357d7ee16a5d8901bedcd103f23c17d"
+       class="btn btn-ghost text-sm break-words strong mt-0 mb-0 px-3"
+    >
+      Untitled
+    </a>
   </div>
 </div>
 `;
 
 exports[`Repo/Header Short Name smoke-test 1`] = `
-<div class="bg-base-300 py-2 border-b border-accent-content">
+<div class="bg-base-300 border-b border-accent-content">
   <div class="mx-auto lg:container">
-    <div class="max-w-md prose px-3">
-      <h4 class="text-sm my-1 break-words">
-        Short Name
-      </h4>
-    </div>
+    <a href="/repo/9ee507fc4357d7ee16a5d8901bedcd103f23c17d"
+       class="btn btn-ghost text-sm break-words strong mt-0 mb-0 px-3"
+    >
+      Short Name
+    </a>
   </div>
 </div>
 `;
 
 exports[`Repo/Header loading smoke-test 1`] = `
-<div class="bg-base-300 py-2 border-b border-accent-content">
+<div class="bg-base-300 border-b border-accent-content">
   <div class="mx-auto lg:container">
-    <div class="max-w-md prose px-3">
-      <div class="h-5 my-2 skeleton w-28">
+    <div class="p-3">
+      <div class="h-6 skeleton w-28 bg-base-200">
       </div>
     </div>
   </div>
