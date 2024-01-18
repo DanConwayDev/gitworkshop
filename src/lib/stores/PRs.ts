@@ -1,11 +1,11 @@
-import type { NDKEvent } from "@nostr-dev-kit/ndk";
+import { NDKRelaySet, type NDKEvent } from "@nostr-dev-kit/ndk";
 import { writable, type Unsubscriber, type Writable } from "svelte/store"
 import { ndk } from "./ndk";
-import type { Repo } from "$lib/components/repo/type";
 import { summary_defaults } from "$lib/components/prs/type";
 import type { User } from "$lib/components/users/type";
-import { ensureUser, users } from "./users";
-import type { PRSummaries, PRSummary } from "$lib/components/prs/type";
+import { ensureUser } from "./users";
+import type { PRSummaries } from "$lib/components/prs/type";
+import { ensureSelectedRepo } from "./repo";
 
 export let pr_summaries: Writable<PRSummaries> = writable({
     id: "",
@@ -19,7 +19,7 @@ let selected_repo_id: string = "";
 
 let authors_unsubscribers: Unsubscriber[] = [];
 
-export let ensurePRSummaries = (repo_id: string) => {
+export let ensurePRSummaries = async (repo_id: string) => {
     if (selected_repo_id == repo_id) return;
     if (repo_id == "") return pr_summaries.set({
         id: "",
@@ -28,6 +28,9 @@ export let ensurePRSummaries = (repo_id: string) => {
     });
 
     selected_repo_id = repo_id;
+
+    let repo = await ensureSelectedRepo(repo_id);
+
     pr_summaries.update(prs => {
         return {
             ...prs,
@@ -38,11 +41,15 @@ export let ensurePRSummaries = (repo_id: string) => {
     authors_unsubscribers.forEach(u => u());
     authors_unsubscribers = [];
 
-    let sub = ndk.subscribe({
-        kinds: [pr_kind],
-        '#r': [`r-${repo_id}`],
-        limit: 50,
-    });
+    let sub = ndk.subscribe(
+        {
+            kinds: [pr_kind],
+            '#r': [`r-${repo_id}`],
+            limit: 50,
+        },
+        {},
+        NDKRelaySet.fromRelayUrls(repo.relays, ndk),
+    );
 
     sub.on("event", (event: NDKEvent) => {
         try {

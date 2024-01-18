@@ -1,10 +1,12 @@
 <script lang="ts">
     import { ndk } from "$lib/stores/ndk";
-    import { NDKEvent, type NDKTag } from "@nostr-dev-kit/ndk";
+    import { NDKEvent, NDKRelaySet, type NDKTag } from "@nostr-dev-kit/ndk";
     import type { PRStatus } from "./type";
     import { selected_pr_full } from "$lib/stores/PR";
     import { load } from "../../../routes/repo/[repo_id]/+page";
     import { patch_kind } from "$lib/kinds";
+    import { getLoggedInUserRelays, logged_in_user } from "$lib/stores/users";
+    import { selected_repo } from "$lib/stores/repo";
 
     export let status: PRStatus = "Draft";
     export let repo_id: string = "";
@@ -12,19 +14,41 @@
 
     let loading = false;
 
+    let edit_mode = false;
+    $: {
+        edit_mode =
+            $logged_in_user !== undefined && repo_id === $selected_repo.repo_id;
+    }
+
     async function changeStatus(new_status: PRStatus) {
         let event = new NDKEvent(ndk);
-        // TODO: use random custom kind for status instead of NIP32?
         event.kind = patch_kind;
         event.tags.push(["t", new_status]);
         event.tags.push(["e", pr_id]);
         event.tags.push(["r", `r-${repo_id}`]);
-        event.sign();
         loading = true;
-        // TODO send to repo relays, current user relay and pr event pubkey relays
+        let relays = [...$selected_repo.relays];
         try {
-            // TODO: check if we are signed in a signer is in ndk
-            // let res = await event.publish();
+            event.sign();
+        } catch {
+            alert("failed to sign event");
+        }
+        try {
+            let user_relays = await getLoggedInUserRelays();
+            relays = [
+                ...relays,
+                ...(user_relays.ndk_relays
+                    ? user_relays.ndk_relays.writeRelayUrls
+                    : []),
+                // TODO: pr event pubkey relays
+            ];
+        } catch {
+            alert("failed to get user relays");
+        }
+        try {
+            let res = await event.publish(
+                NDKRelaySet.fromRelayUrls(relays, ndk),
+            );
             selected_pr_full.update((pr_full) => {
                 if (pr_full.summary.id !== pr_id) return pr_full;
                 return {
@@ -47,6 +71,7 @@
             class:btn-success={status === "Open"}
             class:btn-primary={status === "Merged"}
             class:btn-neutral={status === "Draft" || status === "Closed"}
+            class:cursor-default={edit_mode}
             class="btn btn-success btn-sm mr-6 align-middle"
         >
             {#if status === "Open"}
@@ -94,64 +119,68 @@
                 >
                 Draft
             {/if}
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                class="h-5 w-5s flex-none fill-success-content"
-                ><path
-                    fill="currentColor"
-                    d="M11.646 15.146L5.854 9.354a.5.5 0 0 1 .353-.854h11.586a.5.5 0 0 1 .353.854l-5.793 5.792a.5.5 0 0 1-.707 0"
-                /></svg
-            >
+            {#if edit_mode}
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    class="h-5 w-5s flex-none fill-success-content"
+                    ><path
+                        fill="currentColor"
+                        d="M11.646 15.146L5.854 9.354a.5.5 0 0 1 .353-.854h11.586a.5.5 0 0 1 .353.854l-5.793 5.792a.5.5 0 0 1-.707 0"
+                    /></svg
+                >
+            {/if}
         </div>
-        <ul
-            tabIndex={0}
-            class="dropdown-content z-[1] menu p-2 ml-0 shadow bg-base-300 rounded-box w-52"
-        >
-            {#if status !== "Draft"}
-                <li class="pl-0">
-                    <button
-                        on:click={() => {
-                            changeStatus("Draft");
-                        }}
-                        class="btn btn-neutral btn-sm mx-2 align-middle"
-                        >Draft</button
-                    >
-                </li>
-            {/if}
-            {#if status !== "Open"}
-                <li class="pl-0">
-                    <button
-                        on:click={() => {
-                            changeStatus("Open");
-                        }}
-                        class="btn btn-success btn-sm mx-2 align-middle"
-                        >Open</button
-                    >
-                </li>
-            {/if}
-            {#if status !== "Merged"}
-                <li class="pl-0">
-                    <button
-                        on:click={() => {
-                            changeStatus("Merged");
-                        }}
-                        class="btn btn-primary btn-sm mx-2 align-middle"
-                        >Merged</button
-                    >
-                </li>
-            {/if}
-            {#if status !== "Closed"}
-                <li class="pl-0">
-                    <button
-                        on:click={() => {
-                            changeStatus("Closed");
-                        }}
-                        class="btn btn-neutral btn-sm mx-2 align-middle"
-                        >Closed</button
-                    >
-                </li>
-            {/if}
-        </ul>
+        {#if edit_mode}
+            <ul
+                tabIndex={0}
+                class="dropdown-content z-[1] menu p-2 ml-0 shadow bg-base-300 rounded-box w-52"
+            >
+                {#if status !== "Draft"}
+                    <li class="pl-0">
+                        <button
+                            on:click={() => {
+                                changeStatus("Draft");
+                            }}
+                            class="btn btn-neutral btn-sm mx-2 align-middle"
+                            >Draft</button
+                        >
+                    </li>
+                {/if}
+                {#if status !== "Open"}
+                    <li class="pl-0">
+                        <button
+                            on:click={() => {
+                                changeStatus("Open");
+                            }}
+                            class="btn btn-success btn-sm mx-2 align-middle"
+                            >Open</button
+                        >
+                    </li>
+                {/if}
+                {#if status !== "Merged"}
+                    <li class="pl-0">
+                        <button
+                            on:click={() => {
+                                changeStatus("Merged");
+                            }}
+                            class="btn btn-primary btn-sm mx-2 align-middle"
+                            >Merged</button
+                        >
+                    </li>
+                {/if}
+                {#if status !== "Closed"}
+                    <li class="pl-0">
+                        <button
+                            on:click={() => {
+                                changeStatus("Closed");
+                            }}
+                            class="btn btn-neutral btn-sm mx-2 align-middle"
+                            >Closed</button
+                        >
+                    </li>
+                {/if}
+            </ul>
+        {/if}
     </div>
 {/if}
