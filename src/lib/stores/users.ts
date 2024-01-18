@@ -116,16 +116,12 @@ export let getUserRelays = async (hexpubkey: string): Promise<UserRelays> => {
             unsubscriber = user_relays[hexpubkey].subscribe(querying_user_relays => {
                 if (querying_user_relays && !querying_user_relays.loading) {
                     res(querying_user_relays);
-                    unsubscriber();
+                    if (unsubscriber) unsubscriber();
                 }
             });
         }
         else {
             user_relays[hexpubkey] = writable({
-                loading: true,
-                ndk_relays: undefined,
-            });
-            logged_in_user_relays.set({
                 loading: true,
                 ndk_relays: undefined,
             });
@@ -138,43 +134,4 @@ export let getUserRelays = async (hexpubkey: string): Promise<UserRelays> => {
             res(querying_user_relays);
         }
     });
-
-};
-
-export let logged_in_user_relays: Writable<undefined | UserRelays> = writable(undefined);
-
-export let getLoggedInUserRelays = async (): Promise<UserRelays> => {
-    return new Promise(async (res, rej) => {
-        let user_relays = get(logged_in_user_relays);
-        if (user_relays) {
-            if (!user_relays.loading) return res(user_relays);
-            let unsubscriber = logged_in_user_relays.subscribe(user_relays => {
-                if (user_relays && !user_relays.loading) {
-                    res(user_relays);
-                    unsubscriber();
-                }
-            });
-        }
-        else {
-            let unsubscriber: Unsubscriber;
-            unsubscriber = logged_in_user.subscribe(async user => {
-                if (user) {
-                    if (unsubscriber) unsubscriber();
-                    logged_in_user_relays.set({
-                        loading: true,
-                        ndk_relays: undefined,
-                    });
-                    let relay_list = await ndk.getUser({ hexpubkey: user.hexpubkey }).relayList();
-                    let user_relays = {
-                        loading: false,
-                        ndk_relays: relay_list,
-                    };
-                    logged_in_user_relays.set({ ...user_relays });
-
-                    res(user_relays);
-                }
-            });
-        }
-    });
-
 };

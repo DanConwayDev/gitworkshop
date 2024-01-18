@@ -3,9 +3,8 @@
     import { NDKEvent, NDKRelaySet, type NDKTag } from "@nostr-dev-kit/ndk";
     import type { PRStatus } from "./type";
     import { selected_pr_full } from "$lib/stores/PR";
-    import { load } from "../../../routes/repo/[repo_id]/+page";
     import { patch_kind } from "$lib/kinds";
-    import { getLoggedInUserRelays, logged_in_user } from "$lib/stores/users";
+    import { getUserRelays, logged_in_user } from "$lib/stores/users";
     import { selected_repo } from "$lib/stores/repo";
 
     export let status: PRStatus = "Draft";
@@ -21,6 +20,7 @@
     }
 
     async function changeStatus(new_status: PRStatus) {
+        if (!$logged_in_user) return;
         let event = new NDKEvent(ndk);
         event.kind = patch_kind;
         event.tags.push(["t", new_status]);
@@ -34,7 +34,7 @@
             alert("failed to sign event");
         }
         try {
-            let user_relays = await getLoggedInUserRelays();
+            let user_relays = await getUserRelays($logged_in_user.hexpubkey);
             relays = [
                 ...relays,
                 ...(user_relays.ndk_relays
