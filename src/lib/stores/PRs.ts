@@ -1,4 +1,4 @@
-import { NDKRelaySet, type NDKEvent } from "@nostr-dev-kit/ndk";
+import { NDKRelaySet, type NDKEvent, NDKSubscription } from "@nostr-dev-kit/ndk";
 import { writable, type Unsubscriber, type Writable } from "svelte/store"
 import { ndk } from "./ndk";
 import { summary_defaults } from "$lib/components/prs/type";
@@ -18,6 +18,8 @@ let pr_kind: number = 318;
 let selected_repo_id: string = "";
 
 let authors_unsubscribers: Unsubscriber[] = [];
+
+let sub: NDKSubscription;
 
 export let ensurePRSummaries = async (repo_id: string) => {
     if (selected_repo_id == repo_id) return;
@@ -41,13 +43,17 @@ export let ensurePRSummaries = async (repo_id: string) => {
     authors_unsubscribers.forEach(u => u());
     authors_unsubscribers = [];
 
-    let sub = ndk.subscribe(
+    if (sub) sub.stop();
+
+    sub = ndk.subscribe(
         {
             kinds: [pr_kind],
             '#r': [`r-${repo_id}`],
             limit: 50,
         },
-        {},
+        {
+            closeOnEose: false,
+        },
         NDKRelaySet.fromRelayUrls(repo.relays, ndk),
     );
 

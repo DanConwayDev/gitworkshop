@@ -1,4 +1,4 @@
-import { NDKRelaySet, type NDKEvent } from "@nostr-dev-kit/ndk";
+import { NDKRelaySet, type NDKEvent, NDKSubscription } from "@nostr-dev-kit/ndk";
 import { writable, type Unsubscriber, type Writable } from "svelte/store"
 import { ndk } from "./ndk";
 import type { User } from "$lib/components/users/type";
@@ -16,6 +16,10 @@ let pr_summary_author_unsubsriber: Unsubscriber | undefined;
 export let selected_pr_replies: Writable<NDKEvent[]> = writable([]);
 
 let selected_pr_status_date = 0;
+
+let sub: NDKSubscription;
+
+let sub_replies: NDKSubscription;
 
 export let ensurePRFull = (repo_id: string, pr_id: string) => {
     if (selected_pr_id == pr_id) return;
@@ -46,14 +50,17 @@ export let ensurePRFull = (repo_id: string, pr_id: string) => {
     new Promise(async (r) => {
         let repo = await ensureSelectedRepo(repo_id);
 
-        let sub = ndk.subscribe(
+        if (sub) sub.stop();
+        sub = ndk.subscribe(
             {
                 ids: [pr_id],
                 kinds: [pr_kind],
                 '#r': [`r-${repo_id}`],
                 limit: 50,
             },
-            {},
+            {
+                closeOnEose: false,
+            },
             NDKRelaySet.fromRelayUrls(repo.relays, ndk),
         );
 
@@ -114,11 +121,14 @@ export let ensurePRFull = (repo_id: string, pr_id: string) => {
             });
         });
 
-        let sub_replies = ndk.subscribe(
+        if (sub_replies) sub_replies.stop();
+        sub_replies = ndk.subscribe(
             {
                 "#e": [pr_id],
             },
-            {},
+            {
+                closeOnEose: false
+            },
             NDKRelaySet.fromRelayUrls(repo.relays, ndk),
         );
 

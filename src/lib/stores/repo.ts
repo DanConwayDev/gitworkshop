@@ -1,4 +1,4 @@
-import { NDKRelaySet } from "@nostr-dev-kit/ndk";
+import { NDKRelaySet, NDKSubscription } from "@nostr-dev-kit/ndk";
 import { writable, type Unsubscriber, type Writable, get } from "svelte/store"
 import { base_relays, ndk } from "./ndk";
 import type { Repo } from "$lib/components/repo/type";
@@ -12,6 +12,7 @@ let selected_repo_id: string = "";
 
 let maintainers_unsubscribers: Unsubscriber[] = [];
 
+let sub: NDKSubscription;
 export let ensureSelectedRepo = async (repo_id: string): Promise<Repo> => {
     if (selected_repo_id == repo_id) {
         return new Promise(r => {
@@ -27,13 +28,17 @@ export let ensureSelectedRepo = async (repo_id: string): Promise<Repo> => {
         })
     }
     selected_repo_id = repo_id;
-    let sub = ndk.subscribe(
+
+    if (sub) sub.stop();
+    sub = ndk.subscribe(
         {
             kinds: [repo_kind],
             '#d': [repo_id],
             limit: 1,
         },
-        {},
+        {
+            closeOnEose: false,
+        },
         NDKRelaySet.fromRelayUrls(base_relays, ndk),
     );
 
