@@ -29,6 +29,9 @@ export let ensurePRFull = (repo_id: string, pr_id: string) => {
         return;
     }
 
+    if (sub) sub.stop();
+    if (sub_replies) sub_replies.stop();
+
     selected_pr_repo_id = repo_id;
     selected_pr_id = pr_id;
     selected_pr_status_date = 0;
@@ -50,7 +53,6 @@ export let ensurePRFull = (repo_id: string, pr_id: string) => {
     new Promise(async (r) => {
         let repo = await ensureSelectedRepo(repo_id);
 
-        if (sub) sub.stop();
         sub = ndk.subscribe(
             {
                 ids: [pr_id],
@@ -121,7 +123,6 @@ export let ensurePRFull = (repo_id: string, pr_id: string) => {
             });
         });
 
-        if (sub_replies) sub_replies.stop();
         sub_replies = ndk.subscribe(
             {
                 "#e": [pr_id],

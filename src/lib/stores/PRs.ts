@@ -25,27 +25,20 @@ let sub: NDKSubscription;
 
 export let ensurePRSummaries = async (repo_id: string) => {
     if (selected_repo_id == repo_id) return;
-    if (repo_id == "") return pr_summaries.set({
-        id: "",
+    pr_summaries.set({
+        id: repo_id,
         summaries: [],
-        loading: false,
+        loading: repo_id !== "",
     });
+
+    if (sub) sub.stop();
+    if (sub_statuses) sub_statuses.stop();
+    authors_unsubscribers.forEach(u => u());
+    authors_unsubscribers = [];
 
     selected_repo_id = repo_id;
 
     let repo = await ensureSelectedRepo(repo_id);
-
-    pr_summaries.update(prs => {
-        return {
-            ...prs,
-            id: repo_id,
-            loading: true,
-        };
-    });
-    authors_unsubscribers.forEach(u => u());
-    authors_unsubscribers = [];
-
-    if (sub) sub.stop();
 
     sub = ndk.subscribe(
         {
