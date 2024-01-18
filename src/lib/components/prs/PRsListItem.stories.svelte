@@ -23,4 +23,12 @@
 
 <Story name="Author Loading" args={vectors.AuthorLoading} />
 
+<Story name="Status Loading" args={vectors.StatusLoading} />
+
+<Story name="Status Draft" args={vectors.StatusDraft} />
+
+<Story name="Status Closed" args={vectors.StatusClosed} />
+
+<Story name="Status Merged" args={vectors.StatusMerged} />
+
 <Story name="loading" args={{ loading: true }} />

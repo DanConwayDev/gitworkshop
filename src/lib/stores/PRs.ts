@@ -1,11 +1,13 @@
 import { NDKRelaySet, type NDKEvent, NDKSubscription } from "@nostr-dev-kit/ndk";
 import { writable, type Unsubscriber, type Writable } from "svelte/store"
 import { ndk } from "./ndk";
-import { summary_defaults } from "$lib/components/prs/type";
+import { isPRStatus, summary_defaults } from "$lib/components/prs/type";
 import type { User } from "$lib/components/users/type";
 import { ensureUser } from "./users";
-import type { PRSummaries } from "$lib/components/prs/type";
+import type { PRStatus, PRSummaries } from "$lib/components/prs/type";
 import { ensureSelectedRepo } from "./repo";
+import { pr_status_kind } from "$lib/kinds";
+import type { Repo } from "$lib/components/repo/type";
 
 export let pr_summaries: Writable<PRSummaries> = writable({
     id: "",
@@ -104,10 +106,75 @@ export let ensurePRSummaries = async (repo_id: string) => {
     });
     sub.on("eose", () => {
         pr_summaries.update(prs => {
+            getAndUpdatePRStatus(prs, repo);
             return {
                 ...prs,
                 loading: false,
             };
         });
     });
+}
+
+let sub_statuses: NDKSubscription;
+
+function getAndUpdatePRStatus(prs: PRSummaries, repo: Repo): void {
+    if (sub_statuses) sub_statuses.stop();
+    sub_statuses = ndk.subscribe(
+        {
+            kinds: [pr_status_kind],
+            "#e": prs.summaries.map(pr => pr.id),
+            '#r': [`r-${prs.id}`],
+        },
+        {
+            closeOnEose: false,
+        },
+        NDKRelaySet.fromRelayUrls(repo.relays, ndk),
+    );
+    sub_statuses.on("event", (event: NDKEvent) => {
+        let tagged_pr_event = event.tagValue('e');
+        if (event.kind == pr_status_kind
+            && tagged_pr_event
+            && event.created_at
+            && event.getMatchingTags("t").length === 1
+            && event.getMatchingTags("t")[0].length > 1
+        ) {
+            let potential_status = event.getMatchingTags("t")[0][1];
+
+            if (isPRStatus(potential_status)) {
+                pr_summaries.update(prs => {
+                    return {
+                        ...prs,
+                        summaries: prs.summaries.map(o => {
+                            if (
+                                o.id === tagged_pr_event
+                                && event.created_at
+                                && o.status_date < event.created_at
+                            ) {
+                                return {
+                                    ...o,
+                                    status: potential_status as PRStatus,
+                                    status_date: event.created_at,
+                                }
+                            }
+
+                            return o;
+                        }),
+                    }
+                });
+            }
+        }
+    });
+
+    sub_statuses.on("eose", () => {
+        pr_summaries.update(prs => {
+            return {
+                ...prs,
+                summaries: prs.summaries.map(o => ({
+                    ...o,
+                    status: o.status || "Open",
+                })),
+            }
+        });
+    });
+
 }

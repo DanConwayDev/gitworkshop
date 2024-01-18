@@ -5,19 +5,23 @@ import { UserVectors } from "../users/vectors";
 
 dayjs.extend(relativeTime);
 
+let Short = {
+    title: "short title",
+    author: { ...UserVectors.default },
+    created_at: dayjs().subtract(7, 'days').unix(),
+    comments: 2,
+    status: "Open",
+    loading: false,
+} as PRSummary;
+
 export let PRsListItemArgsVectors = {
-    Short: {
-        title: "short title",
-        author: { ...UserVectors.default },
-        created_at: dayjs().subtract(7, 'days').unix(),
-        comments: 2,
-        loading: false,
-    } as PRSummary,
+    Short,
     Long: {
         title: "rather long title that goes on and on and on and on and on and on and on and on and on and on and on and on and on and on and on",
         author: { ...UserVectors.default },
         created_at: dayjs().subtract(1, 'minute').unix(),
         comments: 0,
+        status: "Open",
         loading: false,
     } as PRSummary,
     LongNoSpaces: {
@@ -25,6 +29,7 @@ export let PRsListItemArgsVectors = {
         author: { ...UserVectors.default },
         created_at: dayjs().subtract(3, 'month').subtract(3, 'days').unix(),
         comments: 1,
+        status: "Open",
         loading: false,
     } as PRSummary,
     AuthorLoading: {
@@ -32,6 +37,23 @@ export let PRsListItemArgsVectors = {
         author: { ...UserVectors.loading },
         created_at: dayjs().subtract(3, 'month').subtract(3, 'days').unix(),
         comments: 1,
+        status: "Open",
         loading: false,
+    } as PRSummary,
+    StatusLoading: {
+        ...Short,
+        status: undefined,
+    } as PRSummary,
+    StatusDraft: {
+        ...Short,
+        status: "Draft",
+    } as PRSummary,
+    StatusClosed: {
+        ...Short,
+        status: "Closed",
+    } as PRSummary,
+    StatusMerged: {
+        ...Short,
+        status: "Merged",
     } as PRSummary,
 };

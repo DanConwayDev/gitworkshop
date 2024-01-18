@@ -3,7 +3,7 @@
     import UserHeader from "../users/UserHeader.svelte";
     import StatusSelector from "./StatusSelector.svelte";
 
-    export let { summary, status, labels, loading } = { ...full_defaults };
+    export let { summary, labels, loading } = { ...full_defaults };
 </script>
 
 <div class="max-w-md">
@@ -26,7 +26,7 @@
         {:else}
             <h4>Status</h4>
             <StatusSelector
-                {status}
+                status={summary.status}
                 repo_id={summary.repo_id}
                 pr_id={summary.id}
             />

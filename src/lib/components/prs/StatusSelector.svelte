@@ -2,13 +2,13 @@
     import { ndk } from "$lib/stores/ndk";
     import { NDKEvent, NDKRelaySet, type NDKTag } from "@nostr-dev-kit/ndk";
     import type { PRStatus } from "./type";
-    import { selected_pr_full } from "$lib/stores/PR";
+    import { selected_pr_full, selected_pr_replies } from "$lib/stores/PR";
     import { pr_status_kind } from "$lib/kinds";
     import { getUserRelays, logged_in_user } from "$lib/stores/users";
     import { selected_repo } from "$lib/stores/repo";
     import Status from "$lib/components/prs/Status.svelte";
 
-    export let status: PRStatus = "Draft";
+    export let status: PRStatus | undefined = undefined;
     export let repo_id: string = "";
     export let pr_id: string = "";
 
@@ -54,15 +54,20 @@
                 if (pr_full.summary.id !== pr_id) return pr_full;
                 return {
                     ...pr_full,
-                    status: new_status,
+                    summary: {
+                        ...pr_full.summary,
+                        status: new_status,
+                        status_date: event.created_at || 0,
+                    },
                 };
             });
+            selected_pr_replies.update((responses) => [...responses, event]);
             loading = false;
         } catch {}
     }
 </script>
 
-{#if loading}
+{#if loading || !status}
     <Status />
 {:else}
     <div class="dropdown">

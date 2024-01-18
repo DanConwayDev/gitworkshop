@@ -33,7 +33,7 @@ exports[`PRs/Status Draft smoke-test 1`] = `
 `;
 
 exports[`PRs/Status Loading smoke-test 1`] = `
-<div class="skeleton w-28 h-8 rounded-md">
+<div class="skeleton w-24 h-8 rounded-md inline-block align-middle">
 </div>
 `;
 
@@ -68,7 +68,7 @@ exports[`PRs/Status Open Edit Mode smoke-test 1`] = `
   Open
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 24 24"
-       class="h-5 w-5s flex-none fill-success-content"
+       class="h-5 w-5 flex-none fill-success-content"
   >
     <path fill="currentColor"
           d="M11.646 15.146L5.854 9.354a.5.5 0 0 1 .353-.854h11.586a.5.5 0 0 1 .353.854l-5.793 5.792a.5.5 0 0 1-.707 0"

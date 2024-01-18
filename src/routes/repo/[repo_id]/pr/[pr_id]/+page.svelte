@@ -75,7 +75,6 @@
             <div class="w-1/3 ml-2 prose hidden md:flex">
                 <PrDetails
                     summary={$selected_pr_full.summary}
-                    status={$selected_pr_full.status}
                     labels={$selected_pr_full.labels}
                     loading={$selected_pr_full.loading}
                 />

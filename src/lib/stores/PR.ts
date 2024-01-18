@@ -145,7 +145,12 @@ export let ensurePRFull = (repo_id: string, pr_id: string) => {
                     selected_pr_full.update(full => {
                         return {
                             ...full,
-                            status: potential_status as PRStatus,
+                            summary: {
+                                ...full.summary,
+                                status: potential_status as PRStatus,
+                                // this wont be 0 as we are ensuring it is not undefined above
+                                status_date: event.created_at || 0,
+                            },
                         };
                     });
                 }
@@ -158,10 +163,14 @@ export let ensurePRFull = (repo_id: string, pr_id: string) => {
             });
         });
 
-        sub.on("eose", () => {
+        sub_replies.on("eose", () => {
             selected_pr_full.update(full => {
                 let updated = {
                     ...full,
+                    summary: {
+                        ...full.summary,
+                        status: full.summary.status || "Open",
+                    },
                     loading: false,
                 };
                 if (full.summary.loading === false) {

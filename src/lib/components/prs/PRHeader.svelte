@@ -10,8 +10,18 @@
     import Status from "./Status.svelte";
 
     dayjs.extend(relativeTime);
-    export let { title, id, repo_id, comments, author, created_at, loading } =
-        summary_defaults;
+    export let {
+        title,
+        descritpion,
+        id,
+        repo_id,
+        comments,
+        status,
+        status_date,
+        author,
+        created_at,
+        loading,
+    } = summary_defaults;
     let short_title: string;
     let created_at_ago: string;
     let author_name = "";
@@ -51,7 +61,7 @@
             </div>
             <div class="pt-1">
                 <div class="inline mr-3 align-middle">
-                    <Status status="Open" />
+                    <Status {status} />
                 </div>
                 <div class="inline mr-3 align-middle">
                     opened {created_at_ago}

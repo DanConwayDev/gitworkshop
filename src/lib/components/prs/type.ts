@@ -9,6 +9,8 @@ export interface PRSummary {
     repo_id: string;
     id: string;
     comments: number;
+    status: undefined | PRStatus,
+    status_date: number,
     author: User;
     created_at: number | undefined;
     loading: boolean;
@@ -20,6 +22,8 @@ export const summary_defaults: PRSummary = {
     repo_id: "",
     id: "",
     comments: 0,
+    status: undefined,
+    status_date: 0,
     author: { ...user_defaults },
     created_at: 0,
     loading: true,
@@ -51,7 +55,6 @@ export function isPRStatus(potential_status: string | undefined): potential_stat
 export interface PRFull {
     summary: PRSummary;
     pr_event: NDKEvent | undefined;
-    status: PRStatus;
     labels: string[];
     events: Event[];
     loading: boolean;
@@ -60,7 +63,6 @@ export interface PRFull {
 export const full_defaults: PRFull = {
     summary: { ...summary_defaults },
     pr_event: undefined,
-    status: "Open",
     labels: [],
     events: [],
     loading: true,
