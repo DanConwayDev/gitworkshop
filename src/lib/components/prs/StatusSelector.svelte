@@ -61,7 +61,6 @@
                     },
                 };
             });
-            selected_pr_replies.update((responses) => [...responses, event]);
             loading = false;
         } catch {}
     }
