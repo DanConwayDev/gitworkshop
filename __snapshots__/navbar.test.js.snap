@@ -21,8 +21,78 @@ exports[`Navbar Default smoke-test 1`] = `
           </h4>
         </div>
         <div class="navbar-end gap-4">
-          <div class="btn normal-case btn-sm btn-ghost">
-            Sign up
+          <div class="h-8 skeleton w-20">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Navbar Logged in smoke-test 1`] = `
+<div class="bg-base-400">
+  <div class="mx-auto lg:container">
+    <div class="px-3">
+      <div class="navbar">
+        <div class="navbar-start">
+        </div>
+        <div class="navbar-center">
+          <h4 class="align-middle text-sm font-mono">
+            <span class="text-primary">
+              git
+            </span>
+            <span class="text-primary">
+              workshop
+            </span>
+            <span class>
+              .net
+            </span>
+          </h4>
+        </div>
+        <div class="navbar-end gap-4">
+          <div class="flex my-2">
+            <div class="avatar flex-none">
+              <div class="w-8 h-8 rounded">
+                <img class="my-0"
+                     src="../test-profile-image.jpg"
+                     alt="DanConwayDev"
+                >
+              </div>
+            </div>
+            <div class="flex-auto pl-3 m-auto">
+              DanConwayDev
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Navbar NIP07 Loading smoke-test 1`] = `
+<div class="bg-base-400">
+  <div class="mx-auto lg:container">
+    <div class="px-3">
+      <div class="navbar">
+        <div class="navbar-start">
+        </div>
+        <div class="navbar-center">
+          <h4 class="align-middle text-sm font-mono">
+            <span class="text-primary">
+              git
+            </span>
+            <span class="text-primary">
+              workshop
+            </span>
+            <span class>
+              .net
+            </span>
+          </h4>
+        </div>
+        <div class="navbar-end gap-4">
+          <div class="h-8 skeleton w-20">
           </div>
         </div>
       </div>

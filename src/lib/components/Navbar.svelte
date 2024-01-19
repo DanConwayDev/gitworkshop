@@ -1,15 +1,11 @@
 <script lang="ts">
-  import {
-    checkForNip07Plugin,
-    logged_in_user,
-    login,
-    nip07_plugin,
-  } from "$lib/stores/users";
-  import { onMount } from "svelte";
   import Container from "./Container.svelte";
   import UserHeader from "./users/UserHeader.svelte";
+  import type { User } from "./users/type";
 
-  onMount(checkForNip07Plugin);
+  export let logged_in_user: User | undefined = undefined;
+  export let nip07_plugin: boolean | undefined = undefined;
+  export let login_function: Function = () => {};
 </script>
 
 <div class="bg-base-400">
@@ -24,14 +20,14 @@
         </h4>
       </div>
       <div class="navbar-end gap-4">
-        {#if $logged_in_user}
-          <UserHeader user={$logged_in_user} />
-        {:else if $nip07_plugin === undefined}
+        {#if logged_in_user}
+          <UserHeader user={logged_in_user} />
+        {:else if nip07_plugin === undefined}
           <div class="h-8 skeleton w-20"></div>
-        {:else if $nip07_plugin}
+        {:else if nip07_plugin}
           <button
             on:click={() => {
-              login();
+              login_function();
             }}
             class="btn normal-case btn-sm btn-ghost">Login</button
           >

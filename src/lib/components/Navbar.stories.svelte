@@ -2,6 +2,7 @@
     import type { Meta } from "@storybook/svelte";
     import Navbar from "$lib/components/Navbar.svelte";
     import { Story, Template } from "@storybook/addon-svelte-csf";
+    import { UserVectors } from "$lib/components/users/vectors";
 
     export const meta: Meta<Navbar> = {
         title: "Navbar",
@@ -16,6 +17,16 @@
 
 <Story name="Default" />
 
-<Story name="NoNIP07" args={{ nip07plugin: false }} />
+<Story name="NIP07 Loading" args={{ nip07_plugin: undefined }} />
 
-<Story name="NIP07Exists" args={{ nip07plugin: true }} />
+<Story name="NoNIP07" args={{ nip07_plugin: false }} />
+
+<Story
+    name="NIP07Exists"
+    args={{ nip07_plugin: true, logged_in_user: undefined }}
+/>
+
+<Story
+    name="Logged in"
+    args={{ nip07_plugin: true, logged_in_user: { ...UserVectors.default } }}
+/>
