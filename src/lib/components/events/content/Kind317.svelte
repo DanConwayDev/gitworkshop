@@ -29,7 +29,12 @@
     <div class="bg-base-200 p-1 rounded-b">
         <table class="table table-xs table-zebra">
             <tr>
-                <td class="text-xs">Changes:</td>
+                <td class="text-xs">Changes: </td>
+                <td class="text-right">
+                    <span class="text-xs font-mono"
+                        >{commit_id.substring(0, 8)}</span
+                    >
+                </td>
             </tr>
             {#each files as file}
                 <tr>
