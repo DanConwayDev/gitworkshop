@@ -6,9 +6,12 @@
   <div class="hero bg-pr h-[calc(100vh-4rem)] md:basis-1/2">
     <div class="hero-content text-center">
       <div class="max-w-md prose">
-        <h1>GitTogether.xyz</h1>
-        <h3>Code Collaboration over Nostr</h3>
-        <p>Pull Requests, Issues, and Git Branch State</p>
+        <h1 class="mb-2">
+          <span class="text-purple-600">git</span><span class="text-white"
+            >workshop</span
+          ><span class="text-neutral">.io</span>
+        </h1>
+        <p class="mt-3">permissionless alternative to GitHub over nostr</p>
       </div>
     </div>
   </div>
