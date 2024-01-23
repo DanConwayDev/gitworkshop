@@ -3,6 +3,7 @@
     import ReposSummaryList from "$lib/components/ReposSummaryList.svelte";
     import { repo_kind } from "$lib/kinds";
     import { ndk } from "$lib/stores/ndk";
+    import { onDestroy } from "svelte";
 
     export let limit: number = 5;
 
@@ -29,6 +30,10 @@
     });
     sub.on("eose", () => {
         if (loading == true) loading = false;
+    });
+
+    onDestroy(() => {
+        sub.stop();
     });
 </script>
 

@@ -8,17 +8,19 @@ exports[`Navbar Default smoke-test 1`] = `
         <div class="navbar-start">
         </div>
         <div class="navbar-center">
-          <h4 class="align-middle text-sm font-mono">
-            <span class="text-primary">
+          <a class="align-middle text-lg"
+             href="/"
+          >
+            <span class="text-purple-600">
               git
             </span>
-            <span class="text-primary">
+            <span class="text-white">
               workshop
             </span>
-            <span class>
-              .net
+            <span class="text-neutral">
+              .io
             </span>
-          </h4>
+          </a>
         </div>
         <div class="navbar-end gap-4">
           <div class="h-8 skeleton w-20">
@@ -38,17 +40,19 @@ exports[`Navbar Logged in smoke-test 1`] = `
         <div class="navbar-start">
         </div>
         <div class="navbar-center">
-          <h4 class="align-middle text-sm font-mono">
-            <span class="text-primary">
+          <a class="align-middle text-lg"
+             href="/"
+          >
+            <span class="text-purple-600">
               git
             </span>
-            <span class="text-primary">
+            <span class="text-white">
               workshop
             </span>
-            <span class>
-              .net
+            <span class="text-neutral">
+              .io
             </span>
-          </h4>
+          </a>
         </div>
         <div class="navbar-end gap-4">
           <div class="flex my-2">
@@ -79,17 +83,19 @@ exports[`Navbar NIP07 Loading smoke-test 1`] = `
         <div class="navbar-start">
         </div>
         <div class="navbar-center">
-          <h4 class="align-middle text-sm font-mono">
-            <span class="text-primary">
+          <a class="align-middle text-lg"
+             href="/"
+          >
+            <span class="text-purple-600">
               git
             </span>
-            <span class="text-primary">
+            <span class="text-white">
               workshop
             </span>
-            <span class>
-              .net
+            <span class="text-neutral">
+              .io
             </span>
-          </h4>
+          </a>
         </div>
         <div class="navbar-end gap-4">
           <div class="h-8 skeleton w-20">
@@ -109,17 +115,19 @@ exports[`Navbar NIP07Exists smoke-test 1`] = `
         <div class="navbar-start">
         </div>
         <div class="navbar-center">
-          <h4 class="align-middle text-sm font-mono">
-            <span class="text-primary">
+          <a class="align-middle text-lg"
+             href="/"
+          >
+            <span class="text-purple-600">
               git
             </span>
-            <span class="text-primary">
+            <span class="text-white">
               workshop
             </span>
-            <span class>
-              .net
+            <span class="text-neutral">
+              .io
             </span>
-          </h4>
+          </a>
         </div>
         <div class="navbar-end gap-4">
           <button class="btn normal-case btn-sm btn-ghost">
@@ -140,17 +148,19 @@ exports[`Navbar NoNIP07 smoke-test 1`] = `
         <div class="navbar-start">
         </div>
         <div class="navbar-center">
-          <h4 class="align-middle text-sm font-mono">
-            <span class="text-primary">
+          <a class="align-middle text-lg"
+             href="/"
+          >
+            <span class="text-purple-600">
               git
             </span>
-            <span class="text-primary">
+            <span class="text-white">
               workshop
             </span>
-            <span class>
-              .net
+            <span class="text-neutral">
+              .io
             </span>
-          </h4>
+          </a>
         </div>
         <div class="navbar-end gap-4">
           <div class="btn normal-case btn-sm btn-ghost">

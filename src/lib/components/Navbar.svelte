@@ -13,11 +13,11 @@
     <div class="navbar">
       <div class="navbar-start"></div>
       <div class="navbar-center">
-        <h4 class="align-middle text-sm font-mono">
-          <span class="text-primary">git</span><span class="text-primary"
+        <a class="align-middle text-lg" href="/">
+          <span class="text-purple-600">git</span><span class="text-white"
             >workshop</span
-          ><span class="">.net</span>
-        </h4>
+          ><span class="text-neutral">.io</span>
+        </a>
       </div>
       <div class="navbar-end gap-4">
         {#if logged_in_user}
