@@ -6,6 +6,7 @@
   export let logged_in_user: User | undefined = undefined;
   export let nip07_plugin: boolean | undefined = undefined;
   export let login_function: Function = () => {};
+  export let singup_function: Function = () => {};
 </script>
 
 <div class="bg-base-400">
@@ -32,7 +33,12 @@
             class="btn normal-case btn-sm btn-ghost">Login</button
           >
         {:else}
-          <div class="btn normal-case btn-sm btn-ghost">Sign up</div>
+          <button
+            on:click={() => {
+              singup_function();
+            }}
+            class="btn normal-case btn-sm btn-ghost">Sign up</button
+          >
         {/if}
       </div>
     </div>

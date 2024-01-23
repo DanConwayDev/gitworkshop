@@ -8,6 +8,12 @@
     import { onMount } from "svelte";
     import Navbar from "$lib/components/Navbar.svelte";
 
+    let singup_function: Function = () => {
+        alert(
+            "a NIP-07 browser extension is required. currently no signup page",
+        );
+    };
+
     onMount(checkForNip07Plugin);
 </script>
 
@@ -15,4 +21,5 @@
     logged_in_user={$logged_in_user}
     nip07_plugin={$nip07_plugin}
     login_function={login}
+    {singup_function}
 />
