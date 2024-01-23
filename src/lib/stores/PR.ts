@@ -136,10 +136,10 @@ export let ensurePRFull = (repo_id: string, pr_id: string) => {
         sub_replies.on("event", (event: NDKEvent) => {
             if (event.kind == pr_status_kind
                 && event.created_at && selected_pr_status_date < event.created_at
-                && event.getMatchingTags("t").length === 1
-                && event.getMatchingTags("t")[0].length > 1
+                && event.getMatchingTags("l").length === 1
+                && event.getMatchingTags("l")[0].length > 1
             ) {
-                let potential_status = event.getMatchingTags("t")[0][1];
+                let potential_status = event.getMatchingTags("l")[0][1];
 
                 if (isPRStatus(potential_status)) {
                     selected_pr_status_date = event.created_at;

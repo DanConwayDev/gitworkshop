@@ -24,7 +24,7 @@
         if (!$logged_in_user) return;
         let event = new NDKEvent(ndk);
         event.kind = pr_status_kind;
-        event.tags.push(["t", new_status]);
+        event.tags.push(["l", new_status]);
         event.tags.push(["e", pr_id]);
         event.tags.push(["r", `r-${repo_id}`]);
         loading = true;

@@ -128,10 +128,10 @@ function getAndUpdatePRStatus(prs: PRSummaries, repo: Repo): void {
         if (event.kind == pr_status_kind
             && tagged_pr_event
             && event.created_at
-            && event.getMatchingTags("t").length === 1
-            && event.getMatchingTags("t")[0].length > 1
+            && event.getMatchingTags("l").length === 1
+            && event.getMatchingTags("l")[0].length > 1
         ) {
-            let potential_status = event.getMatchingTags("t")[0][1];
+            let potential_status = event.getMatchingTags("l")[0][1];
 
             if (isPRStatus(potential_status)) {
                 pr_summaries.update(prs => {
