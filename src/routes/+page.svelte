@@ -9,7 +9,7 @@
         <h1 class="mb-2">
           <span class="text-purple-600">git</span><span class="text-white"
             >workshop</span
-          ><span class="text-neutral">.io</span>
+          ><span class="text-neutral">.dev</span>
         </h1>
         <p class="mt-3">permissionless alternative to GitHub over nostr</p>
       </div>
