@@ -65,6 +65,30 @@
                 <div class="prose my-3">
                     {$selected_pr_full.summary.descritpion}
                 </div>
+                <div role="alert" class="alert">
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        class="stroke-info shrink-0 w-6 h-6"
+                        ><path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        ></path></svg
+                    >
+                    <div>
+                        <h3 class="text-xs prose">
+                            to view the latest patches from this PR <a
+                                href="/ngit">install ngit</a
+                            >, run
+                            <span class="rounded p-1 bg-neutral font-mono"
+                                ><span class="py-3">ngit prs list</span></span
+                            > from the local repository and select this PR title
+                        </h3>
+                    </div>
+                </div>
                 {#if $selected_pr_full.pr_event}
                     <Thread
                         event={$selected_pr_full.pr_event}
