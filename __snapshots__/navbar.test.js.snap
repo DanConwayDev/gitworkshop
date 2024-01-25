@@ -18,7 +18,7 @@ exports[`Navbar Default smoke-test 1`] = `
               workshop
             </span>
             <span class="text-neutral">
-              .io
+              .dev
             </span>
           </a>
         </div>
@@ -50,7 +50,7 @@ exports[`Navbar Logged in smoke-test 1`] = `
               workshop
             </span>
             <span class="text-neutral">
-              .io
+              .dev
             </span>
           </a>
         </div>
@@ -93,7 +93,7 @@ exports[`Navbar NIP07 Loading smoke-test 1`] = `
               workshop
             </span>
             <span class="text-neutral">
-              .io
+              .dev
             </span>
           </a>
         </div>
@@ -125,7 +125,7 @@ exports[`Navbar NIP07Exists smoke-test 1`] = `
               workshop
             </span>
             <span class="text-neutral">
-              .io
+              .dev
             </span>
           </a>
         </div>
@@ -158,14 +158,14 @@ exports[`Navbar NoNIP07 smoke-test 1`] = `
               workshop
             </span>
             <span class="text-neutral">
-              .io
+              .dev
             </span>
           </a>
         </div>
         <div class="navbar-end gap-4">
-          <div class="btn normal-case btn-sm btn-ghost">
+          <button class="btn normal-case btn-sm btn-ghost">
             Sign up
-          </div>
+          </button>
         </div>
       </div>
     </div>
