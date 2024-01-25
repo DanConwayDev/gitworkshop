@@ -12,6 +12,7 @@
     import Container from "$lib/components/Container.svelte";
     import ParsedContent from "$lib/components/events/content/ParsedContent.svelte";
     import Compose from "$lib/wrappers/Compose.svelte";
+    import type { NDKEvent } from "@nostr-dev-kit/ndk";
 
     export let data: {
         repo_id: string;
@@ -23,6 +24,14 @@
 
     ensureSelectedRepo(repo_id);
     ensurePRFull(repo_id, pr_id);
+
+    let replies: NDKEvent[] = [];
+
+    $: {
+        replies = $selected_pr_replies.sort((a, b) =>
+            a.created_at && b.created_at ? a.created_at - b.created_at : 1,
+        );
+    }
 
     let repo_error = false;
     let pr_error = false;
@@ -93,12 +102,9 @@
                         </h3>
                     </div>
                 </div>
-                {#if $selected_pr_full.pr_event}
-                    <Thread
-                        event={$selected_pr_full.pr_event}
-                        replies={$selected_pr_replies}
-                    />
-                {/if}
+                {#each $selected_pr_replies as event}
+                    <Thread {event} replies={[]} />
+                {/each}
                 <div class="my-3">
                     <Compose />
                 </div>
