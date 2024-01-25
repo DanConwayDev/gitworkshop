@@ -10,7 +10,7 @@
     }
     let status: string | undefined;
     $: {
-        status = extractTagContent("t");
+        status = extractTagContent("l");
     }
 </script>
 
