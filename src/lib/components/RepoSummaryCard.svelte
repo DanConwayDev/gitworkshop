@@ -14,8 +14,6 @@
 </script>
 
 <script lang="ts">
-  import { slide } from "svelte/transition";
-
   export let { name, description, repo_id: repo_id, loading } = defaults;
   let short_name: string;
   $: {
@@ -27,37 +25,12 @@
     description.length > 50 ? description.slice(0, 45) + "..." : description;
 </script>
 
-{#if loading}
-  <div
-    transition:slide={{ duration: 50 }}
-    class="card w-96 bg-neutral text-neutral-focus"
-  >
-    <div class="card-body">
-      <div class="text-center">
-        <div class="h-6 mt-1 mb-3 skeleton w-40"></div>
-        <div class="h-4 mb-1 skeleton w-100"></div>
-      </div>
-    </div>
-  </div>
-{:else}
-  <a
-    transition:slide={{ duration: 50 }}
-    class="card w-96 bg-primary text-primary-content"
-    href="/repo/{repo_id}"
-  >
-    <div class="card-body">
-      <h2 class="card-title">{short_name}</h2>
-      <p>{short_descrption}</p>
-    </div>
-  </a>
-{/if}
-
-<style>
-  h2 {
-    display: inline-block;
-  }
-  p,
-  h2 {
-    word-wrap: break-word;
-  }
-</style>
+<div class="p-4 bg-base-200 my-2 rounded-lg">
+  {#if loading}
+    <div class="h-5 mb-2 skeleton w-40"></div>
+    <div class="h-4 skeleton w-100"></div>
+  {:else}
+    <a class="link-primary break-words" href="/repo/{repo_id}">{short_name}</a>
+    <p class="text-sm text-muted break-words">{short_descrption}</p>
+  {/if}
+</div>

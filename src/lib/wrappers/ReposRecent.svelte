@@ -5,7 +5,7 @@
     import { ndk } from "$lib/stores/ndk";
     import { onDestroy } from "svelte";
 
-    export let limit: number = 5;
+    export let limit: number = 10;
 
     let repos: Args[] = [];
     let loading: boolean = true;

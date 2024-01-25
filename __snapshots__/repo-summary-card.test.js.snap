@@ -1,73 +1,61 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`Repo/Summary/Card Long Details smoke-test 1`] = `
-<a class="card w-96 bg-primary text-primary-content"
-   href="/repo/"
->
-  <div class="card-body">
-    <h2 class="card-title svelte-jesdj">
-      Long Name that goes on and on and on and on a...
-    </h2>
-    <p class="svelte-jesdj">
-      Lorem ipsum dolor sit amet, consectetur adipi...
-    </p>
-  </div>
-</a>
+<div class="p-4 bg-base-200 my-2 rounded-lg">
+  <a class="link-primary break-words"
+     href="/repo/"
+  >
+    Long Name that goes on and on and on and on a...
+  </a>
+  <p class="text-sm text-muted break-words">
+    Lorem ipsum dolor sit amet, consectetur adipi...
+  </p>
+</div>
 `;
 
 exports[`Repo/Summary/Card Long and No Spaces smoke-test 1`] = `
-<a class="card w-96 bg-primary text-primary-content"
-   href="/repo/"
->
-  <div class="card-body">
-    <h2 class="card-title svelte-jesdj">
-      LongNameLongNameLongNameLongNameLongNameLongN...
-    </h2>
-    <p class="svelte-jesdj">
-      LoremipsumLoremipsumLoremipsumLoremipsumLorem...
-    </p>
-  </div>
-</a>
+<div class="p-4 bg-base-200 my-2 rounded-lg">
+  <a class="link-primary break-words"
+     href="/repo/"
+  >
+    LongNameLongNameLongNameLongNameLongNameLongN...
+  </a>
+  <p class="text-sm text-muted break-words">
+    LoremipsumLoremipsumLoremipsumLoremipsumLorem...
+  </p>
+</div>
 `;
 
 exports[`Repo/Summary/Card No Details smoke-test 1`] = `
-<a class="card w-96 bg-primary text-primary-content"
-   href="/repo/"
->
-  <div class="card-body">
-    <h2 class="card-title svelte-jesdj">
-      Untitled
-    </h2>
-    <p class="svelte-jesdj">
-    </p>
-  </div>
-</a>
+<div class="p-4 bg-base-200 my-2 rounded-lg">
+  <a class="link-primary break-words"
+     href="/repo/"
+  >
+    Untitled
+  </a>
+  <p class="text-sm text-muted break-words">
+  </p>
+</div>
 `;
 
 exports[`Repo/Summary/Card Short Details smoke-test 1`] = `
-<a class="card w-96 bg-primary text-primary-content"
-   href="/repo/"
->
-  <div class="card-body">
-    <h2 class="card-title svelte-jesdj">
-      Short Name
-    </h2>
-    <p class="svelte-jesdj">
-      short description
-    </p>
-  </div>
-</a>
+<div class="p-4 bg-base-200 my-2 rounded-lg">
+  <a class="link-primary break-words"
+     href="/repo/"
+  >
+    Short Name
+  </a>
+  <p class="text-sm text-muted break-words">
+    short description
+  </p>
+</div>
 `;
 
 exports[`Repo/Summary/Card loading smoke-test 1`] = `
-<div class="card w-96 bg-neutral text-neutral-focus">
-  <div class="card-body">
-    <div class="text-center">
-      <div class="h-6 mt-1 mb-3 skeleton w-40">
-      </div>
-      <div class="h-4 mb-1 skeleton w-100">
-      </div>
-    </div>
+<div class="p-4 bg-base-200 my-2 rounded-lg">
+  <div class="h-5 mb-2 skeleton w-40">
+  </div>
+  <div class="h-4 skeleton w-100">
   </div>
 </div>
 `;
