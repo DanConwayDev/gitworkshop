@@ -1,10 +1,17 @@
 <script lang="ts">
     import type { NDKTag } from "@nostr-dev-kit/ndk";
-    import { isParsedNewLine, isParsedText, parseContent } from "./utils";
+    import {
+        isParsedNewLine,
+        isParsedText,
+        parseContent,
+        type ParsedPart,
+    } from "./utils";
     export let content: string = "";
     export let tags: NDKTag[] = [];
 
-    const fullContent = parseContent({ content, tags });
+    let fullContent: ParsedPart[] = [];
+
+    $: fullContent = parseContent({ content, tags });
 </script>
 
 <div>
