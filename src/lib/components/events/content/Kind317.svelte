@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { NDKTag } from "@nostr-dev-kit/ndk";
     import parseDiff from "parse-diff";
+    import ParsedContent from "./ParsedContent.svelte";
 
     export let content: string = "";
     export let tags: NDKTag[] = [];
@@ -19,7 +20,7 @@
 <div class="">
     <div class="bg-base-300 rounded-t p-1 flex">
         <article class="ml-2 prose font-mono flex-grow">
-            {commit_message}
+            <ParsedContent content={commit_message} />
         </article>
         <div class="text-xs text-neutral p-1 flex-none align-middle">
             commit

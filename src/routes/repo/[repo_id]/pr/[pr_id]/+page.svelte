@@ -10,6 +10,7 @@
     import Thread from "$lib/wrappers/Thread.svelte";
     import PrDetails from "$lib/components/prs/PRDetails.svelte";
     import Container from "$lib/components/Container.svelte";
+    import ParsedContent from "$lib/components/events/content/ParsedContent.svelte";
 
     export let data: {
         repo_id: string;
@@ -63,7 +64,9 @@
         <div class="md:flex">
             <div class="md:w-2/3 md:mr-2">
                 <div class="prose my-3">
-                    {$selected_pr_full.summary.descritpion}
+                    <ParsedContent
+                        content={$selected_pr_full.summary.descritpion}
+                    />
                 </div>
                 <div role="alert" class="alert">
                     <svg

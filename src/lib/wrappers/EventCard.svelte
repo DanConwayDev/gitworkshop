@@ -2,6 +2,7 @@
     import EventWrapper from "$lib/components/events/EventWrapper.svelte";
     import Kind19851985 from "$lib/components/events/content/Kind19851985.svelte";
     import Kind317 from "$lib/components/events/content/Kind317.svelte";
+    import ParsedContent from "$lib/components/events/content/ParsedContent.svelte";
     import type { User } from "$lib/components/users/type";
     import { defaults as user_defaults } from "$lib/components/users/type";
     import { patch_kind, pr_status_kind } from "$lib/kinds";
@@ -27,6 +28,6 @@
     {:else if event.kind === pr_status_kind}
         <Kind19851985 tags={event.tags} />
     {:else}
-        {event.content}
+        <ParsedContent content={event.content} tags={event.tags} />
     {/if}
 </EventWrapper>
