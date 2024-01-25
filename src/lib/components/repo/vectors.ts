@@ -56,6 +56,7 @@ export let RepoDetailsArgsVectors = {
     NoNameOrDescription: { ...base, name: "", description: "" } as Repo,
     NoDescription: { ...base, description: "" } as Repo,
     NoTags: { ...base, tags: [] } as Repo,
+    NoGitServer: { ...base, git_server: "" } as Repo,
     MaintainersOneProfileNotLoaded: {
         ...base, maintainers: [
             { ...base.maintainers[0] },

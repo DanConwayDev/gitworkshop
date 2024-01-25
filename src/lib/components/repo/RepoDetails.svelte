@@ -29,7 +29,7 @@
             : description;
 </script>
 
-<div class="max-w-md prose">
+<div class="max-w-md prose w-full">
     {#if loading}
         <div class="h-5 my-3 skeleton w-20"></div>
         <div class="h-4 my-2 skeleton"></div>
@@ -48,6 +48,23 @@
             {#each tags as tag}
                 <div class="badge badge-secondary mr-2">{tag}</div>
             {/each}
+        {/if}
+    </div>
+    <div>
+        {#if loading}
+            <div class="h-5 my-3 skeleton w-20"></div>
+            <div class="badge skeleton my-2 w-60 block"></div>
+        {:else if git_server.length == 0}
+            <div />
+        {:else}
+            <h4>git server</h4>
+            <a
+                href={git_server}
+                target="_blank"
+                class="link link-primary break-words my-2"
+            >
+                {git_server}
+            </a>
         {/if}
     </div>
     <div>

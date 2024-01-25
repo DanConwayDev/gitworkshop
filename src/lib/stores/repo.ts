@@ -51,7 +51,7 @@ export let ensureSelectedRepo = async (repo_id: string): Promise<Repo> => {
                         repo_id: event.replaceableDTag(),
                         name: event.tagValue("name") || "",
                         description: event.tagValue("description") || "",
-                        git_server: event.tagValue("git_server") || "",
+                        git_server: event.tagValue("git-server") || "",
                         tags: event.getMatchingTags("t") || [],
                         maintainers: event.getMatchingTags("p").map(
                             (t: string[]) =>
