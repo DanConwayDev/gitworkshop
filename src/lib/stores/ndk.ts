@@ -2,13 +2,13 @@ import NDKSvelte from '@nostr-dev-kit/ndk-svelte';
 
 export let base_relays = import.meta.env.DEV
     ? [
-        "ws://localhost:8055",
+        "ws://localhost:8080",
     ]
     : [
         "wss://relayable.org",
         "wss://relay.f7z.io",
         "wss://relay.damus.io",
-        "wss://relay.snort.social",
+        "wss://nos.lol"
         // "wss://nostr.wine/",
         // "wss://eden.nostr.land/",
         // "wss://relay.nostr.band/",
