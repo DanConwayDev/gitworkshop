@@ -11,6 +11,7 @@
     import PrDetails from "$lib/components/prs/PRDetails.svelte";
     import Container from "$lib/components/Container.svelte";
     import ParsedContent from "$lib/components/events/content/ParsedContent.svelte";
+    import Compose from "$lib/wrappers/Compose.svelte";
 
     export let data: {
         repo_id: string;
@@ -98,6 +99,9 @@
                         replies={$selected_pr_replies}
                     />
                 {/if}
+                <div class="my-3">
+                    <Compose />
+                </div>
             </div>
             <div class="w-1/3 ml-2 prose hidden md:flex">
                 <PrDetails
