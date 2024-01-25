@@ -25,7 +25,7 @@
         let event = new NDKEvent(ndk);
         event.kind = pr_status_kind;
         event.tags.push(["l", new_status]);
-        event.tags.push(["e", pr_id]);
+        event.tags.push(["e", pr_id, "root"]);
         event.tags.push(["r", `r-${repo_id}`]);
         loading = true;
         let relays = [...$selected_repo.relays];
