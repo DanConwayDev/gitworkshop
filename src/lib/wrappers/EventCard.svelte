@@ -22,7 +22,11 @@
     });
 </script>
 
-<EventWrapper author={$author} created_at={event.created_at}>
+<EventWrapper
+    author={$author}
+    created_at={event.created_at}
+    event_id={event.id}
+>
     {#if event.kind == patch_kind}
         <Kind317 content={event.content} tags={event.tags} />
     {:else if event.kind === pr_status_kind}
