@@ -72,7 +72,9 @@
                 ><span class="py-5">ngit claim</span></span
             >
             issue a repository nostr event which lists it on gitworkshop.dev and
-            indicates you are accepting patches and PRs via nostr.
+            indicates you are accepting patches and PRs via nostr. This can be run
+            many times to update the details. The relays will reflect your user relays
+            plus blaster.
         </p>
         <p>
             It also creates an optional <span class="font-mono p-2 bg-base-200"
