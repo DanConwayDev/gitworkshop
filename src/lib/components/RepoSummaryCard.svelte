@@ -4,12 +4,14 @@
     description: string;
     repo_id: string;
     loading?: boolean;
+    created_at: number;
   }
   export const defaults: Args = {
     name: "",
     repo_id: "",
     description: "",
     loading: false,
+    created_at: 0,
   };
 </script>
 
