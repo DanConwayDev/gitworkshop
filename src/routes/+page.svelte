@@ -1,11 +1,11 @@
 <script lang="ts">
-  import ReposRecent from "$lib/wrappers/ReposRecent.svelte";
+  import ReposRecent from '$lib/wrappers/ReposRecent.svelte'
 </script>
 
 <div role="alert" class="alert">
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    class="stroke-current shrink-0 h-6 w-6"
+    class="h-6 w-6 shrink-0 stroke-current"
     fill="none"
     viewBox="0 0 24 24"
     ><path
@@ -16,12 +16,12 @@
     /></svg
   >
   <div>
-    <h3 class="text-xs prose">Warning Experimental: expect breaking changes</h3>
+    <h3 class="prose text-xs">Warning Experimental: expect breaking changes</h3>
   </div>
 </div>
 
 <div class="flex flex-row">
-  <div class="hero bg-pr h-[calc(100vh-4rem)] md:basis-1/2">
+  <div class="bg-pr hero h-[calc(100vh-4rem)] md:basis-1/2">
     <div class="hero-content text-center">
       <div class="max-w-md">
         <div class="prose">
@@ -30,12 +30,12 @@
               >workshop</span
             ><span class="text-neutral">.dev</span>
           </h1>
-          <p class="mt-3 mb-8">
+          <p class="mb-8 mt-3">
             permissionless alternative to GitHub over nostr
           </p>
         </div>
         <div>
-          <div class="bg-base-300 card mb-8">
+          <div class="card mb-8 bg-base-300">
             <div class="card-body items-center text-center">
               <div class="card-title">
                 <h3>
@@ -46,7 +46,7 @@
                 a command-line tool to <span class="badge">create</span>,
                 <span class="badge">list</span> and
                 <span class="badge">apply</span> PRs and patches
-                <div class="card-actions flex mt-3">
+                <div class="card-actions mt-3 flex">
                   <div class="flex-grow">
                     <a href="/ngit" class="btn btn-neutral">install ngit</a>
                   </div>
@@ -61,7 +61,7 @@
         <button
           on:click={() =>
             alert(
-              "install ngit and run `ngit claim` your local git repository",
+              'install ngit and run `ngit claim` your local git repository'
             )}
           class="btn btn-secondary">list your repository</button
         >

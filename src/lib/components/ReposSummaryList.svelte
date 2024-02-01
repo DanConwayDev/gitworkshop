@@ -1,14 +1,11 @@
 <script lang="ts">
-  import { fade } from "svelte/transition";
-  import { onMount } from "svelte";
-
   import RepoSummaryCard, {
     type Args as RepoSummaryCardArgs,
-  } from "$lib/components/RepoSummaryCard.svelte";
+  } from '$lib/components/RepoSummaryCard.svelte'
 
-  export let title: string = "";
-  export let repos: RepoSummaryCardArgs[] = [];
-  export let loading: boolean = false;
+  export let title: string = ''
+  export let repos: RepoSummaryCardArgs[] = []
+  export let loading: boolean = false
 </script>
 
 <div class="min-width">

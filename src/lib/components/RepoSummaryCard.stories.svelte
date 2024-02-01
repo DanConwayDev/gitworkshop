@@ -1,18 +1,18 @@
 <script lang="ts" context="module">
-    import type { Meta } from "@storybook/svelte";
-    import RepoSummaryCard from "./RepoSummaryCard.svelte";
-    import { Story, Template } from "@storybook/addon-svelte-csf";
-    import { RepoSummaryCardArgsVectors as vectors } from "./repo/vectors";
+  import type { Meta } from '@storybook/svelte'
+  import RepoSummaryCard from './RepoSummaryCard.svelte'
+  import { Story, Template } from '@storybook/addon-svelte-csf'
+  import { RepoSummaryCardArgsVectors as vectors } from './repo/vectors'
 
-    export const meta: Meta<RepoSummaryCard> = {
-        title: "Repo/Summary/Card",
-        component: RepoSummaryCard,
-        tags: ["autodocs"],
-    };
+  export const meta: Meta<RepoSummaryCard> = {
+    title: 'Repo/Summary/Card',
+    component: RepoSummaryCard,
+    tags: ['autodocs'],
+  }
 </script>
 
 <Template let:args>
-    <RepoSummaryCard {...args} />
+  <RepoSummaryCard {...args} />
 </Template>
 
 <Story name="Short Details" args={vectors.Short} />

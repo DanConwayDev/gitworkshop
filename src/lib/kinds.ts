@@ -1,9 +1,9 @@
-export let reply_kind = 1;
+export const reply_kind: number = 1
 
-export let pr_status_kind = 19851985;
+export const pr_status_kind: number = 19851985
 
-export let repo_kind = 30317;
+export const repo_kind: number = 30317
 
-export let pr_kind = 318;
+export const pr_kind: number = 318
 
-export let patch_kind = 317;
+export const patch_kind: number = 317

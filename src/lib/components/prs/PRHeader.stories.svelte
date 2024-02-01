@@ -1,18 +1,18 @@
 <script lang="ts" context="module">
-    import type { Meta } from "@storybook/svelte";
-    import PRHeader from "./PRHeader.svelte";
-    import { Story, Template } from "@storybook/addon-svelte-csf";
-    import { PRsListItemArgsVectors as vectors } from "./vectors";
+  import type { Meta } from '@storybook/svelte'
+  import PRHeader from './PRHeader.svelte'
+  import { Story, Template } from '@storybook/addon-svelte-csf'
+  import { PRsListItemArgsVectors as vectors } from './vectors'
 
-    export const meta: Meta<PRHeader> = {
-        title: "PRs/Header",
-        component: PRHeader,
-        tags: ["autodocs"],
-    };
+  export const meta: Meta<PRHeader> = {
+    title: 'PRs/Header',
+    component: PRHeader,
+    tags: ['autodocs'],
+  }
 </script>
 
 <Template let:args>
-    <PRHeader {...args} />
+  <PRHeader {...args} />
 </Template>
 
 <Story name="Short Details" args={vectors.Short} />
