@@ -1,21 +1,13 @@
-<script lang="ts" context="module">
-    export const defaults: User = {
-        hexpubkey: "",
-        npub: "",
-        loading: true,
-    };
-</script>
-
 <script lang="ts">
     import { getName, type User } from "./type";
 
-    export let user: User = defaults;
-    let { profile, hexpubkey, loading } = user;
-    let display_name = "";
-    $: {
-        let { profile, hexpubkey, loading } = user;
-        display_name = getName(user);
-    }
+    export let user: User = {
+        hexpubkey: "",
+        npub: "",
+        loading: true,
+        };
+    $: ({ profile, loading } = user);
+    $: display_name = getName(user);
 </script>
 
 <div class="flex my-2">
@@ -25,8 +17,8 @@
             class:skeleton={!profile && loading}
             class:bg-neutral={!loading && (!profile || !profile.image)}
         >
-            {#if profile && profile.image}
-                <img class="my-0" src={profile.image} alt={display_name} />
+            {#if !!profile?.image}
+                <img class="my-0" src={profile?.image} alt={display_name} />
             {/if}
         </div>
     </div>
