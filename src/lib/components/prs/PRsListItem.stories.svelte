@@ -1,18 +1,18 @@
 <script lang="ts" context="module">
-    import type { Meta } from "@storybook/svelte";
-    import PRsListItem from "./PRsListItem.svelte";
-    import { Story, Template } from "@storybook/addon-svelte-csf";
-    import { PRsListItemArgsVectors as vectors } from "./vectors";
+  import type { Meta } from '@storybook/svelte'
+  import PRsListItem from './PRsListItem.svelte'
+  import { Story, Template } from '@storybook/addon-svelte-csf'
+  import { PRsListItemArgsVectors as vectors } from './vectors'
 
-    export const meta: Meta<PRsListItem> = {
-        title: "PRs/List/Item",
-        component: PRsListItem,
-        tags: ["autodocs"],
-    };
+  export const meta: Meta<PRsListItem> = {
+    title: 'PRs/List/Item',
+    component: PRsListItem,
+    tags: ['autodocs'],
+  }
 </script>
 
 <Template let:args>
-    <PRsListItem {...args} />
+  <PRsListItem {...args} />
 </Template>
 
 <Story name="Short Details" args={vectors.Short} />

@@ -1,6 +1,6 @@
 <script>
-  import "../app.css";
-  import Navbar from "$lib/wrappers/Navbar.svelte";
+  import '../app.css'
+  import Navbar from '$lib/wrappers/Navbar.svelte'
 </script>
 
 <Navbar />

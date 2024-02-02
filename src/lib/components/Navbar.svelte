@@ -1,12 +1,12 @@
 <script lang="ts">
-  import Container from "./Container.svelte";
-  import UserHeader from "./users/UserHeader.svelte";
-  import type { User } from "./users/type";
+  import Container from './Container.svelte'
+  import UserHeader from './users/UserHeader.svelte'
+  import type { User } from './users/type'
 
-  export let logged_in_user: User | undefined = undefined;
-  export let nip07_plugin: boolean | undefined = undefined;
-  export let login_function: Function = () => {};
-  export let singup_function: Function = () => {};
+  export let logged_in_user: User | undefined = undefined
+  export let nip07_plugin: boolean | undefined = undefined
+  export let login_function = () => {}
+  export let singup_function = () => {}
 </script>
 
 <div class="bg-base-400">
@@ -24,20 +24,20 @@
         {#if logged_in_user}
           <UserHeader user={logged_in_user} />
         {:else if nip07_plugin === undefined}
-          <div class="h-8 skeleton w-20"></div>
+          <div class="skeleton h-8 w-20"></div>
         {:else if nip07_plugin}
           <button
             on:click={() => {
-              login_function();
+              login_function()
             }}
-            class="btn normal-case btn-sm btn-ghost">Login</button
+            class="btn btn-ghost btn-sm normal-case">Login</button
           >
         {:else}
           <button
             on:click={() => {
-              singup_function();
+              singup_function()
             }}
-            class="btn normal-case btn-sm btn-ghost">Sign up</button
+            class="btn btn-ghost btn-sm normal-case">Sign up</button
           >
         {/if}
       </div>
