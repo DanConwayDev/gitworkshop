@@ -1,16 +1,13 @@
-<script lang="ts" context="module">
-  export const defaults: User = {
+<script lang="ts">
+  import { getName, type User } from './type'
+
+  export let user: User = {
     hexpubkey: '',
     npub: '',
     loading: true,
   }
-</script>
 
-<script lang="ts">
-  import { getName, type User } from './type'
-
-  export let user: User = defaults
-  let { profile, loading } = user
+  $: ({ profile, loading } = user)
   $: display_name = getName(user)
 </script>
 
@@ -21,8 +18,8 @@
       class:skeleton={!profile && loading}
       class:bg-neutral={!loading && (!profile || !profile.image)}
     >
-      {#if profile && profile.image}
-        <img class="my-0" src={profile.image} alt={display_name} />
+      {#if profile && profile?.image}
+        <img class="my-0" src={profile?.image} alt={display_name} />
       {/if}
     </div>
   </div>
