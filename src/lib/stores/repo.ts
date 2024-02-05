@@ -1,4 +1,4 @@
-import { NDKRelaySet, NDKSubscription } from '@nostr-dev-kit/ndk'
+import { NDKEvent, NDKRelaySet, NDKSubscription } from '@nostr-dev-kit/ndk'
 import { writable, type Unsubscriber, type Writable } from 'svelte/store'
 import { base_relays, ndk } from './ndk'
 import type { Repo } from '$lib/components/repo/type'
@@ -42,12 +42,12 @@ export const ensureSelectedRepo = async (repo_id: string): Promise<Repo> => {
   )
 
   return new Promise((r) => {
-    sub.on('event', (event) => {
+    sub.on('event', (event: NDKEvent) => {
       try {
         if (event.kind == repo_kind && event.tagValue('d') == repo_id) {
           const maintainers = [
             {
-              hexpubkey: event.pub_key,
+              hexpubkey: event.pubkey,
               loading: true,
               npub: '',
             } as User,
@@ -66,11 +66,11 @@ export const ensureSelectedRepo = async (repo_id: string): Promise<Repo> => {
           selected_repo.set({
             loading: false,
             repo_id: event.replaceableDTag(),
-            unique_commit: event.getMatchingTags('r'),
+            unique_commit: event.tagValue('r') || undefined,
             name: event.tagValue('name') || '',
             description: event.tagValue('description') || '',
             clone: event.tagValue('clone') || '',
-            tags: event.getMatchingTags('t') || [],
+            tags: event.getMatchingTags('t').map((t) => t[1]) || [],
             maintainers,
             relays: event.getMatchingTags('relay').map((t: string[]) => t[1]),
           })
