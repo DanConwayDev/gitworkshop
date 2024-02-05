@@ -4,9 +4,10 @@
 
   export let {
     repo_id,
+    unique_commit,
     name,
     description,
-    git_server,
+    clone,
     tags,
     maintainers,
     relays,

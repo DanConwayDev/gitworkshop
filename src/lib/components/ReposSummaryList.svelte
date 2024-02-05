@@ -1,10 +1,9 @@
 <script lang="ts">
-  import RepoSummaryCard, {
-    type Args as RepoSummaryCardArgs,
-  } from '$lib/components/RepoSummaryCard.svelte'
+  import type { RepoSummary } from './repo/type'
+  import RepoSummaryCard from '$lib/components/RepoSummaryCard.svelte'
 
   export let title: string = ''
-  export let repos: RepoSummaryCardArgs[] = []
+  export let repos: RepoSummary[] = []
   export let loading: boolean = false
 </script>
 

@@ -1,22 +1,8 @@
-<script lang="ts" context="module">
-  export interface Args {
-    name: string
-    description: string
-    repo_id: string
-    loading?: boolean
-    created_at: number
-  }
-  export const defaults: Args = {
-    name: '',
-    repo_id: '',
-    description: '',
-    loading: false,
-    created_at: 0,
-  }
-</script>
-
 <script lang="ts">
-  export let { name, description, repo_id: repo_id, loading } = defaults
+  import { summary_defaults } from './repo/type'
+
+  export let { name, description, repo_id, maintainers, loading } =
+    summary_defaults
   let short_name: string
   $: {
     if (name.length > 45) short_name = name.slice(0, 45) + '...'

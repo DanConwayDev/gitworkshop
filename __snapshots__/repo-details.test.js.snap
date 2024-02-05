@@ -25,7 +25,7 @@ exports[`Repo/Details Long Details smoke-test 1`] = `
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"
@@ -125,7 +125,7 @@ exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"
@@ -133,6 +133,99 @@ exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
     >
       github.com/example/example
     </a>
+  </div>
+  <div>
+    <h4>
+      maintainers
+    </h4>
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="carole"
+            >
+          </div>
+        </div>
+        <div class="pl-3 flex-auto m-auto">
+          carole
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="bob"
+            >
+          </div>
+        </div>
+        <div class="pl-3 flex-auto m-auto">
+          bob
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="steve"
+            >
+          </div>
+        </div>
+        <div class="pl-3 flex-auto m-auto">
+          steve
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <h4>
+      relays
+    </h4>
+    <div class="badge badge-secondary my-2 block">
+      relay.damus.io
+    </div>
+    <div class="badge badge-secondary my-2 block">
+      relay.snort.social
+    </div>
+    <div class="badge badge-secondary my-2 block">
+      relayable.org
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Details No Clone smoke-test 1`] = `
+<div class="prose w-full max-w-md">
+  <h4>
+    description
+  </h4>
+  <p class="my-2 break-words text-sm">
+    short description
+  </p>
+  <div>
+    <div class="badge badge-secondary mr-2">
+      svelte
+    </div>
+    <div class="badge badge-secondary mr-2">
+      nostr
+    </div>
+    <div class="badge badge-secondary mr-2">
+      code-collaboration
+    </div>
+    <div class="badge badge-secondary mr-2">
+      git
+    </div>
+  </div>
+  <div>
+    <div>
+    </div>
   </div>
   <div>
     <h4>
@@ -221,7 +314,7 @@ exports[`Repo/Details No Description smoke-test 1`] = `
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"
@@ -229,99 +322,6 @@ exports[`Repo/Details No Description smoke-test 1`] = `
     >
       github.com/example/example
     </a>
-  </div>
-  <div>
-    <h4>
-      maintainers
-    </h4>
-    <div>
-      <div class="my-2 text-md flex items-center">
-        <div class="avatar flex-none">
-          <div class="rounded h-8 w-8">
-            <img class="my-0"
-                 src="../test-profile-image.jpg"
-                 alt="carole"
-            >
-          </div>
-        </div>
-        <div class="pl-3 flex-auto m-auto">
-          carole
-        </div>
-      </div>
-    </div>
-    <div>
-      <div class="my-2 text-md flex items-center">
-        <div class="avatar flex-none">
-          <div class="rounded h-8 w-8">
-            <img class="my-0"
-                 src="../test-profile-image.jpg"
-                 alt="bob"
-            >
-          </div>
-        </div>
-        <div class="pl-3 flex-auto m-auto">
-          bob
-        </div>
-      </div>
-    </div>
-    <div>
-      <div class="my-2 text-md flex items-center">
-        <div class="avatar flex-none">
-          <div class="rounded h-8 w-8">
-            <img class="my-0"
-                 src="../test-profile-image.jpg"
-                 alt="steve"
-            >
-          </div>
-        </div>
-        <div class="pl-3 flex-auto m-auto">
-          steve
-        </div>
-      </div>
-    </div>
-  </div>
-  <div>
-    <h4>
-      relays
-    </h4>
-    <div class="badge badge-secondary my-2 block">
-      relay.damus.io
-    </div>
-    <div class="badge badge-secondary my-2 block">
-      relay.snort.social
-    </div>
-    <div class="badge badge-secondary my-2 block">
-      relayable.org
-    </div>
-  </div>
-</div>
-`;
-
-exports[`Repo/Details No Git Server smoke-test 1`] = `
-<div class="prose w-full max-w-md">
-  <h4>
-    description
-  </h4>
-  <p class="my-2 break-words text-sm">
-    short description
-  </p>
-  <div>
-    <div class="badge badge-secondary mr-2">
-      svelte
-    </div>
-    <div class="badge badge-secondary mr-2">
-      nostr
-    </div>
-    <div class="badge badge-secondary mr-2">
-      code-collaboration
-    </div>
-    <div class="badge badge-secondary mr-2">
-      git
-    </div>
-  </div>
-  <div>
-    <div>
-    </div>
   </div>
   <div>
     <h4>
@@ -414,7 +414,7 @@ exports[`Repo/Details No Maintainers or Relays smoke-test 1`] = `
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"
@@ -458,7 +458,7 @@ exports[`Repo/Details No Maintainers smoke-test 1`] = `
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"
@@ -508,7 +508,7 @@ exports[`Repo/Details No Name or Description smoke-test 1`] = `
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"
@@ -608,7 +608,7 @@ exports[`Repo/Details No Relays smoke-test 1`] = `
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"
@@ -686,7 +686,7 @@ exports[`Repo/Details No Tags smoke-test 1`] = `
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"
@@ -786,7 +786,7 @@ exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"
@@ -882,7 +882,7 @@ exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"
@@ -979,7 +979,7 @@ exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name 
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"
@@ -1079,7 +1079,7 @@ exports[`Repo/Details Short Details smoke-test 1`] = `
   </div>
   <div>
     <h4>
-      git server
+      clone
     </h4>
     <a href="github.com/example/example"
        target="_blank"

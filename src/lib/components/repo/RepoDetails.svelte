@@ -6,7 +6,7 @@
     repo_id,
     name,
     description,
-    git_server,
+    clone,
     tags,
     maintainers,
     relays,
@@ -41,16 +41,16 @@
     {#if loading}
       <div class="skeleton my-3 h-5 w-20"></div>
       <div class="badge skeleton my-2 block w-60"></div>
-    {:else if git_server.length == 0}
+    {:else if clone.length == 0}
       <div />
     {:else}
-      <h4>git server</h4>
+      <h4>clone</h4>
       <a
-        href={git_server}
+        href={clone}
         target="_blank"
         class="link link-primary my-2 break-words"
       >
-        {git_server}
+        {clone}
       </a>
     {/if}
   </div>

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Args } from '$lib/components/RepoSummaryCard.svelte'
   import ReposSummaryList from '$lib/components/ReposSummaryList.svelte'
+  import type { RepoSummary } from '$lib/components/repo/type'
   import { repo_kind } from '$lib/kinds'
   import { ndk } from '$lib/stores/ndk'
   import type { NDKEvent } from '@nostr-dev-kit/ndk'
@@ -8,7 +8,7 @@
 
   export let limit: number = 10
 
-  let repos: Args[] = []
+  let repos: RepoSummary[] = []
   let loading: boolean = true
   let sub = ndk.subscribe({
     kinds: [repo_kind],
@@ -37,6 +37,7 @@
               name: event.tagValue('name') || '',
               description: event.tagValue('description') || '',
               repo_id: event.replaceableDTag(),
+              maintainers: [],
               created_at: event.created_at || 0,
             },
           ]

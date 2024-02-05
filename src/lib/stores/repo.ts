@@ -48,9 +48,10 @@ export const ensureSelectedRepo = async (repo_id: string): Promise<Repo> => {
           selected_repo.set({
             loading: false,
             repo_id: event.replaceableDTag(),
+            unique_commit: event.getMatchingTags('r'),
             name: event.tagValue('name') || '',
             description: event.tagValue('description') || '',
-            git_server: event.tagValue('git-server') || '',
+            clone: event.tagValue('clone') || '',
             tags: event.getMatchingTags('t') || [],
             maintainers: event.getMatchingTags('p').map(
               (t: string[]) =>
