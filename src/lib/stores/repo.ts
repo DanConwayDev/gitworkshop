@@ -45,6 +45,24 @@ export const ensureSelectedRepo = async (repo_id: string): Promise<Repo> => {
     sub.on('event', (event) => {
       try {
         if (event.kind == repo_kind && event.tagValue('d') == repo_id) {
+          const maintainers = [
+            {
+              hexpubkey: event.pub_key,
+              loading: true,
+              npub: '',
+            } as User,
+          ]
+          event.getMatchingTags('maintainers').forEach((t: string[]) => {
+            t.forEach((v, i) => {
+              if (i > 0 && v !== maintainers[0].hexpubkey) {
+                maintainers.push({
+                  hexpubkey: v,
+                  loading: true,
+                  npub: '',
+                } as User)
+              }
+            })
+          })
           selected_repo.set({
             loading: false,
             repo_id: event.replaceableDTag(),
@@ -53,32 +71,23 @@ export const ensureSelectedRepo = async (repo_id: string): Promise<Repo> => {
             description: event.tagValue('description') || '',
             clone: event.tagValue('clone') || '',
             tags: event.getMatchingTags('t') || [],
-            maintainers: event.getMatchingTags('p').map(
-              (t: string[]) =>
-                ({
-                  hexpubkey: t[1],
-                  loading: true,
-                  npub: '',
-                }) as User
-            ),
+            maintainers,
             relays: event.getMatchingTags('relay').map((t: string[]) => t[1]),
           })
           const old_unsubscribers = maintainers_unsubscribers
-          maintainers_unsubscribers = event
-            .getMatchingTags('p')
-            .map((t: string[]) => {
-              return ensureUser(t[1]).subscribe((u: User) => {
-                selected_repo.update((repo) => {
-                  return {
-                    ...repo,
-                    maintainers: repo.maintainers.map((m) => {
-                      if (m.hexpubkey == u.hexpubkey) return { ...u }
-                      else return { ...m }
-                    }),
-                  }
-                })
+          maintainers_unsubscribers = maintainers.map((m: User) => {
+            return ensureUser(m.hexpubkey).subscribe((u: User) => {
+              selected_repo.update((repo) => {
+                return {
+                  ...repo,
+                  maintainers: repo.maintainers.map((m) => {
+                    if (m.hexpubkey == u.hexpubkey) return { ...u }
+                    else return { ...m }
+                  }),
+                }
               })
             })
+          })
           old_unsubscribers.forEach((unsubscriber) => unsubscriber())
         }
       } catch {}

@@ -8,7 +8,30 @@ exports[`Repo/Summary/List Default smoke-test 1`] = `
     </h3>
   </div>
   <div class>
-    <div class="my-2 rounded-lg bg-base-200 p-4">
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
+      <p class="text-muted float-right break-words text-sm">
+        <span>
+        </span>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="Will"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                Will
+              </div>
+            </div>
+          </div>
+        </div>
+      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
@@ -18,7 +41,30 @@ exports[`Repo/Summary/List Default smoke-test 1`] = `
         short description
       </p>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4">
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
+      <p class="text-muted float-right break-words text-sm">
+        <span>
+        </span>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="Rather Long Display Name"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                Rather Long Display Name
+              </div>
+            </div>
+          </div>
+        </div>
+      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
@@ -28,7 +74,30 @@ exports[`Repo/Summary/List Default smoke-test 1`] = `
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4">
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
+      <p class="text-muted float-right break-words text-sm">
+        <span>
+        </span>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="DanConwayDev"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                DanConwayDev
+              </div>
+            </div>
+          </div>
+        </div>
+      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
@@ -36,6 +105,73 @@ exports[`Repo/Summary/List Default smoke-test 1`] = `
       </a>
       <p class="text-muted break-words text-sm">
         LoremipsumLoremipsumLoremipsumLoremipsumLorem...
+      </p>
+    </div>
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 5.975rem;"
+    >
+      <p class="text-muted float-right break-words text-sm">
+        <span>
+        </span>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="Will"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                Will
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="DanConwayDev"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                DanConwayDev
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="sectore"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                sectore
+              </div>
+            </div>
+          </div>
+        </div>
+      </p>
+      <a class="link-primary break-words"
+         href="/repo/"
+      >
+        Short Name
+      </a>
+      <p class="text-muted break-words text-sm">
+        short description
       </p>
     </div>
   </div>
@@ -63,19 +199,25 @@ exports[`Repo/Summary/List Loading smoke-test 1`] = `
     </h3>
   </div>
   <div class>
-    <div class="my-2 rounded-lg bg-base-200 p-4">
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
       <div class="skeleton mb-2 h-5 w-40">
       </div>
       <div class="w-100 skeleton h-4">
       </div>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4">
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
       <div class="skeleton mb-2 h-5 w-40">
       </div>
       <div class="w-100 skeleton h-4">
       </div>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4">
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
       <div class="skeleton mb-2 h-5 w-40">
       </div>
       <div class="w-100 skeleton h-4">
@@ -85,10 +227,72 @@ exports[`Repo/Summary/List Loading smoke-test 1`] = `
 </div>
 `;
 
-exports[`Repo/Summary/List No Title smoke-test 1`] = `
+exports[`Repo/Summary/List Multiple Maintainers smoke-test 1`] = `
 <div class="min-width">
+  <div class="prose mb-3">
+    <h3>
+      Multiple Maintainers
+    </h3>
+  </div>
   <div class>
-    <div class="my-2 rounded-lg bg-base-200 p-4">
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 5.975rem;"
+    >
+      <p class="text-muted float-right break-words text-sm">
+        <span>
+        </span>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="Will"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                Will
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="DanConwayDev"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                DanConwayDev
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="sectore"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                sectore
+              </div>
+            </div>
+          </div>
+        </div>
+      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
@@ -98,7 +302,103 @@ exports[`Repo/Summary/List No Title smoke-test 1`] = `
         short description
       </p>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4">
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
+      <p class="text-muted float-right break-words text-sm">
+        <span>
+        </span>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="Rather Long Display Name"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                Rather Long Display Name
+              </div>
+            </div>
+          </div>
+        </div>
+      </p>
+      <a class="link-primary break-words"
+         href="/repo/"
+      >
+        Long Name that goes on and on and on and on a...
+      </a>
+      <p class="text-muted break-words text-sm">
+        Lorem ipsum dolor sit amet, consectetur adipi...
+      </p>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Repo/Summary/List No Title smoke-test 1`] = `
+<div class="min-width">
+  <div class>
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
+      <p class="text-muted float-right break-words text-sm">
+        <span>
+        </span>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="Will"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                Will
+              </div>
+            </div>
+          </div>
+        </div>
+      </p>
+      <a class="link-primary break-words"
+         href="/repo/"
+      >
+        Short Name
+      </a>
+      <p class="text-muted break-words text-sm">
+        short description
+      </p>
+    </div>
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
+      <p class="text-muted float-right break-words text-sm">
+        <span>
+        </span>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="Rather Long Display Name"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                Rather Long Display Name
+              </div>
+            </div>
+          </div>
+        </div>
+      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
@@ -120,7 +420,30 @@ exports[`Repo/Summary/List Partially Loaded smoke-test 1`] = `
     </h3>
   </div>
   <div class>
-    <div class="my-2 rounded-lg bg-base-200 p-4">
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
+      <p class="text-muted float-right break-words text-sm">
+        <span>
+        </span>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="Will"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                Will
+              </div>
+            </div>
+          </div>
+        </div>
+      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
@@ -130,7 +453,30 @@ exports[`Repo/Summary/List Partially Loaded smoke-test 1`] = `
         short description
       </p>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4">
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
+      <p class="text-muted float-right break-words text-sm">
+        <span>
+        </span>
+        <div class="text-right">
+          <div class="inline-block">
+            <div class="text-sm inline-block align-middle">
+              <div class="avatar inline-block align-middle">
+                <div class="rounded inline-block h-3.5 w-3.5">
+                  <img class="my-0"
+                       src="../test-profile-image.jpg"
+                       alt="Rather Long Display Name"
+                  >
+                </div>
+              </div>
+              <div class="pl-0 inline-block">
+                Rather Long Display Name
+              </div>
+            </div>
+          </div>
+        </div>
+      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
@@ -140,7 +486,9 @@ exports[`Repo/Summary/List Partially Loaded smoke-test 1`] = `
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4">
+    <div class="my-2 rounded-lg bg-base-200 p-4"
+         style="min-height: 3.325rem;"
+    >
       <div class="skeleton mb-2 h-5 w-40">
       </div>
       <div class="w-100 skeleton h-4">

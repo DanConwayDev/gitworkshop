@@ -17,8 +17,8 @@
     <p class="prose">None</p>
   {:else}
     <div class="">
-      {#each repos as { name, description, repo_id }}
-        <RepoSummaryCard {name} {description} {repo_id} />
+      {#each repos as { name, description, repo_id, maintainers }}
+        <RepoSummaryCard {name} {description} {repo_id} {maintainers} />
       {/each}
       {#if loading}
         <RepoSummaryCard loading={true} />

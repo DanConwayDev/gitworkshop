@@ -19,7 +19,12 @@
   name="Default"
   args={{
     title: 'Featured Repositories',
-    repos: [vectors.Short, vectors.Long, vectors.LongNoSpaces],
+    repos: [
+      vectors.Short,
+      vectors.Long,
+      vectors.LongNoSpaces,
+      vectors.MulipleMaintainers,
+    ],
   }}
 />
 
@@ -52,5 +57,13 @@
     title: 'Latest',
     repos: [vectors.Short, vectors.Long],
     loading: true,
+  }}
+/>
+
+<Story
+  name="Multiple Maintainers"
+  args={{
+    title: 'Multiple Maintainers',
+    repos: [vectors.MulipleMaintainers, vectors.Long],
   }}
 />

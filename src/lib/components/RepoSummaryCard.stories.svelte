@@ -24,3 +24,5 @@
 <Story name="No Details" args={{}} />
 
 <Story name="loading" args={{ loading: true }} />
+
+<Story name="Multiple Maintainers" args={vectors.MulipleMaintainers} />

@@ -5,16 +5,32 @@ export const RepoSummaryCardArgsVectors = {
   Short: {
     name: 'Short Name',
     description: 'short description',
+    maintainers: [withName(UserVectors.default, 'Will')],
   } as RepoSummary,
   Long: {
     name: 'Long Name that goes on and on and on and on and on and on and on and on and on',
     description:
       'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis quis nisl eget turpis congue molestie. Nulla vitae purus nec augue accumsan facilisis sed sed ligula. Vestibulum sed risus lacinia risus lacinia molestie. Ut lorem quam, consequat eget tempus in, rhoncus vel nunc. Duis efficitur a leo vel sodales. Nam id fermentum lacus. Etiam nec placerat velit. Praesent ac consectetur est. Aenean iaculis commodo enim.',
+    maintainers: [withName(UserVectors.default, 'Rather Long Display Name')],
   } as RepoSummary,
   LongNoSpaces: {
     name: 'LongNameLongNameLongNameLongNameLongNameLongNameLongNameLongName',
     description:
       'LoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsum>',
+    maintainers: [
+      {
+        ...UserVectors.default,
+      },
+    ],
+  } as RepoSummary,
+  MulipleMaintainers: {
+    name: 'Short Name',
+    description: 'short description',
+    maintainers: [
+      withName(UserVectors.default, 'Will'),
+      withName(UserVectors.default, 'DanConwayDev'),
+      withName(UserVectors.default, 'sectore'),
+    ],
   } as RepoSummary,
 }
 const base: Repo = {
