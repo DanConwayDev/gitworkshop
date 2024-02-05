@@ -18,7 +18,7 @@
     pr_id: string
   }
 
-  let repo_id = data.repo_id
+  let repo_id = decodeURI(data.repo_id)
   let pr_id = data.pr_id
 
   ensureSelectedRepo(repo_id)
