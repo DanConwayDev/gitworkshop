@@ -2,7 +2,7 @@
 
 exports[`Users/Header default smoke-test 1`] = `
 <div>
-  <div class="flex items-center my-2">
+  <div class="my-2 text-md flex items-center">
     <div class="avatar flex-none">
       <div class="rounded h-8 w-8">
         <img class="my-0"
@@ -11,7 +11,7 @@ exports[`Users/Header default smoke-test 1`] = `
         >
       </div>
     </div>
-    <div class="m-auto flex-auto pl-3">
+    <div class="pl-3 flex-auto m-auto">
       DanConwayDev
     </div>
   </div>
@@ -20,7 +20,7 @@ exports[`Users/Header default smoke-test 1`] = `
 
 exports[`Users/Header displayName without name smoke-test 1`] = `
 <div>
-  <div class="flex items-center my-2">
+  <div class="my-2 text-md flex items-center">
     <div class="avatar flex-none">
       <div class="rounded h-8 w-8">
         <img class="my-0"
@@ -29,7 +29,7 @@ exports[`Users/Header displayName without name smoke-test 1`] = `
         >
       </div>
     </div>
-    <div class="m-auto flex-auto pl-3">
+    <div class="pl-3 flex-auto m-auto">
       DanConwayDev
     </div>
   </div>
@@ -38,14 +38,47 @@ exports[`Users/Header displayName without name smoke-test 1`] = `
 
 exports[`Users/Header inline loading smoke-test 1`] = `
 <div class="inline-block">
-  <div class="flex items-center">
-    <div class="avatar flex-none">
-      <div class="rounded h-5 w-5 skeleton">
+  <div class="text-md inline-block align-middle">
+    <div class="avatar inline-block align-middle">
+      <div class="rounded inline-block h-5 w-5 skeleton">
       </div>
     </div>
-    <div class="m-auto flex-auto pl-1">
-      <div class="skeleton h-4 w-24">
+    <div class="pl-0 inline-block">
+      <div class="skeleton w-24 h-4">
       </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Users/Header inline small loading smoke-test 1`] = `
+<div class="inline-block">
+  <div class="text-sm inline-block align-middle">
+    <div class="avatar inline-block align-middle">
+      <div class="rounded inline-block h-3.5 w-3.5 skeleton">
+      </div>
+    </div>
+    <div class="pl-0 inline-block">
+      <div class="skeleton w-24 h-3">
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Users/Header inline small smoke-test 1`] = `
+<div class="inline-block">
+  <div class="text-sm inline-block align-middle">
+    <div class="avatar inline-block align-middle">
+      <div class="rounded inline-block h-3.5 w-3.5">
+        <img class="my-0"
+             src="../test-profile-image.jpg"
+             alt="DanConwayDev"
+        >
+      </div>
+    </div>
+    <div class="pl-0 inline-block">
+      DanConwayDev
     </div>
   </div>
 </div>
@@ -53,16 +86,16 @@ exports[`Users/Header inline loading smoke-test 1`] = `
 
 exports[`Users/Header inline smoke-test 1`] = `
 <div class="inline-block">
-  <div class="flex items-center">
-    <div class="avatar flex-none">
-      <div class="rounded h-5 w-5">
+  <div class="text-md inline-block align-middle">
+    <div class="avatar inline-block align-middle">
+      <div class="rounded inline-block h-5 w-5">
         <img class="my-0"
              src="../test-profile-image.jpg"
              alt="DanConwayDev"
         >
       </div>
     </div>
-    <div class="m-auto flex-auto pl-1">
+    <div class="pl-0 inline-block">
       DanConwayDev
     </div>
   </div>
@@ -71,13 +104,13 @@ exports[`Users/Header inline smoke-test 1`] = `
 
 exports[`Users/Header loading smoke-test 1`] = `
 <div>
-  <div class="flex items-center my-2">
+  <div class="my-2 text-md flex items-center">
     <div class="avatar flex-none">
       <div class="rounded h-8 w-8 skeleton">
       </div>
     </div>
-    <div class="m-auto flex-auto pl-3">
-      <div class="skeleton h-4 w-24">
+    <div class="pl-3 flex-auto m-auto">
+      <div class="skeleton w-24 h-4">
       </div>
     </div>
   </div>
@@ -86,7 +119,7 @@ exports[`Users/Header loading smoke-test 1`] = `
 
 exports[`Users/Header name and displayName shows name smoke-test 1`] = `
 <div>
-  <div class="flex items-center my-2">
+  <div class="my-2 text-md flex items-center">
     <div class="avatar flex-none">
       <div class="rounded h-8 w-8">
         <img class="my-0"
@@ -95,7 +128,7 @@ exports[`Users/Header name and displayName shows name smoke-test 1`] = `
         >
       </div>
     </div>
-    <div class="m-auto flex-auto pl-3">
+    <div class="pl-3 flex-auto m-auto">
       Dan
     </div>
   </div>
@@ -104,12 +137,12 @@ exports[`Users/Header name and displayName shows name smoke-test 1`] = `
 
 exports[`Users/Header no image smoke-test 1`] = `
 <div>
-  <div class="flex items-center my-2">
+  <div class="my-2 text-md flex items-center">
     <div class="avatar flex-none">
       <div class="rounded h-8 w-8 bg-neutral">
       </div>
     </div>
-    <div class="m-auto flex-auto pl-3">
+    <div class="pl-3 flex-auto m-auto">
       DanConwayDev
     </div>
   </div>
@@ -118,13 +151,31 @@ exports[`Users/Header no image smoke-test 1`] = `
 
 exports[`Users/Header not found smoke-test 1`] = `
 <div>
-  <div class="flex items-center my-2">
+  <div class="my-2 text-md flex items-center">
     <div class="avatar flex-none">
       <div class="rounded h-8 w-8 bg-neutral">
       </div>
     </div>
-    <div class="m-auto flex-auto pl-3">
+    <div class="pl-3 flex-auto m-auto">
       npub18669...
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Users/Header small smoke-test 1`] = `
+<div>
+  <div class="my-2 text-sm flex items-center">
+    <div class="avatar flex-none">
+      <div class="rounded h-4 w-4">
+        <img class="my-0"
+             src="../test-profile-image.jpg"
+             alt="DanConwayDev"
+        >
+      </div>
+    </div>
+    <div class="pl-2 flex-auto m-auto">
+      DanConwayDev
     </div>
   </div>
 </div>

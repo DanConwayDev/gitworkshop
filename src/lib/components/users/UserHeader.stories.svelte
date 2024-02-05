@@ -25,6 +25,16 @@
 />
 
 <Story
+  name="small"
+  args={{
+    user: {
+      ...vectors.default,
+    },
+    size: 'sm',
+  }}
+/>
+
+<Story
   name="no image"
   args={{
     user: {
@@ -64,5 +74,27 @@
       ...vectors.loading,
     },
     inline: true,
+  }}
+/>
+
+<Story
+  name="inline small"
+  args={{
+    user: {
+      ...vectors.default,
+    },
+    inline: true,
+    size: 'sm',
+  }}
+/>
+
+<Story
+  name="inline small loading"
+  args={{
+    user: {
+      ...vectors.loading,
+    },
+    inline: true,
+    size: 'sm',
   }}
 />

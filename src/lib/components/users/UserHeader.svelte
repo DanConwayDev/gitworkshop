@@ -8,19 +8,38 @@
   }
 
   export let inline = false
+  export let size: 'sm' | 'md' = 'md'
 
   $: ({ profile, loading } = user)
   $: display_name = getName(user)
 </script>
 
 <div class:inline-block={inline}>
-  <div class:my-2={!inline} class="flex items-center">
-    <div class="avatar flex-none">
+  <div
+    class:my-2={!inline}
+    class:text-sm={size === 'sm'}
+    class:text-md={size === 'md'}
+    class:inline-block={inline}
+    class:align-middle={inline}
+    class:flex={!inline}
+    class:items-center={!inline}
+  >
+    <div
+      class="avatar"
+      class:inline-block={inline}
+      class:align-middle={inline}
+      class:flex-none={!inline}
+    >
       <div
-        class:h-8={!inline}
-        class:w-8={!inline}
-        class:h-5={inline}
-        class:w-5={inline}
+        class:inline-block={inline}
+        class:h-8={!inline && size === 'md'}
+        class:w-8={!inline && size === 'md'}
+        class:h-4={!inline && size === 'sm'}
+        class:w-4={!inline && size === 'sm'}
+        class:h-5={inline && size === 'md'}
+        class:w-5={inline && size === 'md'}
+        class:h-3.5={inline && size === 'sm'}
+        class:w-3.5={inline && size === 'sm'}
         class="rounded"
         class:skeleton={!profile && loading}
         class:bg-neutral={!loading && (!profile || !profile.image)}
@@ -30,9 +49,20 @@
         {/if}
       </div>
     </div>
-    <div class:pl-3={!inline} class:pl-1={inline} class="m-auto flex-auto pl-3">
+    <div
+      class:pl-3={!inline && size === 'md'}
+      class:pl-2={!inline && size === 'sm'}
+      class:pl-0={inline}
+      class:flex-auto={!inline}
+      class:m-auto={!inline}
+      class:inline-block={inline}
+    >
       {#if loading}
-        <div class="skeleton h-4 w-24"></div>
+        <div
+          class="skeleton w-24"
+          class:h-4={size === 'md'}
+          class:h-3={size === 'sm'}
+        ></div>
       {:else}
         {display_name}
       {/if}
