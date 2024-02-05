@@ -1,10 +1,10 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`Repo/Header Long Name smoke-test 1`] = `
-<div class="bg-base-300 border-b border-accent-content">
+<div class="border-b border-accent-content bg-base-300">
   <div class="mx-auto lg:container">
     <a href="/repo/9ee507fc4357d7ee16a5d8901bedcd103f23c17d"
-       class="btn btn-ghost text-sm break-words strong mt-0 mb-0 px-3"
+       class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
     >
       Long Name that goes on and on and on and on a...
     </a>
@@ -13,10 +13,10 @@ exports[`Repo/Header Long Name smoke-test 1`] = `
 `;
 
 exports[`Repo/Header No Name smoke-test 1`] = `
-<div class="bg-base-300 border-b border-accent-content">
+<div class="border-b border-accent-content bg-base-300">
   <div class="mx-auto lg:container">
     <a href="/repo/9ee507fc4357d7ee16a5d8901bedcd103f23c17d"
-       class="btn btn-ghost text-sm break-words strong mt-0 mb-0 px-3"
+       class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
     >
       Untitled
     </a>
@@ -25,10 +25,10 @@ exports[`Repo/Header No Name smoke-test 1`] = `
 `;
 
 exports[`Repo/Header Short Name smoke-test 1`] = `
-<div class="bg-base-300 border-b border-accent-content">
+<div class="border-b border-accent-content bg-base-300">
   <div class="mx-auto lg:container">
     <a href="/repo/9ee507fc4357d7ee16a5d8901bedcd103f23c17d"
-       class="btn btn-ghost text-sm break-words strong mt-0 mb-0 px-3"
+       class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
     >
       Short Name
     </a>
@@ -37,10 +37,10 @@ exports[`Repo/Header Short Name smoke-test 1`] = `
 `;
 
 exports[`Repo/Header loading smoke-test 1`] = `
-<div class="bg-base-300 border-b border-accent-content">
+<div class="border-b border-accent-content bg-base-300">
   <div class="mx-auto lg:container">
     <div class="p-3">
-      <div class="h-6 skeleton w-28 bg-base-200">
+      <div class="skeleton h-6 w-28 bg-base-200">
       </div>
     </div>
   </div>

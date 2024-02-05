@@ -1,11 +1,11 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`Repo/Details Long Details smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <h4>
     description
   </h4>
-  <p class="text-sm my-2 break-words">
+  <p class="my-2 break-words text-sm">
     Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis quis nisl eget turpis congue molestie. Nulla vitae purus nec augue accumsan facilisis sed sed ligula. Vestibulum sed risus lacinia risus lacinia molestie. Ut lorem quam, consequat eget tempus in, rhoncus vel nunc. Duis efficitur a leo vel sodales. Nam id fermentum lacus. Etiam nec placerat velit. Praesent ac consectetur est. Aenean iaculis commodo enim.
  Lorem ipsum dolor sit amet, con...
   </p>
@@ -29,7 +29,7 @@ exports[`Repo/Details Long Details smoke-test 1`] = `
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -38,43 +38,49 @@ exports[`Repo/Details Long Details smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="carole"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="carole"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        carole
+        <div class="pl-3 flex-auto m-auto">
+          carole
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="bob"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="bob"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        bob
+        <div class="pl-3 flex-auto m-auto">
+          bob
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="steve"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="steve"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        steve
+        <div class="pl-3 flex-auto m-auto">
+          steve
+        </div>
       </div>
     </div>
   </div>
@@ -82,13 +88,13 @@ exports[`Repo/Details Long Details smoke-test 1`] = `
     <h4>
       relays
     </h4>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.damus.io
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.snort.social
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relayable.org
     </div>
   </div>
@@ -96,11 +102,11 @@ exports[`Repo/Details Long Details smoke-test 1`] = `
 `;
 
 exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <h4>
     description
   </h4>
-  <p class="text-sm my-2 break-words">
+  <p class="my-2 break-words text-sm">
     LoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsum
   </p>
   <div>
@@ -123,7 +129,7 @@ exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -132,43 +138,49 @@ exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="carole"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="carole"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        carole
+        <div class="pl-3 flex-auto m-auto">
+          carole
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="bob"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="bob"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        bob
+        <div class="pl-3 flex-auto m-auto">
+          bob
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="steve"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="steve"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        steve
+        <div class="pl-3 flex-auto m-auto">
+          steve
+        </div>
       </div>
     </div>
   </div>
@@ -176,13 +188,13 @@ exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
     <h4>
       relays
     </h4>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.damus.io
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.snort.social
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relayable.org
     </div>
   </div>
@@ -190,7 +202,7 @@ exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
 `;
 
 exports[`Repo/Details No Description smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <div>
   </div>
   <div>
@@ -213,7 +225,7 @@ exports[`Repo/Details No Description smoke-test 1`] = `
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -222,43 +234,49 @@ exports[`Repo/Details No Description smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="carole"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="carole"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        carole
+        <div class="pl-3 flex-auto m-auto">
+          carole
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="bob"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="bob"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        bob
+        <div class="pl-3 flex-auto m-auto">
+          bob
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="steve"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="steve"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        steve
+        <div class="pl-3 flex-auto m-auto">
+          steve
+        </div>
       </div>
     </div>
   </div>
@@ -266,13 +284,13 @@ exports[`Repo/Details No Description smoke-test 1`] = `
     <h4>
       relays
     </h4>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.damus.io
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.snort.social
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relayable.org
     </div>
   </div>
@@ -280,11 +298,11 @@ exports[`Repo/Details No Description smoke-test 1`] = `
 `;
 
 exports[`Repo/Details No Git Server smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <h4>
     description
   </h4>
-  <p class="text-sm my-2 break-words">
+  <p class="my-2 break-words text-sm">
     short description
   </p>
   <div>
@@ -309,43 +327,49 @@ exports[`Repo/Details No Git Server smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="carole"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="carole"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        carole
+        <div class="pl-3 flex-auto m-auto">
+          carole
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="bob"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="bob"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        bob
+        <div class="pl-3 flex-auto m-auto">
+          bob
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="steve"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="steve"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        steve
+        <div class="pl-3 flex-auto m-auto">
+          steve
+        </div>
       </div>
     </div>
   </div>
@@ -353,13 +377,13 @@ exports[`Repo/Details No Git Server smoke-test 1`] = `
     <h4>
       relays
     </h4>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.damus.io
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.snort.social
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relayable.org
     </div>
   </div>
@@ -367,11 +391,11 @@ exports[`Repo/Details No Git Server smoke-test 1`] = `
 `;
 
 exports[`Repo/Details No Maintainers or Relays smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <h4>
     description
   </h4>
-  <p class="text-sm my-2 break-words">
+  <p class="my-2 break-words text-sm">
     short description
   </p>
   <div>
@@ -394,7 +418,7 @@ exports[`Repo/Details No Maintainers or Relays smoke-test 1`] = `
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -411,11 +435,11 @@ exports[`Repo/Details No Maintainers or Relays smoke-test 1`] = `
 `;
 
 exports[`Repo/Details No Maintainers smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <h4>
     description
   </h4>
-  <p class="text-sm my-2 break-words">
+  <p class="my-2 break-words text-sm">
     short description
   </p>
   <div>
@@ -438,7 +462,7 @@ exports[`Repo/Details No Maintainers smoke-test 1`] = `
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -451,13 +475,13 @@ exports[`Repo/Details No Maintainers smoke-test 1`] = `
     <h4>
       relays
     </h4>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.damus.io
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.snort.social
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relayable.org
     </div>
   </div>
@@ -465,7 +489,7 @@ exports[`Repo/Details No Maintainers smoke-test 1`] = `
 `;
 
 exports[`Repo/Details No Name or Description smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <div>
   </div>
   <div>
@@ -488,7 +512,7 @@ exports[`Repo/Details No Name or Description smoke-test 1`] = `
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -497,43 +521,49 @@ exports[`Repo/Details No Name or Description smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="carole"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="carole"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        carole
+        <div class="pl-3 flex-auto m-auto">
+          carole
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="bob"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="bob"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        bob
+        <div class="pl-3 flex-auto m-auto">
+          bob
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="steve"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="steve"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        steve
+        <div class="pl-3 flex-auto m-auto">
+          steve
+        </div>
       </div>
     </div>
   </div>
@@ -541,13 +571,13 @@ exports[`Repo/Details No Name or Description smoke-test 1`] = `
     <h4>
       relays
     </h4>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.damus.io
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.snort.social
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relayable.org
     </div>
   </div>
@@ -555,11 +585,11 @@ exports[`Repo/Details No Name or Description smoke-test 1`] = `
 `;
 
 exports[`Repo/Details No Relays smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <h4>
     description
   </h4>
-  <p class="text-sm my-2 break-words">
+  <p class="my-2 break-words text-sm">
     short description
   </p>
   <div>
@@ -582,7 +612,7 @@ exports[`Repo/Details No Relays smoke-test 1`] = `
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -591,43 +621,49 @@ exports[`Repo/Details No Relays smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="carole"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="carole"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        carole
+        <div class="pl-3 flex-auto m-auto">
+          carole
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="bob"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="bob"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        bob
+        <div class="pl-3 flex-auto m-auto">
+          bob
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="steve"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="steve"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        steve
+        <div class="pl-3 flex-auto m-auto">
+          steve
+        </div>
       </div>
     </div>
   </div>
@@ -639,11 +675,11 @@ exports[`Repo/Details No Relays smoke-test 1`] = `
 `;
 
 exports[`Repo/Details No Tags smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <h4>
     description
   </h4>
-  <p class="text-sm my-2 break-words">
+  <p class="my-2 break-words text-sm">
     short description
   </p>
   <div>
@@ -654,7 +690,7 @@ exports[`Repo/Details No Tags smoke-test 1`] = `
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -663,43 +699,49 @@ exports[`Repo/Details No Tags smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="carole"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="carole"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        carole
+        <div class="pl-3 flex-auto m-auto">
+          carole
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="bob"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="bob"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        bob
+        <div class="pl-3 flex-auto m-auto">
+          bob
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="steve"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="steve"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        steve
+        <div class="pl-3 flex-auto m-auto">
+          steve
+        </div>
       </div>
     </div>
   </div>
@@ -707,13 +749,13 @@ exports[`Repo/Details No Tags smoke-test 1`] = `
     <h4>
       relays
     </h4>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.damus.io
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.snort.social
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relayable.org
     </div>
   </div>
@@ -721,11 +763,11 @@ exports[`Repo/Details No Tags smoke-test 1`] = `
 `;
 
 exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <h4>
     description
   </h4>
-  <p class="text-sm my-2 break-words">
+  <p class="my-2 break-words text-sm">
     short description
   </p>
   <div>
@@ -748,7 +790,7 @@ exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -757,39 +799,45 @@ exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-
     <h4>
       maintainers
     </h4>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="carole"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="carole"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        carole
+        <div class="pl-3 flex-auto m-auto">
+          carole
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded bg-neutral">
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8 bg-neutral">
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        npub18669...
+        <div class="pl-3 flex-auto m-auto">
+          npub18669...
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="steve"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="steve"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        steve
+        <div class="pl-3 flex-auto m-auto">
+          steve
+        </div>
       </div>
     </div>
   </div>
@@ -797,13 +845,13 @@ exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-
     <h4>
       relays
     </h4>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.damus.io
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.snort.social
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relayable.org
     </div>
   </div>
@@ -811,11 +859,11 @@ exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-
 `;
 
 exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <h4>
     description
   </h4>
-  <p class="text-sm my-2 break-words">
+  <p class="my-2 break-words text-sm">
     short description
   </p>
   <div>
@@ -838,7 +886,7 @@ exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -847,40 +895,46 @@ exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
     <h4>
       maintainers
     </h4>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="carole"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="carole"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        carole
-      </div>
-    </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded skeleton">
-        </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        <div class="w-24 h-4 skeleton">
+        <div class="pl-3 flex-auto m-auto">
+          carole
         </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="steve"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8 skeleton">
+          </div>
+        </div>
+        <div class="pl-3 flex-auto m-auto">
+          <div class="skeleton w-24 h-4">
+          </div>
         </div>
       </div>
-      <div class="flex-auto pl-3 m-auto">
-        steve
+    </div>
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="steve"
+            >
+          </div>
+        </div>
+        <div class="pl-3 flex-auto m-auto">
+          steve
+        </div>
       </div>
     </div>
   </div>
@@ -888,13 +942,13 @@ exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
     <h4>
       relays
     </h4>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.damus.io
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.snort.social
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relayable.org
     </div>
   </div>
@@ -902,11 +956,11 @@ exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
 `;
 
 exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <h4>
     description
   </h4>
-  <p class="text-sm my-2 break-words">
+  <p class="my-2 break-words text-sm">
     short description
   </p>
   <div>
@@ -929,7 +983,7 @@ exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name 
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -938,43 +992,49 @@ exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name 
     <h4>
       maintainers
     </h4>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="carole"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="carole"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        carole
+        <div class="pl-3 flex-auto m-auto">
+          carole
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="DanConwayDev"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="DanConwayDev"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        DanConwayDev
+        <div class="pl-3 flex-auto m-auto">
+          DanConwayDev
+        </div>
       </div>
     </div>
-    <div class="flex my-2">
-      <div class="avatar flex-none">
-        <div class="w-8 h-8 rounded">
-          <img class="my-0"
-               src="../test-profile-image.jpg"
-               alt="steve"
-          >
+    <div>
+      <div class="my-2 text-md flex items-center">
+        <div class="avatar flex-none">
+          <div class="rounded h-8 w-8">
+            <img class="my-0"
+                 src="../test-profile-image.jpg"
+                 alt="steve"
+            >
+          </div>
         </div>
-      </div>
-      <div class="flex-auto pl-3 m-auto">
-        steve
+        <div class="pl-3 flex-auto m-auto">
+          steve
+        </div>
       </div>
     </div>
   </div>
@@ -982,13 +1042,13 @@ exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name 
     <h4>
       relays
     </h4>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.damus.io
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.snort.social
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relayable.org
     </div>
   </div>
@@ -996,11 +1056,11 @@ exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name 
 `;
 
 exports[`Repo/Details Short Details smoke-test 1`] = `
-<div class="max-w-md prose w-full">
+<div class="prose w-full max-w-md">
   <h4>
     description
   </h4>
-  <p class="text-sm my-2 break-words">
+  <p class="my-2 break-words text-sm">
     short description
   </p>
   <div>
@@ -1023,7 +1083,7 @@ exports[`Repo/Details Short Details smoke-test 1`] = `
     </h4>
     <a href="github.com/example/example"
        target="_blank"
-       class="link link-primary break-words my-2"
+       class="link link-primary my-2 break-words"
     >
       github.com/example/example
     </a>
@@ -1036,13 +1096,13 @@ exports[`Repo/Details Short Details smoke-test 1`] = `
     <h4>
       relays
     </h4>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.damus.io
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relay.snort.social
     </div>
-    <div class="badge badge-secondary block my-2">
+    <div class="badge badge-secondary my-2 block">
       relayable.org
     </div>
   </div>
@@ -1050,12 +1110,12 @@ exports[`Repo/Details Short Details smoke-test 1`] = `
 `;
 
 exports[`Repo/Details loading smoke-test 1`] = `
-<div class="max-w-md prose w-full">
-  <div class="h-5 my-3 skeleton w-20">
+<div class="prose w-full max-w-md">
+  <div class="skeleton my-3 h-5 w-20">
   </div>
-  <div class="h-4 my-2 skeleton">
+  <div class="skeleton my-2 h-4">
   </div>
-  <div class="h-4 my-2 mb-3 w-2/3 skeleton">
+  <div class="skeleton my-2 mb-3 h-4 w-2/3">
   </div>
   <div>
     <div class="badge skeleton w-20">
@@ -1064,25 +1124,25 @@ exports[`Repo/Details loading smoke-test 1`] = `
     </div>
   </div>
   <div>
-    <div class="h-5 my-3 skeleton w-20">
+    <div class="skeleton my-3 h-5 w-20">
     </div>
-    <div class="badge skeleton my-2 w-60 block">
-    </div>
-  </div>
-  <div>
-    <div class="h-5 my-3 skeleton w-20">
-    </div>
-    <div class="badge skeleton my-2 w-60 block">
-    </div>
-    <div class="badge skeleton my-2 w-40 block">
+    <div class="badge skeleton my-2 block w-60">
     </div>
   </div>
   <div>
-    <div class="h-5 my-3 skeleton w-20">
+    <div class="skeleton my-3 h-5 w-20">
     </div>
-    <div class="badge skeleton my-2 w-60 block">
+    <div class="badge skeleton my-2 block w-60">
     </div>
-    <div class="badge skeleton my-2 w-40 block">
+    <div class="badge skeleton my-2 block w-40">
+    </div>
+  </div>
+  <div>
+    <div class="skeleton my-3 h-5 w-20">
+    </div>
+    <div class="badge skeleton my-2 block w-60">
+    </div>
+    <div class="badge skeleton my-2 block w-40">
     </div>
   </div>
 </div>

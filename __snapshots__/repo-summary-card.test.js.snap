@@ -1,61 +1,61 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`Repo/Summary/Card Long Details smoke-test 1`] = `
-<div class="p-4 bg-base-200 my-2 rounded-lg">
+<div class="my-2 rounded-lg bg-base-200 p-4">
   <a class="link-primary break-words"
      href="/repo/"
   >
     Long Name that goes on and on and on and on a...
   </a>
-  <p class="text-sm text-muted break-words">
+  <p class="text-muted break-words text-sm">
     Lorem ipsum dolor sit amet, consectetur adipi...
   </p>
 </div>
 `;
 
 exports[`Repo/Summary/Card Long and No Spaces smoke-test 1`] = `
-<div class="p-4 bg-base-200 my-2 rounded-lg">
+<div class="my-2 rounded-lg bg-base-200 p-4">
   <a class="link-primary break-words"
      href="/repo/"
   >
     LongNameLongNameLongNameLongNameLongNameLongN...
   </a>
-  <p class="text-sm text-muted break-words">
+  <p class="text-muted break-words text-sm">
     LoremipsumLoremipsumLoremipsumLoremipsumLorem...
   </p>
 </div>
 `;
 
 exports[`Repo/Summary/Card No Details smoke-test 1`] = `
-<div class="p-4 bg-base-200 my-2 rounded-lg">
+<div class="my-2 rounded-lg bg-base-200 p-4">
   <a class="link-primary break-words"
      href="/repo/"
   >
     Untitled
   </a>
-  <p class="text-sm text-muted break-words">
+  <p class="text-muted break-words text-sm">
   </p>
 </div>
 `;
 
 exports[`Repo/Summary/Card Short Details smoke-test 1`] = `
-<div class="p-4 bg-base-200 my-2 rounded-lg">
+<div class="my-2 rounded-lg bg-base-200 p-4">
   <a class="link-primary break-words"
      href="/repo/"
   >
     Short Name
   </a>
-  <p class="text-sm text-muted break-words">
+  <p class="text-muted break-words text-sm">
     short description
   </p>
 </div>
 `;
 
 exports[`Repo/Summary/Card loading smoke-test 1`] = `
-<div class="p-4 bg-base-200 my-2 rounded-lg">
-  <div class="h-5 mb-2 skeleton w-40">
+<div class="my-2 rounded-lg bg-base-200 p-4">
+  <div class="skeleton mb-2 h-5 w-40">
   </div>
-  <div class="h-4 skeleton w-100">
+  <div class="w-100 skeleton h-4">
   </div>
 </div>
 `;
