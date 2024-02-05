@@ -46,3 +46,23 @@
   name="name and displayName shows name"
   args={{ user: { ...vectors.display_name_and_name } }}
 />
+
+<Story
+  name="inline"
+  args={{
+    user: {
+      ...vectors.default,
+    },
+    inline: true,
+  }}
+/>
+
+<Story
+  name="inline loading"
+  args={{
+    user: {
+      ...vectors.loading,
+    },
+    inline: true,
+  }}
+/>
