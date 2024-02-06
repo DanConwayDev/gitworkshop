@@ -19,8 +19,14 @@ export const ensureUser = (hexpubkey: string): Writable<User> => {
     }
 
     users[hexpubkey] = writable(base)
-    getUserRelays(hexpubkey)
-    u.fetchProfile().then(
+    // getUserRelays is broken due to NDK bug
+    // getUserRelays(hexpubkey)
+    u.fetchProfile({
+      closeOnEose: true,
+      groupable: true,
+      // default 100
+      groupableDelay: 200,
+    }).then(
       (p) => {
         users[hexpubkey].update((u) => ({
           ...u,
@@ -109,6 +115,7 @@ interface UserRelays {
 
 export const user_relays: { [hexpubkey: string]: Writable<UserRelays> } = {}
 
+// Do Not Use - NDK has a bug when batching user relay requests
 export const getUserRelays = async (hexpubkey: string): Promise<UserRelays> => {
   return new Promise(async (res, _) => {
     if (user_relays[hexpubkey]) {
@@ -125,7 +132,11 @@ export const getUserRelays = async (hexpubkey: string): Promise<UserRelays> => {
         loading: true,
         ndk_relays: undefined,
       })
-      const relay_list = await ndk.getUser({ hexpubkey }).relayList()
+      const relay_list = await ndk
+        .getUser({ hexpubkey })
+        // when batching requests NDK creates a really long subid,
+        // beyond the 71 chars that most relays support
+        .relayList()
       const querying_user_relays = {
         loading: false,
         ndk_relays: relay_list,
