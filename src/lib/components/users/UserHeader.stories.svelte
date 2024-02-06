@@ -43,6 +43,15 @@
   }}
 />
 
+<Story
+  name="long name truncated"
+  args={{
+    user: {
+      ...vectors.long_name,
+    },
+  }}
+/>
+
 <Story name="loading" args={{ user: { ...vectors.loading } }} />
 
 <Story name="not found" args={{ user: { ...vectors.no_profile } }} />

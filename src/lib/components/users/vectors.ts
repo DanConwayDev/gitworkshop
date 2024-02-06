@@ -22,6 +22,10 @@ export const UserVectors = {
   } as User,
   no_image: { ...base, profile: { name: 'DanConwayDev' } } as User,
   no_profile: { ...base } as User,
+  long_name: {
+    ...base,
+    profile: { name: 'Really Really Long Long Name', image },
+  } as User,
 }
 
 export function withName(base: User, name: string): User {

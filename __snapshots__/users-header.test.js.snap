@@ -117,6 +117,24 @@ exports[`Users/Header loading smoke-test 1`] = `
 </div>
 `;
 
+exports[`Users/Header long name truncated smoke-test 1`] = `
+<div>
+  <div class="my-2 text-md flex items-center">
+    <div class="avatar flex-none">
+      <div class="rounded h-8 w-8">
+        <img class="my-0"
+             src="../test-profile-image.jpg"
+             alt="Really Really Long Lon..."
+        >
+      </div>
+    </div>
+    <div class="pl-3 flex-auto m-auto">
+      Really Really Long Lon...
+    </div>
+  </div>
+</div>
+`;
+
 exports[`Users/Header name and displayName shows name smoke-test 1`] = `
 <div>
   <div class="my-2 text-md flex items-center">
