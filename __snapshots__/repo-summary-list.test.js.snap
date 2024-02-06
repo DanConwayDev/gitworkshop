@@ -11,168 +11,168 @@ exports[`Repo/Summary/List Default smoke-test 1`] = `
     <div class="my-2 rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
-      <p class="text-muted float-right break-words text-sm">
-        <span>
-        </span>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="Will"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                Will
-              </div>
-            </div>
-          </div>
-        </div>
-      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
         Short Name
       </a>
-      <p class="text-muted break-words text-sm">
+      <p class="text-muted break-words pb-1 text-sm">
         short description
       </p>
+      <div class="break-words text-right text-xs text-slate-400">
+        <ul class="reposummarycard inline svelte-18klqbq">
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="Will"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  Will
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
     <div class="my-2 rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
-      <p class="text-muted float-right break-words text-sm">
-        <span>
-        </span>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="Rather Long Display Name"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                Rather Long Display Name
-              </div>
-            </div>
-          </div>
-        </div>
-      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
         Long Name that goes on and on and on and on a...
       </a>
-      <p class="text-muted break-words text-sm">
+      <p class="text-muted break-words pb-1 text-sm">
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
+      <div class="break-words text-right text-xs text-slate-400">
+        <ul class="reposummarycard inline svelte-18klqbq">
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="Rather Long Display Name"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  Rather Long Display Name
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
     <div class="my-2 rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
-      <p class="text-muted float-right break-words text-sm">
-        <span>
-        </span>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="DanConwayDev"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                DanConwayDev
-              </div>
-            </div>
-          </div>
-        </div>
-      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
         LongNameLongNameLongNameLongNameLongNameLongN...
       </a>
-      <p class="text-muted break-words text-sm">
+      <p class="text-muted break-words pb-1 text-sm">
         LoremipsumLoremipsumLoremipsumLoremipsumLorem...
       </p>
+      <div class="break-words text-right text-xs text-slate-400">
+        <ul class="reposummarycard inline svelte-18klqbq">
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="DanConwayDev"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  DanConwayDev
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
     <div class="my-2 rounded-lg bg-base-200 p-4"
          style="min-height: 5.975rem;"
     >
-      <p class="text-muted float-right break-words text-sm">
-        <span>
-        </span>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="Will"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                Will
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="DanConwayDev"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                DanConwayDev
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="sectore"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                sectore
-              </div>
-            </div>
-          </div>
-        </div>
-      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
         Short Name
       </a>
-      <p class="text-muted break-words text-sm">
+      <p class="text-muted break-words pb-1 text-sm">
         short description
       </p>
+      <div class="break-words text-right text-xs text-slate-400">
+        <ul class="reposummarycard inline svelte-18klqbq">
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="Will"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  Will
+                </div>
+              </div>
+            </div>
+          </li>
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="DanConwayDev"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  DanConwayDev
+                </div>
+              </div>
+            </div>
+          </li>
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="sectore"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  sectore
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </div>
@@ -238,102 +238,102 @@ exports[`Repo/Summary/List Multiple Maintainers smoke-test 1`] = `
     <div class="my-2 rounded-lg bg-base-200 p-4"
          style="min-height: 5.975rem;"
     >
-      <p class="text-muted float-right break-words text-sm">
-        <span>
-        </span>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="Will"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                Will
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="DanConwayDev"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                DanConwayDev
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="sectore"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                sectore
-              </div>
-            </div>
-          </div>
-        </div>
-      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
         Short Name
       </a>
-      <p class="text-muted break-words text-sm">
+      <p class="text-muted break-words pb-1 text-sm">
         short description
       </p>
+      <div class="break-words text-right text-xs text-slate-400">
+        <ul class="reposummarycard inline svelte-18klqbq">
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="Will"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  Will
+                </div>
+              </div>
+            </div>
+          </li>
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="DanConwayDev"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  DanConwayDev
+                </div>
+              </div>
+            </div>
+          </li>
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="sectore"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  sectore
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
     <div class="my-2 rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
-      <p class="text-muted float-right break-words text-sm">
-        <span>
-        </span>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="Rather Long Display Name"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                Rather Long Display Name
-              </div>
-            </div>
-          </div>
-        </div>
-      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
         Long Name that goes on and on and on and on a...
       </a>
-      <p class="text-muted break-words text-sm">
+      <p class="text-muted break-words pb-1 text-sm">
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
+      <div class="break-words text-right text-xs text-slate-400">
+        <ul class="reposummarycard inline svelte-18klqbq">
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="Rather Long Display Name"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  Rather Long Display Name
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </div>
@@ -345,68 +345,68 @@ exports[`Repo/Summary/List No Title smoke-test 1`] = `
     <div class="my-2 rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
-      <p class="text-muted float-right break-words text-sm">
-        <span>
-        </span>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="Will"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                Will
-              </div>
-            </div>
-          </div>
-        </div>
-      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
         Short Name
       </a>
-      <p class="text-muted break-words text-sm">
+      <p class="text-muted break-words pb-1 text-sm">
         short description
       </p>
+      <div class="break-words text-right text-xs text-slate-400">
+        <ul class="reposummarycard inline svelte-18klqbq">
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="Will"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  Will
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
     <div class="my-2 rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
-      <p class="text-muted float-right break-words text-sm">
-        <span>
-        </span>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="Rather Long Display Name"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                Rather Long Display Name
-              </div>
-            </div>
-          </div>
-        </div>
-      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
         Long Name that goes on and on and on and on a...
       </a>
-      <p class="text-muted break-words text-sm">
+      <p class="text-muted break-words pb-1 text-sm">
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
+      <div class="break-words text-right text-xs text-slate-400">
+        <ul class="reposummarycard inline svelte-18klqbq">
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="Rather Long Display Name"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  Rather Long Display Name
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </div>
@@ -423,68 +423,68 @@ exports[`Repo/Summary/List Partially Loaded smoke-test 1`] = `
     <div class="my-2 rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
-      <p class="text-muted float-right break-words text-sm">
-        <span>
-        </span>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="Will"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                Will
-              </div>
-            </div>
-          </div>
-        </div>
-      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
         Short Name
       </a>
-      <p class="text-muted break-words text-sm">
+      <p class="text-muted break-words pb-1 text-sm">
         short description
       </p>
+      <div class="break-words text-right text-xs text-slate-400">
+        <ul class="reposummarycard inline svelte-18klqbq">
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="Will"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  Will
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
     <div class="my-2 rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
-      <p class="text-muted float-right break-words text-sm">
-        <span>
-        </span>
-        <div class="text-right">
-          <div class="inline-block">
-            <div class="text-sm inline-block align-middle">
-              <div class="avatar inline-block align-middle">
-                <div class="rounded inline-block h-3.5 w-3.5">
-                  <img class="my-0"
-                       src="../test-profile-image.jpg"
-                       alt="Rather Long Display Name"
-                  >
-                </div>
-              </div>
-              <div class="pl-0 inline-block">
-                Rather Long Display Name
-              </div>
-            </div>
-          </div>
-        </div>
-      </p>
       <a class="link-primary break-words"
          href="/repo/"
       >
         Long Name that goes on and on and on and on a...
       </a>
-      <p class="text-muted break-words text-sm">
+      <p class="text-muted break-words pb-1 text-sm">
         Lorem ipsum dolor sit amet, consectetur adipi...
       </p>
+      <div class="break-words text-right text-xs text-slate-400">
+        <ul class="reposummarycard inline svelte-18klqbq">
+          <li class="inline svelte-18klqbq">
+            <div class="inline-block">
+              <div class="text-xs inline-block align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="Rather Long Display Name"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  Rather Long Display Name
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
     <div class="my-2 rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"

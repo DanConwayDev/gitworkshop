@@ -22,19 +22,35 @@
     <div class="skeleton mb-2 h-5 w-40"></div>
     <div class="w-100 skeleton h-4"></div>
   {:else}
-    <p class="text-muted float-right break-words text-sm">
-      <span></span>
-      {#each maintainers as user}
-        <div class="text-right">
-          <UserHeader {user} inline={true} size="sm" />
-        </div>
-      {/each}
-    </p>
     <a class="link-primary break-words" href="/repo/{encodeURI(repo_id)}"
       >{short_name}</a
     >
-    <p class="text-muted break-words text-sm">
-      {short_descrption}
-    </p>
+    {#if short_descrption.length > 0}
+      <p class="text-muted break-words pb-1 text-sm">
+        {short_descrption}
+      </p>
+    {/if}
+
+    <div class="break-words text-right text-xs text-slate-400">
+      <ul class="reposummarycard inline">
+        {#each maintainers as user}
+          <li class="inline">
+            <UserHeader {user} inline={true} size="xs" />
+          </li>
+        {/each}
+      </ul>
+    </div>
   {/if}
 </div>
+
+<style lang="postcss">
+  .reposummarycard li::before {
+    content: ', ';
+  }
+  .reposummarycard li:last-child::before {
+    content: ' or ';
+  }
+  .reposummarycard li:first-child::before {
+    content: '';
+  }
+</style>
