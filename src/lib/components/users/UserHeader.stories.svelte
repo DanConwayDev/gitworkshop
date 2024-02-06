@@ -35,6 +35,16 @@
 />
 
 <Story
+  name="extra small"
+  args={{
+    user: {
+      ...vectors.default,
+    },
+    size: 'xs',
+  }}
+/>
+
+<Story
   name="no image"
   args={{
     user: {
@@ -105,5 +115,27 @@
     },
     inline: true,
     size: 'sm',
+  }}
+/>
+
+<Story
+  name="inline extra small"
+  args={{
+    user: {
+      ...vectors.default,
+    },
+    inline: true,
+    size: 'xs',
+  }}
+/>
+
+<Story
+  name="inline extra small loading"
+  args={{
+    user: {
+      ...vectors.loading,
+    },
+    inline: true,
+    size: 'xs',
   }}
 />

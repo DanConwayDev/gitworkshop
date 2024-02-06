@@ -8,7 +8,7 @@
   }
 
   export let inline = false
-  export let size: 'sm' | 'md' = 'md'
+  export let size: 'xs' | 'sm' | 'md' = 'md'
 
   $: ({ profile, loading } = user)
   $: display_name = getName(user)
@@ -17,6 +17,7 @@
 <div class:inline-block={inline}>
   <div
     class:my-2={!inline}
+    class:text-xs={size === 'xs'}
     class:text-sm={size === 'sm'}
     class:text-md={size === 'md'}
     class:inline-block={inline}
@@ -38,8 +39,8 @@
         class:w-4={!inline && size === 'sm'}
         class:h-5={inline && size === 'md'}
         class:w-5={inline && size === 'md'}
-        class:h-3.5={inline && size === 'sm'}
-        class:w-3.5={inline && size === 'sm'}
+        class:h-3.5={(inline && size === 'sm') || size === 'xs'}
+        class:w-3.5={(inline && size === 'sm') || size === 'xs'}
         class="rounded"
         class:skeleton={!profile && loading}
         class:bg-neutral={!loading && (!profile || !profile.image)}
@@ -51,7 +52,7 @@
     </div>
     <div
       class:pl-3={!inline && size === 'md'}
-      class:pl-2={!inline && size === 'sm'}
+      class:pl-2={!inline && (size === 'sm' || size === 'xs')}
       class:pl-0={inline}
       class:flex-auto={!inline}
       class:m-auto={!inline}
@@ -62,6 +63,7 @@
           class="skeleton w-24"
           class:h-4={size === 'md'}
           class:h-3={size === 'sm'}
+          class:h-2.5={size === 'xs'}
         ></div>
       {:else}
         {display_name}

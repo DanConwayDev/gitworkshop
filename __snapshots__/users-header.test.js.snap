@@ -36,6 +36,57 @@ exports[`Users/Header displayName without name smoke-test 1`] = `
 </div>
 `;
 
+exports[`Users/Header extra small smoke-test 1`] = `
+<div>
+  <div class="my-2 text-xs flex items-center">
+    <div class="avatar flex-none">
+      <div class="rounded h-3.5 w-3.5">
+        <img class="my-0"
+             src="../test-profile-image.jpg"
+             alt="DanConwayDev"
+        >
+      </div>
+    </div>
+    <div class="pl-2 flex-auto m-auto">
+      DanConwayDev
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Users/Header inline extra small loading smoke-test 1`] = `
+<div class="inline-block">
+  <div class="text-xs inline-block align-middle">
+    <div class="avatar inline-block align-middle">
+      <div class="rounded inline-block h-3.5 w-3.5 skeleton">
+      </div>
+    </div>
+    <div class="pl-0 inline-block">
+      <div class="skeleton w-24 h-2.5">
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Users/Header inline extra small smoke-test 1`] = `
+<div class="inline-block">
+  <div class="text-xs inline-block align-middle">
+    <div class="avatar inline-block align-middle">
+      <div class="rounded inline-block h-3.5 w-3.5">
+        <img class="my-0"
+             src="../test-profile-image.jpg"
+             alt="DanConwayDev"
+        >
+      </div>
+    </div>
+    <div class="pl-0 inline-block">
+      DanConwayDev
+    </div>
+  </div>
+</div>
+`;
+
 exports[`Users/Header inline loading smoke-test 1`] = `
 <div class="inline-block">
   <div class="text-md inline-block align-middle">
