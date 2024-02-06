@@ -9,7 +9,7 @@
   import { onDestroy } from 'svelte'
   import type { Unsubscriber } from 'svelte/store'
 
-  export let limit: number = 10
+  export let limit: number = 50
 
   let repos: RepoSummary[] = []
   let loading: boolean = true
