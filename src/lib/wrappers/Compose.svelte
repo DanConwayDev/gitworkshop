@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ndk } from '$lib/stores/ndk'
   import { NDKEvent, NDKRelaySet } from '@nostr-dev-kit/ndk'
-  import { reply_kind } from '$lib/kinds'
+  import { reply_kind, repo_kind } from '$lib/kinds'
   import { getUserRelays, logged_in_user } from '$lib/stores/users'
   import { selected_repo } from '$lib/stores/repo'
   import Compose from '$lib/components/events/Compose.svelte'
@@ -34,7 +34,17 @@
     if (reply_to_event_id.length > 0) {
       event.tags.push(['e', pr_id, 'reply'])
     }
-    event.tags.push(['r', `r-${repo_id}`])
+    if ($selected_repo.unique_commit) {
+      event.tags.push(['r', $selected_repo.unique_commit])
+    }
+    event.tags.push([
+      'a',
+      `${repo_kind}:${$selected_repo.maintainers[0].hexpubkey}:${repo_id}`,
+    ])
+    $selected_repo.maintainers.forEach((m) =>
+      event.tags.push(['p', m.hexpubkey])
+    )
+    // TODO nip-10 reply chain p tags
     event.content = content
     submitting = true
     let relays = [...$selected_repo.relays]
