@@ -32,7 +32,7 @@
     event.kind = reply_kind
     event.tags.push(['e', pr_id, 'root'])
     if (reply_to_event_id.length > 0) {
-      event.tags.push(['e', pr_id, 'reply'])
+      event.tags.push(['e', reply_to_event_id, 'reply'])
     }
     if ($selected_repo.unique_commit) {
       event.tags.push(['r', $selected_repo.unique_commit])
