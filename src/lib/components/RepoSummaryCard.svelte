@@ -22,8 +22,9 @@
     <div class="skeleton mb-2 h-5 w-40"></div>
     <div class="w-100 skeleton h-4"></div>
   {:else}
-    <a class="link-primary break-words" href="/repo/{encodeURI(repo_id)}"
-      >{short_name}</a
+    <a
+      class="link-primary break-words"
+      href="/repo/{encodeURIComponent(repo_id)}">{short_name}</a
     >
     {#if short_descrption.length > 0}
       <p class="text-muted break-words pb-1 text-sm">

@@ -6,16 +6,15 @@ import type { User } from '$lib/components/users/type'
 import { ensureUser } from './users'
 import type { PRStatus, PRSummaries } from '$lib/components/prs/type'
 import { ensureSelectedRepo } from './repo'
-import { pr_status_kind } from '$lib/kinds'
+import { patch_kind, pr_kind, pr_status_kind, repo_kind } from '$lib/kinds'
 import type { Repo } from '$lib/components/repo/type'
+import { extractPatchMessage } from '$lib/components/events/content/utils'
 
 export const pr_summaries: Writable<PRSummaries> = writable({
   id: '',
   summaries: [],
   loading: false,
 })
-
-const pr_kind: number = 318
 
 let selected_repo_id: string = ''
 
@@ -41,23 +40,58 @@ export const ensurePRSummaries = async (repo_id: string) => {
   const repo = await ensureSelectedRepo(repo_id)
 
   sub = ndk.subscribe(
+    [
+      {
+        kinds: [pr_kind],
+        '#a': repo.maintainers.map(
+          (m) => `${repo_kind}:${m.hexpubkey}:${repo.repo_id}`
+        ),
+        limit: 50,
+      },
+      {
+        kinds: [patch_kind],
+        '#a': repo.maintainers.map(
+          (m) => `${repo_kind}:${m.hexpubkey}:${repo.repo_id}`
+        ),
+        limit: 50,
+      },
+    ],
     {
-      kinds: [pr_kind],
-      '#r': [`r-${repo_id}`],
-      limit: 50,
+      closeOnEose: true,
     },
-    {
-      closeOnEose: false,
-    },
-    NDKRelaySet.fromRelayUrls(repo.relays, ndk)
+    repo.relays.length > 0
+      ? NDKRelaySet.fromRelayUrls(repo.relays, ndk)
+      : undefined
   )
 
   sub.on('event', (event: NDKEvent) => {
     try {
-      if (
-        event.kind == pr_kind &&
-        event.getMatchingTags('r').find((t) => t[1] === `r-${repo_id}`)
-      ) {
+      if (event.kind == patch_kind && event.content.length > 0) {
+        pr_summaries.update((prs) => {
+          return {
+            ...prs,
+            summaries: [
+              ...prs.summaries,
+              {
+                ...summary_defaults,
+                id: event.id,
+                repo_id: repo_id,
+                title: extractPatchMessage(event.content) || '',
+                descritpion: event.tagValue('description') || '',
+                created_at: event.created_at,
+                comments: 0,
+                author: {
+                  hexpubkey: event.pubkey,
+                  loading: true,
+                  npub: '',
+                },
+                loading: false,
+              },
+            ],
+          }
+        })
+      }
+      if (event.kind == pr_kind) {
         pr_summaries.update((prs) => {
           return {
             ...prs,
@@ -81,21 +115,21 @@ export const ensurePRSummaries = async (repo_id: string) => {
             ],
           }
         })
-
-        authors_unsubscribers.push(
-          ensureUser(event.pubkey).subscribe((u: User) => {
-            pr_summaries.update((prs) => {
-              return {
-                ...prs,
-                summaries: prs.summaries.map((o) => ({
-                  ...o,
-                  author: u,
-                })),
-              }
-            })
-          })
-        )
       }
+
+      authors_unsubscribers.push(
+        ensureUser(event.pubkey).subscribe((u: User) => {
+          pr_summaries.update((prs) => {
+            return {
+              ...prs,
+              summaries: prs.summaries.map((o) => ({
+                ...o,
+                author: event.pubkey === o.author.hexpubkey ? u : o.author,
+              })),
+            }
+          })
+        })
+      )
     } catch {}
   })
   sub.on('eose', () => {

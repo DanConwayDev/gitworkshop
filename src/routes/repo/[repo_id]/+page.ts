@@ -1,5 +1,5 @@
 export const load = ({ params }) => {
   return {
-    repo_id: params.repo_id,
+    repo_id: decodeURIComponent(params.repo_id),
   }
 }
