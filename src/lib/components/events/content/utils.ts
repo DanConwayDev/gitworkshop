@@ -93,3 +93,14 @@ export const parseContent = ({ content }: ContentArgs): ParsedPart[] => {
 
   return result
 }
+
+/** this doesn't work for all patch formats and options */
+export const extractPatchMessage = (s: string): string | undefined => {
+  try {
+    const t = s.split('\nSubject: [')[1].split('] ')[1]
+    if (t.split('\n\n---\n ').length > 1) return t.split('\n\n---\n ')[0]
+    return t.split('\n\ndiff --git ')[0].split('\n\n ').slice(0, -1).join('')
+  } catch {
+    return undefined
+  }
+}

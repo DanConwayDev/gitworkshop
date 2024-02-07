@@ -1,7 +1,7 @@
 <script lang="ts">
   import EventWrapper from '$lib/components/events/EventWrapper.svelte'
   import Kind19851985 from '$lib/components/events/content/Kind19851985.svelte'
-  import Kind317 from '$lib/components/events/content/Kind317.svelte'
+  import Patch from '$lib/components/events/content/Patch.svelte'
   import ParsedContent from '$lib/components/events/content/ParsedContent.svelte'
   import { defaults as user_defaults } from '$lib/components/users/type'
   import { patch_kind, pr_status_kind } from '$lib/kinds'
@@ -27,7 +27,7 @@
   event_id={event.id}
 >
   {#if event.kind == patch_kind}
-    <Kind317 content={event.content} tags={event.tags} />
+    <Patch content={event.content} tags={event.tags} />
   {:else if event.kind === pr_status_kind}
     <Kind19851985 tags={event.tags} />
   {:else}

@@ -2,12 +2,17 @@
   import type { NDKTag } from '@nostr-dev-kit/ndk'
   import parseDiff from 'parse-diff'
   import ParsedContent from './ParsedContent.svelte'
+  import { extractPatchMessage } from './utils'
 
   export let content: string = ''
   export let tags: NDKTag[] = []
 
-  let commit_id = extractTagContent('commit') || '[unknown commit_id]'
-  let commit_message = extractTagContent('description') || '[untitled]'
+  let commit_id_shorthand =
+    extractTagContent('commit')?.substring(0, 8) || '[commit_id unknown]'
+  let commit_message =
+    extractTagContent('description') ||
+    extractPatchMessage(content) ||
+    '[untitled]'
 
   let files = parseDiff(content)
   function extractTagContent(name: string): string | undefined {
@@ -29,7 +34,7 @@
       <tr>
         <td class="text-xs">Changes: </td>
         <td class="text-right">
-          <span class="font-mono text-xs">{commit_id.substring(0, 8)}</span>
+          <span class="font-mono text-xs">{commit_id_shorthand}</span>
         </td>
       </tr>
       {#each files as file}
