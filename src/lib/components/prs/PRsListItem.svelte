@@ -7,6 +7,7 @@
   import { summary_defaults } from './type'
   import { getName } from '../users/type'
   import { pr_icon_path } from './icons'
+  import UserHeader from '../users/UserHeader.svelte'
 
   dayjs.extend(relativeTime)
   export let {
@@ -102,11 +103,7 @@
           opened {created_at_ago}
         </li>
         <li class="inline">
-          {#if author.loading}
-            <div class="skeleton inline-block h-3 w-20 pb-2"></div>
-          {:else}
-            {author_name}
-          {/if}
+          <UserHeader user={author} inline={true} size="xs" />
         </li>
       </ul>
     {/if}

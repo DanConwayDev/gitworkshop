@@ -37,7 +37,21 @@ exports[`PRs/List/List Default smoke-test 1`] = `
             opened 7 days ago
           </li>
           <li class="inline">
-            DanConwayDev
+            <div class="inline-block">
+              <div class="text-xs align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="DanConwayDev"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  DanConwayDev
+                </div>
+              </div>
+            </div>
           </li>
         </ul>
       </a>
@@ -61,7 +75,21 @@ exports[`PRs/List/List Default smoke-test 1`] = `
             opened a minute ago
           </li>
           <li class="inline">
-            DanConwayDev
+            <div class="inline-block">
+              <div class="text-xs align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="DanConwayDev"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  DanConwayDev
+                </div>
+              </div>
+            </div>
           </li>
         </ul>
       </a>
@@ -95,7 +123,21 @@ exports[`PRs/List/List Default smoke-test 1`] = `
             opened 3 months ago
           </li>
           <li class="inline">
-            DanConwayDev
+            <div class="inline-block">
+              <div class="text-xs align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="DanConwayDev"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  DanConwayDev
+                </div>
+              </div>
+            </div>
           </li>
         </ul>
       </a>
@@ -199,7 +241,21 @@ exports[`PRs/List/List No Title smoke-test 1`] = `
             opened 7 days ago
           </li>
           <li class="inline">
-            DanConwayDev
+            <div class="inline-block">
+              <div class="text-xs align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="DanConwayDev"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  DanConwayDev
+                </div>
+              </div>
+            </div>
           </li>
         </ul>
       </a>
@@ -223,7 +279,21 @@ exports[`PRs/List/List No Title smoke-test 1`] = `
             opened a minute ago
           </li>
           <li class="inline">
-            DanConwayDev
+            <div class="inline-block">
+              <div class="text-xs align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="DanConwayDev"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  DanConwayDev
+                </div>
+              </div>
+            </div>
           </li>
         </ul>
       </a>
@@ -269,7 +339,21 @@ exports[`PRs/List/List Partially Loaded smoke-test 1`] = `
             opened 7 days ago
           </li>
           <li class="inline">
-            DanConwayDev
+            <div class="inline-block">
+              <div class="text-xs align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="DanConwayDev"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  DanConwayDev
+                </div>
+              </div>
+            </div>
           </li>
         </ul>
       </a>
@@ -293,7 +377,21 @@ exports[`PRs/List/List Partially Loaded smoke-test 1`] = `
             opened a minute ago
           </li>
           <li class="inline">
-            DanConwayDev
+            <div class="inline-block">
+              <div class="text-xs align-middle">
+                <div class="avatar inline-block align-middle">
+                  <div class="rounded inline-block h-3.5 w-3.5">
+                    <img class="my-0"
+                         src="../test-profile-image.jpg"
+                         alt="DanConwayDev"
+                    >
+                  </div>
+                </div>
+                <div class="pl-0 inline-block">
+                  DanConwayDev
+                </div>
+              </div>
+            </div>
           </li>
         </ul>
       </a>
