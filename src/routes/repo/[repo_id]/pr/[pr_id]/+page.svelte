@@ -12,13 +12,15 @@
   import Container from '$lib/components/Container.svelte'
   import ParsedContent from '$lib/components/events/content/ParsedContent.svelte'
   import Compose from '$lib/wrappers/Compose.svelte'
+  import { patch_kind } from '$lib/kinds'
+  import Patch from '$lib/components/events/content/Patch.svelte'
 
   export let data: {
     repo_id: string
     pr_id: string
   }
 
-  let repo_id = decodeURI(data.repo_id)
+  let repo_id = data.repo_id
   let pr_id = data.pr_id
 
   ensureSelectedRepo(repo_id)
@@ -62,7 +64,14 @@
     <div class="md:flex">
       <div class="md:mr-2 md:w-2/3">
         <div class="prose my-3">
-          <ParsedContent content={$selected_pr_full.summary.descritpion} />
+          {#if $selected_pr_full.pr_event && $selected_pr_full.pr_event.kind === patch_kind}
+            <Patch
+              content={$selected_pr_full.pr_event.content}
+              tags={$selected_pr_full.pr_event.tags}
+            />
+          {:else}
+            <ParsedContent content={$selected_pr_full.summary.descritpion} />
+          {/if}
         </div>
         <div role="alert" class="alert">
           <svg
@@ -88,6 +97,7 @@
             </h3>
           </div>
         </div>
+
         {#each $selected_pr_replies as event}
           <Thread {event} replies={[]} />
         {/each}

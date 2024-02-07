@@ -9,8 +9,10 @@ import {
   isPRStatus,
   type PRStatus,
 } from '$lib/components/prs/type'
-import { pr_kind, pr_status_kind } from '$lib/kinds'
+import { pr_status_kind } from '$lib/kinds'
 import { ensureSelectedRepo } from './repo'
+import { extractPatchMessage } from '$lib/components/events/content/utils'
+import { goto } from '$app/navigation'
 
 export const selected_pr_full: Writable<PRFull> = writable({ ...full_defaults })
 
@@ -62,30 +64,33 @@ export const ensurePRFull = (repo_id: string, pr_id: string) => {
     sub = ndk.subscribe(
       {
         ids: [pr_id],
-        kinds: [pr_kind],
-        '#r': [`r-${repo_id}`],
         limit: 50,
       },
       {
-        closeOnEose: false,
+        closeOnEose: true,
       },
-      NDKRelaySet.fromRelayUrls(repo.relays, ndk)
+      repo.relays.length > 0
+        ? NDKRelaySet.fromRelayUrls(repo.relays, ndk)
+        : undefined
     )
 
     sub.on('event', (event: NDKEvent) => {
       try {
-        if (
-          event.kind == pr_kind &&
-          event.getMatchingTags('r').find((t) => t[1] === `r-${repo_id}`) &&
-          event.id == pr_id
-        ) {
+        if (event.id == pr_id) {
+          const event_repo_id = event.tagValue('a')?.split(':')[2]
+          if (event_repo_id && event_repo_id !== repo_id) {
+            goto(`/repo/${encodeURIComponent(event_repo_id)}/pr/${pr_id}`)
+          }
           selected_pr_full.update((full) => {
             return {
               ...full,
               pr_event: event,
               summary: {
                 ...full.summary,
-                title: event.tagValue('name') || '',
+                title:
+                  event.tagValue('name') ||
+                  extractPatchMessage(event.content) ||
+                  '',
                 descritpion: event.tagValue('description') || '',
                 created_at: event.created_at,
                 comments: 0,
@@ -140,7 +145,9 @@ export const ensurePRFull = (repo_id: string, pr_id: string) => {
       {
         closeOnEose: false,
       },
-      NDKRelaySet.fromRelayUrls(repo.relays, ndk)
+      repo.relays.length > 0
+        ? NDKRelaySet.fromRelayUrls(repo.relays, ndk)
+        : undefined
     )
 
     sub_replies.on('event', (event: NDKEvent) => {
