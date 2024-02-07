@@ -20,7 +20,6 @@
     class:text-xs={size === 'xs'}
     class:text-sm={size === 'sm'}
     class:text-md={size === 'md'}
-    class:inline-block={inline}
     class:align-middle={inline}
     class:flex={!inline}
     class:items-center={!inline}
