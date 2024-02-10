@@ -11,3 +11,7 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 /result
 storybook-static
+
+__snapshots__
+
+yarn-error.log
