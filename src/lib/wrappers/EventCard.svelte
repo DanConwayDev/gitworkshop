@@ -25,6 +25,7 @@
   author={$author}
   created_at={event.created_at}
   event_id={event.id}
+  {event}
 >
   {#if event.kind == patch_kind}
     <Patch content={event.content} tags={event.tags} />
