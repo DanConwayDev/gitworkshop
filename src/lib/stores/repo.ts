@@ -63,6 +63,14 @@ export const ensureSelectedRepo = async (repo_id: string): Promise<Repo> => {
               }
             })
           })
+          const relays: string[] = []
+          event.getMatchingTags('relays').forEach((t: string[]) => {
+            t.forEach((v, i) => {
+              if (i > 0) {
+                relays.push(v)
+              }
+            })
+          })
           selected_repo.set({
             loading: false,
             repo_id: event.replaceableDTag(),
@@ -72,7 +80,7 @@ export const ensureSelectedRepo = async (repo_id: string): Promise<Repo> => {
             clone: event.tagValue('clone') || '',
             tags: event.getMatchingTags('t').map((t) => t[1]) || [],
             maintainers,
-            relays: event.getMatchingTags('relay').map((t: string[]) => t[1]),
+            relays,
           })
           const old_unsubscribers = maintainers_unsubscribers
           maintainers_unsubscribers = maintainers.map((m: User) => {
