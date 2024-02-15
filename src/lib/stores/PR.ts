@@ -178,7 +178,9 @@ export const ensurePRFull = (repo_id: string, pr_id: string) => {
         }
       }
       selected_pr_replies.update((replies) => {
-        return [...replies, event]
+        return [...replies, event].sort(
+          (a, b) => (a.created_at || 0) - (b.created_at || 0)
+        )
       })
     })
 
