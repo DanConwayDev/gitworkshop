@@ -53,6 +53,7 @@ export const ensurePRSummaries = async (repo_id: string) => {
         '#a': repo.maintainers.map(
           (m) => `${repo_kind}:${m.hexpubkey}:${repo.repo_id}`
         ),
+        '#t': ['root'],
         limit: 50,
       },
     ],
