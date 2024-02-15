@@ -87,10 +87,12 @@ export const ensurePRFull = (repo_id: string, pr_id: string) => {
               pr_event: event,
               summary: {
                 ...full.summary,
-                title:
+                title: (
                   event.tagValue('name') ||
+                  event.tagValue('description') ||
                   extractPatchMessage(event.content) ||
-                  '',
+                  ''
+                ).split('\n')[0],
                 descritpion: event.tagValue('description') || '',
                 created_at: event.created_at,
                 comments: 0,

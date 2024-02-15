@@ -76,7 +76,12 @@ export const ensurePRSummaries = async (repo_id: string) => {
                 ...summary_defaults,
                 id: event.id,
                 repo_id: repo_id,
-                title: extractPatchMessage(event.content) || '',
+                title: (
+                  event.tagValue('name') ||
+                  event.tagValue('description') ||
+                  extractPatchMessage(event.content) ||
+                  ''
+                ).split('\n')[0],
                 descritpion: event.tagValue('description') || '',
                 created_at: event.created_at,
                 comments: 0,
@@ -205,4 +210,7 @@ function getAndUpdatePRStatus(prs: PRSummaries, repo: Repo): void {
       }
     })
   })
+}
+function extractTagContent(arg0: string): string {
+  throw new Error('Function not implemented.')
 }
