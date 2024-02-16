@@ -1,4 +1,9 @@
-import { NDKRelaySet, type NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk'
+import {
+  NDKRelaySet,
+  type NDKEvent,
+  NDKSubscription,
+  type NDKFilter,
+} from '@nostr-dev-kit/ndk'
 import { writable, type Unsubscriber, type Writable } from 'svelte/store'
 import { ndk } from './ndk'
 import { isPRStatus, summary_defaults } from '$lib/components/prs/type'
@@ -6,7 +11,7 @@ import type { User } from '$lib/components/users/type'
 import { ensureUser } from './users'
 import type { PRStatus, PRSummaries } from '$lib/components/prs/type'
 import { ensureSelectedRepo } from './repo'
-import { patch_kind, pr_kind, pr_status_kind, repo_kind } from '$lib/kinds'
+import { patch_kind, pr_status_kind, repo_kind } from '$lib/kinds'
 import type { Repo } from '$lib/components/repo/type'
 import { extractPatchMessage } from '$lib/components/events/content/utils'
 
@@ -39,17 +44,27 @@ export const ensurePRSummaries = async (repo_id: string) => {
 
   const repo = await ensureSelectedRepo(repo_id)
 
+  const without_root_tag = !repo.unique_commit
+
+  const filter_with_root: NDKFilter = {
+    kinds: [patch_kind],
+    '#a': repo.maintainers.map(
+      (m) => `${repo_kind}:${m.hexpubkey}:${repo.repo_id}`
+    ),
+    '#t': ['root'],
+    limit: 50,
+  }
+
+  const filter_without_root: NDKFilter = {
+    kinds: [patch_kind],
+    '#a': repo.maintainers.map(
+      (m) => `${repo_kind}:${m.hexpubkey}:${repo.repo_id}`
+    ),
+    limit: 50,
+  }
+
   sub = ndk.subscribe(
-    [
-      {
-        kinds: [patch_kind],
-        '#a': repo.maintainers.map(
-          (m) => `${repo_kind}:${m.hexpubkey}:${repo.repo_id}`
-        ),
-        '#t': ['root'],
-        limit: 50,
-      },
-    ],
+    [without_root_tag ? filter_without_root : filter_with_root],
     {
       closeOnEose: true,
     },
