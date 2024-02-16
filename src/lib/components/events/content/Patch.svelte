@@ -1,12 +1,12 @@
 <script lang="ts">
   import type { NDKTag } from '@nostr-dev-kit/ndk'
   import parseDiff from 'parse-diff'
+  import type { Change, AddChange, DeleteChange } from 'parse-diff'
   import ParsedContent from './ParsedContent.svelte'
   import { extractPatchMessage } from './utils'
 
   export let content: string = ''
   export let tags: NDKTag[] = []
-
   let commit_id_shorthand =
     extractTagContent('commit')?.substring(0, 8) || '[commit_id unknown]'
   let commit_message =
@@ -15,9 +15,26 @@
     '[untitled]'
 
   let files = parseDiff(content)
+  let expand_files = files.map((_) => false)
+
   function extractTagContent(name: string): string | undefined {
     let tag = tags.find((tag) => tag[0] === name)
     return tag ? tag[1] : undefined
+  }
+
+  let isAddChange = (change: Change): change is AddChange =>
+    change.type == 'add'
+  let isDeleteChange = (change: Change): change is DeleteChange =>
+    change.type == 'del'
+  let extractChangeLine = (change: Change, stage?: 'before' | 'after') => {
+    if (isAddChange(change) || isDeleteChange(change)) {
+      return change.ln
+    } else {
+      if (stage === 'before') return change.ln1
+      if (stage === 'after') return change.ln2
+      if (change.ln2 === change.ln2) return change.ln1
+      return '#'
+    }
   }
 </script>
 
@@ -29,31 +46,76 @@
     <div class="flex-none p-1 align-middle text-xs text-neutral">commit</div>
   </div>
 
-  <div class="rounded-b bg-base-200 p-1">
-    <table class="table table-zebra table-xs">
-      <tr>
-        <td class="text-xs">Changes: </td>
-        <td class="text-right">
-          <span class="font-mono text-xs">{commit_id_shorthand}</span>
-        </td>
-      </tr>
-      {#each files as file}
-        <tr>
-          <td>
-            <span
-              class:text-success={file.new}
-              class:text-error={file.deleted}
-              class="text-success"
-            >
-              {file.to || file.from}
-            </span>
-          </td>
-          <td class="text-right">
-            <span class="text-success">+{file.additions}</span>
-            <span class="text-error">- {file.deletions}</span>
-          </td>
-        </tr>
-      {/each}
-    </table>
+  <div class="flex p-3">
+    <div class="flex-grow text-xs">Changes:</div>
+    <div class="flex-none text-right font-mono text-xs">
+      {commit_id_shorthand}
+    </div>
   </div>
+
+  {#each files as file, index}
+    <div class="my-2 border border-base-300">
+      <button
+        class=" 400 flex w-full bg-base-200 p-3"
+        on:click={() => {
+          expand_files[index] = !expand_files[index]
+        }}
+      >
+        <div class="flex-none text-sm">
+          <span>
+            {file.to || file.from}
+          </span>
+          <span
+            class="text-middle flex-none pl-3 align-middle font-mono text-xs opacity-70"
+          >
+            {#if file.new}
+              <span>created file</span>
+            {/if}
+            {#if file.deleted}
+              <span>deleted file</span>
+            {/if}
+            {#if !file.deleted}
+              <span class="text-success">+{file.additions}</span>
+            {/if}
+            {#if !file.new}
+              <span class="text-error">-{file.deletions}</span>
+            {/if}
+          </span>
+        </div>
+        <div class="flex-grow text-right text-xs opacity-40">
+          {expand_files[index] ? 'colapse' : 'expand'}
+        </div>
+      </button>
+      {#if expand_files[index]}
+        <div class="border-t-1 border-base-300">
+          {#each file.chunks as chunk}
+            {#each chunk.changes as change, i}
+              <div class="flex bg-base-300 font-mono text-xs">
+                <div
+                  class="w-8 flex-none bg-slate-500/20 pr-2 text-right opacity-50"
+                >
+                  {isAddChange(change) &&
+                  i !== 0 &&
+                  isDeleteChange(chunk.changes[i - 1])
+                    ? ''
+                    : extractChangeLine(change)}
+                </div>
+                <div
+                  class="text-wrap flex-grow break-all {change.type == 'add'
+                    ? 'bg-success/20'
+                    : change.type == 'del'
+                      ? 'bg-error/20'
+                      : ''}"
+                >
+                  {change.type == 'normal'
+                    ? change.content
+                    : change.content.substring(1)}
+                </div>
+              </div>
+            {/each}
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/each}
 </div>
