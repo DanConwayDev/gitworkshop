@@ -6,79 +6,90 @@
   <div class="prose m-auto mt-8">
     <h2 class=""><span class="text-purple-600">n</span>git</h2>
     <p>
-      a command-line tool to create, list and apply PRs and patches to git
-      repositories via nostr events.
+      a command-line tool for managing git repositories change proposals via
+      nostr
     </p>
-    It is designed to work seemlessly with this site gitworkshop.dev.
+    <p>
+      works seemlessly with <a href="https://gitworkshop.dev">gitworkshop.dev</a
+      >
+    </p>
 
     <h3>Install</h3>
     <p>
-      If you have cargo installed run<code>cargo install ngit</code>.
-      Alternatively download:
+      until the release of v1.0.0 you will need to clone ngit-cli `main` branch
+      and build from source
     </p>
-    <a
-      href="https://github.com/DanConwayDev/ngit-cli/releases/download/v0.1.1/ngit-x86_64-unknown-linux-gnu.tar.gz"
-      class="btn btn-neutral">Linux</a
-    >
-    <a
-      href="https://github.com/DanConwayDev/ngit-cli/releases/download/v0.1.1/ngit-x86_64-apple-darwin.tar.gz"
-      class="btn btn-neutral">Mac</a
-    >
-    <a
-      href="https://github.com/DanConwayDev/ngit-cli/releases/download/v0.1.1/ngit-x86_64-pc-windows-msvc.zip"
-      class="btn btn-neutral">Windows</a
-    >
-    v.0.1.1
-    <p>add the binary to a directory from which it can be run globally.</p>
+    <div class="line-through">
+      <p>
+        add the following binary to a directory from which it can be run
+        globally:
+      </p>
+      <p>
+        <a
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.0.0/ngit-x86_64-unknown-linux-gnu.tar.gz"
+          class="btn btn-neutral">Linux</a
+        >
+        <a
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.0.0/ngit-x86_64-apple-darwin.tar.gz"
+          class="btn btn-neutral">Mac</a
+        >
+        <a
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.0.0/ngit-x86_64-pc-windows-msvc.zip"
+          class="btn btn-neutral">Windows</a
+        > TODO: issue v1.0.0 and activate these links
+      </p>
+
+      <p>
+        alternatively, if you have cargo installed run<code
+          >cargo install ngit</code
+        >
+      </p>
+    </div>
     <h3>Commands</h3>
-    <p>All commands should be run from the directory of the git repository</p>
+    <p>run from the directory of the git repository:</p>
     <p>
       <span class="rounded bg-neutral p-2 font-mono"
-        ><span class="py-5">ngit prs create</span></span
+        ><span class="py-5">ngit init</span></span
       >
-      use this when you are on a feature branch to propose it gets merged into the
-      remote branch by repository maintainer.
+      for maintainers to signal they are accepting proposals via nostr
     </p>
+
     <p>
-      It creates a PR event and patch events for each commit that isn't also in
-      the main or master branch.
+      <span class="rounded bg-neutral p-2 font-mono"
+        ><span class="py-5">ngit send</span></span
+      >
+      send commits on current branch as a proposal
     </p>
     <p>
       <span class="rounded bg-neutral p-2 font-mono"
-        ><span class="py-5">ngit prs list</span></span
+        ><span class="py-5">ngit list</span></span
       >
-      fetches a selectable list of open PRs and, if one is selected and the repository
-      is clean, will create a branch for it and apply the commits. If the branch
-      already exists it will pull any updates.
+      list proposals; optionally apply them as a new branch
+    </p>
+    <p>and when on a proposal branch:</p>
+    <p>
+      <span class="rounded bg-neutral p-2 font-mono"
+        ><span class="py-5">ngit push</span></span
+      >
+      send new commits as proposal ammendments
     </p>
     <p>
       <span class="rounded bg-neutral p-2 font-mono"
         ><span class="py-5">ngit pull</span></span
       >
-      if the repository is currently in a branch related to an existing PR, it will
-      pull any updates from nostr.
+      fetch and apply new proposal commits
     </p>
+    <h3>Learn More</h3>
+
     <p>
       <span class="rounded bg-neutral p-2 font-mono"
-        ><span class="py-5">ngit push</span></span
+        ><span class="py-5">ngit init</span></span
       >
-      if the repository is currently in a branch related to an existing PR, it will
-      create patch events for any new commits.
-    </p>
-    <p>
-      <span class="rounded bg-neutral p-2 font-mono"
-        ><span class="py-5">ngit claim</span></span
-      >
-      issue a repository nostr event which lists it on gitworkshop.dev and indicates
-      you are accepting patches and PRs via nostr. This can be run many times to
-      update the details. The relays will reflect your user relays plus blaster.
-    </p>
-    <p>
-      It also creates an optional <span class="bg-base-200 p-2 font-mono"
-        >maintainers.yaml</span
-      > file in the root of your repo that lists maintainers and relays. If commited
-      it will make it smoother for contributors to find your repository event and
-      also makes any future transfer of repository ownership easier.
+      also creates an optional
+      <span class="bg-base-200 p-2 font-mono">maintainers.yaml</span> file in the
+      root of your repo that lists maintainers and relays. If commited it will make
+      it smoother for contributors to find your repository event and also makes any
+      future transfer of repository ownership easier.
     </p>
   </div>
 </Container>
