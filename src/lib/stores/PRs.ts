@@ -42,13 +42,6 @@ export const ensurePRSummaries = async (repo_id: string) => {
   sub = ndk.subscribe(
     [
       {
-        kinds: [pr_kind],
-        '#a': repo.maintainers.map(
-          (m) => `${repo_kind}:${m.hexpubkey}:${repo.repo_id}`
-        ),
-        limit: 50,
-      },
-      {
         kinds: [patch_kind],
         '#a': repo.maintainers.map(
           (m) => `${repo_kind}:${m.hexpubkey}:${repo.repo_id}`
@@ -83,31 +76,6 @@ export const ensurePRSummaries = async (repo_id: string) => {
                   extractPatchMessage(event.content) ||
                   ''
                 ).split('\n')[0],
-                descritpion: event.tagValue('description') || '',
-                created_at: event.created_at,
-                comments: 0,
-                author: {
-                  hexpubkey: event.pubkey,
-                  loading: true,
-                  npub: '',
-                },
-                loading: false,
-              },
-            ],
-          }
-        })
-      }
-      if (event.kind == pr_kind) {
-        pr_summaries.update((prs) => {
-          return {
-            ...prs,
-            summaries: [
-              ...prs.summaries,
-              {
-                ...summary_defaults,
-                id: event.id,
-                repo_id: repo_id,
-                title: event.tagValue('name') || '',
                 descritpion: event.tagValue('description') || '',
                 created_at: event.created_at,
                 comments: 0,
