@@ -19,11 +19,7 @@
     repo_id = $selected_repo.repo_id
     pr_id = $selected_pr_full.summary.id
 
-    edit_mode =
-      $logged_in_user !== undefined &&
-      repo_id.length > 0 &&
-      pr_id.length > 0 &&
-      !submitted
+    edit_mode = repo_id.length > 0 && pr_id.length > 0 && !submitted
   }
 
   async function sendReply(content: string) {
@@ -77,7 +73,7 @@
 </script>
 
 {#if edit_mode}
-  <Compose {sendReply} {submitting} />
+  <Compose {sendReply} {submitting} logged_in={!!$logged_in_user} />
 {/if}
 {#if submitted}
   <div>sent!</div>

@@ -1,7 +1,11 @@
 <script lang="ts">
+  import { login } from '$lib/stores/users'
+
   export let sendReply: (content: string) => void = () => {}
   export let submitting = false
+  export let logged_in = false
   let submit = () => {
+    if (!logged_in) login()
     sendReply(content)
   }
   let content = ''
@@ -23,6 +27,8 @@
     >
       {#if submitting}
         Sending
+      {:else if !logged_in}
+        Login before Sending
       {:else}
         Send
       {/if}

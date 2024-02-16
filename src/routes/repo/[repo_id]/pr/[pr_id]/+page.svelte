@@ -63,17 +63,7 @@
   <Container>
     <div class="md:flex">
       <div class="md:mr-2 md:w-2/3">
-        <div class="prose my-3">
-          {#if $selected_pr_full.pr_event && $selected_pr_full.pr_event.kind === patch_kind}
-            <Patch
-              content={$selected_pr_full.pr_event.content}
-              tags={$selected_pr_full.pr_event.tags}
-            />
-          {:else}
-            <ParsedContent content={$selected_pr_full.summary.descritpion} />
-          {/if}
-        </div>
-        <div role="alert" class="alert">
+        <div role="alert" class="alert mt-3">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
@@ -87,17 +77,27 @@
             ></path></svg
           >
           <div>
-            <h3 class="prose text-xs">
-              to view the latest patches from this PR <a href="/ngit"
-                >install ngit</a
-              >, run
-              <span class="rounded bg-neutral p-1 font-mono"
-                ><span class="py-3">ngit prs list</span></span
-              > from the local repository and select this PR title
+            <h3 class="prose mb-2 text-sm font-bold">
+              view proposal in local git repository
             </h3>
+            <p class="prose text-xs">
+              <a href="/ngit">install ngit</a>, run
+              <span class="rounded bg-neutral p-1 font-mono"
+                ><span class="py-3">ngit list</span></span
+              > from the local repository and select the proposal title
+            </p>
           </div>
         </div>
-
+        <div class="prose my-3">
+          {#if $selected_pr_full.pr_event && $selected_pr_full.pr_event.kind === patch_kind}
+            <Patch
+              content={$selected_pr_full.pr_event.content}
+              tags={$selected_pr_full.pr_event.tags}
+            />
+          {:else}
+            <ParsedContent content={$selected_pr_full.summary.descritpion} />
+          {/if}
+        </div>
         {#each $selected_pr_replies as event}
           <Thread {event} replies={[]} />
         {/each}
