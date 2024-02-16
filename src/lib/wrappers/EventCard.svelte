@@ -8,16 +8,20 @@
   import { ensureUser } from '$lib/stores/users'
   import type { NDKEvent } from '@nostr-dev-kit/ndk'
   import { onDestroy } from 'svelte'
-  import { writable } from 'svelte/store'
+  import { writable, type Unsubscriber } from 'svelte/store'
 
   export let event: NDKEvent
 
   let author = writable({ ...user_defaults })
-  let author_unsubsriber = ensureUser(event.pubkey).subscribe((u) => {
-    author.set({ ...u })
-  })
+  let author_unsubsriber: Unsubscriber
+  $: {
+    if (event && event.pubkey.length > 0)
+      author_unsubsriber = ensureUser(event.pubkey).subscribe((u) => {
+        if (u.hexpubkey == event.pubkey) author.set({ ...u })
+      })
+  }
   onDestroy(() => {
-    author_unsubsriber()
+    if (author_unsubsriber) author_unsubsriber()
   })
 </script>
 
