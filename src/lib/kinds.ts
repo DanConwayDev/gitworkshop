@@ -4,7 +4,7 @@ export const proposal_status_open: number = 1630
 export const proposal_status_applied: number = 1631
 export const proposal_status_closed: number = 1632
 export const proposal_status_draft: number = 1633
-export const pr_status_kinds: number[] = [
+export const proposal_status_kinds: number[] = [
   proposal_status_open,
   proposal_status_applied,
   proposal_status_closed,

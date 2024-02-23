@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { NDKTag } from '@nostr-dev-kit/ndk'
-  import Status from '$lib/components/prs/Status.svelte'
+  import Status from '$lib/components/proposals/Status.svelte'
 
   export let tags: NDKTag[] = []
 

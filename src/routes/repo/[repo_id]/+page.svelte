@@ -1,6 +1,6 @@
 <script lang="ts">
   import RepoDetails from '$lib/wrappers/RepoDetails.svelte'
-  import OpenPRs from '$lib/wrappers/OpenPRs.svelte'
+  import OpenProposals from '$lib/wrappers/OpenProposals.svelte'
   import { ensureSelectedRepo, selected_repo } from '$lib/stores/repo'
   import RepoHeader from '$lib/components/repo/RepoHeader.svelte'
   import Container from '$lib/components/Container.svelte'
@@ -40,7 +40,7 @@
   <Container>
     <div class="mt-2 md:flex">
       <div class="md:mr-2 md:w-2/3">
-        <OpenPRs {repo_id} />
+        <OpenProposals {repo_id} />
       </div>
       <div class="prose ml-2 hidden w-1/3 md:flex">
         <RepoDetails {repo_id} />

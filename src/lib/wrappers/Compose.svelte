@@ -5,28 +5,28 @@
   import { getUserRelays, logged_in_user } from '$lib/stores/users'
   import { selected_repo } from '$lib/stores/repo'
   import Compose from '$lib/components/events/Compose.svelte'
-  import { selected_pr_full } from '$lib/stores/PR'
+  import { selected_proposal_full } from '$lib/stores/Proposal'
 
   export let reply_to_event_id = ''
 
   let repo_id: string
-  let pr_id: string
+  let proposal_id: string
 
   let submitting = false
   let submitted = false
   let edit_mode = false
   $: {
     repo_id = $selected_repo.repo_id
-    pr_id = $selected_pr_full.summary.id
+    proposal_id = $selected_proposal_full.summary.id
 
-    edit_mode = repo_id.length > 0 && pr_id.length > 0 && !submitted
+    edit_mode = repo_id.length > 0 && proposal_id.length > 0 && !submitted
   }
 
   async function sendReply(content: string) {
     if (!$logged_in_user) return
     let event = new NDKEvent(ndk)
     event.kind = reply_kind
-    event.tags.push(['e', pr_id, 'root'])
+    event.tags.push(['e', proposal_id, 'root'])
     if (reply_to_event_id.length > 0) {
       event.tags.push(['e', reply_to_event_id, 'reply'])
     }
@@ -56,7 +56,7 @@
         ...(user_relays.ndk_relays
           ? user_relays.ndk_relays.writeRelayUrls
           : []),
-        // TODO: pr event pubkey relays
+        // TODO: proposal event pubkey relays
       ]
     } catch {
       alert('failed to get user relays')

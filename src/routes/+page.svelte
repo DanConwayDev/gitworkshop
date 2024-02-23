@@ -45,7 +45,7 @@
               <div class="prose">
                 a command-line tool to <span class="badge">create</span>,
                 <span class="badge">list</span> and
-                <span class="badge">apply</span> PRs and patches
+                <span class="badge">apply</span> Proposals and patches
                 <div class="card-actions mt-3 flex">
                   <div class="flex-grow">
                     <a href="/ngit" class="btn btn-neutral">install ngit</a>
