@@ -29,6 +29,6 @@
 
 <Story name="Status Closed" args={vectors.StatusClosed} />
 
-<Story name="Status Merged" args={vectors.StatusMerged} />
+<Story name="Status Applied" args={vectors.StatusApplied} />
 
 <Story name="loading" args={{ loading: true }} />

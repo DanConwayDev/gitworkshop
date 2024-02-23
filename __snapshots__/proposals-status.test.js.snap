@@ -23,12 +23,12 @@ exports[`Proposals/Status Loading smoke-test 1`] = `
 </div>
 `;
 
-exports[`Proposals/Status Merged smoke-test 1`] = `
+exports[`Proposals/Status Applied smoke-test 1`] = `
 <div tabindex="0"
      role="button"
      class="btn btn-sm align-middle cursor-default"
 >
-  Merged
+  Applied
 </div>
 `;
 

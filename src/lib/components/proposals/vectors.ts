@@ -59,7 +59,7 @@ export const ProposalsListItemArgsVectors = {
     ...Short,
     status: proposal_status_draft,
   } as ProposalSummary,
-  StatusMerged: {
+  StatusApplied: {
     ...Short,
     status: proposal_status_applied,
   } as ProposalSummary,

@@ -42,7 +42,7 @@
         class="h-5 w-5 flex-none fill-primary-content pt-1"
         ><path d={proposal_icon_path.merge} /></svg
       >
-      Merged
+      Applied
     {:else if status === proposal_status_closed}
       <!-- https://icon-sets.iconify.design/octicon/git-pull-request-closed-16/ -->
       <svg

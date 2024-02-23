@@ -20,7 +20,7 @@
 
 <Story name="Draft" args={{ status: 'Draft' }} />
 
-<Story name="Merged" args={{ status: 'Merged' }} />
+<Story name="Applied" args={{ status: 'Applied' }} />
 
 <Story name="Open Edit Mode" args={{ edit_mode: true, status: 'Open' }} />
 
