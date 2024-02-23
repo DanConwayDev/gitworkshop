@@ -51,33 +51,33 @@
       <span class="rounded bg-neutral p-2 font-mono"
         ><span class="py-5">ngit init</span></span
       >
-      for maintainers to signal they are accepting proposals via nostr
+      signal you are this repo's maintainer accepting proposals via nostr
     </p>
 
     <p>
       <span class="rounded bg-neutral p-2 font-mono"
         ><span class="py-5">ngit send</span></span
       >
-      send commits on current branch as a proposal
+      issue commits as a proposal
     </p>
     <p>
       <span class="rounded bg-neutral p-2 font-mono"
         ><span class="py-5">ngit list</span></span
       >
-      list proposals; optionally apply them as a new branch
+      list proposals; checkout, apply or donwload selected
     </p>
     <p>and when on a proposal branch:</p>
     <p>
       <span class="rounded bg-neutral p-2 font-mono"
         ><span class="py-5">ngit push</span></span
       >
-      send new commits as proposal ammendments
+      send proposal revision
     </p>
     <p>
       <span class="rounded bg-neutral p-2 font-mono"
         ><span class="py-5">ngit pull</span></span
       >
-      fetch and apply new proposal commits
+      fetch and apply new proposal commits / revisions linked to branch
     </p>
     <h3>Learn More</h3>
 
