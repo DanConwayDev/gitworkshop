@@ -1,14 +1,19 @@
 <script lang="ts">
   import { ndk } from '$lib/stores/ndk'
   import { NDKEvent, NDKRelaySet } from '@nostr-dev-kit/ndk'
-  import type { PRStatus } from './type'
   import { selected_pr_full } from '$lib/stores/PR'
-  import { pr_status_kind } from '$lib/kinds'
+  import {
+    proposal_status_applied,
+    proposal_status_closed,
+    proposal_status_draft,
+    proposal_status_open,
+    statusKindtoText,
+  } from '$lib/kinds'
   import { getUserRelays, logged_in_user } from '$lib/stores/users'
   import { selected_repo } from '$lib/stores/repo'
   import Status from '$lib/components/prs/Status.svelte'
 
-  export let status: PRStatus | undefined = undefined
+  export let status: number | undefined = undefined
   export let repo_id: string = ''
   export let pr_id: string = ''
 
@@ -20,13 +25,12 @@
       $logged_in_user !== undefined && repo_id === $selected_repo.repo_id
   }
 
-  async function changeStatus(new_status: PRStatus) {
+  async function changeStatus(new_status_kind: number) {
     if (!$logged_in_user) return
     let event = new NDKEvent(ndk)
-    event.kind = pr_status_kind
-    event.tags.push(['l', new_status])
+    event.kind = new_status_kind
     event.tags.push(['e', pr_id, 'root'])
-    event.tags.push(['r', `r-${repo_id}`])
+    event.tags.push(['r', `${repo_id}`])
     loading = true
     let relays = [...$selected_repo.relays]
     try {
@@ -54,7 +58,7 @@
           ...pr_full,
           summary: {
             ...pr_full.summary,
-            status: new_status,
+            status: new_status_kind,
             status_date: event.created_at || 0,
           },
         }
@@ -74,43 +78,47 @@
         tabIndex={0}
         class="menu dropdown-content z-[1] ml-0 w-52 rounded-box bg-base-300 p-2 shadow"
       >
-        {#if status !== 'Draft'}
+        {#if status !== proposal_status_draft}
           <li class="pl-0">
             <button
               on:click={() => {
-                changeStatus('Draft')
+                changeStatus(proposal_status_draft)
               }}
-              class="btn btn-neutral btn-sm mx-2 align-middle">Draft</button
+              class="btn btn-neutral btn-sm mx-2 align-middle"
+              >{statusKindtoText(proposal_status_draft)}</button
             >
           </li>
         {/if}
-        {#if status !== 'Open'}
+        {#if status !== proposal_status_open}
           <li class="pl-0">
             <button
               on:click={() => {
-                changeStatus('Open')
+                changeStatus(proposal_status_open)
               }}
-              class="btn btn-success btn-sm mx-2 align-middle">Open</button
+              class="btn btn-success btn-sm mx-2 align-middle"
+              >{statusKindtoText(proposal_status_open)}</button
             >
           </li>
         {/if}
-        {#if status !== 'Merged'}
+        {#if status !== proposal_status_applied}
           <li class="pl-0">
             <button
               on:click={() => {
-                changeStatus('Merged')
+                changeStatus(proposal_status_applied)
               }}
-              class="btn btn-primary btn-sm mx-2 align-middle">Merged</button
+              class="btn btn-primary btn-sm mx-2 align-middle"
+              >{statusKindtoText(proposal_status_applied)}</button
             >
           </li>
         {/if}
-        {#if status !== 'Closed'}
+        {#if status !== proposal_status_closed}
           <li class="pl-0">
             <button
               on:click={() => {
-                changeStatus('Closed')
+                changeStatus(proposal_status_closed)
               }}
-              class="btn btn-neutral btn-sm mx-2 align-middle">Closed</button
+              class="btn btn-neutral btn-sm mx-2 align-middle"
+              >{statusKindtoText(proposal_status_closed)}</button
             >
           </li>
         {/if}

@@ -3,13 +3,8 @@ import { writable, type Unsubscriber, type Writable } from 'svelte/store'
 import { ndk } from './ndk'
 import type { User } from '$lib/components/users/type'
 import { ensureUser } from './users'
-import {
-  type PRFull,
-  full_defaults,
-  isPRStatus,
-  type PRStatus,
-} from '$lib/components/prs/type'
-import { pr_status_kind } from '$lib/kinds'
+import { type PRFull, full_defaults } from '$lib/components/prs/type'
+import { pr_status_kinds, proposal_status_open } from '$lib/kinds'
 import { ensureSelectedRepo } from './repo'
 import { extractPatchMessage } from '$lib/components/events/content/utils'
 import { goto } from '$app/navigation'
@@ -154,28 +149,23 @@ export const ensurePRFull = (repo_id: string, pr_id: string) => {
 
     sub_replies.on('event', (event: NDKEvent) => {
       if (
-        event.kind == pr_status_kind &&
+        event.kind &&
+        pr_status_kinds.includes(event.kind) &&
         event.created_at &&
-        selected_pr_status_date < event.created_at &&
-        event.getMatchingTags('l').length === 1 &&
-        event.getMatchingTags('l')[0].length > 1
+        selected_pr_status_date < event.created_at
       ) {
-        const potential_status = event.getMatchingTags('l')[0][1]
-
-        if (isPRStatus(potential_status)) {
-          selected_pr_status_date = event.created_at
-          selected_pr_full.update((full) => {
-            return {
-              ...full,
-              summary: {
-                ...full.summary,
-                status: potential_status as PRStatus,
-                // this wont be 0 as we are ensuring it is not undefined above
-                status_date: event.created_at || 0,
-              },
-            }
-          })
-        }
+        selected_pr_status_date = event.created_at
+        selected_pr_full.update((full) => {
+          return {
+            ...full,
+            summary: {
+              ...full.summary,
+              status: event.kind,
+              // this wont be 0 as we are ensuring it is not undefined above
+              status_date: event.created_at || 0,
+            },
+          }
+        })
       }
       selected_pr_replies.update((replies) => {
         return [...replies, event].sort(
@@ -190,7 +180,7 @@ export const ensurePRFull = (repo_id: string, pr_id: string) => {
           ...full,
           summary: {
             ...full.summary,
-            status: full.summary.status || 'Open',
+            status: full.summary.status || proposal_status_open,
           },
           loading: false,
         }

@@ -1,7 +1,13 @@
 <script lang="ts">
+  import {
+    proposal_status_applied,
+    proposal_status_closed,
+    proposal_status_draft,
+    proposal_status_open,
+  } from '$lib/kinds'
   import { pr_icon_path } from './icons'
 
-  export let status: string | undefined = undefined
+  export let status: number | undefined = undefined
   export let edit_mode = false
 </script>
 
@@ -11,13 +17,15 @@
   <div
     tabIndex={0}
     role="button"
-    class:btn-success={status && status === 'Open'}
-    class:btn-primary={status && status === 'Merged'}
-    class:btn-neutral={!status || status === 'Draft' || status === 'Closed'}
+    class:btn-success={status && status === proposal_status_open}
+    class:btn-primary={status && status === proposal_status_applied}
+    class:btn-neutral={!status ||
+      status === proposal_status_draft ||
+      status === proposal_status_closed}
     class:cursor-default={!edit_mode}
     class="btn btn-success btn-sm align-middle"
   >
-    {#if status === 'Open'}
+    {#if status === proposal_status_open}
       <!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -26,7 +34,7 @@
         ><path d={pr_icon_path.open} />
       </svg>
       Open
-    {:else if status === 'Merged'}
+    {:else if status === proposal_status_applied}
       <!-- https://icon-sets.iconify.design/octicon/git-merge-16/ -->
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -35,7 +43,7 @@
         ><path d={pr_icon_path.merge} /></svg
       >
       Merged
-    {:else if status === 'Closed'}
+    {:else if status === proposal_status_closed}
       <!-- https://icon-sets.iconify.design/octicon/git-pull-request-closed-16/ -->
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -44,7 +52,7 @@
         ><path d={pr_icon_path.close} /></svg
       >
       Closed
-    {:else if status === 'Draft'}
+    {:else if status === proposal_status_draft}
       <!-- https://icon-sets.iconify.design/octicon/git-pull-request-draft-16// -->
       <svg
         xmlns="http://www.w3.org/2000/svg"

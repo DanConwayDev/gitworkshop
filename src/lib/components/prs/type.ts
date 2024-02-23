@@ -9,7 +9,7 @@ export interface PRSummary {
   repo_id: string
   id: string
   comments: number
-  status: undefined | PRStatus
+  status: undefined | number
   status_date: number
   author: User
   created_at: number | undefined
@@ -41,19 +41,6 @@ export const summaries_defaults: PRSummaries = {
   loading: true,
 }
 
-export type PRStatus = 'Draft' | 'Open' | 'Merged' | 'Closed'
-
-export function isPRStatus(
-  potential_status: string | undefined
-): potential_status is PRStatus {
-  return (
-    !!potential_status &&
-    (potential_status == 'Draft' ||
-      potential_status == 'Open' ||
-      potential_status == 'Merged' ||
-      potential_status == 'Closed')
-  )
-}
 export interface PRFull {
   summary: PRSummary
   pr_event: NDKEvent | undefined

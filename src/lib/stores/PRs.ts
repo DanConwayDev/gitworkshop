@@ -6,12 +6,17 @@ import {
 } from '@nostr-dev-kit/ndk'
 import { writable, type Unsubscriber, type Writable } from 'svelte/store'
 import { ndk } from './ndk'
-import { isPRStatus, summary_defaults } from '$lib/components/prs/type'
+import { summary_defaults } from '$lib/components/prs/type'
 import type { User } from '$lib/components/users/type'
 import { ensureUser } from './users'
-import type { PRStatus, PRSummaries } from '$lib/components/prs/type'
+import type { PRSummaries } from '$lib/components/prs/type'
 import { ensureSelectedRepo } from './repo'
-import { patch_kind, pr_status_kind, repo_kind } from '$lib/kinds'
+import {
+  patch_kind,
+  pr_status_kinds,
+  proposal_status_open,
+  repo_kind,
+} from '$lib/kinds'
 import type { Repo } from '$lib/components/repo/type'
 import { extractPatchMessage } from '$lib/components/events/content/utils'
 
@@ -138,7 +143,7 @@ function getAndUpdatePRStatus(prs: PRSummaries, repo: Repo): void {
   if (sub_statuses) sub_statuses.stop()
   sub_statuses = ndk.subscribe(
     {
-      kinds: [pr_status_kind],
+      kinds: pr_status_kinds,
       '#e': prs.summaries.map((pr) => pr.id),
       '#r': [`r-${prs.id}`],
     },
@@ -150,36 +155,31 @@ function getAndUpdatePRStatus(prs: PRSummaries, repo: Repo): void {
   sub_statuses.on('event', (event: NDKEvent) => {
     const tagged_pr_event = event.tagValue('e')
     if (
-      event.kind == pr_status_kind &&
+      event.kind &&
+      pr_status_kinds.includes(event.kind) &&
       tagged_pr_event &&
-      event.created_at &&
-      event.getMatchingTags('l').length === 1 &&
-      event.getMatchingTags('l')[0].length > 1
+      event.created_at
     ) {
-      const potential_status = event.getMatchingTags('l')[0][1]
-
-      if (isPRStatus(potential_status)) {
-        pr_summaries.update((prs) => {
-          return {
-            ...prs,
-            summaries: prs.summaries.map((o) => {
-              if (
-                o.id === tagged_pr_event &&
-                event.created_at &&
-                o.status_date < event.created_at
-              ) {
-                return {
-                  ...o,
-                  status: potential_status as PRStatus,
-                  status_date: event.created_at,
-                }
+      pr_summaries.update((prs) => {
+        return {
+          ...prs,
+          summaries: prs.summaries.map((o) => {
+            if (
+              o.id === tagged_pr_event &&
+              event.created_at &&
+              o.status_date < event.created_at
+            ) {
+              return {
+                ...o,
+                status: event.kind as number,
+                status_date: event.created_at,
               }
+            }
 
-              return o
-            }),
-          }
-        })
-      }
+            return o
+          }),
+        }
+      })
     }
   })
 
@@ -189,12 +189,9 @@ function getAndUpdatePRStatus(prs: PRSummaries, repo: Repo): void {
         ...prs,
         summaries: prs.summaries.map((o) => ({
           ...o,
-          status: o.status || 'Open',
+          status: o.status || proposal_status_open,
         })),
       }
     })
   })
-}
-function extractTagContent(arg0: string): string {
-  throw new Error('Function not implemented.')
 }
