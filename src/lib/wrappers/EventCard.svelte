@@ -1,10 +1,10 @@
 <script lang="ts">
   import EventWrapper from '$lib/components/events/EventWrapper.svelte'
-  import Kind19851985 from '$lib/components/events/content/Kind19851985.svelte'
+  import Status from '$lib/components/events/content/Status.svelte'
   import Patch from '$lib/components/events/content/Patch.svelte'
   import ParsedContent from '$lib/components/events/content/ParsedContent.svelte'
   import { defaults as user_defaults } from '$lib/components/users/type'
-  import { patch_kind, proposal_status_kind } from '$lib/kinds'
+  import { patch_kind, proposal_status_kinds } from '$lib/kinds'
   import { ensureUser } from '$lib/stores/users'
   import type { NDKEvent } from '@nostr-dev-kit/ndk'
   import { onDestroy } from 'svelte'
@@ -33,8 +33,8 @@
 >
   {#if event.kind == patch_kind}
     <Patch content={event.content} tags={event.tags} />
-  {:else if event.kind === proposal_status_kind}
-    <Kind19851985 tags={event.tags} />
+  {:else if event.kind && proposal_status_kinds.includes(event.kind)}
+    <Status status={event.kind} />
   {:else}
     <ParsedContent content={event.content} tags={event.tags} />
   {/if}

@@ -2,6 +2,11 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import type { ProposalSummary } from './type'
 import { UserVectors } from '../users/vectors'
+import {
+  proposal_status_applied,
+  proposal_status_draft,
+  proposal_status_open,
+} from '$lib/kinds'
 
 dayjs.extend(relativeTime)
 
@@ -10,7 +15,7 @@ const Short = {
   author: { ...UserVectors.default },
   created_at: dayjs().subtract(7, 'days').unix(),
   comments: 2,
-  status: 'Open',
+  status: proposal_status_open,
   loading: false,
 } as ProposalSummary
 
@@ -22,7 +27,7 @@ export const ProposalsListItemArgsVectors = {
     author: { ...UserVectors.default },
     created_at: dayjs().subtract(1, 'minute').unix(),
     comments: 0,
-    status: 'Open',
+    status: proposal_status_open,
     loading: false,
   } as ProposalSummary,
   LongNoSpaces: {
@@ -31,7 +36,7 @@ export const ProposalsListItemArgsVectors = {
     author: { ...UserVectors.default },
     created_at: dayjs().subtract(3, 'month').subtract(3, 'days').unix(),
     comments: 1,
-    status: 'Open',
+    status: proposal_status_open,
     loading: false,
   } as ProposalSummary,
   AuthorLoading: {
@@ -39,7 +44,7 @@ export const ProposalsListItemArgsVectors = {
     author: { ...UserVectors.loading },
     created_at: dayjs().subtract(3, 'month').subtract(3, 'days').unix(),
     comments: 1,
-    status: 'Open',
+    status: proposal_status_open,
     loading: false,
   } as ProposalSummary,
   StatusLoading: {
@@ -48,14 +53,14 @@ export const ProposalsListItemArgsVectors = {
   } as ProposalSummary,
   StatusDraft: {
     ...Short,
-    status: 'Draft',
+    status: proposal_status_draft,
   } as ProposalSummary,
   StatusClosed: {
     ...Short,
-    status: 'Closed',
+    status: proposal_status_draft,
   } as ProposalSummary,
   StatusMerged: {
     ...Short,
-    status: 'Merged',
+    status: proposal_status_applied,
   } as ProposalSummary,
 }

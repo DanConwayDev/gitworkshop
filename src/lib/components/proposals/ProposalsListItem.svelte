@@ -5,9 +5,14 @@
   import dayjs from 'dayjs'
   import relativeTime from 'dayjs/plugin/relativeTime'
   import { summary_defaults } from './type'
-  import { getName } from '../users/type'
   import { proposal_icon_path } from './icons'
   import UserHeader from '../users/UserHeader.svelte'
+  import {
+    proposal_status_applied,
+    proposal_status_closed,
+    proposal_status_draft,
+    proposal_status_open,
+  } from '$lib/kinds'
 
   dayjs.extend(relativeTime)
   export let {
@@ -22,10 +27,6 @@
   } = summary_defaults
   let short_title: string
   let created_at_ago: string
-  let author_name = ''
-  $: {
-    author_name = getName(author)
-  }
   $: {
     if (title.length > 70) short_title = title.slice(0, 65) + '...'
     else if (title.length == 0) short_title = 'Untitled'
@@ -41,28 +42,28 @@
   <!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
   {#if loading || !status}
     <div class="skeleton h-5 w-5 flex-none pt-1"></div>
-  {:else if status === 'Open'}
+  {:else if status === proposal_status_open}
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
       class="h-5 w-5 flex-none fill-success pt-1"
       ><path d={proposal_icon_path.open} /></svg
     >
-  {:else if status === 'Closed'}
+  {:else if status === proposal_status_closed}
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
       class="h-5 w-5 flex-none fill-neutral-content pt-1"
       ><path d={proposal_icon_path.close} /></svg
     >
-  {:else if status === 'Draft'}
+  {:else if status === proposal_status_draft}
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
       class="h-5 w-5 flex-none fill-neutral-content pt-1"
       ><path d={proposal_icon_path.draft} /></svg
     >
-  {:else if status === 'Merged'}
+  {:else if status === proposal_status_applied}
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
