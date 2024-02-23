@@ -60,9 +60,7 @@
         </div>
         <button
           on:click={() =>
-            alert(
-              'install ngit and run `ngit claim` your local git repository'
-            )}
+            alert('install ngit and run `ngit init` your local git repository')}
           class="btn btn-secondary">list your repository</button
         >
       </div>
