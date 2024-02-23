@@ -147,7 +147,7 @@ export const ensurePRFull = (repo_id: string, pr_id: string) => {
         : undefined
     )
 
-    sub_replies.on('event', (event: NDKEvent) => {
+    const process_replies = (event: NDKEvent) => {
       if (
         event.kind &&
         pr_status_kinds.includes(event.kind) &&
@@ -172,6 +172,27 @@ export const ensurePRFull = (repo_id: string, pr_id: string) => {
           (a, b) => (a.created_at || 0) - (b.created_at || 0)
         )
       })
+      if (event.tags.some((t) => t.length > 1 && t[1] === 'revision-root')) {
+        const sub_revision_replies = ndk.subscribe(
+          {
+            ids: [pr_id],
+            limit: 50,
+          },
+          {
+            closeOnEose: true,
+          },
+          repo.relays.length > 0
+            ? NDKRelaySet.fromRelayUrls(repo.relays, ndk)
+            : undefined
+        )
+        sub_revision_replies.on('event', (event: NDKEvent) => {
+          process_replies(event)
+        })
+      }
+    }
+
+    sub_replies.on('event', (event: NDKEvent) => {
+      process_replies(event)
     })
 
     sub_replies.on('eose', () => {

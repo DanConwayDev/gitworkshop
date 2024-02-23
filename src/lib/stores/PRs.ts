@@ -80,7 +80,11 @@ export const ensurePRSummaries = async (repo_id: string) => {
 
   sub.on('event', (event: NDKEvent) => {
     try {
-      if (event.kind == patch_kind && event.content.length > 0) {
+      if (
+        event.kind == patch_kind &&
+        event.content.length > 0 &&
+        !event.tags.some((t) => t.length > 1 && t[1] === 'revision-root')
+      ) {
         pr_summaries.update((prs) => {
           return {
             ...prs,

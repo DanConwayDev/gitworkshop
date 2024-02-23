@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ndk } from '$lib/stores/ndk'
   import { NDKEvent, NDKRelaySet } from '@nostr-dev-kit/ndk'
-  import { selected_pr_full } from '$lib/stores/PR'
+  import { selected_pr_full, selected_pr_replies } from '$lib/stores/PR'
   import {
     proposal_status_applied,
     proposal_status_closed,
@@ -29,7 +29,16 @@
     if (!$logged_in_user) return
     let event = new NDKEvent(ndk)
     event.kind = new_status_kind
+    // tag pr event
     event.tags.push(['e', pr_id, 'root'])
+    // tag pr revision event
+    $selected_pr_replies
+      .filter((reply) =>
+        reply.tags.some((t) => t.length > 1 && t[1] === 'revision-root')
+      )
+      .forEach((revision) => {
+        event.tags.push(['e', revision.id, 'mention'])
+      })
     event.tags.push(['r', `${repo_id}`])
     loading = true
     let relays = [...$selected_repo.relays]
