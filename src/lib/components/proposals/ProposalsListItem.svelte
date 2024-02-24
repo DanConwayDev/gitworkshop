@@ -47,7 +47,7 @@
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
       class="h-5 w-5 flex-none fill-success pt-1"
-      ><path d={proposal_icon_path.open} /></svg
+      ><path d={proposal_icon_path.open_patch} /></svg
     >
   {:else if status === proposal_status_closed}
     <svg
@@ -68,7 +68,7 @@
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
       class="h-5 w-5 flex-none fill-primary pt-1"
-      ><path d={proposal_icon_path.merge} /></svg
+      ><path d={proposal_icon_path.applied} /></svg
     >
   {/if}
   <a

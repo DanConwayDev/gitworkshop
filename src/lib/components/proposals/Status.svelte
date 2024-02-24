@@ -26,25 +26,22 @@
     class="btn btn-success btn-sm align-middle"
   >
     {#if status === proposal_status_open}
-      <!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 18 18"
         class="h-5 w-5 flex-none fill-success-content pt-1"
-        ><path d={proposal_icon_path.open} />
+        ><path d={proposal_icon_path.open_patch} />
       </svg>
       Open
     {:else if status === proposal_status_applied}
-      <!-- https://icon-sets.iconify.design/octicon/git-merge-16/ -->
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 16 16"
         class="h-5 w-5 flex-none fill-primary-content pt-1"
-        ><path d={proposal_icon_path.merge} /></svg
+        ><path d={proposal_icon_path.applied} /></svg
       >
       Applied
     {:else if status === proposal_status_closed}
-      <!-- https://icon-sets.iconify.design/octicon/git-pull-request-closed-16/ -->
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 16 16"
@@ -53,7 +50,6 @@
       >
       Closed
     {:else if status === proposal_status_draft}
-      <!-- https://icon-sets.iconify.design/octicon/git-pull-request-draft-16// -->
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 16 16"
