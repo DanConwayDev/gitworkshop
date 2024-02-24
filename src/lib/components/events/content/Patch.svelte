@@ -15,7 +15,7 @@
     '[untitled]'
 
   let files = parseDiff(content)
-  let expand_files = files.map((_) => false)
+  let expand_files = files.map((file) => file.deletions + file.additions < 20)
 
   function extractTagContent(name: string): string | undefined {
     let tag = tags.find((tag) => tag[0] === name)
@@ -40,7 +40,7 @@
 
 <div class="">
   <div class="flex rounded-t bg-base-300 p-1">
-    <article class="prose ml-2 flex-grow font-mono">
+    <article class="ml-2 flex-grow font-mono">
       <ParsedContent content={commit_message} />
     </article>
     <div class="flex-none p-1 align-middle text-xs text-neutral">commit</div>
@@ -88,7 +88,10 @@
       </button>
       {#if expand_files[index]}
         <div class="border-t-1 border-base-300">
-          {#each file.chunks as chunk}
+          {#each file.chunks as chunk, index}
+            {#if index !== 0}
+              <div class="h-6 bg-base-400"></div>
+            {/if}
             {#each chunk.changes as change, i}
               <div class="flex bg-base-300 font-mono text-xs">
                 <div

@@ -90,7 +90,7 @@
             </p>
           </div>
         </div>
-        <div class="prose my-3">
+        <div class="my-3">
           {#if $selected_proposal_full.proposal_event && $selected_proposal_full.proposal_event.kind === patch_kind}
             <Patch
               content={$selected_proposal_full.proposal_event.content}
