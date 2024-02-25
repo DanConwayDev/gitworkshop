@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { NDKTag } from '@nostr-dev-kit/ndk'
   import parseDiff from 'parse-diff'
+  import hljs from 'highlight.js/lib/common'
+  import 'highlight.js/styles/agate.min.css'
   import type { Change, AddChange, DeleteChange } from 'parse-diff'
   import ParsedContent from './ParsedContent.svelte'
   import { extractPatchMessage } from './utils'
@@ -90,12 +92,22 @@
         <div class="border-t-1 border-base-300">
           {#each file.chunks as chunk, index}
             {#if index !== 0}
-              <div class="h-6 bg-base-400"></div>
+              <div class="text-middle h-6 bg-base-200 font-mono text-xs">
+                <div
+                  class="w-8 flex-none select-none pr-2 text-right opacity-50"
+                >
+                  ...
+                </div>
+              </div>
             {/if}
             {#each chunk.changes as change, i}
-              <div class="flex bg-base-300 font-mono text-xs">
+              <div class="flex bg-base-100 font-mono text-xs">
                 <div
-                  class="w-8 flex-none bg-slate-500/20 pr-2 text-right opacity-50"
+                  class="w-8 flex-none select-none {change.type == 'add'
+                    ? 'bg-success/30'
+                    : change.type == 'del'
+                      ? 'bg-error/30'
+                      : 'bg-slate-500/20'} pr-2 text-right opacity-50"
                 >
                   {isAddChange(change) &&
                   i !== 0 &&
@@ -105,14 +117,20 @@
                 </div>
                 <div
                   class="text-wrap flex-grow break-all {change.type == 'add'
-                    ? 'bg-success/20'
+                    ? 'bg-success/10'
                     : change.type == 'del'
-                      ? 'bg-error/20'
+                      ? 'bg-error/10'
                       : ''}"
                 >
-                  {change.type == 'normal'
-                    ? change.content
-                    : change.content.substring(1)}
+                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                  {@html hljs.highlight(
+                    change.type == 'normal'
+                      ? change.content
+                      : change.content.substring(1),
+                    {
+                      language: (file.to || file.from)?.split('.').pop() || '',
+                    }
+                  ).value}
                 </div>
               </div>
             {/each}
