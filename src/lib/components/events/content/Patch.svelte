@@ -91,49 +91,52 @@
       {#if expand_files[index]}
         <div class="border-t-1 border-base-300">
           {#each file.chunks as chunk, index}
-            {#if index !== 0}
-              <div class="text-middle h-6 bg-base-200 font-mono text-xs">
-                <div
-                  class="w-8 flex-none select-none pr-2 text-right opacity-50"
-                >
-                  ...
+            <div class="overflow-x-auto">
+              {#if index !== 0}
+                <div class="text-middle h-6 bg-base-200 font-mono text-xs">
+                  <div
+                    class="w-8 flex-none select-none pr-2 text-right opacity-50"
+                  >
+                    ...
+                  </div>
                 </div>
-              </div>
-            {/if}
-            {#each chunk.changes as change, i}
-              <div class="flex bg-base-100 font-mono text-xs">
-                <div
-                  class="w-8 flex-none select-none {change.type == 'add'
-                    ? 'bg-success/30'
-                    : change.type == 'del'
-                      ? 'bg-error/30'
-                      : 'bg-slate-500/20'} pr-2 text-right opacity-50"
-                >
-                  {isAddChange(change) &&
-                  i !== 0 &&
-                  isDeleteChange(chunk.changes[i - 1])
-                    ? ''
-                    : extractChangeLine(change)}
+              {/if}
+              {#each chunk.changes as change, i}
+                <div class="flex w-full bg-base-100 font-mono text-xs">
+                  <div
+                    class="w-8 flex-none select-none {change.type == 'add'
+                      ? 'bg-success/30'
+                      : change.type == 'del'
+                        ? 'bg-error/30'
+                        : 'bg-slate-500/20'} pr-2 text-right opacity-50"
+                  >
+                    {isAddChange(change) &&
+                    i !== 0 &&
+                    isDeleteChange(chunk.changes[i - 1])
+                      ? ''
+                      : extractChangeLine(change)}
+                  </div>
+                  <div
+                    class="w-full flex-grow whitespace-pre {change.type == 'add'
+                      ? 'bg-success/10'
+                      : change.type == 'del'
+                        ? 'bg-error/10'
+                        : ''}"
+                  >
+                    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                    {@html hljs.highlight(
+                      change.type == 'normal'
+                        ? change.content
+                        : change.content.substring(1),
+                      {
+                        language:
+                          (file.to || file.from)?.split('.').pop() || '',
+                      }
+                    ).value}
+                  </div>
                 </div>
-                <div
-                  class="text-wrap flex-grow break-all {change.type == 'add'
-                    ? 'bg-success/10'
-                    : change.type == 'del'
-                      ? 'bg-error/10'
-                      : ''}"
-                >
-                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                  {@html hljs.highlight(
-                    change.type == 'normal'
-                      ? change.content
-                      : change.content.substring(1),
-                    {
-                      language: (file.to || file.from)?.split('.').pop() || '',
-                    }
-                  ).value}
-                </div>
-              </div>
-            {/each}
+              {/each}
+            </div>
           {/each}
         </div>
       {/if}
