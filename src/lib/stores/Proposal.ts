@@ -1,6 +1,6 @@
 import { NDKRelaySet, type NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk'
 import { writable, type Unsubscriber, type Writable } from 'svelte/store'
-import { ndk } from './ndk'
+import { base_relays, ndk } from './ndk'
 import type { User } from '$lib/components/users/type'
 import { ensureUser } from './users'
 import {
@@ -8,9 +8,10 @@ import {
   full_defaults,
 } from '$lib/components/proposals/type'
 import { proposal_status_kinds, proposal_status_open } from '$lib/kinds'
-import { ensureSelectedRepo } from './repo'
+import { awaitSelectedRepoCollection } from './repo'
 import { extractPatchMessage } from '$lib/components/events/content/utils'
 import { goto } from '$app/navigation'
+import { selectRepoFromCollection } from '$lib/components/repo/utils'
 
 export const selected_proposal_full: Writable<ProposalFull> = writable({
   ...full_defaults,
@@ -58,8 +59,16 @@ export const ensureProposalFull = (repo_id: string, proposal_id: string) => {
   if (proposal_summary_author_unsubsriber) proposal_summary_author_unsubsriber()
   proposal_summary_author_unsubsriber = undefined
 
-  new Promise(async (r) => {
-    const repo = await ensureSelectedRepo(repo_id)
+  new Promise(async (r, reject) => {
+    const repo_collection = await awaitSelectedRepoCollection(repo_id)
+    const repo = selectRepoFromCollection(repo_collection)
+    if (!repo) {
+      return reject()
+    }
+    const relays_to_use =
+      repo.relays.length > 3
+        ? repo.relays
+        : [...base_relays].concat(repo.relays)
 
     sub = ndk.subscribe(
       {
@@ -69,9 +78,7 @@ export const ensureProposalFull = (repo_id: string, proposal_id: string) => {
       {
         closeOnEose: true,
       },
-      repo.relays.length > 0
-        ? NDKRelaySet.fromRelayUrls(repo.relays, ndk)
-        : undefined
+      NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
     )
 
     sub.on('event', (event: NDKEvent) => {
@@ -148,9 +155,7 @@ export const ensureProposalFull = (repo_id: string, proposal_id: string) => {
       {
         closeOnEose: false,
       },
-      repo.relays.length > 0
-        ? NDKRelaySet.fromRelayUrls(repo.relays, ndk)
-        : undefined
+      NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
     )
 
     const process_replies = (event: NDKEvent) => {
@@ -187,9 +192,7 @@ export const ensureProposalFull = (repo_id: string, proposal_id: string) => {
           {
             closeOnEose: true,
           },
-          repo.relays.length > 0
-            ? NDKRelaySet.fromRelayUrls(repo.relays, ndk)
-            : undefined
+          NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
         )
         sub_revision_replies.on('event', (event: NDKEvent) => {
           process_replies(event)

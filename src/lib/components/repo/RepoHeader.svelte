@@ -1,18 +1,22 @@
 <script lang="ts">
   import Container from '../Container.svelte'
-  import { defaults } from './type'
+  import { event_defaults } from './type'
 
   export let {
-    repo_id,
+    event_id,
+    identifier,
     unique_commit,
     name,
     description,
     clone,
+    web,
     tags,
     maintainers,
     relays,
+    referenced_by,
+    created_at,
     loading,
-  } = defaults
+  } = event_defaults
   let short_name: string
   $: {
     if (name.length > 45) short_name = name.slice(0, 45) + '...'
@@ -29,7 +33,7 @@
       </div>
     {:else}
       <a
-        href={`/repo/${repo_id}`}
+        href={`/repo/${identifier}`}
         class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
         >{short_name}</a
       >

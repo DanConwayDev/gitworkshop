@@ -1,17 +1,22 @@
 <script lang="ts">
   import UserHeader from '$lib/components/users/UserHeader.svelte'
-  import { defaults } from './type'
+  import { event_defaults } from './type'
 
   export let {
-    repo_id,
+    event_id,
+    identifier,
+    unique_commit,
     name,
     description,
     clone,
+    web,
     tags,
     maintainers,
     relays,
+    referenced_by,
+    created_at,
     loading,
-  } = defaults
+  } = event_defaults
   $: short_descrption =
     description.length > 500 ? description.slice(0, 450) + '...' : description
 </script>

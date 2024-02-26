@@ -17,10 +17,12 @@
   dayjs.extend(relativeTime)
   export let {
     title,
+    descritpion,
     id,
     repo_id,
     comments,
     status,
+    status_date,
     author,
     created_at,
     loading,
@@ -74,6 +76,7 @@
   <a
     href="/repo/{repo_id}/proposal/{id}"
     class="ml-3 grow overflow-hidden text-xs text-neutral-content"
+    class:pointer-events-none={loading}
   >
     {#if loading}
       <div class="skeleton h-5 w-60 flex-none pt-1"></div>

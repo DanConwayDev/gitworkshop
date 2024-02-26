@@ -19,4 +19,4 @@ export const ndk = new NDKSvelte({
   explicitRelayUrls: [...base_relays],
 })
 
-ndk.connect()
+ndk.connect(5000)

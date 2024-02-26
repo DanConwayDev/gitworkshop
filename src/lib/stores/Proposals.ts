@@ -5,20 +5,21 @@ import {
   type NDKFilter,
 } from '@nostr-dev-kit/ndk'
 import { writable, type Unsubscriber, type Writable } from 'svelte/store'
-import { ndk } from './ndk'
+import { base_relays, ndk } from './ndk'
 import { summary_defaults } from '$lib/components/proposals/type'
 import type { User } from '$lib/components/users/type'
 import { ensureUser } from './users'
 import type { ProposalSummaries } from '$lib/components/proposals/type'
-import { ensureSelectedRepo } from './repo'
+import { awaitSelectedRepoCollection } from './repo'
 import {
   patch_kind,
   proposal_status_kinds,
   proposal_status_open,
   repo_kind,
 } from '$lib/kinds'
-import type { Repo } from '$lib/components/repo/type'
+import type { RepoEvent } from '$lib/components/repo/type'
 import { extractPatchMessage } from '$lib/components/events/content/utils'
+import { selectRepoFromCollection } from '$lib/components/repo/utils'
 
 export const proposal_summaries: Writable<ProposalSummaries> = writable({
   id: '',
@@ -47,14 +48,31 @@ export const ensureProposalSummaries = async (repo_id: string) => {
 
   selected_repo_id = repo_id
 
-  const repo = await ensureSelectedRepo(repo_id)
+  setTimeout(() => {
+    proposal_summaries.update((summaries) => {
+      return {
+        ...summaries,
+        loading: false,
+      }
+    })
+  }, 6000)
+
+  const repo_collection = await awaitSelectedRepoCollection(repo_id)
+
+  const repo = selectRepoFromCollection(repo_collection)
+  if (!repo) {
+    return
+  }
+
+  const relays_to_use =
+    repo.relays.length > 3 ? repo.relays : [...base_relays].concat(repo.relays)
 
   const without_root_tag = !repo.unique_commit
 
   const filter_with_root: NDKFilter = {
     kinds: [patch_kind],
     '#a': repo.maintainers.map(
-      (m) => `${repo_kind}:${m.hexpubkey}:${repo.repo_id}`
+      (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
     ),
     '#t': ['root'],
     limit: 50,
@@ -63,7 +81,7 @@ export const ensureProposalSummaries = async (repo_id: string) => {
   const filter_without_root: NDKFilter = {
     kinds: [patch_kind],
     '#a': repo.maintainers.map(
-      (m) => `${repo_kind}:${m.hexpubkey}:${repo.repo_id}`
+      (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
     ),
     limit: 50,
   }
@@ -73,9 +91,7 @@ export const ensureProposalSummaries = async (repo_id: string) => {
     {
       closeOnEose: true,
     },
-    repo.relays.length > 0
-      ? NDKRelaySet.fromRelayUrls(repo.relays, ndk)
-      : undefined
+    NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
   )
 
   sub.on('event', (event: NDKEvent) => {
@@ -145,8 +161,11 @@ let sub_statuses: NDKSubscription
 
 function getAndUpdateProposalStatus(
   proposals: ProposalSummaries,
-  repo: Repo
+  repo: RepoEvent
 ): void {
+  const relays_to_use =
+    repo.relays.length > 3 ? repo.relays : [...base_relays].concat(repo.relays)
+
   if (sub_statuses) sub_statuses.stop()
   sub_statuses = ndk.subscribe(
     {
@@ -156,7 +175,7 @@ function getAndUpdateProposalStatus(
     {
       closeOnEose: true,
     },
-    NDKRelaySet.fromRelayUrls(repo.relays, ndk)
+    NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
   )
   sub_statuses.on('event', (event: NDKEvent) => {
     const tagged_proposal_event = event.tagValue('e')

@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { ensureSelectedRepo, selected_repo } from '$lib/stores/repo'
+  import {
+    ensureSelectedRepoCollection,
+    selected_repo_collection,
+    selected_repo_event,
+  } from '$lib/stores/repo'
   import {
     ensureProposalFull,
     selected_proposal_full,
@@ -23,13 +27,15 @@
   let repo_id = data.repo_id
   let proposal_id = data.proposal_id
 
-  ensureSelectedRepo(repo_id)
+  ensureSelectedRepoCollection(repo_id)
   ensureProposalFull(repo_id, proposal_id)
 
   let repo_error = false
   let proposal_error = false
   $: {
-    repo_error = !$selected_repo.loading && $selected_repo.name.length === 0
+    repo_error =
+      !$selected_repo_collection.loading &&
+      $selected_repo_event.name.length === 0
     proposal_error =
       !$selected_proposal_full.summary.loading &&
       $selected_proposal_full.summary.created_at === 0
@@ -37,7 +43,7 @@
 </script>
 
 {#if !repo_error}
-  <RepoHeader {...$selected_repo} />
+  <RepoHeader {...$selected_repo_event} />
 {/if}
 
 {#if proposal_error}

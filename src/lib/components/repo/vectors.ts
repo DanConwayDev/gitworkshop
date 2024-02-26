@@ -1,5 +1,5 @@
 import { UserVectors, withName } from '../users/vectors'
-import type { Repo, RepoSummary } from './type'
+import type { RepoEvent, RepoSummary } from './type'
 
 export const RepoSummaryCardArgsVectors = {
   Short: {
@@ -33,8 +33,8 @@ export const RepoSummaryCardArgsVectors = {
     ],
   } as RepoSummary,
 }
-const base: Repo = {
-  repo_id: '9ee507fc4357d7ee16a5d8901bedcd103f23c17d',
+const base: RepoEvent = {
+  identifier: '9ee507fc4357d7ee16a5d8901bedcd103f23c17d',
   unique_commit: '9ee507fc4357d7ee16a5d8901bedcd103f23c17d',
   name: 'Short Name',
   description: 'short description',
@@ -50,23 +50,23 @@ const base: Repo = {
 }
 
 export const RepoDetailsArgsVectors = {
-  Short: { ...base } as Repo,
+  Short: { ...base } as RepoEvent,
   Long: {
     ...base,
     name: 'Long Name that goes on and on and on and on and on and on and on and on and on',
     description:
       'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis quis nisl eget turpis congue molestie. Nulla vitae purus nec augue accumsan facilisis sed sed ligula. Vestibulum sed risus lacinia risus lacinia molestie. Ut lorem quam, consequat eget tempus in, rhoncus vel nunc. Duis efficitur a leo vel sodales. Nam id fermentum lacus. Etiam nec placerat velit. Praesent ac consectetur est. Aenean iaculis commodo enim.\n Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis quis nisl eget turpis congue molestie.',
-  } as Repo,
+  } as RepoEvent,
   LongNoSpaces: {
     ...base,
     name: 'LongNameLongNameLongNameLongNameLongNameLongNameLongNameLongName',
     description:
       'LoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsum',
-  } as Repo,
-  NoNameOrDescription: { ...base, name: '', description: '' } as Repo,
-  NoDescription: { ...base, description: '' } as Repo,
-  NoTags: { ...base, tags: [] } as Repo,
-  NoGitServer: { ...base, clone: '' } as Repo,
+  } as RepoEvent,
+  NoNameOrDescription: { ...base, name: '', description: '' } as RepoEvent,
+  NoDescription: { ...base, description: '' } as RepoEvent,
+  NoTags: { ...base, tags: [] } as RepoEvent,
+  NoGitServer: { ...base, clone: '' } as RepoEvent,
   MaintainersOneProfileNotLoaded: {
     ...base,
     maintainers: [
@@ -74,7 +74,7 @@ export const RepoDetailsArgsVectors = {
       { ...UserVectors.loading },
       { ...base.maintainers[2] },
     ],
-  } as Repo,
+  } as RepoEvent,
   MaintainersOneProfileDisplayNameWithoutName: {
     ...base,
     maintainers: [
@@ -82,7 +82,7 @@ export const RepoDetailsArgsVectors = {
       { ...UserVectors.display_name_only },
       { ...base.maintainers[2] },
     ],
-  } as Repo,
+  } as RepoEvent,
   MaintainersOneProfileNameAndDisplayNamePresent: {
     ...base,
     maintainers: [
@@ -90,7 +90,7 @@ export const RepoDetailsArgsVectors = {
       { ...UserVectors.display_name_and_name },
       { ...base.maintainers[2] },
     ],
-  } as Repo,
+  } as RepoEvent,
   MaintainersOneProfileNoNameOrDisplayNameBeingPresent: {
     ...base,
     maintainers: [
@@ -98,8 +98,8 @@ export const RepoDetailsArgsVectors = {
       { ...UserVectors.no_profile },
       { ...base.maintainers[2] },
     ],
-  } as Repo,
-  NoMaintainers: { ...base, maintainers: [] } as Repo,
-  NoRelays: { ...base, relays: [] } as Repo,
-  NoMaintainersOrRelays: { ...base, maintainers: [], relays: [] } as Repo,
+  } as RepoEvent,
+  NoMaintainers: { ...base, maintainers: [] } as RepoEvent,
+  NoRelays: { ...base, relays: [] } as RepoEvent,
+  NoMaintainersOrRelays: { ...base, maintainers: [], relays: [] } as RepoEvent,
 }

@@ -13,7 +13,10 @@
     statusKindtoText,
   } from '$lib/kinds'
   import { getUserRelays, logged_in_user } from '$lib/stores/users'
-  import { selected_repo } from '$lib/stores/repo'
+  import {
+    selected_repo_collection,
+    selected_repo_event,
+  } from '$lib/stores/repo'
   import Status from '$lib/components/proposals/Status.svelte'
 
   export let status: number | undefined = undefined
@@ -25,7 +28,8 @@
   let edit_mode = false
   $: {
     edit_mode =
-      $logged_in_user !== undefined && repo_id === $selected_repo.repo_id
+      $logged_in_user !== undefined &&
+      repo_id === $selected_repo_collection.identifier
   }
 
   async function changeStatus(new_status_kind: number) {
@@ -42,10 +46,10 @@
       .forEach((revision) => {
         event.tags.push(['e', revision.id, 'mention'])
       })
-    if ($selected_repo.unique_commit)
-      event.tags.push(['r', $selected_repo.unique_commit])
+    if ($selected_repo_event.unique_commit)
+      event.tags.push(['r', $selected_repo_event.unique_commit])
     loading = true
-    let relays = [...$selected_repo.relays]
+    let relays = [...$selected_repo_event.relays]
     try {
       event.sign()
     } catch {

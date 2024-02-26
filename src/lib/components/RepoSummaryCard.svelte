@@ -2,7 +2,7 @@
   import { summary_defaults } from './repo/type'
   import UserHeader from './users/UserHeader.svelte'
 
-  export let { name, description, repo_id, maintainers, loading } =
+  export let { name, description, identifier, maintainers, loading } =
     summary_defaults
   let short_name: string
   $: {
@@ -24,7 +24,7 @@
   {:else}
     <a
       class="link-primary break-words"
-      href="/repo/{encodeURIComponent(repo_id)}">{short_name}</a
+      href="/repo/{encodeURIComponent(identifier)}">{short_name}</a
     >
     {#if short_descrption.length > 0}
       <p class="text-muted break-words pb-1 text-sm">
