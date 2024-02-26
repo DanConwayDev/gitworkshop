@@ -59,16 +59,13 @@ export const ensureProposalFull = (repo_id: string, proposal_id: string) => {
   if (proposal_summary_author_unsubsriber) proposal_summary_author_unsubsriber()
   proposal_summary_author_unsubsriber = undefined
 
-  new Promise(async (r, reject) => {
+  new Promise(async (r) => {
     const repo_collection = await awaitSelectedRepoCollection(repo_id)
     const repo = selectRepoFromCollection(repo_collection)
-    if (!repo) {
-      return reject()
-    }
     const relays_to_use =
-      repo.relays.length > 3
+      repo && repo.relays.length > 3
         ? repo.relays
-        : [...base_relays].concat(repo.relays)
+        : [...base_relays].concat(repo ? repo.relays : [])
 
     sub = ndk.subscribe(
       {
