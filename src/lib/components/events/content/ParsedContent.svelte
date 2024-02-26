@@ -14,7 +14,7 @@
   $: fullContent = parseContent({ content, tags })
 </script>
 
-<div>
+<div class="max-w-prose">
   {#each fullContent as part}
     {#if isParsedNewLine(part)}
       {#if part.value.length > 1}

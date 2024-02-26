@@ -48,7 +48,7 @@
 
 <div class="">
   <div class="flex rounded-t bg-base-300 p-1">
-    <article class="ml-2 flex-grow font-mono">
+    <article class="ml-2 flex-grow font-mono text-sm">
       <ParsedContent content={commit_message} />
     </article>
     <div class="flex-none p-1 align-middle text-xs text-neutral">commit</div>

@@ -18,7 +18,7 @@
   $: created_at_ago = created_at ? dayjs(created_at * 1000).fromNow() : ''
 </script>
 
-<div class="border-b border-base-300 p-3 pl-3">
+<div class="max-w-4xl border-b border-base-300 p-3 pl-3">
   <div class="flex">
     <div class="flex-auto">
       <UserHeader user={author} />
