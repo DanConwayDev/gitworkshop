@@ -42,7 +42,8 @@
       .forEach((revision) => {
         event.tags.push(['e', revision.id, 'mention'])
       })
-    event.tags.push(['r', `${repo_id}`])
+    if ($selected_repo.unique_commit)
+      event.tags.push(['r', $selected_repo.unique_commit])
     loading = true
     let relays = [...$selected_repo.relays]
     try {
