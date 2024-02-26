@@ -153,7 +153,7 @@ export const ensureProposalFull = (repo_id: string, proposal_id: string) => {
         : undefined
     )
 
-    const proposalocess_replies = (event: NDKEvent) => {
+    const process_replies = (event: NDKEvent) => {
       if (
         event.kind &&
         proposal_status_kinds.includes(event.kind) &&
@@ -192,13 +192,13 @@ export const ensureProposalFull = (repo_id: string, proposal_id: string) => {
             : undefined
         )
         sub_revision_replies.on('event', (event: NDKEvent) => {
-          proposalocess_replies(event)
+          process_replies(event)
         })
       }
     }
 
     sub_replies.on('event', (event: NDKEvent) => {
-      proposalocess_replies(event)
+      process_replies(event)
     })
 
     sub_replies.on('eose', () => {

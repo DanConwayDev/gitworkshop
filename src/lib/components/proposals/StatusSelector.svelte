@@ -119,7 +119,7 @@
               on:click={() => {
                 changeStatus(proposal_status_applied)
               }}
-              class="btn-proposalimary btn btn-sm mx-2 align-middle"
+              class="btn btn-primary btn-sm mx-2 align-middle"
               >{statusKindtoText(proposal_status_applied)}</button
             >
           </li>
