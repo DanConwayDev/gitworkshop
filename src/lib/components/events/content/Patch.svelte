@@ -19,6 +19,12 @@
   let files = parseDiff(content)
   let expand_files = files.map((file) => file.deletions + file.additions < 20)
 
+  if (
+    files.reduce((acc, file) => acc + file.deletions + file.additions, 0) < 60
+  ) {
+    expand_files = expand_files.map((_) => true)
+  }
+
   function extractTagContent(name: string): string | undefined {
     let tag = tags.find((tag) => tag[0] === name)
     return tag ? tag[1] : undefined
