@@ -152,10 +152,9 @@ function getAndUpdateProposalStatus(
     {
       kinds: proposal_status_kinds,
       '#e': proposals.summaries.map((proposal) => proposal.id),
-      '#r': [`r-${proposals.id}`],
     },
     {
-      closeOnEose: false,
+      closeOnEose: true,
     },
     NDKRelaySet.fromRelayUrls(repo.relays, ndk)
   )
