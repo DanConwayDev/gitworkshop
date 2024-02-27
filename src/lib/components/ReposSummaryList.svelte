@@ -16,7 +16,7 @@
   {#if repos.length == 0 && !loading}
     <p class="prose">None</p>
   {:else}
-    <div class="">
+    <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
       {#each repos as { name, description, identifier, maintainers }}
         <RepoSummaryCard {name} {description} {identifier} {maintainers} />
       {/each}

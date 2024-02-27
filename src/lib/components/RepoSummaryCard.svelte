@@ -15,7 +15,7 @@
 </script>
 
 <div
-  class=" my-2 rounded-lg bg-base-200 p-4"
+  class="rounded-lg bg-base-200 p-4"
   style={`min-height: ${maintainers.length * 1.325 + 2}rem;`}
 >
   {#if loading}
