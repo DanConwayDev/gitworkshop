@@ -9,6 +9,7 @@
 
   export let inline = false
   export let size: 'xs' | 'sm' | 'md' = 'md'
+  export let avatar_only = false
 
   $: ({ profile, loading } = user)
   $: display_name = getName(user)
@@ -56,6 +57,7 @@
       class:flex-auto={!inline}
       class:m-auto={!inline}
       class:inline-block={inline}
+      class:hidden={avatar_only}
     >
       {#if loading}
         <div
