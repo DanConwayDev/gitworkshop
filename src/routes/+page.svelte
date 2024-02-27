@@ -76,7 +76,7 @@
   <div class="hero md:basis-1/2">
     <ProposalsList
       title="Recent Proposals"
-      proposals={$proposal_summaries.summaries}
+      proposals_or_issues={$proposal_summaries.summaries}
       show_repo={true}
       loading={$proposal_summaries.loading}
       limit={6}

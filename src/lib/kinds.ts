@@ -21,3 +21,5 @@ export function statusKindtoText(kind: number): string {
 export const repo_kind: number = 30617
 
 export const patch_kind: number = 1617
+
+export const issue_kind: number = 1621

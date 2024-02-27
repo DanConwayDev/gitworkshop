@@ -3,8 +3,8 @@ import { defaults as user_defaults } from '../users/type'
 import type { Event } from '../events/type'
 import type { NDKEvent } from '@nostr-dev-kit/ndk'
 
-export interface ProposalSummary {
-  type: 'proposal'
+export interface IssueSummary {
+  type: 'issue'
   title: string
   descritpion: string
   repo_identifier: string
@@ -17,8 +17,8 @@ export interface ProposalSummary {
   loading: boolean
 }
 
-export const summary_defaults: ProposalSummary = {
-  type: 'proposal',
+export const summary_defaults: IssueSummary = {
+  type: 'issue',
   title: '',
   descritpion: '',
   repo_identifier: '',
@@ -31,29 +31,29 @@ export const summary_defaults: ProposalSummary = {
   loading: true,
 }
 
-export interface ProposalSummaries {
+export interface IssueSummaries {
   id: string | undefined
-  summaries: ProposalSummary[]
+  summaries: IssueSummary[]
   loading: boolean
 }
 
-export const summaries_defaults: ProposalSummaries = {
+export const summaries_defaults: IssueSummaries = {
   id: '',
   summaries: [],
   loading: true,
 }
 
-export interface ProposalFull {
-  summary: ProposalSummary
-  proposal_event: NDKEvent | undefined
+export interface IssueFull {
+  summary: IssueSummary
+  issue_event: NDKEvent | undefined
   labels: string[]
   events: Event[]
   loading: boolean
 }
 
-export const full_defaults: ProposalFull = {
+export const full_defaults: IssueFull = {
   summary: { ...summary_defaults },
-  proposal_event: undefined,
+  issue_event: undefined,
   labels: [],
   events: [],
   loading: true,

@@ -15,6 +15,8 @@
   } from '$lib/kinds'
 
   dayjs.extend(relativeTime)
+  export let type: 'issue' | 'proposal' = 'proposal'
+
   export let {
     title,
     descritpion,
@@ -73,7 +75,7 @@
     >
   {/if}
   <a
-    href="/repo/{repo_identifier}/proposal/{id}"
+    href="/repo/{repo_identifier}/{type}/{id}"
     class="ml-3 grow overflow-hidden text-xs text-neutral-content"
     class:pointer-events-none={loading}
   >

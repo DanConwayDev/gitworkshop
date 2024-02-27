@@ -12,12 +12,16 @@
     proposal_summaries,
   } from '$lib/stores/Proposals'
   import ProposalsList from '$lib/components/proposals/ProposalsList.svelte'
+  import { ensureIssueSummaries, issue_summaries } from '$lib/stores/Issues'
 
   export let data: { repo_id: string }
   let identifier = data.repo_id
 
   ensureSelectedRepoCollection(identifier)
   ensureProposalSummaries(identifier)
+  ensureIssueSummaries(identifier)
+
+  let selected_tab: 'issues' | 'proposals' = 'proposals'
 
   let repo_error = false
 
@@ -58,11 +62,52 @@
   <Container>
     <div class="mt-2 md:flex">
       <div class="md:mr-2 md:w-2/3">
-        <ProposalsList
-          title="Proposals"
-          proposals={$proposal_summaries.summaries}
-          loading={$proposal_summaries.loading}
-        />
+        <div class="flex border-b border-base-400">
+          <div role="tablist" class="tabs tabs-bordered flex-none">
+            <button
+              on:click={() => {
+                selected_tab = 'proposals'
+              }}
+              role="tab"
+              class="tab"
+              class:tab-active={selected_tab === 'proposals'}
+            >
+              Proposals
+              {#if !$proposal_summaries.loading}
+                <span class="pl-1 opacity-30">
+                  ({$proposal_summaries.summaries.length})
+                </span>
+              {/if}
+            </button>
+            <button
+              on:click={() => {
+                selected_tab = 'issues'
+              }}
+              role="tab"
+              class="tab"
+              class:tab-active={selected_tab === 'issues'}
+            >
+              Issues
+              {#if !$issue_summaries.loading}
+                <span class="pl-1 opacity-30">
+                  ({$issue_summaries.summaries.length})
+                </span>
+              {/if}
+            </button>
+          </div>
+          <div class="flex-grow"></div>
+        </div>
+        {#if selected_tab === 'proposals'}
+          <ProposalsList
+            proposals_or_issues={$proposal_summaries.summaries}
+            loading={$proposal_summaries.loading}
+          />
+        {:else if selected_tab === 'issues'}
+          <ProposalsList
+            proposals_or_issues={$issue_summaries.summaries}
+            loading={$issue_summaries.loading}
+          />
+        {/if}
       </div>
       <div class="prose ml-2 hidden w-1/3 md:flex">
         <RepoDetails repo_id={identifier} />
