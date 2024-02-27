@@ -88,7 +88,7 @@
 </script>
 
 {#if loading || !status}
-  <Status />
+  <Status {type} />
 {:else}
   <div class="dropdown">
     <Status {type} {edit_mode} {status} />
