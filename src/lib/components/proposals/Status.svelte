@@ -23,6 +23,8 @@
       status === proposal_status_draft ||
       status === proposal_status_closed}
     class:cursor-default={!edit_mode}
+    class:no-animation={!edit_mode}
+    class:hover:bg-primary={!edit_mode}
     class="btn btn-success btn-sm align-middle"
   >
     {#if status === proposal_status_open}
