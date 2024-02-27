@@ -4,6 +4,7 @@
   import EventCard from './EventCard.svelte'
   import ThreadWrapper from '$lib/components/events/ThreadWrapper.svelte'
   import { writable } from 'svelte/store'
+  import ComposeReply from './ComposeReply.svelte'
 
   export let event: NDKEvent
   export let type: 'proposal' | 'issue' = 'proposal'
@@ -26,4 +27,5 @@
   {#each $replies_store as event}
     <EventCard {type} {event} />
   {/each}
+  <ComposeReply {type} reply_to_event_id={event.id} />
 </ThreadWrapper>

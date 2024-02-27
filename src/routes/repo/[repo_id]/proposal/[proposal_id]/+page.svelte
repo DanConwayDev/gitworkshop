@@ -14,10 +14,6 @@
   import Thread from '$lib/wrappers/Thread.svelte'
   import ProposalDetails from '$lib/components/proposals/ProposalDetails.svelte'
   import Container from '$lib/components/Container.svelte'
-  import ParsedContent from '$lib/components/events/content/ParsedContent.svelte'
-  import ComposeReply from '$lib/wrappers/ComposeReply.svelte'
-  import { patch_kind } from '$lib/kinds'
-  import Patch from '$lib/components/events/content/Patch.svelte'
 
   export let data: {
     repo_id: string
@@ -72,57 +68,48 @@
     <div class="mx-auto max-w-6xl md:flex">
       <div class="md:mr-2 md:w-2/3">
         <div class="max-w-4xl">
-          <div class="my-3">
-            {#if $selected_proposal_full.proposal_event && $selected_proposal_full.proposal_event.kind === patch_kind}
-              <Patch
-                content={$selected_proposal_full.proposal_event.content}
-                tags={$selected_proposal_full.proposal_event.tags}
-              />
-            {:else}
-              <ParsedContent
-                content={$selected_proposal_full.summary.descritpion}
-              />
-            {/if}
-          </div>
-          <div role="alert" class="alert mt-3">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              class="h-6 w-6 shrink-0 stroke-info"
-              ><path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              ></path></svg
-            >
-            <div>
-              <h3 class="prose mb-2 text-sm font-bold">
-                view proposal in local git repository
-              </h3>
-              <p class="prose text-xs">
-                <a href="/ngit">install ngit</a>, run
-                <span class="rounded bg-neutral p-1 font-mono"
-                  ><span class="py-3">ngit list</span></span
-                > from the local repository and select the proposal title
-              </p>
-            </div>
-          </div>
-          {#each $selected_proposal_replies as event}
-            <Thread type="proposal" {event} replies={[]} />
-          {/each}
-          <div class="my-3">
-            <ComposeReply type="proposal" />
-          </div>
+          {#if $selected_proposal_full.proposal_event}
+            <Thread
+              type="proposal"
+              event={$selected_proposal_full.proposal_event}
+              replies={$selected_proposal_replies}
+            />
+          {/if}
         </div>
       </div>
-      <div class="prose ml-2 hidden w-1/3 md:flex">
-        <ProposalDetails
-          summary={$selected_proposal_full.summary}
-          labels={$selected_proposal_full.labels}
-          loading={$selected_proposal_full.loading}
-        />
+      <div class="prose ml-2 w-1/3">
+        <div role="alert" class="alert mt-3 w-full">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            class="h-6 w-6 shrink-0 stroke-info"
+            ><path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            ></path></svg
+          >
+          <div>
+            <h3 class="prose mb-2 mt-2 text-sm font-bold">
+              view in local git repository
+            </h3>
+            <p class="prose text-xs">
+              <a href="/ngit">install ngit</a>, run
+              <span class="rounded bg-neutral p-1 font-mono"
+                ><span class="py-3">ngit list</span></span
+              > from the local repository and select the proposal title
+            </p>
+          </div>
+        </div>
+        <div class="block">
+          <ProposalDetails
+            summary={$selected_proposal_full.summary}
+            labels={$selected_proposal_full.labels}
+            loading={$selected_proposal_full.loading}
+          />
+        </div>
       </div>
     </div>
   </Container>

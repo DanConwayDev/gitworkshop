@@ -12,8 +12,6 @@
   import RepoHeader from '$lib/components/repo/RepoHeader.svelte'
   import Thread from '$lib/wrappers/Thread.svelte'
   import Container from '$lib/components/Container.svelte'
-  import ParsedContent from '$lib/components/events/content/ParsedContent.svelte'
-  import ComposeReply from '$lib/wrappers/ComposeReply.svelte'
   import ProposalHeader from '$lib/components/proposals/ProposalHeader.svelte'
   import ProposalDetails from '$lib/components/proposals/ProposalDetails.svelte'
 
@@ -68,15 +66,13 @@
     <div class="mx-auto max-w-6xl md:flex">
       <div class="md:mr-2 md:w-2/3">
         <div class="max-w-4xl">
-          <div class="my-3">
-            <ParsedContent content={$selected_issue_full.summary.descritpion} />
-          </div>
-          {#each $selected_issue_replies as event}
-            <Thread type="issue" {event} replies={[]} />
-          {/each}
-          <div class="my-3">
-            <ComposeReply type="issue" />
-          </div>
+          {#if $selected_issue_full.issue_event}
+            <Thread
+              type="issue"
+              event={$selected_issue_full.issue_event}
+              replies={$selected_issue_replies}
+            />
+          {/if}
         </div>
       </div>
       <div class="prose ml-2 hidden w-1/3 md:flex">
