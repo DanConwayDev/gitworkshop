@@ -160,8 +160,8 @@
             {/each}
           </div>
           <div class="flex-auto overflow-x-auto">
-            {#each file.chunks as chunk, index}
-              <div class="w-fit">
+            <div class="w-fit">
+              {#each file.chunks as chunk, index}
                 {#if index !== 0}
                   <div class="flex h-7 w-full bg-base-200"></div>
                 {/if}
@@ -195,8 +195,8 @@
                     </div>
                   </div>
                 {/each}
-              </div>
-            {/each}
+              {/each}
+            </div>
           </div>
         </div>
       {/if}
