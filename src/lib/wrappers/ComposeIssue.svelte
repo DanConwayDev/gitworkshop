@@ -5,6 +5,7 @@
   import { getUserRelays, logged_in_user } from '$lib/stores/users'
   import Compose from '$lib/components/events/Compose.svelte'
   import type { RepoEvent } from '$lib/components/repo/type'
+  import { goto } from '$app/navigation'
 
   export let repo_event: RepoEvent
 
@@ -59,8 +60,8 @@
       submitting = false
       submitted = true
       setTimeout(() => {
-        submitted = false
-      }, 5000)
+        goto(`/repo/${repo_event.identifier}/issues/${event.id}`)
+      }, 2000)
     } catch {}
   }
 </script>
@@ -74,5 +75,5 @@
   />
 {/if}
 {#if submitted}
-  <div>sent!</div>
+  <div>sent going to issue!</div>
 {/if}
