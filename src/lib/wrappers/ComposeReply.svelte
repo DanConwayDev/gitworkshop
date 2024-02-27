@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ndk } from '$lib/stores/ndk'
+  import { base_relays, ndk } from '$lib/stores/ndk'
   import { NDKEvent, NDKRelaySet } from '@nostr-dev-kit/ndk'
   import { reply_kind, repo_kind } from '$lib/kinds'
   import { getUserRelays, logged_in_user } from '$lib/stores/users'
@@ -11,18 +11,18 @@
   import { selected_proposal_full } from '$lib/stores/Proposal'
 
   export let reply_to_event_id = ''
-
-  let repo_id: string
+  let repo_identifier: string
   let proposal_id: string
 
   let submitting = false
   let submitted = false
   let edit_mode = false
   $: {
-    repo_id = $selected_repo_collection.identifier
+    repo_identifier = $selected_repo_collection.identifier
     proposal_id = $selected_proposal_full.summary.id
 
-    edit_mode = repo_id.length > 0 && proposal_id.length > 0 && !submitted
+    edit_mode =
+      repo_identifier.length > 0 && proposal_id.length > 0 && !submitted
   }
 
   async function sendReply(content: string) {
@@ -38,7 +38,7 @@
     }
     event.tags.push([
       'a',
-      `${repo_kind}:${$selected_repo_event.maintainers[0].hexpubkey}:${repo_id}`,
+      `${repo_kind}:${$selected_repo_event.maintainers[0].hexpubkey}:${repo_identifier}`,
     ])
     $selected_repo_event.maintainers.forEach((m) =>
       event.tags.push(['p', m.hexpubkey])
@@ -46,7 +46,12 @@
     // TODO nip-10 reply chain p tags
     event.content = content
     submitting = true
-    let relays = [...$selected_repo_event.relays]
+    let relays = [
+      ...($selected_repo_event.relays.length > 3
+        ? $selected_repo_event.relays
+        : [...base_relays].concat($selected_repo_event.relays)),
+    ]
+
     try {
       event.sign()
     } catch {

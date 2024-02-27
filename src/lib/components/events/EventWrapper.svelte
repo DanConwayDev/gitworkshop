@@ -3,7 +3,7 @@
   import UserHeader from '../users/UserHeader.svelte'
   import type { User } from '../users/type'
   import { defaults as user_defaults } from '../users/type'
-  import Compose from '$lib/wrappers/Compose.svelte'
+  import ComposeReply from '$lib/wrappers/ComposeReply.svelte'
   import { logged_in_user } from '$lib/stores/users'
   import type { NDKEvent } from '@nostr-dev-kit/ndk'
 
@@ -96,7 +96,7 @@
           >
         </div>
         <div class="">
-          <Compose reply_to_event_id={event_id} />
+          <ComposeReply reply_to_event_id={event_id} />
         </div>
       </div>
     {/if}

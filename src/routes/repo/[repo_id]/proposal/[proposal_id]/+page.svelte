@@ -15,7 +15,7 @@
   import ProposalDetails from '$lib/components/proposals/ProposalDetails.svelte'
   import Container from '$lib/components/Container.svelte'
   import ParsedContent from '$lib/components/events/content/ParsedContent.svelte'
-  import Compose from '$lib/wrappers/Compose.svelte'
+  import ComposeReply from '$lib/wrappers/ComposeReply.svelte'
   import { patch_kind } from '$lib/kinds'
   import Patch from '$lib/components/events/content/Patch.svelte'
 
@@ -113,7 +113,7 @@
             <Thread {event} replies={[]} />
           {/each}
           <div class="my-3">
-            <Compose />
+            <ComposeReply />
           </div>
         </div>
       </div>
