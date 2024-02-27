@@ -1,12 +1,12 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`Proposals/List/Item Author Loading smoke-test 1`] = `
-<li class="flex p-2 pt-4 cursor-pointer hover:bg-neutral-700">
+<li class="flex p-2 pt-4 cursor-pointer hover:bg-base-200">
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 16 16"
        class="h-5 w-5 flex-none fill-success pt-1"
   >
-    <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25m5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354M3.75 2.5a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m0 9.5a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m8.25.75a.75.75 0 1 0 1.5 0a.75.75 0 0 0-1.5 0">
+    <path d="M3.75 4.5a1.25 1.25 0 1 0 0-2.5a1.25 1.25 0 0 0 0 2.5M3 7.75a.75.75 0 0 1 1.5 0v2.878a2.251 2.251 0 1 1-1.5 0Zm.75 5.75a.75.75 0 1 0 0-1.5a.75.75 0 0 0 0 1.5m5-7.75a1.25 1.25 0 1 1-2.5 0a1.25 1.25 0 0 1 2.5 0m5.75 2.5a2.25 2.25 0 1 1-4.5 0a2.25 2.25 0 0 1 4.5 0m-1.5 0a.75.75 0 1 0-1.5 0a.75.75 0 0 0 1.5 0">
     </path>
   </svg>
   <a href="/repo//proposal/"
@@ -49,12 +49,12 @@ exports[`Proposals/List/Item Author Loading smoke-test 1`] = `
 `;
 
 exports[`Proposals/List/Item Long Details smoke-test 1`] = `
-<li class="flex p-2 pt-4 cursor-pointer hover:bg-neutral-700">
+<li class="flex p-2 pt-4 cursor-pointer hover:bg-base-200">
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 16 16"
        class="h-5 w-5 flex-none fill-success pt-1"
   >
-    <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25m5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354M3.75 2.5a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m0 9.5a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m8.25.75a.75.75 0 1 0 1.5 0a.75.75 0 0 0-1.5 0">
+    <path d="M3.75 4.5a1.25 1.25 0 1 0 0-2.5a1.25 1.25 0 0 0 0 2.5M3 7.75a.75.75 0 0 1 1.5 0v2.878a2.251 2.251 0 1 1-1.5 0Zm.75 5.75a.75.75 0 1 0 0-1.5a.75.75 0 0 0 0 1.5m5-7.75a1.25 1.25 0 1 1-2.5 0a1.25 1.25 0 0 1 2.5 0m5.75 2.5a2.25 2.25 0 1 1-4.5 0a2.25 2.25 0 0 1 4.5 0m-1.5 0a.75.75 0 1 0-1.5 0a.75.75 0 0 0 1.5 0">
     </path>
   </svg>
   <a href="/repo//proposal/"
@@ -90,12 +90,12 @@ exports[`Proposals/List/Item Long Details smoke-test 1`] = `
 `;
 
 exports[`Proposals/List/Item Long and No Spaces smoke-test 1`] = `
-<li class="flex p-2 pt-4 cursor-pointer hover:bg-neutral-700">
+<li class="flex p-2 pt-4 cursor-pointer hover:bg-base-200">
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 16 16"
        class="h-5 w-5 flex-none fill-success pt-1"
   >
-    <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25m5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354M3.75 2.5a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m0 9.5a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m8.25.75a.75.75 0 1 0 1.5 0a.75.75 0 0 0-1.5 0">
+    <path d="M3.75 4.5a1.25 1.25 0 1 0 0-2.5a1.25 1.25 0 0 0 0 2.5M3 7.75a.75.75 0 0 1 1.5 0v2.878a2.251 2.251 0 1 1-1.5 0Zm.75 5.75a.75.75 0 1 0 0-1.5a.75.75 0 0 0 0 1.5m5-7.75a1.25 1.25 0 1 1-2.5 0a1.25 1.25 0 0 1 2.5 0m5.75 2.5a2.25 2.25 0 1 1-4.5 0a2.25 2.25 0 0 1 4.5 0m-1.5 0a.75.75 0 1 0-1.5 0a.75.75 0 0 0 1.5 0">
     </path>
   </svg>
   <a href="/repo//proposal/"
@@ -141,12 +141,12 @@ exports[`Proposals/List/Item Long and No Spaces smoke-test 1`] = `
 `;
 
 exports[`Proposals/List/Item Short Details smoke-test 1`] = `
-<li class="flex p-2 pt-4 cursor-pointer hover:bg-neutral-700">
+<li class="flex p-2 pt-4 cursor-pointer hover:bg-base-200">
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 16 16"
        class="h-5 w-5 flex-none fill-success pt-1"
   >
-    <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25m5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354M3.75 2.5a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m0 9.5a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m8.25.75a.75.75 0 1 0 1.5 0a.75.75 0 0 0-1.5 0">
+    <path d="M3.75 4.5a1.25 1.25 0 1 0 0-2.5a1.25 1.25 0 0 0 0 2.5M3 7.75a.75.75 0 0 1 1.5 0v2.878a2.251 2.251 0 1 1-1.5 0Zm.75 5.75a.75.75 0 1 0 0-1.5a.75.75 0 0 0 0 1.5m5-7.75a1.25 1.25 0 1 1-2.5 0a1.25 1.25 0 0 1 2.5 0m5.75 2.5a2.25 2.25 0 1 1-4.5 0a2.25 2.25 0 0 1 4.5 0m-1.5 0a.75.75 0 1 0-1.5 0a.75.75 0 0 0 1.5 0">
     </path>
   </svg>
   <a href="/repo//proposal/"
@@ -192,12 +192,12 @@ exports[`Proposals/List/Item Short Details smoke-test 1`] = `
 `;
 
 exports[`Proposals/List/Item Status Applied smoke-test 1`] = `
-<li class="flex p-2 pt-4 cursor-pointer hover:bg-neutral-700">
+<li class="flex p-2 pt-4 cursor-pointer hover:bg-base-200">
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 16 16"
        class="h-5 w-5 flex-none fill-primary pt-1"
   >
-    <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218M4.25 13.5a.75.75 0 1 0 0-1.5a.75.75 0 0 0 0 1.5m8.5-4.5a.75.75 0 1 0 0-1.5a.75.75 0 0 0 0 1.5M5 3.25a.75.75 0 1 0 0 .005z">
+    <path d="M 3.25 1 A 2.25 2.25 0 0 1 4 5.372 v 5.256 a 2.251 2.251 0 1 1 -1.5 0 V 5.372 A 2.251 2.251 0 0 1 3.25 1 Z M 2.5 3.25 a 0.75 0.75 0 1 0 1.5 0 a 0.75 0.75 0 0 0 -1.5 0 M 3.25 12 a 0.75 0.75 0 1 0 0 1.5 a 0.75 0.75 0 0 0 0 -1.5">
     </path>
   </svg>
   <a href="/repo//proposal/"
@@ -243,7 +243,7 @@ exports[`Proposals/List/Item Status Applied smoke-test 1`] = `
 `;
 
 exports[`Proposals/List/Item Status Closed smoke-test 1`] = `
-<li class="flex p-2 pt-4 cursor-pointer hover:bg-neutral-700">
+<li class="flex p-2 pt-4 cursor-pointer hover:bg-base-200">
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 16 16"
        class="h-5 w-5 flex-none fill-neutral-content pt-1"
@@ -294,7 +294,7 @@ exports[`Proposals/List/Item Status Closed smoke-test 1`] = `
 `;
 
 exports[`Proposals/List/Item Status Draft smoke-test 1`] = `
-<li class="flex p-2 pt-4 cursor-pointer hover:bg-neutral-700">
+<li class="flex p-2 pt-4 cursor-pointer hover:bg-base-200">
   <svg xmlns="http://www.w3.org/2000/svg"
        viewbox="0 0 16 16"
        class="h-5 w-5 flex-none fill-neutral-content pt-1"
@@ -345,7 +345,7 @@ exports[`Proposals/List/Item Status Draft smoke-test 1`] = `
 `;
 
 exports[`Proposals/List/Item Status Loading smoke-test 1`] = `
-<li class="flex p-2 pt-4 cursor-pointer hover:bg-neutral-700">
+<li class="flex p-2 pt-4 cursor-pointer hover:bg-base-200">
   <div class="skeleton h-5 w-5 flex-none pt-1">
   </div>
   <a href="/repo//proposal/"
@@ -395,7 +395,7 @@ exports[`Proposals/List/Item loading smoke-test 1`] = `
   <div class="skeleton h-5 w-5 flex-none pt-1">
   </div>
   <a href="/repo//proposal/"
-     class="ml-3 grow overflow-hidden text-xs text-neutral-content"
+     class="ml-3 grow overflow-hidden text-xs text-neutral-content pointer-events-none"
   >
     <div class="skeleton h-5 w-60 flex-none pt-1">
     </div>

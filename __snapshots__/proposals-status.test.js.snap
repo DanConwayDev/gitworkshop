@@ -1,9 +1,18 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`Proposals/Status Applied smoke-test 1`] = `
+<div tabindex="0"
+     role="button"
+     class="btn btn-sm align-middle cursor-default no-animation hover:bg-primary"
+>
+  Applied
+</div>
+`;
+
 exports[`Proposals/Status Closed smoke-test 1`] = `
 <div tabindex="0"
      role="button"
-     class="btn btn-sm align-middle cursor-default"
+     class="btn btn-sm align-middle cursor-default no-animation hover:bg-primary"
 >
   Closed
 </div>
@@ -12,7 +21,7 @@ exports[`Proposals/Status Closed smoke-test 1`] = `
 exports[`Proposals/Status Draft smoke-test 1`] = `
 <div tabindex="0"
      role="button"
-     class="btn btn-sm align-middle cursor-default"
+     class="btn btn-sm align-middle cursor-default no-animation hover:bg-primary"
 >
   Draft
 </div>
@@ -20,15 +29,6 @@ exports[`Proposals/Status Draft smoke-test 1`] = `
 
 exports[`Proposals/Status Loading smoke-test 1`] = `
 <div class="skeleton inline-block h-8 w-24 rounded-md align-middle">
-</div>
-`;
-
-exports[`Proposals/Status Applied smoke-test 1`] = `
-<div tabindex="0"
-     role="button"
-     class="btn btn-sm align-middle cursor-default"
->
-  Applied
 </div>
 `;
 
@@ -53,7 +53,7 @@ exports[`Proposals/Status Open Edit Mode smoke-test 1`] = `
 exports[`Proposals/Status Open smoke-test 1`] = `
 <div tabindex="0"
      role="button"
-     class="btn btn-sm align-middle cursor-default"
+     class="btn btn-sm align-middle cursor-default no-animation hover:bg-primary"
 >
   Open
 </div>
