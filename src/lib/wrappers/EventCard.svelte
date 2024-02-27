@@ -11,6 +11,7 @@
   import { writable, type Unsubscriber } from 'svelte/store'
 
   export let event: NDKEvent
+  export let type: 'proposal' | 'issue' = 'proposal'
 
   let author = writable({ ...user_defaults })
   let author_unsubsriber: Unsubscriber
@@ -26,6 +27,7 @@
 </script>
 
 <EventWrapper
+  {type}
   author={$author}
   created_at={event.created_at}
   event_id={event.id}

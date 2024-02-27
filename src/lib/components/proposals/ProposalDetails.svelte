@@ -1,9 +1,12 @@
 <script lang="ts">
-  import { full_defaults } from './type'
+  import { full_defaults, summary_defaults, type ProposalSummary } from './type'
   import UserHeader from '../users/UserHeader.svelte'
   import StatusSelector from './StatusSelector.svelte'
+  import type { IssueSummary } from '../issues/type'
 
-  export let { summary, labels, loading } = { ...full_defaults }
+  export let type: 'proposal' | 'issue' = 'proposal'
+  export let summary: ProposalSummary | IssueSummary = { ...summary_defaults }
+  export let { labels, loading } = { ...full_defaults }
 </script>
 
 <div class="max-w-md">
@@ -26,9 +29,10 @@
     {:else}
       <h4>Status</h4>
       <StatusSelector
+        {type}
         status={summary.status}
         repo_identifier={summary.repo_identifier}
-        proposal_id={summary.id}
+        proposal_or_issue_id={summary.id}
       />
     {/if}
   </div>

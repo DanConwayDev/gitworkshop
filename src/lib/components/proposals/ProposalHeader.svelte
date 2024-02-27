@@ -10,6 +10,7 @@
   import Status from './Status.svelte'
 
   dayjs.extend(relativeTime)
+  export let type: 'proposal' | 'issue' = 'proposal'
   export let {
     title,
     descritpion,
@@ -59,7 +60,7 @@
       </div>
       <div class="pt-1">
         <div class="mr-3 inline align-middle">
-          <Status {status} />
+          <Status {type} {status} />
         </div>
         <div class="mr-3 inline align-middle">
           opened {created_at_ago}

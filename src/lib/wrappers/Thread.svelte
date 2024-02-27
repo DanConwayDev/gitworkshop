@@ -6,6 +6,7 @@
   import { writable } from 'svelte/store'
 
   export let event: NDKEvent
+  export let type: 'proposal' | 'issue' = 'proposal'
 
   export let replies: NDKEvent[] | undefined = undefined
 
@@ -19,10 +20,10 @@
   }
 </script>
 
-<EventCard {event} />
+<EventCard {type} {event} />
 
 <ThreadWrapper>
   {#each $replies_store as event}
-    <EventCard {event} />
+    <EventCard {type} {event} />
   {/each}
 </ThreadWrapper>

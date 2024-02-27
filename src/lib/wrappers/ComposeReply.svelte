@@ -9,27 +9,34 @@
   } from '$lib/stores/repo'
   import Compose from '$lib/components/events/Compose.svelte'
   import { selected_proposal_full } from '$lib/stores/Proposal'
+  import { selected_issue_full } from '$lib/stores/Issue'
 
+  export let type: 'proposal' | 'issue' = 'proposal'
   export let reply_to_event_id = ''
   let repo_identifier: string
-  let proposal_id: string
+  let proposal_or_issue_id: string
 
   let submitting = false
   let submitted = false
   let edit_mode = false
   $: {
     repo_identifier = $selected_repo_collection.identifier
-    proposal_id = $selected_proposal_full.summary.id
+    selected_issue_full
+    proposal_or_issue_id = (
+      type === 'proposal' ? $selected_proposal_full : $selected_issue_full
+    ).summary.id
 
     edit_mode =
-      repo_identifier.length > 0 && proposal_id.length > 0 && !submitted
+      repo_identifier.length > 0 &&
+      proposal_or_issue_id.length > 0 &&
+      !submitted
   }
 
   async function sendReply(content: string) {
     if (!$logged_in_user) return
     let event = new NDKEvent(ndk)
     event.kind = reply_kind
-    event.tags.push(['e', proposal_id, 'root'])
+    event.tags.push(['e', proposal_or_issue_id, 'root'])
     if (reply_to_event_id.length > 0) {
       event.tags.push(['e', reply_to_event_id, 'reply'])
     }

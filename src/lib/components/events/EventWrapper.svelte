@@ -7,6 +7,7 @@
   import { logged_in_user } from '$lib/stores/users'
   import type { NDKEvent } from '@nostr-dev-kit/ndk'
 
+  export let type: 'proposal' | 'issue' = 'proposal'
   export let author: User = { ...user_defaults }
   export let created_at: number | undefined
   export let event_id = ''
@@ -96,7 +97,7 @@
           >
         </div>
         <div class="">
-          <ComposeReply reply_to_event_id={event_id} />
+          <ComposeReply {type} reply_to_event_id={event_id} />
         </div>
       </div>
     {/if}

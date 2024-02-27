@@ -104,3 +104,20 @@ export const extractPatchMessage = (s: string): string | undefined => {
     return undefined
   }
 }
+
+/** this doesn't work for all patch formats and options */
+export const extractPatchTitle = (s: string): string | undefined => {
+  const msg = extractPatchMessage(s)
+  if (!msg) return undefined
+  return s.split('\n')[0]
+}
+
+export const extractIssueTitle = (s: string): string => {
+  return s.split('\n')[0] || ''
+}
+
+export const extractIssueDescription = (s: string): string => {
+  const split = s.split('\n')
+  if (split.length === 0) return ''
+  return s.substring(split[0].length) || ''
+}

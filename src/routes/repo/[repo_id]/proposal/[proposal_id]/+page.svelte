@@ -110,10 +110,10 @@
             </div>
           </div>
           {#each $selected_proposal_replies as event}
-            <Thread {event} replies={[]} />
+            <Thread type="proposal" {event} replies={[]} />
           {/each}
           <div class="my-3">
-            <ComposeReply />
+            <ComposeReply type="proposal" />
           </div>
         </div>
       </div>

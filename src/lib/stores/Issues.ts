@@ -15,7 +15,10 @@ import {
   proposal_status_open,
   repo_kind,
 } from '$lib/kinds'
-import { extractPatchMessage } from '$lib/components/events/content/utils'
+import {
+  extractIssueDescription,
+  extractIssueTitle,
+} from '$lib/components/events/content/utils'
 import { selectRepoFromCollection } from '$lib/components/repo/utils'
 import {
   summary_defaults,
@@ -112,13 +115,8 @@ export const ensureIssueSummaries = async (repo_id: string | undefined) => {
                 id: event.id,
                 repo_identifier:
                   extractRepoIdentiferFromIssueEvent(event) || repo_id || '',
-                title: (
-                  event.tagValue('name') ||
-                  event.tagValue('description') ||
-                  extractPatchMessage(event.content) ||
-                  ''
-                ).split('\n')[0],
-                descritpion: event.tagValue('description') || '',
+                title: extractIssueTitle(event.content),
+                descritpion: extractIssueDescription(event.content),
                 created_at: event.created_at,
                 comments: 0,
                 author: {

@@ -3,64 +3,61 @@ import { writable, type Unsubscriber, type Writable } from 'svelte/store'
 import { base_relays, ndk } from './ndk'
 import type { User } from '$lib/components/users/type'
 import { ensureUser } from './users'
-import {
-  type ProposalFull,
-  full_defaults,
-} from '$lib/components/proposals/type'
+import { type IssueFull, full_defaults } from '$lib/components/issues/type'
 import { proposal_status_kinds, proposal_status_open } from '$lib/kinds'
 import { awaitSelectedRepoCollection } from './repo'
-import { extractPatchMessage } from '$lib/components/events/content/utils'
+import {
+  extractIssueDescription,
+  extractIssueTitle,
+} from '$lib/components/events/content/utils'
 import { goto } from '$app/navigation'
 import { selectRepoFromCollection } from '$lib/components/repo/utils'
 
-export const selected_proposal_full: Writable<ProposalFull> = writable({
+export const selected_issue_full: Writable<IssueFull> = writable({
   ...full_defaults,
 })
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-let selected_proposal_repo_id: string = ''
-let selected_proposal_id: string = ''
-let proposal_summary_author_unsubsriber: Unsubscriber | undefined
+let selected_issue_repo_id: string = ''
+let selected_issue_id: string = ''
+let issue_summary_author_unsubsriber: Unsubscriber | undefined
 
-export const selected_proposal_replies: Writable<NDKEvent[]> = writable([])
+export const selected_issue_replies: Writable<NDKEvent[]> = writable([])
 
-let selected_proposal_status_date = 0
+let selected_issue_status_date = 0
 
 let sub: NDKSubscription
 
 let sub_replies: NDKSubscription
 
-export const ensureProposalFull = (
-  repo_identifier: string,
-  proposal_id: string
-) => {
-  if (selected_proposal_id == proposal_id) return
-  if (proposal_id == '') {
-    selected_proposal_full.set({ ...full_defaults })
-    selected_proposal_replies.set([])
+export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
+  if (selected_issue_id == issue_id) return
+  if (issue_id == '') {
+    selected_issue_full.set({ ...full_defaults })
+    selected_issue_replies.set([])
     return
   }
 
   if (sub) sub.stop()
   if (sub_replies) sub_replies.stop()
 
-  selected_proposal_repo_id = repo_identifier
-  selected_proposal_id = proposal_id
-  selected_proposal_status_date = 0
-  selected_proposal_replies.set([])
+  selected_issue_repo_id = repo_identifier
+  selected_issue_id = issue_id
+  selected_issue_status_date = 0
+  selected_issue_replies.set([])
 
-  selected_proposal_full.set({
+  selected_issue_full.set({
     ...full_defaults,
     summary: {
       ...full_defaults.summary,
-      id: proposal_id,
+      id: issue_id,
       repo_identifier: repo_identifier,
       loading: true,
     },
     loading: true,
   })
-  if (proposal_summary_author_unsubsriber) proposal_summary_author_unsubsriber()
-  proposal_summary_author_unsubsriber = undefined
+  if (issue_summary_author_unsubsriber) issue_summary_author_unsubsriber()
+  issue_summary_author_unsubsriber = undefined
 
   new Promise(async (r) => {
     const repo_collection = await awaitSelectedRepoCollection(repo_identifier)
@@ -72,7 +69,7 @@ export const ensureProposalFull = (
 
     sub = ndk.subscribe(
       {
-        ids: [proposal_id],
+        ids: [issue_id],
         limit: 50,
       },
       {
@@ -83,26 +80,19 @@ export const ensureProposalFull = (
 
     sub.on('event', (event: NDKEvent) => {
       try {
-        if (event.id == proposal_id) {
+        if (event.id == issue_id) {
           const event_repo_id = event.tagValue('a')?.split(':')[2]
           if (event_repo_id && event_repo_id !== repo_identifier) {
-            goto(
-              `/repo/${encodeURIComponent(event_repo_id)}/proposal/${proposal_id}`
-            )
+            goto(`/repo/${encodeURIComponent(event_repo_id)}/issue/${issue_id}`)
           }
-          selected_proposal_full.update((full) => {
+          selected_issue_full.update((full) => {
             return {
               ...full,
-              proposal_event: event,
+              issue_event: event,
               summary: {
                 ...full.summary,
-                title: (
-                  event.tagValue('name') ||
-                  event.tagValue('description') ||
-                  extractPatchMessage(event.content) ||
-                  ''
-                ).split('\n')[0],
-                descritpion: event.tagValue('description') || '',
+                title: extractIssueTitle(event.content),
+                descritpion: extractIssueDescription(event.content),
                 created_at: event.created_at,
                 comments: 0,
                 author: {
@@ -115,25 +105,26 @@ export const ensureProposalFull = (
             }
           })
 
-          proposal_summary_author_unsubsriber = ensureUser(
-            event.pubkey
-          ).subscribe((u: User) => {
-            selected_proposal_full.update((full) => {
-              return {
-                ...full,
-                summary: {
-                  ...full.summary,
-                  author: event.pubkey == u.hexpubkey ? u : full.summary.author,
-                },
-              }
-            })
-          })
+          issue_summary_author_unsubsriber = ensureUser(event.pubkey).subscribe(
+            (u: User) => {
+              selected_issue_full.update((full) => {
+                return {
+                  ...full,
+                  summary: {
+                    ...full.summary,
+                    author:
+                      event.pubkey == u.hexpubkey ? u : full.summary.author,
+                  },
+                }
+              })
+            }
+          )
         }
       } catch {}
     })
 
     sub.on('eose', () => {
-      selected_proposal_full.update((full) => {
+      selected_issue_full.update((full) => {
         const updated = {
           ...full,
           summary: {
@@ -150,7 +141,7 @@ export const ensureProposalFull = (
 
     sub_replies = ndk.subscribe(
       {
-        '#e': [proposal_id],
+        '#e': [issue_id],
       },
       {
         closeOnEose: false,
@@ -163,10 +154,10 @@ export const ensureProposalFull = (
         event.kind &&
         proposal_status_kinds.includes(event.kind) &&
         event.created_at &&
-        selected_proposal_status_date < event.created_at
+        selected_issue_status_date < event.created_at
       ) {
-        selected_proposal_status_date = event.created_at
-        selected_proposal_full.update((full) => {
+        selected_issue_status_date = event.created_at
+        selected_issue_full.update((full) => {
           return {
             ...full,
             summary: {
@@ -178,26 +169,11 @@ export const ensureProposalFull = (
           }
         })
       }
-      selected_proposal_replies.update((replies) => {
+      selected_issue_replies.update((replies) => {
         return [...replies, event].sort(
           (a, b) => (a.created_at || 0) - (b.created_at || 0)
         )
       })
-      if (event.tags.some((t) => t.length > 1 && t[1] === 'revision-root')) {
-        const sub_revision_replies = ndk.subscribe(
-          {
-            ids: [proposal_id],
-            limit: 50,
-          },
-          {
-            closeOnEose: true,
-          },
-          NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
-        )
-        sub_revision_replies.on('event', (event: NDKEvent) => {
-          process_replies(event)
-        })
-      }
     }
 
     sub_replies.on('event', (event: NDKEvent) => {
@@ -205,7 +181,7 @@ export const ensureProposalFull = (
     })
 
     sub_replies.on('eose', () => {
-      selected_proposal_full.update((full) => {
+      selected_issue_full.update((full) => {
         const updated = {
           ...full,
           summary: {

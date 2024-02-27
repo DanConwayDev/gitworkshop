@@ -20,8 +20,9 @@
   import Status from '$lib/components/proposals/Status.svelte'
 
   export let status: number | undefined = undefined
+  export let type: 'proposal' | 'issue' = 'proposal'
   export let repo_identifier: string = ''
-  export let proposal_id: string = ''
+  export let proposal_or_issue_id: string = ''
 
   let loading = false
 
@@ -37,7 +38,7 @@
     let event = new NDKEvent(ndk)
     event.kind = new_status_kind
     // tag proposal event
-    event.tags.push(['e', proposal_id, 'root'])
+    event.tags.push(['e', proposal_or_issue_id, 'root'])
     // tag proposal revision event
     $selected_proposal_replies
       .filter((reply) =>
@@ -70,7 +71,8 @@
     try {
       let _ = await event.publish(NDKRelaySet.fromRelayUrls(relays, ndk))
       selected_proposal_full.update((proposal_full) => {
-        if (proposal_full.summary.id !== proposal_id) return proposal_full
+        if (proposal_full.summary.id !== proposal_or_issue_id)
+          return proposal_full
         return {
           ...proposal_full,
           summary: {
@@ -89,20 +91,20 @@
   <Status />
 {:else}
   <div class="dropdown">
-    <Status {edit_mode} {status} />
+    <Status {type} {edit_mode} {status} />
     {#if edit_mode}
       <ul
         tabIndex={0}
         class="menu dropdown-content z-[1] ml-0 w-52 rounded-box bg-base-300 p-2 shadow"
       >
-        {#if status !== proposal_status_draft}
+        {#if status !== proposal_status_draft && type !== 'issue'}
           <li class="pl-0">
             <button
               on:click={() => {
                 changeStatus(proposal_status_draft)
               }}
               class="btn btn-neutral btn-sm mx-2 align-middle"
-              >{statusKindtoText(proposal_status_draft)}</button
+              >{statusKindtoText(proposal_status_draft, type)}</button
             >
           </li>
         {/if}
@@ -113,7 +115,7 @@
                 changeStatus(proposal_status_open)
               }}
               class="btn btn-success btn-sm mx-2 align-middle"
-              >{statusKindtoText(proposal_status_open)}</button
+              >{statusKindtoText(proposal_status_open, type)}</button
             >
           </li>
         {/if}
@@ -124,7 +126,7 @@
                 changeStatus(proposal_status_applied)
               }}
               class="btn btn-primary btn-sm mx-2 align-middle"
-              >{statusKindtoText(proposal_status_applied)}</button
+              >{statusKindtoText(proposal_status_applied, type)}</button
             >
           </li>
         {/if}
@@ -135,7 +137,7 @@
                 changeStatus(proposal_status_closed)
               }}
               class="btn btn-neutral btn-sm mx-2 align-middle"
-              >{statusKindtoText(proposal_status_closed)}</button
+              >{statusKindtoText(proposal_status_closed, type)}</button
             >
           </li>
         {/if}
