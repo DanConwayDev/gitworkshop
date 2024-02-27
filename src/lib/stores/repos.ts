@@ -223,7 +223,7 @@ export const eventToRepoEvent = (event: NDKEvent): RepoEvent | undefined => {
   event.getMatchingTags('web').forEach((t: string[]) => {
     t.forEach((v, i) => {
       if (i > 0) {
-        relays.push(v)
+        web.push(v)
       }
     })
   })
