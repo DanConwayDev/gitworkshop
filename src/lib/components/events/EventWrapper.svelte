@@ -12,11 +12,14 @@
   export let created_at: number | undefined
   export let event_id = ''
   export let event: NDKEvent | undefined = undefined
-  export let logged_in = $logged_in_user
   let show_compose = false
   let show_raw_json_modal = false
   let created_at_ago = ''
   $: created_at_ago = created_at ? dayjs(created_at * 1000).fromNow() : ''
+
+  const replySent = () => {
+    show_compose = false
+  }
 </script>
 
 <div class="max-w-4xl border-b border-base-300 p-3 pl-3">
@@ -61,7 +64,7 @@
           </div>
         {/if}
       {/if}
-      {#if !show_compose && logged_in}
+      {#if !show_compose && $logged_in_user}
         <div class="tooltip align-middle" data-tip="reply">
           <button
             on:click={() => {
@@ -97,7 +100,11 @@
           >
         </div>
         <div class="">
-          <ComposeReply {type} reply_to_event_id={event_id} />
+          <ComposeReply
+            {type}
+            reply_to_event_id={event_id}
+            sentFunction={() => replySent()}
+          />
         </div>
       </div>
     {/if}
