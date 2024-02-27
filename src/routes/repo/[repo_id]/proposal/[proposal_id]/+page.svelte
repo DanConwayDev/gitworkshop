@@ -72,6 +72,18 @@
     <div class="mx-auto max-w-6xl md:flex">
       <div class="md:mr-2 md:w-2/3">
         <div class="max-w-4xl">
+          <div class="my-3">
+            {#if $selected_proposal_full.proposal_event && $selected_proposal_full.proposal_event.kind === patch_kind}
+              <Patch
+                content={$selected_proposal_full.proposal_event.content}
+                tags={$selected_proposal_full.proposal_event.tags}
+              />
+            {:else}
+              <ParsedContent
+                content={$selected_proposal_full.summary.descritpion}
+              />
+            {/if}
+          </div>
           <div role="alert" class="alert mt-3">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -96,18 +108,6 @@
                 > from the local repository and select the proposal title
               </p>
             </div>
-          </div>
-          <div class="my-3">
-            {#if $selected_proposal_full.proposal_event && $selected_proposal_full.proposal_event.kind === patch_kind}
-              <Patch
-                content={$selected_proposal_full.proposal_event.content}
-                tags={$selected_proposal_full.proposal_event.tags}
-              />
-            {:else}
-              <ParsedContent
-                content={$selected_proposal_full.summary.descritpion}
-              />
-            {/if}
           </div>
           {#each $selected_proposal_replies as event}
             <Thread {event} replies={[]} />
