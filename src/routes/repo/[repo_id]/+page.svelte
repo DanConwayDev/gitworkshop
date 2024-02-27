@@ -21,9 +21,15 @@
 
   let repo_error = false
 
+  let waited_5_secs = false
+  setTimeout(() => {
+    waited_5_secs = true
+  }, 5000)
+
   $: {
     repo_error =
       !$selected_repo_collection.loading &&
+      waited_5_secs &&
       $selected_repo_event.name.length === 0
   }
 </script>
