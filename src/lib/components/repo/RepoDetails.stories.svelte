@@ -29,6 +29,8 @@
 
 <Story name="No Clone" args={vectors.NoGitServer} />
 
+<Story name="No Web" args={vectors.NoWeb} />
+
 <Story name="No Maintainers" args={vectors.NoMaintainers} />
 
 <Story

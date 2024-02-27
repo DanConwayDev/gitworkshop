@@ -47,6 +47,10 @@ const base: RepoEvent = {
     withName(UserVectors.default, 'steve'),
   ],
   loading: false,
+  event_id: '',
+  web: ['https://gitworkshop.dev/repo/example', 'https://example.com'],
+  referenced_by: [],
+  created_at: 0,
 }
 
 export const RepoDetailsArgsVectors = {
@@ -67,6 +71,7 @@ export const RepoDetailsArgsVectors = {
   NoDescription: { ...base, description: '' } as RepoEvent,
   NoTags: { ...base, tags: [] } as RepoEvent,
   NoGitServer: { ...base, clone: '' } as RepoEvent,
+  NoWeb: { ...base, web: [] } as RepoEvent,
   MaintainersOneProfileNotLoaded: {
     ...base,
     maintainers: [

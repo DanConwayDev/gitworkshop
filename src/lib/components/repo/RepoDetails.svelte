@@ -53,12 +53,34 @@
       <a
         href={clone}
         target="_blank"
-        class="link link-primary my-2 break-words"
+        class="link link-primary my-2 break-words text-sm"
       >
         {clone}
       </a>
     {/if}
   </div>
+  <div>
+    {#if loading}
+      <div class="skeleton my-3 h-5 w-20"></div>
+      <div class="badge skeleton my-2 block w-60"></div>
+      <div class="badge skeleton my-2 block w-40"></div>
+    {:else if web.length == 0}
+      <h4>websites</h4>
+      <div>none</div>
+    {:else}
+      <h4>websites</h4>
+      {#each web as site}
+        <a
+          href={site}
+          target="_blank"
+          class="link link-primary my-2 break-words text-sm"
+        >
+          {site}
+        </a>
+      {/each}
+    {/if}
+  </div>
+
   <div>
     {#if loading}
       <div class="skeleton my-3 h-5 w-20"></div>
@@ -79,11 +101,12 @@
       <div class="badge skeleton my-2 block w-60"></div>
       <div class="badge skeleton my-2 block w-40"></div>
     {:else if relays.length == 0}
-      <div />
+      <h4>relays</h4>
+      <div>none</div>
     {:else}
       <h4>relays</h4>
       {#each relays as relay}
-        <div class="badge badge-secondary my-2 block">{relay}</div>
+        <div class="badge badge-secondary badge-sm my-2 block">{relay}</div>
       {/each}
     {/if}
   </div>
