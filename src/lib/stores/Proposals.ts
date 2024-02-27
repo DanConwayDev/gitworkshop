@@ -17,7 +17,6 @@ import {
   proposal_status_open,
   repo_kind,
 } from '$lib/kinds'
-import type { RepoEvent } from '$lib/components/repo/type'
 import { extractPatchMessage } from '$lib/components/events/content/utils'
 import { selectRepoFromCollection } from '$lib/components/repo/utils'
 
@@ -27,13 +26,13 @@ export const proposal_summaries: Writable<ProposalSummaries> = writable({
   loading: false,
 })
 
-let selected_repo_id: string = ''
+let selected_repo_id: string | undefined = ''
 
 let authors_unsubscribers: Unsubscriber[] = []
 
 let sub: NDKSubscription
 
-export const ensureProposalSummaries = async (repo_id: string) => {
+export const ensureProposalSummaries = async (repo_id: string | undefined) => {
   if (selected_repo_id == repo_id) return
   proposal_summaries.set({
     id: repo_id,
@@ -57,37 +56,50 @@ export const ensureProposalSummaries = async (repo_id: string) => {
     })
   }, 6000)
 
-  const repo_collection = await awaitSelectedRepoCollection(repo_id)
-
-  const repo = selectRepoFromCollection(repo_collection)
-  if (!repo) {
-    return
-  }
-
-  const relays_to_use =
-    repo.relays.length > 3 ? repo.relays : [...base_relays].concat(repo.relays)
-
-  const without_root_tag = !repo.unique_commit
-
-  const filter_with_root: NDKFilter = {
+  let relays_to_use = [...base_relays]
+  let filter: NDKFilter = {
     kinds: [patch_kind],
-    '#a': repo.maintainers.map(
-      (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
-    ),
-    '#t': ['root'],
     limit: 50,
   }
 
-  const filter_without_root: NDKFilter = {
-    kinds: [patch_kind],
-    '#a': repo.maintainers.map(
-      (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
-    ),
-    limit: 50,
+  if (repo_id) {
+    const repo_collection = await awaitSelectedRepoCollection(repo_id)
+
+    const repo = selectRepoFromCollection(repo_collection)
+    if (!repo) {
+      // TODO: display error info bar
+      return
+    }
+
+    relays_to_use =
+      repo.relays.length > 3
+        ? repo.relays
+        : [...base_relays].concat(repo.relays)
+
+    const without_root_tag = !repo.unique_commit
+
+    if (without_root_tag) {
+      filter = {
+        kinds: [patch_kind],
+        '#a': repo.maintainers.map(
+          (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
+        ),
+        limit: 50,
+      }
+    } else {
+      filter = {
+        kinds: [patch_kind],
+        '#a': repo.maintainers.map(
+          (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
+        ),
+        '#t': ['root'],
+        limit: 50,
+      }
+    }
   }
 
   sub = ndk.subscribe(
-    [without_root_tag ? filter_without_root : filter_with_root],
+    filter,
     {
       closeOnEose: true,
     },
@@ -109,7 +121,8 @@ export const ensureProposalSummaries = async (repo_id: string) => {
               {
                 ...summary_defaults,
                 id: event.id,
-                repo_id: repo_id,
+                repo_identifier:
+                  extractRepoIdentiferFromProposalEvent(event) || repo_id || '',
                 title: (
                   event.tagValue('name') ||
                   event.tagValue('description') ||
@@ -126,7 +139,7 @@ export const ensureProposalSummaries = async (repo_id: string) => {
                 },
                 loading: false,
               },
-            ],
+            ].sort((a, b) => (b.created_at || 0) - (a.created_at || 0)),
           }
         })
       }
@@ -148,7 +161,7 @@ export const ensureProposalSummaries = async (repo_id: string) => {
   })
   sub.on('eose', () => {
     proposal_summaries.update((proposals) => {
-      getAndUpdateProposalStatus(proposals, repo)
+      getAndUpdateProposalStatus(proposals, relays_to_use)
       return {
         ...proposals,
         loading: false,
@@ -161,11 +174,8 @@ let sub_statuses: NDKSubscription
 
 function getAndUpdateProposalStatus(
   proposals: ProposalSummaries,
-  repo: RepoEvent
+  relays: string[]
 ): void {
-  const relays_to_use =
-    repo.relays.length > 3 ? repo.relays : [...base_relays].concat(repo.relays)
-
   if (sub_statuses) sub_statuses.stop()
   sub_statuses = ndk.subscribe(
     {
@@ -175,7 +185,7 @@ function getAndUpdateProposalStatus(
     {
       closeOnEose: true,
     },
-    NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
+    NDKRelaySet.fromRelayUrls(relays, ndk)
   )
   sub_statuses.on('event', (event: NDKEvent) => {
     const tagged_proposal_event = event.tagValue('e')
@@ -219,4 +229,14 @@ function getAndUpdateProposalStatus(
       }
     })
   })
+}
+
+export const extractRepoIdentiferFromProposalEvent = (
+  event: NDKEvent
+): string | undefined => {
+  const value = event.tagValue('a')
+  if (!value) return undefined
+  const split = value.split(':')
+  if (split.length < 3) return undefined
+  return split[2]
 }

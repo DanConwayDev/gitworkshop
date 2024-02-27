@@ -19,7 +19,7 @@
     title,
     descritpion,
     id,
-    repo_id,
+    repo_identifier,
     comments,
     status,
     status_date,
@@ -27,6 +27,7 @@
     created_at,
     loading,
   } = summary_defaults
+  export let show_repo: boolean = false
   let short_title: string
   let created_at_ago: string
   $: {
@@ -37,9 +38,7 @@
   }
 </script>
 
-<li
-  class="flex p-2 pt-4 {!loading ? 'cursor-pointer hover:bg-neutral-700' : ''}"
->
+<li class="flex p-2 pt-4 {!loading ? 'cursor-pointer hover:bg-base-200' : ''}">
   <!-- <figure class="p-4 pl-0 text-color-primary"> -->
   <!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
   {#if loading || !status}
@@ -74,7 +73,7 @@
     >
   {/if}
   <a
-    href="/repo/{repo_id}/proposal/{id}"
+    href="/repo/{repo_identifier}/proposal/{id}"
     class="ml-3 grow overflow-hidden text-xs text-neutral-content"
     class:pointer-events-none={loading}
   >
@@ -83,6 +82,7 @@
       <div class="skeleton mb-1 mt-3 h-3 w-40 flex-none"></div>
     {:else}
       <div class="text-sm text-base-content">
+        {show_repo ? repo_identifier : ''}
         {short_title}
       </div>
       <!-- <div class="text-xs text-neutral-content">
@@ -109,6 +109,13 @@
         <li class="inline">
           <UserHeader user={author} inline={true} size="xs" />
         </li>
+        {#if show_repo && repo_identifier.length > 0}
+          <li class="ml-3 inline">
+            <a class="link-primary z-10" href="/repo/{repo_identifier}">
+              {repo_identifier}
+            </a>
+          </li>
+        {/if}
       </ul>
     {/if}
   </a>

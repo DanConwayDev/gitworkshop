@@ -51,7 +51,7 @@ export const ensureProposalFull = (repo_id: string, proposal_id: string) => {
     summary: {
       ...full_defaults.summary,
       id: proposal_id,
-      repo_id: repo_id,
+      repo_identifier: repo_id,
       loading: true,
     },
     loading: true,

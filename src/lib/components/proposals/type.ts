@@ -6,7 +6,7 @@ import type { NDKEvent } from '@nostr-dev-kit/ndk'
 export interface ProposalSummary {
   title: string
   descritpion: string
-  repo_id: string
+  repo_identifier: string
   id: string
   comments: number
   status: undefined | number
@@ -19,7 +19,7 @@ export interface ProposalSummary {
 export const summary_defaults: ProposalSummary = {
   title: '',
   descritpion: '',
-  repo_id: '',
+  repo_identifier: '',
   id: '',
   comments: 0,
   status: undefined,
@@ -30,7 +30,7 @@ export const summary_defaults: ProposalSummary = {
 }
 
 export interface ProposalSummaries {
-  id: string
+  id: string | undefined
   summaries: ProposalSummary[]
   loading: boolean
 }
