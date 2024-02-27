@@ -59,7 +59,7 @@
     <div class="mt-2 md:flex">
       <div class="md:mr-2 md:w-2/3">
         <ProposalsList
-          title="Open Proposals"
+          title="Proposals"
           proposals={$proposal_summaries.summaries}
           loading={$proposal_summaries.loading}
         />
