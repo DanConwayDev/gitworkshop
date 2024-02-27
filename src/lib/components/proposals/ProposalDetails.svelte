@@ -27,7 +27,7 @@
       <h4>Status</h4>
       <StatusSelector
         status={summary.status}
-        repo_id={summary.repo_id}
+        repo_identifier={summary.repo_identifier}
         proposal_id={summary.id}
       />
     {/if}

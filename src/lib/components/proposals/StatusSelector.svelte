@@ -20,7 +20,7 @@
   import Status from '$lib/components/proposals/Status.svelte'
 
   export let status: number | undefined = undefined
-  export let repo_id: string = ''
+  export let repo_identifier: string = ''
   export let proposal_id: string = ''
 
   let loading = false
@@ -29,7 +29,7 @@
   $: {
     edit_mode =
       $logged_in_user !== undefined &&
-      repo_id === $selected_repo_collection.identifier
+      repo_identifier === $selected_repo_collection.identifier
   }
 
   async function changeStatus(new_status_kind: number) {

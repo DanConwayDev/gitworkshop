@@ -14,7 +14,7 @@
     title,
     descritpion,
     id,
-    repo_id,
+    repo_identifier,
     comments,
     status,
     status_date,
