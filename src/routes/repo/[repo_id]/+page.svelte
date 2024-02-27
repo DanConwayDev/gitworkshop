@@ -1,6 +1,5 @@
 <script lang="ts">
   import RepoDetails from '$lib/wrappers/RepoDetails.svelte'
-  import OpenProposals from '$lib/wrappers/OpenProposals.svelte'
   import {
     ensureSelectedRepoCollection,
     selected_repo_collection,
@@ -8,13 +7,20 @@
   } from '$lib/stores/repo'
   import RepoHeader from '$lib/components/repo/RepoHeader.svelte'
   import Container from '$lib/components/Container.svelte'
+  import {
+    ensureProposalSummaries,
+    proposal_summaries,
+  } from '$lib/stores/Proposals'
+  import ProposalsList from '$lib/components/proposals/ProposalsList.svelte'
 
   export let data: { repo_id: string }
   let identifier = data.repo_id
 
   ensureSelectedRepoCollection(identifier)
+  ensureProposalSummaries(identifier)
 
   let repo_error = false
+
   $: {
     repo_error =
       !$selected_repo_collection.loading &&
@@ -46,7 +52,11 @@
   <Container>
     <div class="mt-2 md:flex">
       <div class="md:mr-2 md:w-2/3">
-        <OpenProposals repo_id={identifier} />
+        <ProposalsList
+          title="Open Proposals"
+          proposals={$proposal_summaries.summaries}
+          loading={$proposal_summaries.loading}
+        />
       </div>
       <div class="prose ml-2 hidden w-1/3 md:flex">
         <RepoDetails repo_id={identifier} />

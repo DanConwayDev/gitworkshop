@@ -1,7 +1,13 @@
 <script lang="ts">
   import Container from '$lib/components/Container.svelte'
-  import PatchesRecent from '$lib/wrappers/RecentProposals.svelte'
+  import ProposalsList from '$lib/components/proposals/ProposalsList.svelte'
+  import {
+    ensureProposalSummaries,
+    proposal_summaries,
+  } from '$lib/stores/Proposals'
   import ReposRecent from '$lib/wrappers/ReposRecent.svelte'
+
+  ensureProposalSummaries(undefined)
 </script>
 
 <div role="alert" class="alert">
@@ -68,7 +74,14 @@
     </div>
   </div>
   <div class="hero md:basis-1/2">
-    <PatchesRecent />
+    <ProposalsList
+      title="Recent Proposals"
+      proposals={$proposal_summaries.summaries}
+      show_repo={true}
+      loading={$proposal_summaries.loading}
+      limit={6}
+      allow_more={true}
+    />
   </div>
 </div>
 <Container>

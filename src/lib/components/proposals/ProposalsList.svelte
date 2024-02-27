@@ -32,7 +32,7 @@
         <ProposalsListItem loading={true} />
         <ProposalsListItem loading={true} />
       {/if}
-    {:else if allow_more && proposals.length > current_limit}
+    {:else if allow_more && limit !== 0 && proposals.length > current_limit}
       <button
         on:click={() => {
           current_limit = current_limit + 5
