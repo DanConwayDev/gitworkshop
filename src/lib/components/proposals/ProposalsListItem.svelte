@@ -82,7 +82,6 @@
       <div class="skeleton mb-1 mt-3 h-3 w-40 flex-none"></div>
     {:else}
       <div class="text-sm text-base-content">
-        {show_repo ? repo_identifier : ''}
         {short_title}
       </div>
       <!-- <div class="text-xs text-neutral-content">
