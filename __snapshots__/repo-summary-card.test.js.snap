@@ -1,7 +1,7 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`Repo/Summary/Card Long Details smoke-test 1`] = `
-<div class="my-2 rounded-lg bg-base-200 p-4"
+<div class="rounded-lg bg-base-200 p-4"
      style="min-height: 3.325rem;"
 >
   <a class="link-primary break-words"
@@ -37,7 +37,7 @@ exports[`Repo/Summary/Card Long Details smoke-test 1`] = `
 `;
 
 exports[`Repo/Summary/Card Long and No Spaces smoke-test 1`] = `
-<div class="my-2 rounded-lg bg-base-200 p-4"
+<div class="rounded-lg bg-base-200 p-4"
      style="min-height: 3.325rem;"
 >
   <a class="link-primary break-words"
@@ -73,7 +73,7 @@ exports[`Repo/Summary/Card Long and No Spaces smoke-test 1`] = `
 `;
 
 exports[`Repo/Summary/Card Multiple Maintainers smoke-test 1`] = `
-<div class="my-2 rounded-lg bg-base-200 p-4"
+<div class="rounded-lg bg-base-200 p-4"
      style="min-height: 5.975rem;"
 >
   <a class="link-primary break-words"
@@ -143,7 +143,7 @@ exports[`Repo/Summary/Card Multiple Maintainers smoke-test 1`] = `
 `;
 
 exports[`Repo/Summary/Card No Details smoke-test 1`] = `
-<div class="my-2 rounded-lg bg-base-200 p-4"
+<div class="rounded-lg bg-base-200 p-4"
      style="min-height: 3.325rem;"
 >
   <a class="link-primary break-words"
@@ -173,7 +173,7 @@ exports[`Repo/Summary/Card No Details smoke-test 1`] = `
 `;
 
 exports[`Repo/Summary/Card Short Details smoke-test 1`] = `
-<div class="my-2 rounded-lg bg-base-200 p-4"
+<div class="rounded-lg bg-base-200 p-4"
      style="min-height: 3.325rem;"
 >
   <a class="link-primary break-words"
@@ -209,7 +209,7 @@ exports[`Repo/Summary/Card Short Details smoke-test 1`] = `
 `;
 
 exports[`Repo/Summary/Card loading smoke-test 1`] = `
-<div class="my-2 rounded-lg bg-base-200 p-4"
+<div class="rounded-lg bg-base-200 p-4"
      style="min-height: 3.325rem;"
 >
   <div class="skeleton mb-2 h-5 w-40">

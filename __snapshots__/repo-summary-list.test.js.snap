@@ -7,8 +7,8 @@ exports[`Repo/Summary/List Default smoke-test 1`] = `
       Featured Repositories
     </h3>
   </div>
-  <div class>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+  <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <a class="link-primary break-words"
@@ -41,7 +41,7 @@ exports[`Repo/Summary/List Default smoke-test 1`] = `
         </ul>
       </div>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <a class="link-primary break-words"
@@ -74,7 +74,7 @@ exports[`Repo/Summary/List Default smoke-test 1`] = `
         </ul>
       </div>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <a class="link-primary break-words"
@@ -107,7 +107,7 @@ exports[`Repo/Summary/List Default smoke-test 1`] = `
         </ul>
       </div>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 5.975rem;"
     >
       <a class="link-primary break-words"
@@ -198,8 +198,8 @@ exports[`Repo/Summary/List Loading smoke-test 1`] = `
       Latest
     </h3>
   </div>
-  <div class>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+  <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <div class="skeleton mb-2 h-5 w-40">
@@ -207,7 +207,7 @@ exports[`Repo/Summary/List Loading smoke-test 1`] = `
       <div class="w-100 skeleton h-4">
       </div>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <div class="skeleton mb-2 h-5 w-40">
@@ -215,7 +215,7 @@ exports[`Repo/Summary/List Loading smoke-test 1`] = `
       <div class="w-100 skeleton h-4">
       </div>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <div class="skeleton mb-2 h-5 w-40">
@@ -234,8 +234,8 @@ exports[`Repo/Summary/List Multiple Maintainers smoke-test 1`] = `
       Multiple Maintainers
     </h3>
   </div>
-  <div class>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+  <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 5.975rem;"
     >
       <a class="link-primary break-words"
@@ -302,7 +302,7 @@ exports[`Repo/Summary/List Multiple Maintainers smoke-test 1`] = `
         </ul>
       </div>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <a class="link-primary break-words"
@@ -341,8 +341,8 @@ exports[`Repo/Summary/List Multiple Maintainers smoke-test 1`] = `
 
 exports[`Repo/Summary/List No Title smoke-test 1`] = `
 <div class="min-width">
-  <div class>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+  <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <a class="link-primary break-words"
@@ -375,7 +375,7 @@ exports[`Repo/Summary/List No Title smoke-test 1`] = `
         </ul>
       </div>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <a class="link-primary break-words"
@@ -419,8 +419,8 @@ exports[`Repo/Summary/List Partially Loaded smoke-test 1`] = `
       Latest
     </h3>
   </div>
-  <div class>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+  <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <a class="link-primary break-words"
@@ -453,7 +453,7 @@ exports[`Repo/Summary/List Partially Loaded smoke-test 1`] = `
         </ul>
       </div>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <a class="link-primary break-words"
@@ -486,7 +486,7 @@ exports[`Repo/Summary/List Partially Loaded smoke-test 1`] = `
         </ul>
       </div>
     </div>
-    <div class="my-2 rounded-lg bg-base-200 p-4"
+    <div class="rounded-lg bg-base-200 p-4"
          style="min-height: 3.325rem;"
     >
       <div class="skeleton mb-2 h-5 w-40">
