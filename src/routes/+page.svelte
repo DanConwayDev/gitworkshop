@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Container from '$lib/components/Container.svelte'
+  import PatchesRecent from '$lib/wrappers/RecentProposals.svelte'
   import ReposRecent from '$lib/wrappers/ReposRecent.svelte'
 </script>
 
@@ -20,9 +22,9 @@
   </div>
 </div>
 
-<div class="flex flex-row">
-  <div class="bg-pr hero h-[calc(100vh-4rem)] md:basis-1/2">
-    <div class="hero-content text-center">
+<div class="my-8 flex flex-row">
+  <div class="justify-right flex items-center">
+    <div class="align-center hero-content text-center">
       <div class="max-w-md">
         <div class="prose">
           <h1 class="mb-2">
@@ -66,7 +68,10 @@
       </div>
     </div>
   </div>
-  <div class="hero h-[calc(100vh-4rem)] md:basis-1/2">
-    <ReposRecent />
+  <div class="hero md:basis-1/2">
+    <PatchesRecent />
   </div>
 </div>
+<Container>
+  <ReposRecent />
+</Container>
