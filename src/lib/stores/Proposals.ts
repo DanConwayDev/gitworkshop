@@ -113,6 +113,10 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
         event.content.length > 0 &&
         !event.tags.some((t) => t.length > 1 && t[1] === 'revision-root')
       ) {
+        if (!extractRepoIdentiferFromProposalEvent(event) && !repo_id) {
+          // link to proposal will not work as it requires an identifier
+          return
+        }
         proposal_summaries.update((proposals) => {
           return {
             ...proposals,
