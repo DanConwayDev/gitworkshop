@@ -14,8 +14,6 @@
   import Container from '$lib/components/Container.svelte'
   import ParsedContent from '$lib/components/events/content/ParsedContent.svelte'
   import ComposeReply from '$lib/wrappers/ComposeReply.svelte'
-  import { patch_kind } from '$lib/kinds'
-  import Patch from '$lib/components/events/content/Patch.svelte'
   import ProposalHeader from '$lib/components/proposals/ProposalHeader.svelte'
   import ProposalDetails from '$lib/components/proposals/ProposalDetails.svelte'
 
