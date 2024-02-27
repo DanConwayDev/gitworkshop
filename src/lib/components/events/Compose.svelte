@@ -2,6 +2,7 @@
   import { login } from '$lib/stores/users'
 
   export let sendReply: (content: string) => void = () => {}
+  export let placeholder = 'reply...'
   export let submitting = false
   export let logged_in = false
   let submit = () => {
@@ -16,7 +17,7 @@
     disabled={submitting}
     bind:value={content}
     class="textarea textarea-primary w-full"
-    placeholder="reply..."
+    {placeholder}
   ></textarea>
   <div class="flex">
     <div class="flex-auto"></div>

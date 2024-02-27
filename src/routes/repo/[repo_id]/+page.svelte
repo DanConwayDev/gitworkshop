@@ -133,6 +133,9 @@
             proposals_or_issues={$issue_summaries.summaries}
             loading={$issue_summaries.loading}
           />
+          <a class="btn btn-success my-3" href="/repo/{identifier}/issues/new">
+            create issue
+          </a>
         {/if}
       </div>
       <div class="prose ml-2 hidden w-1/3 md:flex">
