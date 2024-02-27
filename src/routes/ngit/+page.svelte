@@ -5,10 +5,7 @@
 <Container>
   <div class="prose m-auto mt-8">
     <h2 class=""><span class="text-purple-600">n</span>git</h2>
-    <p>
-      a command-line tool for managing git repositories change proposals via
-      nostr
-    </p>
+    <p>a command-line tool to send and review patches via nostr</p>
     <p>
       works seemlessly with <a href="https://gitworkshop.dev">gitworkshop.dev</a
       >

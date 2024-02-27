@@ -45,9 +45,8 @@
                 </h3>
               </div>
               <div class="prose">
-                a command-line tool to <span class="badge">create</span>,
-                <span class="badge">list</span> and
-                <span class="badge">apply</span> Proposals and patches
+                a command-line tool to <span class="badge">send</span> and
+                <span class="badge">review</span> patches using nostr
                 <div class="card-actions mt-3 flex">
                   <div class="flex-grow">
                     <a href="/ngit" class="btn btn-neutral">install ngit</a>
