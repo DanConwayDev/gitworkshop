@@ -13,6 +13,7 @@
     proposal_status_draft,
     proposal_status_open,
   } from '$lib/kinds'
+  import { issue_icon_path } from '../issues/icons'
 
   dayjs.extend(relativeTime)
   export let type: 'issue' | 'proposal' = 'proposal'
@@ -50,15 +51,29 @@
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
       class="h-5 w-5 flex-none fill-success pt-1"
-      ><path d={proposal_icon_path.open_patch} /></svg
     >
+      {#if type === 'proposal'}
+        <path d={proposal_icon_path.open_patch} />
+      {:else if type === 'issue'}
+        {#each issue_icon_path.open as p}
+          <path d={p} />
+        {/each}
+      {/if}
+    </svg>
   {:else if status === proposal_status_closed}
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
       class="h-5 w-5 flex-none fill-neutral-content pt-1"
-      ><path d={proposal_icon_path.close} /></svg
     >
+      {#if type === 'proposal'}
+        <path d={proposal_icon_path.close} />
+      {:else if type === 'issue'}
+        {#each issue_icon_path.closed as p}
+          <path d={p} />
+        {/each}
+      {/if}
+    </svg>
   {:else if status === proposal_status_draft}
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -71,8 +86,15 @@
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
       class="h-5 w-5 flex-none fill-primary pt-1"
-      ><path d={proposal_icon_path.applied} /></svg
     >
+      {#if type === 'proposal'}
+        <path d={proposal_icon_path.applied} />
+      {:else if type === 'issue'}
+        {#each issue_icon_path.resolved as p}
+          <path d={p} />
+        {/each}
+      {/if}
+    </svg>
   {/if}
   <a
     href="/repo/{repo_identifier}/{type}/{id}"
