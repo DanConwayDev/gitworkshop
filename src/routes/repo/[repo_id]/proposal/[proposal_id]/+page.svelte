@@ -77,7 +77,7 @@
           {/if}
         </div>
       </div>
-      <div class="prose ml-2 w-1/3">
+      <div class="prose ml-2 hidden w-1/3 md:block">
         <div role="alert" class="alert mt-3 w-full">
           <svg
             xmlns="http://www.w3.org/2000/svg"
