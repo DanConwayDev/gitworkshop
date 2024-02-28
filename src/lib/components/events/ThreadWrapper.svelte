@@ -12,21 +12,18 @@
 <div class="border-l border-blue-500 pl-1">
   {#if num_replies > 0}
     {#if show_replies}
-      <div class="opacity-20 hover:opacity-70" class:relative={show_replies}>
+      <div class="opacity-60 hover:opacity-90" class:relative={show_replies}>
         <button
           on:click={() => {
             toggle_replies()
           }}
-          class=" right-0 -mt-8 p-1"
+          class="-ml-1 -mt-8"
           class:absolute={show_replies}
         >
-          <span class="inline text-xs"
-            >{show_replies ? 'hide' : 'show'} {num_replies} replies</span
-          >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 16 16"
-            class="inline h-7 w-7 flex-none fill-base-content pt-1"
+            class="h-7 w-7 flex-none fill-blue-500 pt-1"
           >
             {#each show_replies ? icons_misc.chevron_up : icons_misc.chevron_down as p}
               <path d={p} />
