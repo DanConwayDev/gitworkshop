@@ -71,7 +71,7 @@
     >
       <div class="flex w-full bg-base-200">
         <button
-          class="flex flex-grow p-3 text-sm"
+          class="flex shrink flex-grow p-3 text-sm"
           on:click={() => {
             if (expand_full_files[index]) {
               expand_full_files[index] = false
@@ -82,25 +82,17 @@
               expand_files[index] = true
             }
           }}
-          ><div class="flex-none">
-            <span>
-              {file.to || file.from}
-            </span>
+          ><div class="text-wrap shrink text-left">
+            <span class="pr-3">{file.to || file.from}</span>
             <span
-              class="text-middle flex-none pl-3 align-middle font-mono text-xs opacity-70"
-            >
-              {#if file.new}
-                <span>created file</span>
-              {/if}
-              {#if file.deleted}
-                <span>deleted file</span>
-              {/if}
-              {#if !file.deleted}
-                <span class="text-success">+{file.additions}</span>
-              {/if}
-              {#if !file.new}
-                <span class="text-error">-{file.deletions}</span>
-              {/if}
+              class="text-middle flex-none align-middle font-mono text-xs opacity-70"
+              >{#if file.new}<span>created&nbsp;file</span
+                >&nbsp;{/if}{#if file.deleted}<span>deleted&nbsp;file</span
+                >&nbsp;{/if}{#if !file.deleted}<span class="text-success"
+                  >+{file.additions}</span
+                >{/if}&nbsp;{#if !file.new}<span class="text-error"
+                  >-{file.deletions}</span
+                >{/if}
             </span>
           </div>
           <div class="flex-grow"></div>
