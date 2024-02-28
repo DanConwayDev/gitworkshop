@@ -30,6 +30,8 @@ let sub: NDKSubscription
 
 let sub_replies: NDKSubscription
 
+let revision_ids_queried: string[]
+
 export const ensureProposalFull = (
   repo_identifier: string,
   proposal_id: string
@@ -48,6 +50,7 @@ export const ensureProposalFull = (
   selected_proposal_id = proposal_id
   selected_proposal_status_date = 0
   selected_proposal_replies.set([])
+  revision_ids_queried = []
 
   selected_proposal_full.set({
     ...full_defaults,
@@ -181,10 +184,15 @@ export const ensureProposalFull = (
       selected_proposal_replies.update((replies) => {
         return [...replies, event]
       })
-      if (event.tags.some((t) => t.length > 1 && t[1] === 'revision-root')) {
+      if (
+        event.tags.some((t) => t.length > 1 && t[1] === 'revision-root') &&
+        !revision_ids_queried.includes(event.id)
+      ) {
+        // prevents an infinate loop of querying the same revision
+        revision_ids_queried.push(event.id)
         const sub_revision_replies = ndk.subscribe(
           {
-            ids: [proposal_id],
+            '#e': [event.id],
             limit: 50,
           },
           {
