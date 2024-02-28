@@ -26,7 +26,16 @@
       status === proposal_status_closed}
     class:cursor-default={!edit_mode}
     class:no-animation={!edit_mode}
-    class:hover:bg-primary={!edit_mode}
+    class:hover:bg-success={!edit_mode &&
+      status &&
+      status === proposal_status_open}
+    class:hover:bg-primary={!edit_mode &&
+      status &&
+      status === proposal_status_applied}
+    class:hover:bg-neutral={(!edit_mode &&
+      status &&
+      status === proposal_status_draft) ||
+      status === proposal_status_closed}
     class="btn btn-success btn-sm align-middle"
   >
     {#if status === proposal_status_open}
