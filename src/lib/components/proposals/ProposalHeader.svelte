@@ -8,6 +8,7 @@
   import { getName } from '../users/type'
   import Container from '../Container.svelte'
   import Status from './Status.svelte'
+  import { logged_in_user } from '$lib/stores/users'
 
   dayjs.extend(relativeTime)
   export let type: 'proposal' | 'issue' = 'proposal'
@@ -60,7 +61,7 @@
       </div>
       <div class="pt-1">
         <div class="mr-3 inline align-middle">
-          <Status {type} {status} />
+          <Status {type} {status} edit_mode={!!$logged_in_user} />
         </div>
         <div class="mr-3 inline align-middle">
           opened {created_at_ago}
