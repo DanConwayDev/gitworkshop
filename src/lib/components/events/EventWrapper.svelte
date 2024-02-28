@@ -10,8 +10,7 @@
   export let type: 'proposal' | 'issue' = 'proposal'
   export let author: User = { ...user_defaults }
   export let created_at: number | undefined
-  export let event_id = ''
-  export let event: NDKEvent | undefined = undefined
+  export let event: NDKEvent
   let show_compose = false
   let show_raw_json_modal = false
   let created_at_ago = ''
@@ -100,11 +99,7 @@
           >
         </div>
         <div class="">
-          <ComposeReply
-            {type}
-            reply_to_event_id={event_id}
-            sentFunction={() => replySent()}
-          />
+          <ComposeReply {type} {event} sentFunction={() => replySent()} />
         </div>
       </div>
     {/if}

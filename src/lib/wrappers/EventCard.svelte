@@ -26,13 +26,7 @@
   })
 </script>
 
-<EventWrapper
-  {type}
-  author={$author}
-  created_at={event.created_at}
-  event_id={event.id}
-  {event}
->
+<EventWrapper {type} author={$author} created_at={event.created_at} {event}>
   {#if event.kind == patch_kind}
     <Patch content={event.content} tags={event.tags} />
   {:else if event.kind && proposal_status_kinds.includes(event.kind)}

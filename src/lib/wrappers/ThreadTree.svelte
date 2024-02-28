@@ -131,6 +131,6 @@
     </ThreadWrapper>
   {/each}
   {#if show_compose}
-    <ComposeReply {type} reply_to_event_id={tree.event.id} />
+    <ComposeReply {type} event={tree.event} />
   {/if}
 </ThreadWrapper>

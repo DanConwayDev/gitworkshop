@@ -31,7 +31,6 @@
       'root',
     ])
     repo_event.maintainers.forEach((m) => event.tags.push(['p', m.hexpubkey]))
-    // TODO nip-10 reply chain p tags
     event.content = content
     submitting = true
     let relays = [
