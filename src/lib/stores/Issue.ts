@@ -70,10 +70,10 @@ export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
     sub = ndk.subscribe(
       {
         ids: [issue_id],
-        limit: 50,
+        limit: 100,
       },
       {
-        closeOnEose: true,
+        closeOnEose: false,
       },
       NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
     )

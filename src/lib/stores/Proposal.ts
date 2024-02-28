@@ -30,6 +30,8 @@ let sub: NDKSubscription
 
 let sub_replies: NDKSubscription
 
+const sub_revisions: NDKSubscription[] = []
+
 let revision_ids_queried: string[]
 
 export const ensureProposalFull = (
@@ -45,6 +47,7 @@ export const ensureProposalFull = (
 
   if (sub) sub.stop()
   if (sub_replies) sub_replies.stop()
+  sub_revisions.forEach((sub) => sub.stop())
 
   selected_proposal_repo_id = repo_identifier
   selected_proposal_id = proposal_id
@@ -76,10 +79,10 @@ export const ensureProposalFull = (
     sub = ndk.subscribe(
       {
         ids: [proposal_id],
-        limit: 50,
+        limit: 100,
       },
       {
-        closeOnEose: true,
+        closeOnEose: false,
       },
       NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
     )
@@ -193,16 +196,17 @@ export const ensureProposalFull = (
         const sub_revision_replies = ndk.subscribe(
           {
             '#e': [event.id],
-            limit: 50,
+            limit: 100,
           },
           {
-            closeOnEose: true,
+            closeOnEose: false,
           },
           NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
         )
         sub_revision_replies.on('event', (event: NDKEvent) => {
           process_replies(event)
         })
+        sub_revisions.push(sub_revision_replies)
       }
     }
 

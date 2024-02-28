@@ -59,7 +59,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
   let relays_to_use = [...base_relays]
   let filter: NDKFilter = {
     kinds: [patch_kind],
-    limit: 50,
+    limit: 100,
   }
 
   if (repo_id) {
@@ -84,7 +84,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
         '#a': repo.maintainers.map(
           (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
         ),
-        limit: 50,
+        limit: 100,
       }
     } else {
       filter = {
@@ -93,7 +93,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
           (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
         ),
         '#t': ['root'],
-        limit: 50,
+        limit: 100,
       }
     }
   }
@@ -101,7 +101,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
   sub = ndk.subscribe(
     filter,
     {
-      closeOnEose: true,
+      closeOnEose: false,
     },
     NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
   )
@@ -187,7 +187,7 @@ function getAndUpdateProposalStatus(
       '#e': proposals.summaries.map((proposal) => proposal.id),
     },
     {
-      closeOnEose: true,
+      closeOnEose: false,
     },
     NDKRelaySet.fromRelayUrls(relays, ndk)
   )

@@ -64,7 +64,7 @@ export const ensureIssueSummaries = async (repo_id: string | undefined) => {
   let relays_to_use = [...base_relays]
   let filter: NDKFilter = {
     kinds: [issue_kind],
-    limit: 50,
+    limit: 100,
   }
 
   if (repo_id) {
@@ -86,14 +86,14 @@ export const ensureIssueSummaries = async (repo_id: string | undefined) => {
       '#a': repo.maintainers.map(
         (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
       ),
-      limit: 50,
+      limit: 100,
     }
   }
 
   sub = ndk.subscribe(
     filter,
     {
-      closeOnEose: true,
+      closeOnEose: false,
     },
     NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
   )
@@ -170,7 +170,7 @@ function getAndUpdateIssueStatus(
       '#e': issues.summaries.map((issue) => issue.id),
     },
     {
-      closeOnEose: true,
+      closeOnEose: false,
     },
     NDKRelaySet.fromRelayUrls(relays, ndk)
   )
