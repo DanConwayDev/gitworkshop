@@ -179,9 +179,7 @@ export const ensureProposalFull = (
         })
       }
       selected_proposal_replies.update((replies) => {
-        return [...replies, event].sort(
-          (a, b) => (a.created_at || 0) - (b.created_at || 0)
-        )
+        return [...replies, event]
       })
       if (event.tags.some((t) => t.length > 1 && t[1] === 'revision-root')) {
         const sub_revision_replies = ndk.subscribe(

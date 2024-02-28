@@ -9,6 +9,7 @@
   export let show_repo: boolean = false
   export let limit: number = 0
   export let allow_more = true
+  export let sort_youngest_first = true
   let current_limit = limit
 </script>
 
@@ -22,7 +23,7 @@
     <p class="prose">None</p>
   {/if}
   <ul class=" divide-y divide-base-400">
-    {#each proposals_or_issues as proposal, index}
+    {#each sort_youngest_first ? proposals_or_issues.sort((a, b) => (b.created_at || 0) - (a.created_at || 0)) : proposals_or_issues as proposal, index}
       {#if current_limit === 0 || index + 1 <= current_limit}
         <ProposalsListItem {...proposal} {show_repo} />
       {/if}

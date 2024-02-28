@@ -143,7 +143,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
                 },
                 loading: false,
               },
-            ].sort((a, b) => (b.created_at || 0) - (a.created_at || 0)),
+            ],
           }
         })
       }

@@ -2,9 +2,11 @@
   import EventCard from './EventCard.svelte'
   import ThreadWrapper from '$lib/components/events/ThreadWrapper.svelte'
   import type { ThreadTreeNode } from '$lib/components/events/type'
+  import ComposeReply from './ComposeReply.svelte'
 
   export let tree: ThreadTreeNode
   export let type: 'proposal' | 'issue' = 'proposal'
+  export let show_compose = false
   const countReplies = (tree: ThreadTreeNode, starting: number = 0): number => {
     return (
       tree.child_nodes.length +
@@ -128,4 +130,7 @@
       {/each}
     </ThreadWrapper>
   {/each}
+  {#if show_compose}
+    <ComposeReply {type} reply_to_event_id={tree.event.id} />
+  {/if}
 </ThreadWrapper>

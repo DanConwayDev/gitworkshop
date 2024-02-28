@@ -170,9 +170,7 @@ export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
         })
       }
       selected_issue_replies.update((replies) => {
-        return [...replies, event].sort(
-          (a, b) => (a.created_at || 0) - (b.created_at || 0)
-        )
+        return [...replies, event]
       })
     }
 
