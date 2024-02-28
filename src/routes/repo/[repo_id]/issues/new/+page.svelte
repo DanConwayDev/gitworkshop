@@ -50,12 +50,12 @@
   <RepoHeader {...$selected_repo_event} />
 
   <Container>
-    <div class="mt-2 md:flex">
-      <div class="prose md:mr-2 md:w-2/3">
+    <div class="mt-2 lg:flex">
+      <div class="prose lg:mr-2 lg:w-2/3">
         <h4>Create Issue</h4>
         <ComposeIssue repo_event={$selected_repo_event} />
       </div>
-      <div class="prose ml-2 hidden w-1/3 md:flex">
+      <div class="prose ml-2 hidden w-1/3 lg:flex">
         <RepoDetails repo_id={identifier} />
       </div>
     </div>
