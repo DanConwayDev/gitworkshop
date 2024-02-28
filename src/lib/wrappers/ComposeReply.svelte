@@ -34,6 +34,15 @@
       selected_proposal_or_issue.summary.id.length > 0 &&
       !submitted
   }
+  /** to get the proposal revision id rather than the root proposal */
+  const getRootId = (event: NDKEvent): string | undefined => {
+    // exclude 'a' references to repo events
+    return event.tags.find(
+      (t) => t[0] === 'e' && t.length === 4 && t[3] === 'root'
+    ) || event.tags.some((t) => t[0] === 't' && t[1] === 'root')
+      ? event.id
+      : undefined
+  }
 
   async function sendReply(content: string) {
     if (!$logged_in_user) return
@@ -41,14 +50,14 @@
     new_event.kind = reply_kind
     new_event.tags.push([
       'e',
-      selected_proposal_or_issue.summary.id,
+      getRootId(event) || selected_proposal_or_issue.summary.id,
       $selected_repo_event.relays[0] || '',
       'root',
     ])
-    if (new_event.id.length > 0) {
-      new_event.tags.push([
+    if (event.id.length > 0) {
+      event.tags.push([
         'e',
-        new_event.id,
+        event.id,
         $selected_repo_event.relays[0] || '',
         'reply',
       ])
@@ -64,15 +73,17 @@
       ? get(user_relays[event.pubkey]).ndk_relays?.writeRelayUrls[0]
       : undefined
 
-    new_event.tags.push(
-      parent_event_user_relay
-        ? ['p', event.pubkey, parent_event_user_relay]
-        : ['p', event.pubkey]
-    )
+    if (event.pubkey !== $logged_in_user?.hexpubkey)
+      new_event.tags.push(
+        parent_event_user_relay
+          ? ['p', event.pubkey, parent_event_user_relay]
+          : ['p', event.pubkey]
+      )
     new_event.tags
       .filter((tag) => tag[0] === 'p')
       .forEach((tag) => {
-        new_event.tags.push(tag)
+        if (tag[1] !== event.pubkey && tag[1] !== $logged_in_user?.hexpubkey)
+          new_event.tags.push(tag)
       })
     new_event.content = content
     submitting = true
