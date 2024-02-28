@@ -40,7 +40,7 @@
 
 <EventCard {type} {event} />
 
-<ThreadWrapper>
+<ThreadWrapper num_replies={$thread_tree_store.length}>
   {#each $thread_tree_store as tree}
     <ThreadTree {type} {tree} />
   {/each}
