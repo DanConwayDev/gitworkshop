@@ -9,8 +9,8 @@
   }
 </script>
 
-{#if num_replies > 0}
-  <div class="border-l border-blue-500 pl-1">
+<div class="border-l border-blue-500 pl-1">
+  {#if num_replies > 0}
     {#if show_replies}
       <div class="opacity-20 hover:opacity-70" class:relative={show_replies}>
         <button
@@ -44,8 +44,8 @@
         show {num_replies} hidden replies
       </button>
     {/if}
-    <div class:hidden={!show_replies}>
-      <slot />
-    </div>
+  {/if}
+  <div class:hidden={!show_replies}>
+    <slot />
   </div>
-{/if}
+</div>
