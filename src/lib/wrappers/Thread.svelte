@@ -37,18 +37,57 @@
     return thread_tree
   }
 
+  const splitIntoRevisionThreadTrees = (
+    tree: ThreadTreeNode
+  ): ThreadTreeNode[] => {
+    let thread_revision_trees: ThreadTreeNode[] = [
+      {
+        ...tree,
+        child_nodes: [...tree?.child_nodes],
+      },
+    ]
+    thread_revision_trees[0].child_nodes =
+      thread_revision_trees[0].child_nodes.filter((n) => {
+        if (
+          n.event.tags.some((t) => t.length > 1 && t[1] === 'revision-root')
+        ) {
+          thread_revision_trees.push(n)
+          return false
+        }
+        return true
+      })
+    return thread_revision_trees.sort(
+      (a, b) => (a.event.created_at || 0) - (b.event.created_at || 0)
+    )
+  }
+
   let thread_tree_store = writable(
     createThreadTree(replies ? [event, ...replies] : [event])
   )
   let thread_tree_root: ThreadTreeNode | undefined
+  let thread_revision_trees: ThreadTreeNode[] | undefined
   // TODO: add 'mentions' and secondary references that fall outside of root childNodes
   //       they should appear in the UI as 'mentioned in' and be clear that replies ar enot incldued
   $: {
     if (replies) thread_tree_store.set(createThreadTree([event, ...replies]))
     thread_tree_root = $thread_tree_store.find((t) => t.event.id === event.id)
+    if (type === 'proposal' && thread_tree_root)
+      thread_revision_trees = splitIntoRevisionThreadTrees(thread_tree_root)
   }
 </script>
 
-{#if thread_tree_root}
+{#if type === 'issue' && thread_tree_root}
   <ThreadTree {type} tree={thread_tree_root} {show_compose} />
+{/if}
+{#if thread_revision_trees}
+  {#each thread_revision_trees as tree, i}
+    {#if i > 0}
+      <div class="divider">new revision</div>
+    {/if}
+    <ThreadTree
+      {type}
+      {tree}
+      show_compose={show_compose && thread_revision_trees.length - 1 === i}
+    />
+  {/each}
 {/if}
