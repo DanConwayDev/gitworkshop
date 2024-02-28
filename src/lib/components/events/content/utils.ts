@@ -94,9 +94,16 @@ export const parseContent = ({ content }: ContentArgs): ParsedPart[] => {
   return result
 }
 
+export const isCoverLetter = (s: string): boolean => {
+  return s.indexOf('PATCH 0/') > 0
+}
+
 /** this doesn't work for all patch formats and options */
 export const extractPatchMessage = (s: string): string | undefined => {
   try {
+    if (isCoverLetter(s)) {
+      return s.substring(s.indexOf('] ') + 2)
+    }
     const t = s.split('\nSubject: [')[1].split('] ')[1]
     if (t.split('\n\n---\n ').length > 1) return t.split('\n\n---\n ')[0]
     return t.split('\n\ndiff --git ')[0].split('\n\n ').slice(0, -1).join('')
@@ -110,6 +117,15 @@ export const extractPatchTitle = (s: string): string | undefined => {
   const msg = extractPatchMessage(s)
   if (!msg) return undefined
   return s.split('\n')[0]
+}
+
+/** patch message without first line */
+export const extractPatchDescription = (s: string): string | undefined => {
+  const msg = extractPatchMessage(s)
+  if (!msg) return ''
+  const i = msg.indexOf('\n')
+  if (i === -1) return ''
+  return msg.substring(i).trim()
 }
 
 export const extractIssueTitle = (s: string): string => {

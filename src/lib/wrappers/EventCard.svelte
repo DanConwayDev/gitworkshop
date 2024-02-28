@@ -9,6 +9,10 @@
   import type { NDKEvent } from '@nostr-dev-kit/ndk'
   import { onDestroy } from 'svelte'
   import { writable, type Unsubscriber } from 'svelte/store'
+  import {
+    extractPatchMessage,
+    isCoverLetter,
+  } from '$lib/components/events/content/utils'
 
   export let event: NDKEvent
   export let type: 'proposal' | 'issue' = 'proposal'
@@ -28,7 +32,14 @@
 
 <EventWrapper {type} author={$author} created_at={event.created_at} {event}>
   {#if event.kind == patch_kind}
-    <Patch content={event.content} tags={event.tags} />
+    {#if isCoverLetter(event.content)}
+      <ParsedContent
+        content={extractPatchMessage(event.content)}
+        tags={event.tags}
+      />
+    {:else}
+      <Patch content={event.content} tags={event.tags} />
+    {/if}
   {:else if event.kind && proposal_status_kinds.includes(event.kind)}
     <Status {type} status={event.kind} />
   {:else}
