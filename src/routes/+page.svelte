@@ -28,62 +28,67 @@
   </div>
 </div>
 
-<div class="my-8 flex flex-row">
-  <div class="justify-right flex items-center">
-    <div class="align-center hero-content text-center">
-      <div class="max-w-md">
-        <div class="prose">
-          <h1 class="mb-2">
-            <span class="text-purple-600">git</span><span class="text-white"
-              >workshop</span
-            ><span class="text-neutral">.dev</span>
-          </h1>
-          <p class="mb-8 mt-3">
-            permissionless alternative to GitHub over nostr
-          </p>
-        </div>
-        <div>
-          <div class="card mb-8 bg-base-300">
-            <div class="card-body items-center text-center">
-              <div class="card-title">
-                <h3>
-                  pairs with <span class="text-purple-600">n</span>git cli
-                </h3>
-              </div>
-              <div class="prose">
-                a command-line tool to <span class="badge">send</span> and
-                <span class="badge">review</span> patches using nostr
-                <div class="card-actions mt-3 flex">
-                  <div class="flex-grow">
-                    <a href="/ngit" class="btn btn-neutral">install ngit</a>
-                  </div>
-                  <div class="flex-grow">
-                    <a href="/ngit" class="btn">learn more</a>
+<Container>
+  <div class="mx-auto my-8 grid gap-4 md:grid-cols-2">
+    <div class="items">
+      <div class="align-center hero-content text-center">
+        <div class="max-w-lg">
+          <div class="prose">
+            <h1 class="mb-2">
+              <span class="text-purple-600">git</span><span class="text-white"
+                >workshop</span
+              ><span class="text-neutral">.dev</span>
+            </h1>
+            <p class="mb-8 mt-3">
+              permissionless alternative to GitHub over nostr
+            </p>
+          </div>
+          <div>
+            <div class="card mb-8 bg-base-300">
+              <div class="card-body items-center text-center">
+                <div class="card-title">
+                  <h3>
+                    pairs with <span class="text-purple-600">n</span>git cli
+                  </h3>
+                </div>
+                <div class="prose">
+                  a command-line tool to <span class="badge">send</span> and
+                  <span class="badge">review</span> patches using nostr
+                  <div class="card-actions mt-3 flex">
+                    <div class="flex-grow">
+                      <a href="/ngit" class="btn btn-neutral">install ngit</a>
+                    </div>
+                    <div class="flex-grow">
+                      <a href="/ngit" class="btn">learn more</a>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+          <button
+            on:click={() =>
+              alert(
+                'install ngit and run `ngit init` your local git repository'
+              )}
+            class="btn btn-secondary">list your repository</button
+          >
         </div>
-        <button
-          on:click={() =>
-            alert('install ngit and run `ngit init` your local git repository')}
-          class="btn btn-secondary">list your repository</button
-        >
       </div>
     </div>
+    <div class="hero">
+      <ProposalsList
+        title="Recent Proposals"
+        proposals_or_issues={$proposal_summaries.summaries}
+        show_repo={true}
+        loading={$proposal_summaries.loading}
+        limit={6}
+        allow_more={true}
+      />
+    </div>
   </div>
-  <div class="hero md:basis-1/2">
-    <ProposalsList
-      title="Recent Proposals"
-      proposals_or_issues={$proposal_summaries.summaries}
-      show_repo={true}
-      loading={$proposal_summaries.loading}
-      limit={6}
-      allow_more={true}
-    />
-  </div>
-</div>
+</Container>
+
 <Container>
   <ReposRecent />
 </Container>
