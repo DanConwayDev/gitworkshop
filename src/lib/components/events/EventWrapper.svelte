@@ -24,7 +24,7 @@
 <div class="max-w-4xl border-b border-base-300 p-3 pl-3">
   <div class="flex">
     <div class="flex-auto">
-      <UserHeader user={author} />
+      <UserHeader user={author} in_event_header={true} />
     </div>
     <span class="m-auto text-xs">{created_at_ago}</span>
     <div class="m-auto ml-2">

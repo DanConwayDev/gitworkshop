@@ -10,6 +10,7 @@
   export let inline = false
   export let size: 'xs' | 'sm' | 'md' = 'md'
   export let avatar_only = false
+  export let in_event_header = false
 
   $: ({ profile, loading } = user)
   $: display_name = getName(user)
@@ -58,6 +59,8 @@
       class:m-auto={!inline}
       class:inline-block={inline}
       class:hidden={avatar_only}
+      class:font-bold={in_event_header}
+      class:opacity-40={in_event_header}
     >
       {#if loading}
         <div
