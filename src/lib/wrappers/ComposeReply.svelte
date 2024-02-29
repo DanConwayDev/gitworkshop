@@ -55,7 +55,7 @@
       'root',
     ])
     if (event.id.length > 0) {
-      event.tags.push([
+      new_event.tags.push([
         'e',
         event.id,
         $selected_repo_event.relays[0] || '',
