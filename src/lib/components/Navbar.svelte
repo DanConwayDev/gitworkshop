@@ -12,7 +12,9 @@
 <div class="bg-base-400">
   <Container>
     <div class="navbar">
-      <div class="navbar-start"></div>
+      <div class="navbar-start">
+        <a href="/about" class="btn btn-ghost btn-sm normal-case">About</a>
+      </div>
       <div class="navbar-center">
         <a class="align-middle text-lg" href="/">
           <span class="text-purple-600">git</span><span class="text-white"

@@ -48,7 +48,7 @@
               <div class="card-body items-center text-center">
                 <div class="card-title">
                   <h3>
-                    pairs with <span class="text-purple-600">n</span>git cli
+                    pairs with <span class="text-purple-600">n</span>git
                   </h3>
                 </div>
                 <div class="prose">
@@ -59,7 +59,7 @@
                       <a href="/ngit" class="btn btn-neutral">install ngit</a>
                     </div>
                     <div class="flex-grow">
-                      <a href="/ngit" class="btn">learn more</a>
+                      <a href="/about" class="btn">learn more</a>
                     </div>
                   </div>
                 </div>
