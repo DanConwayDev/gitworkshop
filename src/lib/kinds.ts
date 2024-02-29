@@ -1,4 +1,4 @@
-export const reply_kind: number = 1622
+export const reply_kind: number = 1
 
 export const proposal_status_open: number = 1630
 export const proposal_status_applied: number = 1631
