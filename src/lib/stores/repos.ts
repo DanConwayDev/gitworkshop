@@ -5,12 +5,13 @@ import {
   type RepoSummary,
 } from '$lib/components/repo/type'
 import { NDKRelaySet, type NDKFilter, NDKEvent } from '@nostr-dev-kit/ndk'
-import { writable, type Writable } from 'svelte/store'
+import { get, writable, type Writable } from 'svelte/store'
 import { base_relays, ndk } from './ndk'
 import { repo_kind } from '$lib/kinds'
 import type { User } from '$lib/components/users/type'
 import { ensureUser } from './users'
 import { selectRepoFromCollection } from '$lib/components/repo/utils'
+import { selected_repo_collection } from './repo'
 
 export const repos: {
   [unique_commit_or_identifier: string]: Writable<RepoCollection>
@@ -85,7 +86,9 @@ export const ensureRepoCollection = (
             groupable: true,
             // default 100
             groupableDelay: 200,
-            closeOnEose: true,
+            closeOnEose: !get(selected_repo_collection)
+              .events.map((e) => e.identifier)
+              .includes(repo_event.identifier),
           },
           NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
         )
