@@ -73,7 +73,7 @@ export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
         limit: 100,
       },
       {
-        closeOnEose: false,
+        closeOnEose: true,
       },
       NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
     )

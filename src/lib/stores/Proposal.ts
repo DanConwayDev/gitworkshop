@@ -82,7 +82,7 @@ export const ensureProposalFull = (
         limit: 100,
       },
       {
-        closeOnEose: false,
+        closeOnEose: true,
       },
       NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
     )
@@ -199,6 +199,9 @@ export const ensureProposalFull = (
             limit: 100,
           },
           {
+            groupable: true,
+            // default 100
+            groupableDelay: 200,
             closeOnEose: false,
           },
           NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
