@@ -21,6 +21,13 @@
       > to nostr, and also have backwards compatible enhancements (nip34+ for shorthand)
       eg. to optionally enable experiences similar to github PRs
     </p>
+
+    <p>
+      gitworkshop.dev aims to support all things git on nostr, such as the yet
+      to be released and NostrNest and gnostr. ngit is more opinionated focusing
+      on nip34+
+    </p>
+
     <div role="alert" class="max-w-2 alert my-3">
       <!-- licence MIT https://icon-sets.iconify.design/ph/hands-praying-fill/ -->
       <svg
@@ -53,6 +60,7 @@
         </p>
       </div>
     </div>
+
     <p>
       should we focus on improving the PR-like experiences or remove them in
       favor of traditional patch-model patch application? please let use know!
@@ -70,6 +78,8 @@
       accounts and repositories without warning and this creates a real risk of
       disruption for important projects like bitcoin-core
     </p>
+
+    <h3>The Opportunity</h3>
 
     <p>
       whilst alternatives do exist, nearly all of them involve moving to an
@@ -89,31 +99,25 @@
       network effect are just a few of the reasons
     </p>
 
-    <h3>The Opportunity</h3>
-
     <p>
       nostr is the ideal permissionless, decentralized and censorship resistant
-      social layer for the anarchic FOSS code collaboration use case.
-    </p>
-
-    <p>
-      patch-over-email, with its proven scalability, lays the foundation for
-      providing this social layer without having to re-invent the complexities
-      of creating an efficient alternative to git server over nostr, or use
-      specialized relays.
+      social layer for the anarchic FOSS code collaboration use case
     </p>
 
     <p>
       there is an opportunity to build modern tooling that compete from a UX
       perspective and have the additional benefit of integrating into a wider
-      social ecosystem.
+      social ecosystem
     </p>
 
     <h3>The Philosophy</h3>
 
-    <p>there is innovation happening with git and nostr in a few places</p>
+    <p>
+      there is innovation happening with git and nostr in a few places and
+      gitworkshop.dev aims to work with different approaches
+    </p>
 
-    <p>the philosophy of ngit and gitworkshop.dev can be summed up as:</p>
+    <p>ngit is more opinionated and its philosophy can be summed up as:</p>
     <ul>
       <li><strong>let git be git</strong> - don't try and reinvent git</li>
       <li>
@@ -124,6 +128,13 @@
         proved to be very popular. how can we enable similar experiences with patches?
       </li>
     </ul>
+
+    <p>
+      patch-over-email, with its proven scalability, lays the foundation for
+      providing this social layer without having to re-invent the complexities
+      of creating an efficient alternative to git server over nostr, or use
+      specialized relays
+    </p>
 
     <h3>The Protocol</h3>
 
