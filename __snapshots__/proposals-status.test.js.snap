@@ -3,7 +3,7 @@
 exports[`Proposals/Status Applied smoke-test 1`] = `
 <div tabindex="0"
      role="button"
-     class="btn btn-sm align-middle cursor-default no-animation hover:bg-primary"
+     class="btn btn-sm align-middle cursor-default no-animation"
 >
   Applied
 </div>
@@ -12,7 +12,7 @@ exports[`Proposals/Status Applied smoke-test 1`] = `
 exports[`Proposals/Status Closed smoke-test 1`] = `
 <div tabindex="0"
      role="button"
-     class="btn btn-sm align-middle cursor-default no-animation hover:bg-primary"
+     class="btn btn-sm align-middle cursor-default no-animation"
 >
   Closed
 </div>
@@ -21,7 +21,7 @@ exports[`Proposals/Status Closed smoke-test 1`] = `
 exports[`Proposals/Status Draft smoke-test 1`] = `
 <div tabindex="0"
      role="button"
-     class="btn btn-sm align-middle cursor-default no-animation hover:bg-primary"
+     class="btn btn-sm align-middle cursor-default no-animation"
 >
   Draft
 </div>
@@ -53,7 +53,7 @@ exports[`Proposals/Status Open Edit Mode smoke-test 1`] = `
 exports[`Proposals/Status Open smoke-test 1`] = `
 <div tabindex="0"
      role="button"
-     class="btn btn-sm align-middle cursor-default no-animation hover:bg-primary"
+     class="btn btn-sm align-middle cursor-default no-animation"
 >
   Open
 </div>

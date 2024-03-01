@@ -11,7 +11,7 @@ exports[`Proposals/Header Author Loading smoke-test 1`] = `
         <div class="mr-3 inline align-middle">
           <div tabindex="0"
                role="button"
-               class="btn btn-success btn-sm align-middle cursor-default no-animation hover:bg-primary"
+               class="btn btn-success btn-sm align-middle cursor-default no-animation hover:bg-success"
           >
             <svg xmlns="http://www.w3.org/2000/svg"
                  viewbox="0 0 18 18"
@@ -47,7 +47,7 @@ exports[`Proposals/Header Long Details smoke-test 1`] = `
         <div class="mr-3 inline align-middle">
           <div tabindex="0"
                role="button"
-               class="btn btn-success btn-sm align-middle cursor-default no-animation hover:bg-primary"
+               class="btn btn-success btn-sm align-middle cursor-default no-animation hover:bg-success"
           >
             <svg xmlns="http://www.w3.org/2000/svg"
                  viewbox="0 0 18 18"
@@ -82,7 +82,7 @@ exports[`Proposals/Header Long and No Spaces smoke-test 1`] = `
         <div class="mr-3 inline align-middle">
           <div tabindex="0"
                role="button"
-               class="btn btn-success btn-sm align-middle cursor-default no-animation hover:bg-primary"
+               class="btn btn-success btn-sm align-middle cursor-default no-animation hover:bg-success"
           >
             <svg xmlns="http://www.w3.org/2000/svg"
                  viewbox="0 0 18 18"
@@ -117,7 +117,7 @@ exports[`Proposals/Header Short Details smoke-test 1`] = `
         <div class="mr-3 inline align-middle">
           <div tabindex="0"
                role="button"
-               class="btn btn-success btn-sm align-middle cursor-default no-animation hover:bg-primary"
+               class="btn btn-success btn-sm align-middle cursor-default no-animation hover:bg-success"
           >
             <svg xmlns="http://www.w3.org/2000/svg"
                  viewbox="0 0 18 18"

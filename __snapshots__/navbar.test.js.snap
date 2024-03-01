@@ -6,6 +6,11 @@ exports[`Navbar Default smoke-test 1`] = `
     <div class="px-3">
       <div class="navbar">
         <div class="navbar-start">
+          <a href="/about"
+             class="btn btn-ghost btn-sm normal-case"
+          >
+            About
+          </a>
         </div>
         <div class="navbar-center">
           <a class="align-middle text-lg"
@@ -38,6 +43,11 @@ exports[`Navbar Logged in smoke-test 1`] = `
     <div class="px-3">
       <div class="navbar">
         <div class="navbar-start">
+          <a href="/about"
+             class="btn btn-ghost btn-sm normal-case"
+          >
+            About
+          </a>
         </div>
         <div class="navbar-center">
           <a class="align-middle text-lg"
@@ -83,6 +93,11 @@ exports[`Navbar NIP07 Loading smoke-test 1`] = `
     <div class="px-3">
       <div class="navbar">
         <div class="navbar-start">
+          <a href="/about"
+             class="btn btn-ghost btn-sm normal-case"
+          >
+            About
+          </a>
         </div>
         <div class="navbar-center">
           <a class="align-middle text-lg"
@@ -115,6 +130,11 @@ exports[`Navbar NIP07Exists smoke-test 1`] = `
     <div class="px-3">
       <div class="navbar">
         <div class="navbar-start">
+          <a href="/about"
+             class="btn btn-ghost btn-sm normal-case"
+          >
+            About
+          </a>
         </div>
         <div class="navbar-center">
           <a class="align-middle text-lg"
@@ -148,6 +168,11 @@ exports[`Navbar NoNIP07 smoke-test 1`] = `
     <div class="px-3">
       <div class="navbar">
         <div class="navbar-start">
+          <a href="/about"
+             class="btn btn-ghost btn-sm normal-case"
+          >
+            About
+          </a>
         </div>
         <div class="navbar-center">
           <a class="align-middle text-lg"
