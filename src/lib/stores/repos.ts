@@ -25,7 +25,9 @@ export const returnRepoCollection = async (
       unique_commit_or_identifier
     ).subscribe((c) => {
       if (!c.loading) {
-        unsubscriber()
+        setTimeout(() => {
+          if (unsubscriber) unsubscriber()
+        }, 5)
         r(c)
       }
     })

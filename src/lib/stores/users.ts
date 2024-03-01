@@ -49,7 +49,9 @@ export const returnUser = async (hexpubkey: string): Promise<User> => {
   return new Promise((r) => {
     const unsubscriber = ensureUser(hexpubkey).subscribe((u) => {
       if (!u.loading) {
-        unsubscriber()
+        setTimeout(() => {
+          if (unsubscriber) unsubscriber()
+        }, 5)
         r(u)
       }
     })
@@ -123,7 +125,9 @@ export const getUserRelays = async (hexpubkey: string): Promise<UserRelays> => {
         (querying_user_relays) => {
           if (querying_user_relays && !querying_user_relays.loading) {
             res(querying_user_relays)
-            if (unsubscriber) unsubscriber()
+            setTimeout(() => {
+              if (unsubscriber) unsubscriber()
+            }, 5)
           }
         }
       )

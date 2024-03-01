@@ -52,7 +52,7 @@ export const awaitSelectedRepoCollection = async (
         !repo_collection.loading
       ) {
         setTimeout(() => {
-          unsubscriber()
+          if (unsubscriber) unsubscriber()
         }, 5)
         r({ ...repo_collection })
       }
