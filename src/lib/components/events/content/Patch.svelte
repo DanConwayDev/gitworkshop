@@ -46,6 +46,19 @@
       return '#'
     }
   }
+  let getFortmattedDiffHtml = (
+    change: Change,
+    language: string
+  ): string | undefined => {
+    try {
+      return hljs.highlight(
+        change.type == 'normal' ? change.content : change.content.substring(1),
+        { language }
+      ).value
+    } catch {
+      return undefined
+    }
+  }
 </script>
 
 <div class="">
@@ -170,16 +183,19 @@
                       class:pb-3={index === file.chunks.length - 1 &&
                         i === chunk.changes.length - 1}
                     >
-                      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                      {@html hljs.highlight(
-                        change.type == 'normal'
+                      {#if getFortmattedDiffHtml(change, (file.to || file.from)
+                          ?.split('.')
+                          .pop() || '')}
+                        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                        {@html getFortmattedDiffHtml(
+                          change,
+                          (file.to || file.from)?.split('.').pop() || ''
+                        )}
+                      {:else}
+                        {change.type == 'normal'
                           ? change.content
-                          : change.content.substring(1),
-                        {
-                          language:
-                            (file.to || file.from)?.split('.').pop() || '',
-                        }
-                      ).value}
+                          : change.content.substring(1)}
+                      {/if}
                       {#if (change.type == 'normal' ? change.content : change.content.substring(1)).length === 0}
                         <!-- force empty line to have height -->
                         <span></span>
