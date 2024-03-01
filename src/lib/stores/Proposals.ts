@@ -19,6 +19,7 @@ import {
 } from '$lib/kinds'
 import { extractPatchMessage } from '$lib/components/events/content/utils'
 import { selectRepoFromCollection } from '$lib/components/repo/utils'
+import { returnRepoCollection } from './repos'
 
 export const proposal_summaries: Writable<ProposalSummaries> = writable({
   id: '',
@@ -106,7 +107,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
     NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
   )
 
-  sub.on('event', (event: NDKEvent) => {
+  sub.on('event', async (event: NDKEvent) => {
     try {
       if (
         event.kind == patch_kind &&
@@ -117,6 +118,9 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
           // link to proposal will not work as it requires an identifier
           return
         }
+        const repo_identifier =
+          extractRepoIdentiferFromProposalEvent(event) || repo_id || ''
+
         proposal_summaries.update((proposals) => {
           return {
             ...proposals,
@@ -125,8 +129,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
               {
                 ...summary_defaults,
                 id: event.id,
-                repo_identifier:
-                  extractRepoIdentiferFromProposalEvent(event) || repo_id || '',
+                repo_identifier,
                 title: (
                   event.tagValue('name') ||
                   event.tagValue('description') ||
@@ -146,6 +149,30 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
             ],
           }
         })
+
+        // filter out non root proposals if repo event supports nip34+ features
+        if (!repo_id && repo_identifier.length > 0) {
+          const repo_collection = await returnRepoCollection(repo_identifier)
+          if (repo_collection.unique_commit) {
+            proposal_summaries.update((proposals) => {
+              return {
+                ...proposals,
+                summaries: [
+                  ...proposals.summaries.filter(
+                    (summary) =>
+                      (event.tags.some(
+                        (t) => t.length > 1 && t[1] === 'root'
+                      ) &&
+                        !event.tags.some(
+                          (t) => t.length > 1 && t[1] === 'revision-root'
+                        )) ||
+                      event.id !== summary.id
+                  ),
+                ],
+              }
+            })
+          }
+        }
       }
 
       authors_unsubscribers.push(

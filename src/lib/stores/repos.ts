@@ -17,6 +17,21 @@ export const repos: {
   [unique_commit_or_identifier: string]: Writable<RepoCollection>
 } = {}
 
+export const returnRepoCollection = async (
+  unique_commit_or_identifier: string
+): Promise<RepoCollection> => {
+  return new Promise((r) => {
+    const unsubscriber = ensureRepoCollection(
+      unique_commit_or_identifier
+    ).subscribe((c) => {
+      if (!c.loading) {
+        unsubscriber()
+        r(c)
+      }
+    })
+  })
+}
+
 export const ensureRepoCollection = (
   unique_commit_or_identifier: string
 ): Writable<RepoCollection> => {
