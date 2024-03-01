@@ -81,6 +81,10 @@ export const ensureRepoCollection = (
         repos[unique_commit_or_identifier].update((repo_collection) => {
           return {
             ...repo_collection,
+            unique_commit:
+              repo_collection.unique_commit.length > 0
+                ? repo_collection.unique_commit
+                : repo_event.unique_commit || '',
             events: [...repo_collection.events, repo_event as RepoEvent],
           }
         })
