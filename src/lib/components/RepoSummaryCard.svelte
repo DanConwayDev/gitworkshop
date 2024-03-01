@@ -6,9 +6,12 @@
     summary_defaults
   let short_name: string
   $: {
-    if (name.length > 45) short_name = name.slice(0, 45) + '...'
-    else if (name.length == 0) short_name = 'Untitled'
-    else short_name = name
+    if (name && name.length > 45) short_name = name.slice(0, 45) + '...'
+    else if (name && name.length >= 0) short_name = name
+    else if (identifier && identifier.length > 45)
+      short_name = identifier.slice(0, 45) + '...'
+    else if (identifier && identifier.length >= 0) short_name = identifier
+    else short_name = 'Untitled'
   }
   $: short_descrption =
     description.length > 50 ? description.slice(0, 45) + '...' : description
