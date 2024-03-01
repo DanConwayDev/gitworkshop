@@ -35,13 +35,14 @@
       !submitted
   }
   /** to get the proposal revision id rather than the root proposal */
-  const getRootId = (event: NDKEvent): string | undefined => {
+  const getRootId = (event: NDKEvent): string => {
     // exclude 'a' references to repo events
-    return event.tags.find(
+    let root_tag = event.tags.find(
       (t) => t[0] === 'e' && t.length === 4 && t[3] === 'root'
-    ) || event.tags.some((t) => t[0] === 't' && t[1] === 'root')
-      ? event.id
-      : undefined
+    )
+    if (root_tag) return root_tag[1]
+    if (event.tags.some((t) => t[0] === 't' && t[1] === 'root')) return event.id
+    return selected_proposal_or_issue.summary.id
   }
 
   async function sendReply(content: string) {
@@ -50,7 +51,7 @@
     new_event.kind = reply_kind
     new_event.tags.push([
       'e',
-      getRootId(event) || selected_proposal_or_issue.summary.id,
+      getRootId(event),
       $selected_repo_event.relays[0] || '',
       'root',
     ])
