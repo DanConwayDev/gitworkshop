@@ -18,7 +18,9 @@
     loading,
   } = event_defaults
   $: short_descrption =
-    description.length > 500 ? description.slice(0, 450) + '...' : description
+    !description && description.length > 500
+      ? description.slice(0, 450) + '...'
+      : description
 </script>
 
 <div class="prose w-full max-w-md">
@@ -26,8 +28,31 @@
     <div class="skeleton my-3 h-5 w-20"></div>
     <div class="skeleton my-2 h-4"></div>
     <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
-  {:else if description.length == 0}
-    <div />
+  {:else if !name || name.length == 0}
+    <h4>name</h4>
+    <div>none</div>
+  {:else}
+    <h4>name</h4>
+    <p class="my-2 break-words text-sm">{name}</p>
+  {/if}
+  {#if loading}
+    <div class="skeleton my-3 h-5 w-20"></div>
+    <div class="skeleton my-2 h-4"></div>
+    <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
+  {:else if !identifier || identifier.length == 0}
+    <h4>identifier</h4>
+    <div>none</div>
+  {:else}
+    <h4>identifier</h4>
+    <p class="my-2 break-words text-sm">{identifier}</p>
+  {/if}
+  {#if loading}
+    <div class="skeleton my-3 h-5 w-20"></div>
+    <div class="skeleton my-2 h-4"></div>
+    <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
+  {:else if !short_descrption || description.length == 0}
+    <h4>description</h4>
+    <div>none</div>
   {:else}
     <h4>description</h4>
     <p class="my-2 break-words text-sm">{short_descrption}</p>

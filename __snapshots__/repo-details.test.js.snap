@@ -3,11 +3,23 @@
 exports[`Repo/Details Long Details smoke-test 1`] = `
 <div class="prose w-full max-w-md">
   <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Long Name that goes on and on and on and on and on and on and on and on and on
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
+  <h4>
     description
   </h4>
   <p class="my-2 break-words text-sm">
     Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis quis nisl eget turpis congue molestie. Nulla vitae purus nec augue accumsan facilisis sed sed ligula. Vestibulum sed risus lacinia risus lacinia molestie. Ut lorem quam, consequat eget tempus in, rhoncus vel nunc. Duis efficitur a leo vel sodales. Nam id fermentum lacus. Etiam nec placerat velit. Praesent ac consectetur est. Aenean iaculis commodo enim.
- Lorem ipsum dolor sit amet, con...
+ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis quis nisl eget turpis congue molestie.
   </p>
   <div>
     <div class="badge badge-secondary mr-2">
@@ -120,6 +132,18 @@ exports[`Repo/Details Long Details smoke-test 1`] = `
 
 exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
 <div class="prose w-full max-w-md">
+  <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    LongNameLongNameLongNameLongNameLongNameLongNameLongNameLongName
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
   <h4>
     description
   </h4>
@@ -238,6 +262,18 @@ exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
 exports[`Repo/Details No Clone smoke-test 1`] = `
 <div class="prose w-full max-w-md">
   <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Short Name
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
+  <h4>
     description
   </h4>
   <p class="my-2 break-words text-sm">
@@ -347,7 +383,23 @@ exports[`Repo/Details No Clone smoke-test 1`] = `
 
 exports[`Repo/Details No Description smoke-test 1`] = `
 <div class="prose w-full max-w-md">
+  <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Short Name
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
+  <h4>
+    description
+  </h4>
   <div>
+    none
   </div>
   <div>
     <div class="badge badge-secondary mr-2">
@@ -461,6 +513,18 @@ exports[`Repo/Details No Description smoke-test 1`] = `
 exports[`Repo/Details No Maintainers or Relays smoke-test 1`] = `
 <div class="prose w-full max-w-md">
   <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Short Name
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
+  <h4>
     description
   </h4>
   <p class="my-2 break-words text-sm">
@@ -525,6 +589,18 @@ exports[`Repo/Details No Maintainers or Relays smoke-test 1`] = `
 
 exports[`Repo/Details No Maintainers smoke-test 1`] = `
 <div class="prose w-full max-w-md">
+  <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Short Name
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
   <h4>
     description
   </h4>
@@ -596,7 +672,23 @@ exports[`Repo/Details No Maintainers smoke-test 1`] = `
 
 exports[`Repo/Details No Name or Description smoke-test 1`] = `
 <div class="prose w-full max-w-md">
+  <h4>
+    name
+  </h4>
   <div>
+    none
+  </div>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
+  <h4>
+    description
+  </h4>
+  <div>
+    none
   </div>
   <div>
     <div class="badge badge-secondary mr-2">
@@ -710,6 +802,18 @@ exports[`Repo/Details No Name or Description smoke-test 1`] = `
 exports[`Repo/Details No Relays smoke-test 1`] = `
 <div class="prose w-full max-w-md">
   <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Short Name
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
+  <h4>
     description
   </h4>
   <p class="my-2 break-words text-sm">
@@ -821,6 +925,18 @@ exports[`Repo/Details No Relays smoke-test 1`] = `
 exports[`Repo/Details No Tags smoke-test 1`] = `
 <div class="prose w-full max-w-md">
   <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Short Name
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
+  <h4>
     description
   </h4>
   <p class="my-2 break-words text-sm">
@@ -925,6 +1041,18 @@ exports[`Repo/Details No Tags smoke-test 1`] = `
 
 exports[`Repo/Details No Web smoke-test 1`] = `
 <div class="prose w-full max-w-md">
+  <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Short Name
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
   <h4>
     description
   </h4>
@@ -1033,6 +1161,18 @@ exports[`Repo/Details No Web smoke-test 1`] = `
 
 exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-test 1`] = `
 <div class="prose w-full max-w-md">
+  <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Short Name
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
   <h4>
     description
   </h4>
@@ -1147,6 +1287,18 @@ exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-
 exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
 <div class="prose w-full max-w-md">
   <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Short Name
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
+  <h4>
     description
   </h4>
   <p class="my-2 break-words text-sm">
@@ -1260,6 +1412,18 @@ exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
 
 exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name smoke-test 1`] = `
 <div class="prose w-full max-w-md">
+  <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Short Name
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
   <h4>
     description
   </h4>
@@ -1378,6 +1542,18 @@ exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name 
 exports[`Repo/Details Short Details smoke-test 1`] = `
 <div class="prose w-full max-w-md">
   <h4>
+    name
+  </h4>
+  <p class="my-2 break-words text-sm">
+    Short Name
+  </p>
+  <h4>
+    identifier
+  </h4>
+  <p class="my-2 break-words text-sm">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
+  <h4>
     description
   </h4>
   <p class="my-2 break-words text-sm">
@@ -1448,6 +1624,18 @@ exports[`Repo/Details Short Details smoke-test 1`] = `
 
 exports[`Repo/Details loading smoke-test 1`] = `
 <div class="prose w-full max-w-md">
+  <div class="skeleton my-3 h-5 w-20">
+  </div>
+  <div class="skeleton my-2 h-4">
+  </div>
+  <div class="skeleton my-2 mb-3 h-4 w-2/3">
+  </div>
+  <div class="skeleton my-3 h-5 w-20">
+  </div>
+  <div class="skeleton my-2 h-4">
+  </div>
+  <div class="skeleton my-2 mb-3 h-4 w-2/3">
+  </div>
   <div class="skeleton my-3 h-5 w-20">
   </div>
   <div class="skeleton my-2 h-4">
