@@ -339,7 +339,6 @@ export const recent_repo_summaries: Writable<RepoSummary[]> = writable([])
 export const recent_repo_summaries_loading = writable(false)
 
 let began_fetching_repo_events = false
-
 export const ensureRecentReposEvents = () => {
   if (began_fetching_repo_events) return
   began_fetching_repo_events = true
@@ -398,7 +397,7 @@ export const ensureRecentReposEvents = () => {
                     return summary
                   return { ...repo }
                 }),
-              ]
+              ].sort((a, b) => b.created_at - a.created_at)
             }
             // if not duplicate - add summary
             else if (summary) return [...repos, summary]
