@@ -153,7 +153,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
         // filter out non root proposals if repo event supports nip34+ features
         if (!repo_id && repo_identifier.length > 0) {
           const repo_collection = await returnRepoCollection(repo_identifier)
-          if (repo_collection.unique_commit) {
+          if (selected_repo_id === repo_id && repo_collection.unique_commit) {
             proposal_summaries.update((proposals) => {
               return {
                 ...proposals,
