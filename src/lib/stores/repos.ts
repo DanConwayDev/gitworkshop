@@ -333,3 +333,79 @@ const addEventsWithMatchingIdentifiers = (exisiting_events: RepoEvent[]) => {
       )
     })
 }
+
+export const recent_repo_summaries: Writable<RepoSummary[]> = writable([])
+
+export const recent_repo_summaries_loading = writable(false)
+
+let began_fetching_repo_events = false
+
+export const ensureRecentReposEvents = () => {
+  if (began_fetching_repo_events) return
+  began_fetching_repo_events = true
+  recent_repo_summaries_loading.set(true)
+  const sub = ndk.subscribe(
+    {
+      kinds: [repo_kind],
+      limit: 100,
+    },
+    {
+      closeOnEose: false,
+    }
+  )
+  const events: RepoEvent[] = []
+  sub.on('event', (event: NDKEvent) => {
+    const repo_event = eventToRepoEvent(event)
+    if (repo_event) events.push(repo_event)
+  })
+  sub.on('eose', () => {
+    const unique_commits = [
+      ...new Set(events.map((e) => e.unique_commit).filter((s) => !!s)),
+    ] as string[]
+    const identifers_not_linked_to_unique_commit = [
+      ...new Set(events.map((e) => e.identifier)),
+    ].filter(
+      (identifier) =>
+        !events.some((e) => e.identifier == identifier && e.unique_commit)
+    )
+    unique_commits
+      .concat(identifers_not_linked_to_unique_commit)
+      .forEach((c) => {
+        ensureRepoCollection(c).subscribe((repo_collection) => {
+          const summary = repoCollectionToSummary(repo_collection)
+          if (!summary) return
+          recent_repo_summaries.update((repos) => {
+            // if duplicate
+            if (
+              repos.some(
+                (repo) =>
+                  (repo.unique_commit &&
+                    repo.unique_commit === repo_collection.unique_commit) ||
+                  (!repo.unique_commit &&
+                    repo.identifier === repo_collection.identifier)
+              )
+            ) {
+              return [
+                // update summary
+                ...repos.map((repo) => {
+                  if (
+                    summary &&
+                    ((repo.unique_commit &&
+                      repo.unique_commit === repo_collection.unique_commit) ||
+                      (!repo.unique_commit &&
+                        repo.identifier === repo_collection.identifier))
+                  )
+                    return summary
+                  return { ...repo }
+                }),
+              ]
+            }
+            // if not duplicate - add summary
+            else if (summary) return [...repos, summary]
+            return [...repos]
+          })
+        })
+      })
+    recent_repo_summaries_loading.set(false)
+  })
+}
