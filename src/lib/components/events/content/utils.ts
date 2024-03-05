@@ -27,11 +27,6 @@ export const isVideo = (url: string) =>
   url.match(/^.*\.(mov|mkv|mp4|avi|m4v|webm)/gi)
 export const isAudio = (url: string) => url.match(/^.*\.(ogg|mp3|wav)/gi)
 
-export type ContentArgs = {
-  content: string
-  tags?: Array<NDKTag>
-}
-
 export const NEWLINE = 'newline'
 type PartTypeNewLine = 'newline'
 export type ParsedNewLine = {
@@ -45,6 +40,17 @@ export type ParsedLink = {
   type: PartTypeLink
   url: string
   is_media: boolean
+  imeta: Imeta | undefined
+}
+type Imeta = {
+  url: string
+  m: string | undefined
+  alt: string | undefined
+  size: string | undefined
+  dim: string | undefined
+  x: string | undefined
+  fallback: string[]
+  blurhash: string | undefined
 }
 
 export const TEXT = 'text'
@@ -65,10 +71,31 @@ export const isParsedLink = (part: ParsedPart): part is ParsedLink =>
 export const isParsedText = (part: ParsedPart): part is ParsedText =>
   part.type == TEXT
 
-export const parseContent = ({ content }: ContentArgs): ParsedPart[] => {
+export const parseContent = (content: string, tags: NDKTag[]): ParsedPart[] => {
   const result: ParsedPart[] = []
   let text = content.trim()
   let buffer = ''
+
+  const getIMeta = (url: string): undefined | Imeta => {
+    const imeta_tag_for_url = tags.find(
+      (tag) => tag[0] === 'imeta' && tag.some((e) => e.includes(url))
+    )
+    if (!imeta_tag_for_url) return undefined
+    const pairs = imeta_tag_for_url.map((s) => [
+      s.split(' ')[0],
+      s.substring(s.indexOf(' ') + 1),
+    ])
+    return {
+      url,
+      m: pairs.find((p) => p[0] === 'm')?.[1],
+      alt: pairs.find((p) => p[0] === 'alt')?.[1],
+      x: pairs.find((p) => p[0] === 'x')?.[1],
+      size: pairs.find((p) => p[0] === 'size')?.[1],
+      dim: pairs.find((p) => p[0] === 'dim')?.[1],
+      blurhash: pairs.find((p) => p[0] === 'blurhash')?.[1],
+      fallback: pairs.filter((p) => p[0] === 'fallback')?.map((p) => p[1]),
+    }
+  }
 
   const parseNewline = (): undefined | [string, ParsedNewLine] => {
     const newline: string = first(text.match(/^\n+/))
@@ -107,7 +134,10 @@ export const parseContent = ({ content }: ContentArgs): ParsedPart[] => {
       url = 'https://' + url
     }
 
-    return [raw, { type: LINK, url, is_media: urlIsMedia(url) }]
+    return [
+      raw,
+      { type: LINK, url, is_media: urlIsMedia(url), imeta: getIMeta(url) },
+    ]
   }
 
   while (text) {

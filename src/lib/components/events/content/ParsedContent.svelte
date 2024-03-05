@@ -13,7 +13,7 @@
 
   let fullContent: ParsedPart[] = []
 
-  $: fullContent = parseContent({ content, tags })
+  $: fullContent = parseContent(content, tags)
 </script>
 
 <div class="prose max-w-prose break-words">
@@ -25,9 +25,7 @@
       <br />
     {:else if isParsedLink(part)}
       {#if isImage(part.url)}
-        <!-- eslint-disable-next-line svelte/valid-compile -->
-        <!-- svelte-ignore a11y-missing-attribute -->
-        <img src={part.url} />
+        <img src={part.url} alt={part.imeta?.alt} />
       {:else}
         <a href={part.url} target="_blank">
           {part.url.replace(/https?:\/\/(www\.)?/, '')}
