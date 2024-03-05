@@ -4,6 +4,7 @@
     proposal_status_closed,
     proposal_status_draft,
     proposal_status_open,
+    statusKindtoText,
   } from '$lib/kinds'
   import { issue_icon_path } from '../issues/icons'
   import { proposal_icon_path } from './icons'
@@ -52,7 +53,7 @@
           {/each}
         {/if}
       </svg>
-      Open
+      {statusKindtoText(proposal_status_open, type)}
     {:else if status === proposal_status_applied}
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -67,7 +68,7 @@
           {/each}
         {/if}
       </svg>
-      Applied
+      {statusKindtoText(proposal_status_applied, type)}
     {:else if status === proposal_status_closed}
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -82,7 +83,7 @@
           {/each}
         {/if}
       </svg>
-      Closed
+      {statusKindtoText(proposal_status_closed, type)}
     {:else if status === proposal_status_draft}
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -90,7 +91,7 @@
         class="h-5 w-5 flex-none fill-neutral-content pt-1"
         ><path d={proposal_icon_path.draft} /></svg
       >
-      Draft
+      {statusKindtoText(proposal_status_draft, type)}
     {:else}
       {status}
     {/if}
