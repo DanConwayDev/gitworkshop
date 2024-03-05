@@ -2,7 +2,6 @@ import type { NDKTag } from '@nostr-dev-kit/ndk'
 import { last } from 'ramda'
 
 export const TOPIC = 'topic'
-export const LINK = 'link'
 export const LINKCOLLECTION = 'link[]'
 export const HTML = 'html'
 export const INVOICE = 'invoice'
@@ -17,65 +16,113 @@ const first = (list: any) => (list ? list[0] : undefined)
 
 export const fromNostrURI = (s: string) => s.replace(/^[\w+]+:\/?\/?/, '')
 
-export const urlIsMedia = (url: string) =>
-  !url.match(/\.(apk|docx|xlsx|csv|dmg)/) &&
-  last(url.split('://'))?.includes('/')
+export const urlIsMedia = (url: string): boolean =>
+  (!url.match(/\.(apk|docx|xlsx|csv|dmg)/) &&
+    last(url.split('://'))?.includes('/')) ||
+  false
+
+export const isImage = (url: string) =>
+  url.match(/^.*\.(jpg|jpeg|png|webp|gif|avif|svg)/gi)
+export const isVideo = (url: string) =>
+  url.match(/^.*\.(mov|mkv|mp4|avi|m4v|webm)/gi)
+export const isAudio = (url: string) => url.match(/^.*\.(ogg|mp3|wav)/gi)
 
 export type ContentArgs = {
   content: string
   tags?: Array<NDKTag>
 }
 
-export type ParsedPart = ParsedNewLine | ParsedText
-
 export const NEWLINE = 'newline'
-
+type PartTypeNewLine = 'newline'
 export type ParsedNewLine = {
-  type: 'newline'
+  type: PartTypeNewLine
   value: string
 }
 
-export const isParsedNewLine = (part: ParsedPart): part is ParsedNewLine => {
-  return part.type == 'newline'
+export const LINK = 'link'
+type PartTypeLink = 'link'
+export type ParsedLink = {
+  type: PartTypeLink
+  url: string
+  is_media: boolean
 }
 
 export const TEXT = 'text'
-
+type PartTypeText = 'text'
 export type ParsedText = {
-  type: 'text'
+  type: PartTypeText
   value: string
 }
 
-export const isParsedText = (part: ParsedPart): part is ParsedText => {
-  return part.type == 'text'
-}
+export type ParsedPart = ParsedNewLine | ParsedText | ParsedLink
+
+export const isParsedNewLine = (part: ParsedPart): part is ParsedNewLine =>
+  part.type == NEWLINE
+
+export const isParsedLink = (part: ParsedPart): part is ParsedLink =>
+  part.type == LINK
+
+export const isParsedText = (part: ParsedPart): part is ParsedText =>
+  part.type == TEXT
 
 export const parseContent = ({ content }: ContentArgs): ParsedPart[] => {
   const result: ParsedPart[] = []
   let text = content.trim()
   let buffer = ''
 
-  const parseNewline = () => {
-    const newline = first(text.match(/^\n+/))
+  const parseNewline = (): undefined | [string, ParsedNewLine] => {
+    const newline: string = first(text.match(/^\n+/))
 
     if (newline) {
-      return [NEWLINE, newline, newline]
+      return [newline, { type: NEWLINE, value: newline }]
     }
+  }
+
+  const parseUrl = (): undefined | [string, ParsedLink] => {
+    const raw: string = first(
+      text.match(
+        /^([a-z\+:]{2,30}:\/\/)?[^<>\(\)\s]+\.[a-z]{2,6}[^\s]*[^<>"'\.!?,:\s\)\(]/gi
+      )
+    )
+
+    // Skip url if it's just the end of a filepath
+    if (!raw) {
+      return
+    }
+
+    const prev = last(result)
+
+    if (prev?.type === TEXT && prev.value.endsWith('/')) {
+      return
+    }
+
+    let url = raw
+
+    // Skip ellipses and very short non-urls
+    if (url.match(/\.\./)) {
+      return
+    }
+
+    if (!url.match('://')) {
+      url = 'https://' + url
+    }
+
+    return [raw, { type: LINK, url, is_media: urlIsMedia(url) }]
   }
 
   while (text) {
     // The order that this runs matters
-    const part = parseNewline()
+    const part = parseNewline() || parseUrl()
 
     if (part) {
       if (buffer) {
-        result.push({ type: 'text', value: buffer })
+        result.push({ type: TEXT, value: buffer })
         buffer = ''
       }
 
-      const [type, raw, value] = part
+      const [raw, parsed] = part
 
-      result.push({ type, value })
+      result.push(parsed)
       text = text.slice(raw.length)
     } else {
       // Instead of going character by character and re-running all the above regular expressions
