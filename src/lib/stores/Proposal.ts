@@ -30,9 +30,7 @@ let sub: NDKSubscription
 
 let sub_replies: NDKSubscription
 
-const sub_revisions: NDKSubscription[] = []
-
-let revision_ids_queried: string[]
+const sub_replies_to_replies: NDKSubscription[] = []
 
 export const ensureProposalFull = (
   repo_identifier: string,
@@ -47,13 +45,12 @@ export const ensureProposalFull = (
 
   if (sub) sub.stop()
   if (sub_replies) sub_replies.stop()
-  sub_revisions.forEach((sub) => sub.stop())
+  sub_replies_to_replies.forEach((sub) => sub.stop())
 
   selected_proposal_repo_id = repo_identifier
   selected_proposal_id = proposal_id
   selected_proposal_status_date = 0
   selected_proposal_replies.set([])
-  revision_ids_queried = []
 
   selected_proposal_full.set({
     ...full_defaults,
@@ -185,32 +182,26 @@ export const ensureProposalFull = (
         })
       }
       selected_proposal_replies.update((replies) => {
-        return [...replies, event]
+        if (!replies.some((e) => e.id === event.id)) {
+          const sub_replies_to_reply = ndk.subscribe(
+            {
+              '#e': [event.id],
+            },
+            {
+              groupable: true,
+              groupableDelay: 300,
+              closeOnEose: false,
+            },
+            NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
+          )
+          sub_replies_to_reply.on('event', (event: NDKEvent) => {
+            process_replies(event)
+          })
+          sub_replies_to_replies.push(sub_replies_to_reply)
+          return [...replies, event]
+        }
+        return [...replies]
       })
-      if (
-        event.tags.some((t) => t.length > 1 && t[1] === 'revision-root') &&
-        !revision_ids_queried.includes(event.id)
-      ) {
-        // prevents an infinate loop of querying the same revision
-        revision_ids_queried.push(event.id)
-        const sub_revision_replies = ndk.subscribe(
-          {
-            '#e': [event.id],
-            limit: 100,
-          },
-          {
-            groupable: true,
-            // default 100
-            groupableDelay: 200,
-            closeOnEose: false,
-          },
-          NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
-        )
-        sub_revision_replies.on('event', (event: NDKEvent) => {
-          process_replies(event)
-        })
-        sub_revisions.push(sub_revision_replies)
-      }
     }
 
     sub_replies.on('event', (event: NDKEvent) => {

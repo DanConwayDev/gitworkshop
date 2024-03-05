@@ -30,6 +30,8 @@ let sub: NDKSubscription
 
 let sub_replies: NDKSubscription
 
+const sub_replies_to_replies: NDKSubscription[] = []
+
 export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
   if (selected_issue_id == issue_id) return
   if (issue_id == '') {
@@ -40,6 +42,7 @@ export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
 
   if (sub) sub.stop()
   if (sub_replies) sub_replies.stop()
+  sub_replies_to_replies.forEach((sub) => sub.stop())
 
   selected_issue_repo_id = repo_identifier
   selected_issue_id = issue_id
@@ -170,7 +173,25 @@ export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
         })
       }
       selected_issue_replies.update((replies) => {
-        return [...replies, event]
+        if (!replies.some((e) => e.id === event.id)) {
+          const sub_replies_to_reply = ndk.subscribe(
+            {
+              '#e': [event.id],
+            },
+            {
+              groupable: true,
+              groupableDelay: 300,
+              closeOnEose: false,
+            },
+            NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
+          )
+          sub_replies_to_reply.on('event', (event: NDKEvent) => {
+            process_replies(event)
+          })
+          sub_replies_to_replies.push(sub_replies_to_reply)
+          return [...replies, event]
+        }
+        return [...replies]
       })
     }
 
