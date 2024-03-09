@@ -253,6 +253,7 @@ export const eventToRepoEvent = (event: NDKEvent): RepoEvent | undefined => {
   })
   return {
     event_id: event.id,
+    naddr: event.encode(),
     identifier: event.replaceableDTag(),
     unique_commit: event.tagValue('r') || undefined,
     name: event.tagValue('name') || '',

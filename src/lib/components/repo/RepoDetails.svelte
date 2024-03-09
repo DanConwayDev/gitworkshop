@@ -4,6 +4,7 @@
 
   export let {
     event_id,
+    naddr,
     identifier,
     unique_commit,
     name,
@@ -21,6 +22,7 @@
     !description && description.length > 500
       ? description.slice(0, 450) + '...'
       : description
+  let naddr_copied = false
 </script>
 
 <div class="prose w-full max-w-md">
@@ -149,4 +151,41 @@
       {/each}
     {/if}
   </div>
+
+  {#if loading}
+    <div class="skeleton my-3 h-5 w-20"></div>
+    <div class="skeleton my-2 h-4"></div>
+    <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
+  {:else if unique_commit && unique_commit.length > 0}
+    <h4>earliest unique commit</h4>
+    <p class="my-2 break-words text-xs">{unique_commit}</p>
+  {/if}
+
+  {#if loading}
+    <div class="skeleton my-3 h-5 w-20"></div>
+    <div class="skeleton my-2 h-4"></div>
+    <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
+  {:else if naddr && naddr.length > 0}
+    <!-- eslint-disable-next-line svelte/valid-compile -->
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <div
+      on:click={async () => {
+        try {
+          await navigator.clipboard.writeText(naddr)
+          naddr_copied = true
+          setTimeout(() => {
+            naddr_copied = false
+          }, 2000)
+        } catch {}
+      }}
+    >
+      <h4>
+        naddr
+        {#if naddr_copied}<span class="text-success opacity-50">
+            (copied)</span
+          >{/if}
+      </h4>
+      <p class="my-2 break-words text-xs">{naddr}</p>
+    </div>
+  {/if}
 </div>

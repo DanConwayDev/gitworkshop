@@ -48,6 +48,7 @@ const base: RepoEvent = {
   ],
   loading: false,
   event_id: '',
+  naddr: '',
   web: ['https://gitworkshop.dev/repo/example', 'https://example.com'],
   referenced_by: [],
   created_at: 0,

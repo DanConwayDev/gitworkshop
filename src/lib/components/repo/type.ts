@@ -2,6 +2,7 @@ import { defaults as user_defaults, type User } from '../users/type'
 
 export interface RepoEvent {
   event_id: string
+  naddr: string
   identifier: string
   unique_commit: string | undefined
   name: string
@@ -17,6 +18,7 @@ export interface RepoEvent {
 }
 export const event_defaults: RepoEvent = {
   event_id: '',
+  naddr: '',
   identifier: '',
   unique_commit: '',
   name: '',
