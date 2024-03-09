@@ -156,7 +156,10 @@
     <div class="skeleton my-3 h-5 w-20"></div>
     <div class="skeleton my-2 h-4"></div>
     <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
-  {:else if unique_commit && unique_commit.length > 0}
+  {:else if !unique_commit || unique_commit.length == 0}
+    <h4>earliest unique commit</h4>
+    <p class="my-2 break-words text-xs">not specified</p>
+  {:else}
     <h4>earliest unique commit</h4>
     <p class="my-2 break-words text-xs">{unique_commit}</p>
   {/if}
