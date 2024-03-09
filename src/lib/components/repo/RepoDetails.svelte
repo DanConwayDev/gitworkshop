@@ -24,27 +24,41 @@
 </script>
 
 <div class="prose w-full max-w-md">
-  {#if loading}
-    <div class="skeleton my-3 h-5 w-20"></div>
-    <div class="skeleton my-2 h-4"></div>
-    <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
-  {:else if !name || name.length == 0}
-    <h4>name</h4>
-    <div>none</div>
+  {#if name == identifier}
+    {#if loading}
+      <div class="skeleton my-3 h-5 w-20"></div>
+      <div class="skeleton my-2 h-4"></div>
+      <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
+    {:else if !name || name.length == 0}
+      <h4>name / identifier</h4>
+      <div>none</div>
+    {:else}
+      <h4>name / identifier</h4>
+      <p class="my-2 break-words text-sm">{name}</p>
+    {/if}
   {:else}
-    <h4>name</h4>
-    <p class="my-2 break-words text-sm">{name}</p>
-  {/if}
-  {#if loading}
-    <div class="skeleton my-3 h-5 w-20"></div>
-    <div class="skeleton my-2 h-4"></div>
-    <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
-  {:else if !identifier || identifier.length == 0}
-    <h4>identifier</h4>
-    <div>none</div>
-  {:else}
-    <h4>identifier</h4>
-    <p class="my-2 break-words text-sm">{identifier}</p>
+    {#if loading}
+      <div class="skeleton my-3 h-5 w-20"></div>
+      <div class="skeleton my-2 h-4"></div>
+      <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
+    {:else if !name || name.length == 0}
+      <h4>name</h4>
+      <div>none</div>
+    {:else}
+      <h4>name</h4>
+      <p class="my-2 break-words text-sm">{name}</p>
+    {/if}
+    {#if loading}
+      <div class="skeleton my-3 h-5 w-20"></div>
+      <div class="skeleton my-2 h-4"></div>
+      <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
+    {:else if !identifier || identifier.length == 0}
+      <h4>identifier</h4>
+      <div>none</div>
+    {:else}
+      <h4>identifier</h4>
+      <p class="my-2 break-words text-sm">{identifier}</p>
+    {/if}
   {/if}
   {#if loading}
     <div class="skeleton my-3 h-5 w-20"></div>
