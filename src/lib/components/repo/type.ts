@@ -67,3 +67,15 @@ export const summary_defaults: RepoSummary = {
   loading: false,
   created_at: 0,
 }
+
+export interface RepoReadme {
+  md: string
+  loading: boolean
+  failed: boolean
+}
+
+export const readme_defaults: RepoReadme = {
+  md: '',
+  loading: true,
+  failed: false,
+}

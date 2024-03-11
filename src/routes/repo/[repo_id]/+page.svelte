@@ -4,6 +4,7 @@
     ensureSelectedRepoCollection,
     selected_repo_collection,
     selected_repo_event,
+    selected_repo_readme,
   } from '$lib/stores/repo'
   import RepoHeader from '$lib/components/repo/RepoHeader.svelte'
   import Container from '$lib/components/Container.svelte'
@@ -13,6 +14,7 @@
   } from '$lib/stores/Proposals'
   import ProposalsList from '$lib/components/proposals/ProposalsList.svelte'
   import { ensureIssueSummaries, issue_summaries } from '$lib/stores/Issues'
+  import SvelteMarkdown from 'svelte-markdown'
 
   export let data: { repo_id: string }
   let identifier = data.repo_id
@@ -136,6 +138,22 @@
           <a class="btn btn-success my-3" href="/repo/{identifier}/issues/new">
             create issue
           </a>
+        {/if}
+        {#if false}
+          <!-- feature stapled off - style improvements needed eg 'a img' need to be inline-block -->
+          {#if $selected_repo_readme.loading}
+            <div>loading readme...</div>
+          {:else if $selected_repo_readme.failed}
+            <div>failed to load readme from git server...</div>
+          {:else}
+            <h4>README.md</h4>
+            <article class="prose prose-sm">
+              <SvelteMarkdown
+                options={{ gfm: true }}
+                source={$selected_repo_readme.md}
+              />
+            </article>
+          {/if}
         {/if}
       </div>
       <div class="prose ml-2 hidden w-1/3 md:flex">

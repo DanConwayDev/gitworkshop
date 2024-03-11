@@ -68,9 +68,7 @@
     "dayjs": "^1.11.10",
     "highlight.js": "^11.9.0",
     "parse-diff": "^0.11.1",
-    "ramda": "^0.29.1"
-  },
-  "resolutions": {
-    "jackspeak": "2.1.1"
+    "ramda": "^0.29.1",
+    "svelte-markdown": "^0.4.1"
   }
 }
