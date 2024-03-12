@@ -1,5 +1,6 @@
 <script lang="ts">
   import UserHeader from '$lib/components/users/UserHeader.svelte'
+  import { icons_misc } from '../icons'
   import { event_defaults } from './type'
 
   export let {
@@ -181,11 +182,24 @@
           }, 2000)
         } catch {}
       }}
+      class="group -m-3 mt-3 cursor-pointer rounded-md p-3 hover:bg-base-300"
     >
-      <h4>
+      <h4 class="mt-0 pt-0">
         naddr
-        {#if naddr_copied}<span class="text-success opacity-50">
-            (copied)</span
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 16 16"
+          class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+          class:fill-base-content={!naddr_copied}
+          class:fill-success={naddr_copied}
+        >
+          {#each icons_misc.copy as d}
+            <path {d} />
+          {/each}
+        </svg>
+
+        {#if naddr_copied}<span class="text-sm text-success opacity-50">
+            (copied to clipboard)</span
           >{/if}
       </h4>
       <p class="my-2 break-words text-xs">{naddr}</p>
