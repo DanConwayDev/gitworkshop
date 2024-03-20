@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { selectRepoFromCollection } from './utils'
+import { extractGithubDetails, selectRepoFromCollection } from './utils'
 import {
   collection_defaults,
   event_defaults,
@@ -156,6 +156,22 @@ describe('getSelectedRepo', () => {
           ],
         } as RepoCollection)
       ).toEqual(preferable_event)
+    })
+  })
+})
+
+describe('extractGithubDetails', () => {
+  ;[
+    'https://github.com/orgname/reponame.git',
+    'https://github.com/orgname/reponame',
+    'git@github.com:orgname/reponame',
+  ].forEach((clone) => {
+    describe(clone, () => {
+      test('returns correct org and repo', () => {
+        const res = extractGithubDetails(clone)
+        expect(res?.org).toEqual('orgname')
+        expect(res?.repo_name).toEqual('reponame')
+      })
     })
   })
 })

@@ -1,39 +1,42 @@
 <script lang="ts">
-  import ProposalsList from '$lib/components/proposals/ProposalsList.svelte'
-  import { proposal_summaries } from '$lib/stores/Proposals'
+  import { selected_repo_readme } from '$lib/stores/repo'
+  import SvelteMarkdown from 'svelte-markdown'
   import RepoPageWrapper from '$lib/wrappers/RepoPageWrapper.svelte'
+  import { goto } from '$app/navigation'
 
   export let data: { repo_id: string }
   let identifier = data.repo_id
+
+  let selected_tab: '' | 'issues' | 'proposals' = ''
+  $: {
+    if ($selected_repo_readme.failed === true)
+      goto(`/repo/${identifier}/proposals`)
+  }
 </script>
 
-<RepoPageWrapper {identifier} selected_tab="proposals">
-  <ProposalsList
-    proposals_or_issues={$proposal_summaries.summaries}
-    loading={$proposal_summaries.loading}
-  />
-  <div role="alert" class="alert mt-6">
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      class="h-6 w-6 shrink-0 stroke-info"
-      ><path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      ></path></svg
-    >
-    <div>
-      <h3 class="prose mb-2 text-sm font-bold">want to submit a proposal?</h3>
-      <p class="prose text-xs">
-        <a href="/ngit">install ngit</a>, create add a feature in the local
-        repository and run
-        <span class="rounded bg-neutral p-1 font-mono"
-          ><span class="py-3">ngit send</span></span
-        >
-      </p>
+<RepoPageWrapper {identifier} {selected_tab}>
+  <div class="my-3 rounded-lg border border-base-400">
+    <div class="border-b border-base-400 bg-base-300 px-6 py-3">
+      <h4 class="">README.md</h4>
+    </div>
+    <div class="p-6">
+      {#if $selected_repo_readme.loading}
+        <div class="skeleton my-3 h-5 w-20"></div>
+        <div class="skeleton my-2 h-4"></div>
+        <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
+        <div class="skeleton my-3 h-5 w-20"></div>
+        <div class="skeleton my-2 h-4"></div>
+        <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
+      {:else if $selected_repo_readme.failed}
+        <div>failed to load readme from git server...</div>
+      {:else}
+        <article class="prose prose-sm">
+          <SvelteMarkdown
+            options={{ gfm: true }}
+            source={$selected_repo_readme.md}
+          />
+        </article>
+      {/if}
     </div>
   </div>
 </RepoPageWrapper>

@@ -15,3 +15,21 @@ export const selectRepoFromCollection = (
     return b_ref - a_ref
   })[0]
 }
+
+export const extractGithubDetails = (
+  clone: string
+): { org: string; repo_name: string } | undefined => {
+  if (clone.indexOf('github.') > -1) {
+    const g_split = clone.split('github.')
+    if (g_split.length > 0) {
+      const final = g_split[1].replace(':', '/').split('/')
+      if (final.length > 2) {
+        return {
+          org: final[1],
+          repo_name: final[2].split('.')[0],
+        }
+      }
+    }
+  }
+  return undefined
+}

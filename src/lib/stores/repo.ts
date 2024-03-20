@@ -10,7 +10,10 @@ import {
   readme_defaults,
 } from '$lib/components/repo/type'
 import { ensureRepoCollection } from './repos'
-import { selectRepoFromCollection } from '$lib/components/repo/utils'
+import {
+  extractGithubDetails,
+  selectRepoFromCollection,
+} from '$lib/components/repo/utils'
 import { get } from 'svelte/store'
 
 export const selected_repo_collection: Writable<RepoCollection> = writable({
@@ -103,41 +106,28 @@ const ensureRepoReadme = async (
   }
   try {
     const github_details = extractGithubDetails(clone)
-    // feature stapled off
-    const feature_staple = false
-    if (github_details && feature_staple) {
-      const res = await fetch(
-        // `/git_proxy/readme?clone=${encodeURIComponent(clone)}`
-        `https://raw.githubusercontent.com/${github_details.org}/${github_details.repo_name}/HEAD/README.md`
-      )
-      if (!res.ok) {
-        throw 'api request error'
+    let res: Response
+    if (github_details) {
+      try {
+        res = await fetch(
+          `https://raw.githubusercontent.com/${github_details.org}/${github_details.repo_name}/HEAD/README.md`
+        )
+        if (!res.ok) {
+          throw 'api request error'
+        }
+      } catch {
+        res = await fetch(
+          `https://raw.githubusercontent.com/${github_details.org}/${github_details.repo_name}/HEAD/readme.md`
+        )
       }
-      let text = ''
-      text = await res.text()
-      update(text)
-    } else {
-      // use proxy to get readme using 'git archive' or 'git clone'
+    } else res = await fetch(`/git_proxy/readme/${encodeURIComponent(clone)}`)
+    if (!res.ok) {
+      throw 'api request error'
     }
+    let text = ''
+    text = await res.text()
+    update(text)
   } catch (e) {
     update()
   }
-}
-
-const extractGithubDetails = (
-  clone: string
-): { org: string; repo_name: string } | undefined => {
-  if (clone.indexOf('github.') > -1) {
-    const g_split = clone.split('github.')
-    if (g_split.length > 0) {
-      const slash_split = g_split[1].split('/')
-      if (slash_split.length > 2) {
-        return {
-          org: slash_split[1],
-          repo_name: slash_split[2].split('.')[0],
-        }
-      }
-    }
-  }
-  return undefined
 }
