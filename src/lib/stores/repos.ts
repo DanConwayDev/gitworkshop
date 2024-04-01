@@ -251,6 +251,14 @@ export const eventToRepoEvent = (event: NDKEvent): RepoEvent | undefined => {
       }
     })
   })
+  const clone: string[] = []
+  event.getMatchingTags('clone').forEach((t: string[]) => {
+    t.forEach((v, i) => {
+      if (i > 0) {
+        clone.push(v)
+      }
+    })
+  })
   return {
     event_id: event.id,
     naddr: event.encode(),
@@ -258,7 +266,7 @@ export const eventToRepoEvent = (event: NDKEvent): RepoEvent | undefined => {
     unique_commit: event.tagValue('r') || undefined,
     name: event.tagValue('name') || '',
     description: event.tagValue('description') || '',
-    clone: event.tagValue('clone') || '',
+    clone,
     web,
     tags: event.getMatchingTags('t').map((t) => t[1]) || [],
     maintainers,

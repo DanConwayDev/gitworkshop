@@ -38,7 +38,7 @@ const base: RepoEvent = {
   unique_commit: '9ee507fc4357d7ee16a5d8901bedcd103f23c17d',
   name: 'Short Name',
   description: 'short description',
-  clone: 'github.com/example/example',
+  clone: ['github.com/example/example'],
   tags: ['svelte', 'nostr', 'code-collaboration', 'git'],
   relays: ['relay.damus.io', 'relay.snort.social', 'relayable.org'],
   maintainers: [
@@ -71,7 +71,7 @@ export const RepoDetailsArgsVectors = {
   NoNameOrDescription: { ...base, name: '', description: '' } as RepoEvent,
   NoDescription: { ...base, description: '' } as RepoEvent,
   NoTags: { ...base, tags: [] } as RepoEvent,
-  NoGitServer: { ...base, clone: '' } as RepoEvent,
+  NoGitServer: { ...base, clone: [''] } as RepoEvent,
   NoWeb: { ...base, web: [] } as RepoEvent,
   MaintainersOneProfileNotLoaded: {
     ...base,

@@ -24,6 +24,7 @@
       ? description.slice(0, 450) + '...'
       : description
   let naddr_copied = false
+  let git_url_copied: false | string = false
 </script>
 
 <div class="prose w-full max-w-md">
@@ -92,13 +93,40 @@
       <div />
     {:else}
       <h4>clone</h4>
-      <a
-        href={clone}
-        target="_blank"
-        class="link link-primary my-2 break-words text-sm"
-      >
-        {clone}
-      </a>
+      {#each clone as git_url}
+        <!-- eslint-disable-next-line svelte/valid-compile -->
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <div
+          on:click={async () => {
+            try {
+              await navigator.clipboard.writeText(git_url)
+              git_url_copied = git_url
+              setTimeout(() => {
+                git_url_copied = false
+              }, 2000)
+            } catch {}
+          }}
+          class="group my-2 mt-3 cursor-pointer break-words text-xs"
+          class:text-success={git_url_copied === git_url}
+          class:opacity-50={git_url_copied === git_url}
+        >
+          {git_url}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 16 16"
+            class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+            class:fill-base-content={git_url_copied !== git_url}
+            class:fill-success={git_url_copied === git_url}
+          >
+            {#each icons_misc.copy as d}
+              <path {d} />
+            {/each}
+          </svg>
+          {#if git_url_copied === git_url}<span class="text-xs text-success">
+              (copied to clipboard)</span
+            >{/if}
+        </div>
+      {/each}
     {/if}
   </div>
   <div>

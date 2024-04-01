@@ -84,7 +84,7 @@ export const selected_repo_readme: Writable<RepoReadme> = writable({
 })
 
 const ensureRepoReadme = async (
-  clone: string,
+  clone: string[],
   unique_commit_or_identifier: string
 ): Promise<void> => {
   selected_repo_readme.set({ ...readme_defaults })
@@ -105,7 +105,9 @@ const ensureRepoReadme = async (
     }
   }
   try {
-    const github_details = extractGithubDetails(clone)
+    const github_details = clone
+      .map(extractGithubDetails)
+      .find((details) => !!details)
     let res: Response
     if (github_details) {
       try {
@@ -120,7 +122,8 @@ const ensureRepoReadme = async (
           `https://raw.githubusercontent.com/${github_details.org}/${github_details.repo_name}/HEAD/readme.md`
         )
       }
-    } else res = await fetch(`/git_proxy/readme/${encodeURIComponent(clone)}`)
+    } else
+      res = await fetch(`/git_proxy/readme/${encodeURIComponent(clone[0])}`)
     if (!res.ok) {
       throw 'api request error'
     }

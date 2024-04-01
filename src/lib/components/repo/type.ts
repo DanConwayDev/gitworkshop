@@ -7,7 +7,7 @@ export interface RepoEvent {
   unique_commit: string | undefined
   name: string
   description: string
-  clone: string
+  clone: string[]
   web: string[]
   tags: string[]
   maintainers: User[]
@@ -23,7 +23,7 @@ export const event_defaults: RepoEvent = {
   unique_commit: '',
   name: '',
   description: '',
-  clone: '',
+  clone: [],
   web: [],
   tags: [],
   maintainers: [],
