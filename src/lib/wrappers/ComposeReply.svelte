@@ -105,13 +105,22 @@
         ...(user_relays.ndk_relays
           ? user_relays.ndk_relays.writeRelayUrls
           : []),
-        // TODO: proposal event pubkey relays
       ]
-    } catch {
-      alert('failed to get user relays')
-    }
+    } catch {}
     try {
-      let _ = await new_event.publish(NDKRelaySet.fromRelayUrls(relays, ndk))
+      let root_event_user_relays = await getUserRelays(event.pubkey)
+      relays = [
+        ...relays,
+        ...(root_event_user_relays.ndk_relays
+          ? root_event_user_relays.ndk_relays.writeRelayUrls
+          : []),
+      ]
+    } catch {}
+    // TODO root event user relays
+    try {
+      let _ = await new_event.publish(
+        NDKRelaySet.fromRelayUrls([...new Set(relays)], ndk)
+      )
       submitting = false
       submitted = true
       setTimeout(() => {
