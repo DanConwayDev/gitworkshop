@@ -80,10 +80,15 @@
           ? ['p', event.pubkey, parent_event_user_relay]
           : ['p', event.pubkey]
       )
-    new_event.tags
+    event.tags
       .filter((tag) => tag[0] === 'p')
       .forEach((tag) => {
-        if (tag[1] !== event.pubkey && tag[1] !== $logged_in_user?.hexpubkey)
+        if (
+          // not duplicate
+          !new_event.tags.some((t) => t[1] === tag[1]) &&
+          // not current user (dont tag self)
+          tag[1] !== $logged_in_user?.hexpubkey
+        )
           new_event.tags.push(tag)
       })
     new_event.content = content
