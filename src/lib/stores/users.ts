@@ -19,8 +19,7 @@ export const ensureUser = (hexpubkey: string): Writable<User> => {
     }
 
     users[hexpubkey] = writable(base)
-    // getUserRelays is broken due to NDK bug
-    // getUserRelays(hexpubkey)
+    getUserRelays(hexpubkey)
     u.fetchProfile({
       closeOnEose: true,
       groupable: true,
@@ -117,7 +116,6 @@ interface UserRelays {
 
 export const user_relays: { [hexpubkey: string]: Writable<UserRelays> } = {}
 
-// Do Not Use - NDK has a bug when batching user relay requests
 export const getUserRelays = async (hexpubkey: string): Promise<UserRelays> => {
   return new Promise(async (res, _) => {
     if (user_relays[hexpubkey]) {
