@@ -11,7 +11,7 @@ import {
 } from '$lib/components/repo/type'
 import { ensureRepoCollection } from './repos'
 import {
-  extractGithubDetails,
+  cloneArrayToReadMeUrls,
   selectRepoFromCollection,
 } from '$lib/components/repo/utils'
 import { get } from 'svelte/store'
@@ -104,33 +104,34 @@ const ensureRepoReadme = async (
       })
     }
   }
+  let text: string | undefined
   try {
-    const github_details = clone
-      .map(extractGithubDetails)
-      .find((details) => !!details)
-    let res: Response
-    if (github_details) {
+    let readme_urls = cloneArrayToReadMeUrls(clone)
+    // prioritise using github as it doesn't require a proxy
+    readme_urls = [
+      ...readme_urls.filter((url) => url.includes('raw.githubusercontent.com')),
+      ...readme_urls.filter(
+        (url) => !url.includes('raw.githubusercontent.com')
+      ),
+    ]
+    for (let i = 0; i < readme_urls.length; i++) {
       try {
-        res = await fetch(
-          `https://raw.githubusercontent.com/${github_details.org}/${github_details.repo_name}/HEAD/README.md`
+        const res = await fetch(
+          readme_urls[i].includes('raw.githubusercontent.com')
+            ? readme_urls[i]
+            : // use proxy as most servers produce a CORS error
+              `/git_proxy/readme/${encodeURIComponent(readme_urls[i])}`
         )
-        if (!res.ok) {
-          throw 'api request error'
+        if (res.ok) {
+          text = await res.text()
+          break
+        } else {
+          continue
         }
       } catch {
-        res = await fetch(
-          `https://raw.githubusercontent.com/${github_details.org}/${github_details.repo_name}/HEAD/readme.md`
-        )
+        continue
       }
-    } else
-      res = await fetch(`/git_proxy/readme/${encodeURIComponent(clone[0])}`)
-    if (!res.ok) {
-      throw 'api request error'
     }
-    let text = ''
-    text = await res.text()
-    update(text)
-  } catch (e) {
-    update()
-  }
+  } catch {}
+  update(text)
 }
