@@ -39,12 +39,18 @@ exports[`Repo/Details Long Details smoke-test 1`] = `
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -127,6 +133,12 @@ exports[`Repo/Details Long Details smoke-test 1`] = `
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -168,12 +180,18 @@ exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -256,6 +274,12 @@ exports[`Repo/Details Long and No Spaces smoke-test 1`] = `
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -294,7 +318,19 @@ exports[`Repo/Details No Clone smoke-test 1`] = `
     </div>
   </div>
   <div>
-    <div>
+    <h4>
+      clone
+    </h4>
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
     </div>
   </div>
   <div>
@@ -378,6 +414,12 @@ exports[`Repo/Details No Clone smoke-test 1`] = `
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -419,12 +461,18 @@ exports[`Repo/Details No Description smoke-test 1`] = `
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -507,6 +555,12 @@ exports[`Repo/Details No Description smoke-test 1`] = `
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -548,12 +602,18 @@ exports[`Repo/Details No Maintainers or Relays smoke-test 1`] = `
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -584,6 +644,12 @@ exports[`Repo/Details No Maintainers or Relays smoke-test 1`] = `
       none
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -625,12 +691,18 @@ exports[`Repo/Details No Maintainers smoke-test 1`] = `
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -667,6 +739,12 @@ exports[`Repo/Details No Maintainers smoke-test 1`] = `
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -708,12 +786,18 @@ exports[`Repo/Details No Name or Description smoke-test 1`] = `
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -796,6 +880,12 @@ exports[`Repo/Details No Name or Description smoke-test 1`] = `
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -837,12 +927,18 @@ exports[`Repo/Details No Relays smoke-test 1`] = `
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -919,6 +1015,12 @@ exports[`Repo/Details No Relays smoke-test 1`] = `
       none
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -948,12 +1050,18 @@ exports[`Repo/Details No Tags smoke-test 1`] = `
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -1036,6 +1144,12 @@ exports[`Repo/Details No Tags smoke-test 1`] = `
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -1077,12 +1191,18 @@ exports[`Repo/Details No Web smoke-test 1`] = `
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -1156,6 +1276,12 @@ exports[`Repo/Details No Web smoke-test 1`] = `
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -1197,12 +1323,18 @@ exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -1281,6 +1413,12 @@ exports[`Repo/Details One Maintainer's Profile Has No displayName or Name smoke-
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -1322,12 +1460,18 @@ exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -1407,6 +1551,12 @@ exports[`Repo/Details One Maintainer's Profile Not Loaded smoke-test 1`] = `
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -1448,12 +1598,18 @@ exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name 
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -1536,6 +1692,12 @@ exports[`Repo/Details One Maintainer's Profile Only Has displayName But No Name 
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -1577,12 +1739,18 @@ exports[`Repo/Details Short Details smoke-test 1`] = `
     <h4>
       clone
     </h4>
-    <a href="github.com/example/example"
-       target="_blank"
-       class="link link-primary my-2 break-words text-sm"
-    >
+    <div class="group my-2 mt-3 cursor-pointer break-words text-xs">
       github.com/example/example
-    </a>
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewbox="0 0 16 16"
+           class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+      >
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z">
+        </path>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z">
+        </path>
+      </svg>
+    </div>
   </div>
   <div>
     <h4>
@@ -1619,6 +1787,12 @@ exports[`Repo/Details Short Details smoke-test 1`] = `
       relayable.org
     </div>
   </div>
+  <h4>
+    earliest unique commit
+  </h4>
+  <p class="my-2 break-words text-xs">
+    9ee507fc4357d7ee16a5d8901bedcd103f23c17d
+  </p>
 </div>
 `;
 
@@ -1636,47 +1810,53 @@ exports[`Repo/Details loading smoke-test 1`] = `
   </div>
   <div class="skeleton my-2 mb-3 h-4 w-2/3">
   </div>
+  <div>
+    <div class="badge skeleton w-20">
+    </div>
+    <div class="badge skeleton w-20">
+    </div>
+  </div>
+  <div>
+    <div class="skeleton my-3 h-5 w-20">
+    </div>
+    <div class="badge skeleton my-2 block w-60">
+    </div>
+  </div>
+  <div>
+    <div class="skeleton my-3 h-5 w-20">
+    </div>
+    <div class="badge skeleton my-2 block w-60">
+    </div>
+    <div class="badge skeleton my-2 block w-40">
+    </div>
+  </div>
+  <div>
+    <div class="skeleton my-3 h-5 w-20">
+    </div>
+    <div class="badge skeleton my-2 block w-60">
+    </div>
+    <div class="badge skeleton my-2 block w-40">
+    </div>
+  </div>
+  <div>
+    <div class="skeleton my-3 h-5 w-20">
+    </div>
+    <div class="badge skeleton my-2 block w-60">
+    </div>
+    <div class="badge skeleton my-2 block w-40">
+    </div>
+  </div>
   <div class="skeleton my-3 h-5 w-20">
   </div>
   <div class="skeleton my-2 h-4">
   </div>
   <div class="skeleton my-2 mb-3 h-4 w-2/3">
   </div>
-  <div>
-    <div class="badge skeleton w-20">
-    </div>
-    <div class="badge skeleton w-20">
-    </div>
+  <div class="skeleton my-3 h-5 w-20">
   </div>
-  <div>
-    <div class="skeleton my-3 h-5 w-20">
-    </div>
-    <div class="badge skeleton my-2 block w-60">
-    </div>
+  <div class="skeleton my-2 h-4">
   </div>
-  <div>
-    <div class="skeleton my-3 h-5 w-20">
-    </div>
-    <div class="badge skeleton my-2 block w-60">
-    </div>
-    <div class="badge skeleton my-2 block w-40">
-    </div>
-  </div>
-  <div>
-    <div class="skeleton my-3 h-5 w-20">
-    </div>
-    <div class="badge skeleton my-2 block w-60">
-    </div>
-    <div class="badge skeleton my-2 block w-40">
-    </div>
-  </div>
-  <div>
-    <div class="skeleton my-3 h-5 w-20">
-    </div>
-    <div class="badge skeleton my-2 block w-60">
-    </div>
-    <div class="badge skeleton my-2 block w-40">
-    </div>
+  <div class="skeleton my-2 mb-3 h-4 w-2/3">
   </div>
 </div>
 `;

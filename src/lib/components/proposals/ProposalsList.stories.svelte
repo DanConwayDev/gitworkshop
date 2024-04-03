@@ -19,21 +19,21 @@
   name="Default"
   args={{
     title: 'Open Proposals',
-    proposals: [vectors.Short, vectors.Long, vectors.LongNoSpaces],
+    proposals_or_issues: [vectors.Short, vectors.Long, vectors.LongNoSpaces],
   }}
 />
 
 <Story
   name="No Title"
   args={{
-    proposals: [vectors.Short, vectors.Long],
+    proposals_or_issues: [vectors.Short, vectors.Long],
   }}
 />
 <Story
   name="Empty"
   args={{
     title: 'Open Proposals',
-    proposals: [],
+    proposals_or_issues: [],
   }}
 />
 
@@ -41,7 +41,7 @@
   name="Loading"
   args={{
     title: 'Open Proposals',
-    proposals: [],
+    proposals_or_issues: [],
     loading: true,
   }}
 />
@@ -50,7 +50,7 @@
   name="Partially Loaded"
   args={{
     title: 'Open Proposals',
-    proposals: [vectors.Short, vectors.Long],
+    proposals_or_issues: [vectors.Short, vectors.Long],
     loading: true,
   }}
 />
