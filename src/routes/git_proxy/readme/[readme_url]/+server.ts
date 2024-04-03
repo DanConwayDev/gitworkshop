@@ -36,4 +36,9 @@ export const GET = async ({ params }: { params: { readme_url: string } }) => {
   //    * 'git clone' is too expensive for retrieving single files. even when
   //      done using treeless or blobless flags. see:
   //      https://noise.getoto.net/2020/12/21/get-up-to-speed-with-partial-clone-and-shallow-clone/
+  // files can be listed at:
+  //  * gitea / forgejo https://codeberg.org/api/v1/repos/DanConwayDev/ngit-cli/git/trees/HEAD
+  //  * github - https://api.github.com/repos/DanConwayDev/ngit-cli/git/trees/HEAD?recursive=1
+  //  * gitlab - tbc
+  //  * gogs - needs testing - https://github.com/gogs/docs-api/
 }
