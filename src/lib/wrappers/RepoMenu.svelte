@@ -15,7 +15,7 @@
         class="tab"
         class:tab-active={selected_tab === ''}
       >
-        Code
+        About
       </a>
     {/if}
     <a
