@@ -54,7 +54,8 @@
           ];
 
           PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
-
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS= "true";
+          
           shellHook = ''
             # auto-install git hooks
             dot_git="$(git rev-parse --git-common-dir)"
