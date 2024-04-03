@@ -8,7 +8,7 @@ const config: TestRunnerConfig = {
     setup() {
         expect.extend({ toMatchImageSnapshot });
     },
-    async postRender(page, context) {
+    async postVisit(page, context) {
         // DOM Snapshot
         const elementHandler = await page.$('#storybook-root');
         if (elementHandler) {
