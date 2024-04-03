@@ -70,5 +70,10 @@
     "parse-diff": "^0.11.1",
     "ramda": "^0.29.1",
     "svelte-markdown": "^0.4.1"
+  },
+  "resolutions": {
+    "playwright": "1.40.0",
+    "playwright-core": "1.40.0",
+    "jackspeak": "2.1.1"
   }
 }
