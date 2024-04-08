@@ -68,7 +68,7 @@
     }
     new_event.tags.push([
       'a',
-      `${repo_kind}:${$selected_repo_event.maintainers[0].hexpubkey}:${repo_identifier}`,
+      `${repo_kind}:${$selected_repo_event.maintainers[0]}:${repo_identifier}`,
     ])
     let parent_event_user_relay = user_relays[event.pubkey]
       ? get(user_relays[event.pubkey]).ndk_relays?.writeRelayUrls[0]

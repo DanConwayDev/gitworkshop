@@ -26,11 +26,11 @@
     }
     event.tags.push([
       'a',
-      `${repo_kind}:${repo_event.maintainers[0].hexpubkey}:${repo_event.identifier}`,
+      `${repo_kind}:${repo_event.maintainers[0]}:${repo_event.identifier}`,
       repo_event.relays[0] || '',
       'root',
     ])
-    repo_event.maintainers.forEach((m) => event.tags.push(['p', m.hexpubkey]))
+    repo_event.maintainers.forEach((m) => event.tags.push(['p', m]))
     event.content = content
     submitting = true
     let relays = [
