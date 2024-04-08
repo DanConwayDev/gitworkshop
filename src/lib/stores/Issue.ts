@@ -1,8 +1,6 @@
 import { NDKRelaySet, type NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk'
-import { writable, type Unsubscriber, type Writable } from 'svelte/store'
+import { writable, type Writable } from 'svelte/store'
 import { base_relays, ndk } from './ndk'
-import type { User } from '$lib/components/users/type'
-import { ensureUser } from './users'
 import { type IssueFull, full_defaults } from '$lib/components/issues/type'
 import { proposal_status_kinds, proposal_status_open } from '$lib/kinds'
 import { awaitSelectedRepoCollection } from './repo'
@@ -20,7 +18,6 @@ export const selected_issue_full: Writable<IssueFull> = writable({
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let selected_issue_repo_id: string = ''
 let selected_issue_id: string = ''
-let issue_summary_author_unsubsriber: Unsubscriber | undefined
 
 export const selected_issue_replies: Writable<NDKEvent[]> = writable([])
 
@@ -59,8 +56,6 @@ export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
     },
     loading: true,
   })
-  if (issue_summary_author_unsubsriber) issue_summary_author_unsubsriber()
-  issue_summary_author_unsubsriber = undefined
 
   new Promise(async (r) => {
     const repo_collection = await awaitSelectedRepoCollection(repo_identifier)
@@ -98,30 +93,11 @@ export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
                 descritpion: extractIssueDescription(event.content),
                 created_at: event.created_at,
                 comments: 0,
-                author: {
-                  hexpubkey: event.pubkey,
-                  loading: true,
-                  npub: '',
-                },
+                author: event.pubkey,
                 loading: false,
               },
             }
           })
-
-          issue_summary_author_unsubsriber = ensureUser(event.pubkey).subscribe(
-            (u: User) => {
-              selected_issue_full.update((full) => {
-                return {
-                  ...full,
-                  summary: {
-                    ...full.summary,
-                    author:
-                      event.pubkey == u.hexpubkey ? u : full.summary.author,
-                  },
-                }
-              })
-            }
-          )
         }
       } catch {}
     })

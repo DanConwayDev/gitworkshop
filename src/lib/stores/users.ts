@@ -1,18 +1,18 @@
 import {
   defaults as user_defaults,
-  type User,
+  type UserObject,
 } from '$lib/components/users/type'
 import { NDKNip07Signer, NDKRelayList } from '@nostr-dev-kit/ndk'
 import { get, writable, type Unsubscriber, type Writable } from 'svelte/store'
 import { ndk } from './ndk'
 
-export const users: { [hexpubkey: string]: Writable<User> } = {}
+export const users: { [hexpubkey: string]: Writable<UserObject> } = {}
 
-export const ensureUser = (hexpubkey: string): Writable<User> => {
+export const ensureUser = (hexpubkey: string): Writable<UserObject> => {
   if (!users[hexpubkey]) {
     const u = ndk.getUser({ hexpubkey })
 
-    const base: User = {
+    const base: UserObject = {
       loading: false,
       hexpubkey,
       npub: u.npub,
@@ -44,7 +44,7 @@ export const ensureUser = (hexpubkey: string): Writable<User> => {
   return users[hexpubkey]
 }
 
-export const returnUser = async (hexpubkey: string): Promise<User> => {
+export const returnUser = async (hexpubkey: string): Promise<UserObject> => {
   return new Promise((r) => {
     const unsubscriber = ensureUser(hexpubkey).subscribe((u) => {
       if (!u.loading) {
@@ -81,7 +81,8 @@ export const checkForNip07Plugin = () => {
 
 const signer = new NDKNip07Signer(2000)
 
-export const logged_in_user: Writable<undefined | User> = writable(undefined)
+export const logged_in_user: Writable<undefined | UserObject> =
+  writable(undefined)
 
 export const login = async (): Promise<void> => {
   return new Promise(async (res, rej) => {

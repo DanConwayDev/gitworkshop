@@ -5,10 +5,16 @@
   import dayjs from 'dayjs'
   import relativeTime from 'dayjs/plugin/relativeTime'
   import { summary_defaults } from './type'
-  import { getName } from '../users/type'
+  import {
+    defaults as user_defaults,
+    getName,
+    type UserObject,
+  } from '../users/type'
   import Container from '../Container.svelte'
   import Status from './Status.svelte'
-  import { logged_in_user } from '$lib/stores/users'
+  import { ensureUser, logged_in_user } from '$lib/stores/users'
+  import type { Unsubscriber } from 'svelte/store'
+  import { onDestroy } from 'svelte'
 
   dayjs.extend(relativeTime)
   export let type: 'proposal' | 'issue' = 'proposal'
@@ -27,8 +33,23 @@
   let short_title: string
   let created_at_ago: string
   let author_name = ''
+  let author_object: UserObject = {
+    ...user_defaults,
+  }
+  let unsubscriber: Unsubscriber
   $: {
-    author_name = getName(author)
+    if (typeof author === 'string') {
+      if (unsubscriber) unsubscriber()
+      unsubscriber = ensureUser(author).subscribe((u) => {
+        author_object = { ...u }
+      })
+    } else author_object = author
+  }
+  onDestroy(() => {
+    if (unsubscriber) unsubscriber()
+  })
+  $: {
+    author_name = getName(author_object)
   }
   $: {
     if (title.length > 70) short_title = title.slice(0, 65) + '...'
@@ -67,7 +88,7 @@
           opened {created_at_ago}
         </div>
         <div class="inline align-middle">
-          {#if author.loading}
+          {#if author_object.loading}
             <div class="skeleton inline-block h-3 w-20 pb-2"></div>
           {:else}
             {author_name}

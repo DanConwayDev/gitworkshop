@@ -1,19 +1,21 @@
 import type { NDKUserProfile } from '@nostr-dev-kit/ndk'
 
-export interface User {
+export interface UserObject {
   loading: boolean
   hexpubkey: string
   npub: string
   profile?: NDKUserProfile
 }
 
-export const defaults: User = {
+export const defaults: UserObject = {
   loading: true,
   hexpubkey: '',
   npub: '',
 }
 
-export function getName(user: User, truncate_above = 25): string {
+export type User = UserObject | string
+
+export function getName(user: UserObject, truncate_above = 25): string {
   return truncate(
     user.profile
       ? user.profile.name

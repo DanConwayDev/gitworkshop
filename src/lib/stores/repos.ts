@@ -8,8 +8,6 @@ import { NDKRelaySet, type NDKFilter, NDKEvent } from '@nostr-dev-kit/ndk'
 import { get, writable, type Writable } from 'svelte/store'
 import { base_relays, ndk } from './ndk'
 import { repo_kind } from '$lib/kinds'
-import type { User } from '$lib/components/users/type'
-import { ensureUser } from './users'
 import { selectRepoFromCollection } from '$lib/components/repo/utils'
 import { selected_repo_collection } from './repo'
 
@@ -99,7 +97,7 @@ export const ensureRepoCollection = (
         const ref_sub = ndk.subscribe(
           {
             '#a': [
-              `${repo_kind}:${repo_event.maintainers[0].hexpubkey}:${repo_event.identifier}`,
+              `${repo_kind}:${repo_event.maintainers[0]}:${repo_event.identifier}`,
             ],
             limit: 10,
           },
@@ -166,35 +164,11 @@ export const ensureRepoCollection = (
             }
           })
         })
-
-        // load maintainers - we will subscribe later to prevent too many updates
-        repo_event.maintainers.forEach((m) => ensureUser(m.hexpubkey))
       }
     })
     sub.on('eose', () => {
       // still awaiting reference_by at this point
       repos[unique_commit_or_identifier].update((repo_collection) => {
-        // subscribe to maintainers
-        const hexpubkeys = repo_collection.events.flatMap((repo_event) =>
-          repo_event.maintainers.map((m) => m.hexpubkey)
-        )
-        hexpubkeys.forEach((hexpubkey) => {
-          ensureUser(hexpubkey).subscribe((u) => {
-            repos[unique_commit_or_identifier].update((repo_collection) => ({
-              ...repo_collection,
-              events: [
-                ...repo_collection.events.map((repo_event) => ({
-                  ...repo_event,
-                  maintainers: [
-                    ...repo_event.maintainers.map((m) => ({
-                      ...(m.hexpubkey === u.hexpubkey ? u : m),
-                    })),
-                  ],
-                })),
-              ],
-            }))
-          })
-        })
         return {
           ...repo_collection,
           loading: false,
@@ -217,21 +191,11 @@ export const ensureRepoCollection = (
 export const eventToRepoEvent = (event: NDKEvent): RepoEvent | undefined => {
   if (event.kind !== repo_kind) return undefined
 
-  const maintainers = [
-    {
-      hexpubkey: event.pubkey,
-      loading: true,
-      npub: '',
-    } as User,
-  ]
+  const maintainers = [event.pubkey]
   event.getMatchingTags('maintainers').forEach((t: string[]) => {
     t.forEach((v, i) => {
-      if (i > 0 && v !== maintainers[0].hexpubkey) {
-        maintainers.push({
-          hexpubkey: v,
-          loading: true,
-          npub: '',
-        } as User)
+      if (i > 0 && v !== maintainers[0]) {
+        maintainers.push(v)
       }
     })
   })

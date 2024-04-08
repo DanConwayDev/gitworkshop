@@ -4,11 +4,9 @@ import {
   NDKSubscription,
   type NDKFilter,
 } from '@nostr-dev-kit/ndk'
-import { writable, type Unsubscriber, type Writable } from 'svelte/store'
+import { writable, type Writable } from 'svelte/store'
 import { base_relays, ndk } from './ndk'
 import { summary_defaults } from '$lib/components/proposals/type'
-import type { User } from '$lib/components/users/type'
-import { ensureUser } from './users'
 import type { ProposalSummaries } from '$lib/components/proposals/type'
 import { awaitSelectedRepoCollection } from './repo'
 import {
@@ -29,8 +27,6 @@ export const proposal_summaries: Writable<ProposalSummaries> = writable({
 
 let selected_repo_id: string | undefined = ''
 
-let authors_unsubscribers: Unsubscriber[] = []
-
 let sub: NDKSubscription
 
 export const ensureProposalSummaries = async (repo_id: string | undefined) => {
@@ -43,8 +39,6 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
 
   if (sub) sub.stop()
   if (sub_statuses) sub_statuses.stop()
-  authors_unsubscribers.forEach((u) => u())
-  authors_unsubscribers = []
 
   selected_repo_id = repo_id
 
@@ -83,7 +77,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
       filter = {
         kinds: [patch_kind],
         '#a': repo.maintainers.map(
-          (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
+          (m) => `${repo_kind}:${m}:${repo.identifier}`
         ),
         limit: 100,
       }
@@ -91,7 +85,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
       filter = {
         kinds: [patch_kind],
         '#a': repo.maintainers.map(
-          (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
+          (m) => `${repo_kind}:${m}:${repo.identifier}`
         ),
         '#t': ['root'],
         limit: 100,
@@ -139,11 +133,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
                 descritpion: event.tagValue('description') || '',
                 created_at: event.created_at,
                 comments: 0,
-                author: {
-                  hexpubkey: event.pubkey,
-                  loading: true,
-                  npub: '',
-                },
+                author: event.pubkey,
                 loading: false,
               },
             ],
@@ -174,20 +164,6 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
           }
         }
       }
-
-      authors_unsubscribers.push(
-        ensureUser(event.pubkey).subscribe((u: User) => {
-          proposal_summaries.update((proposals) => {
-            return {
-              ...proposals,
-              summaries: proposals.summaries.map((o) => ({
-                ...o,
-                author: event.pubkey === o.author.hexpubkey ? u : o.author,
-              })),
-            }
-          })
-        })
-      )
     } catch {}
   })
   sub.on('eose', () => {

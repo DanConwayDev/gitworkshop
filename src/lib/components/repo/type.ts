@@ -1,6 +1,10 @@
-import { defaults as user_defaults, type User } from '../users/type'
+import {
+  defaults as user_defaults,
+  type User,
+  type UserObject,
+} from '../users/type'
 
-export interface RepoEvent {
+export interface RepoEventBase {
   event_id: string
   naddr: string
   identifier: string
@@ -10,12 +14,20 @@ export interface RepoEvent {
   clone: string[]
   web: string[]
   tags: string[]
-  maintainers: User[]
+  maintainers: string | User[]
   relays: string[]
   referenced_by: string[]
   created_at: number
   loading: boolean
 }
+export interface RepoEvent extends RepoEventBase {
+  maintainers: string[]
+}
+
+export interface RepoEventWithMaintainersMetadata extends RepoEventBase {
+  maintainers: UserObject[]
+}
+
 export const event_defaults: RepoEvent = {
   event_id: '',
   naddr: '',

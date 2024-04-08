@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { getName, type User } from './type'
+  import { ensureUser } from '$lib/stores/users'
+  import type { Unsubscriber } from 'svelte/store'
+  import { defaults, getName, type User, type UserObject } from './type'
+  import { onDestroy } from 'svelte'
 
   export let user: User = {
-    hexpubkey: '',
-    npub: '',
-    loading: true,
+    ...defaults,
   }
 
   export let inline = false
@@ -12,8 +13,23 @@
   export let avatar_only = false
   export let in_event_header = false
 
-  $: ({ profile, loading } = user)
-  $: display_name = getName(user)
+  let user_object: UserObject = {
+    ...defaults,
+  }
+  let unsubscriber: Unsubscriber
+  $: {
+    if (typeof user === 'string') {
+      if (unsubscriber) unsubscriber()
+      unsubscriber = ensureUser(user).subscribe((u) => {
+        user_object = { ...u }
+      })
+    } else user_object = user
+  }
+  onDestroy(() => {
+    if (unsubscriber) unsubscriber()
+  })
+  $: ({ profile, loading } = user_object)
+  $: display_name = getName(user_object)
 </script>
 
 <div class:inline-block={inline}>

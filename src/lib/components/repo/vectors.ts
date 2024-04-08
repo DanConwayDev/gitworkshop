@@ -1,5 +1,5 @@
 import { UserVectors, withName } from '../users/vectors'
-import type { RepoEvent, RepoSummary } from './type'
+import type { RepoEventWithMaintainersMetadata, RepoSummary } from './type'
 
 export const RepoSummaryCardArgsVectors = {
   Short: {
@@ -33,7 +33,7 @@ export const RepoSummaryCardArgsVectors = {
     ],
   } as RepoSummary,
 }
-const base: RepoEvent = {
+const base: RepoEventWithMaintainersMetadata = {
   identifier: '9ee507fc4357d7ee16a5d8901bedcd103f23c17d',
   unique_commit: '9ee507fc4357d7ee16a5d8901bedcd103f23c17d',
   name: 'Short Name',
@@ -55,24 +55,31 @@ const base: RepoEvent = {
 }
 
 export const RepoDetailsArgsVectors = {
-  Short: { ...base } as RepoEvent,
+  Short: { ...base } as RepoEventWithMaintainersMetadata,
   Long: {
     ...base,
     name: 'Long Name that goes on and on and on and on and on and on and on and on and on',
     description:
       'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis quis nisl eget turpis congue molestie. Nulla vitae purus nec augue accumsan facilisis sed sed ligula. Vestibulum sed risus lacinia risus lacinia molestie. Ut lorem quam, consequat eget tempus in, rhoncus vel nunc. Duis efficitur a leo vel sodales. Nam id fermentum lacus. Etiam nec placerat velit. Praesent ac consectetur est. Aenean iaculis commodo enim.\n Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis quis nisl eget turpis congue molestie.',
-  } as RepoEvent,
+  } as RepoEventWithMaintainersMetadata,
   LongNoSpaces: {
     ...base,
     name: 'LongNameLongNameLongNameLongNameLongNameLongNameLongNameLongName',
     description:
       'LoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsumLoremipsum',
-  } as RepoEvent,
-  NoNameOrDescription: { ...base, name: '', description: '' } as RepoEvent,
-  NoDescription: { ...base, description: '' } as RepoEvent,
-  NoTags: { ...base, tags: [] } as RepoEvent,
-  NoGitServer: { ...base, clone: [''] } as RepoEvent,
-  NoWeb: { ...base, web: [] } as RepoEvent,
+  } as RepoEventWithMaintainersMetadata,
+  NoNameOrDescription: {
+    ...base,
+    name: '',
+    description: '',
+  } as RepoEventWithMaintainersMetadata,
+  NoDescription: {
+    ...base,
+    description: '',
+  } as RepoEventWithMaintainersMetadata,
+  NoTags: { ...base, tags: [] } as RepoEventWithMaintainersMetadata,
+  NoGitServer: { ...base, clone: [''] } as RepoEventWithMaintainersMetadata,
+  NoWeb: { ...base, web: [] } as RepoEventWithMaintainersMetadata,
   MaintainersOneProfileNotLoaded: {
     ...base,
     maintainers: [
@@ -80,7 +87,7 @@ export const RepoDetailsArgsVectors = {
       { ...UserVectors.loading },
       { ...base.maintainers[2] },
     ],
-  } as RepoEvent,
+  } as RepoEventWithMaintainersMetadata,
   MaintainersOneProfileDisplayNameWithoutName: {
     ...base,
     maintainers: [
@@ -88,7 +95,7 @@ export const RepoDetailsArgsVectors = {
       { ...UserVectors.display_name_only },
       { ...base.maintainers[2] },
     ],
-  } as RepoEvent,
+  } as RepoEventWithMaintainersMetadata,
   MaintainersOneProfileNameAndDisplayNamePresent: {
     ...base,
     maintainers: [
@@ -96,7 +103,7 @@ export const RepoDetailsArgsVectors = {
       { ...UserVectors.display_name_and_name },
       { ...base.maintainers[2] },
     ],
-  } as RepoEvent,
+  } as RepoEventWithMaintainersMetadata,
   MaintainersOneProfileNoNameOrDisplayNameBeingPresent: {
     ...base,
     maintainers: [
@@ -104,8 +111,15 @@ export const RepoDetailsArgsVectors = {
       { ...UserVectors.no_profile },
       { ...base.maintainers[2] },
     ],
-  } as RepoEvent,
-  NoMaintainers: { ...base, maintainers: [] } as RepoEvent,
-  NoRelays: { ...base, relays: [] } as RepoEvent,
-  NoMaintainersOrRelays: { ...base, maintainers: [], relays: [] } as RepoEvent,
+  } as RepoEventWithMaintainersMetadata,
+  NoMaintainers: {
+    ...base,
+    maintainers: [],
+  } as RepoEventWithMaintainersMetadata,
+  NoRelays: { ...base, relays: [] } as RepoEventWithMaintainersMetadata,
+  NoMaintainersOrRelays: {
+    ...base,
+    maintainers: [],
+    relays: [],
+  } as RepoEventWithMaintainersMetadata,
 }
