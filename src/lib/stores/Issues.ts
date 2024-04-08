@@ -4,10 +4,8 @@ import {
   NDKSubscription,
   type NDKFilter,
 } from '@nostr-dev-kit/ndk'
-import { writable, type Unsubscriber, type Writable } from 'svelte/store'
+import { writable, type Writable } from 'svelte/store'
 import { base_relays, ndk } from './ndk'
-import type { User } from '$lib/components/users/type'
-import { ensureUser } from './users'
 import { awaitSelectedRepoCollection } from './repo'
 import {
   issue_kind,
@@ -33,8 +31,6 @@ export const issue_summaries: Writable<IssueSummaries> = writable({
 
 let selected_repo_id: string | undefined = ''
 
-let authors_unsubscribers: Unsubscriber[] = []
-
 let sub: NDKSubscription
 
 export const ensureIssueSummaries = async (repo_id: string | undefined) => {
@@ -47,8 +43,6 @@ export const ensureIssueSummaries = async (repo_id: string | undefined) => {
 
   if (sub) sub.stop()
   if (sub_statuses) sub_statuses.stop()
-  authors_unsubscribers.forEach((u) => u())
-  authors_unsubscribers = []
 
   selected_repo_id = repo_id
 
@@ -83,9 +77,7 @@ export const ensureIssueSummaries = async (repo_id: string | undefined) => {
 
     filter = {
       kinds: [issue_kind],
-      '#a': repo.maintainers.map(
-        (m) => `${repo_kind}:${m.hexpubkey}:${repo.identifier}`
-      ),
+      '#a': repo.maintainers.map((m) => `${repo_kind}:${m}:${repo.identifier}`),
       limit: 100,
     }
   }
@@ -119,31 +111,13 @@ export const ensureIssueSummaries = async (repo_id: string | undefined) => {
                 descritpion: extractIssueDescription(event.content),
                 created_at: event.created_at,
                 comments: 0,
-                author: {
-                  hexpubkey: event.pubkey,
-                  loading: true,
-                  npub: '',
-                },
+                author: event.pubkey,
                 loading: false,
               },
             ],
           }
         })
       }
-
-      authors_unsubscribers.push(
-        ensureUser(event.pubkey).subscribe((u: User) => {
-          issue_summaries.update((issues) => {
-            return {
-              ...issues,
-              summaries: issues.summaries.map((o) => ({
-                ...o,
-                author: event.pubkey === o.author.hexpubkey ? u : o.author,
-              })),
-            }
-          })
-        })
-      )
     } catch {}
   })
   sub.on('eose', () => {
