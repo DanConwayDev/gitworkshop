@@ -9,10 +9,11 @@
   import Container from '$lib/components/Container.svelte'
   import { ensureProposalSummaries } from '$lib/stores/Proposals'
   import { ensureIssueSummaries } from '$lib/stores/Issues'
-  import RepoMenu from '$lib/wrappers/RepoMenu.svelte'
+  import type { RepoPage } from '$lib/components/repo/type'
 
   export let identifier = ''
-  export let selected_tab: '' | 'issues' | 'proposals' = ''
+  export let selected_tab: RepoPage = 'about'
+  export let with_side_bar = true
 
   ensureSelectedRepoCollection(identifier)
   ensureProposalSummaries(identifier)
@@ -52,17 +53,19 @@
     </div>
   </Container>
 {:else}
-  <RepoHeader {...$selected_repo_event} />
-
-  <Container>
-    <div class="mt-2 md:flex">
-      <div class="md:mr-2 md:w-2/3">
-        <RepoMenu {identifier} {selected_tab} />
-        <slot />
+  <RepoHeader {...$selected_repo_event} {selected_tab} />
+  {#if with_side_bar}
+    <Container>
+      <div class="mt-2 md:flex">
+        <div class="md:mr-2 md:w-2/3">
+          <slot />
+        </div>
+        <div class="prose ml-2 hidden w-1/3 md:flex">
+          <RepoDetails repo_id={identifier} />
+        </div>
       </div>
-      <div class="prose ml-2 hidden w-1/3 md:flex">
-        <RepoDetails repo_id={identifier} />
-      </div>
-    </div>
-  </Container>
+    </Container>
+  {:else}
+    <slot />
+  {/if}
 {/if}

@@ -1,9 +1,10 @@
 <script lang="ts">
+  import type { RepoPage } from '$lib/components/repo/type'
   import { issue_summaries } from '$lib/stores/Issues'
   import { proposal_summaries } from '$lib/stores/Proposals'
   import { selected_repo_readme } from '$lib/stores/repo'
 
-  export let selected_tab: '' | 'proposals' | 'issues' = ''
+  export let selected_tab: RepoPage = 'about'
   export let identifier = ''
 </script>
 
@@ -13,7 +14,7 @@
       <a
         href={`/repo/${identifier}`}
         class="tab"
-        class:tab-active={selected_tab === ''}
+        class:tab-active={selected_tab === 'about'}
       >
         About
       </a>

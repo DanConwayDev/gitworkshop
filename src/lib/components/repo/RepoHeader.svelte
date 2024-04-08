@@ -1,6 +1,7 @@
 <script lang="ts">
+  import RepoMenu from '$lib/wrappers/RepoMenu.svelte'
   import Container from '../Container.svelte'
-  import { event_defaults } from './type'
+  import { event_defaults, type RepoPage } from './type'
 
   export let {
     event_id,
@@ -17,6 +18,7 @@
     created_at,
     loading,
   } = event_defaults
+  export let selected_tab: RepoPage = 'about'
   let short_name: string
   $: {
     if (name && name.length > 45) short_name = name.slice(0, 45) + '...'
@@ -41,5 +43,6 @@
         >{short_name}</a
       >
     {/if}
+    <RepoMenu {identifier} {selected_tab} />
   </Container>
 </div>

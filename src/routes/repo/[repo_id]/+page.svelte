@@ -7,14 +7,13 @@
   export let data: { repo_id: string }
   let identifier = data.repo_id
 
-  let selected_tab: '' | 'issues' | 'proposals' = ''
   $: {
     if ($selected_repo_readme.failed === true)
       goto(`/repo/${identifier}/proposals`)
   }
 </script>
 
-<RepoPageWrapper {identifier} {selected_tab}>
+<RepoPageWrapper {identifier} selected_tab="about">
   <div class="my-3 rounded-lg border border-base-400">
     <div class="border-b border-base-400 bg-base-300 px-6 py-3">
       <h4 class="">README.md</h4>

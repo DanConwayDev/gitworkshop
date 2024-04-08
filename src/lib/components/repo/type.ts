@@ -80,6 +80,8 @@ export const summary_defaults: RepoSummary = {
   created_at: 0,
 }
 
+export type RepoPage = 'about' | 'issues' | 'proposals'
+
 export interface RepoReadme {
   md: string
   loading: boolean
