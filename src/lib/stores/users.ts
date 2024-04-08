@@ -20,26 +20,43 @@ export const ensureUser = (hexpubkey: string): Writable<UserObject> => {
 
     users[hexpubkey] = writable(base)
     getUserRelays(hexpubkey)
-    u.fetchProfile({
-      closeOnEose: true,
-      groupable: true,
-      // default 100
-      groupableDelay: 200,
-    }).then(
-      (p) => {
-        users[hexpubkey].update((u) => ({
-          ...u,
-          loading: false,
-          profile: p === null ? undefined : p,
-        }))
-      },
-      () => {
-        users[hexpubkey].update((u) => ({
-          ...u,
-          loading: false,
-        }))
-      }
-    )
+    const getProfile = () => {
+      u.fetchProfile({
+        closeOnEose: true,
+        groupable: true,
+        // default 100
+        groupableDelay: 200,
+      }).then(
+        (p) => {
+          users[hexpubkey].update((u) => ({
+            ...u,
+            loading: false,
+            profile: p === null ? undefined : p,
+          }))
+        },
+        () => {
+          users[hexpubkey].update((u) => ({
+            ...u,
+            loading: false,
+          }))
+        }
+      )
+    }
+    let attempts = 1
+    const tryAgainin3s = () => {
+      setTimeout(
+        () => {
+          if (!get(users[hexpubkey]).profile) {
+            getProfile()
+            attempts++
+            if (attempts < 5) tryAgainin3s()
+          }
+        },
+        (attempts ^ 2) * 1000
+      )
+    }
+    getProfile()
+    tryAgainin3s()
   }
   return users[hexpubkey]
 }
