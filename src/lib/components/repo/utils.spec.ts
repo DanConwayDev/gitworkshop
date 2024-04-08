@@ -178,8 +178,8 @@ describe('cloneArrayToReadMeUrls', () => {
     expect(
       cloneArrayToReadMeUrls(['https://github.com/orgname/reponame'])
     ).toEqual([
-      'https://raw.githubusercontent.com/HEAD/README.md',
-      'https://raw.githubusercontent.com/HEAD/readme.md',
+      'https://raw.githubusercontent.com/orgname/reponame/HEAD/README.md',
+      'https://raw.githubusercontent.com/orgname/reponame/HEAD/readme.md',
     ])
   })
   test('for sr.hr link to /blob/HEAD', () => {
