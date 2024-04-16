@@ -20,7 +20,7 @@
     </ul>
     <p>ngit and gitworkshop.dev are new, experimental and in an alpha state.</p>
 
-    <div role="alert" class="max-w-2 alert my-3">
+    <div role="alert" class="alert my-3 max-w-2">
       <!-- licence MIT https://icon-sets.iconify.design/ph/hands-praying-fill/ -->
       <svg
         class="h-5 w-5 shrink-0 stroke-current"
@@ -60,18 +60,18 @@
       </p>
       <p>
         <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.1.1/ngit-x86_64-unknown-linux-gnu.tar.gz"
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.1.2/ngit-x86_64-unknown-linux-gnu.tar.gz"
           class="btn btn-neutral">Linux</a
         >
         <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.1.1/ngit-x86_64-apple-darwin.tar.gz"
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.1.2/ngit-x86_64-apple-darwin.tar.gz"
           class="btn btn-neutral">Mac</a
         >
         <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.1.1/ngit-x86_64-pc-windows-msvc.zip"
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.1.2/ngit-x86_64-pc-windows-msvc.zip"
           class="btn btn-neutral">Windows</a
         >
-        v1.1.1
+        v1.1.2
       </p>
 
       <p>
