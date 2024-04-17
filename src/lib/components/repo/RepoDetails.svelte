@@ -92,7 +92,11 @@
     {:else if clone.length == 0}
       <div />
     {:else}
-      <h4>clone</h4>
+      <h4>
+        clone {#if git_url_copied}<span class="text-sm text-success opacity-50">
+            (copied to clipboard)</span
+          >{/if}
+      </h4>
       {#each clone as git_url}
         <!-- eslint-disable-next-line svelte/valid-compile -->
         <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -114,17 +118,16 @@
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 16 16"
-            class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+            class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50"
+            class:group-hover:opacity-100={git_url_copied !== git_url}
             class:fill-base-content={git_url_copied !== git_url}
             class:fill-success={git_url_copied === git_url}
+            class:opacity-100={git_url_copied === git_url}
           >
             {#each icons_misc.copy as d}
               <path {d} />
             {/each}
           </svg>
-          {#if git_url_copied === git_url}<span class="text-xs text-success">
-              (copied to clipboard)</span
-            >{/if}
         </div>
       {/each}
     {/if}
