@@ -2,8 +2,7 @@
   import { base_relays, ndk } from '$lib/stores/ndk'
   import { NDKEvent, NDKRelaySet } from '@nostr-dev-kit/ndk'
   import { issue_kind, repo_kind } from '$lib/kinds'
-  import { getUserRelays, logged_in_user } from '$lib/stores/users'
-  import Compose from '$lib/components/events/Compose.svelte'
+  import { getUserRelays, logged_in_user, login } from '$lib/stores/users'
   import type { RepoEvent } from '$lib/components/repo/type'
   import { goto } from '$app/navigation'
 
@@ -12,11 +11,14 @@
   let submitting = false
   let submitted = false
   let edit_mode = false
+  let title = ''
+  let content = ''
   $: {
     edit_mode = !submitted
   }
 
   async function sendIssue(content: string) {
+    if (!$logged_in_user) await login()
     if (!$logged_in_user) return
     let event = new NDKEvent(ndk)
     event.kind = issue_kind
@@ -66,12 +68,51 @@
 </script>
 
 {#if edit_mode}
-  <Compose
-    sendReply={sendIssue}
-    {submitting}
-    logged_in={!!$logged_in_user}
-    placeholder="title on first line..."
-  />
+  <div class="flex">
+    <div class="flex-grow">
+      <label class="form-control w-full">
+        <div class="label">
+          <span class="label-text text-sm">Title</span>
+        </div>
+        <input
+          type="text"
+          bind:value={title}
+          class="input-neutral input input-sm input-bordered mb-3 w-full"
+          placeholder="title"
+        />
+      </label>
+      <label class="form-control w-full">
+        <div class="label">
+          <span class="label-textarea text-sm">Description</span>
+        </div>
+
+        <textarea
+          disabled={submitting}
+          bind:value={content}
+          class="textarea textarea-secondary w-full"
+          placeholder="description"
+          rows="10"
+        ></textarea>
+      </label>
+
+      <div class="flex">
+        <div class="flex-auto"></div>
+        <button
+          on:click={() => sendIssue(`${title}\n\n${content}`)}
+          disabled={submitting}
+          class="align-right btn btn-primary btn-sm mt-2 align-bottom"
+        >
+          {#if submitting}
+            Sending
+          {:else if !$logged_in_user}
+            Login before Sending
+          {:else}
+            Send
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
 {/if}
 {#if submitted}
   <div>sent going to issue!</div>
