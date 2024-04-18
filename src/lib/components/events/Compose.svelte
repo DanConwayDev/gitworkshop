@@ -32,7 +32,7 @@
       <div class="flex-auto"></div>
       <button
         on:click={submit}
-        disabled={submitting}
+        disabled={submitting || content.length === 0}
         class="align-right btn btn-primary btn-sm mt-2 align-bottom"
       >
         {#if submitting}

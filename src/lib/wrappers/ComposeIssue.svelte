@@ -99,7 +99,7 @@
         <div class="flex-auto"></div>
         <button
           on:click={() => sendIssue(`${title}\n\n${content}`)}
-          disabled={submitting}
+          disabled={submitting || title.length < 10}
           class="align-right btn btn-primary btn-sm mt-2 align-bottom"
         >
           {#if submitting}
