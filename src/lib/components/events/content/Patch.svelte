@@ -95,7 +95,7 @@
               expand_files[index] = true
             }
           }}
-          ><div class="text-wrap shrink text-left">
+          ><div class="shrink text-wrap text-left">
             <span class="pr-3">{file.to || file.from}</span>
             <span
               class="text-middle flex-none align-middle font-mono text-xs opacity-70"

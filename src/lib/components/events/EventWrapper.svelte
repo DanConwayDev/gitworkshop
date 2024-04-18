@@ -51,7 +51,7 @@
         </div>
         {#if show_raw_json_modal}
           <div class="modal" class:modal-open={show_raw_json_modal}>
-            <div class="text-wrap modal-box max-w-full text-xs">
+            <div class="modal-box max-w-full text-wrap text-xs">
               <code class="w-full">{JSON.stringify(event.rawEvent())}</code>
               <div class="modal-action">
                 <button
