@@ -1,5 +1,6 @@
 <script lang="ts">
   import UserHeader from '$lib/components/users/UserHeader.svelte'
+  import { NDKUser } from '@nostr-dev-kit/ndk'
   import { icons_misc } from '../icons'
   import { event_defaults } from './type'
 
@@ -25,6 +26,7 @@
       : description
   let naddr_copied = false
   let git_url_copied: false | string = false
+  let maintainer_copied: false | string = false
 </script>
 
 <div class="prose w-full max-w-md">
@@ -162,9 +164,47 @@
     {:else if maintainers.length == 0}
       <div />
     {:else}
-      <h4>maintainers</h4>
+      <h4>
+        maintainers {#if maintainer_copied}<span
+            class="text-sm text-success opacity-50"
+          >
+            (copied to clipboard)</span
+          >{/if}
+      </h4>
       {#each maintainers as maintainer}
-        <UserHeader user={maintainer} />
+        <!-- eslint-disable-next-line svelte/valid-compile -->
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <div
+          on:click={async () => {
+            try {
+              await navigator.clipboard.writeText(
+                new NDKUser({ hexpubkey: maintainer }).npub
+              )
+              maintainer_copied = maintainer
+              setTimeout(() => {
+                maintainer_copied = false
+              }, 2000)
+            } catch {}
+          }}
+          class="group my-2 mt-3 flex cursor-pointer items-center break-words text-xs"
+          class:text-success={maintainer_copied === maintainer}
+          class:opacity-50={maintainer_copied === maintainer}
+        >
+          <div class="flex-none"><UserHeader user={maintainer} /></div>
+          <div class="flex-auto">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 16 16"
+              class=" ml-2 inline h-4 w-4 flex-none fill-base-content align-middle opacity-0 group-hover:opacity-100"
+              class:fill-base-content={maintainer_copied !== maintainer}
+              class:fill-success={maintainer_copied === maintainer}
+            >
+              {#each icons_misc.copy as d}
+                <path {d} />
+              {/each}
+            </svg>
+          </div>
+        </div>
       {/each}
     {/if}
   </div>
