@@ -22,12 +22,13 @@
     />
   </div>
   <div class="flex-grow pt-2">
-    <textarea
-      disabled={submitting}
-      bind:value={content}
-      class="textarea textarea-primary w-full"
-      {placeholder}
-    ></textarea>
+    {#if !submitting}
+      <textarea
+        bind:value={content}
+        class="textarea textarea-primary w-full"
+        {placeholder}
+      ></textarea>
+    {/if}
     <div class="flex">
       <div class="flex-auto"></div>
       <button
