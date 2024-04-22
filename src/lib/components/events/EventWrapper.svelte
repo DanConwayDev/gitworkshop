@@ -6,6 +6,7 @@
   import ComposeReply from '$lib/wrappers/ComposeReply.svelte'
   import { logged_in_user } from '$lib/stores/users'
   import type { NDKEvent } from '@nostr-dev-kit/ndk'
+  import CopyField from '../CopyField.svelte'
 
   export let type: 'proposal' | 'issue' = 'proposal'
   export let author: User = { ...user_defaults }
@@ -13,6 +14,7 @@
   export let event: NDKEvent
   let show_compose = false
   let show_raw_json_modal = false
+  let show_share_modal = false
   let created_at_ago = ''
   $: created_at_ago = created_at ? dayjs(created_at * 1000).fromNow() : ''
 
@@ -57,6 +59,53 @@
                 <button
                   class="btn btn-sm"
                   on:click={() => (show_raw_json_modal = false)}>Close</button
+                >
+              </div>
+            </div>
+          </div>
+        {/if}
+        <div class="tooltip align-middle" data-tip="share">
+          <button
+            on:click={() => {
+              show_share_modal = true
+            }}
+            class="btn btn-xs text-neutral-content"
+          >
+            <!-- https://icon-sets.iconify.design/ph/share-network-bold/ -->
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 256 256"
+              ><path
+                fill="currentColor"
+                d="M176 156a43.78 43.78 0 0 0-29.09 11l-40.81-26.2a44.07 44.07 0 0 0 0-25.6L146.91 89a43.83 43.83 0 1 0-13-20.17L93.09 95a44 44 0 1 0 0 65.94l40.81 26.26A44 44 0 1 0 176 156m0-120a20 20 0 1 1-20 20a20 20 0 0 1 20-20M64 148a20 20 0 1 1 20-20a20 20 0 0 1-20 20m112 72a20 20 0 1 1 20-20a20 20 0 0 1-20 20"
+              /></svg
+            ></button
+          >
+        </div>
+        {#if show_share_modal}
+          <div class="modal" class:modal-open={show_share_modal}>
+            <div class="modal-box max-w-lg text-wrap">
+              <div class="prose"><h3>Share</h3></div>
+              <CopyField
+                label="nostr address"
+                content={`nostr:${event.encode()}`}
+              />
+              <CopyField
+                label="njump"
+                content={`https://njump.me/${event.encode()}`}
+                border_color="secondary"
+              />
+              <CopyField
+                label="raw event id"
+                content={event.id}
+                border_color="neutral-content"
+              />
+              <div class="modal-action">
+                <button
+                  class="btn btn-sm"
+                  on:click={() => (show_share_modal = false)}>Close</button
                 >
               </div>
             </div>
