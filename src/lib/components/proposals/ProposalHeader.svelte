@@ -15,6 +15,7 @@
   import { ensureUser, logged_in_user } from '$lib/stores/users'
   import type { Unsubscriber } from 'svelte/store'
   import { onDestroy } from 'svelte'
+  import StatusSelector from './StatusSelector.svelte'
 
   dayjs.extend(relativeTime)
   export let type: 'proposal' | 'issue' = 'proposal'
@@ -60,7 +61,7 @@
 </script>
 
 <div
-  class="grow overflow-hidden border-b border-accent-content bg-base-200 pb-4 pt-2 text-xs text-neutral-content"
+  class="grow border-b border-accent-content bg-base-200 pb-4 pt-2 text-xs text-neutral-content"
 >
   <Container>
     {#if loading}
@@ -82,7 +83,15 @@
       </div>
       <div class="pt-1">
         <div class="mr-3 inline align-middle">
-          <Status {type} {status} edit_mode={!!$logged_in_user} />
+          {#if !$logged_in_user}
+            <Status {type} {status} edit_mode={false} />
+          {:else}
+            <StatusSelector
+              {type}
+              {status}
+              {repo_identifier}
+              proposal_or_issue_id={id}
+            />{/if}
         </div>
         <div class="mr-3 inline align-middle">
           opened {created_at_ago}

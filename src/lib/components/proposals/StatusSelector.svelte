@@ -98,7 +98,7 @@
         class="menu dropdown-content z-[1] ml-0 w-52 rounded-box bg-base-300 p-2 shadow"
       >
         {#if status !== proposal_status_draft && type !== 'issue'}
-          <li class="pl-0">
+          <li class="my-2 pl-0">
             <button
               on:click={() => {
                 changeStatus(proposal_status_draft)
@@ -109,7 +109,7 @@
           </li>
         {/if}
         {#if status !== proposal_status_open}
-          <li class="pl-0">
+          <li class="my-2 pl-0">
             <button
               on:click={() => {
                 changeStatus(proposal_status_open)
@@ -120,7 +120,7 @@
           </li>
         {/if}
         {#if status !== proposal_status_applied}
-          <li class="pl-0">
+          <li class="my-2 pl-0">
             <button
               on:click={() => {
                 changeStatus(proposal_status_applied)
@@ -131,7 +131,7 @@
           </li>
         {/if}
         {#if status !== proposal_status_closed}
-          <li class="pl-0">
+          <li class="my-2 pl-0">
             <button
               on:click={() => {
                 changeStatus(proposal_status_closed)
