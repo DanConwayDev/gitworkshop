@@ -79,7 +79,7 @@
           </div>
         </div>
         <div class="prose ml-2 hidden w-1/3 lg:block">
-          <div role="alert" class="alert mt-3 max-w-2">
+          <div role="alert" class="alert mt-3">
             <div class="text-center">
               <div>
                 <svg
