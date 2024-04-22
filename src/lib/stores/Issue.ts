@@ -129,6 +129,8 @@ export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
     )
 
     const process_replies = (event: NDKEvent) => {
+      const amethyst_draft_kind = 31234
+      if (event.kind && event.kind === amethyst_draft_kind) return
       if (
         event.kind &&
         proposal_status_kinds.includes(event.kind) &&
