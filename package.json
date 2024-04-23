@@ -68,6 +68,7 @@
     "daisyui": "^4.4",
     "dayjs": "^1.11.10",
     "highlight.js": "^11.9.0",
+    "nostr-tools": "^2.5.0",
     "parse-diff": "^0.11.1",
     "ramda": "^0.29.1",
     "svelte-markdown": "^0.4.1"

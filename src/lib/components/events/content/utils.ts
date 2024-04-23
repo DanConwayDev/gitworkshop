@@ -1,4 +1,5 @@
 import type { NDKTag } from '@nostr-dev-kit/ndk'
+import { nip19 } from 'nostr-tools'
 import { last } from 'ramda'
 
 export const TOPIC = 'topic'
@@ -7,8 +8,6 @@ export const HTML = 'html'
 export const INVOICE = 'invoice'
 export const NOSTR_NOTE = 'nostr:note'
 export const NOSTR_NEVENT = 'nostr:nevent'
-export const NOSTR_NPUB = 'nostr:npub'
-export const NOSTR_NPROFILE = 'nostr:nprofile'
 export const NOSTR_NADDR = 'nostr:naddr'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,6 +52,22 @@ type Imeta = {
   blurhash: string | undefined
 }
 
+export const NOSTR_NPUB = 'nostr:npub'
+type PartTypeNpub = 'nostr:npub'
+export type ParsedNpub = {
+  type: PartTypeNpub
+  hex: string
+}
+export const NOSTR_NPROFILE = 'nostr:nprofile'
+type PartTypeNprofile = 'nostr:nprofile'
+export type ParsedNprofile = {
+  type: PartTypeNprofile
+  hex: string
+  relays: string[]
+}
+
+export type ParsedNostrLink = ParsedNpub | ParsedNprofile
+
 export const TEXT = 'text'
 type PartTypeText = 'text'
 export type ParsedText = {
@@ -60,13 +75,26 @@ export type ParsedText = {
   value: string
 }
 
-export type ParsedPart = ParsedNewLine | ParsedText | ParsedLink
+export type ParsedPart =
+  | ParsedNewLine
+  | ParsedText
+  | ParsedNostrLink
+  | ParsedLink
 
 export const isParsedNewLine = (part: ParsedPart): part is ParsedNewLine =>
   part.type == NEWLINE
 
 export const isParsedLink = (part: ParsedPart): part is ParsedLink =>
   part.type == LINK
+
+export const isParsedNostrLink = (part: ParsedPart): part is ParsedNostrLink =>
+  part.type == NOSTR_NPUB || part.type == NOSTR_NPROFILE
+
+export const isParsedNpub = (part: ParsedPart): part is ParsedNpub =>
+  part.type == NOSTR_NPUB
+
+export const isParsedNprofile = (part: ParsedPart): part is ParsedNprofile =>
+  part.type == NOSTR_NPROFILE
 
 export const isParsedText = (part: ParsedPart): part is ParsedText =>
   part.type == TEXT
@@ -140,9 +168,29 @@ export const parseContent = (content: string, tags: NDKTag[]): ParsedPart[] => {
     ]
   }
 
+  const parseNostrLinks = (): undefined | [string, ParsedNostrLink] => {
+    const bech32: string = first(
+      text.match(
+        /^(web\+)?(nostr:)?\/?\/?n(event|ote|profile|pub|addr)1[\d\w]+/i
+      )
+    )
+    if (bech32) {
+      try {
+        const entity = fromNostrURI(bech32)
+        const decoded = nip19.decode(entity)
+        if (decoded.type === 'npub') {
+          return [bech32, { type: NOSTR_NPUB, hex: decoded.data }]
+        }
+        if (decoded.type === 'nprofile') {
+          return [bech32, { type: NOSTR_NPUB, hex: decoded.data.pubkey }]
+        }
+      } catch {}
+    }
+  }
+
   while (text) {
     // The order that this runs matters
-    const part = parseNewline() || parseUrl()
+    const part = parseNewline() || parseUrl() || parseNostrLinks()
 
     if (part) {
       if (buffer) {

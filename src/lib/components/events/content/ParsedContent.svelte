@@ -4,10 +4,13 @@
     isImage,
     isParsedLink,
     isParsedNewLine,
+    isParsedNprofile,
+    isParsedNpub,
     isParsedText,
     parseContent,
     type ParsedPart,
   } from './utils'
+  import UserHeader from '$lib/components/users/UserHeader.svelte'
   export let content: string = ''
   export let tags: NDKTag[] = []
 
@@ -31,6 +34,10 @@
           {part.url.replace(/https?:\/\/(www\.)?/, '')}
         </a>
       {/if}
+    {:else if isParsedNpub(part) || isParsedNprofile(part)}
+      <div class="badge badge-neutral">
+        <UserHeader user={part.hex} inline={true} size="sm" />
+      </div>
     {:else if isParsedText(part)}
       {part.value}
     {/if}
