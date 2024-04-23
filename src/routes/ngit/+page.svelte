@@ -20,7 +20,7 @@
     </ul>
     <p>ngit and gitworkshop.dev are new, experimental and in an alpha state.</p>
 
-    <div role="alert" class="alert my-3 max-w-2">
+    <div role="alert" class="alert my-3">
       <!-- licence MIT https://icon-sets.iconify.design/ph/hands-praying-fill/ -->
       <svg
         class="h-5 w-5 shrink-0 stroke-current"
