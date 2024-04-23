@@ -1,5 +1,6 @@
 <script lang="ts">
   import EventWrapper from '$lib/components/events/EventWrapper.svelte'
+  import EventWrapperLite from '$lib/components/events/EventWrapperLite.svelte'
   import Status from '$lib/components/events/content/Status.svelte'
   import Patch from '$lib/components/events/content/Patch.svelte'
   import ParsedContent from '$lib/components/events/content/ParsedContent.svelte'
@@ -28,21 +29,37 @@
   onDestroy(() => {
     if (author_unsubsriber) author_unsubsriber()
   })
+  const getDtag = (event: NDKEvent): undefined | string => {
+    try {
+      const tag = event.replaceableDTag()
+      return tag
+    } catch {}
+  }
 </script>
 
-<EventWrapper {type} author={$author} created_at={event.created_at} {event}>
-  {#if event.kind == patch_kind}
-    {#if isCoverLetter(event.content)}
-      <ParsedContent
-        content={extractPatchMessage(event.content)}
-        tags={event.tags}
-      />
+{#if event.kind && event.kind === 6}
+  <EventWrapperLite author={$author} created_at={event.created_at}>
+    reposted by
+  </EventWrapperLite>
+{:else if event.kind && event.kind === 30001}
+  <EventWrapperLite author={$author} created_at={event.created_at}>
+    added to '{getDtag(event) || 'unknown'}' list by
+  </EventWrapperLite>
+{:else}
+  <EventWrapper {type} author={$author} created_at={event.created_at} {event}>
+    {#if event.kind == patch_kind}
+      {#if isCoverLetter(event.content)}
+        <ParsedContent
+          content={extractPatchMessage(event.content)}
+          tags={event.tags}
+        />
+      {:else}
+        <Patch content={event.content} tags={event.tags} />
+      {/if}
+    {:else if event.kind && proposal_status_kinds.includes(event.kind)}
+      <Status {type} status={event.kind} />
     {:else}
-      <Patch content={event.content} tags={event.tags} />
+      <ParsedContent content={event.content} tags={event.tags} />
     {/if}
-  {:else if event.kind && proposal_status_kinds.includes(event.kind)}
-    <Status {type} status={event.kind} />
-  {:else}
-    <ParsedContent content={event.content} tags={event.tags} />
-  {/if}
-</EventWrapper>
+  </EventWrapper>
+{/if}
