@@ -88,82 +88,12 @@ export const ensureRepoCollection = (
             events: [...repo_collection.events, repo_event as RepoEvent],
           }
         })
-        const relays_to_use =
-          repo_event.relays.length < 3
-            ? repo_event.relays
-            : [...base_relays].concat(repo_event.relays)
-
-        // get references
-        const ref_sub = ndk.subscribe(
-          {
-            '#a': [
-              `${repo_kind}:${repo_event.maintainers[0]}:${repo_event.identifier}`,
-            ],
-            limit: 10,
-          },
-          {
-            groupable: true,
-            // default 100
-            groupableDelay: 200,
-            closeOnEose: !get(selected_repo_collection)
-              .events.map((e) => e.identifier)
-              .includes(repo_event.identifier),
-          },
-          NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
+        fetchReferencedBy(
+          repo_event,
+          unique_commit_or_identifier,
+          collection_for_unique_commit
         )
-        ref_sub.on('event', (ref_event: NDKEvent) => {
-          repos[unique_commit_or_identifier].update((repo_collection) => {
-            return {
-              ...repo_collection,
-              events: [
-                ...repo_collection.events.map((latest_ref_event) => {
-                  if (latest_ref_event.event_id === repo_event.event_id) {
-                    return {
-                      ...latest_ref_event,
-                      referenced_by: latest_ref_event.referenced_by
-                        ? [...latest_ref_event.referenced_by, ref_event.id]
-                        : [ref_event.id],
-                    }
-                  }
-                  return latest_ref_event
-                }),
-              ],
-            }
-          })
-        })
-        ref_sub.on('eose', () => {
-          repos[unique_commit_or_identifier].update((repo_collection) => {
-            const events = [
-              ...repo_collection.events.map((latest_ref_event) => {
-                if (latest_ref_event.event_id === repo_event.event_id) {
-                  return {
-                    ...latest_ref_event,
-                    // finished loading repo_event as we have all referenced_by events
-                    loading: false,
-                  }
-                }
-                return latest_ref_event
-              }),
-            ]
-            const still_loading_events_in_collection = events.some(
-              (e) => e.loading
-            )
-            if (
-              collection_for_unique_commit &&
-              !still_loading_events_in_collection
-            )
-              addEventsWithMatchingIdentifiers(events)
-
-            return {
-              ...repo_collection,
-              events,
-              loading:
-                still_loading_events_in_collection ||
-                // for uninque_commit loading will complete after extra identifer events are added
-                collection_for_unique_commit,
-            }
-          })
-        })
+        // TODO fetch stargazers
       }
     })
     sub.on('eose', () => {
@@ -186,6 +116,83 @@ export const ensureRepoCollection = (
     })
   }, 5000)
   return repos[unique_commit_or_identifier]
+}
+
+const fetchReferencedBy = (
+  repo_event: RepoEvent,
+  unique_commit_or_identifier: string,
+  collection_for_unique_commit: boolean
+) => {
+  const relays_to_use =
+    repo_event.relays.length < 3
+      ? repo_event.relays
+      : [...base_relays].concat(repo_event.relays)
+
+  const ref_sub = ndk.subscribe(
+    {
+      '#a': [
+        `${repo_kind}:${repo_event.maintainers[0]}:${repo_event.identifier}`,
+      ],
+      limit: 10,
+    },
+    {
+      groupable: true,
+      // default 100
+      groupableDelay: 200,
+      closeOnEose: !get(selected_repo_collection)
+        .events.map((e) => e.identifier)
+        .includes(repo_event.identifier),
+    },
+    NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
+  )
+  ref_sub.on('event', (ref_event: NDKEvent) => {
+    repos[unique_commit_or_identifier].update((repo_collection) => {
+      return {
+        ...repo_collection,
+        events: [
+          ...repo_collection.events.map((latest_ref_event) => {
+            if (latest_ref_event.event_id === repo_event.event_id) {
+              return {
+                ...latest_ref_event,
+                referenced_by: latest_ref_event.referenced_by
+                  ? [...latest_ref_event.referenced_by, ref_event.id]
+                  : [ref_event.id],
+              }
+            }
+            return latest_ref_event
+          }),
+        ],
+      }
+    })
+  })
+  ref_sub.on('eose', () => {
+    repos[unique_commit_or_identifier].update((repo_collection) => {
+      const events = [
+        ...repo_collection.events.map((latest_ref_event) => {
+          if (latest_ref_event.event_id === repo_event.event_id) {
+            return {
+              ...latest_ref_event,
+              // finished loading repo_event as we have all referenced_by events
+              loading: false,
+            }
+          }
+          return latest_ref_event
+        }),
+      ]
+      const still_loading_events_in_collection = events.some((e) => e.loading)
+      if (collection_for_unique_commit && !still_loading_events_in_collection)
+        addEventsWithMatchingIdentifiers(events)
+
+      return {
+        ...repo_collection,
+        events,
+        loading:
+          still_loading_events_in_collection ||
+          // for uninque_commit loading will complete after extra identifer events are added
+          collection_for_unique_commit,
+      }
+    })
+  })
 }
 
 export const eventToRepoEvent = (event: NDKEvent): RepoEvent | undefined => {
