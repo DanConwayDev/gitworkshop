@@ -172,38 +172,8 @@
           >{/if}
       </h4>
       {#each maintainers as maintainer}
-        <!-- eslint-disable-next-line svelte/valid-compile -->
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <div
-          on:click={async () => {
-            try {
-              await navigator.clipboard.writeText(
-                new NDKUser({ hexpubkey: maintainer }).npub
-              )
-              maintainer_copied = maintainer
-              setTimeout(() => {
-                maintainer_copied = false
-              }, 2000)
-            } catch {}
-          }}
-          class="group my-2 mt-3 flex cursor-pointer items-center break-words text-xs"
-          class:text-success={maintainer_copied === maintainer}
-          class:opacity-50={maintainer_copied === maintainer}
-        >
-          <div class="flex-none"><UserHeader user={maintainer} /></div>
-          <div class="flex-auto">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 16 16"
-              class=" ml-2 inline h-4 w-4 flex-none fill-base-content align-middle opacity-0 group-hover:opacity-100"
-              class:fill-base-content={maintainer_copied !== maintainer}
-              class:fill-success={maintainer_copied === maintainer}
-            >
-              {#each icons_misc.copy as d}
-                <path {d} />
-              {/each}
-            </svg>
-          </div>
+        <div class="my-2 mt-3 break-words text-xs">
+          <UserHeader user={maintainer} />
         </div>
       {/each}
     {/if}
