@@ -1,6 +1,5 @@
 <script lang="ts">
   import UserHeader from '$lib/components/users/UserHeader.svelte'
-  import { NDKUser } from '@nostr-dev-kit/ndk'
   import { icons_misc } from '../icons'
   import { event_defaults } from './type'
 

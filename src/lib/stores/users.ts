@@ -152,11 +152,7 @@ export const getUserRelays = async (hexpubkey: string): Promise<UserRelays> => {
         loading: true,
         ndk_relays: undefined,
       })
-      const relay_list = await ndk
-        .getUser({ hexpubkey })
-        // when batching requests NDK creates a really long subid,
-        // beyond the 71 chars that most relays support
-        .relayList()
+      const relay_list = await NDKRelayList.forUser(hexpubkey, ndk)
       const querying_user_relays = {
         loading: false,
         ndk_relays: relay_list,
