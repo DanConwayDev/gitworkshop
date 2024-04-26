@@ -5,7 +5,6 @@ import NDKSvelte from '@nostr-dev-kit/ndk-svelte'
 //   : [
 
 export const base_relays = [
-  'wss://relay.f7z.io',
   'wss://relay.damus.io',
   'wss://nos.lol',
   'wss://relay.nostr.band',
