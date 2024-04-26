@@ -356,6 +356,11 @@ export const ensureRecentReposEvents = () => {
           const summary = repoCollectionToSummary(repo_collection)
           if (!summary) return
           recent_repo_summaries.update((repos) => {
+            if (
+              summary.identifier === 'dotfiles' &&
+              repos.some((repo) => repo.identifier === 'dotfiles')
+            )
+              return [...repos]
             // if duplicate
             if (
               repos.some(
@@ -382,7 +387,12 @@ export const ensureRecentReposEvents = () => {
               ].sort((a, b) => b.created_at - a.created_at)
             }
             // if not duplicate - add summary
-            else if (summary) return [...repos, summary]
+            else if (summary) {
+              console.log(
+                `${summary.identifier} ${summary.unique_commit} col ${repo_collection.unique_commit}`
+              )
+              return [...repos, summary]
+            }
             return [...repos]
           })
         })
