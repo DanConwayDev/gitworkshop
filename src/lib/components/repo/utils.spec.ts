@@ -239,6 +239,14 @@ describe('cloneArrayToReadMeUrls', () => {
         'https://codeberg.org/orgname/reponame/raw/HEAD/readme.md',
       ])
     })
+    test('strips port eg ssh://git@git.v0l.io:2222/Kieran/snort.git to address', () => {
+      expect(
+        cloneArrayToReadMeUrls(['ssh://git@git.v0l.io:2222/Kieran/snort.git'])
+      ).toEqual([
+        'https://git.v0l.io/Kieran/snort/raw/HEAD/README.md',
+        'https://git.v0l.io/Kieran/snort/raw/HEAD/readme.md',
+      ])
+    })
     test('https://custom.com/deep/deeper/deeper to address', () => {
       expect(
         cloneArrayToReadMeUrls(['https://custom.com/deep/deeper/deeper'])

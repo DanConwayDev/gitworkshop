@@ -66,6 +66,7 @@ const extractRepoAddress = (clone_string: string): string => {
   // remove @ and anything before
   if (s.includes('@')) s = s.split('@')[1]
   // replace : with /
+  s = s.replace(/\s|:[0-9]+/g, '')
   s = s.replace(':', '/')
   return s
 }
