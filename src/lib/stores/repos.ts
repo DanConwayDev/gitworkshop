@@ -63,7 +63,7 @@ export const ensureRepoCollection = (
         groupable: true,
         // default 100
         groupableDelay: 200,
-        closeOnEose: true,
+        closeOnEose: false,
       },
       NDKRelaySet.fromRelayUrls(base_relays, ndk)
     )

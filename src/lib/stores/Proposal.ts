@@ -79,7 +79,7 @@ export const ensureProposalFull = (
         limit: 100,
       },
       {
-        closeOnEose: true,
+        closeOnEose: false,
       },
       NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
     )
