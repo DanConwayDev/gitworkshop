@@ -14,6 +14,7 @@
   export let identifier = ''
   export let selected_tab: RepoPage = 'about'
   export let with_side_bar = true
+  export let show_details_on_mobile = false
 
   ensureSelectedRepoCollection(identifier)
   ensureProposalSummaries(identifier)
@@ -60,8 +61,16 @@
         <div class="md:mr-2 md:w-2/3">
           <slot />
         </div>
-        <div class="prose ml-2 hidden w-1/3 md:flex">
-          <RepoDetails repo_id={identifier} />
+        <div
+          class:hidden={!show_details_on_mobile}
+          class=" rounded-lg border border-base-400 md:flex md:w-1/3 md:border-none"
+        >
+          <div class="border-b border-base-400 bg-base-300 px-6 py-3 md:hidden">
+            <h4 class="">Repository Details</h4>
+          </div>
+          <div class="prose my-3 px-6 md:ml-2 md:px-0">
+            <RepoDetails repo_id={identifier} />
+          </div>
         </div>
       </div>
     </Container>

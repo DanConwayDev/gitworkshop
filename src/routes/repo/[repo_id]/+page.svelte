@@ -13,7 +13,7 @@
   }
 </script>
 
-<RepoPageWrapper {identifier} selected_tab="about">
+<RepoPageWrapper {identifier} selected_tab="about" show_details_on_mobile>
   <div class="my-3 rounded-lg border border-base-400">
     <div class="border-b border-base-400 bg-base-300 px-6 py-3">
       <h4 class="">README.md</h4>
