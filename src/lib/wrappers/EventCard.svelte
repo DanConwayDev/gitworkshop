@@ -37,7 +37,7 @@
   }
 </script>
 
-{#if event.kind && event.kind === 6}
+{#if event.kind && [6, 16].includes(event.kind)}
   <EventWrapperLite author={$author} created_at={event.created_at}>
     reposted by
   </EventWrapperLite>
