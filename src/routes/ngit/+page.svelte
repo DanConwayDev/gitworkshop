@@ -60,18 +60,18 @@
       </p>
       <p>
         <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.2.0/ngit-x86_64-unknown-linux-gnu.tar.gz"
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.2.1/ngit-x86_64-unknown-linux-gnu.tar.gz"
           class="btn btn-neutral">Linux</a
         >
         <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.2.0/ngit-x86_64-apple-darwin.tar.gz"
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.2.1/ngit-x86_64-apple-darwin.tar.gz"
           class="btn btn-neutral">Mac</a
         >
         <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.2.0/ngit-x86_64-pc-windows-msvc.zip"
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.2.1/ngit-x86_64-pc-windows-msvc.zip"
           class="btn btn-neutral">Windows</a
         >
-        v1.2.0
+        v1.2.1
       </p>
 
       <p>
