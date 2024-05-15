@@ -38,7 +38,7 @@
           ><span class="text-neutral">.dev</span>
         </h1>
         <p class="mb-8 mt-3">
-          a decentralized git workflow no nostr for freedom lovers
+          a decentralized git workflow on nostr for freedom lovers
         </p>
       </div>
     </div>

@@ -68,7 +68,7 @@
     <h3>The Need</h3>
 
     <p>
-      git is decentralized version control system, yet most freedom tech
+      git is a decentralized version control system, yet most freedom tech
       projects use centralized walled gardens on top of git as a social and
       collaboration layer for code changes
     </p>
