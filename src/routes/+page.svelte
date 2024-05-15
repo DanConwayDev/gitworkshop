@@ -29,51 +29,116 @@
 </div>
 
 <Container>
+  <div>
+    <div class="m-auto mt-5 max-w-lg text-center">
+      <div class="prose">
+        <h1 class="mb-2">
+          <span class="text-purple-600">git</span><span class="text-white"
+            >workshop</span
+          ><span class="text-neutral">.dev</span>
+        </h1>
+        <p class="mb-8 mt-3">
+          a decentralized git workflow no nostr for freedom lovers
+        </p>
+      </div>
+    </div>
+  </div>
+</Container>
+
+<Container>
+  <div class="grid gap-4 md:grid-cols-3">
+    <div class="card bg-base-300">
+      <div class="card-body">
+        <div class="card-title">
+          <h3>nostr</h3>
+        </div>
+        <div class="prose">
+          An open protocol that is able to create a censorship resistant global
+          "social" network once and for all
+        </div>
+      </div>
+    </div>
+    <div class="card bg-base-300">
+      <div class="card-body">
+        <div class="card-title">
+          <h3>
+            <span class="text-purple-600">n</span>git
+          </h3>
+        </div>
+        <div class="prose">
+          a NIP34 compatible command line tool to send and review git patches
+          via nostr. <a class="link link-secondary" href="/ngit">more...</a>
+        </div>
+      </div>
+    </div>
+    <div class="card bg-base-300">
+      <div class="card-body">
+        <div class="card-title">
+          <h3>
+            any <span class="text-yellow-600">git</span> server
+          </h3>
+        </div>
+        <div class="prose">
+          to host the authoratitive code. eg. Gitea, Github, Gitlab,
+          BitBucket...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hidden md:block">
+    <div class="grid h-5 grid-cols-6 gap-0">
+      <div class=""></div>
+      <div class="border-b border-l"></div>
+      <div class="border-b"></div>
+      <div class="border-b border-l"></div>
+      <div class="border-b border-r"></div>
+    </div>
+    <div class="grid h-5 grid-cols-2 gap-0">
+      <div class=""></div>
+      <div class="border-l"></div>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-3">
+    <div class=""></div>
+    <div class="card bg-base-300">
+      <div class="card-body">
+        <div class="card-title">
+          <h3>
+            <span class="text-purple-600">git</span>workshop<span
+              class="text-neutral">.dev</span
+            >
+          </h3>
+        </div>
+        <div class="prose">
+          A web client to collaborate on git repos via nostr, managing issues
+          and code proposals
+        </div>
+      </div>
+    </div>
+    <div class=""></div>
+  </div>
+</Container>
+
+<Container>
   <div class="mx-auto my-8 grid gap-4 md:grid-cols-2">
     <div class="items">
-      <div class="align-center hero-content text-center">
-        <div class="max-w-lg">
-          <div class="prose">
-            <h1 class="mb-2">
-              <span class="text-purple-600">git</span><span class="text-white"
-                >workshop</span
-              ><span class="text-neutral">.dev</span>
-            </h1>
-            <p class="mb-8 mt-3">
-              permissionless alternative to GitHub over nostr
-            </p>
-          </div>
-          <div>
-            <div class="card mb-8 bg-base-300">
-              <div class="card-body items-center text-center">
-                <div class="card-title">
-                  <h3>
-                    pairs with <span class="text-purple-600">n</span>git
-                  </h3>
-                </div>
-                <div class="prose">
-                  a command-line tool to <span class="badge">send</span> and
-                  <span class="badge">review</span> patches using nostr
-                  <div class="card-actions mt-3 flex">
-                    <div class="flex-grow">
-                      <a href="/ngit" class="btn btn-neutral">install ngit</a>
-                    </div>
-                    <div class="flex-grow">
-                      <a href="/about" class="btn">learn more</a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <button
-            on:click={() =>
-              alert(
-                'install ngit and run `ngit init` your local git repository'
-              )}
-            class="btn btn-secondary">list your repository</button
-          >
-        </div>
+      <div class="w-lg prose m-auto my-6">
+        <h2>How it works</h2>
+        <p>
+          Git is a decentralized version control system, yet most freedom tech
+          projects use centralized walled gardens on top of git as a social and
+          collaboration layer for code changes.
+        </p>
+        <p>
+          ngit and gitworkshop.dev are tools to enable code collaboration over
+          nostr. ngit allows contributors to manage the flow to open a proposal,
+          maintainers to verify proposals and incorporate them into the project.
+          Gitworkshop.dev provides a visual interface to discuss proposals and
+          open issues.
+        </p>
+        <a href="/about" class="btn btn-secondary text-right">learn more</a>
       </div>
     </div>
     <div class="hero">
