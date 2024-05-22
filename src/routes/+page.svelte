@@ -1,13 +1,42 @@
 <script lang="ts">
   import Container from '$lib/components/Container.svelte'
+  import ReposSummaryList from '$lib/components/ReposSummaryList.svelte'
   import ProposalsList from '$lib/components/proposals/ProposalsList.svelte'
+  import { summary_defaults, type RepoEvent, type RepoSummary } from '$lib/components/repo/type'
+  import { repo_kind } from '$lib/kinds'
   import {
     ensureProposalSummaries,
     proposal_summaries,
   } from '$lib/stores/Proposals'
-  import ReposRecent from '$lib/wrappers/ReposRecent.svelte'
+  import {
+  ensureRepo,
+    ensureRepoCollection,
+    repoCollectionToSummary,
+    repoEventToSummary,
+    returnRepo,
+  } from '$lib/stores/repos'
+import { writable, type Writable } from 'svelte/store'
 
   ensureProposalSummaries(undefined)
+  
+  let example_repos: Writable<RepoSummary[]> = writable([])
+  const updateRepos = (r: RepoEvent) => {
+    example_repos.update(repos => {
+      return [
+        ...repos.filter((s) => s.identifier.length > 0 && s.identifier !== r.identifier),
+        repoEventToSummary(r) || {
+        ...summary_defaults,
+      },
+      ].sort()
+    })
+  }
+
+  ensureRepo(
+    `${repo_kind}:a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d:ngit`
+  ).subscribe(updateRepos)
+  ensureRepo(
+    `${repo_kind}:a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d:gitworkshop`
+  ).subscribe(updateRepos)
 </script>
 
 <div role="alert" class="alert">
@@ -155,5 +184,13 @@
 </Container>
 
 <Container>
-  <ReposRecent />
+  <div class="prose mb-6">
+    <h2>Example Repositories</h2>
+    <p>These repositories have plenty of issues and proposals to explore</p>
+  </div>
+  <ReposSummaryList
+    repos={$example_repos}
+    loading={false}
+  />
+  <a href="/repos" class="btn btn-primary mt-9">List More Repositories</a>
 </Container>
