@@ -11,14 +11,15 @@
   import { proposal_summaries } from '$lib/stores/Proposals'
   import RepoPageWrapper from '$lib/wrappers/RepoPageWrapper.svelte'
 
-  export let data: { repo_id: string }
-  let identifier = data.repo_id
+  export let data: { repo_naddr: string }
+  let repo_naddr = data.repo_naddr
+
   let status: number = proposal_status_open
   let filtered: ProposalSummary[] = []
   $: filtered = $proposal_summaries.summaries.filter((s) => s.status === status)
 </script>
 
-<RepoPageWrapper {identifier} selected_tab="proposals">
+<RepoPageWrapper {repo_naddr} selected_tab="proposals">
   <div class="mt-2 border border-base-400">
     <div class="flex bg-slate-900">
       <div class="tabs tabs-lifted tabs-xs flex-none p-2">

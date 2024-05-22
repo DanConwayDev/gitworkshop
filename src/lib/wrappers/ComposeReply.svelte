@@ -24,7 +24,7 @@
   let submitted = false
   let edit_mode = false
   $: {
-    repo_identifier = $selected_repo_collection.identifier
+    repo_identifier = $selected_repo_event.identifier
     selected_issue_full
     selected_proposal_or_issue =
       type === 'proposal' ? $selected_proposal_full : $selected_issue_full
@@ -66,10 +66,9 @@
     if ($selected_repo_event.unique_commit) {
       new_event.tags.push(['r', $selected_repo_event.unique_commit])
     }
-    new_event.tags.push([
-      'a',
-      `${repo_kind}:${$selected_repo_event.maintainers[0]}:${repo_identifier}`,
-    ])
+    $selected_repo_collection.maintainers.forEach((m) => {
+      new_event.tags.push(['a', `${repo_kind}:${m}:${repo_identifier}`])
+    })
     let parent_event_user_relay = user_relays[event.pubkey]
       ? get(user_relays[event.pubkey]).ndk_relays?.writeRelayUrls[0]
       : undefined

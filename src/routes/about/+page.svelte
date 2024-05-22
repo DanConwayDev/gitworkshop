@@ -44,14 +44,20 @@
       <div>
         <h4 class="my-1 font-bold">please provide feedback</h4>
         <p class="mb-0 text-sm">
-          via an <a class="link-secondary" href="/repo/ngit">ngit issue</a>, a
-          <a class="link-secondary" href="/repo/gitworkshop"
+          via an <a
+            class="link-secondary"
+            href="/r/naddr1qqzxuemfwsqs6amnwvaz7tmwdaejumr0dspzpgqgmmc409hm4xsdd74sf68a2uyf9pwel4g9mfdg8l5244t6x4jdqvzqqqrhnym0k2qj"
+            >ngit issue</a
+          >, a
+          <a
+            class="link-secondary"
+            href="/r/naddr1qq9kw6t5wahhy6mndphhqqgkwaehxw309aex2mrp0yhxummnw3ezucnpdejqyg9qpr00z4uklw56p4h6kp8gl4ts3y59m874qhd94ql732k40g6kf5psgqqqw7vs2nfsd9"
             >gitworkshop.dev issue</a
           >
           or directly to
           <a
             class="link-primary"
-            href="https://njump.me/nprofile1qy88wumn8ghj7mn0wvhxcmmv9uq3vamnwvaz7tmsw4e8qmr9wfjkccte9e3k7mf0qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vng80y96x"
+            href="/p/nprofile1qy88wumn8ghj7mn0wvhxcmmv9uq3vamnwvaz7tmsw4e8qmr9wfjkccte9e3k7mf0qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vng80y96x"
             >DanConwayDev</a
           > on nostr
         </p>
@@ -283,14 +289,20 @@
       <div>
         <h4 class="my-1 font-bold">please provide feedback</h4>
         <p class="mb-0 text-sm">
-          via an <a class="link-secondary" href="/repo/ngit">ngit issue</a>, a
-          <a class="link-secondary" href="/repo/gitworkshop"
+          via an <a
+            class="link-secondary"
+            href="/r/naddr1qqzxuemfwsqs6amnwvaz7tmwdaejumr0dspzpgqgmmc409hm4xsdd74sf68a2uyf9pwel4g9mfdg8l5244t6x4jdqvzqqqrhnym0k2qj"
+            >ngit issue</a
+          >, a
+          <a
+            class="link-secondary"
+            href="/r/naddr1qq9kw6t5wahhy6mndphhqqgkwaehxw309aex2mrp0yhxummnw3ezucnpdejqyg9qpr00z4uklw56p4h6kp8gl4ts3y59m874qhd94ql732k40g6kf5psgqqqw7vs2nfsd9"
             >gitworkshop.dev issue</a
           >
           or directly to
           <a
             class="link-primary"
-            href="https://njump.me/nprofile1qy88wumn8ghj7mn0wvhxcmmv9uq3vamnwvaz7tmsw4e8qmr9wfjkccte9e3k7mf0qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vng80y96x"
+            href="/p/nprofile1qy88wumn8ghj7mn0wvhxcmmv9uq3vamnwvaz7tmsw4e8qmr9wfjkccte9e3k7mf0qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vng80y96x"
             >DanConwayDev</a
           > on nostr
         </p>

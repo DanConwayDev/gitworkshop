@@ -14,6 +14,8 @@
     proposal_status_open,
   } from '$lib/kinds'
   import { issue_icon_path } from '../issues/icons'
+  import { aToNaddr, extractAReference } from '../repo/utils'
+  import { nip19 } from 'nostr-tools'
 
   dayjs.extend(relativeTime)
   export let type: 'issue' | 'proposal' = 'proposal'
@@ -22,7 +24,7 @@
     title,
     descritpion,
     id,
-    repo_identifier,
+    repo_a,
     comments,
     status,
     status_date,
@@ -38,6 +40,15 @@
     else if (title.length == 0) short_title = 'Untitled'
     else short_title = title
     created_at_ago = created_at ? dayjs(created_at * 1000).fromNow() : ''
+  }
+  let repo_naddr = ''
+  let repo_identifier = ''
+  $: {
+    if (repo_a.length > 0) {
+      repo_naddr = aToNaddr(repo_a) || ''
+      let a_ref = extractAReference(repo_a)
+      repo_identifier = a_ref ? a_ref.identifier : ''
+    }
   }
 </script>
 
@@ -97,7 +108,7 @@
     </svg>
   {/if}
   <a
-    href="/repo/{repo_identifier}/{type}/{id}"
+    href="/r/{repo_naddr}/{type}s/{nip19.noteEncode(id) || ''}"
     class="ml-3 grow overflow-hidden text-xs text-neutral-content"
     class:pointer-events-none={loading}
   >
@@ -134,7 +145,7 @@
         </li>
         {#if show_repo && repo_identifier.length > 0}
           <li class="ml-3 inline">
-            <a class="link-primary z-10" href="/repo/{repo_identifier}">
+            <a class="link-primary z-10" href="/r/{repo_naddr}">
               {repo_identifier}
             </a>
           </li>

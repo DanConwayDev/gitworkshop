@@ -61,7 +61,7 @@
       submitting = false
       submitted = true
       setTimeout(() => {
-        goto(`/repo/${repo_event.identifier}/issue/${event.id}`)
+        goto(`/r/${repo_event.identifier}/issues/${event.id}`)
       }, 2000)
     } catch {}
   }

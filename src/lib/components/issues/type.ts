@@ -7,7 +7,7 @@ export interface IssueSummary {
   type: 'issue'
   title: string
   descritpion: string
-  repo_identifier: string
+  repo_a: string
   id: string
   comments: number
   status: undefined | number
@@ -21,7 +21,7 @@ export const summary_defaults: IssueSummary = {
   type: 'issue',
   title: '',
   descritpion: '',
-  repo_identifier: '',
+  repo_a: '',
   id: '',
   comments: 0,
   status: undefined,
@@ -32,13 +32,13 @@ export const summary_defaults: IssueSummary = {
 }
 
 export interface IssueSummaries {
-  id: string | undefined
+  repo_a: string | undefined
   summaries: IssueSummary[]
   loading: boolean
 }
 
 export const summaries_defaults: IssueSummaries = {
-  id: '',
+  repo_a: '',
   summaries: [],
   loading: true,
 }

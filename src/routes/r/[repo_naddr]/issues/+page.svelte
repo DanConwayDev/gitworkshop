@@ -10,14 +10,14 @@
   import { issue_summaries } from '$lib/stores/Issues'
   import RepoPageWrapper from '$lib/wrappers/RepoPageWrapper.svelte'
 
-  export let data: { repo_id: string }
-  let identifier = data.repo_id
+  export let data: { repo_naddr: string }
+  let repo_naddr = data.repo_naddr
   let status: number = proposal_status_open
   let filtered: IssueSummary[] = []
   $: filtered = $issue_summaries.summaries.filter((s) => s.status === status)
 </script>
 
-<RepoPageWrapper {identifier} selected_tab="issues">
+<RepoPageWrapper {repo_naddr} selected_tab="issues">
   <div class="mt-2 rounded-tr-lg border border-base-400">
     <div class="flex rounded-r-lg bg-slate-900">
       <div class="flex-none">
@@ -67,7 +67,7 @@
       <div class="flex-none">
         <a
           class="btn btn-success btn-sm h-full text-base-400"
-          href="/repo/{identifier}/issues/new"
+          href={`/r/${repo_naddr}/issues/new`}
         >
           create issue
         </a>

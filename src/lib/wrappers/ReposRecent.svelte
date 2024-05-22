@@ -1,16 +1,17 @@
 <script lang="ts">
   import ReposSummaryList from '$lib/components/ReposSummaryList.svelte'
-  import {
-    ensureRecentReposEvents,
-    recent_repo_summaries,
-    recent_repo_summaries_loading,
-  } from '$lib/stores/repos'
+  import { summary_defaults } from '$lib/components/repo/type'
+  import { ensureRecentRepos, recent_repos } from '$lib/stores/ReposRecent'
+  import { repoEventToSummary } from '$lib/stores/repos'
 
-  ensureRecentReposEvents()
+  ensureRecentRepos()
 </script>
 
 <ReposSummaryList
   title="Latest Repositories"
-  repos={$recent_repo_summaries}
-  loading={$recent_repo_summaries_loading}
+  repos={$recent_repos.events.map(
+    (c) => repoEventToSummary(c) || { ...summary_defaults }
+  )}
+  group_by="name"
+  loading={$recent_repos.loading}
 />

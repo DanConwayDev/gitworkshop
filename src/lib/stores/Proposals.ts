@@ -20,27 +20,27 @@ import { selectRepoFromCollection } from '$lib/components/repo/utils'
 import { returnRepoCollection } from './repos'
 
 export const proposal_summaries: Writable<ProposalSummaries> = writable({
-  id: '',
+  repo_a: '',
   summaries: [],
   loading: false,
 })
 
-let selected_repo_id: string | undefined = ''
+let selected_a: string | undefined = ''
 
 let sub: NDKSubscription
 
-export const ensureProposalSummaries = async (repo_id: string | undefined) => {
-  if (selected_repo_id == repo_id) return
+export const ensureProposalSummaries = async (repo_a: string | undefined) => {
+  if (selected_a == repo_a) return
   proposal_summaries.set({
-    id: repo_id,
+    repo_a,
     summaries: [],
-    loading: repo_id !== '',
+    loading: repo_a !== '',
   })
 
   if (sub) sub.stop()
   if (sub_statuses) sub_statuses.stop()
 
-  selected_repo_id = repo_id
+  selected_a = repo_a
 
   setTimeout(() => {
     proposal_summaries.update((summaries) => {
@@ -57,8 +57,8 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
     limit: 100,
   }
 
-  if (repo_id) {
-    const repo_collection = await awaitSelectedRepoCollection(repo_id)
+  if (repo_a) {
+    const repo_collection = await awaitSelectedRepoCollection(repo_a)
 
     const repo = selectRepoFromCollection(repo_collection)
     if (!repo) {
@@ -108,12 +108,10 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
         event.content.length > 0 &&
         !event.tags.some((t) => t.length > 1 && t[1] === 'revision-root')
       ) {
-        if (!extractRepoIdentiferFromProposalEvent(event) && !repo_id) {
+        if (!extractRepoAFromProposalEvent(event) && !repo_a) {
           // link to proposal will not work as it requires an identifier
           return
         }
-        const repo_identifier =
-          extractRepoIdentiferFromProposalEvent(event) || repo_id || ''
 
         proposal_summaries.update((proposals) => {
           return {
@@ -123,7 +121,7 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
               {
                 ...summary_defaults,
                 id: event.id,
-                repo_identifier,
+                repo_a: extractRepoAFromProposalEvent(event) || repo_a || '',
                 title: (
                   event.tagValue('name') ||
                   event.tagValue('description') ||
@@ -141,9 +139,13 @@ export const ensureProposalSummaries = async (repo_id: string | undefined) => {
         })
 
         // filter out non root proposals if repo event supports nip34+ features
-        if (!repo_id && repo_identifier.length > 0) {
-          const repo_collection = await returnRepoCollection(repo_identifier)
-          if (selected_repo_id === repo_id && repo_collection.unique_commit) {
+        if (repo_a && repo_a.length > 0) {
+          const repo_collection = await returnRepoCollection(repo_a)
+          if (
+            selected_a === repo_a &&
+            repo_collection.events[repo_collection.most_recent_index]
+              .unique_commit
+          ) {
             proposal_summaries.update((proposals) => {
               return {
                 ...proposals,
@@ -238,12 +240,12 @@ function getAndUpdateProposalStatus(
   })
 }
 
-export const extractRepoIdentiferFromProposalEvent = (
+export const extractRepoAFromProposalEvent = (
   event: NDKEvent
 ): string | undefined => {
   const value = event.tagValue('a')
   if (!value) return undefined
   const split = value.split(':')
   if (split.length < 3) return undefined
-  return split[2]
+  return value
 }

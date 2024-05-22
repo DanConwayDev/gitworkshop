@@ -2,12 +2,13 @@
   import { nip19 } from 'nostr-tools'
   import Container from '$lib/components/Container.svelte'
   import ReposSummaryList from '$lib/components/ReposSummaryList.svelte'
-  import {
-    ensureRecentReposEvents,
-    recent_repo_summaries,
-    recent_repo_summaries_loading,
-  } from '$lib/stores/repos'
   import UserHeader from '$lib/components/users/UserHeader.svelte'
+  import {
+    ensureSelectedPubkeyRepoCollection,
+    selected_npub_repo_collections,
+  } from '$lib/stores/ReposPubkey'
+  import { repoCollectionToSummary } from '$lib/stores/repos'
+  import { summary_defaults } from '$lib/components/repo/type'
 
   export let data: { npub: string }
 
@@ -19,11 +20,11 @@
       if (decoded.type === 'npub') pubkey = decoded.data
       else if (decoded.type === 'nprofile') pubkey = decoded.data.pubkey
       else error = true
+      if (pubkey) ensureSelectedPubkeyRepoCollection(pubkey)
     } catch {
       error = true
     }
   }
-  ensureRecentReposEvents()
 </script>
 
 {#if error}
@@ -56,10 +57,10 @@
       <div class="divider"></div>
       <ReposSummaryList
         title="Repositories"
-        repos={$recent_repo_summaries.filter(
-          (summary) => pubkey && summary.maintainers.includes(pubkey)
+        repos={$selected_npub_repo_collections.collections.map(
+          (c) => repoCollectionToSummary(c) || { ...summary_defaults }
         )}
-        loading={$recent_repo_summaries_loading}
+        loading={false}
       />
     </div>
   </Container>

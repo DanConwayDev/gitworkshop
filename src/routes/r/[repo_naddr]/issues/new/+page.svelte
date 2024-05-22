@@ -8,27 +8,31 @@
   import RepoHeader from '$lib/components/repo/RepoHeader.svelte'
   import Container from '$lib/components/Container.svelte'
   import ComposeIssue from '$lib/wrappers/ComposeIssue.svelte'
+  import { naddrToRepoA } from '$lib/components/repo/utils'
 
-  export let data: { repo_id: string }
-  let identifier = data.repo_id
+  export let data: { repo_naddr: string }
+  let repo_naddr = data.repo_naddr
+  let invalid_naddr = false
+  let a = ''
 
-  ensureSelectedRepoCollection(identifier)
-  let repo_error = false
+  $: {
+    const a_result = naddrToRepoA(repo_naddr)
+    if (a_result) {
+      a = a_result
+      invalid_naddr = false
+      ensureSelectedRepoCollection(a)
+    } else {
+      invalid_naddr = true
+    }
+  }
 
   let waited_5_secs = false
   setTimeout(() => {
     waited_5_secs = true
   }, 5000)
-
-  $: {
-    repo_error =
-      !$selected_repo_collection.loading &&
-      waited_5_secs &&
-      $selected_repo_event.name.length === 0
-  }
 </script>
 
-{#if repo_error}
+{#if invalid_naddr || (waited_5_secs && $selected_repo_collection.loading && $selected_repo_event.name.length)}
   <Container>
     <div role="alert" class="alert alert-error m-auto mt-6 w-full max-w-xs">
       <svg
@@ -43,7 +47,11 @@
           d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
         /></svg
       >
-      <span>Error! cannot find repository event</span>
+      {#if invalid_naddr}
+        <span>Error! invalid naddr in url: {repo_naddr}</span>
+      {:else}
+        <span>Error! cannot find repository event: {repo_naddr}</span>
+      {/if}
     </div>
   </Container>
 {:else}
@@ -56,7 +64,7 @@
         <ComposeIssue repo_event={$selected_repo_event} />
       </div>
       <div class="prose ml-2 hidden w-1/3 lg:flex">
-        <RepoDetails repo_id={identifier} />
+        <RepoDetails {a} />
       </div>
     </div>
   </Container>

@@ -24,27 +24,27 @@ import {
 } from '$lib/components/issues/type'
 
 export const issue_summaries: Writable<IssueSummaries> = writable({
-  id: '',
+  repo_a: '',
   summaries: [],
   loading: false,
 })
 
-let selected_repo_id: string | undefined = ''
+let selected_repo_a: string | undefined = ''
 
 let sub: NDKSubscription
 
-export const ensureIssueSummaries = async (repo_id: string | undefined) => {
-  if (selected_repo_id == repo_id) return
+export const ensureIssueSummaries = async (repo_a: string | undefined) => {
+  if (selected_repo_a == repo_a) return
   issue_summaries.set({
-    id: repo_id,
+    repo_a,
     summaries: [],
-    loading: repo_id !== '',
+    loading: repo_a !== '',
   })
 
   if (sub) sub.stop()
   if (sub_statuses) sub_statuses.stop()
 
-  selected_repo_id = repo_id
+  selected_repo_a = repo_a
 
   setTimeout(() => {
     issue_summaries.update((summaries) => {
@@ -61,8 +61,8 @@ export const ensureIssueSummaries = async (repo_id: string | undefined) => {
     limit: 100,
   }
 
-  if (repo_id) {
-    const repo_collection = await awaitSelectedRepoCollection(repo_id)
+  if (repo_a) {
+    const repo_collection = await awaitSelectedRepoCollection(repo_a)
 
     const repo = selectRepoFromCollection(repo_collection)
     if (!repo) {
@@ -93,7 +93,7 @@ export const ensureIssueSummaries = async (repo_id: string | undefined) => {
   sub.on('event', (event: NDKEvent) => {
     try {
       if (event.kind == issue_kind) {
-        if (!extractRepoIdentiferFromIssueEvent(event) && !repo_id) {
+        if (!extractRepoIdentiferFromIssueEvent(event) && !repo_a) {
           // link to issue will not work as it requires an identifier
           return
         }
@@ -105,8 +105,8 @@ export const ensureIssueSummaries = async (repo_id: string | undefined) => {
               {
                 ...summary_defaults,
                 id: event.id,
-                repo_identifier:
-                  extractRepoIdentiferFromIssueEvent(event) || repo_id || '',
+                repo_a:
+                  extractRepoIdentiferFromIssueEvent(event) || repo_a || '',
                 title: extractIssueTitle(event.content),
                 descritpion: extractIssueDescription(event.content),
                 created_at: event.created_at,
@@ -199,5 +199,5 @@ export const extractRepoIdentiferFromIssueEvent = (
   if (!value) return undefined
   const split = value.split(':')
   if (split.length < 3) return undefined
-  return split[2]
+  return value
 }

@@ -1,10 +1,5 @@
 <script lang="ts">
   import {
-    ensureSelectedRepoCollection,
-    selected_repo_collection,
-    selected_repo_event,
-  } from '$lib/stores/repo'
-  import {
     ensureIssueFull,
     selected_issue_full,
     selected_issue_replies,
@@ -14,36 +9,51 @@
   import ProposalHeader from '$lib/components/proposals/ProposalHeader.svelte'
   import ProposalDetails from '$lib/components/proposals/ProposalDetails.svelte'
   import RepoPageWrapper from '$lib/wrappers/RepoPageWrapper.svelte'
+  import { naddrToRepoA, neventOrNoteToHexId } from '$lib/components/repo/utils'
 
   export let data: {
-    repo_id: string
-    issue_id: string
+    repo_naddr: string
+    issue_nip19: string
   }
 
-  let repo_id = data.repo_id
-  let issue_id = data.issue_id
+  let repo_naddr = data.repo_naddr
+  let a = ''
+  $: {
+    const a_result = naddrToRepoA(repo_naddr)
+    if (a_result) a = a_result
+  }
 
-  ensureSelectedRepoCollection(repo_id)
-  ensureIssueFull(repo_id, issue_id)
+  let issue_nip19 = data.issue_nip19
+  let issue_id = ''
+  let invalid_issue_ref = false
+  $: {
+    const issue_nip19_result = neventOrNoteToHexId(issue_nip19)
+
+    if (issue_nip19_result) {
+      issue_id = issue_nip19_result
+      invalid_issue_ref = false
+      ensureIssueFull(a, issue_id)
+    } else {
+      invalid_issue_ref = true
+    }
+  }
 
   let repo_error = false
   let issue_error = false
   $: {
-    repo_error =
-      !$selected_repo_collection.loading &&
-      $selected_repo_event.name.length === 0
     issue_error =
       !$selected_issue_full.summary.loading &&
       $selected_issue_full.summary.created_at === 0
   }
+
+  let waited_5_secs = false
+  setTimeout(() => {
+    waited_5_secs = true
+  }, 5000)
 </script>
 
-<RepoPageWrapper
-  identifier={repo_id}
-  with_side_bar={false}
-  selected_tab="issues"
->
-  {#if issue_error}
+<RepoPageWrapper {repo_naddr} with_side_bar={false} selected_tab="issues">
+  {#if invalid_issue_ref || (waited_5_secs && issue_error)}
     <Container>
       <div role="alert" class="alert alert-error m-auto mt-6 w-full max-w-xs">
         <svg
@@ -58,8 +68,14 @@
             d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
           /></svg
         >
-        <span>Error! cannot find Issue {repo_error ? 'or repo ' : ''}event</span
-        >
+        {#if invalid_issue_ref}<span
+            >Error! invalid Issue reference: {issue_id} '{issue_nip19}'</span
+          >
+        {:else}
+          <span
+            >Error! cannot find Issue {repo_error ? 'or repo ' : ''}event</span
+          >
+        {/if}
       </div>
     </Container>
   {:else}

@@ -5,17 +5,16 @@
   import { proposal_status_open } from '$lib/kinds'
   import { issue_summaries } from '$lib/stores/Issues'
   import { proposal_summaries } from '$lib/stores/Proposals'
-  import { selected_repo_readme } from '$lib/stores/repo'
+  import { selected_repo_event, selected_repo_readme } from '$lib/stores/repo'
 
   export let selected_tab: RepoPage = 'about'
-  export let identifier = ''
 </script>
 
 <div class="flex border-b border-base-400">
   <div role="tablist" class="tabs tabs-bordered flex-none">
     {#if !$selected_repo_readme.failed}
       <a
-        href={`/repo/${identifier}`}
+        href={`/r/${$selected_repo_event.naddr}`}
         class="tab"
         class:tab-active={selected_tab === 'about'}
       >
@@ -23,7 +22,7 @@
       </a>
     {/if}
     <a
-      href={`/repo/${identifier}/proposals`}
+      href={`/r/${$selected_repo_event.naddr}/proposals`}
       class="tab"
       class:tab-active={selected_tab === 'proposals'}
     >
@@ -44,7 +43,7 @@
       {/if}
     </a>
     <a
-      href={`/repo/${identifier}/issues`}
+      href={`/r/${$selected_repo_event.naddr}/issues`}
       class="tab"
       class:tab-active={selected_tab === 'issues'}
     >

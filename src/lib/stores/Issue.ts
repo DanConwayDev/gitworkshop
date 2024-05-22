@@ -8,7 +8,6 @@ import {
   extractIssueDescription,
   extractIssueTitle,
 } from '$lib/components/events/content/utils'
-import { goto } from '$app/navigation'
 import { selectRepoFromCollection } from '$lib/components/repo/utils'
 
 export const selected_issue_full: Writable<IssueFull> = writable({
@@ -16,7 +15,7 @@ export const selected_issue_full: Writable<IssueFull> = writable({
 })
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-let selected_issue_repo_id: string = ''
+let selected_issue_repo_a: string = ''
 let selected_issue_id: string = ''
 
 export const selected_issue_replies: Writable<NDKEvent[]> = writable([])
@@ -29,7 +28,7 @@ let sub_replies: NDKSubscription
 
 const sub_replies_to_replies: NDKSubscription[] = []
 
-export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
+export const ensureIssueFull = (repo_a: string, issue_id: string) => {
   if (selected_issue_id == issue_id) return
   if (issue_id == '') {
     selected_issue_full.set({ ...full_defaults })
@@ -41,7 +40,7 @@ export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
   if (sub_replies) sub_replies.stop()
   sub_replies_to_replies.forEach((sub) => sub.stop())
 
-  selected_issue_repo_id = repo_identifier
+  selected_issue_repo_a = repo_a
   selected_issue_id = issue_id
   selected_issue_status_date = 0
   selected_issue_replies.set([])
@@ -51,14 +50,14 @@ export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
     summary: {
       ...full_defaults.summary,
       id: issue_id,
-      repo_identifier: repo_identifier,
+      repo_a,
       loading: true,
     },
     loading: true,
   })
 
   new Promise(async (r) => {
-    const repo_collection = await awaitSelectedRepoCollection(repo_identifier)
+    const repo_collection = await awaitSelectedRepoCollection(repo_a)
     const repo = selectRepoFromCollection(repo_collection)
     const relays_to_use =
       repo && repo.relays.length > 3
@@ -79,10 +78,6 @@ export const ensureIssueFull = (repo_identifier: string, issue_id: string) => {
     sub.on('event', (event: NDKEvent) => {
       try {
         if (event.id == issue_id) {
-          const event_repo_id = event.tagValue('a')?.split(':')[2]
-          if (event_repo_id && event_repo_id !== repo_identifier) {
-            goto(`/repo/${encodeURIComponent(event_repo_id)}/issue/${issue_id}`)
-          }
           selected_issue_full.update((full) => {
             return {
               ...full,

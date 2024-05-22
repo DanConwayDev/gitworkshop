@@ -5,9 +5,9 @@
     selected_repo_event,
   } from '$lib/stores/repo'
 
-  export let repo_id = ''
+  export let a = ''
 
-  ensureSelectedRepoCollection(repo_id)
+  ensureSelectedRepoCollection(a)
 </script>
 
 <RepoDetails {...$selected_repo_event} />

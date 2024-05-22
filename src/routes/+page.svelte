@@ -79,7 +79,7 @@
           </h3>
         </div>
         <div class="prose">
-          to host the authoratitive code. eg. Gitea, Github, Gitlab,
+          to host the authoritative code. eg. Gitea, Github, Gitlab,
           BitBucket...
         </div>
       </div>

@@ -6,8 +6,10 @@
   export let {
     event_id,
     identifier,
+    naddr,
     unique_commit,
     name,
+    author,
     description,
     clone,
     web,
@@ -38,11 +40,11 @@
       </div>
     {:else}
       <a
-        href={`/repo/${identifier}`}
+        href={`/r/${naddr}`}
         class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
         >{short_name}</a
       >
     {/if}
-    <RepoMenu {identifier} {selected_tab} />
+    <RepoMenu {selected_tab} />
   </Container>
 </div>

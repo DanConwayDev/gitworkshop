@@ -1,19 +1,12 @@
+import type { AddressPointer } from 'nostr-tools/lib/types/nip19'
 import type { RepoCollection, RepoEvent } from './type'
+import { nip19 } from 'nostr-tools'
+import { repo_kind } from '$lib/kinds'
 
 export const selectRepoFromCollection = (
   collection: RepoCollection
 ): RepoEvent | undefined => {
-  if (collection.selected_event_id && collection.selected_event_id.length > 0)
-    return collection.events.find(
-      (e) => e.event_id === collection.selected_event_id
-    )
-
-  return [...collection.events].sort((a, b) => {
-    const a_ref = a.referenced_by ? a.referenced_by.length : 0
-    const b_ref = b.referenced_by ? b.referenced_by.length : 0
-    if (a_ref === b_ref) return b.created_at - a.created_at
-    return b_ref - a_ref
-  })[0]
+  return collection.events[collection.most_recent_index]
 }
 
 /** most servers will produce a CORS error so a proxy should be used */
@@ -69,4 +62,42 @@ const extractRepoAddress = (clone_string: string): string => {
   s = s.replace(/\s|:[0-9]+/g, '')
   s = s.replace(':', '/')
   return s
+}
+
+const naddrToPointer = (s: string): AddressPointer | undefined => {
+  const decoded = nip19.decode(s)
+  if (
+    typeof decoded.data === 'string' ||
+    !Object.keys(decoded.data).includes('identifier')
+  )
+    return undefined
+  return decoded.data as AddressPointer
+}
+
+export const extractAReference = (a: string): AddressPointer | undefined => {
+  if (a.split(':').length !== 3) return undefined
+  const [k, pubkey, identifier] = a.split(':')
+  return { kind: Number(k), pubkey, identifier }
+}
+
+export const naddrToRepoA = (s: string): string | undefined => {
+  const pointer = naddrToPointer(s)
+  if (pointer && pointer.kind === repo_kind)
+    return `${repo_kind}:${pointer.pubkey}:${pointer.identifier}`
+  return undefined
+}
+
+export const aToNaddr = (
+  a: string | AddressPointer
+): `naddr1${string}` | undefined => {
+  const a_ref = typeof a === 'string' ? extractAReference(a) : a
+  if (!a_ref) return undefined
+  return nip19.naddrEncode(a_ref)
+}
+
+export const neventOrNoteToHexId = (s: string): string | undefined => {
+  const decoded = nip19.decode(s)
+  if (decoded.type === 'note') return decoded.data
+  else if (decoded.type === 'nevent') return decoded.data.id
+  return undefined
 }

@@ -4,16 +4,16 @@
   import RepoPageWrapper from '$lib/wrappers/RepoPageWrapper.svelte'
   import { goto } from '$app/navigation'
 
-  export let data: { repo_id: string }
-  let identifier = data.repo_id
+  export let data: { repo_naddr: string }
+  let repo_naddr = data.repo_naddr
 
   $: {
     if ($selected_repo_readme.failed === true)
-      goto(`/repo/${identifier}/proposals`)
+      goto(`/r/${repo_naddr}/proposals`)
   }
 </script>
 
-<RepoPageWrapper {identifier} selected_tab="about" show_details_on_mobile>
+<RepoPageWrapper {repo_naddr} selected_tab="about" show_details_on_mobile>
   <div class="my-3 rounded-lg border border-base-400">
     <div class="border-b border-base-400 bg-base-300 px-6 py-3">
       <h4 class="">README.md</h4>

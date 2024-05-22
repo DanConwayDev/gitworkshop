@@ -13,24 +13,18 @@
     statusKindtoText,
   } from '$lib/kinds'
   import { getUserRelays, logged_in_user } from '$lib/stores/users'
-  import {
-    selected_repo_collection,
-    selected_repo_event,
-  } from '$lib/stores/repo'
+  import { selected_repo_event } from '$lib/stores/repo'
   import Status from '$lib/components/proposals/Status.svelte'
 
   export let status: number | undefined = undefined
   export let type: 'proposal' | 'issue' = 'proposal'
-  export let repo_identifier: string = ''
   export let proposal_or_issue_id: string = ''
 
   let loading = false
 
   let edit_mode = false
   $: {
-    edit_mode =
-      $logged_in_user !== undefined &&
-      repo_identifier === $selected_repo_collection.identifier
+    edit_mode = $logged_in_user !== undefined
   }
 
   async function changeStatus(new_status_kind: number) {

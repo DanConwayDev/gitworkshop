@@ -1,8 +1,6 @@
 import { NDKRelaySet, type NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk'
-import { writable, type Unsubscriber, type Writable } from 'svelte/store'
+import { writable, type Writable } from 'svelte/store'
 import { base_relays, ndk } from './ndk'
-import type { User } from '$lib/components/users/type'
-import { ensureUser } from './users'
 import {
   type ProposalFull,
   full_defaults,
@@ -10,7 +8,6 @@ import {
 import { proposal_status_kinds, proposal_status_open } from '$lib/kinds'
 import { awaitSelectedRepoCollection } from './repo'
 import { extractPatchMessage } from '$lib/components/events/content/utils'
-import { goto } from '$app/navigation'
 import { selectRepoFromCollection } from '$lib/components/repo/utils'
 
 export const selected_proposal_full: Writable<ProposalFull> = writable({
@@ -18,9 +15,8 @@ export const selected_proposal_full: Writable<ProposalFull> = writable({
 })
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-let selected_proposal_repo_id: string = ''
+let selected_proposal_repo_a: string = ''
 let selected_proposal_id: string = ''
-let proposal_summary_author_unsubsriber: Unsubscriber | undefined
 
 export const selected_proposal_replies: Writable<NDKEvent[]> = writable([])
 
@@ -32,10 +28,7 @@ let sub_replies: NDKSubscription
 
 const sub_replies_to_replies: NDKSubscription[] = []
 
-export const ensureProposalFull = (
-  repo_identifier: string,
-  proposal_id: string
-) => {
+export const ensureProposalFull = (repo_a: string, proposal_id: string) => {
   if (selected_proposal_id == proposal_id) return
   if (proposal_id == '') {
     selected_proposal_full.set({ ...full_defaults })
@@ -47,7 +40,7 @@ export const ensureProposalFull = (
   if (sub_replies) sub_replies.stop()
   sub_replies_to_replies.forEach((sub) => sub.stop())
 
-  selected_proposal_repo_id = repo_identifier
+  selected_proposal_repo_a = repo_a
   selected_proposal_id = proposal_id
   selected_proposal_status_date = 0
   selected_proposal_replies.set([])
@@ -57,16 +50,14 @@ export const ensureProposalFull = (
     summary: {
       ...full_defaults.summary,
       id: proposal_id,
-      repo_identifier: repo_identifier,
+      repo_a,
       loading: true,
     },
     loading: true,
   })
-  if (proposal_summary_author_unsubsriber) proposal_summary_author_unsubsriber()
-  proposal_summary_author_unsubsriber = undefined
 
   new Promise(async (r) => {
-    const repo_collection = await awaitSelectedRepoCollection(repo_identifier)
+    const repo_collection = await awaitSelectedRepoCollection(repo_a)
     const repo = selectRepoFromCollection(repo_collection)
     const relays_to_use =
       repo && repo.relays.length > 3
@@ -87,12 +78,6 @@ export const ensureProposalFull = (
     sub.on('event', (event: NDKEvent) => {
       try {
         if (event.id == proposal_id) {
-          const event_repo_id = event.tagValue('a')?.split(':')[2]
-          if (event_repo_id && event_repo_id !== repo_identifier) {
-            goto(
-              `/repo/${encodeURIComponent(event_repo_id)}/proposal/${proposal_id}`
-            )
-          }
           selected_proposal_full.update((full) => {
             return {
               ...full,
@@ -108,28 +93,10 @@ export const ensureProposalFull = (
                 descritpion: event.tagValue('description') || '',
                 created_at: event.created_at,
                 comments: 0,
-                author: {
-                  hexpubkey: event.pubkey,
-                  loading: true,
-                  npub: '',
-                },
+                author: event.pubkey,
                 loading: false,
               },
             }
-          })
-
-          proposal_summary_author_unsubsriber = ensureUser(
-            event.pubkey
-          ).subscribe((u: User) => {
-            selected_proposal_full.update((full) => {
-              return {
-                ...full,
-                summary: {
-                  ...full.summary,
-                  author: event.pubkey == u.hexpubkey ? u : full.summary.author,
-                },
-              }
-            })
           })
         }
       } catch {}

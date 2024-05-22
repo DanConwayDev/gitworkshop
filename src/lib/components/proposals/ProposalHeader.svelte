@@ -23,7 +23,6 @@
     title,
     descritpion,
     id,
-    repo_identifier,
     comments,
     status,
     status_date,
@@ -86,12 +85,7 @@
           {#if !$logged_in_user}
             <Status {type} {status} edit_mode={false} />
           {:else}
-            <StatusSelector
-              {type}
-              {status}
-              {repo_identifier}
-              proposal_or_issue_id={id}
-            />{/if}
+            <StatusSelector {type} {status} proposal_or_issue_id={id} />{/if}
         </div>
         <div class="mr-3 inline align-middle">
           opened {created_at_ago}

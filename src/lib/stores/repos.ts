@@ -1,64 +1,54 @@
 import {
+  event_defaults,
   collection_defaults,
   type RepoCollection,
   type RepoEvent,
   type RepoSummary,
 } from '$lib/components/repo/type'
-import { NDKRelaySet, type NDKFilter, NDKEvent } from '@nostr-dev-kit/ndk'
+import { NDKRelaySet, NDKEvent } from '@nostr-dev-kit/ndk'
 import { get, writable, type Writable } from 'svelte/store'
 import { base_relays, ndk } from './ndk'
 import { repo_kind } from '$lib/kinds'
-import { selectRepoFromCollection } from '$lib/components/repo/utils'
-import { selected_repo_collection } from './repo'
+import {
+  extractAReference,
+  selectRepoFromCollection,
+} from '$lib/components/repo/utils'
+import { nip19 } from 'nostr-tools'
 
 export const repos: {
-  [unique_commit_or_identifier: string]: Writable<RepoCollection>
+  [a: string]: Writable<RepoEvent>
 } = {}
 
-export const returnRepoCollection = async (
-  unique_commit_or_identifier: string
-): Promise<RepoCollection> => {
-  return new Promise((r) => {
-    const unsubscriber = ensureRepoCollection(
-      unique_commit_or_identifier
-    ).subscribe((c) => {
-      if (!c.loading) {
-        setTimeout(() => {
-          if (unsubscriber) unsubscriber()
-        }, 5)
-        r(c)
-      }
-    })
-  })
-}
+export const repo_collections: {
+  [a: string]: Writable<RepoCollection>
+} = {}
 
-export const ensureRepoCollection = (
-  unique_commit_or_identifier: string
-): Writable<RepoCollection> => {
-  if (!repos[unique_commit_or_identifier]) {
-    let base: RepoCollection = {
-      ...collection_defaults,
+export const ensureRepo = (a: string | NDKEvent): Writable<RepoEvent> => {
+  if (typeof a !== 'string') {
+    const repo_event = eventToRepoEvent(a)
+    if (repo_event) {
+      const a = repoEventToARef(repo_event)
+      repos[a] = writable({ ...repo_event, loading: true })
+      fetchReferencedBy(repo_event)
+      return repos[a]
     }
-    if (unique_commit_or_identifier.length === 40) {
-      base = { ...base, unique_commit: unique_commit_or_identifier }
-    } else {
-      base = { ...base, identifier: unique_commit_or_identifier }
+    return repos['']
+  }
+  if (!repos[a]) {
+    const base: RepoEvent = {
+      ...event_defaults,
     }
 
-    repos[unique_commit_or_identifier] = writable(base)
-    const filter: NDKFilter = base.unique_commit
-      ? {
-          kinds: [repo_kind],
-          '#r': [base.unique_commit],
-          limit: 100,
-        }
-      : {
-          kinds: [repo_kind],
-          '#d': [base.identifier],
-          limit: 100,
-        }
+    repos[a] = writable(base)
+
+    const a_ref = extractAReference(a)
+
+    if (!a_ref) return repos[a]
+
+    const { pubkey, identifier } = a_ref
+
     const sub = ndk.subscribe(
-      filter,
+      { kinds: [repo_kind], '#d': [identifier], authors: [pubkey] },
       {
         groupable: true,
         // default 100
@@ -69,36 +59,122 @@ export const ensureRepoCollection = (
     )
     sub.on('event', (event: NDKEvent) => {
       const repo_event = eventToRepoEvent(event)
+
       if (repo_event) {
-        const collection_for_unique_commit =
-          unique_commit_or_identifier.length === 40
-        // get repo events with same identifer but no unique_commit as
-        // the assumption is that they will be the same repo
-        if (collection_for_unique_commit) {
-          ensureRepoCollection(repo_event.identifier)
-          // we will process them just before we turn loading to true
-        }
-        repos[unique_commit_or_identifier].update((repo_collection) => {
-          return {
-            ...repo_collection,
-            unique_commit:
-              repo_collection.unique_commit.length > 0
-                ? repo_collection.unique_commit
-                : repo_event.unique_commit || '',
-            events: [...repo_collection.events, repo_event as RepoEvent],
-          }
-        })
-        fetchReferencedBy(
-          repo_event,
-          unique_commit_or_identifier,
-          collection_for_unique_commit
+        if (
+          identifier === repo_event.identifier &&
+          pubkey === repo_event.author
         )
+          repos[a].update(() => {
+            return {
+              ...repo_event,
+            }
+          })
+        fetchReferencedBy(repo_event)
         // TODO fetch stargazers
       }
     })
     sub.on('eose', () => {
       // still awaiting reference_by at this point
-      repos[unique_commit_or_identifier].update((repo_collection) => {
+      repos[a].update((repo_event) => {
+        return {
+          ...repo_event,
+          loading: false,
+        }
+      })
+    })
+  }
+  setTimeout(() => {
+    repos[a].update((repo_event) => {
+      return {
+        ...repo_event,
+        loading: false,
+      }
+    })
+  }, 5000)
+  return repos[a]
+}
+
+export const returnRepo = async (a: string): Promise<RepoEvent> => {
+  return new Promise((r) => {
+    const unsubscriber = ensureRepo(a).subscribe((c) => {
+      if (!c.loading) {
+        setTimeout(() => {
+          if (unsubscriber) unsubscriber()
+        }, 5)
+        r(c)
+      }
+    })
+  })
+}
+
+export const ensureRepoCollection = (a: string): Writable<RepoCollection> => {
+  if (!repo_collections[a]) {
+    const base: RepoCollection = {
+      ...collection_defaults,
+      selected_a: a,
+    }
+
+    repo_collections[a] = writable(base)
+
+    const a_ref = extractAReference(a)
+
+    if (!a_ref) return repo_collections[a]
+
+    const { pubkey, identifier } = a_ref
+
+    returnRepo(a).then(async (repo_event) => {
+      if (get(repo_collections[a]).events.length > 0) return
+      repo_collections[a].update((collection) => {
+        return {
+          ...collection,
+          events: [repo_event],
+          maintainers: repo_event.maintainers,
+          most_recent_index: 0,
+        }
+      })
+
+      const new_maintainers: string[] = []
+
+      const addMaintainers = async (m: string) => {
+        const m_repo_event = await returnRepo(`${repo_kind}:${m}:${identifier}`)
+        repo_collections[a].update((collection) => {
+          m_repo_event.maintainers.forEach((m) => {
+            if (
+              ![pubkey, ...collection.maintainers, ...new_maintainers].includes(
+                m
+              )
+            )
+              new_maintainers.push(m)
+          })
+          const events = [...collection.events, m_repo_event]
+          const most_recent = events.sort(
+            (a, b) => b.created_at - a.created_at
+          )[0]
+          return {
+            ...collection,
+            events,
+            most_recent_index: events.findIndex(
+              (e) => e.author === most_recent.author
+            ),
+            maintainers: [...collection.maintainers, ...new_maintainers],
+          }
+        })
+      }
+
+      // add maintainer events
+      await Promise.all(
+        repo_event.maintainers
+          .filter((m) => m !== pubkey)
+          .map((m) => addMaintainers(m))
+      )
+
+      // also add maintainers included in their maintainer events
+      while (new_maintainers.length > 0) {
+        await Promise.all(new_maintainers.map((m) => addMaintainers(m)))
+      }
+
+      repo_collections[a].update((repo_collection) => {
         return {
           ...repo_collection,
           loading: false,
@@ -107,22 +183,35 @@ export const ensureRepoCollection = (
     })
   }
   setTimeout(() => {
-    repos[unique_commit_or_identifier].update((collection) => {
+    repo_collections[a].update((repo_collection) => {
       return {
-        ...collection,
-        events: collection.events.map((e) => ({ ...e, loading: false })),
+        ...repo_collection,
         loading: false,
       }
     })
   }, 5000)
-  return repos[unique_commit_or_identifier]
+  return repo_collections[a]
 }
 
-const fetchReferencedBy = (
-  repo_event: RepoEvent,
-  unique_commit_or_identifier: string,
-  collection_for_unique_commit: boolean
-) => {
+export const returnRepoCollection = async (
+  a: string
+): Promise<RepoCollection> => {
+  return new Promise((r) => {
+    const unsubscriber = ensureRepoCollection(a).subscribe((c) => {
+      if (!c.loading) {
+        setTimeout(() => {
+          if (unsubscriber) unsubscriber()
+        }, 5)
+        r(c)
+      }
+    })
+  })
+}
+
+const repoEventToARef = (repo_event: RepoEvent): string =>
+  `${repo_kind}:${repo_event.author}:${repo_event.identifier}`
+
+const fetchReferencedBy = (repo_event: RepoEvent) => {
   const relays_to_use =
     repo_event.relays.length < 3
       ? repo_event.relays
@@ -130,66 +219,39 @@ const fetchReferencedBy = (
 
   const ref_sub = ndk.subscribe(
     {
-      '#a': [
-        `${repo_kind}:${repo_event.maintainers[0]}:${repo_event.identifier}`,
-      ],
+      '#a': [repoEventToARef(repo_event)],
       limit: 10,
     },
     {
       groupable: true,
       // default 100
       groupableDelay: 200,
-      closeOnEose: !get(selected_repo_collection)
-        .events.map((e) => e.identifier)
-        .includes(repo_event.identifier),
+      closeOnEose: true,
     },
     NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
   )
   ref_sub.on('event', (ref_event: NDKEvent) => {
-    repos[unique_commit_or_identifier].update((repo_collection) => {
+    repos[repoEventToARef(repo_event)].update((repo_event) => {
       return {
-        ...repo_collection,
-        events: [
-          ...repo_collection.events.map((latest_ref_event) => {
-            if (latest_ref_event.event_id === repo_event.event_id) {
-              return {
-                ...latest_ref_event,
-                referenced_by: latest_ref_event.referenced_by
-                  ? [...latest_ref_event.referenced_by, ref_event.id]
-                  : [ref_event.id],
-              }
-            }
-            return latest_ref_event
-          }),
-        ],
+        ...repo_event,
+        referenced_by: repo_event.referenced_by.includes(ref_event.id)
+          ? [...repo_event.referenced_by]
+          : [...repo_event.referenced_by, ref_event.id],
+        most_recent_reference_timestamp:
+          ref_event.created_at &&
+          repo_event.most_recent_reference_timestamp < ref_event.created_at
+            ? ref_event.created_at
+            : repo_event.most_recent_reference_timestamp,
       }
     })
   })
-  ref_sub.on('eose', () => {
-    repos[unique_commit_or_identifier].update((repo_collection) => {
-      const events = [
-        ...repo_collection.events.map((latest_ref_event) => {
-          if (latest_ref_event.event_id === repo_event.event_id) {
-            return {
-              ...latest_ref_event,
-              // finished loading repo_event as we have all referenced_by events
-              loading: false,
-            }
-          }
-          return latest_ref_event
-        }),
-      ]
-      const still_loading_events_in_collection = events.some((e) => e.loading)
-      if (collection_for_unique_commit && !still_loading_events_in_collection)
-        addEventsWithMatchingIdentifiers(events)
 
+  ref_sub.on('eose', () => {
+    repos[repoEventToARef(repo_event)].update((repo_event) => {
       return {
-        ...repo_collection,
-        events,
-        loading:
-          still_loading_events_in_collection ||
-          // for uninque_commit loading will complete after extra identifer events are added
-          collection_for_unique_commit,
+        ...repo_event,
+        // finished loading repo_event as we have all referenced_by events
+        loading: false,
       }
     })
   })
@@ -202,7 +264,10 @@ export const eventToRepoEvent = (event: NDKEvent): RepoEvent | undefined => {
   event.getMatchingTags('maintainers').forEach((t: string[]) => {
     t.forEach((v, i) => {
       if (i > 0 && v !== maintainers[0]) {
-        maintainers.push(v)
+        try {
+          nip19.npubEncode(v) // will throw if invalid hex pubkey
+          maintainers.push(v)
+        } catch {}
       }
     })
   })
@@ -233,6 +298,7 @@ export const eventToRepoEvent = (event: NDKEvent): RepoEvent | undefined => {
   return {
     event_id: event.id,
     naddr: event.encode(),
+    author: event.pubkey,
     identifier: event.replaceableDTag(),
     unique_commit: event.tagValue('r') || undefined,
     name: event.tagValue('name') || '',
@@ -243,6 +309,7 @@ export const eventToRepoEvent = (event: NDKEvent): RepoEvent | undefined => {
     maintainers,
     relays,
     referenced_by: [],
+    most_recent_reference_timestamp: event.created_at || 0,
     created_at: event.created_at || 0,
     loading: true, // loading until references fetched
   }
@@ -256,147 +323,29 @@ export const repoCollectionToSummary = (
   return {
     name: selected.name,
     identifier: selected.identifier,
+    naddr: selected.naddr,
     unique_commit: selected.unique_commit,
     description: selected.description,
     maintainers: selected.maintainers,
     loading: collection.loading,
     created_at: selected.created_at,
+    most_recent_reference_timestamp: Math.max.apply(
+      0,
+      collection.events.map((e) => e.most_recent_reference_timestamp)
+    ),
   } as RepoSummary
 }
 
-/** to be called once all existing events have been found. this
- * function is useful if we assume events with the same
- * identifier reference the same repository */
-const addEventsWithMatchingIdentifiers = (exisiting_events: RepoEvent[]) => {
-  // add events with same identifier but no unique_commit
-  exisiting_events
-    // filter out duplicate identifiers
-    .filter(
-      (e, i) =>
-        exisiting_events.findIndex((v) => v.identifier == e.identifier) === i
-    )
-    // subscribe to each identifier
-    .forEach((repo_event) => {
-      ensureRepoCollection(repo_event.identifier).subscribe(
-        (identiifer_collection) => {
-          // if extra event(s)
-          if (
-            identiifer_collection.events.some(
-              (identifier_repo) =>
-                !exisiting_events.some(
-                  (e) => e.event_id === identifier_repo.event_id
-                )
-            )
-          ) {
-            // add identifier events
-            repos[repo_event.unique_commit as string].update(
-              (repo_collection) => {
-                const events = [
-                  ...repo_collection.events,
-                  ...identiifer_collection.events
-                    .filter(
-                      (identifier_repo) =>
-                        !repo_collection.events.some(
-                          (e) => e.event_id === identifier_repo.event_id
-                        )
-                    )
-                    .map((e) => ({ ...e })),
-                ]
-                return {
-                  ...repo_collection,
-                  events,
-                  // if all RepoEvents are loaded, the collection is too
-                  loading: events.some((e) => e.loading),
-                }
-              }
-            )
-          }
-        }
-      )
-    })
-}
-
-export const recent_repo_summaries: Writable<RepoSummary[]> = writable([])
-
-export const recent_repo_summaries_loading = writable(false)
-
-let began_fetching_repo_events = false
-export const ensureRecentReposEvents = () => {
-  if (began_fetching_repo_events) return
-  began_fetching_repo_events = true
-  recent_repo_summaries_loading.set(true)
-  const sub = ndk.subscribe(
-    {
-      kinds: [repo_kind],
-      limit: 100,
-    },
-    {
-      closeOnEose: false,
-    }
-  )
-  const events: RepoEvent[] = []
-  sub.on('event', (event: NDKEvent) => {
-    const repo_event = eventToRepoEvent(event)
-    if (repo_event) events.push(repo_event)
-  })
-  sub.on('eose', () => {
-    const unique_commits = [
-      ...new Set(events.map((e) => e.unique_commit).filter((s) => !!s)),
-    ] as string[]
-    const identifers_not_linked_to_unique_commit = [
-      ...new Set(events.map((e) => e.identifier)),
-    ].filter(
-      (identifier) =>
-        !events.some((e) => e.identifier == identifier && e.unique_commit)
-    )
-    unique_commits
-      .concat(identifers_not_linked_to_unique_commit)
-      .forEach((c) => {
-        ensureRepoCollection(c).subscribe((repo_collection) => {
-          const summary = repoCollectionToSummary(repo_collection)
-          if (!summary) return
-          recent_repo_summaries.update((repos) => {
-            if (
-              summary.identifier === 'dotfiles' &&
-              repos.some((repo) => repo.identifier === 'dotfiles')
-            )
-              return [...repos]
-            // if duplicate
-            if (
-              repos.some(
-                (repo) =>
-                  (repo.unique_commit &&
-                    repo.unique_commit === repo_collection.unique_commit) ||
-                  (!repo.unique_commit &&
-                    repo.identifier === repo_collection.identifier)
-              )
-            ) {
-              return [
-                // update summary
-                ...repos.map((repo) => {
-                  if (
-                    summary &&
-                    ((repo.unique_commit &&
-                      repo.unique_commit === repo_collection.unique_commit) ||
-                      (!repo.unique_commit &&
-                        repo.identifier === repo_collection.identifier))
-                  )
-                    return summary
-                  return { ...repo }
-                }),
-              ].sort((a, b) => b.created_at - a.created_at)
-            }
-            // if not duplicate - add summary
-            else if (summary) {
-              console.log(
-                `${summary.identifier} ${summary.unique_commit} col ${repo_collection.unique_commit}`
-              )
-              return [...repos, summary]
-            }
-            return [...repos]
-          })
-        })
-      })
-    recent_repo_summaries_loading.set(false)
-  })
+export const repoEventToSummary = (event: RepoEvent): RepoSummary => {
+  return {
+    name: event.name,
+    identifier: event.identifier,
+    naddr: event.naddr,
+    unique_commit: event.unique_commit,
+    description: event.description,
+    maintainers: event.maintainers,
+    loading: event.loading,
+    created_at: event.created_at,
+    most_recent_reference_timestamp: event.most_recent_reference_timestamp,
+  } as RepoSummary
 }

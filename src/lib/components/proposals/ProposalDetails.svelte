@@ -31,7 +31,6 @@
       <StatusSelector
         {type}
         status={summary.status}
-        repo_identifier={summary.repo_identifier}
         proposal_or_issue_id={summary.id}
       />
     {/if}
