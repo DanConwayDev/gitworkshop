@@ -2,31 +2,31 @@
   import Container from '$lib/components/Container.svelte'
   import ReposSummaryList from '$lib/components/ReposSummaryList.svelte'
   import ProposalsList from '$lib/components/proposals/ProposalsList.svelte'
-  import { summary_defaults, type RepoEvent, type RepoSummary } from '$lib/components/repo/type'
+  import {
+    summary_defaults,
+    type RepoEvent,
+    type RepoSummary,
+  } from '$lib/components/repo/type'
   import { repo_kind } from '$lib/kinds'
   import {
     ensureProposalSummaries,
     proposal_summaries,
   } from '$lib/stores/Proposals'
-  import {
-  ensureRepo,
-    ensureRepoCollection,
-    repoCollectionToSummary,
-    repoEventToSummary,
-    returnRepo,
-  } from '$lib/stores/repos'
-import { writable, type Writable } from 'svelte/store'
+  import { ensureRepo, repoEventToSummary } from '$lib/stores/repos'
+  import { writable, type Writable } from 'svelte/store'
 
   ensureProposalSummaries(undefined)
-  
+
   let example_repos: Writable<RepoSummary[]> = writable([])
   const updateRepos = (r: RepoEvent) => {
-    example_repos.update(repos => {
+    example_repos.update((repos) => {
       return [
-        ...repos.filter((s) => s.identifier.length > 0 && s.identifier !== r.identifier),
+        ...repos.filter(
+          (s) => s.identifier.length > 0 && s.identifier !== r.identifier
+        ),
         repoEventToSummary(r) || {
-        ...summary_defaults,
-      },
+          ...summary_defaults,
+        },
       ].sort()
     })
   }
@@ -38,24 +38,6 @@ import { writable, type Writable } from 'svelte/store'
     `${repo_kind}:a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d:gitworkshop`
   ).subscribe(updateRepos)
 </script>
-
-<div role="alert" class="alert">
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    class="h-6 w-6 shrink-0 stroke-current"
-    fill="none"
-    viewBox="0 0 24 24"
-    ><path
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      stroke-width="2"
-      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-    /></svg
-  >
-  <div>
-    <h3 class="prose text-xs">Warning Experimental: expect breaking changes</h3>
-  </div>
-</div>
 
 <Container>
   <div>
@@ -75,104 +57,108 @@ import { writable, type Writable } from 'svelte/store'
 </Container>
 
 <Container>
-  <div class="grid gap-4 md:grid-cols-3">
-    <div class="card bg-base-300">
-      <div class="card-body">
-        <div class="card-title">
-          <h3>nostr</h3>
+  <div class="m-auto max-w-5xl">
+    <div class="grid gap-4 md:grid-cols-3">
+      <div class="card bg-base-300">
+        <div class="card-body">
+          <div class="card-title">
+            <h3>nostr</h3>
+          </div>
+          <div class="prose">
+            An open protocol that is able to create a censorship resistant
+            global "social" network once and for all
+          </div>
         </div>
-        <div class="prose">
-          An open protocol that is able to create a censorship resistant global
-          "social" network once and for all
+      </div>
+      <div class="card bg-base-300">
+        <div class="card-body">
+          <div class="card-title">
+            <h3>
+              <span class="text-purple-600">n</span>git
+            </h3>
+          </div>
+          <div class="prose">
+            a NIP34 compatible command line tool to send and review git patches
+            via nostr. <a class="link link-secondary" href="/ngit">more...</a>
+          </div>
+        </div>
+      </div>
+      <div class="card bg-base-300">
+        <div class="card-body">
+          <div class="card-title">
+            <h3>
+              any <span class="text-yellow-600">git</span> server
+            </h3>
+          </div>
+          <div class="prose">
+            to host the authoritative code. eg. Gitea, Github, Gitlab,
+            BitBucket...
+          </div>
         </div>
       </div>
     </div>
-    <div class="card bg-base-300">
-      <div class="card-body">
-        <div class="card-title">
-          <h3>
-            <span class="text-purple-600">n</span>git
-          </h3>
-        </div>
-        <div class="prose">
-          a NIP34 compatible command line tool to send and review git patches
-          via nostr. <a class="link link-secondary" href="/ngit">more...</a>
-        </div>
-      </div>
-    </div>
-    <div class="card bg-base-300">
-      <div class="card-body">
-        <div class="card-title">
-          <h3>
-            any <span class="text-yellow-600">git</span> server
-          </h3>
-        </div>
-        <div class="prose">
-          to host the authoritative code. eg. Gitea, Github, Gitlab,
-          BitBucket...
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <div class="hidden md:block">
-    <div class="grid h-5 grid-cols-6 gap-0">
-      <div class=""></div>
-      <div class="border-b border-l"></div>
-      <div class="border-b"></div>
-      <div class="border-b border-l"></div>
-      <div class="border-b border-r"></div>
-    </div>
-    <div class="grid h-5 grid-cols-2 gap-0">
-      <div class=""></div>
-      <div class="border-l"></div>
-    </div>
-  </div>
-
-  <div class="grid gap-4 md:grid-cols-3">
-    <div class=""></div>
-    <div class="card bg-base-300">
-      <div class="card-body">
-        <div class="card-title">
-          <h3>
-            <span class="text-purple-600">git</span>workshop<span
-              class="text-neutral">.dev</span
-            >
-          </h3>
-        </div>
-        <div class="prose">
-          A web client to collaborate on git repos via nostr, managing issues
-          and code proposals
-        </div>
+    <div class="hidden md:block">
+      <div class="grid h-5 grid-cols-6 gap-0">
+        <div class=""></div>
+        <div class="border-b border-l"></div>
+        <div class="border-b"></div>
+        <div class="border-b border-l"></div>
+        <div class="border-b border-r"></div>
+      </div>
+      <div class="grid h-5 grid-cols-2 gap-0">
+        <div class=""></div>
+        <div class="border-l"></div>
       </div>
     </div>
-    <div class=""></div>
+
+    <div class="grid gap-4 md:grid-cols-3">
+      <div class=""></div>
+      <div class="card bg-base-300">
+        <div class="card-body">
+          <div class="card-title">
+            <h3>
+              <span class="text-purple-600">git</span>workshop<span
+                class="text-neutral">.dev</span
+              >
+            </h3>
+          </div>
+          <div class="prose">
+            A web client to collaborate on git repos via nostr, managing issues
+            and code proposals
+          </div>
+        </div>
+      </div>
+      <div class=""></div>
+    </div>
   </div>
 </Container>
 
 <Container>
-  <div class="mx-auto my-8 grid gap-4 md:grid-cols-2">
-    <div class="items">
-      <div class="w-lg prose m-auto my-6">
-        <h2>How it works</h2>
-        <p>
-          Git is a decentralized version control system, yet most freedom tech
-          projects use centralized walled gardens on top of git as a social and
-          collaboration layer for code changes.
-        </p>
-        <p>
-          ngit and gitworkshop.dev are tools to enable code collaboration over
-          nostr. ngit allows contributors to manage the flow to open a proposal,
-          maintainers to verify proposals and incorporate them into the project.
-          Gitworkshop.dev provides a visual interface to discuss proposals and
-          open issues.
-        </p>
-        <a href="/about" class="btn btn-secondary text-right">learn more</a>
-      </div>
+  <div class="prose m-auto mb-6 mt-6">
+    <h2>How it works</h2>
+    <p>
+      Git is a decentralized version control system, yet most freedom tech
+      projects use centralized walled gardens on top of git as a social and
+      collaboration layer for code changes.
+    </p>
+    <p>
+      ngit and gitworkshop.dev are tools to enable code collaboration over
+      nostr. ngit allows contributors to manage the flow to open a proposal,
+      maintainers to verify proposals and incorporate them into the project.
+      Gitworkshop.dev provides a visual interface to discuss proposals and open
+      issues.
+    </p>
+    <a href="/about" class="btn btn-secondary text-right">learn more</a>
+    <h2>Example Repositories</h2>
+    <p>These repositories have plenty of issues and proposals to explore</p>
+    <div class="not-prose w-[64rem]">
+      <ReposSummaryList repos={$example_repos} loading={false} />
     </div>
-    <div class="hero">
+    <a href="/repos" class="btn btn-primary mt-9">List More Repositories</a>
+    <h2>Recent Proposals</h2>
+    <div class="not-prose mt-6">
       <ProposalsList
-        title="Recent Proposals"
         proposals_or_issues={$proposal_summaries.summaries}
         show_repo={true}
         loading={$proposal_summaries.loading}
@@ -181,16 +167,4 @@ import { writable, type Writable } from 'svelte/store'
       />
     </div>
   </div>
-</Container>
-
-<Container>
-  <div class="prose mb-6">
-    <h2>Example Repositories</h2>
-    <p>These repositories have plenty of issues and proposals to explore</p>
-  </div>
-  <ReposSummaryList
-    repos={$example_repos}
-    loading={false}
-  />
-  <a href="/repos" class="btn btn-primary mt-9">List More Repositories</a>
 </Container>
