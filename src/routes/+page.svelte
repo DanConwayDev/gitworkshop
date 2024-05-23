@@ -39,6 +39,10 @@
   ).subscribe(updateRepos)
 </script>
 
+<svelte:head>
+  <title>gitworkshop.dev</title>
+</svelte:head>
+
 <Container>
   <div>
     <div class="m-auto mt-5 max-w-lg text-center">

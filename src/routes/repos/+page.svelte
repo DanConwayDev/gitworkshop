@@ -8,6 +8,10 @@
   ensureRecentRepos()
 </script>
 
+<svelte:head>
+  <title>GitWorkshop - Repos</title>
+</svelte:head>
+
 <Container>
   <div class="mt-3">
     <ReposSummaryList

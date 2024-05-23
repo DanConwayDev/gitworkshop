@@ -8,6 +8,7 @@
     statusKindtoText,
   } from '$lib/kinds'
   import { issue_summaries } from '$lib/stores/Issues'
+  import { selected_repo_event } from '$lib/stores/repo'
   import RepoPageWrapper from '$lib/wrappers/RepoPageWrapper.svelte'
 
   export let data: { repo_naddr: string }
@@ -16,6 +17,10 @@
   let filtered: IssueSummary[] = []
   $: filtered = $issue_summaries.summaries.filter((s) => s.status === status)
 </script>
+
+<svelte:head>
+  <title>GitWorkshop: {$selected_repo_event.name} - issues</title>
+</svelte:head>
 
 <RepoPageWrapper {repo_naddr} selected_tab="issues">
   <div class="mt-2 rounded-tr-lg border border-base-400">

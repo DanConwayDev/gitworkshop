@@ -28,6 +28,10 @@
   }
 </script>
 
+<svelte:head>
+  <title>GitWorkshop</title>
+</svelte:head>
+
 {#if error}
   <Container>
     <AlertError>

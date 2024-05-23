@@ -11,6 +11,7 @@
   import RepoPageWrapper from '$lib/wrappers/RepoPageWrapper.svelte'
   import { naddrToRepoA, neventOrNoteToHexId } from '$lib/components/repo/utils'
   import AlertError from '$lib/components/AlertError.svelte'
+  import { selected_repo_event } from '$lib/stores/repo'
 
   export let data: {
     repo_naddr: string
@@ -52,6 +53,13 @@
     waited_5_secs = true
   }, 5000)
 </script>
+
+<svelte:head>
+  <title
+    >GitWorkshop: {$selected_repo_event.name} - {$selected_issue_full.summary
+      .title}</title
+  >
+</svelte:head>
 
 <RepoPageWrapper {repo_naddr} with_side_bar={false} selected_tab="issues">
   {#if invalid_issue_ref || (waited_5_secs && issue_error)}

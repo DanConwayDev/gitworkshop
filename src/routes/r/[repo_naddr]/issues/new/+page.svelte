@@ -33,6 +33,10 @@
   }, 5000)
 </script>
 
+<svelte:head>
+  <title>GitWorkshop: {$selected_repo_event.name} - new issue</title>
+</svelte:head>
+
 {#if invalid_naddr || (waited_5_secs && $selected_repo_collection.loading && $selected_repo_event.name.length)}
   <Container>
     <AlertError>

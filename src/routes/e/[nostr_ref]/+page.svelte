@@ -97,6 +97,10 @@
   }
 </script>
 
+<svelte:head>
+  <title>GitWorkshop - ngit</title>
+</svelte:head>
+
 {#if error && waited}
   <Container>
     <AlertError>

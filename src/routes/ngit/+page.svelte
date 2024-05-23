@@ -2,6 +2,10 @@
   import Container from '$lib/components/Container.svelte'
 </script>
 
+<svelte:head>
+  <title>GitWorkshop - ngit</title>
+</svelte:head>
+
 <Container>
   <div class="prose m-auto mt-8">
     <h2 class=""><span class="text-purple-600">n</span>git</h2>
