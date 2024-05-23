@@ -49,6 +49,7 @@
     if (!$logged_in_user) return
     let new_event = new NDKEvent(ndk)
     new_event.kind = reply_kind
+    if (reply_kind !== 1) event.tags.push(['alt', `git reply`])
     new_event.tags.push([
       'e',
       getRootId(event),

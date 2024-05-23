@@ -17,11 +17,13 @@
     edit_mode = !submitted
   }
 
-  async function sendIssue(content: string) {
+  async function sendIssue(title: string, content: string) {
     if (!$logged_in_user) await login()
     if (!$logged_in_user) return
     let event = new NDKEvent(ndk)
     event.kind = issue_kind
+
+    event.tags.push(['alt', `git repository issue: ${title}`])
 
     if (repo_event.unique_commit) {
       event.tags.push(['r', repo_event.unique_commit])
@@ -33,7 +35,7 @@
       'root',
     ])
     repo_event.maintainers.forEach((m) => event.tags.push(['p', m]))
-    event.content = content
+    event.content = `${title}\n\n${content}`
     submitting = true
     let relays = [
       ...(repo_event.relays.length > 3
@@ -98,7 +100,7 @@
       <div class="flex">
         <div class="flex-auto"></div>
         <button
-          on:click={() => sendIssue(`${title}\n\n${content}`)}
+          on:click={() => sendIssue(title, content)}
           disabled={submitting || title.length < 10}
           class="align-right btn btn-primary btn-sm mt-2 align-bottom"
         >
