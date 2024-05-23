@@ -96,8 +96,11 @@ export const aToNaddr = (
 }
 
 export const neventOrNoteToHexId = (s: string): string | undefined => {
-  const decoded = nip19.decode(s)
-  if (decoded.type === 'note') return decoded.data
-  else if (decoded.type === 'nevent') return decoded.data.id
+  try {
+    const decoded = nip19.decode(s)
+    if (decoded.type === 'note') return decoded.data
+    else if (decoded.type === 'nevent') return decoded.data.id
+  }
+  catch {}
   return undefined
 }
