@@ -10,6 +10,7 @@
   import ProposalDetails from '$lib/components/proposals/ProposalDetails.svelte'
   import RepoPageWrapper from '$lib/wrappers/RepoPageWrapper.svelte'
   import { naddrToRepoA, neventOrNoteToHexId } from '$lib/components/repo/utils'
+  import AlertError from '$lib/components/AlertError.svelte'
 
   export let data: {
     repo_naddr: string
@@ -55,28 +56,14 @@
 <RepoPageWrapper {repo_naddr} with_side_bar={false} selected_tab="proposals">
   {#if invalid_proposal_ref || (waited_5_secs && proposal_error)}
     <Container>
-      <div role="alert" class="alert alert-error m-auto mt-6 w-full max-w-xs">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 shrink-0 stroke-current"
-          fill="none"
-          viewBox="0 0 24 24"
-          ><path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-          /></svg
-        >
-        {#if invalid_proposal_ref}<span
-            >Error! invalid Issue reference: {proposal_id} '{proposal_nip19}'</span
-          >
+      <AlertError>
+        {#if invalid_proposal_ref}
+          <div>Error! invalid Issue reference: {proposal_id}</div>
+          <div class="break-all">'{proposal_nip19}'</div>
         {:else}
-          <span
-            >Error! cannot find Issue {repo_error ? 'or repo ' : ''}event</span
-          >
+          <div>Error! cannot find Issue {repo_error ? 'or repo ' : ''}event</div>
         {/if}
-      </div>
+      </AlertError>
     </Container>
   {:else}
     <ProposalHeader {...$selected_proposal_full.summary} />
