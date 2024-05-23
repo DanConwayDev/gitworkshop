@@ -45,10 +45,10 @@
             )
           } else {
             if (event.kind === issue_kind) {
-              ensureIssueFull(a, id)
+              ensureIssueFull(a, event)
               goto(`/r/${aToNaddr(a)}/issues/${nip19.noteEncode(id)}`)
             } else if (event.kind === patch_kind) {
-              ensureProposalFull(a, id)
+              ensureProposalFull(a, event)
               goto(`/r/${aToNaddr(a)}/proposals/${nip19.noteEncode(id)}`)
             } else {
               showError()

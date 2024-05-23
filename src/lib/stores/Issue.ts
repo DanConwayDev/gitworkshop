@@ -1,4 +1,4 @@
-import { NDKRelaySet, type NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk'
+import { NDKRelaySet, NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk'
 import { writable, type Writable } from 'svelte/store'
 import { base_relays, ndk } from './ndk'
 import { type IssueFull, full_defaults } from '$lib/components/issues/type'
@@ -28,7 +28,14 @@ let sub_replies: NDKSubscription
 
 const sub_replies_to_replies: NDKSubscription[] = []
 
-export const ensureIssueFull = (repo_a: string, issue_id: string) => {
+export const ensureIssueFull = (
+  repo_a: string,
+  issue_id_or_event: string | NDKEvent
+) => {
+  const issue_id =
+    typeof issue_id_or_event === 'string'
+      ? issue_id_or_event
+      : issue_id_or_event.id
   if (selected_issue_id == issue_id) return
   if (issue_id == '') {
     selected_issue_full.set({ ...full_defaults })
@@ -64,54 +71,59 @@ export const ensureIssueFull = (repo_a: string, issue_id: string) => {
         ? repo.relays
         : [...base_relays].concat(repo ? repo.relays : [])
 
-    sub = ndk.subscribe(
-      {
-        ids: [issue_id],
-        limit: 100,
-      },
-      {
-        closeOnEose: false,
-      },
-      NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
-    )
-
-    sub.on('event', (event: NDKEvent) => {
+    const setEvent = (event: NDKEvent) => {
       try {
-        if (event.id == issue_id) {
-          selected_issue_full.update((full) => {
-            return {
-              ...full,
-              issue_event: event,
-              summary: {
-                ...full.summary,
-                title: extractIssueTitle(event.content),
-                descritpion: extractIssueDescription(event.content),
-                created_at: event.created_at,
-                comments: 0,
-                author: event.pubkey,
-                loading: false,
-              },
-            }
-          })
-        }
+        selected_issue_full.update((full) => {
+          return {
+            ...full,
+            issue_event: event,
+            summary: {
+              ...full.summary,
+              title: extractIssueTitle(event.content),
+              descritpion: extractIssueDescription(event.content),
+              created_at: event.created_at,
+              comments: 0,
+              author: event.pubkey,
+              loading: false,
+            },
+          }
+        })
       } catch {}
-    })
+    }
+    if (typeof issue_id_or_event !== 'string') {
+      setEvent(issue_id_or_event)
+    } else {
+      sub = ndk.subscribe(
+        {
+          ids: [issue_id],
+          limit: 100,
+        },
+        {
+          closeOnEose: false,
+        },
+        NDKRelaySet.fromRelayUrls(relays_to_use, ndk)
+      )
 
-    sub.on('eose', () => {
-      selected_issue_full.update((full) => {
-        const updated = {
-          ...full,
-          summary: {
-            ...full.summary,
-            loading: false,
-          },
-        }
-        if (full.loading === false) {
-          r({ ...updated })
-        }
-        return updated
+      sub.on('event', (event: NDKEvent) => {
+        if (event.id == issue_id) setEvent(event)
       })
-    })
+
+      sub.on('eose', () => {
+        selected_issue_full.update((full) => {
+          const updated = {
+            ...full,
+            summary: {
+              ...full.summary,
+              loading: false,
+            },
+          }
+          if (full.loading === false) {
+            r({ ...updated })
+          }
+          return updated
+        })
+      })
+    }
 
     sub_replies = ndk.subscribe(
       {
