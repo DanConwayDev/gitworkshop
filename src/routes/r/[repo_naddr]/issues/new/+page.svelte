@@ -43,7 +43,6 @@
         <div>Error! cannot find repository event:</div>
         <div class="break-all">{repo_naddr}</div>
       {/if}
-
     </AlertError>
   </Container>
 {:else}

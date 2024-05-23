@@ -61,7 +61,9 @@
           <div>Error! invalid Issue reference: {issue_id}</div>
           <div class="break-all">'{issue_nip19}'</div>
         {:else}
-          <div>Error! cannot find Issue {repo_error ? 'or repo ' : ''}event</div>
+          <div>
+            Error! cannot find Issue {repo_error ? 'or repo ' : ''}event
+          </div>
         {/if}
       </AlertError>
     </Container>

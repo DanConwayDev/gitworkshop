@@ -43,13 +43,13 @@
 {#if invalid_naddr || (waited_5_secs && !$selected_repo_collection.loading && $selected_repo_event.name.length === 0)}
   <Container>
     <AlertError>
-        {#if invalid_naddr}
-          <div>Error! invalid naddr in url:</div>
-          <div class="break-all">{repo_naddr}</div>
-        {:else}
-          <div>Error! cannot find repository event:</div>
-          <div class="break-all">{repo_naddr}</div>
-        {/if}
+      {#if invalid_naddr}
+        <div>Error! invalid naddr in url:</div>
+        <div class="break-all">{repo_naddr}</div>
+      {:else}
+        <div>Error! cannot find repository event:</div>
+        <div class="break-all">{repo_naddr}</div>
+      {/if}
     </AlertError>
   </Container>
 {:else}

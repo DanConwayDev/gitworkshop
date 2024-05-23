@@ -31,7 +31,9 @@
 {#if error}
   <Container>
     <AlertError>
-      <div>Error! profile reference in URL is not a valid npub or nprofile::</div>
+      <div>
+        Error! profile reference in URL is not a valid npub or nprofile::
+      </div>
       <div class="break-all">{data.npub}</div>
     </AlertError>
   </Container>

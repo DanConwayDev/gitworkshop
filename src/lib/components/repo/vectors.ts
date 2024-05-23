@@ -36,6 +36,7 @@ export const RepoSummaryCardArgsVectors = {
 const base: RepoEventWithMaintainersMetadata = {
   identifier: '9ee507fc4357d7ee16a5d8901bedcd103f23c17d',
   unique_commit: '9ee507fc4357d7ee16a5d8901bedcd103f23c17d',
+  author: '',
   name: 'Short Name',
   description: 'short description',
   clone: ['github.com/example/example'],
@@ -51,6 +52,7 @@ const base: RepoEventWithMaintainersMetadata = {
   naddr: '',
   web: ['https://gitworkshop.dev/repo/example', 'https://example.com'],
   referenced_by: [],
+  most_recent_reference_timestamp: 0,
   created_at: 0,
 }
 
