@@ -7,6 +7,7 @@
     event_id,
     naddr,
     identifier,
+    author,
     unique_commit,
     name,
     description,
@@ -16,6 +17,7 @@
     maintainers,
     relays,
     referenced_by,
+    most_recent_reference_timestamp,
     created_at,
     loading,
   } = event_defaults

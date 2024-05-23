@@ -22,6 +22,7 @@
   export let {
     title,
     descritpion,
+    repo_a,
     id,
     comments,
     status,

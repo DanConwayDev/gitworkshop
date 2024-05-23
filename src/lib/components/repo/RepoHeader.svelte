@@ -18,6 +18,7 @@
     relays,
     referenced_by,
     created_at,
+    most_recent_reference_timestamp,
     loading,
   } = event_defaults
   export let selected_tab: RepoPage = 'about'
