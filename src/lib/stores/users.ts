@@ -80,6 +80,7 @@ export const nip07_plugin: Writable<undefined | boolean> = writable(undefined)
 export const checkForNip07Plugin = () => {
   if (window.nostr) {
     nip07_plugin.set(true)
+    if (localStorage.getItem('nip07pubkey')) login()
   } else {
     let timerId: NodeJS.Timeout | undefined = undefined
     const intervalId = setInterval(() => {
@@ -87,6 +88,7 @@ export const checkForNip07Plugin = () => {
         clearTimeout(timerId)
         clearInterval(intervalId)
         nip07_plugin.set(true)
+        if (localStorage.getItem('nip07pubkey')) login()
       }
     }, 100)
     timerId = setTimeout(() => {
@@ -108,6 +110,7 @@ export const login = async (): Promise<void> => {
     if (get(nip07_plugin)) {
       try {
         const ndk_user = await signer.blockUntilReady()
+        localStorage.setItem('nip07pubkey', ndk_user.pubkey)
         logged_in_user.set({
           ...user_defaults,
           hexpubkey: ndk_user.pubkey,
