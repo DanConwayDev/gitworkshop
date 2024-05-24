@@ -49,6 +49,10 @@
   <EventWrapperLite author={$author} created_at={event.created_at}>
     reposted by
   </EventWrapperLite>
+{:else if event.kind && event.kind === 5}
+  <EventWrapperLite author={$author} created_at={event.created_at}>
+    deletion requested by
+  </EventWrapperLite>
 {:else if event.kind && event.kind === 30001}
   <EventWrapperLite author={$author} created_at={event.created_at}>
     added to '{getDtag(event) || 'unknown'}' list by
