@@ -18,6 +18,6 @@
         <UserHeader user={author} inline />
       </div>
     </div>
-    <span class="m-auto pr-1 text-xs">{created_at_ago}</span>
+    <span class="m-auto flex-none py-1 text-xs">{created_at_ago}</span>
   </div>
 </div>

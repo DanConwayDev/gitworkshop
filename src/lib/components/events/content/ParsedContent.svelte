@@ -43,7 +43,7 @@
         <UserHeader user={part.hex} inline={true} size="sm" />
       </div>
     {:else if isParsedNevent(part) || isParsedNote(part) || isParsedNaddr(part)}
-      <EventPreview parsed_nostr_ref={part} />
+      <EventPreview pointer={part.data} />
     {:else if isParsedText(part)}
       {part.value}
     {/if}

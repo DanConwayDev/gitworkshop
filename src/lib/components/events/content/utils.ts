@@ -1,5 +1,6 @@
 import type { NDKTag } from '@nostr-dev-kit/ndk'
 import { nip19 } from 'nostr-tools'
+import type { AddressPointer, EventPointer } from 'nostr-tools/lib/types/nip19'
 import { last } from 'ramda'
 
 export const TOPIC = 'topic'
@@ -67,31 +68,29 @@ export const NOSTR_NOTE = 'nostr:note'
 type PartTypeNote = 'nostr:note'
 export type ParsedNote = {
   type: PartTypeNote
-  id: string
-  relays: string[]
+  data: EventPointer
 }
 
 export const NOSTR_NEVENT = 'nostr:nevent'
 type PartTypeNevent = 'nostr:nevent'
 export type ParsedNevent = {
   type: PartTypeNevent
-  id: string
-  relays: string[]
+  data: EventPointer
 }
-
 
 export const NOSTR_NADDR = 'nostr:naddr'
 type PartTypeNaddr = 'nostr:naddr'
 export type ParsedNaddr = {
   type: PartTypeNaddr
-  identifier: string
-  pubkey: string
-  kind: number
-  relays: string[]
+  data: AddressPointer
 }
 
-
-export type ParsedNostrLink = ParsedNpub | ParsedNprofile | ParsedNevent | ParsedNote | ParsedNaddr
+export type ParsedNostrLink =
+  | ParsedNpub
+  | ParsedNprofile
+  | ParsedNevent
+  | ParsedNote
+  | ParsedNaddr
 
 export const TEXT = 'text'
 type PartTypeText = 'text'
@@ -113,7 +112,11 @@ export const isParsedLink = (part: ParsedPart): part is ParsedLink =>
   part.type == LINK
 
 export const isParsedNostrLink = (part: ParsedPart): part is ParsedNostrLink =>
-  part.type == NOSTR_NPUB || part.type == NOSTR_NPROFILE || part.type == NOSTR_NEVENT || part.type == NOSTR_NOTE || part.type == NOSTR_NADDR
+  part.type == NOSTR_NPUB ||
+  part.type == NOSTR_NPROFILE ||
+  part.type == NOSTR_NEVENT ||
+  part.type == NOSTR_NOTE ||
+  part.type == NOSTR_NADDR
 
 export const isParsedNpub = (part: ParsedPart): part is ParsedNpub =>
   part.type == NOSTR_NPUB
@@ -219,13 +222,13 @@ export const parseContent = (content: string, tags: NDKTag[]): ParsedPart[] => {
           return [bech32, { type: NOSTR_NPUB, hex: decoded.data.pubkey }]
         }
         if (decoded.type === 'note') {
-          return [bech32, { type: NOSTR_NOTE, id: decoded.data, relays: [] }]
+          return [bech32, { type: NOSTR_NOTE, data: { id: decoded.data } }]
         }
         if (decoded.type === 'nevent') {
-          return [bech32, { type: NOSTR_NEVENT, id: decoded.data.id, relays: decoded.data.relays || [] }]
+          return [bech32, { type: NOSTR_NEVENT, data: decoded.data }]
         }
         if (decoded.type === 'naddr') {
-          return [bech32, { ...decoded.data, type: NOSTR_NADDR, relays: decoded.data.relays || [] }]
+          return [bech32, { type: NOSTR_NADDR, data: decoded.data }]
         }
       } catch {}
     }
@@ -264,6 +267,14 @@ export const parseContent = (content: string, tags: NDKTag[]): ParsedPart[] => {
 
 export const isCoverLetter = (s: string): boolean => {
   return s.indexOf('PATCH 0/') > 0
+}
+
+export function extractTagContent(
+  name: string,
+  tags: NDKTag[]
+): string | undefined {
+  const tag = tags.find((tag) => tag[0] === name)
+  return tag ? tag[1] : undefined
 }
 
 /** this doesn't work for all patch formats and options */

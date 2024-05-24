@@ -1,58 +1,72 @@
 <script lang="ts">
-  import EventWrapper from '$lib/components/events/EventWrapper.svelte'
-  import EventWrapperLite from '$lib/components/events/EventWrapperLite.svelte'
-  import Status from '$lib/components/events/content/Status.svelte'
-  import Patch from '$lib/components/events/content/Patch.svelte'
-  import ParsedContent from '$lib/components/events/content/ParsedContent.svelte'
-  import { defaults as user_defaults } from '$lib/components/users/type'
-  import { patch_kind, proposal_status_kinds } from '$lib/kinds'
-  import { ensureUser } from '$lib/stores/users'
   import { NDKRelaySet, type NDKEvent } from '@nostr-dev-kit/ndk'
-  import { onDestroy, onMount } from 'svelte'
-  import { get, writable, type Unsubscriber, type Writable } from 'svelte/store'
-  import {
-    extractPatchMessage,
-    isCoverLetter,
-    isParsedNaddr,
-    type ParsedNaddr,
-    type ParsedNevent,
-    type ParsedNote,
-  } from '$lib/components/events/content/utils'
+  import { onMount } from 'svelte'
+  import { get, writable, type Writable } from 'svelte/store'
   import { base_relays, ndk } from '$lib/stores/ndk'
   import EventCard from './EventCard.svelte'
+  import type {
+    AddressPointer,
+    EventPointer,
+  } from 'nostr-tools/lib/types/nip19'
+  import { repo_kind } from '$lib/kinds'
+  import { ensureRepo } from '$lib/stores/repos'
+  import EventWrapperLite from '$lib/components/events/EventWrapperLite.svelte'
+  import Repo from '$lib/components/events/content/Repo.svelte'
 
-  export let parsed_nostr_ref: ParsedNaddr | ParsedNevent | ParsedNote
+  export let pointer: AddressPointer | EventPointer
 
-  let cannot_find_event = false;
+  let cannot_find_event = false
   let event: Writable<undefined | NDKEvent> = writable(undefined)
 
+  const isAddressPointer = (
+    pointer: AddressPointer | EventPointer
+  ): pointer is AddressPointer => {
+    return Object.keys(pointer).includes('identifier')
+  }
+  let is_repo = isAddressPointer(pointer) && pointer.kind == repo_kind
+  let repo =
+    is_repo && isAddressPointer(pointer)
+      ? ensureRepo(`${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`)
+      : undefined
+
   onMount(() => {
-    let sub = ndk.subscribe(
-      isParsedNaddr(parsed_nostr_ref) ? {
-        '#a': [`${parsed_nostr_ref.kind}:${parsed_nostr_ref.pubkey}:${parsed_nostr_ref.identifier}`],
-      } :
-      { ids: [parsed_nostr_ref.id] },
-      {closeOnEose: true},
-      NDKRelaySet.fromRelayUrls([ ...base_relays, ...parsed_nostr_ref.relays ], ndk)
-    )
+    if (!is_repo) {
+      let sub = ndk.subscribe(
+        isAddressPointer(pointer)
+          ? {
+              '#a': [`${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`],
+            }
+          : { ids: [pointer.id] },
+        { closeOnEose: true },
+        NDKRelaySet.fromRelayUrls(
+          pointer.relays ? [...base_relays, ...pointer.relays] : base_relays,
+          ndk
+        )
+      )
 
-    sub.on('event', (e: NDKEvent) => {
-      event.set(e)
-    })
+      sub.on('event', (e: NDKEvent) => {
+        event.set(e)
+      })
 
-    sub.on('eose', () => {
-      if (!get(event)) cannot_find_event = true
-    })
+      sub.on('eose', () => {
+        if (!get(event)) cannot_find_event = true
+      })
+    }
   })
 </script>
 
-  <div class="card shadow-xl border border-base-400 p-2 pt-0 my-3">
-    {#if $event && $event.pubkey}
-      <EventCard event={$event} />
-    {:else if cannot_find_event}
-      cannot find event
-    {:else}
-      loading...
-    {/if}
-  </div>
-
+<div class="card my-3 border border-base-400 shadow-xl">
+  {#if repo && $repo}
+    <EventWrapperLite author={$repo?.author} created_at={$repo?.created_at}>
+      <Repo event={$repo} />
+    </EventWrapperLite>
+  {:else if $event && $event.pubkey}
+    <div class="p-2 pt-0">
+      <EventCard event={$event} preview={true} />
+    </div>
+  {:else if cannot_find_event}
+    <div class="m-3 text-center text-sm">cannot find event</div>
+  {:else}
+    <div class="m-3 text-center text-sm">loading...</div>
+  {/if}
+</div>
