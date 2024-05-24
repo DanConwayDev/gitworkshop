@@ -3,7 +3,10 @@
   import {
     isImage,
     isParsedLink,
+    isParsedNaddr,
+    isParsedNevent,
     isParsedNewLine,
+    isParsedNote,
     isParsedNprofile,
     isParsedNpub,
     isParsedText,
@@ -11,6 +14,7 @@
     type ParsedPart,
   } from './utils'
   import UserHeader from '$lib/components/users/UserHeader.svelte'
+  import EventPreview from '$lib/wrappers/EventPreview.svelte'
   export let content: string = ''
   export let tags: NDKTag[] = []
 
@@ -38,6 +42,8 @@
       <div class="badge badge-neutral">
         <UserHeader user={part.hex} inline={true} size="sm" />
       </div>
+    {:else if isParsedNevent(part) || isParsedNote(part) || isParsedNaddr(part)}
+      <EventPreview parsed_nostr_ref={part} />
     {:else if isParsedText(part)}
       {part.value}
     {/if}

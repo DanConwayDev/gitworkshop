@@ -6,9 +6,6 @@ export const TOPIC = 'topic'
 export const LINKCOLLECTION = 'link[]'
 export const HTML = 'html'
 export const INVOICE = 'invoice'
-export const NOSTR_NOTE = 'nostr:note'
-export const NOSTR_NEVENT = 'nostr:nevent'
-export const NOSTR_NADDR = 'nostr:naddr'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const first = (list: any) => (list ? list[0] : undefined)
@@ -66,7 +63,35 @@ export type ParsedNprofile = {
   relays: string[]
 }
 
-export type ParsedNostrLink = ParsedNpub | ParsedNprofile
+export const NOSTR_NOTE = 'nostr:note'
+type PartTypeNote = 'nostr:note'
+export type ParsedNote = {
+  type: PartTypeNote
+  id: string
+  relays: string[]
+}
+
+export const NOSTR_NEVENT = 'nostr:nevent'
+type PartTypeNevent = 'nostr:nevent'
+export type ParsedNevent = {
+  type: PartTypeNevent
+  id: string
+  relays: string[]
+}
+
+
+export const NOSTR_NADDR = 'nostr:naddr'
+type PartTypeNaddr = 'nostr:naddr'
+export type ParsedNaddr = {
+  type: PartTypeNaddr
+  identifier: string
+  pubkey: string
+  kind: number
+  relays: string[]
+}
+
+
+export type ParsedNostrLink = ParsedNpub | ParsedNprofile | ParsedNevent | ParsedNote | ParsedNaddr
 
 export const TEXT = 'text'
 type PartTypeText = 'text'
@@ -88,13 +113,22 @@ export const isParsedLink = (part: ParsedPart): part is ParsedLink =>
   part.type == LINK
 
 export const isParsedNostrLink = (part: ParsedPart): part is ParsedNostrLink =>
-  part.type == NOSTR_NPUB || part.type == NOSTR_NPROFILE
+  part.type == NOSTR_NPUB || part.type == NOSTR_NPROFILE || part.type == NOSTR_NEVENT || part.type == NOSTR_NOTE || part.type == NOSTR_NADDR
 
 export const isParsedNpub = (part: ParsedPart): part is ParsedNpub =>
   part.type == NOSTR_NPUB
 
 export const isParsedNprofile = (part: ParsedPart): part is ParsedNprofile =>
   part.type == NOSTR_NPROFILE
+
+export const isParsedNevent = (part: ParsedPart): part is ParsedNevent =>
+  part.type == NOSTR_NEVENT
+
+export const isParsedNote = (part: ParsedPart): part is ParsedNote =>
+  part.type == NOSTR_NOTE
+
+export const isParsedNaddr = (part: ParsedPart): part is ParsedNaddr =>
+  part.type == NOSTR_NADDR
 
 export const isParsedText = (part: ParsedPart): part is ParsedText =>
   part.type == TEXT
@@ -183,6 +217,15 @@ export const parseContent = (content: string, tags: NDKTag[]): ParsedPart[] => {
         }
         if (decoded.type === 'nprofile') {
           return [bech32, { type: NOSTR_NPUB, hex: decoded.data.pubkey }]
+        }
+        if (decoded.type === 'note') {
+          return [bech32, { type: NOSTR_NOTE, id: decoded.data, relays: [] }]
+        }
+        if (decoded.type === 'nevent') {
+          return [bech32, { type: NOSTR_NEVENT, id: decoded.data.id, relays: decoded.data.relays || [] }]
+        }
+        if (decoded.type === 'naddr') {
+          return [bech32, { ...decoded.data, type: NOSTR_NADDR, relays: decoded.data.relays || [] }]
         }
       } catch {}
     }
