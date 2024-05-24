@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { logout } from '$lib/stores/users'
   import Container from './Container.svelte'
   import UserHeader from './users/UserHeader.svelte'
   import type { User } from './users/type'
@@ -24,7 +25,18 @@
       </div>
       <div class="navbar-end gap-4">
         {#if logged_in_user}
-          <UserHeader user={logged_in_user} />
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="m-1">
+            <UserHeader user={logged_in_user} link_to_profile={false} />
+          </div>
+          <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+          <ul tabindex="0" class="dropdown-content z-[1] menu -mr-4 p-2 shadow bg-base-400 rounded-box">
+            <li><UserHeader user={logged_in_user} /></li>
+            <!-- svelte-ignore a11y-click-events-have-key-events -->
+            <!-- svelte-ignore a11y-missing-attribute -->
+            <li><a on:click={()=>{logout()}}>Logout</a></li>
+          </ul>
+        </div>
         {:else if nip07_plugin === undefined}
           <div class="skeleton h-8 w-20"></div>
         {:else if nip07_plugin}

@@ -130,6 +130,12 @@ export const login = async (): Promise<void> => {
   })
 }
 
+export const logout = async (): Promise<void> => {
+  logged_in_user.set(undefined)
+  localStorage.removeItem('nip07pubkey')
+  ndk.signer = undefined
+}
+
 interface UserRelays {
   loading: boolean
   ndk_relays: NDKRelayList | undefined
