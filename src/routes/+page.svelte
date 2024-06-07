@@ -156,7 +156,7 @@
     <a href="/about" class="btn btn-secondary text-right">learn more</a>
     <h2>Example Repositories</h2>
     <p>These repositories have plenty of issues and proposals to explore</p>
-    <div class="not-prose w-[64rem]">
+    <div class="not-prose lg:w-[64rem]">
       <ReposSummaryList repos={$example_repos} loading={false} />
     </div>
     <a href="/repos" class="btn btn-primary mt-9">List More Repositories</a>
