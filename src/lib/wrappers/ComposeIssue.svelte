@@ -5,6 +5,7 @@
   import { getUserRelays, logged_in_user, login } from '$lib/stores/users'
   import type { RepoEvent } from '$lib/components/repo/type'
   import { goto } from '$app/navigation'
+  import { nip19 } from 'nostr-tools'
 
   export let repo_event: RepoEvent
 
@@ -63,7 +64,7 @@
       submitting = false
       submitted = true
       setTimeout(() => {
-        goto(`/r/${repo_event.identifier}/issues/${event.id}`)
+        goto(`/r/${repo_event.naddr}/issues/${nip19.noteEncode(event.id)}`)
       }, 2000)
     } catch {}
   }
