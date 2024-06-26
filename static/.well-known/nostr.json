@@ -1,0 +1,12 @@
+{
+  "names": {
+    "DanConwayDev": "a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d"
+  },
+  "nip46": {
+    "DanConwayDev": {
+        "a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d": [
+            "wss://relay.nsec.app"
+        ]
+    }
+  }
+}
