@@ -17,8 +17,11 @@
   $: {
     edit_mode = !submitted
   }
-
+  let submit_attempted = false
+  
   async function sendIssue(title: string, content: string) {
+    submit_attempted = true
+    if (title.length < 10) return
     if (!$logged_in_user) await login()
     if (!$logged_in_user) return
     let event = new NDKEvent(ndk)
@@ -80,9 +83,13 @@
         <input
           type="text"
           bind:value={title}
-          class="input-neutral input input-sm input-bordered mb-3 w-full"
+          class="input-neutral input input-sm input-bordered mb-3 w-full border-warning"
+          class:border-warning={submit_attempted && title.length < 10}
           placeholder="title"
         />
+        {#if submit_attempted && title.length < 10}
+          <div class="text-warning pr-3 text-sm align-middle">title must be at least 10 characters</div>
+        {/if}
       </label>
       <label class="form-control w-full">
         <div class="label">
@@ -98,12 +105,15 @@
         ></textarea>
       </label>
 
-      <div class="flex">
+      <div class="flex items-center mt-2">
         <div class="flex-auto"></div>
+        {#if submit_attempted && title.length < 10}
+          <div class="text-warning pr-3 text-sm align-middle">title must be at least 10 characters</div>
+        {/if}
         <button
           on:click={() => sendIssue(title, content)}
-          disabled={submitting || title.length < 10}
-          class="align-right btn btn-primary btn-sm mt-2 align-bottom"
+          disabled={submitting || (submit_attempted && title.length < 10)}
+          class="btn btn-primary btn-sm"
         >
           {#if submitting}
             Sending
