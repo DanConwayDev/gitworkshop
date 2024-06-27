@@ -39,13 +39,17 @@ export const ensureRepo = (a: string | NDKEvent): Writable<RepoEvent> => {
       ...event_defaults,
     }
 
-    repos[a] = writable(base)
-
     const a_ref = extractAReference(a)
 
-    if (!a_ref) return repos[a]
+    if (!a_ref) return writable(base)
 
     const { pubkey, identifier } = a_ref
+
+    repos[a] = writable({
+      ...base,
+      identifier,
+      author: pubkey,
+    })
 
     const sub = ndk.subscribe(
       { kinds: [repo_kind], '#d': [identifier], authors: [pubkey] },
