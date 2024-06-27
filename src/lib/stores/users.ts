@@ -8,7 +8,14 @@ import { ndk } from './ndk'
 
 export const users: { [hexpubkey: string]: Writable<UserObject> } = {}
 
+let empty_user: Writable<UserObject> = writable({
+  loading: true,
+  hexpubkey:'',
+  npub: "npub...",
+})
+
 export const ensureUser = (hexpubkey: string): Writable<UserObject> => {
+  if (hexpubkey === '') return empty_user;
   if (!users[hexpubkey]) {
     const u = ndk.getUser({ hexpubkey })
 
