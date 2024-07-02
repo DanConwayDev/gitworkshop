@@ -6,6 +6,16 @@
   <title>GitWorkshop - About</title>
 </svelte:head>
 
+<!--
+  Proposed style:
+  o headers and titles are capitalized, but with no ending period.
+  o sentences are not capitalized, but end with period when followed
+    by another sentence (period as separator, not terminator)
+  o bullet points are not capitalized, use period as terminator as above
+  o identifiers MAY use html code style to avoid confusion with
+    period when ending a sentence.
+-->
+
 <Container>
   <div class="prose m-auto mt-8">
     <h2 class="">About</h2>
@@ -28,7 +38,7 @@
 
     <p>
       gitworkshop.dev aims to support all things git on nostr, such as the yet
-      to be released and NostrNest and gnostr. ngit is more opinionated focusing
+      to be released and NostrNest and gnostr. ngit is more opinionated, focusing
       on nip34+
     </p>
 
@@ -72,9 +82,10 @@
     </div>
 
     <p>
-      should we focus on improving the PR-like experiences or remove them in
+      should we focus on improving the PR-like experiences, or remove them in
       favor of traditional patch-model patch application? please let use know!
     </p>
+
     <h3>The Need</h3>
 
     <p>
@@ -92,31 +103,31 @@
     <h3>The Opportunity</h3>
 
     <p>
-      whilst alternatives do exist, nearly all of them involve moving to an
+      whilst alternatives do exist, nearly all of them involve moving to
       another walled garden, either controlled by a different centralized
-      guardian, or self-hosted which is less suitable for a anarchic project
+      guardian, or self-hosted which is less suitable for an anarchic project
     </p>
     <p>
       some projects use patches-over-email: an alternative and decentralized
       approach that pre-dates GitHub. despite its antiquated tooling, it has a
       very smooth and effective workflow for those that use it regularly and has
-      proven to scale to very large projects like the linux kernal.
+      proven to scale to very large projects like the linux kernel
     </p>
 
     <p>
       ultimately, GitHub remains by far the most popular choice for freedom tech
-      projects. The accessible UX, convenience, inter-connected tooling and
+      projects. the accessible UX, convenience, inter-connected tooling and
       network effect are just a few of the reasons
     </p>
 
     <p>
-      nostr is the ideal permissionless, decentralized and censorship resistant
+      nostr is the ideal permissionless, decentralized, and censorship resistant
       social layer for the anarchic FOSS code collaboration use case
     </p>
 
     <p>
-      there is an opportunity to build modern tooling that compete from a UX
-      perspective and have the additional benefit of integrating into a wider
+      there is an opportunity to build modern tooling that competes from a UX
+      perspective and has the additional benefit of integrating into a wider
       social ecosystem
     </p>
 
@@ -127,7 +138,7 @@
       gitworkshop.dev aims to work with different approaches
     </p>
 
-    <p>ngit is more opinionated and its philosophy can be summed up as:</p>
+    <p>ngit is more opinionated, and its philosophy can be summed up as:</p>
     <ul>
       <li><strong>let git be git</strong> - don't try and reinvent git</li>
       <li>
@@ -149,16 +160,16 @@
     <h3>The Protocol</h3>
 
     <p>
-      <strong>nip34</strong> is draft nip (nostr protocol) for sending git patches
+      <strong>nip34</strong> is a draft nip (nostr protocol) for sending git patches
       over nostr, similar to how patches are sent via email using `git format-patch`
-      and `git send-email`. The patches-over-email model has proven to be a robust
-      workflow that is used extensively; including in very large project such as
+      and `git send-email`. the patches-over-email model has proven to be a robust
+      workflow that is used extensively, including in very large projects such as
       the linux kernel
     </p>
 
     <p>
       ngit and gitworkshop.dev are experimenting with some additional, backwards
-      compatible features (<strong>nip34+</strong> for shorthand), some of which
+      compatible, features (<strong>nip34+</strong> for shorthand), some of which
       may make it into the nip34 specification:
     </p>
 
@@ -184,7 +195,7 @@
             >)
           </li>
           <li>
-            proposal can be checked out as a branch which reflects the repo
+            a proposal can be checked out as a branch which reflects the repo
             state when the proposal was generated with pgp signatures intact
             <ul>
               <li>
@@ -200,16 +211,16 @@
           <li>
             features can be 'merged' using a 'merge commit' so that a series of
             feature commits can remain distinct rather than each applied to the
-            main branch directly.
+            main branch directly
           </li>
         </ul>
       </li>
       <li>
-        multiple maintainers for a repository and a pathway to smoothly
+        support multiple maintainers for a repository and a pathway to smoothly
         transition maintainership when a maintainer moves on
       </li>
       <li>
-        ensure that user who have already cloned the repository dont get scammed
+        ensure that users who have already cloned the repository dont get scammed
         by someone else issuing a repository event, pretending to be the
         maintainer, and directing users to a malicious git server
         <ul>
@@ -226,11 +237,11 @@
                 a fallback is used to prevent contributors from needing to know
                 the event id if a maintainer is not ready to add a nostr
                 specific file to the repository. ngit tags the earliest unique
-                commit id in the repo event. ngit defaults to uses the most
+                commit id in the repo event. ngit defaults to using the most
                 recent repo event it finds with this tag. it also tags all
-                proposals with this id and when listing patches, also includes
+                proposals with this id and when listing patches, and also includes
                 patches sent to other repo events with this id as it is clearly
-                intended for the same repo.
+                intended for the same repo
               </li>
             </ul>
           </li>
@@ -241,19 +252,19 @@
     <h3>FAQs</h3>
 
     <h4>
-      Your not replacing GitHub, your still using it GitHub as a git server.
+      You're not replacing GitHub, you're still using GitHub as a git server
     </h4>
     <p>
-      it is trivial to switch git servers as they all operate the exact same
+      it is trivial to switch git servers as they all operate with the exact same
       protocol. changing the social layer requires a social and UX shift which
-      can be challenging, disruptive and timeconsuming.
+      can be challenging, disruptive and timeconsuming
     </p>
 
-    <h4>are you trying to replicate / replace Github?</h4>
+    <h4>Are you trying to replicate / replace Github?</h4>
 
     <p>
       no. GitHub is a very large product with a lot of features which don't meet
-      the goal of freedom tech code collaboration.
+      the goal of freedom tech code collaboration
     </p>
     <p>
       we are specifically looking to address the needs of anarchic FOSS freedom
@@ -273,7 +284,7 @@
       </li>
       <li>
         repo event showing authoritive tip of main branch and referencing
-        multiple git_server mirros? <i>Hell yeah!</i>
+        multiple git_server mirrors? <i>Hell yeah!</i>
       </li>
     </ul>
 
