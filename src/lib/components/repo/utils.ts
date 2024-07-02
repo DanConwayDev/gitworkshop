@@ -64,7 +64,7 @@ const extractRepoAddress = (clone_string: string): string => {
   return s
 }
 
-const naddrToPointer = (s: string): AddressPointer | undefined => {
+export const naddrToPointer = (s: string): AddressPointer | undefined => {
   const decoded = nip19.decode(s)
   if (
     typeof decoded.data === 'string' ||

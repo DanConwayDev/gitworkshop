@@ -84,6 +84,7 @@
       </div>
     {:else}
       <ProposalsList
+        repo_naddr_override={repo_naddr}
         proposals_or_issues={filtered}
         loading={$issue_summaries.loading}
       />

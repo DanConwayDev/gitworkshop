@@ -14,7 +14,7 @@
     proposal_status_open,
   } from '$lib/kinds'
   import { issue_icon_path } from '../issues/icons'
-  import { aToNaddr, extractAReference } from '../repo/utils'
+  import { aToNaddr, naddrToPointer } from '../repo/utils'
   import { nip19 } from 'nostr-tools'
 
   dayjs.extend(relativeTime)
@@ -33,6 +33,7 @@
     loading,
   } = summary_defaults
   export let show_repo: boolean = false
+  export let repo_naddr_override: string | undefined = undefined;
   let short_title: string
   let created_at_ago: string
   $: {
@@ -45,9 +46,10 @@
   let repo_identifier = ''
   $: {
     if (repo_a.length > 0) {
-      repo_naddr = aToNaddr(repo_a) || ''
-      let a_ref = extractAReference(repo_a)
-      repo_identifier = a_ref ? a_ref.identifier : ''
+      repo_naddr = repo_naddr_override || aToNaddr(repo_a) || ''
+      if (repo_naddr_override) {
+        repo_identifier = naddrToPointer(repo_naddr)?.identifier || ''
+      }
     }
   }
 </script>

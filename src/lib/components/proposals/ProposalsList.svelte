@@ -5,6 +5,7 @@
 
   export let title: string = ''
   export let proposals_or_issues: ProposalSummary[] | IssueSummary[] = []
+  export let repo_naddr_override: string | undefined = undefined;
   export let loading: boolean = false
   export let show_repo: boolean = false
   export let limit: number = 0
@@ -25,7 +26,7 @@
   <ul class=" divide-y divide-base-400">
     {#each sort_youngest_first ? proposals_or_issues.sort((a, b) => (b.created_at || 0) - (a.created_at || 0)) : proposals_or_issues as proposal, index}
       {#if current_limit === 0 || index + 1 <= current_limit}
-        <ProposalsListItem {...proposal} {show_repo} />
+        <ProposalsListItem {...proposal} {repo_naddr_override} {show_repo} />
       {/if}
     {/each}
     {#if loading}
