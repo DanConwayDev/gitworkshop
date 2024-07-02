@@ -10,6 +10,7 @@ import { get, writable, type Writable } from 'svelte/store'
 import { base_relays, ndk } from './ndk'
 import { repo_kind } from '$lib/kinds'
 import {
+  aToNaddr,
   extractAReference,
   selectRepoFromCollection,
 } from '$lib/components/repo/utils'
@@ -49,6 +50,7 @@ export const ensureRepo = (a: string | NDKEvent): Writable<RepoEvent> => {
       ...base,
       identifier,
       author: pubkey,
+      naddr: aToNaddr(a_ref) || '',
     })
 
     const sub = ndk.subscribe(
