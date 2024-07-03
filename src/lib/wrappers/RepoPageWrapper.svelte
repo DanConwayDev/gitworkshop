@@ -65,7 +65,7 @@
         <div class="border-b border-base-400 bg-base-300 px-6 py-3 md:hidden">
           <h4 class="">Repository Details</h4>
         </div>
-        <div class="prose my-3 px-6 md:ml-2 md:px-0">
+        <div class="prose my-3 px-6 md:ml-2 md:px-0 w-full">
           <RepoDetails {a} />
         </div>
       </div>
