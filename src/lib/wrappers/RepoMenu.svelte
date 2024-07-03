@@ -34,7 +34,9 @@
         <path d={proposal_icon_path.open_pull} />
       </svg>
       Proposals
-      {#if !$proposal_summaries.loading && $proposal_summaries.summaries.filter((s) => s.status === proposal_status_open).length > 0}
+      {#if  $proposal_summaries.loading}
+        <span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
+      {:else if $proposal_summaries.summaries.filter((s) => s.status === proposal_status_open).length > 0}
         <span class="badge badge-neutral badge-sm ml-2">
           {$proposal_summaries.summaries.filter(
             (s) => s.status === proposal_status_open
@@ -57,7 +59,9 @@
         {/each}
       </svg>
       Issues
-      {#if !$issue_summaries.loading && $issue_summaries.summaries.filter((s) => s.status === proposal_status_open).length > 0}
+      {#if  $issue_summaries.loading}
+        <span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
+      {:else if $issue_summaries.summaries.filter((s) => s.status === proposal_status_open).length > 0}
         <span class="badge badge-neutral badge-sm ml-2">
           {$issue_summaries.summaries.filter(
             (s) => s.status === proposal_status_open
