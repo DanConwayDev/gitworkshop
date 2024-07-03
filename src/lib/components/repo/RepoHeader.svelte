@@ -1,5 +1,6 @@
 <script lang="ts">
   import RepoMenu from '$lib/wrappers/RepoMenu.svelte'
+  import UserHeader from '$lib/components/users/UserHeader.svelte'
   import Container from '../Container.svelte'
   import { event_defaults, type RepoPage } from './type'
 
@@ -45,6 +46,11 @@
         class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
         >{short_name}</a
       >
+      {#if created_at === 0 && name.length === 0}
+        <span class="text-xs text-warning">
+          cannot find referenced repository event by <UserHeader user={author} inline />
+        </span>    
+      {/if}
     {/if}
     <RepoMenu {selected_tab} />
   </Container>

@@ -51,6 +51,7 @@ export const ensureRepo = (a: string | NDKEvent): Writable<RepoEvent> => {
       identifier,
       author: pubkey,
       naddr: aToNaddr(a_ref) || '',
+      maintainers: [pubkey], 
     })
 
     const sub = ndk.subscribe(

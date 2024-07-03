@@ -40,40 +40,37 @@
   }, 5000)
 </script>
 
-{#if invalid_naddr || (waited_5_secs && !$selected_repo_collection.loading && $selected_repo_event.name.length === 0)}
+<RepoHeader {...$selected_repo_event} {selected_tab} />
+{#if invalid_naddr}
   <Container>
     <AlertError>
-      {#if invalid_naddr}
-        <div>Error! invalid naddr in url:</div>
-        <div class="break-all">{repo_naddr}</div>
-      {:else}
-        <div>Error! cannot find repository event:</div>
-        <div class="break-all">{repo_naddr}</div>
-      {/if}
+      <div>Error! invalid naddr in url:</div>
+      <div class="break-all">{repo_naddr}</div>
     </AlertError>
   </Container>
-{:else}
-  <RepoHeader {...$selected_repo_event} {selected_tab} />
-  {#if with_side_bar}
-    <Container>
-      <div class="mt-2 md:flex">
-        <div class="md:mr-2 md:w-2/3">
-          <slot />
+  <Container>
+    <slot />
+  </Container>
+{/if}
+{#if with_side_bar}
+  <Container>
+    <div class="mt-2 md:flex">
+      <div class="md:mr-2 md:w-2/3">
+        <slot />
+      </div>
+      <div
+        class:hidden={!show_details_on_mobile}
+        class=" rounded-lg border border-base-400 md:flex md:w-1/3 md:border-none"
+      >
+        <div class="border-b border-base-400 bg-base-300 px-6 py-3 md:hidden">
+          <h4 class="">Repository Details</h4>
         </div>
-        <div
-          class:hidden={!show_details_on_mobile}
-          class=" rounded-lg border border-base-400 md:flex md:w-1/3 md:border-none"
-        >
-          <div class="border-b border-base-400 bg-base-300 px-6 py-3 md:hidden">
-            <h4 class="">Repository Details</h4>
-          </div>
-          <div class="prose my-3 px-6 md:ml-2 md:px-0">
-            <RepoDetails {a} />
-          </div>
+        <div class="prose my-3 px-6 md:ml-2 md:px-0">
+          <RepoDetails {a} />
         </div>
       </div>
-    </Container>
-  {:else}
-    <slot />
-  {/if}
+    </div>
+  </Container>
+{:else}
+  <slot />
 {/if}
