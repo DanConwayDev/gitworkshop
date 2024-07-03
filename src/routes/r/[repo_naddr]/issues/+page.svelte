@@ -80,7 +80,7 @@
     </div>
     {#if !$issue_summaries.loading && filtered.length === 0}
       <div class="py-10 text-center lowercase">
-        there aren't any {statusKindtoText(status, 'issue')} issues
+        can't find any {statusKindtoText(status, 'issue')} issues
       </div>
     {:else}
       <ProposalsList

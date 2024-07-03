@@ -84,7 +84,7 @@
     </div>
     {#if filtered.length === 0}
       <div class="py-10 text-center lowercase">
-        there aren't any {statusKindtoText(status, 'proposal')} proposals
+        can't find any {statusKindtoText(status, 'proposal')} proposals
       </div>
     {:else}
       <ProposalsList
