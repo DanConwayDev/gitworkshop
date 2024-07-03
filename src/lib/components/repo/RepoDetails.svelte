@@ -234,7 +234,7 @@
           }, 2000)
         } catch {}
       }}
-      class="group -m-3 mt-3 cursor-pointer rounded-md p-3 hover:bg-base-300"
+      class="group -ml-3 mt-3 cursor-pointer rounded-md p-3 hover:bg-base-300"
     >
       <h4 class="mt-0 pt-0">
         naddr
