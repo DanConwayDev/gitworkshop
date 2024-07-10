@@ -24,7 +24,10 @@ export const repo_collections: {
   [a: string]: Writable<RepoCollection>
 } = {}
 
-export const ensureRepo = (a: string | NDKEvent): Writable<RepoEvent> => {
+export const ensureRepo = (
+  a: string | NDKEvent,
+  naddr_relays: string[] | undefined = undefined,
+): Writable<RepoEvent> => {
   if (typeof a !== 'string') {
     const repo_event = eventToRepoEvent(a)
     if (repo_event) {
@@ -62,7 +65,7 @@ export const ensureRepo = (a: string | NDKEvent): Writable<RepoEvent> => {
         groupableDelay: 200,
         closeOnEose: false,
       },
-      NDKRelaySet.fromRelayUrls(base_relays, ndk)
+      NDKRelaySet.fromRelayUrls([...base_relays, ...(naddr_relays || [])], ndk)
     )
     sub.on('event', (event: NDKEvent) => {
       const repo_event = eventToRepoEvent(event)
@@ -102,9 +105,12 @@ export const ensureRepo = (a: string | NDKEvent): Writable<RepoEvent> => {
   return repos[a]
 }
 
-export const returnRepo = async (a: string): Promise<RepoEvent> => {
+export const returnRepo = async (
+  a: string,
+  naddr_relays: string[] | undefined = undefined,
+): Promise<RepoEvent> => {
   return new Promise((r) => {
-    const unsubscriber = ensureRepo(a).subscribe((c) => {
+    const unsubscriber = ensureRepo(a, naddr_relays).subscribe((c) => {
       if (!c.loading) {
         setTimeout(() => {
           if (unsubscriber) unsubscriber()
@@ -115,7 +121,10 @@ export const returnRepo = async (a: string): Promise<RepoEvent> => {
   })
 }
 
-export const ensureRepoCollection = (a: string): Writable<RepoCollection> => {
+export const ensureRepoCollection = (
+  a: string,
+  naddr_relays: string[] | undefined = undefined,
+): Writable<RepoCollection> => {
   if (!repo_collections[a]) {
     const base: RepoCollection = {
       ...collection_defaults,
@@ -130,7 +139,7 @@ export const ensureRepoCollection = (a: string): Writable<RepoCollection> => {
 
     const { pubkey, identifier } = a_ref
 
-    returnRepo(a).then(async (repo_event) => {
+    returnRepo(a, naddr_relays).then(async (repo_event) => {
       if (get(repo_collections[a]).events.length > 0) return
       repo_collections[a].update((collection) => {
         return {

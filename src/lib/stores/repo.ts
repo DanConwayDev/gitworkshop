@@ -35,13 +35,14 @@ let selected_repo_a: string = ''
 let selected_unsubscriber: Unsubscriber
 
 export const ensureSelectedRepoCollection = (
-  a: string
+  a: string,
+  naddr_relays: string[] | undefined = undefined,
 ): Writable<RepoCollection> => {
   if (selected_repo_a !== a) {
     let loading = true
     selected_repo_a = a
     if (selected_unsubscriber) selected_unsubscriber()
-    selected_unsubscriber = ensureRepoCollection(a).subscribe(
+    selected_unsubscriber = ensureRepoCollection(a, naddr_relays).subscribe(
       (repo_collection) => {
         selected_repo_collection.set({ ...repo_collection })
         if (loading && !repo_collection.loading) {

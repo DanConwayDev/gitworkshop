@@ -10,7 +10,7 @@
   import { ensureProposalSummaries } from '$lib/stores/Proposals'
   import { ensureIssueSummaries } from '$lib/stores/Issues'
   import type { RepoPage } from '$lib/components/repo/type'
-  import { naddrToRepoA } from '$lib/components/repo/utils'
+  import { naddrToPointer, naddrToRepoA } from '$lib/components/repo/utils'
   import AlertError from '$lib/components/AlertError.svelte'
 
   export let repo_naddr = ''
@@ -26,7 +26,7 @@
     if (a_result) {
       a = a_result
       invalid_naddr = false
-      ensureSelectedRepoCollection(a)
+      ensureSelectedRepoCollection(a, naddrToPointer(repo_naddr)?.relays)
       ensureProposalSummaries(a)
       ensureIssueSummaries(a)
     } else {

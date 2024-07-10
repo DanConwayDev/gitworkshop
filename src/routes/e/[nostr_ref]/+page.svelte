@@ -23,7 +23,10 @@
     waited = true
   }
 
-  let lookupEvent = (id: string) => {
+  let lookupEvent = (
+    id: string,
+    relays: string[] | undefined = undefined,
+  ) => {
     let sub = ndk.subscribe(
       {
         ids: [id],
@@ -32,7 +35,7 @@
       {
         closeOnEose: false,
       },
-      NDKRelaySet.fromRelayUrls(base_relays, ndk)
+      NDKRelaySet.fromRelayUrls([ ...base_relays, ...(relays || [])] ndk)
     )
 
     sub.on('event', (event: NDKEvent) => {
@@ -82,7 +85,7 @@
           [patch_kind, issue_kind].includes(decoded.data.kind)
         )
       ) {
-        lookupEvent(decoded.data.id)
+        lookupEvent(decoded.data.id, decoded.data.relays)
       } else {
         showError()
       }
