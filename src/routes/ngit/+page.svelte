@@ -89,7 +89,6 @@
           >cargo install ngit</code
         >
       </p>
-    </div>
       <p>
         Or install the pre-release 
       </p>
