@@ -35,7 +35,7 @@
       {
         closeOnEose: false,
       },
-      NDKRelaySet.fromRelayUrls([ ...base_relays, ...(relays || [])] ndk)
+      NDKRelaySet.fromRelayUrls([ ...base_relays, ...(relays || [])], ndk)
     )
 
     sub.on('event', (event: NDKEvent) => {
