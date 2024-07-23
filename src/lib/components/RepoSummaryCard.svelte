@@ -1,6 +1,7 @@
 <script lang="ts">
   import { summary_defaults } from './repo/type'
   import UserHeader from './users/UserHeader.svelte'
+  import type { User } from './users/type'
 
   export let { name, description, identifier, maintainers, naddr, loading } =
     summary_defaults
@@ -13,8 +14,16 @@
     else if (identifier && identifier.length >= 0) short_name = identifier
     else short_name = 'Untitled'
   }
+  let additional_maintainers: User[] = []
+  let author: User | undefined = undefined
+
   $: short_descrption =
     description.length > 50 ? description.slice(0, 45) + '...' : description
+
+  $: {
+    additional_maintainers = (([_, ...xs]) => xs)(maintainers)
+    author = maintainers[0]
+  }
 </script>
 
 <div
@@ -33,13 +42,28 @@
     {/if}
 
     <div class="break-words text-right text-xs text-slate-400">
-      <ul class="reposummarycard inline">
-        {#each maintainers as user}
-          <li class="inline">
-            <UserHeader {user} inline={true} size="xs" />
-          </li>
-        {/each}
-      </ul>
+      {#if author}
+        <div
+          class="inline"
+          class:p-1={additional_maintainers.length > 0}
+          class:rounded-md={additional_maintainers.length > 0}
+          class:bg-base-400={additional_maintainers.length > 0}
+          class:text-white={additional_maintainers.length > 0}
+        >
+          <UserHeader user={author} inline={true} size="xs" />
+        </div>
+        {#if additional_maintainers.length > 0}
+          <span>with</span>
+
+          <ul class="reposummarycard inline">
+            {#each additional_maintainers as user}
+              <li class="inline">
+                <UserHeader {user} inline={true} size="xs" />
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      {/if}
     </div>
   {/if}
 </div>
@@ -49,7 +73,7 @@
     content: ', ';
   }
   .reposummarycard li:last-child::before {
-    content: ' or ';
+    content: ' and ';
   }
   .reposummarycard li:first-child::before {
     content: '';
