@@ -26,22 +26,8 @@
         class="link-primary"
         href="https://njump.me/nprofile1qy88wumn8ghj7mn0wvhxcmmv9uq3vamnwvaz7tmsw4e8qmr9wfjkccte9e3k7mf0qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vng80y96x"
         >DanConwayDev</a
-      >
+      > compatible with nip34
     </p>
-    <p>
-      they implement the nip34 draft, which ports the <a
-        href="https://git-send-email.io/"
-        target="_blank">git-email-patch model</a
-      > to nostr, and also have backwards compatible enhancements (nip34+ for shorthand)
-      eg. to optionally enable experiences similar to github PRs
-    </p>
-
-    <p>
-      gitworkshop.dev aims to support all things git on nostr, such as the yet
-      to be released and NostrNest and gnostr. ngit is more opinionated, focusing
-      on nip34+
-    </p>
-
     <div role="alert" class="alert my-3">
       <!-- licence MIT https://icon-sets.iconify.design/ph/hands-praying-fill/ -->
       <svg
@@ -75,16 +61,9 @@
             >DanConwayDev</a
           > on nostr
         </p>
-        <p class="mt-1 text-sm">
-          the tools are in alpha and your feedback makes them better
-        </p>
+        <p class="mt-1 text-sm">your feedback makes them better</p>
       </div>
     </div>
-
-    <p>
-      should we focus on improving the PR-like experiences, or remove them in
-      favor of traditional patch-model patch application? please let use know!
-    </p>
 
     <h3>The Need</h3>
 
@@ -103,9 +82,9 @@
     <h3>The Opportunity</h3>
 
     <p>
-      whilst alternatives do exist, nearly all of them involve moving to
-      another walled garden, either controlled by a different centralized
-      guardian, or self-hosted which is less suitable for an anarchic project
+      whilst alternatives do exist, nearly all of them involve moving to another
+      walled garden, either controlled by a different centralized guardian, or
+      self-hosted which is less suitable for an anarchic project
     </p>
     <p>
       some projects use patches-over-email: an alternative and decentralized
@@ -160,22 +139,20 @@
     <h3>The Protocol</h3>
 
     <p>
-      <strong>nip34</strong> is a draft nip (nostr protocol) for sending git patches
-      over nostr, similar to how patches are sent via email using `git format-patch`
-      and `git send-email`. the patches-over-email model has proven to be a robust
-      workflow that is used extensively, including in very large projects such as
-      the linux kernel
+      <strong>nip34</strong> is a nostr protocol for sending git patches over nostr,
+      similar to how patches are sent via email using `git format-patch` and `git
+      send-email`. the patches-over-email model has proven to be a robust workflow
+      that is used extensively, including in very large projects such as the linux
+      kernel
     </p>
 
     <p>
-      ngit and gitworkshop.dev are experimenting with some additional, backwards
-      compatible, features (<strong>nip34+</strong> for shorthand), some of which
-      may make it into the nip34 specification:
+      ngit and gitworkshop.dev implements optional features of nip34, which
+      enable:
     </p>
-
     <ul>
       <li>
-        patches optionally managed as branches, similar to GitHub PRs
+        patches to be managed as branches, similar to GitHub PRs
         <ul>
           <li>
             amendments to a proposal can be made by pushing a commit using <span
@@ -220,8 +197,8 @@
         transition maintainership when a maintainer moves on
       </li>
       <li>
-        ensure that users who have already cloned the repository dont get scammed
-        by someone else issuing a repository event, pretending to be the
+        ensure that users who have already cloned the repository dont get
+        scammed by someone else issuing a repository event, pretending to be the
         maintainer, and directing users to a malicious git server
         <ul>
           <li>
@@ -239,9 +216,9 @@
                 specific file to the repository. ngit tags the earliest unique
                 commit id in the repo event. ngit defaults to using the most
                 recent repo event it finds with this tag. it also tags all
-                proposals with this id and when listing patches, and also includes
-                patches sent to other repo events with this id as it is clearly
-                intended for the same repo
+                proposals with this id and when listing patches, and also
+                includes patches sent to other repo events with this id as it is
+                clearly intended for the same repo
               </li>
             </ul>
           </li>
@@ -255,9 +232,9 @@
       You're not replacing GitHub, you're still using GitHub as a git server
     </h4>
     <p>
-      it is trivial to switch git servers as they all operate with the exact same
-      protocol. changing the social layer requires a social and UX shift which
-      can be challenging, disruptive and timeconsuming
+      it is trivial to switch git servers as they all operate with the exact
+      same protocol. changing the social layer requires a social and UX shift
+      which can be challenging, disruptive and timeconsuming
     </p>
 
     <h4>Are you trying to replicate / replace Github?</h4>
@@ -321,9 +298,7 @@
             >DanConwayDev</a
           > on nostr
         </p>
-        <p class="mt-1 text-sm">
-          the tools are in alpha and your feedback makes them better
-        </p>
+        <p class="mt-1 text-sm">your feedback makes them better</p>
       </div>
     </div>
   </div>

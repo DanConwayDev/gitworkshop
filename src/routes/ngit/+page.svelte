@@ -16,10 +16,10 @@
           >gitworkshop.dev
         </a>
       </li>
-      <li>fully compatable with nip34 draft</li>
+      <li>fully compatable with nip34</li>
       <li>
         enables proposals to be managed as branches, similar to GitHub PRs via
-        nip34+
+        optional nip34
       </li>
     </ul>
     <p>ngit and gitworkshop.dev are new, experimental and in an alpha state.</p>
@@ -57,9 +57,7 @@
             >DanConwayDev</a
           > on nostr
         </p>
-        <p class="mt-1 text-sm">
-          the tools are in alpha and your feedback makes them better
-        </p>
+        <p class="mt-1 text-sm">your feedback makes them better</p>
       </div>
     </div>
     <h3>Install</h3>
@@ -89,9 +87,7 @@
           >cargo install ngit</code
         >
       </p>
-      <p>
-        Or install the pre-release 
-      </p>
+      <p>Or install the pre-release</p>
       <p>
         <a
           href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3-beta1/ngit-x86_64-unknown-linux-gnu.tar.gz"
@@ -150,14 +146,11 @@
     </p>
     <h3>Protocol</h3>
     <p>
-      <a href="/about">nip34</a> is draft nip (nostr protocol) for sending git patches
-      over nostr, similar to how patches are sent via email which is a model used
-      extensively including in very large project such as the linux kernel
+      <a href="/about">nip34</a> is a nostr protocol for sending git patches over
+      nostr, similar to how patches are sent via email which is a model used extensively
+      including in very large project such as the linux kernel
     </p>
-    <p>
-      <a href="/about">nip34+</a> adds backwards compatable features to nip34, primarily
-      to enable:
-    </p>
+    <p>ngit supports optional nip34 features to enable:</p>
     <ul>
       <li>
         patches managed as branches, similar to GitHub PRs
@@ -189,11 +182,6 @@
         </ul>
       </li>
     </ul>
-    <p>
-      if feedback is possive on nip34+ features, they may make it into the nip34
-      specification
-    </p>
-
     <p>
       <a class="btn" href="/about">learn more</a>
     </p>
