@@ -110,12 +110,6 @@
     </p>
     <p>
       <span class="rounded bg-neutral p-2 font-mono"
-        ><span class="py-5">ngit fetch</span></span
-      >
-      download latest repository updates to allow `ngit list` usage offline
-    </p>
-    <p>
-      <span class="rounded bg-neutral p-2 font-mono"
         ><span class="py-5">ngit list</span></span
       >
       list proposals; checkout, apply or donwload selected
