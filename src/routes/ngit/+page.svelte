@@ -68,18 +68,18 @@
       </p>
       <p>
         <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.2.1/ngit-x86_64-unknown-linux-gnu.tar.gz"
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.0/ngit-x86_64-unknown-linux-gnu.tar.gz"
           class="btn btn-neutral">Linux</a
         >
         <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.2.1/ngit-x86_64-apple-darwin.tar.gz"
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.0/ngit-x86_64-apple-darwin.tar.gz"
           class="btn btn-neutral">Mac</a
         >
         <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.2.1/ngit-x86_64-pc-windows-msvc.zip"
+          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.0/ngit-x86_64-pc-windows-msvc.zip"
           class="btn btn-neutral">Windows</a
         >
-        v1.2.1
+        v1.3.0
       </p>
 
       <p>
@@ -87,23 +87,6 @@
           >cargo install ngit</code
         >
       </p>
-      <p>Or install the pre-release</p>
-      <p>
-        <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3-beta1/ngit-x86_64-unknown-linux-gnu.tar.gz"
-          class="btn btn-neutral">Linux</a
-        >
-        <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3-beta1/ngit-x86_64-apple-darwin.tar.gz"
-          class="btn btn-neutral">Mac</a
-        >
-        <a
-          href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3-beta1/ngit-x86_64-pc-windows-msvc.zip"
-          class="btn btn-neutral">Windows</a
-        >
-        v1.3-beta1
-      </p>
-
       <p>
         alternatively, if you have cargo installed run<code
           >cargo install ngit</code
@@ -124,6 +107,12 @@
         ><span class="py-5">ngit send</span></span
       >
       issue commits as a proposal
+    </p>
+    <p>
+      <span class="rounded bg-neutral p-2 font-mono"
+        ><span class="py-5">ngit fetch</span></span
+      >
+      download latest repository updates to allow `ngit list` usage offline
     </p>
     <p>
       <span class="rounded bg-neutral p-2 font-mono"
