@@ -62,8 +62,9 @@
 
 <Container>
   <div class="m-auto max-w-5xl">
-    <div class="grid gap-4 md:grid-cols-3">
-      <div class="card bg-base-300">
+    <div class="grid gap-4 md:grid-cols-6">
+      <div class=""></div>
+      <div class="card col-span-2 bg-base-300">
         <div class="card-body">
           <div class="card-title">
             <h3>nostr</h3>
@@ -74,20 +75,7 @@
           </div>
         </div>
       </div>
-      <div class="card bg-base-300">
-        <div class="card-body">
-          <div class="card-title">
-            <h3>
-              <span class="text-purple-600">n</span>git
-            </h3>
-          </div>
-          <div class="prose">
-            a NIP34 compatible command line tool to send and review git patches
-            via nostr. <a class="link link-secondary" href="/ngit">more...</a>
-          </div>
-        </div>
-      </div>
-      <div class="card bg-base-300">
+      <div class="card col-span-2 bg-base-300">
         <div class="card-body">
           <div class="card-title">
             <h3>
@@ -95,8 +83,8 @@
             </h3>
           </div>
           <div class="prose">
-            to host the authoritative code. eg. Gitea, Github, Gitlab,
-            BitBucket...
+            just for syncing data related to nostr's state eg. Gitea, Github,
+            Gitlab, self-hosted...
           </div>
         </div>
       </div>
@@ -105,19 +93,27 @@
     <div class="hidden md:block">
       <div class="grid h-5 grid-cols-6 gap-0">
         <div class=""></div>
+        <div class=""></div>
         <div class="border-b border-l"></div>
         <div class="border-b"></div>
-        <div class="border-b border-l"></div>
-        <div class="border-b border-r"></div>
+        <div class="border-l"></div>
       </div>
       <div class="grid h-5 grid-cols-2 gap-0">
         <div class=""></div>
         <div class="border-l"></div>
       </div>
+      <div class="grid h-5 grid-cols-6 gap-0">
+        <div class=""></div>
+        <div class="border-l border-t"></div>
+        <div class="border-t"></div>
+        <div class="border-l border-t"></div>
+        <div class="border-r border-t"></div>
+      </div>
     </div>
 
+    <div class="divider md:hidden"></div>
+
     <div class="grid gap-4 md:grid-cols-3">
-      <div class=""></div>
       <div class="card bg-base-300">
         <div class="card-body">
           <div class="card-title">
@@ -128,12 +124,33 @@
             </h3>
           </div>
           <div class="prose">
-            A web client to collaborate on git repos via nostr, managing issues
-            and code proposals
+            A nostr web client to manage and discuss issues and code proposals
           </div>
         </div>
       </div>
-      <div class=""></div>
+      <div class="card bg-base-300">
+        <div class="card-body">
+          <div class="card-title">
+            <h3>
+              <span class="text-yellow-600">git</span> remote nostr
+            </h3>
+          </div>
+          <div class="prose">git plugin for seemless nostr integration</div>
+        </div>
+      </div>
+      <div class="card bg-base-300">
+        <div class="card-body">
+          <div class="card-title">
+            <h3>
+              <span class="text-purple-600">n</span>git
+            </h3>
+          </div>
+          <div class="prose">
+            a command line tool to manage repos and advanced patch submission
+            and review
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </Container>
