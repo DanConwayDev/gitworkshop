@@ -1,5 +1,6 @@
 <script lang="ts">
   import Container from '$lib/components/Container.svelte'
+  import InstallNgit from '$lib/components/InstallNgit.svelte'
   import ReposSummaryList from '$lib/components/ReposSummaryList.svelte'
   import ProposalsList from '$lib/components/proposals/ProposalsList.svelte'
   import {
@@ -184,30 +185,7 @@
       Install <span class="text-purple-600">n</span>git and
       <span class="text-yellow-600">git</span>-remote-nostr
     </h3>
-    <p>
-      donwload binaries and add them to a directory from which they can be run
-      globally:
-    </p>
-    <p>
-      <a
-        href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.1/ngit-x86_64-unknown-linux-gnu.tar.gz"
-        class="btn btn-neutral">Linux</a
-      >
-      <a
-        href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.1/ngit-x86_64-apple-darwin.tar.gz"
-        class="btn btn-neutral">Mac</a
-      >
-      <a
-        href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.1/ngit-x86_64-pc-windows-msvc.zip"
-        class="btn btn-neutral">Windows</a
-      >
-      v1.3.1
-    </p>
-    <p>
-      alternatively, if you have cargo installed run<code
-        >cargo install ngit</code
-      >
-    </p>
+    <InstallNgit />
   </div>
   <div class="m-auto max-w-5xl">
     <div class="grid gap-4 md:grid-cols-2">

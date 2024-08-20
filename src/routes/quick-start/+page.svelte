@@ -1,5 +1,6 @@
 <script lang="ts">
   import Container from '$lib/components/Container.svelte'
+  import InstallNgit from '$lib/components/InstallNgit.svelte'
 </script>
 
 <svelte:head>
@@ -8,7 +9,9 @@
 
 <Container>
   <div class="prose m-auto mt-8">
-    <h3>Quick Start</h3>
+    <h2>Quick Start</h2>
+    <h4 id="prereq">pre-requesite: install ngit and git-remote-nostr</h4>
+    <InstallNgit />
   </div>
 </Container>
 <div class="bg-base-300">
@@ -18,6 +21,9 @@
       <div class="text-sm">
         <div>
           <div class="prose">
+            <p>
+              pre-requesite: <a href="#prereq">install</a> ngit and git-remote-nostr
+            </p>
             <h4>1. find repository</h4>
             <ul>
               <li>
@@ -187,6 +193,9 @@
       <div class="text-sm">
         <div>
           <div class="prose">
+            <p>
+              pre-requesite: <a href="#prereq">install</a> ngit and git-remote-nostr
+            </p>
             <h4>1. create a git repo and push to a git server</h4>
             <div>
               <ul>
