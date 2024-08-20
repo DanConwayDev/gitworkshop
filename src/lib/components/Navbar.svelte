@@ -14,7 +14,6 @@
   <Container>
     <div class="navbar">
       <div class="navbar-start">
-        <a href="/about" class="btn btn-ghost btn-sm normal-case">About</a>
         <a href="/repos" class="btn btn-ghost btn-sm normal-case">Repos</a>
       </div>
       <div class="navbar-center">
