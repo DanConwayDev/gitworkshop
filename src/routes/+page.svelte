@@ -181,10 +181,7 @@
 <Container>
   <div class="prose m-auto mb-6 mt-6">
     <h2>Quick Start</h2>
-    <h3>
-      Install <span class="text-purple-600">n</span>git and
-      <span class="text-yellow-600">git</span>-remote-nostr
-    </h3>
+    <h3>Install ngit and git-remote-nostr</h3>
     <InstallNgit />
   </div>
   <div class="m-auto max-w-5xl">
@@ -295,34 +292,43 @@
                 </div>
                 <div>
                   <code
-                    ><span class="text-yellow-600">git</span> remote set-url
-                    origin nostr://<span class="text-purple-600">npub123</span
-                    >/<span class="text-primary">my-repo</span></code
-                  >
-                </div>
-                <div>
-                  <code
                     ><span class="text-green-600"
-                      >// pushing merged commits updates proposal status</span
+                      >// push to nostr and git server(s) via remote helper</span
                     ></code
                   >
                 </div>
                 <div>
-                  <code
-                    ><span class="text-yellow-600">git</span> merge origin/pr/great-feature(e8246b2)</code
-                  >
-                </div>
-                <div>
-                  <code><span class="text-yellow-600">git</span> push</code>
+                  <div>
+                    <code
+                      ><span class="text-yellow-600">git</span> remote set-url
+                      origin nostr://<span class="text-purple-600">npub123</span
+                      >/<span class="text-primary">my-repo</span></code
+                    >
+                  </div>
+                  <div>
+                    <code
+                      ><span class="text-green-600"
+                        >// pushing merged commits updates proposal status</span
+                      ></code
+                    >
+                  </div>
+                  <div>
+                    <code
+                      ><span class="text-yellow-600">git</span> merge origin/pr/great-feature(e8246b2)</code
+                    >
+                  </div>
+                  <div>
+                    <code><span class="text-yellow-600">git</span> push</code>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          <div class="card-actions mt-auto justify-end">
-            <a
-              href="/quick-start#maintainer"
-              class="btn btn-secondary text-right">full guide</a
-            >
+            <div class="card-actions mt-auto justify-end">
+              <a
+                href="/quick-start#maintainer"
+                class="btn btn-secondary text-right">full guide</a
+              >
+            </div>
           </div>
         </div>
       </div>

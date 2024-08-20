@@ -224,7 +224,7 @@
                       <div>
                         <code
                           ><span class="text-yellow-600">git</span> remote add origin
-                          https://codeberg.org/johnedoe/my-repo.git</code
+                          https://dm.co/usr/my-repo.git</code
                         >
                       </div>
                       <div>
@@ -243,13 +243,23 @@
               <ul>
                 <li>
                   <div>
-                    <div>initialize and use the nostr remote:</div>
+                    <div>initialize:</div>
                     <div class="not-prose text-sm">
                       <div>
                         <code
                           ><span class="text-purple-600">ngit</span> init
                         </code>
                       </div>
+                    </div>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <div>
+                      use the nostr remote to push state to nostr and git
+                      server(s):
+                    </div>
+                    <div class="not-prose text-sm">
                       <div>
                         <code
                           ><span class="text-yellow-600">git</span> remote
@@ -263,7 +273,7 @@
                 </li>
                 <li>
                   ensure all maintainers push to the nostr remote and not git
-                  server directly so that the state is updated on nostr
+                  server directly so that state on nostr remains in sync
                 </li>
               </ul>
             </div>
@@ -345,6 +355,18 @@
                       </div>
                     </div>
                   </div>
+                </li>
+              </ul>
+            </div>
+            <h4>5. consider turning off PRs and issues elsewhere</h4>
+            <div>
+              <ul>
+                <li>
+                  ie. on git server(s) so they are managed solely on nostr.
+                </li>
+                <li>
+                  Note: for github use <code>Repo Settings &gt; Features</code> for
+                  issues but turning off PRs isn't yet possible.
                 </li>
               </ul>
             </div>
