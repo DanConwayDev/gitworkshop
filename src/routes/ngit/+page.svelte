@@ -81,12 +81,6 @@
         >
         v1.3.1
       </p>
-
-      <p>
-        alternatively, if you have cargo installed run<code
-          >cargo install ngit</code
-        >
-      </p>
       <p>
         alternatively, if you have cargo installed run<code
           >cargo install ngit</code

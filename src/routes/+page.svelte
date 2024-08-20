@@ -83,8 +83,7 @@
             </h3>
           </div>
           <div class="prose">
-            just for syncing data related to nostr's state eg. Gitea, Github,
-            Gitlab, self-hosted...
+            used only for syncing data eg. Gitea, Github, Gitlab, self-hosted...
           </div>
         </div>
       </div>
@@ -132,10 +131,12 @@
         <div class="card-body">
           <div class="card-title">
             <h3>
-              <span class="text-yellow-600">git</span> remote nostr
+              <span class="text-yellow-600">git</span>-remote-nostr
             </h3>
           </div>
-          <div class="prose">git plugin for seemless nostr integration</div>
+          <div class="prose">
+            git remote helper (plugin) for seemless nostr integration
+          </div>
         </div>
       </div>
       <div class="card bg-base-300">
@@ -146,8 +147,8 @@
             </h3>
           </div>
           <div class="prose">
-            a command line tool to manage repos and advanced patch submission
-            and review
+            a command line tool to manage repos and advanced patch
+            submission&nbsp;/&nbsp;review
           </div>
         </div>
       </div>
@@ -164,13 +165,195 @@
       collaboration layer for code changes.
     </p>
     <p>
-      ngit and gitworkshop.dev are tools to enable code collaboration over
-      nostr. ngit allows contributors to manage the flow to open a proposal,
-      maintainers to verify proposals and incorporate them into the project.
-      Gitworkshop.dev provides a visual interface to discuss proposals and open
-      issues.
+      Gitworkshop.dev, git-remote-nostr and ngit are tools to enable code
+      collaboration over nostr. Gitworkshop.dev provides a visual interface to
+      discuss proposals and open issues. git-remote-nostr enables proposal
+      creation, review and incorporation using standard git tooling. ngit
+      handles repository setup and advanced proposal submission.
     </p>
-    <a href="/about" class="btn btn-secondary text-right">learn more</a>
+    <div class="flex justify-end">
+      <a href="/about" class="btn btn-secondary text-right">details</a>
+    </div>
+  </div></Container
+>
+
+<Container>
+  <div class="prose m-auto mb-6 mt-6">
+    <h2>Quick Start</h2>
+    <h3>
+      Install <span class="text-purple-600">n</span>git and
+      <span class="text-yellow-600">git</span>-remote-nostr
+    </h3>
+    <p>
+      donwload binaries and add them to a directory from which they can be run
+      globally:
+    </p>
+    <p>
+      <a
+        href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.1/ngit-x86_64-unknown-linux-gnu.tar.gz"
+        class="btn btn-neutral">Linux</a
+      >
+      <a
+        href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.1/ngit-x86_64-apple-darwin.tar.gz"
+        class="btn btn-neutral">Mac</a
+      >
+      <a
+        href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.1/ngit-x86_64-pc-windows-msvc.zip"
+        class="btn btn-neutral">Windows</a
+      >
+      v1.3.1
+    </p>
+    <p>
+      alternatively, if you have cargo installed run<code
+        >cargo install ngit</code
+      >
+    </p>
+  </div>
+  <div class="m-auto max-w-5xl">
+    <div class="grid gap-4 md:grid-cols-2">
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <div class="card-title">
+            <h3>for the contributor</h3>
+          </div>
+          <p>
+            clone the nostr url and use normal git operations with tool you are
+            used it (eg. your IDE)
+          </p>
+          <div class="text-sm">
+            <div>
+              <code
+                ><span class="text-yellow-600">git</span> clone nostr://<span
+                  class="text-purple-600">npub123</span
+                >/<span class="text-primary">repo-identifier</span></code
+              >
+            </div>
+            <div>
+              <code
+                ><span class="text-green-600"
+                  >// use pr/ branch prefix to create a nostr proposal</span
+                ></code
+              >
+            </div>
+            <div>
+              <code
+                ><span class="text-yellow-600">git</span> checkout -b pr/great-feature</code
+              >
+            </div>
+            <div>
+              <code
+                ><span class="text-yellow-600">git</span> commit -am "improve the
+                world"</code
+              >
+            </div>
+            <div>
+              <code><span class="text-yellow-600">git</span> push -u</code>
+            </div>
+            <div>
+              <code
+                ><span class="text-green-600"
+                  >// any branch with pr/ prefix is nostr proposal</span
+                ></code
+              >
+            </div>
+            <div>
+              <code
+                ><span class="text-yellow-600">git</span> branch -r --list origin/pr/*</code
+              >
+            </div>
+          </div>
+          <div class="card-actions mt-auto justify-end">
+            <a
+              href="/quick-start#contributor"
+              class="btn btn-secondary text-right">full guide</a
+            >
+          </div>
+        </div>
+      </div>
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <div class="card-title">
+            <h3>for the maintainer</h3>
+          </div>
+          <div class="text-sm">
+            <div class="not-prose text-sm">
+              <div>
+                <code
+                  ><span class="text-green-600"
+                    >// create a git repo and push to a git server</span
+                  ></code
+                >
+              </div>
+              <div>
+                <code><span class="text-yellow-600">git</span> init</code>
+              </div>
+              <div>
+                <code
+                  ><span class="text-yellow-600">git</span> commit -am "initial commit"</code
+                >
+              </div>
+              <div>
+                <code
+                  ><span class="text-yellow-600">git</span> remote add origin https://dm.co/usr/my-repo</code
+                >
+              </div>
+              <div>
+                <code
+                  ><span class="text-yellow-600">git</span> push -u origin master</code
+                >
+              </div>
+              <div>
+                <code
+                  ><span class="text-green-600">// announce on nostr</span
+                  ></code
+                >
+              </div>
+              <div>
+                <div>
+                  <code
+                    ><span class="text-purple-600">ngit</span> init --identifier
+                    <span class="text-primary">my-repo</span></code
+                  >
+                </div>
+                <div>
+                  <code
+                    ><span class="text-yellow-600">git</span> remote set-url
+                    origin nostr://<span class="text-purple-600">npub123</span
+                    >/<span class="text-primary">my-repo</span></code
+                  >
+                </div>
+                <div>
+                  <code
+                    ><span class="text-green-600"
+                      >// pushing merged commits updates proposal status</span
+                    ></code
+                  >
+                </div>
+                <div>
+                  <code
+                    ><span class="text-yellow-600">git</span> merge origin/pr/great-feature(e8246b2)</code
+                  >
+                </div>
+                <div>
+                  <code><span class="text-yellow-600">git</span> push</code>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card-actions mt-auto justify-end">
+            <a
+              href="/quick-start#maintainer"
+              class="btn btn-secondary text-right">full guide</a
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></Container
+>
+
+<Container>
+  <div class="prose m-auto mb-6 mt-6">
     <h2>Example Repositories</h2>
     <p>These repositories have plenty of issues and proposals to explore</p>
     <div class="not-prose lg:w-[64rem]">

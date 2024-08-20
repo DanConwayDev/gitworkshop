@@ -20,8 +20,8 @@
   <div class="prose m-auto mt-8">
     <h2 class="">About</h2>
     <p>
-      gitworkshop.dev and <a href="/ngit">ngit</a> are tools to enable code
-      collaboration over nostr created and maintained by
+      gitworkshop.dev, <a href="/ngit">ngit</a> and git-remote-nostr are tools
+      to enable code collaboration over nostr created and maintained by
       <a
         class="link-primary"
         href="https://njump.me/nprofile1qy88wumn8ghj7mn0wvhxcmmv9uq3vamnwvaz7tmsw4e8qmr9wfjkccte9e3k7mf0qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vng80y96x"
@@ -147,8 +147,8 @@
     </p>
 
     <p>
-      ngit and gitworkshop.dev implements optional features of nip34, which
-      enable:
+      git-remote-nostr, ngit and gitworkshop.dev implements optional features of
+      nip34, which enable:
     </p>
     <ul>
       <li>
@@ -157,10 +157,18 @@
           <li>
             amendments to a proposal can be made by pushing a commit using <span
               class="rounded bg-neutral p-2 font-mono"
+              ><span class="py-5">git&nbsp;push</span></span
+            >
+            or
+            <span class="rounded bg-neutral p-2 font-mono"
               ><span class="py-5">ngit&nbsp;push</span></span
             >
             rather than issuing a complete revision, which modifies the original
             commits (still possible with
+            <span class="rounded bg-neutral p-2 font-mono"
+              ><span class="py-5">git&nbsp;push --force</span></span
+            >
+            or
             <span class="rounded bg-neutral p-2 font-mono"
               ><span class="py-5">ngit&nbsp;push&nbsp;--force</span></span
             >
