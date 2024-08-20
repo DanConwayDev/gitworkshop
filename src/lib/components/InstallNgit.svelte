@@ -1,4 +1,8 @@
-<div class="prose">
+<script lang="ts">
+  export let size: 'sm' | 'md' = 'md'
+</script>
+
+<div class="prose" class:text-sm={size === 'sm'}>
   <p>
     download binaries and add them to a directory from which they can be run
     globally:
@@ -6,15 +10,18 @@
   <p>
     <a
       href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.1/ngit-x86_64-unknown-linux-gnu.tar.gz"
-      class="btn btn-neutral">Linux</a
+      class="btn btn-neutral"
+      class:btn-sm={size === 'sm'}>Linux</a
     >
     <a
       href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.1/ngit-x86_64-apple-darwin.tar.gz"
-      class="btn btn-neutral">Mac</a
+      class="btn btn-neutral"
+      class:btn-sm={size === 'sm'}>Mac</a
     >
     <a
       href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.3.1/ngit-x86_64-pc-windows-msvc.zip"
-      class="btn btn-neutral">Windows</a
+      class="btn btn-neutral"
+      class:btn-sm={size === 'sm'}>Windows</a
     >
     v1.3.1
   </p>
