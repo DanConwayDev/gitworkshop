@@ -14,7 +14,7 @@
       class:btn-sm={size === 'sm'}>Linux</a
     >
     <a
-      href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.4.3/ngit-x86_64-apple-darwin.tar.gz"
+      href="https://github.com/DanConwayDev/ngit-cli/releases/download/v1.4.3/ngit-aarch64-apple-darwin.tar.gz"
       class="btn btn-neutral"
       class:btn-sm={size === 'sm'}>Mac</a
     >
