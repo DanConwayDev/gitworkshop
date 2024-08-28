@@ -3,5 +3,3 @@ export const load = ({ params }: { params: { repo_identifier: string } }) => {
     repo_identifier: params.repo_identifier,
   }
 }
-
-export const ssr = false

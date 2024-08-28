@@ -3,5 +3,3 @@ export const load = ({ params }: { params: { npub: string } }) => {
     npub: params.npub,
   }
 }
-
-export const ssr = false
