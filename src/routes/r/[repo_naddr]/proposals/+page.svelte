@@ -110,11 +110,11 @@
     <div>
       <h3 class="prose mb-2 text-sm font-bold">want to submit a proposal?</h3>
       <p class="prose text-xs">
-        <a href="/ngit">install ngit</a>, create add a feature in the local
-        repository and run
+        1) <a href="/ngit">install ngit</a> 2) clone with the nostr url 3) push
+        a new branch with the
         <span class="rounded bg-neutral p-1 font-mono"
-          ><span class="py-3">ngit send</span></span
-        >
+          ><span class="py-3">pr/</span></span
+        > prefix
       </p>
     </div>
   </div>
