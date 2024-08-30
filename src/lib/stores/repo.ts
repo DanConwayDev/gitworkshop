@@ -36,7 +36,7 @@ let selected_unsubscriber: Unsubscriber
 
 export const ensureSelectedRepoCollection = (
   a: string,
-  naddr_relays: string[] | undefined = undefined,
+  naddr_relays: string[] | undefined = undefined
 ): Writable<RepoCollection> => {
   if (selected_repo_a !== a) {
     let loading = true
@@ -106,11 +106,16 @@ const ensureRepoReadme = async (clone: string[], a: string): Promise<void> => {
     ]
     for (let i = 0; i < readme_urls.length; i++) {
       try {
+        // temporarily disable using proxy
+        if (!readme_urls[i].includes('raw.githubusercontent.com')) {
+          continue
+        }
         const res = await fetch(
-          readme_urls[i].includes('raw.githubusercontent.com')
-            ? readme_urls[i]
-            : // use proxy as most servers produce a CORS error
-              `/git_proxy/readme/${encodeURIComponent(readme_urls[i])}`
+          readme_urls[i]
+          // readme_urls[i].includes('raw.githubusercontent.com')
+          //   ? readme_urls[i]
+          //   : // use proxy as most servers produce a CORS error
+          //     `/git_proxy/readme/${encodeURIComponent(readme_urls[i])}`
         )
         if (res.ok) {
           text = await res.text()
