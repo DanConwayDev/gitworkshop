@@ -7,6 +7,8 @@
   import { logged_in_user } from '$lib/stores/users'
   import type { NDKEvent } from '@nostr-dev-kit/ndk'
   import CopyField from '../CopyField.svelte'
+  import { nip19 } from 'nostr-tools'
+  import { ndkEventToNeventOrNaddr } from '../repo/utils'
 
   export let type: 'proposal' | 'issue' = 'proposal'
   export let author: User = { ...user_defaults }
@@ -90,11 +92,11 @@
               <div class="prose"><h3>Share</h3></div>
               <CopyField
                 label="nostr address"
-                content={`nostr:${event.encode()}`}
+                content={`nostr:${ndkEventToNeventOrNaddr(event)}`}
               />
               <CopyField
                 label="njump"
-                content={`https://njump.me/${event.encode()}`}
+                content={`https://njump.me/${ndkEventToNeventOrNaddr(event)}`}
                 border_color="secondary"
               />
               <CopyField

@@ -2,6 +2,7 @@ import type { AddressPointer } from 'nostr-tools/lib/types/nip19'
 import type { RepoCollection, RepoEvent } from './type'
 import { nip19 } from 'nostr-tools'
 import { repo_kind } from '$lib/kinds'
+import type { NDKEvent, NDKRelay } from '@nostr-dev-kit/ndk'
 
 export const selectRepoFromCollection = (
   collection: RepoCollection
@@ -102,4 +103,33 @@ export const neventOrNoteToHexId = (s: string): string | undefined => {
     else if (decoded.type === 'nevent') return decoded.data.id
   } catch {}
   return undefined
+}
+
+/** this functoin can be removed when ndk.encode includes kind in nevent */
+export const ndkEventToNeventOrNaddr = (
+  event: NDKEvent
+): string | undefined => {
+  let relays: string[] = []
+  if (event.onRelays.length > 0) {
+    relays = event.onRelays.map((relay) => relay.url)
+  } else if (event.relay) {
+    relays = [event.relay.url]
+  }
+  if (event.kind && event.isParamReplaceable()) {
+    return nip19.naddrEncode({
+      kind: event.kind,
+      pubkey: event.pubkey,
+      identifier: event.replaceableDTag(),
+      relays,
+    })
+  } else if (relays.length > 0) {
+    return nip19.neventEncode({
+      kind: event.kind,
+      id: event.tagId(),
+      relays,
+      author: event.pubkey,
+    })
+  } else {
+    return nip19.noteEncode(event.tagId())
+  }
 }
