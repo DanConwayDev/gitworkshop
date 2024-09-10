@@ -1,11 +1,79 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width" />
-		%sveltekit.head%
-	</head>
-	<body data-sveltekit-preload-data="hover">
-		<div style="display: contents">%sveltekit.body%</div>
-	</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Favicon -->
+    <link
+      rel="icon"
+      href="/icons/icon-32x32.png?v=1"
+      sizes="32x32"
+      type="image/png"
+    />
+    <link
+      rel="icon"
+      href="/icons/icon-16x16.png?v=1"
+      sizes="16x16"
+      type="image/png"
+    />
+
+    <!-- Apple Touch Icons -->
+    <link
+      rel="apple-touch-icon"
+      href="/icons/icon-180x180.png?v=1"
+      sizes="180x180"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="/icons/icon-192x192.png?v=1"
+      sizes="192x192"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="/icons/icon-120x120.png?v=1"
+      sizes="120x120"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="/icons/icon-76x76.png?v=1"
+      sizes="76x76"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="/icons/icon-152x152.png?v=1"
+      sizes="152x152"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="/icons/icon-512x512.png?v=1"
+      sizes="512x512"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="/icons/icon-60x60.png?v=1"
+      sizes="60x60"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="/icons/icon-57x57.png?v=1"
+      sizes="57x57"
+    />
+
+    <!-- Fallback without sizes -->
+    <link rel="apple-touch-icon" href="/icons/icon-180x180.png?v=1" />
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/manifest.json?v=1" />
+
+    <!-- Open Graph and Twitter Card -->
+    <meta property="og:image" content="/icons/icon-512x512.png?v=1" />
+    <meta name="twitter:image" content="/icons/icon-512x512.png?v=1" />
+
+    <!-- SvelteKit Head -->
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
 </html>
