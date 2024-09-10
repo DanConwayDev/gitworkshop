@@ -106,10 +106,6 @@ const ensureRepoReadme = async (clone: string[], a: string): Promise<void> => {
     ]
     for (let i = 0; i < readme_urls.length; i++) {
       try {
-        // temporarily disable using proxy
-        if (!readme_urls[i].includes('raw.githubusercontent.com')) {
-          continue
-        }
         const res = await fetch(
           readme_urls[i]
           // readme_urls[i].includes('raw.githubusercontent.com')
