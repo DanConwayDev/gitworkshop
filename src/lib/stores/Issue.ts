@@ -9,6 +9,7 @@ import {
   extractIssueTitle,
 } from '$lib/components/events/content/utils'
 import { selectRepoFromCollection } from '$lib/components/repo/utils'
+import { ignore_kinds } from './utils'
 
 export const selected_issue_full: Writable<IssueFull> = writable({
   ...full_defaults,
@@ -136,8 +137,7 @@ export const ensureIssueFull = (
     )
 
     const process_replies = (event: NDKEvent) => {
-      const amethyst_draft_kind = 31234
-      if (event.kind && event.kind === amethyst_draft_kind) return
+      if (event.kind && ignore_kinds.includes(event.kind)) return false
       if (
         event.kind &&
         proposal_status_kinds.includes(event.kind) &&

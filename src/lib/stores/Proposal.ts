@@ -9,6 +9,7 @@ import { proposal_status_kinds, proposal_status_open } from '$lib/kinds'
 import { awaitSelectedRepoCollection } from './repo'
 import { extractPatchMessage } from '$lib/components/events/content/utils'
 import { selectRepoFromCollection } from '$lib/components/repo/utils'
+import { ignore_kinds } from './utils'
 
 export const selected_proposal_full: Writable<ProposalFull> = writable({
   ...full_defaults,
@@ -142,8 +143,7 @@ export const ensureProposalFull = (
     )
 
     const process_replies = (event: NDKEvent) => {
-      const amethyst_draft_kind = 31234
-      if (event.kind && event.kind === amethyst_draft_kind) return false
+      if (event.kind && ignore_kinds.includes(event.kind)) return false
       if (
         event.kind &&
         proposal_status_kinds.includes(event.kind) &&
