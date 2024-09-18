@@ -38,10 +38,12 @@
       let npub = nip19.npubEncode(maintainers[0])
       if (relays.length > 0) {
         let relay = relays[0]
+          // remove trailing slash(es)
+          .replace(/\/+$/, '')
         if (/^[a-zA-Z0-9.]+$/.test(relay.replace('wss://', ''))) {
-          return `nostr://${npub}/${identifier}?relayhint=${relay.replace('wss://', '')}`
+          return `nostr://${npub}/${relay.replace('wss://', '')}/${identifier}`
         }
-        return `nostr://${npub}/${identifier}?relayhint=${encodeURIComponent(relay)}`
+        return `nostr://${npub}/${encodeURIComponent(relay)}/${identifier}`
       }
       return `nostr://${npub}/${identifier}`
     }
@@ -138,7 +140,7 @@
             >
               <div>
                 <h4 class="mt-0 pt-0">
-                  2. copy gitclone url
+                  2. copy git clone url
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 16 16"
