@@ -60,5 +60,6 @@
     "parse-diff": "^0.11.1",
     "ramda": "^0.29.1",
     "svelte-markdown": "^0.4.1"
-  }
+  },
+  "packageManager": "yarn@4.5.0"
 }

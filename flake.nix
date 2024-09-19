@@ -49,10 +49,11 @@
           buildInputs = [
             pkgs.gitlint
             pkgs.nodejs
-            pkgs.yarn
+            pkgs.corepack
           ];
 
           shellHook = ''
+            yarn set version 4.5.0
             # auto-install git hooks
             dot_git="$(git rev-parse --git-common-dir)"
             if [[ ! -d "$dot_git/hooks" ]]; then mkdir "$dot_git/hooks"; fi
