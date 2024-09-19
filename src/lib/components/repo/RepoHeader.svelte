@@ -48,8 +48,12 @@
       >
       {#if created_at === 0 && name.length === 0}
         <span class="text-xs text-warning">
-          cannot find referenced repository event by <div class="badge bg-base-400 text-warning"><UserHeader user={author} inline size='xs'/></div>
-        </span>    
+          cannot find referenced repository event by <div
+            class="badge bg-base-400 text-warning"
+          >
+            <UserHeader user={author} inline size="xs" />
+          </div>
+        </span>
       {/if}
     {/if}
     <RepoMenu {selected_tab} />

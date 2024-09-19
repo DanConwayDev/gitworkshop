@@ -7,7 +7,6 @@
   import { logged_in_user } from '$lib/stores/users'
   import type { NDKEvent } from '@nostr-dev-kit/ndk'
   import CopyField from '../CopyField.svelte'
-  import { nip19 } from 'nostr-tools'
   import { ndkEventToNeventOrNaddr } from '../repo/utils'
 
   export let type: 'proposal' | 'issue' = 'proposal'

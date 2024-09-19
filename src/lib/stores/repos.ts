@@ -26,7 +26,7 @@ export const repo_collections: {
 
 export const ensureRepo = (
   a: string | NDKEvent,
-  naddr_relays: string[] | undefined = undefined,
+  naddr_relays: string[] | undefined = undefined
 ): Writable<RepoEvent> => {
   if (typeof a !== 'string') {
     const repo_event = eventToRepoEvent(a)
@@ -54,7 +54,7 @@ export const ensureRepo = (
       identifier,
       author: pubkey,
       naddr: aToNaddr(a_ref) || '',
-      maintainers: [pubkey], 
+      maintainers: [pubkey],
     })
 
     const sub = ndk.subscribe(
@@ -107,7 +107,7 @@ export const ensureRepo = (
 
 export const returnRepo = async (
   a: string,
-  naddr_relays: string[] | undefined = undefined,
+  naddr_relays: string[] | undefined = undefined
 ): Promise<RepoEvent> => {
   return new Promise((r) => {
     const unsubscriber = ensureRepo(a, naddr_relays).subscribe((c) => {
@@ -123,7 +123,7 @@ export const returnRepo = async (
 
 export const ensureRepoCollection = (
   a: string,
-  naddr_relays: string[] | undefined = undefined,
+  naddr_relays: string[] | undefined = undefined
 ): Writable<RepoCollection> => {
   if (!repo_collections[a]) {
     const base: RepoCollection = {

@@ -1,8 +1,8 @@
-import type { AddressPointer } from 'nostr-tools/lib/types/nip19'
 import type { RepoCollection, RepoEvent } from './type'
 import { nip19 } from 'nostr-tools'
 import { repo_kind } from '$lib/kinds'
-import type { NDKEvent, NDKRelay } from '@nostr-dev-kit/ndk'
+import type { NDKEvent } from '@nostr-dev-kit/ndk'
+import type { AddressPointer } from 'nostr-tools/nip19'
 
 export const selectRepoFromCollection = (
   collection: RepoCollection

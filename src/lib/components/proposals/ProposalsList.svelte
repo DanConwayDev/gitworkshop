@@ -5,7 +5,7 @@
 
   export let title: string = ''
   export let proposals_or_issues: ProposalSummary[] | IssueSummary[] = []
-  export let repo_naddr_override: string | undefined = undefined;
+  export let repo_naddr_override: string | undefined = undefined
   export let loading: boolean = false
   export let show_repo: boolean = false
   export let limit: number = 0

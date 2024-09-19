@@ -2,7 +2,6 @@
   import RepoDetails from '$lib/wrappers/RepoDetails.svelte'
   import {
     ensureSelectedRepoCollection,
-    selected_repo_collection,
     selected_repo_event,
   } from '$lib/stores/repo'
   import RepoHeader from '$lib/components/repo/RepoHeader.svelte'
@@ -33,11 +32,6 @@
       invalid_naddr = true
     }
   }
-
-  let waited_5_secs = false
-  setTimeout(() => {
-    waited_5_secs = true
-  }, 5000)
 </script>
 
 <RepoHeader {...$selected_repo_event} {selected_tab} />
@@ -65,7 +59,7 @@
         <div class="border-b border-base-400 bg-base-300 px-6 py-3 md:hidden">
           <h4 class="">Repository Details</h4>
         </div>
-        <div class="prose my-3 px-6 md:ml-2 md:px-0 w-full">
+        <div class="prose my-3 w-full px-6 md:ml-2 md:px-0">
           <RepoDetails {a} />
         </div>
       </div>

@@ -23,10 +23,7 @@
     waited = true
   }
 
-  let lookupEvent = (
-    id: string,
-    relays: string[] | undefined = undefined,
-  ) => {
+  let lookupEvent = (id: string, relays: string[] | undefined = undefined) => {
     let sub = ndk.subscribe(
       {
         ids: [id],
@@ -35,7 +32,7 @@
       {
         closeOnEose: false,
       },
-      NDKRelaySet.fromRelayUrls([ ...base_relays, ...(relays || [])], ndk)
+      NDKRelaySet.fromRelayUrls([...base_relays, ...(relays || [])], ndk)
     )
 
     sub.on('event', (event: NDKEvent) => {

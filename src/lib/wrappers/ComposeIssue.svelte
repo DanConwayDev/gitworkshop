@@ -18,7 +18,7 @@
     edit_mode = !submitted
   }
   let submit_attempted = false
-  
+
   async function sendIssue(title: string, content: string) {
     submit_attempted = true
     if (title.length < 10) return
@@ -88,7 +88,9 @@
           placeholder="title"
         />
         {#if submit_attempted && title.length < 10}
-          <div class="text-warning pr-3 text-sm align-middle">title must be at least 10 characters</div>
+          <div class="pr-3 align-middle text-sm text-warning">
+            title must be at least 10 characters
+          </div>
         {/if}
       </label>
       <label class="form-control w-full">
@@ -105,10 +107,12 @@
         ></textarea>
       </label>
 
-      <div class="flex items-center mt-2">
+      <div class="mt-2 flex items-center">
         <div class="flex-auto"></div>
         {#if submit_attempted && title.length < 10}
-          <div class="text-warning pr-3 text-sm align-middle">title must be at least 10 characters</div>
+          <div class="pr-3 align-middle text-sm text-warning">
+            title must be at least 10 characters
+          </div>
         {/if}
         <button
           on:click={() => sendIssue(title, content)}

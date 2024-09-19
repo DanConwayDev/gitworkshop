@@ -33,7 +33,7 @@
     loading,
   } = summary_defaults
   export let show_repo: boolean = false
-  export let repo_naddr_override: string | undefined = undefined;
+  export let repo_naddr_override: string | undefined = undefined
   let short_title: string
   let created_at_ago: string
   $: {
