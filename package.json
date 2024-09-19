@@ -12,6 +12,7 @@
     "storybook": "storybook dev -p 6006",
     "test": "vitest"
   },
+  "license": "MIT",
   "devDependencies": {
     "@storybook/addon-a11y": "^7.4.5",
     "@storybook/addon-essentials": "^7.4.5",
