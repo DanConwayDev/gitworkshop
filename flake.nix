@@ -9,8 +9,7 @@
   };
 
   outputs =
-    { self
-    , nixpkgs
+    { nixpkgs
     , gitignore
     , flake-utils
     , ...
