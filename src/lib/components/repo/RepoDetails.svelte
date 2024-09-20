@@ -126,6 +126,7 @@
           <li class="m-0 p-0">
             <!-- eslint-disable-next-line svelte/valid-compile -->
             <!-- svelte-ignore a11y-click-events-have-key-events -->
+            <!-- svelte-ignore a11y-no-static-element-interactions -->
             <div
               on:click={async () => {
                 try {
@@ -204,6 +205,7 @@
         {#each clone as git_url}
           <!-- eslint-disable-next-line svelte/valid-compile -->
           <!-- svelte-ignore a11y-click-events-have-key-events -->
+          <!-- svelte-ignore a11y-no-static-element-interactions -->
           <div
             on:click={async () => {
               try {
@@ -318,6 +320,7 @@
   {:else if naddr && naddr.length > 0}
     <!-- eslint-disable-next-line svelte/valid-compile -->
     <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
       on:click={async () => {
         try {

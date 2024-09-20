@@ -54,6 +54,7 @@
         {:else if group_by}
           <div class="stack">
             <!-- svelte-ignore a11y-click-events-have-key-events -->
+            <!-- svelte-ignore a11y-no-static-element-interactions -->
             <div
               class="flex min-h-28 cursor-pointer items-center rounded-lg border border-base-400 bg-base-200 p-4 hover:bg-base-300"
               on:click={() => {
