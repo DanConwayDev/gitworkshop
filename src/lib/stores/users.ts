@@ -2,7 +2,11 @@ import {
   defaults as user_defaults,
   type UserObject,
 } from '$lib/components/users/type'
-import { NDKNip07Signer, NDKRelayList } from '@nostr-dev-kit/ndk'
+import {
+  getRelayListForUser,
+  NDKNip07Signer,
+  NDKRelayList,
+} from '@nostr-dev-kit/ndk'
 import { get, writable, type Unsubscriber, type Writable } from 'svelte/store'
 import { ndk } from './ndk'
 
@@ -168,7 +172,7 @@ export const getUserRelays = async (hexpubkey: string): Promise<UserRelays> => {
         loading: true,
         ndk_relays: undefined,
       })
-      const relay_list = await NDKRelayList.forUser(hexpubkey, ndk)
+      const relay_list = await getRelayListForUser(hexpubkey, ndk)
       const querying_user_relays = {
         loading: false,
         ndk_relays: relay_list,

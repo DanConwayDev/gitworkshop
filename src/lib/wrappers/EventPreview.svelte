@@ -4,10 +4,7 @@
   import { get, writable, type Writable } from 'svelte/store'
   import { base_relays, ndk } from '$lib/stores/ndk'
   import EventCard from './EventCard.svelte'
-  import type {
-    AddressPointer,
-    EventPointer,
-  } from 'nostr-tools/lib/types/nip19'
+  import type { AddressPointer, EventPointer } from 'nostr-tools/nip19'
   import { repo_kind } from '$lib/kinds'
   import { ensureRepo } from '$lib/stores/repos'
   import EventWrapperLite from '$lib/components/events/EventWrapperLite.svelte'

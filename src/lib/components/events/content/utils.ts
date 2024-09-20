@@ -1,7 +1,7 @@
 import type { NDKTag } from '@nostr-dev-kit/ndk'
 import { nip19 } from 'nostr-tools'
-import type { AddressPointer, EventPointer } from 'nostr-tools/lib/types/nip19'
-import { last } from 'ramda'
+import type { AddressPointer, EventPointer } from 'nostr-tools/nip19'
+import last from 'ramda/src/last'
 
 export const TOPIC = 'topic'
 export const LINKCOLLECTION = 'link[]'
