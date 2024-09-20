@@ -25,7 +25,6 @@
   let edit_mode = false
   $: {
     repo_identifier = $selected_repo_event.identifier
-    selected_issue_full
     selected_proposal_or_issue =
       type === 'proposal' ? $selected_proposal_full : $selected_issue_full
 
