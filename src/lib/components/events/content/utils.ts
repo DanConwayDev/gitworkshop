@@ -1,4 +1,4 @@
-import type { NDKTag } from '@nostr-dev-kit/ndk'
+import type { NDKEvent, NDKTag } from '@nostr-dev-kit/ndk'
 import { nip19 } from 'nostr-tools'
 import type { AddressPointer, EventPointer } from 'nostr-tools/nip19'
 import last from 'ramda/src/last'
@@ -307,8 +307,8 @@ export const extractPatchDescription = (s: string): string | undefined => {
   return msg.substring(i).trim()
 }
 
-export const extractIssueTitle = (s: string): string => {
-  return s.split('\n')[0] || ''
+export const extractIssueTitle = (event: NDKEvent): string => {
+  return event.tagValue('subject') || event.content.split('\n')[0] || ''
 }
 
 export const extractIssueDescription = (s: string): string => {

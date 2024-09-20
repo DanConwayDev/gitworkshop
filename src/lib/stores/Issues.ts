@@ -107,7 +107,7 @@ export const ensureIssueSummaries = async (repo_a: string | undefined) => {
                 id: event.id,
                 repo_a:
                   extractRepoIdentiferFromIssueEvent(event) || repo_a || '',
-                title: extractIssueTitle(event.content),
+                title: extractIssueTitle(event),
                 descritpion: extractIssueDescription(event.content),
                 created_at: event.created_at,
                 comments: 0,

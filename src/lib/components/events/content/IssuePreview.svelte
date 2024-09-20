@@ -3,6 +3,7 @@
   import { extractRepoAFromProposalEvent } from '$lib/stores/Proposals'
   import type { NDKEvent } from '@nostr-dev-kit/ndk'
   import { nip19 } from 'nostr-tools'
+  import { extractIssueTitle } from './utils'
 
   export let event: NDKEvent
   let nevent = nip19.neventEncode({
@@ -17,5 +18,5 @@
 <span>
   Git Issue for <a class="opacity-50" href={`/e/${naddr}`}
     >{pointer?.identifier}</a
-  >: <a href={`/e/${nevent}`}>{event.content?.split('\n')[0]}</a> by
+  >: <a href={`/e/${nevent}`}>{extractIssueTitle(event)}</a> by
 </span>

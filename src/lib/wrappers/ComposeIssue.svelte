@@ -26,7 +26,7 @@
     if (!$logged_in_user) return
     let event = new NDKEvent(ndk)
     event.kind = issue_kind
-
+    event.tags.push(['subject', title])
     event.tags.push(['alt', `git repository issue: ${title}`])
 
     if (repo_event.unique_commit) {
@@ -39,7 +39,7 @@
       'root',
     ])
     repo_event.maintainers.forEach((m) => event.tags.push(['p', m]))
-    event.content = `${title}\n\n${content}`
+    event.content = `${content}`
     submitting = true
     let relays = [
       ...(repo_event.relays.length > 3

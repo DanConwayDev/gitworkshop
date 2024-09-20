@@ -80,7 +80,7 @@ export const ensureIssueFull = (
             issue_event: event,
             summary: {
               ...full.summary,
-              title: extractIssueTitle(event.content),
+              title: extractIssueTitle(event),
               descritpion: extractIssueDescription(event.content),
               created_at: event.created_at,
               comments: 0,
