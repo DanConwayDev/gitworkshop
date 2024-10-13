@@ -1,27 +1,13 @@
-import type { NDKUserProfile } from '@nostr-dev-kit/ndk'
+import type { PubKeyInfo } from '$lib/dbs/types'
 
-export interface UserObject {
-  loading: boolean
-  hexpubkey: string
-  npub: string
-  profile?: NDKUserProfile
-}
-
-export const defaults: UserObject = {
-  loading: true,
-  hexpubkey: '',
-  npub: '',
-}
-
-export type User = UserObject | string
-
-export function getName(user: UserObject, truncate_above = 25): string {
+export function getName(user: PubKeyInfo, truncate_above = 25): string {
+  if (!user) return ''
   return truncate(
-    user.profile
-      ? user.profile.name
-        ? user.profile.name
-        : user.profile.displayName
-          ? user.profile.displayName
+    Object.keys(user.metadata.fields).length > 0
+      ? user.metadata.fields.name
+        ? user.metadata.fields.name
+        : user.metadata.fields.displayName
+          ? user.metadata.fields.displayName
           : truncateNpub(user.npub)
       : truncateNpub(user.npub),
     truncate_above

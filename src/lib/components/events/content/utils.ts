@@ -1,5 +1,7 @@
-import type { NDKEvent, NDKTag } from '@nostr-dev-kit/ndk'
-import { nip19 } from 'nostr-tools'
+import type { ARef } from '$lib/dbs/types'
+import { repo_kind } from '$lib/kinds'
+import { getTagValue } from '$lib/utils'
+import { nip19, type Event } from 'nostr-tools'
 import type { AddressPointer, EventPointer } from 'nostr-tools/nip19'
 import last from 'ramda/src/last'
 
@@ -136,7 +138,10 @@ export const isParsedNaddr = (part: ParsedPart): part is ParsedNaddr =>
 export const isParsedText = (part: ParsedPart): part is ParsedText =>
   part.type == TEXT
 
-export const parseContent = (content: string, tags: NDKTag[]): ParsedPart[] => {
+export const parseContent = (
+  content: string,
+  tags: string[][]
+): ParsedPart[] => {
   const result: ParsedPart[] = []
   let text = content.trim()
   let buffer = ''
@@ -271,7 +276,7 @@ export const isCoverLetter = (s: string): boolean => {
 
 export function extractTagContent(
   name: string,
-  tags: NDKTag[]
+  tags: string[][]
 ): string | undefined {
   const tag = tags.find((tag) => tag[0] === name)
   return tag ? tag[1] : undefined
@@ -307,12 +312,24 @@ export const extractPatchDescription = (s: string): string | undefined => {
   return msg.substring(i).trim()
 }
 
-export const extractIssueTitle = (event: NDKEvent): string => {
-  return event.tagValue('subject') || event.content.split('\n')[0] || ''
-}
+export const extractIssueTitle = (event: Event) =>
+  getTagValue(event.tags, 'subject') || event.content.split('\\n')[0]
 
 export const extractIssueDescription = (s: string): string => {
   const split = s.split('\n')
   if (split.length === 0) return ''
   return s.substring(split[0].length) || ''
+}
+
+export const extractRepoAFromProposalEvent = (
+  event: Event
+): ARef | undefined => {
+  const tag = event.tags.find(
+    (t) =>
+      t[0] === 'a' &&
+      t[1].split(':').length === 3 &&
+      t[1].split(':')[0] === repo_kind.toFixed()
+  )
+  if (tag) return tag[1] as ARef
+  else return undefined
 }

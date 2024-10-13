@@ -1,7 +1,6 @@
-import type { User } from '../users/type'
-import { defaults as user_defaults } from '../users/type'
-import type { Event } from '../events/type'
-import type { NDKEvent } from '@nostr-dev-kit/ndk'
+import type { TreeEvent } from '../events/type'
+import type { Event } from 'nostr-tools'
+import type { PubKeyString } from '$lib/dbs/types'
 
 export interface IssueSummary {
   type: 'issue'
@@ -12,7 +11,7 @@ export interface IssueSummary {
   comments: number
   status: undefined | number
   status_date: number
-  author: User
+  author: PubKeyString | undefined
   created_at: number | undefined
   loading: boolean
 }
@@ -26,7 +25,7 @@ export const summary_defaults: IssueSummary = {
   comments: 0,
   status: undefined,
   status_date: 0,
-  author: { ...user_defaults },
+  author: undefined,
   created_at: 0,
   loading: true,
 }
@@ -45,9 +44,9 @@ export const summaries_defaults: IssueSummaries = {
 
 export interface IssueFull {
   summary: IssueSummary
-  issue_event: NDKEvent | undefined
+  issue_event: Event | undefined
   labels: string[]
-  events: Event[]
+  events: TreeEvent[]
   loading: boolean
 }
 

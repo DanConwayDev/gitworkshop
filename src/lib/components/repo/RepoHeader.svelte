@@ -2,28 +2,21 @@
   import RepoMenu from '$lib/wrappers/RepoMenu.svelte'
   import UserHeader from '$lib/components/users/UserHeader.svelte'
   import Container from '../Container.svelte'
-  import { event_defaults, type RepoPage } from './type'
+  import {
+    isRepoLoading,
+    selectedRepoCollectionToLeadMaintainer,
+    selectedRepoCollectionToName,
+    selectedRepoIsAddressPointerWithLoading,
+    type SelectedRepoCollection,
+  } from '$lib/dbs/types'
+  import type { RepoPage } from './type'
 
-  export let {
-    event_id,
-    identifier,
-    naddr,
-    unique_commit,
-    name,
-    author,
-    description,
-    clone,
-    web,
-    tags,
-    maintainers,
-    relays,
-    referenced_by,
-    created_at,
-    most_recent_reference_timestamp,
-    loading,
-  } = event_defaults
+  export let repo_collection: SelectedRepoCollection = undefined
   export let selected_tab: RepoPage = 'about'
   let short_name: string
+  $: name = selectedRepoCollectionToName(repo_collection)
+  $: identifier = !repo_collection ? '' : repo_collection.identifier
+  $: loading = isRepoLoading(repo_collection)
   $: {
     if (name && name.length > 45) short_name = name.slice(0, 45) + '...'
     else if (name && name.length >= 0) short_name = name
@@ -35,27 +28,33 @@
 </script>
 
 <div class="border-b border-accent-content bg-base-300">
-  <Container no_wrap={true}>
-    {#if loading}
-      <div class="p-3">
-        <div class="skeleton h-6 w-28 bg-base-200"></div>
-      </div>
-    {:else}
-      <a
-        href={`/r/${naddr}`}
-        class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
-        >{short_name}</a
-      >
-      {#if created_at === 0 && name.length === 0}
-        <span class="text-xs text-warning">
-          cannot find referenced repository event by <div
-            class="badge bg-base-400 text-warning"
-          >
-            <UserHeader user={author} inline size="xs" />
-          </div>
-        </span>
+  {#if repo_collection}
+    <Container no_wrap={true}>
+      {#if loading}
+        <div class="p-3">
+          <div class="skeleton h-6 w-28 bg-base-200"></div>
+        </div>
+      {:else}
+        <a
+          href={`/r/${repo_collection.naddr}`}
+          class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
+          >{short_name}</a
+        >
+        {#if selectedRepoIsAddressPointerWithLoading(repo_collection) && !repo_collection.loading}
+          <span class="text-xs text-warning">
+            cannot find referenced repository event by <div
+              class="badge bg-base-400 text-warning"
+            >
+              <UserHeader
+                user={selectedRepoCollectionToLeadMaintainer(repo_collection)}
+                inline
+                size="xs"
+              />
+            </div>
+          </span>
+        {/if}
       {/if}
-    {/if}
-    <RepoMenu {selected_tab} />
-  </Container>
+      <RepoMenu {selected_tab} />
+    </Container>
+  {/if}
 </div>

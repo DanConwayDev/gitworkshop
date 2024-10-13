@@ -1,14 +1,7 @@
 <script lang="ts">
   import { nip19 } from 'nostr-tools'
   import Container from '$lib/components/Container.svelte'
-  import ReposSummaryList from '$lib/components/ReposSummaryList.svelte'
   import UserHeader from '$lib/components/users/UserHeader.svelte'
-  import {
-    ensureSelectedPubkeyRepoCollection,
-    selected_npub_repo_collections,
-  } from '$lib/stores/ReposPubkey'
-  import { repoCollectionToSummary } from '$lib/stores/repos'
-  import { summary_defaults } from '$lib/components/repo/type'
   import AlertError from '$lib/components/AlertError.svelte'
 
   export let data: { npub: string }
@@ -21,7 +14,7 @@
       if (decoded.type === 'npub') pubkey = decoded.data
       else if (decoded.type === 'nprofile') pubkey = decoded.data.pubkey
       else error = true
-      if (pubkey) ensureSelectedPubkeyRepoCollection(pubkey)
+      // if (pubkey) ensureSelectedPubkeyRepoCollection(pubkey)
     } catch {
       error = true
     }
@@ -46,13 +39,13 @@
     <div class="mt-12">
       <UserHeader user={pubkey} link_to_profile={false} size="full" />
       <div class="divider"></div>
-      <ReposSummaryList
+      <!-- <ReposSummaryList
         title="Repositories"
         repos={$selected_npub_repo_collections.collections.map(
           (c) => repoCollectionToSummary(c) || { ...summary_defaults }
         )}
         loading={false}
-      />
+      /> -->
     </div>
   </Container>
 {/if}

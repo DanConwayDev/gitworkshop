@@ -4,30 +4,24 @@
   import AlertWarning from '../AlertWarning.svelte'
   import { icons_misc } from '../icons'
   import InstallNgit from '../InstallNgit.svelte'
-  import { event_defaults } from './type'
+  import {
+    selectedRepoCollectionToMaintainers,
+    selectedRepoCollectionToRelays,
+    selectedRepoIsAddressPointerWithLoading,
+    type SelectedRepoCollection,
+  } from '$lib/dbs/types'
 
-  export let {
-    event_id,
-    naddr,
-    identifier,
-    author,
-    unique_commit,
-    name,
-    description,
-    clone,
-    web,
-    tags,
-    maintainers,
-    relays,
-    referenced_by,
-    most_recent_reference_timestamp,
-    created_at,
-    loading,
-  } = event_defaults
+  export let repo: Exclude<SelectedRepoCollection, undefined>
+
+  const isJustPointer = (repo: SelectedRepoCollection) =>
+    selectedRepoIsAddressPointerWithLoading(repo)
+
+  $: loading = isJustPointer(repo) && repo.loading
+  $: event_not_found = isJustPointer(repo) && !loading
+  $: description = isJustPointer(repo) ? '' : repo.description
   $: short_descrption =
-    !description && description.length > 500
-      ? description.slice(0, 450) + '...'
-      : description
+    description.length > 500 ? description.slice(0, 450) + '...' : description
+
   let naddr_copied = false
   const create_nostr_url = (
     maintainers: string[],
@@ -49,52 +43,55 @@
     }
     return ''
   }
-  $: nostr_url = create_nostr_url(maintainers, identifier, relays)
+  $: nostr_url = create_nostr_url(
+    selectedRepoCollectionToMaintainers(repo),
+    repo.identifier,
+    selectedRepoCollectionToRelays(repo)
+  )
   let nostr_url_copied = false
   let git_url_copied: false | string = false
   let maintainer_copied: false | string = false
-  $: event_not_found = !loading && created_at == 0
 </script>
 
 <div class="prose w-full max-w-md">
-  {#if event_not_found}
+  {#if isJustPointer(repo)}
     <h4 class="mt-0 pt-1">identifier</h4>
-    <p class="my-2 break-words text-sm">{identifier}</p>
+    <p class="my-2 break-words text-sm">{repo.identifier}</p>
   {:else}
-    {#if name == identifier}
+    {#if repo.name == repo.identifier}
       {#if loading}
         <div class="skeleton my-3 h-5 w-20"></div>
         <div class="skeleton my-2 h-4"></div>
         <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
-      {:else if !name || name.length == 0}
+      {:else if !repo.name || repo.name.length == 0}
         <h4 class="mt-0 pt-1">name / identifier</h4>
         <div>none</div>
       {:else}
         <h4 class="mt-0 pt-1">name / identifier</h4>
-        <p class="my-2 break-words text-sm">{name}</p>
+        <p class="my-2 break-words text-sm">{repo.name}</p>
       {/if}
     {:else}
       {#if loading}
         <div class="skeleton my-3 h-5 w-20"></div>
         <div class="skeleton my-2 h-4"></div>
         <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
-      {:else if !name || name.length == 0}
+      {:else if !repo.name || repo.name.length == 0}
         <h4>name</h4>
         <div>none</div>
       {:else}
         <h4>name</h4>
-        <p class="my-2 break-words text-sm">{name}</p>
+        <p class="my-2 break-words text-sm">{repo.name}</p>
       {/if}
       {#if loading}
         <div class="skeleton my-3 h-5 w-20"></div>
         <div class="skeleton my-2 h-4"></div>
         <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
-      {:else if !identifier || identifier.length == 0}
+      {:else if !repo.identifier || repo.identifier.length == 0}
         <h4>identifier</h4>
         <div>none</div>
       {:else}
         <h4>identifier</h4>
-        <p class="my-2 break-words text-sm">{identifier}</p>
+        <p class="my-2 break-words text-sm">{repo.identifier}</p>
       {/if}
     {/if}
     {#if !loading}
@@ -182,8 +179,8 @@
       {#if loading}
         <div class="badge skeleton w-20"></div>
         <div class="badge skeleton w-20"></div>
-      {:else}
-        {#each tags as tag}
+      {:else if !isJustPointer(repo)}
+        {#each repo.tags as tag}
           <div class="badge badge-secondary mr-2">{tag}</div>
         {/each}
       {/if}
@@ -192,7 +189,7 @@
       {#if loading}
         <div class="skeleton my-3 h-5 w-20"></div>
         <div class="badge skeleton my-2 block w-60"></div>
-      {:else if clone.length == 0}
+      {:else if isJustPointer(repo) || repo.clone.length == 0}
         <div />
       {:else}
         <h4>
@@ -202,7 +199,7 @@
               (copied to clipboard)</span
             >{/if}
         </h4>
-        {#each clone as git_url}
+        {#each repo.clone as git_url}
           <!-- eslint-disable-next-line svelte/valid-compile -->
           <!-- svelte-ignore a11y-click-events-have-key-events -->
           <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -243,12 +240,12 @@
         <div class="skeleton my-3 h-5 w-20"></div>
         <div class="badge skeleton my-2 block w-60"></div>
         <div class="badge skeleton my-2 block w-40"></div>
-      {:else if web.length == 0}
+      {:else if repo.web.length == 0}
         <h4>websites</h4>
         <div>none</div>
       {:else}
         <h4>websites</h4>
-        {#each web as site}
+        {#each repo.web as site}
           <a
             href={site}
             target="_blank"
@@ -262,25 +259,17 @@
   {/if}
 
   <div>
-    {#if loading}
-      <div class="skeleton my-3 h-5 w-20"></div>
-      <div class="badge skeleton my-2 block w-60"></div>
-      <div class="badge skeleton my-2 block w-40"></div>
-    {:else if maintainers.length == 0}
-      <div />
-    {:else}
-      <h4>
-        {#if event_not_found}author{:else}maintainers{/if}
-        {#if maintainer_copied}<span class="text-sm text-success opacity-50">
-            (copied to clipboard)</span
-          >{/if}
-      </h4>
-      {#each maintainers as maintainer}
-        <div class="my-2 mt-3 break-words text-xs">
-          <UserHeader user={maintainer} />
-        </div>
-      {/each}
-    {/if}
+    <h4>
+      {#if isJustPointer(repo)}author{:else}maintainers{/if}
+      {#if maintainer_copied}<span class="text-sm text-success opacity-50">
+          (copied to clipboard)</span
+        >{/if}
+    </h4>
+    {#each selectedRepoCollectionToMaintainers(repo) as maintainer}
+      <div class="my-2 mt-3 break-words text-xs">
+        <UserHeader user={maintainer} />
+      </div>
+    {/each}
   </div>
 
   {#if !event_not_found}
@@ -289,12 +278,12 @@
         <div class="skeleton my-3 h-5 w-20"></div>
         <div class="badge skeleton my-2 block w-60"></div>
         <div class="badge skeleton my-2 block w-40"></div>
-      {:else if relays.length == 0}
+      {:else if isJustPointer(repo) || repo.relays.length == 0}
         <h4>relays</h4>
         <div>none</div>
       {:else}
         <h4>relays</h4>
-        {#each relays as relay}
+        {#each repo.relays as relay}
           <div class="badge badge-secondary badge-sm my-2 block">{relay}</div>
         {/each}
       {/if}
@@ -304,27 +293,23 @@
       <div class="skeleton my-3 h-5 w-20"></div>
       <div class="skeleton my-2 h-4"></div>
       <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
-    {:else if !unique_commit || unique_commit.length == 0}
+    {:else if isJustPointer(repo) || !repo.unique_commit || repo.unique_commit.length == 0}
       <h4>earliest unique commit</h4>
       <p class="my-2 break-words text-xs">not specified</p>
     {:else}
       <h4>earliest unique commit</h4>
-      <p class="my-2 break-words text-xs">{unique_commit}</p>
+      <p class="my-2 break-words text-xs">{repo.unique_commit}</p>
     {/if}
   {/if}
 
-  {#if loading}
-    <div class="skeleton my-3 h-5 w-20"></div>
-    <div class="skeleton my-2 h-4"></div>
-    <div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
-  {:else if naddr && naddr.length > 0}
+  {#if repo.naddr && repo.naddr.length > 0}
     <!-- eslint-disable-next-line svelte/valid-compile -->
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
       on:click={async () => {
         try {
-          await navigator.clipboard.writeText(naddr)
+          await navigator.clipboard.writeText(repo.naddr)
           naddr_copied = true
           setTimeout(() => {
             naddr_copied = false
@@ -351,7 +336,7 @@
             (copied to clipboard)</span
           >{/if}
       </h4>
-      <p class="my-2 break-words text-xs">{naddr}</p>
+      <p class="my-2 break-words text-xs">{repo.naddr}</p>
     </div>
   {/if}
   {#if event_not_found}

@@ -11,7 +11,8 @@
   import RepoPageWrapper from '$lib/wrappers/RepoPageWrapper.svelte'
   import { naddrToRepoA, neventOrNoteToHexId } from '$lib/components/repo/utils'
   import AlertError from '$lib/components/AlertError.svelte'
-  import { selected_repo_event } from '$lib/stores/repo'
+  import { selected_repo_collection } from '$lib/stores/repo'
+  import { selectedRepoCollectionToName } from '$lib/dbs/types'
 
   export let data: {
     repo_naddr: string
@@ -24,6 +25,7 @@
     const a_result = naddrToRepoA(repo_naddr)
     if (a_result) a = a_result
   }
+  $: name = selectedRepoCollectionToName($selected_repo_collection)
 
   let issue_nip19 = data.issue_nip19
   let issue_id = ''
@@ -55,10 +57,7 @@
 </script>
 
 <svelte:head>
-  <title
-    >GitWorkshop: {$selected_repo_event.name} - {$selected_issue_full.summary
-      .title}</title
-  >
+  <title>GitWorkshop: {name} - {$selected_issue_full.summary.title}</title>
 </svelte:head>
 
 <RepoPageWrapper {repo_naddr} with_side_bar={false} selected_tab="issues">

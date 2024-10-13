@@ -2067,6 +2067,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"applesauce-core@npm:^0.6.0":
+  version: 0.6.0
+  resolution: "applesauce-core@npm:0.6.0"
+  dependencies:
+    debug: "npm:^4.3.7"
+    json-stringify-deterministic: "npm:^1.0.12"
+    nanoid: "npm:^5.0.7"
+    nostr-tools: "npm:^2.7.2"
+    zen-observable: "npm:^0.10.0"
+    zen-push: "npm:^0.3.1"
+  checksum: 10c0/57bb25ff3dba1101f40d4b3f587a924d090dd49c953dc3b9f767efcd7bcc240f134e7fab30ce678742ebfae77d2ce646b687c32920e9b98406d8ee4e0b1b0908
+  languageName: node
+  linkType: hard
+
 "arg@npm:^5.0.2":
   version: 5.0.2
   resolution: "arg@npm:5.0.2"
@@ -2624,7 +2638,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"debug@npm:4, debug@npm:^4.1.1, debug@npm:^4.3.1, debug@npm:^4.3.2, debug@npm:^4.3.4, debug@npm:^4.3.6":
+"debug@npm:4, debug@npm:^4.1.1, debug@npm:^4.3.1, debug@npm:^4.3.2, debug@npm:^4.3.4, debug@npm:^4.3.6, debug@npm:^4.3.7":
   version: 4.3.7
   resolution: "debug@npm:4.3.7"
   dependencies:
@@ -2719,6 +2733,13 @@ __metadata:
   version: 5.0.0
   resolution: "devalue@npm:5.0.0"
   checksum: 10c0/d9d9ee5d23ab4de92821a5660ed8ccd5259933ad153b1b18bdb2500fd2464d08f942ecaf57fdadfff17b712d8b80514727266a2b6ce9060c5aec7b1cfc3d0838
+  languageName: node
+  linkType: hard
+
+"dexie@npm:^4.0.8":
+  version: 4.0.8
+  resolution: "dexie@npm:4.0.8"
+  checksum: 10c0/d35a817d986c334a2de5f1a0d5ef373b3d9464de7b520f9af50c00ea2f974386632a3f949add83ba1fce9e929908d96db19726377f641f4768c137a554969a2d
   languageName: node
   linkType: hard
 
@@ -3849,14 +3870,17 @@ __metadata:
     "@types/ramda": "npm:^0.30.2"
     "@typescript-eslint/eslint-plugin": "npm:^8.6.0"
     "@typescript-eslint/parser": "npm:^8.6.0"
+    applesauce-core: "npm:^0.6.0"
     autoprefixer: "npm:^10.4.20"
     daisyui: "npm:^4.12.10"
     dayjs: "npm:^1.11.13"
+    dexie: "npm:^4.0.8"
     eslint: "npm:^8.0.0"
     eslint-config-prettier: "npm:^9.1.0"
     eslint-plugin-prettier: "npm:^5.2.1"
     eslint-plugin-svelte: "npm:^2.44.0"
     highlight.js: "npm:^11.10.0"
+    nostr-idb: "https://github.com/hzrd149/nostr-idb"
     nostr-tools: "npm:^2.7.2"
     parse-diff: "npm:^0.11.1"
     postcss: "npm:^8.4.47"
@@ -4128,6 +4152,13 @@ __metadata:
   dependencies:
     safer-buffer: "npm:>= 2.1.2 < 3.0.0"
   checksum: 10c0/98102bc66b33fcf5ac044099d1257ba0b7ad5e3ccd3221f34dd508ab4070edff183276221684e1e0555b145fce0850c9f7d2b60a9fcac50fbb4ea0d6e845a3b1
+  languageName: node
+  linkType: hard
+
+"idb@npm:^8.0.0":
+  version: 8.0.0
+  resolution: "idb@npm:8.0.0"
+  checksum: 10c0/d27547e03939d3d269cea38c3d4528569621ec134c717ebfc1ff816dce18e4f77372dba1d930384a9949ac56dc600e3790f98f1812a4164004e71fec302ee491
   languageName: node
   linkType: hard
 
@@ -4434,6 +4465,13 @@ __metadata:
   version: 1.0.1
   resolution: "json-stable-stringify-without-jsonify@npm:1.0.1"
   checksum: 10c0/cb168b61fd4de83e58d09aaa6425ef71001bae30d260e2c57e7d09a5fd82223e2f22a042dedaab8db23b7d9ae46854b08bb1f91675a8be11c5cffebef5fb66a5
+  languageName: node
+  linkType: hard
+
+"json-stringify-deterministic@npm:^1.0.12":
+  version: 1.0.12
+  resolution: "json-stringify-deterministic@npm:1.0.12"
+  checksum: 10c0/ed7a4b887e5f73195a16bf165f2b74b22968824235e55fe8680319f1ceabc82d7ab303f0a4756a5cbdba65a305c32827e5463cc47426ef2ecb819cdaedec7e41
   languageName: node
   linkType: hard
 
@@ -4928,6 +4966,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"nanoid@npm:^5.0.7":
+  version: 5.0.7
+  resolution: "nanoid@npm:5.0.7"
+  bin:
+    nanoid: bin/nanoid.js
+  checksum: 10c0/a3fb1c157e3e35378f44e5a7130c70f80c9037f66c9a37285e5e3d8298e8405fcb2399baaa420980b0fe5fd9c2e4186a6a31c3526f21de03cf34c1b459871401
+  languageName: node
+  linkType: hard
+
 "natural-compare@npm:^1.4.0":
   version: 1.4.0
   resolution: "natural-compare@npm:1.4.0"
@@ -5027,6 +5074,17 @@ __metadata:
   version: 0.1.2
   resolution: "normalize-range@npm:0.1.2"
   checksum: 10c0/bf39b73a63e0a42ad1a48c2bd1bda5a07ede64a7e2567307a407674e595bcff0fa0d57e8e5f1e7fa5e91000797c7615e13613227aaaa4d6d6e87f5bd5cc95de6
+  languageName: node
+  linkType: hard
+
+"nostr-idb@https://github.com/hzrd149/nostr-idb":
+  version: 2.1.6
+  resolution: "nostr-idb@https://github.com/hzrd149/nostr-idb.git#commit=6c5ea60901ba38a8320d1e0fa8780ce584cb9d8d"
+  dependencies:
+    debug: "npm:^4.3.6"
+    idb: "npm:^8.0.0"
+    nostr-tools: "npm:^2.7.1"
+  checksum: 10c0/35b63a0db39213c9cd8a21004570a20b5aa6123b88dd497d074838778b2ce22c5886ed44576545d2046e00a745959547a4fb8444de027f967376a6e3ca85062f
   languageName: node
   linkType: hard
 
@@ -7199,5 +7257,28 @@ __metadata:
   version: 0.1.0
   resolution: "yocto-queue@npm:0.1.0"
   checksum: 10c0/dceb44c28578b31641e13695d200d34ec4ab3966a5729814d5445b194933c096b7ced71494ce53a0e8820685d1d010df8b2422e5bf2cdea7e469d97ffbea306f
+  languageName: node
+  linkType: hard
+
+"zen-observable@npm:^0.10.0":
+  version: 0.10.0
+  resolution: "zen-observable@npm:0.10.0"
+  checksum: 10c0/f97e97bfaa1dbe0033761d4860368120c1b69ee12dd1fa649c902f3f740c6cac3470a07e3dd00e2d41598dd9f17a97c80f69652b851ba1a73802f30748eb4260
+  languageName: node
+  linkType: hard
+
+"zen-observable@npm:^0.9.0":
+  version: 0.9.0
+  resolution: "zen-observable@npm:0.9.0"
+  checksum: 10c0/bced7c017bc2a6b44d2f4c8d33aedf8adfc3eb847bb3971a4918c98e70b216f59a0d92ef6fc98ed1841c02633d31ba756e82c53cba652705408e63d2d053632d
+  languageName: node
+  linkType: hard
+
+"zen-push@npm:^0.3.1":
+  version: 0.3.1
+  resolution: "zen-push@npm:0.3.1"
+  dependencies:
+    zen-observable: "npm:^0.9.0"
+  checksum: 10c0/4e2c0af67cde6381e596fd6746b0abccd1e04c3ee6e0cf7e12dee4386122a1b0af33fa217b14f33b05cd803d0f2ce1426e8f1acf894b187c852026fffd1e2f28
   languageName: node
   linkType: hard

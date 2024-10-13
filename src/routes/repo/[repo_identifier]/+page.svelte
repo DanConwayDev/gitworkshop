@@ -1,20 +1,21 @@
 <script lang="ts">
   import Container from '$lib/components/Container.svelte'
   import ReposSummaryList from '$lib/components/ReposSummaryList.svelte'
-  import { ensureIdentifierRepoCollection } from '$lib/stores/ReposIdentifier'
-  import { repoEventToSummary } from '$lib/stores/repos'
+  import db from '$lib/dbs/LocalDb'
+  import { liveQuery } from 'dexie'
 
   export let data: { repo_identifier: string }
-
-  let collection = ensureIdentifierRepoCollection(data.repo_identifier || '')
+  // TODO fetch from relays
+  $: repos = liveQuery(() => {
+    return db.repos.where('identifier').equals(data.repo_identifier).toArray()
+  })
 </script>
 
 <Container>
   <div class="m-5">
     <ReposSummaryList
       title={`repositories for '${data.repo_identifier}'`}
-      repos={$collection.events.map(repoEventToSummary)}
-      loading={$collection.loading}
+      repos={$repos}
     />
   </div>
 </Container>

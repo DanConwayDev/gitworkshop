@@ -1,6 +1,6 @@
 <script lang="ts">
   import ProposalsList from '$lib/components/proposals/ProposalsList.svelte'
-  import type { ProposalSummary } from '$lib/components/proposals/type'
+  import { isRepoLoading, selectedRepoCollectionToName } from '$lib/dbs/types'
   import {
     proposal_status_applied,
     proposal_status_closed,
@@ -8,20 +8,19 @@
     proposal_status_open,
     statusKindtoText,
   } from '$lib/kinds'
-  import { proposal_summaries } from '$lib/stores/Proposals'
-  import { selected_repo_event } from '$lib/stores/repo'
+  import { selected_prs, selected_repo_collection } from '$lib/stores/repo'
   import RepoPageWrapper from '$lib/wrappers/RepoPageWrapper.svelte'
 
   export let data: { repo_naddr: string }
   let repo_naddr = data.repo_naddr
 
   let status: number = proposal_status_open
-  let filtered: ProposalSummary[] = []
-  $: filtered = $proposal_summaries.summaries.filter((s) => s.status === status)
+  $: name = selectedRepoCollectionToName($selected_repo_collection)
+  $: filtered = $selected_prs.filter((s) => s.status === status)
 </script>
 
 <svelte:head>
-  <title>GitWorkshop: {$selected_repo_event.name} - proposals</title>
+  <title>GitWorkshop: {name} - proposals</title>
 </svelte:head>
 
 <RepoPageWrapper {repo_naddr} selected_tab="proposals">
@@ -37,9 +36,8 @@
             status = proposal_status_open
           }}
         >
-          {$proposal_summaries.summaries.filter(
-            (s) => s.status === proposal_status_open
-          ).length} Open
+          {$selected_prs.filter((s) => s.status === proposal_status_open)
+            .length} Open
         </button>
         <button
           role="tab"
@@ -50,9 +48,8 @@
             status = proposal_status_draft
           }}
         >
-          {$proposal_summaries.summaries.filter(
-            (s) => s.status === proposal_status_draft
-          ).length} Draft
+          {$selected_prs.filter((s) => s.status === proposal_status_draft)
+            .length} Draft
         </button>
         <button
           role="tab"
@@ -63,9 +60,8 @@
             status = proposal_status_applied
           }}
         >
-          {$proposal_summaries.summaries.filter(
-            (s) => s.status === proposal_status_applied
-          ).length} Merged
+          {$selected_prs.filter((s) => s.status === proposal_status_applied)
+            .length} Merged
         </button>
         <button
           role="tab"
@@ -76,9 +72,8 @@
             status = proposal_status_closed
           }}
         >
-          {$proposal_summaries.summaries.filter(
-            (s) => s.status === proposal_status_closed
-          ).length} Closed
+          {$selected_prs.filter((s) => s.status === proposal_status_closed)
+            .length} Closed
         </button>
       </div>
     </div>
@@ -90,7 +85,7 @@
       <ProposalsList
         repo_naddr_override={repo_naddr}
         proposals_or_issues={filtered}
-        loading={$proposal_summaries.loading}
+        loading={isRepoLoading($selected_repo_collection)}
       />
     {/if}
   </div>

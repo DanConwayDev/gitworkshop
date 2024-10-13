@@ -1,13 +1,17 @@
 <script lang="ts">
-  import { base_relays, ndk } from '$lib/stores/ndk'
+  import { ndk } from '$lib/stores/ndk'
   import { NDKEvent, NDKRelaySet } from '@nostr-dev-kit/ndk'
-  import { issue_kind, repo_kind } from '$lib/kinds'
-  import { getUserRelays, logged_in_user, login } from '$lib/stores/users'
-  import type { RepoEvent } from '$lib/components/repo/type'
+  import { issue_kind } from '$lib/kinds'
+  import { logged_in_user, login } from '$lib/stores/users'
   import { goto } from '$app/navigation'
   import { nip19 } from 'nostr-tools'
+  import {
+    selectedRepoCollectionToRelays,
+    type SelectedRepoCollection,
+  } from '$lib/dbs/types'
+  import { tagRepoAnns } from '$lib/utils'
 
-  export let repo_event: RepoEvent
+  export let repo_collection: Exclude<SelectedRepoCollection, undefined>
 
   let submitting = false
   let submitted = false
@@ -28,37 +32,17 @@
     event.kind = issue_kind
     event.tags.push(['subject', title])
     event.tags.push(['alt', `git repository issue: ${title}`])
-
-    if (repo_event.unique_commit) {
-      event.tags.push(['r', repo_event.unique_commit])
-    }
-    event.tags.push([
-      'a',
-      `${repo_kind}:${repo_event.maintainers[0]}:${repo_event.identifier}`,
-      repo_event.relays[0] || '',
-      'root',
-    ])
-    repo_event.maintainers.forEach((m) => event.tags.push(['p', m]))
+    tagRepoAnns(event, repo_collection, true, true)
     event.content = `${content}`
     submitting = true
-    let relays = [
-      ...(repo_event.relays.length > 3
-        ? repo_event.relays
-        : [...base_relays].concat(repo_event.relays)),
-    ]
+    let relays = selectedRepoCollectionToRelays(repo_collection)
     try {
       event.sign()
     } catch {
       alert('failed to sign event')
     }
     try {
-      let user_relays = await getUserRelays($logged_in_user.hexpubkey)
-      relays = [
-        ...relays,
-        ...(user_relays.ndk_relays
-          ? user_relays.ndk_relays.writeRelayUrls
-          : []),
-      ]
+      relays = [...relays, ...$logged_in_user.relays.write]
     } catch {
       alert('failed to get user relays')
     }
@@ -67,7 +51,7 @@
       submitting = false
       submitted = true
       setTimeout(() => {
-        goto(`/r/${repo_event.naddr}/issues/${nip19.noteEncode(event.id)}`)
+        goto(`/r/${repo_collection.naddr}/issues/${nip19.noteEncode(event.id)}`)
       }, 2000)
     } catch {}
   }

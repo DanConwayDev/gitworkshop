@@ -3,28 +3,20 @@
   import {
     ensureSelectedRepoCollection,
     selected_repo_collection,
-    selected_repo_event,
   } from '$lib/stores/repo'
   import RepoHeader from '$lib/components/repo/RepoHeader.svelte'
   import Container from '$lib/components/Container.svelte'
   import ComposeIssue from '$lib/wrappers/ComposeIssue.svelte'
-  import { naddrToRepoA } from '$lib/components/repo/utils'
+  import { naddrToPointer, naddrToRepoA } from '$lib/components/repo/utils'
   import AlertError from '$lib/components/AlertError.svelte'
+  import { selectedRepoCollectionToName } from '$lib/dbs/types'
 
   export let data: { repo_naddr: string }
   let repo_naddr = data.repo_naddr
-  let invalid_naddr = false
-  let a = ''
-
+  $: name = selectedRepoCollectionToName($selected_repo_collection)
+  $: a = naddrToRepoA(repo_naddr)
   $: {
-    const a_result = naddrToRepoA(repo_naddr)
-    if (a_result) {
-      a = a_result
-      invalid_naddr = false
-      ensureSelectedRepoCollection(a)
-    } else {
-      invalid_naddr = true
-    }
+    if (a) ensureSelectedRepoCollection(a, naddrToPointer(repo_naddr)?.relays)
   }
 
   let waited_5_secs = false
@@ -34,13 +26,13 @@
 </script>
 
 <svelte:head>
-  <title>GitWorkshop: {$selected_repo_event.name} - new issue</title>
+  <title>GitWorkshop: {name} - new issue</title>
 </svelte:head>
 
-{#if invalid_naddr || (waited_5_secs && $selected_repo_collection.loading && $selected_repo_event.name.length)}
+{#if !a || (waited_5_secs && (!$selected_repo_collection || ('loading' in $selected_repo_collection && $selected_repo_collection.loading === false)))}
   <Container>
     <AlertError>
-      {#if invalid_naddr}
+      {#if !a}
         <div>Error! invalid naddr in url:</div>
         <div class="break-all">{repo_naddr}</div>
       {:else}
@@ -50,13 +42,18 @@
     </AlertError>
   </Container>
 {:else}
-  <RepoHeader {...$selected_repo_event} />
+  <RepoHeader repo_collection={$selected_repo_collection} />
 
   <Container>
     <div class="mt-2 lg:flex">
       <div class="prose lg:mr-2 lg:w-2/3">
         <h4>Create Issue</h4>
-        <ComposeIssue repo_event={$selected_repo_event} />
+        {#if $selected_repo_collection}
+          <ComposeIssue repo_collection={$selected_repo_collection} />
+        {:else}
+          <span class="loading loading-spinner loading-xs ml-2 text-neutral"
+          ></span>
+        {/if}
       </div>
       <div class="prose ml-2 hidden w-1/3 lg:flex">
         <RepoDetails {a} />

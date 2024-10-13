@@ -1,14 +1,9 @@
-import type { RepoCollection, RepoEvent } from './type'
 import { nip19 } from 'nostr-tools'
 import { repo_kind } from '$lib/kinds'
-import type { NDKEvent } from '@nostr-dev-kit/ndk'
+import type { Event } from 'nostr-tools'
 import type { AddressPointer } from 'nostr-tools/nip19'
-
-export const selectRepoFromCollection = (
-  collection: RepoCollection
-): RepoEvent | undefined => {
-  return collection.events[collection.most_recent_index]
-}
+import type { ARef } from '$lib/dbs/types'
+import { getTagValue, SeenRelaysSymbol } from 'applesauce-core/helpers'
 
 /** most servers will produce a CORS error so a proxy should be used */
 export const cloneArrayToReadMeUrls = (clone: string[]): string[] => {
@@ -75,13 +70,20 @@ export const naddrToPointer = (s: string): AddressPointer | undefined => {
   return decoded.data as AddressPointer
 }
 
-export const extractAReference = (a: string): AddressPointer | undefined => {
+export const aRefToAddressPointer = (
+  a: ARef | string,
+  relays: string[] | undefined = undefined
+): AddressPointer | undefined => {
   if (a.split(':').length !== 3) return undefined
   const [k, pubkey, identifier] = a.split(':')
-  return { kind: Number(k), pubkey, identifier }
+  return { kind: Number(k), pubkey, identifier, relays }
 }
 
-export const naddrToRepoA = (s: string): string | undefined => {
+export const addressPointerToARef = (address_pointer: AddressPointer): ARef => {
+  return `${address_pointer.kind}:${address_pointer.pubkey}:${address_pointer.identifier}`
+}
+
+export const naddrToRepoA = (s: string): ARef | undefined => {
   const pointer = naddrToPointer(s)
   if (pointer && pointer.kind === repo_kind)
     return `${repo_kind}:${pointer.pubkey}:${pointer.identifier}`
@@ -91,7 +93,7 @@ export const naddrToRepoA = (s: string): string | undefined => {
 export const aToNaddr = (
   a: string | AddressPointer
 ): `naddr1${string}` | undefined => {
-  const a_ref = typeof a === 'string' ? extractAReference(a) : a
+  const a_ref = typeof a === 'string' ? aRefToAddressPointer(a) : a
   if (!a_ref) return undefined
   return nip19.naddrEncode(a_ref)
 }
@@ -106,30 +108,26 @@ export const neventOrNoteToHexId = (s: string): string | undefined => {
 }
 
 /** this functoin can be removed when ndk.encode includes kind in nevent */
-export const ndkEventToNeventOrNaddr = (
-  event: NDKEvent
-): string | undefined => {
+export const eventToNeventOrNaddr = (event: Event): string | undefined => {
   let relays: string[] = []
-  if (event.onRelays.length > 0) {
-    relays = event.onRelays.map((relay) => relay.url)
-  } else if (event.relay) {
-    relays = [event.relay.url]
-  }
-  if (event.kind && event.isParamReplaceable()) {
+  const seen_relays = event[SeenRelaysSymbol]
+  if (seen_relays && seen_relays.size > 0) relays = [[...seen_relays][0]]
+  const identifier = getTagValue(event, 'd')
+  if (event.kind && identifier) {
     return nip19.naddrEncode({
       kind: event.kind,
       pubkey: event.pubkey,
-      identifier: event.replaceableDTag(),
+      identifier,
       relays,
     })
   } else if (relays.length > 0) {
     return nip19.neventEncode({
       kind: event.kind,
-      id: event.tagId(),
+      id: event.id,
       relays,
       author: event.pubkey,
     })
   } else {
-    return nip19.noteEncode(event.tagId())
+    return nip19.noteEncode(event.id)
   }
 }

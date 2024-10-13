@@ -1,11 +1,17 @@
 <script lang="ts">
   import Container from '$lib/components/Container.svelte'
   import ReposSummaryList from '$lib/components/ReposSummaryList.svelte'
-  import { summary_defaults } from '$lib/components/repo/type'
-  import { ensureRecentRepos, recent_repos } from '$lib/stores/ReposRecent'
-  import { repoEventToSummary } from '$lib/stores/repos'
+  import db from '$lib/dbs/LocalDb'
+  import relays_manager from '$lib/stores/RelaysManager'
+  import { liveQuery } from 'dexie'
 
-  ensureRecentRepos()
+  relays_manager.fetchAllRepos()
+
+  $: all_repos = liveQuery(() => {
+    // TODO: check when last refershed repos for relays
+    // call button
+    return db.repos.toArray()
+  })
 </script>
 
 <svelte:head>
@@ -16,11 +22,8 @@
   <div class="mt-3">
     <ReposSummaryList
       title="Explore Repositories"
-      repos={$recent_repos.events.map(
-        (c) => repoEventToSummary(c) || { ...summary_defaults }
-      )}
+      repos={$all_repos}
       group_by="name"
-      loading={$recent_repos.loading}
     />
   </div>
 </Container>

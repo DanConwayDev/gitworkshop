@@ -1,13 +1,13 @@
 <script lang="ts">
-  import type { NDKEvent } from '@nostr-dev-kit/ndk'
+  import type { Event } from 'nostr-tools'
   import ThreadTree from './ThreadTree.svelte'
   import { getThreadTrees } from './thread_tree'
 
-  export let event: NDKEvent
+  export let event: Event
   export let type: 'proposal' | 'issue' = 'proposal'
   export let show_compose = true
 
-  export let replies: NDKEvent[] | undefined = undefined
+  export let replies: Event[] | undefined = undefined
 
   $: thread_trees = getThreadTrees(type, event, replies)
 </script>

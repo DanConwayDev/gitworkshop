@@ -2,12 +2,10 @@
   import RepoDetails from '$lib/wrappers/RepoDetails.svelte'
   import {
     ensureSelectedRepoCollection,
-    selected_repo_event,
+    selected_repo_collection,
   } from '$lib/stores/repo'
   import RepoHeader from '$lib/components/repo/RepoHeader.svelte'
   import Container from '$lib/components/Container.svelte'
-  import { ensureProposalSummaries } from '$lib/stores/Proposals'
-  import { ensureIssueSummaries } from '$lib/stores/Issues'
   import type { RepoPage } from '$lib/components/repo/type'
   import { naddrToPointer, naddrToRepoA } from '$lib/components/repo/utils'
   import AlertError from '$lib/components/AlertError.svelte'
@@ -17,25 +15,15 @@
   export let with_side_bar = true
   export let show_details_on_mobile = false
 
-  let invalid_naddr = false
-  let a = ''
+  $: a = naddrToRepoA(repo_naddr)
 
   $: {
-    const a_result = naddrToRepoA(repo_naddr)
-    if (a_result) {
-      a = a_result
-      invalid_naddr = false
-      ensureSelectedRepoCollection(a, naddrToPointer(repo_naddr)?.relays)
-      ensureProposalSummaries(a)
-      ensureIssueSummaries(a)
-    } else {
-      invalid_naddr = true
-    }
+    if (a) ensureSelectedRepoCollection(a, naddrToPointer(repo_naddr)?.relays)
   }
 </script>
 
-<RepoHeader {...$selected_repo_event} {selected_tab} />
-{#if invalid_naddr}
+<RepoHeader repo_collection={$selected_repo_collection} {selected_tab} />
+{#if !a}
   <Container>
     <AlertError>
       <div>Error! invalid naddr in url:</div>
@@ -45,8 +33,7 @@
   <Container>
     <slot />
   </Container>
-{/if}
-{#if with_side_bar}
+{:else if with_side_bar}
   <Container>
     <div class="mt-2 md:flex">
       <div class="md:mr-2 md:w-2/3">

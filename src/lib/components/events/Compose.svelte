@@ -1,7 +1,6 @@
 <script lang="ts">
   import { logged_in_user, login } from '$lib/stores/users'
   import UserHeader from '../users/UserHeader.svelte'
-  import { defaults as user_defaults } from '../users/type'
 
   export let sendReply: (content: string) => void = () => {}
   export let placeholder = 'reply...'
@@ -16,10 +15,7 @@
 
 <div class="flex pt-5">
   <div class="mt-0 flex-none px-3">
-    <UserHeader
-      avatar_only={true}
-      user={$logged_in_user || { ...user_defaults, loading: false }}
-    />
+    <UserHeader avatar_only={true} user={$logged_in_user?.pubkey} />
   </div>
   <div class="flex-grow pt-2">
     {#if !submitting}

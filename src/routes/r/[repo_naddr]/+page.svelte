@@ -1,12 +1,16 @@
 <script lang="ts">
-  import { selected_repo_event, selected_repo_readme } from '$lib/stores/repo'
+  import {
+    selected_repo_collection,
+    selected_repo_readme,
+  } from '$lib/stores/repo'
   import SvelteMarkdown from 'svelte-markdown'
   import RepoPageWrapper from '$lib/wrappers/RepoPageWrapper.svelte'
   import { goto } from '$app/navigation'
+  import { selectedRepoCollectionToName } from '$lib/dbs/types'
 
   export let data: { repo_naddr: string }
   let repo_naddr = data.repo_naddr
-
+  $: name = selectedRepoCollectionToName($selected_repo_collection)
   $: {
     if ($selected_repo_readme.failed === true)
       goto(`/r/${repo_naddr}/proposals`)
@@ -14,7 +18,7 @@
 </script>
 
 <svelte:head>
-  <title>GitWorkshop: {$selected_repo_event.name}</title>
+  <title>GitWorkshop: {name}</title>
 </svelte:head>
 
 <RepoPageWrapper {repo_naddr} selected_tab="about" show_details_on_mobile>

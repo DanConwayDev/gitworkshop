@@ -3,41 +3,31 @@
   import InstallNgit from '$lib/components/InstallNgit.svelte'
   import ReposSummaryList from '$lib/components/ReposSummaryList.svelte'
   import ProposalsList from '$lib/components/proposals/ProposalsList.svelte'
-  import {
-    summary_defaults,
-    type RepoEvent,
-    type RepoSummary,
-  } from '$lib/components/repo/type'
+
+  import db from '$lib/dbs/LocalDb'
+  import { selectedRepoIsAddressPointerWithLoading } from '$lib/dbs/types'
   import { repo_kind } from '$lib/kinds'
-  import {
-    ensureProposalSummaries,
-    proposal_summaries,
-  } from '$lib/stores/Proposals'
-  import { ensureRepo, repoEventToSummary } from '$lib/stores/repos'
-  import { writable, type Writable } from 'svelte/store'
+  import relays_manager from '$lib/stores/RelaysManager'
+  import { selected_prs, selected_repo_collection } from '$lib/stores/repo'
+  import { liveQuery } from 'dexie'
 
-  ensureProposalSummaries(undefined)
+  // ensureProposalSummaries(undefined)
 
-  let example_repos: Writable<RepoSummary[]> = writable([])
-  const updateRepos = (r: RepoEvent) => {
-    example_repos.update((repos) => {
-      return [
-        ...repos.filter(
-          (s) => s.identifier.length > 0 && s.identifier !== r.identifier
-        ),
-        repoEventToSummary(r) || {
-          ...summary_defaults,
-        },
-      ].sort()
-    })
-  }
-
-  ensureRepo(
+  let example_repos = liveQuery(() => {
+    return db.repos
+      .where('uuid')
+      .anyOf([
+        `${repo_kind}:a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d:ngit`,
+        `${repo_kind}:a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d:gitworkshop`,
+      ])
+      .toArray()
+  })
+  relays_manager.fetchRepoAnn(
     `${repo_kind}:a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d:ngit`
-  ).subscribe(updateRepos)
-  ensureRepo(
+  )
+  relays_manager.fetchRepoAnn(
     `${repo_kind}:a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d:gitworkshop`
-  ).subscribe(updateRepos)
+  )
 </script>
 
 <svelte:head>
@@ -341,15 +331,20 @@
     <h2>Example Repositories</h2>
     <p>These repositories have plenty of issues and proposals to explore</p>
     <div class="not-prose lg:w-[64rem]">
-      <ReposSummaryList repos={$example_repos} loading={false} />
+      <ReposSummaryList
+        repos={$example_repos}
+        loading={!$example_repos || $example_repos.length === 0}
+      />
     </div>
     <a href="/repos" class="btn btn-primary mt-9">List More Repositories</a>
     <h2>Recent Proposals</h2>
     <div class="not-prose mt-6">
       <ProposalsList
-        proposals_or_issues={$proposal_summaries.summaries}
+        proposals_or_issues={$selected_prs}
         show_repo={true}
-        loading={$proposal_summaries.loading}
+        loading={selectedRepoIsAddressPointerWithLoading(
+          $selected_repo_collection
+        )}
         limit={6}
         allow_more={true}
       />

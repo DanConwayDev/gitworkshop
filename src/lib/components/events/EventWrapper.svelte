@@ -1,18 +1,17 @@
 <script lang="ts">
   import dayjs from 'dayjs'
   import UserHeader from '../users/UserHeader.svelte'
-  import type { User } from '../users/type'
-  import { defaults as user_defaults } from '../users/type'
   import ComposeReply from '$lib/wrappers/ComposeReply.svelte'
   import { logged_in_user } from '$lib/stores/users'
-  import type { NDKEvent } from '@nostr-dev-kit/ndk'
+  import type { Event } from 'nostr-tools'
   import CopyField from '../CopyField.svelte'
-  import { ndkEventToNeventOrNaddr } from '../repo/utils'
+  import { eventToNeventOrNaddr } from '../repo/utils'
+  import type { PubKeyString } from '$lib/dbs/types'
 
   export let type: 'proposal' | 'issue' = 'proposal'
-  export let author: User = { ...user_defaults }
+  export let author: PubKeyString
   export let created_at: number | undefined
-  export let event: NDKEvent
+  export let event: Event
   let show_compose = false
   let show_raw_json_modal = false
   let show_share_modal = false
@@ -55,7 +54,7 @@
         {#if show_raw_json_modal}
           <div class="modal" class:modal-open={show_raw_json_modal}>
             <div class="modal-box max-w-full text-wrap text-xs">
-              <code class="w-full">{JSON.stringify(event.rawEvent())}</code>
+              <code class="w-full">{JSON.stringify(event)}</code>
               <div class="modal-action">
                 <button
                   class="btn btn-sm"
@@ -91,11 +90,11 @@
               <div class="prose"><h3>Share</h3></div>
               <CopyField
                 label="nostr address"
-                content={`nostr:${ndkEventToNeventOrNaddr(event)}`}
+                content={`nostr:${eventToNeventOrNaddr(event)}`}
               />
               <CopyField
                 label="njump"
-                content={`https://njump.me/${ndkEventToNeventOrNaddr(event)}`}
+                content={`https://njump.me/${eventToNeventOrNaddr(event)}`}
                 border_color="secondary"
               />
               <CopyField

@@ -1,21 +1,21 @@
 <script lang="ts">
-  import { base_relays, ndk } from '$lib/stores/ndk'
+  import { ndk } from '$lib/stores/ndk'
   import { NDKEvent, NDKRelaySet } from '@nostr-dev-kit/ndk'
-  import { reply_kind, repo_kind } from '$lib/kinds'
-  import { getUserRelays, logged_in_user, user_relays } from '$lib/stores/users'
-  import {
-    selected_repo_collection,
-    selected_repo_event,
-  } from '$lib/stores/repo'
+  import { type Event } from 'nostr-tools'
+  import { reply_kind } from '$lib/kinds'
+  import { logged_in_user } from '$lib/stores/users'
+  import { selected_repo_collection } from '$lib/stores/repo'
   import Compose from '$lib/components/events/Compose.svelte'
   import { selected_proposal_full } from '$lib/stores/Proposal'
   import { selected_issue_full } from '$lib/stores/Issue'
   import type { IssueFull } from '$lib/components/issues/type'
   import type { ProposalFull } from '$lib/components/proposals/type'
-  import { get } from 'svelte/store'
+  import { selectedRepoCollectionToRelays } from '$lib/dbs/types'
+  import { tagRepoAnns } from '$lib/utils'
+  import relays_manager from '$lib/stores/RelaysManager'
 
   export let type: 'proposal' | 'issue' = 'proposal'
-  export let event: NDKEvent
+  export let event: Event
   export let sentFunction = () => {}
   let repo_identifier: string
   let selected_proposal_or_issue: IssueFull | ProposalFull
@@ -24,7 +24,8 @@
   let submitted = false
   let edit_mode = false
   $: {
-    repo_identifier = $selected_repo_event.identifier
+    repo_identifier =
+      ($selected_repo_collection && $selected_repo_collection.identifier) || ''
     selected_proposal_or_issue =
       type === 'proposal' ? $selected_proposal_full : $selected_issue_full
 
@@ -34,7 +35,7 @@
       !submitted
   }
   /** to get the proposal revision id rather than the root proposal */
-  const getRootId = (event: NDKEvent): string => {
+  const getRootId = (event: Event): string => {
     // exclude 'a' references to repo events
     let root_tag = event.tags.find(
       (t) => t[0] === 'e' && t.length === 4 && t[3] === 'root'
@@ -49,34 +50,30 @@
     let new_event = new NDKEvent(ndk)
     new_event.kind = reply_kind
     if (reply_kind !== 1) event.tags.push(['alt', `git reply`])
-    new_event.tags.push([
-      'e',
-      getRootId(event),
-      $selected_repo_event.relays[0] || '',
-      'root',
-    ])
+    let relay_hint =
+      !$selected_repo_collection || !$selected_repo_collection.relays
+        ? ''
+        : $selected_repo_collection.relays[0] || ''
+    new_event.tags.push(['e', getRootId(event), relay_hint, 'root'])
     if (event.id.length > 0) {
-      new_event.tags.push([
-        'e',
-        event.id,
-        $selected_repo_event.relays[0] || '',
-        'reply',
-      ])
+      new_event.tags.push(['e', event.id, relay_hint, 'reply'])
     }
-    if ($selected_repo_event.unique_commit) {
-      new_event.tags.push(['r', $selected_repo_event.unique_commit])
+    if (
+      $selected_repo_collection &&
+      'unique_commit' in $selected_repo_collection &&
+      !!$selected_repo_collection.unique_commit
+    ) {
+      new_event.tags.push(['r', $selected_repo_collection.unique_commit])
     }
-    $selected_repo_collection.maintainers.forEach((m) => {
-      new_event.tags.push(['a', `${repo_kind}:${m}:${repo_identifier}`])
-    })
-    let parent_event_user_relay = user_relays[event.pubkey]
-      ? get(user_relays[event.pubkey]).ndk_relays?.writeRelayUrls[0]
-      : undefined
 
-    if (event.pubkey !== $logged_in_user?.hexpubkey)
+    let parent_event_user_info = await relays_manager.awaitPubKeyInfo(
+      event.pubkey
+    )
+
+    if (event.pubkey !== $logged_in_user?.pubkey)
       new_event.tags.push(
-        parent_event_user_relay
-          ? ['p', event.pubkey, parent_event_user_relay]
+        parent_event_user_info.relays.write[0]
+          ? ['p', event.pubkey, parent_event_user_info.relays.write[0]]
           : ['p', event.pubkey]
       )
     event.tags
@@ -86,39 +83,27 @@
           // not duplicate
           !new_event.tags.some((t) => t[1] === tag[1]) &&
           // not current user (dont tag self)
-          tag[1] !== $logged_in_user?.hexpubkey
+          tag[1] !== $logged_in_user?.pubkey
         )
           new_event.tags.push(tag)
       })
+    tagRepoAnns(new_event, $selected_repo_collection)
     new_event.content = content
     submitting = true
-    let relays = [
-      ...($selected_repo_event.relays.length > 3
-        ? $selected_repo_event.relays
-        : [...base_relays].concat($selected_repo_event.relays)),
-    ]
+    let relays = selectedRepoCollectionToRelays($selected_repo_collection)
     try {
       new_event.sign()
     } catch {
       alert('failed to sign event')
     }
     try {
-      let user_relays = await getUserRelays($logged_in_user.hexpubkey)
-      relays = [
-        ...relays,
-        ...(user_relays.ndk_relays
-          ? user_relays.ndk_relays.writeRelayUrls
-          : []),
-      ]
+      relays = [...relays, ...$logged_in_user.relays.write]
     } catch {}
     try {
-      let root_event_user_relays = await getUserRelays(event.pubkey)
-      relays = [
-        ...relays,
-        ...(root_event_user_relays.ndk_relays
-          ? root_event_user_relays.ndk_relays.writeRelayUrls
-          : []),
-      ]
+      let root_event_user_relays = await relays_manager.awaitPubKeyInfo(
+        event.pubkey
+      )
+      relays = [...relays, ...root_event_user_relays.relays.write]
     } catch {}
     // TODO root event user relays
     try {

@@ -53,9 +53,12 @@
   "dependencies": {
     "@nostr-dev-kit/ndk": "^2.10.0",
     "@nostr-dev-kit/ndk-svelte": "^2.2.18",
+    "applesauce-core": "^0.6.0",
     "daisyui": "^4.12.10",
     "dayjs": "^1.11.13",
+    "dexie": "^4.0.8",
     "highlight.js": "^11.10.0",
+    "nostr-idb": "https://github.com/hzrd149/nostr-idb",
     "nostr-tools": "^2.7.2",
     "parse-diff": "^0.11.1",
     "ramda": "^0.30.1",

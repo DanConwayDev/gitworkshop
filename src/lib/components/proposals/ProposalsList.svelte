@@ -1,10 +1,9 @@
 <script lang="ts">
   import ProposalsListItem from '$lib/components/proposals/ProposalsListItem.svelte'
-  import type { IssueSummary } from '../issues/type'
-  import type { ProposalSummary } from './type'
+  import type { IssueOrPrWithReferences } from '$lib/dbs/types'
 
   export let title: string = ''
-  export let proposals_or_issues: ProposalSummary[] | IssueSummary[] = []
+  export let proposals_or_issues: IssueOrPrWithReferences[] = []
   export let repo_naddr_override: string | undefined = undefined
   export let loading: boolean = false
   export let show_repo: boolean = false

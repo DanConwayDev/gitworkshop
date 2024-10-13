@@ -1,88 +1,17 @@
-import {
-  defaults as user_defaults,
-  type UserObject,
-} from '$lib/components/users/type'
-import {
-  getRelayListForUser,
-  NDKNip07Signer,
-  NDKRelayList,
-} from '@nostr-dev-kit/ndk'
+import { NDKNip07Signer } from '@nostr-dev-kit/ndk'
 import { get, writable, type Unsubscriber, type Writable } from 'svelte/store'
 import { ndk } from './ndk'
+import { type PubKeyInfo, type PubKeyString } from '$lib/dbs/types'
+import relays_manager from './RelaysManager'
+import type { Observable } from 'dexie'
 
-export const users: { [hexpubkey: string]: Writable<UserObject> } = {}
+export const users: { [hexpubkey: PubKeyString]: Observable<PubKeyInfo> } = {}
 
-const empty_user: Writable<UserObject> = writable({
-  loading: true,
-  hexpubkey: '',
-  npub: 'npub...',
-})
-
-export const ensureUser = (hexpubkey: string): Writable<UserObject> => {
-  if (hexpubkey === '') return empty_user
+export const ensureUser = (hexpubkey: PubKeyString): Observable<PubKeyInfo> => {
   if (!users[hexpubkey]) {
-    const u = ndk.getUser({ hexpubkey })
-
-    const base: UserObject = {
-      loading: false,
-      hexpubkey,
-      npub: u.npub,
-    }
-
-    users[hexpubkey] = writable(base)
-    getUserRelays(hexpubkey)
-    const getProfile = () => {
-      u.fetchProfile({
-        closeOnEose: true,
-        groupable: true,
-        // default 100
-        groupableDelay: 200,
-      }).then(
-        (p) => {
-          users[hexpubkey].update((u) => ({
-            ...u,
-            loading: false,
-            profile: p === null ? undefined : p,
-          }))
-        },
-        () => {
-          users[hexpubkey].update((u) => ({
-            ...u,
-            loading: false,
-          }))
-        }
-      )
-    }
-    let attempts = 1
-    const tryAgainin3s = () => {
-      setTimeout(
-        () => {
-          if (!get(users[hexpubkey]).profile) {
-            getProfile()
-            attempts++
-            if (attempts < 5) tryAgainin3s()
-          }
-        },
-        (attempts ^ 2) * 1000
-      )
-    }
-    getProfile()
-    tryAgainin3s()
+    users[hexpubkey] = relays_manager.fetchPubkeyInfoWithObserable(hexpubkey)
   }
   return users[hexpubkey]
-}
-
-export const returnUser = async (hexpubkey: string): Promise<UserObject> => {
-  return new Promise((r) => {
-    const unsubscriber = ensureUser(hexpubkey).subscribe((u) => {
-      if (!u.loading) {
-        setTimeout(() => {
-          if (unsubscriber) unsubscriber()
-        }, 5)
-        r(u)
-      }
-    })
-  })
 }
 
 // nip07_plugin is set in Navbar component
@@ -111,10 +40,13 @@ export const checkForNip07Plugin = () => {
 
 const signer = new NDKNip07Signer(2000)
 
-export const logged_in_user: Writable<undefined | UserObject> =
+export const logged_in_user: Writable<undefined | PubKeyInfo> =
   writable(undefined)
 
+let login_unsubscriber: Unsubscriber | undefined = undefined
+
 export const login = async (): Promise<void> => {
+  logout()
   return new Promise(async (res, rej) => {
     const user = get(logged_in_user)
     if (user) return res()
@@ -122,14 +54,10 @@ export const login = async (): Promise<void> => {
       try {
         const ndk_user = await signer.blockUntilReady()
         localStorage.setItem('nip07pubkey', ndk_user.pubkey)
-        logged_in_user.set({
-          ...user_defaults,
-          hexpubkey: ndk_user.pubkey,
-        })
-        ndk.signer = signer
-        ensureUser(ndk_user.pubkey).subscribe((user) => {
-          logged_in_user.set({ ...user })
-        })
+        // ndk.signer = signer
+        login_unsubscriber = ensureUser(ndk_user.pubkey).subscribe((user) => {
+          logged_in_user.set(user)
+        }).unsubscribe
         return res()
       } catch (e) {
         alert(e)
@@ -142,43 +70,8 @@ export const login = async (): Promise<void> => {
 }
 
 export const logout = async (): Promise<void> => {
+  if (login_unsubscriber) login_unsubscriber()
   logged_in_user.set(undefined)
   localStorage.removeItem('nip07pubkey')
   ndk.signer = undefined
-}
-
-interface UserRelays {
-  loading: boolean
-  ndk_relays: NDKRelayList | undefined
-}
-
-export const user_relays: { [hexpubkey: string]: Writable<UserRelays> } = {}
-
-export const getUserRelays = async (hexpubkey: string): Promise<UserRelays> => {
-  return new Promise(async (res, _) => {
-    if (user_relays[hexpubkey]) {
-      const unsubscriber: Unsubscriber = user_relays[hexpubkey].subscribe(
-        (querying_user_relays) => {
-          if (querying_user_relays && !querying_user_relays.loading) {
-            res(querying_user_relays)
-            setTimeout(() => {
-              if (unsubscriber) unsubscriber()
-            }, 5)
-          }
-        }
-      )
-    } else {
-      user_relays[hexpubkey] = writable({
-        loading: true,
-        ndk_relays: undefined,
-      })
-      const relay_list = await getRelayListForUser(hexpubkey, ndk)
-      const querying_user_relays = {
-        loading: false,
-        ndk_relays: relay_list,
-      }
-      user_relays[hexpubkey].set({ ...querying_user_relays })
-      res(querying_user_relays)
-    }
-  })
 }

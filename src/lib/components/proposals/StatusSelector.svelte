@@ -12,9 +12,10 @@
     proposal_status_open,
     statusKindtoText,
   } from '$lib/kinds'
-  import { getUserRelays, logged_in_user } from '$lib/stores/users'
-  import { selected_repo_event } from '$lib/stores/repo'
+  import { logged_in_user } from '$lib/stores/users'
+  import { selected_repo_collection } from '$lib/stores/repo'
   import Status from '$lib/components/proposals/Status.svelte'
+  import { selectedRepoCollectionToRelays } from '$lib/dbs/types'
 
   export let status: number | undefined = undefined
   export let type: 'proposal' | 'issue' = 'proposal'
@@ -41,27 +42,28 @@
       .forEach((revision) => {
         event.tags.push(['e', revision.id, 'mention'])
       })
-    if ($selected_repo_event.unique_commit)
-      event.tags.push(['r', $selected_repo_event.unique_commit])
+    if (
+      $selected_repo_collection &&
+      'unique_commit' in $selected_repo_collection &&
+      !!$selected_repo_collection.unique_commit
+    ) {
+      event.tags.push(['r', $selected_repo_collection.unique_commit])
+    }
+
     loading = true
-    let relays = [...$selected_repo_event.relays]
+    let relays = selectedRepoCollectionToRelays($selected_repo_collection)
     try {
       event.sign()
     } catch {
       alert('failed to sign event')
     }
     try {
-      let user_relays = await getUserRelays($logged_in_user.hexpubkey)
       relays = [
         ...relays,
-        ...(user_relays.ndk_relays
-          ? user_relays.ndk_relays.writeRelayUrls
-          : []),
+        ...$logged_in_user.relays.write,
         // TODO: proposal event pubkey relays
       ]
-    } catch {
-      alert('failed to get user relays')
-    }
+    } catch {}
     try {
       let _ = await event.publish(NDKRelaySet.fromRelayUrls(relays, ndk))
       selected_proposal_full.update((proposal_full) => {

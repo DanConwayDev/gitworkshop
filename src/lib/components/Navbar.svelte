@@ -1,10 +1,10 @@
 <script lang="ts">
+  import type { PubKeyString } from '$lib/dbs/types'
   import { logout } from '$lib/stores/users'
   import Container from './Container.svelte'
   import UserHeader from './users/UserHeader.svelte'
-  import type { User } from './users/type'
 
-  export let logged_in_user: User | undefined = undefined
+  export let logged_in_user: PubKeyString | undefined = undefined
   export let nip07_plugin: boolean | undefined = undefined
   export let login_function = () => {}
   export let singup_function = () => {}

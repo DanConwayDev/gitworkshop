@@ -1,20 +1,22 @@
 <script lang="ts">
-  import type { NDKEvent, NDKTag } from '@nostr-dev-kit/ndk'
   import parseDiff from 'parse-diff'
   import hljs from 'highlight.js/lib/common'
   import 'highlight.js/styles/agate.min.css'
   import type { Change, AddChange, DeleteChange } from 'parse-diff'
   import ParsedContent from './ParsedContent.svelte'
-  import { extractPatchMessage, extractTagContent } from './utils'
-  import { nip19 } from 'nostr-tools'
-  import { extractRepoAFromProposalEvent } from '$lib/stores/Proposals'
-  import { extractAReference } from '$lib/components/repo/utils'
+  import {
+    extractPatchMessage,
+    extractRepoAFromProposalEvent,
+    extractTagContent,
+  } from './utils'
+  import { nip19, type Event } from 'nostr-tools'
+  import { aRefToAddressPointer } from '$lib/components/repo/utils'
 
-  export let event: NDKEvent
+  export let event: Event
   export let preview = false
 
   let content: string = event ? event.content : ''
-  let tags: NDKTag[] = event ? event.tags : []
+  let tags: string[][] = event ? event.tags : []
 
   let commit_id_shorthand =
     extractTagContent('commit', tags)?.substring(0, 8) || '[commit_id unknown]'
@@ -62,13 +64,13 @@
       return undefined
     }
   }
-  let nevent = nip19.neventEncode({
+  $: nevent = nip19.neventEncode({
     id: event.id,
-    relays: event.relay ? [event.relay.url] : undefined,
+    relays: undefined,
   })
 
   let a_string = extractRepoAFromProposalEvent(event)
-  let pointer = a_string ? extractAReference(a_string) : undefined
+  let pointer = a_string ? aRefToAddressPointer(a_string) : undefined
   let naddr = pointer ? nip19.naddrEncode(pointer) : undefined
 </script>
 

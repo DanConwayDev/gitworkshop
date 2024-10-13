@@ -1,12 +1,12 @@
-import type { NDKEvent } from '@nostr-dev-kit/ndk'
-import type { User } from '../users/type'
+import type { Event } from 'nostr-tools'
+import type { PubKeyString } from '$lib/dbs/types'
 
-export interface Event {
-  author: User
+export interface TreeEvent {
+  author: PubKeyString
   content: unknown
 }
 
 export interface ThreadTreeNode {
-  event: NDKEvent
+  event: Event
   child_nodes: ThreadTreeNode[]
 }

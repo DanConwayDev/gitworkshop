@@ -16,7 +16,7 @@
 </script>
 
 <Navbar
-  logged_in_user={$logged_in_user}
+  logged_in_user={$logged_in_user?.pubkey}
   nip07_plugin={$nip07_plugin}
   login_function={login}
   {singup_function}

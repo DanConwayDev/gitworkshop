@@ -1,28 +1,62 @@
 <script lang="ts">
-  import { summary_defaults } from './repo/type'
+  import {
+    repoToNaddr,
+    type Naddr,
+    type PubKeyString,
+    type RepoSummarisable,
+  } from '$lib/dbs/types'
   import UserHeader from './users/UserHeader.svelte'
-  import type { User } from './users/type'
+  export let repo: RepoSummarisable | undefined
 
-  export let { name, description, identifier, maintainers, naddr, loading } =
-    summary_defaults
-  let short_name: string
+  let short_name: string = 'Untitled'
   $: {
-    if (name && name.length > 45) short_name = name.slice(0, 45) + '...'
-    else if (name && name.length >= 0) short_name = name
-    else if (identifier && identifier.length > 45)
-      short_name = identifier.slice(0, 45) + '...'
-    else if (identifier && identifier.length >= 0) short_name = identifier
-    else short_name = 'Untitled'
+    if (repo) {
+      if ('name' in repo && repo.name.length > 45)
+        short_name = repo.name.slice(0, 45) + '...'
+      else if ('name' in repo && repo.name.length >= 0) short_name = repo.name
+      else if (repo.identifier && repo.identifier.length > 45)
+        short_name = repo.identifier.slice(0, 45) + '...'
+      else if (repo.identifier && repo.identifier.length >= 0)
+        short_name = repo.identifier
+    }
   }
-  let additional_maintainers: User[] = []
-  let author: User | undefined = undefined
 
-  $: short_descrption =
-    description.length > 50 ? description.slice(0, 45) + '...' : description
-
+  let short_descrption: string = ''
   $: {
-    additional_maintainers = (([_, ...xs]) => xs)(maintainers)
-    author = maintainers[0]
+    if (repo && 'description' in repo) {
+      if (repo.name.length > 50)
+        short_name = repo.description.slice(0, 45) + '...'
+      else short_descrption = repo.description
+    }
+  }
+
+  let author: PubKeyString | undefined = undefined
+  $: {
+    if (repo) {
+      if ('trusted_maintainer' in repo) author = repo.trusted_maintainer
+      else if ('pubkey' in repo) author = repo.pubkey
+      else if ('author' in repo) author = repo.author
+    }
+  }
+
+  let maintainers: PubKeyString[] = []
+  let additional_maintainers: PubKeyString[] = []
+  $: {
+    if (repo && 'maintainers' in repo)
+      additional_maintainers = repo.maintainers.filter(
+        (pubkey) => pubkey !== author
+      )
+    maintainers = author
+      ? [author, ...additional_maintainers]
+      : additional_maintainers
+  }
+
+  let naddr: Naddr | undefined = undefined
+  $: {
+    if (repo) {
+      if ('naddr' in repo) naddr = repo.naddr
+      else naddr = repoToNaddr(repo)
+    }
   }
 </script>
 
@@ -30,11 +64,19 @@
   class="rounded-lg bg-base-200 p-4"
   style={`min-height: ${maintainers.length * 1.325 + 2}rem;`}
 >
-  {#if loading}
+  {#if !repo}
     <div class="skeleton mb-2 h-5 w-40"></div>
     <div class="w-100 skeleton h-4"></div>
   {:else}
-    <a class="link-primary break-words" href="/r/{naddr}">{short_name}</a>
+    <a
+      class="link-primary break-words"
+      href="/r/{naddr}"
+      on:click={(event) => {
+        if (!naddr) {
+          event.preventDefault()
+        }
+      }}>{short_name}</a
+    >
     {#if short_descrption.length > 0}
       <p class="text-muted break-words pb-1 text-sm">
         {short_descrption}

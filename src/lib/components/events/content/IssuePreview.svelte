@@ -1,17 +1,15 @@
 <script lang="ts">
-  import { extractAReference } from '$lib/components/repo/utils'
-  import { extractRepoAFromProposalEvent } from '$lib/stores/Proposals'
-  import type { NDKEvent } from '@nostr-dev-kit/ndk'
-  import { nip19 } from 'nostr-tools'
-  import { extractIssueTitle } from './utils'
+  import { aRefToAddressPointer } from '$lib/components/repo/utils'
+  import { nip19, type Event } from 'nostr-tools'
+  import { extractIssueTitle, extractRepoAFromProposalEvent } from './utils'
 
-  export let event: NDKEvent
+  export let event: Event
   let nevent = nip19.neventEncode({
     id: event.id,
-    relays: event.relay ? [event.relay.url] : undefined,
+    relays: undefined,
   })
   let a_string = extractRepoAFromProposalEvent(event)
-  let pointer = a_string ? extractAReference(a_string) : undefined
+  let pointer = a_string ? aRefToAddressPointer(a_string) : undefined
   let naddr = pointer ? nip19.naddrEncode(pointer) : undefined
 </script>
 

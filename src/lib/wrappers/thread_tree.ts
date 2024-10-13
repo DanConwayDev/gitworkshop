@@ -1,7 +1,7 @@
 import type { ThreadTreeNode } from '$lib/components/events/type'
-import type { NDKEvent } from '@nostr-dev-kit/ndk'
+import type { Event } from 'nostr-tools'
 
-export const getParentId = (reply: NDKEvent): string | undefined => {
+export const getParentId = (reply: Event): string | undefined => {
   const t =
     reply.tags.find((tag) => tag.length === 4 && tag[3] === 'reply') ||
     reply.tags.find((tag) => tag.length === 4 && tag[3] === 'root') ||
@@ -10,7 +10,7 @@ export const getParentId = (reply: NDKEvent): string | undefined => {
   return t ? t[1] : undefined
 }
 
-export const createThreadTree = (replies: NDKEvent[]): ThreadTreeNode[] => {
+export const createThreadTree = (replies: Event[]): ThreadTreeNode[] => {
   const hashTable: { [key: string]: ThreadTreeNode } = Object.create(null)
   replies.forEach(
     (reply) => (hashTable[reply.id] = { event: reply, child_nodes: [] })
@@ -53,8 +53,8 @@ export const splitIntoRevisionThreadTrees = (
 
 export const getThreadTrees = (
   type: 'proposal' | 'issue',
-  event: NDKEvent | undefined,
-  replies: NDKEvent[] | undefined
+  event: Event | undefined,
+  replies: Event[] | undefined
 ): ThreadTreeNode[] => {
   if (event) {
     const all_trees = createThreadTree(replies ? [event, ...replies] : [event])

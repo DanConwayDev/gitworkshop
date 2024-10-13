@@ -1,29 +1,29 @@
 <script lang="ts">
-  import type { RepoSummary } from './repo/type'
   import RepoSummaryCard from '$lib/components/RepoSummaryCard.svelte'
+  import { type RepoAnn } from '$lib/dbs/types'
 
   export let title: string = ''
-  export let repos: RepoSummary[] = []
+  export let repos: RepoAnn[] = []
   export let loading: boolean = false
   export let group_by: 'name' | 'identifier' | undefined = undefined
 
-  let grouped_repos: RepoSummary[][] = []
+  let grouped_repos: RepoAnn[][] = []
   let selected_group: string | undefined = undefined
   $: {
     grouped_repos = []
-    repos.forEach((collection) => {
+    repos.forEach((ann) => {
       if (!group_by) {
-        grouped_repos.push([collection])
+        grouped_repos.push([ann])
         return
       }
       const added_to_group = grouped_repos.some((group, i) => {
-        if (group.some((c) => c[group_by] === collection[group_by])) {
-          grouped_repos[i].push(collection)
+        if (group.some((c) => c[group_by] === ann[group_by])) {
+          grouped_repos[i].push(ann)
           return true
         }
         return false
       })
-      if (!added_to_group) grouped_repos.push([collection])
+      if (!added_to_group) grouped_repos.push([ann])
     })
   }
 </script>
@@ -40,16 +40,10 @@
     <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
       {#each grouped_repos as group}
         {#if group.length === 0}
-          <RepoSummaryCard loading={true} />
+          <RepoSummaryCard repo={undefined} />
         {:else if group.length === 1}
-          {#each group as { name, description, identifier, maintainers, naddr }}
-            <RepoSummaryCard
-              {name}
-              {description}
-              {identifier}
-              {maintainers}
-              {naddr}
-            />
+          {#each group as repo}
+            <RepoSummaryCard {repo} />
           {/each}
         {:else if group_by}
           <div class="stack">
@@ -66,25 +60,19 @@
                 <div class=" text-sm opacity-50">{group.length} Items</div>
               </div>
             </div>
-            {#each group as { name, description, identifier, maintainers, naddr }}
+            {#each group as repo}
               <div class="rounded-lg border border-base-400">
-                <RepoSummaryCard
-                  {name}
-                  {description}
-                  {identifier}
-                  {maintainers}
-                  {naddr}
-                />
+                <RepoSummaryCard {repo} />
               </div>
             {/each}
           </div>
         {/if}
       {/each}
       {#if loading}
-        <RepoSummaryCard loading={true} />
+        <RepoSummaryCard repo={undefined} />
         {#if repos.length == 0}
-          <RepoSummaryCard loading={true} />
-          <RepoSummaryCard loading={true} />
+          <RepoSummaryCard repo={undefined} />
+          <RepoSummaryCard repo={undefined} />
         {/if}
       {/if}
     </div>
@@ -99,14 +87,8 @@
         </h3>
       </div>
       <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {#each repos.filter((summary) => group_by && summary[group_by] === selected_group) as { name, description, identifier, maintainers, naddr }}
-          <RepoSummaryCard
-            {name}
-            {description}
-            {identifier}
-            {maintainers}
-            {naddr}
-          />
+        {#each repos.filter((summary) => group_by && summary[group_by] === selected_group) as repo}
+          <RepoSummaryCard {repo} />
         {/each}
       </div>
       <div class="modal-action">
