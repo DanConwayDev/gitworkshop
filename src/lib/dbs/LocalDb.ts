@@ -18,7 +18,7 @@ export interface SchemaV1 {
 const db = new Dexie('localdb') as Dexie & SchemaV1
 
 db.version(1).stores({
-  repos: '&uuid, identifier',
+  repos: '&uuid, identifier, author',
   issues: '&uuid, parent_id',
   prs: '&uuid, parent_id',
   pubkeys: '&pubkey',

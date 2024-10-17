@@ -153,6 +153,41 @@ class RelayManager {
     })
   }
 
+  async fetchPubKeyRepos(pubkey: PubKeyString) {
+    await this.connect()
+    const checks = await db.last_checks.get(`${this.url}|${pubkey}`)
+    db.last_checks.put({
+      url_and_query: `${this.url}|${pubkey}`,
+      url: this.url,
+      timestamp: unixNow(),
+      query: pubkey,
+    })
+    return new Promise<void>((r) => {
+      const sub = this.relay.subscribe(
+        [
+          {
+            kinds: [repo_kind],
+            since: checks ? checks.timestamp - 60 * 10 : 0,
+            // TODO: what if this last check failed to reach the relay?
+            authors: [pubkey],
+          },
+        ],
+        {
+          onevent: async (event) => {
+            const repo_ann = eventToRepoAnn(event)
+            if (!repo_ann) return
+            processRepoAnnFromRelay(repo_ann, this.url)
+          },
+          oneose: async () => {
+            sub.close()
+            this.resetInactivityTimer()
+            r()
+          },
+        }
+      )
+    })
+  }
+
   async fetchPubkeyInfo(pubkey: PubKeyString) {
     this.pubkey_metadata_queue.add(pubkey)
     await this.connect()
@@ -454,6 +489,17 @@ class RelaysManager {
   async fetchAllRepos() {
     const relays = await chooseRelaysForAllRepos()
     Promise.all(relays.map((url) => this.get(url).fetchAllRepos()))
+  }
+
+  async fetchPubKeyRepos(pubkey: PubKeyString | undefined) {
+    if (!pubkey) return
+    // TODO only ask relays if we haven't done it in last 10 seconds
+    // TODO: check if user has existing repos and factor in those relay hints
+    // TODO: create chooseLikelyRepoRelaysForPubkey function
+    const relays = await chooseRelaysForPubkey(pubkey)
+    Promise.all(
+      relays.slice(0, 4).map((url) => this.get(url).fetchPubKeyRepos(pubkey))
+    )
   }
 
   fetchPubkeyInfoWithObserable(
