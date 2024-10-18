@@ -217,9 +217,35 @@ interface EventRefBase extends EventAttribution {
 }
 
 export interface SeenOnRelay {
+  /// last successful check completed timestamp | 0
   last_check: Timestamp
+  /// in progress start timestamp so we dont assume every check was successful
+  check_initiated_at: Timestamp | undefined
   seen: boolean
   up_to_date: boolean
+  // for Repos children are PR and issues and for pubkeys they are repo events, Pr and Issues
+  last_children_check: Timestamp
+  children_check_initiated_at: Timestamp | undefined
+}
+
+export const seen_on_relay_defaults: SeenOnRelay = {
+  last_check: 0,
+  check_initiated_at: undefined,
+  seen: false,
+  up_to_date: false,
+  last_children_check: 0,
+  children_check_initiated_at: undefined,
+}
+
+export const extractOrCreateSeenOnRelay = (
+  entry: SeenOn | undefined,
+  url: string
+): SeenOnRelay => {
+  if (entry) {
+    const seen_on_relay = entry.seen_on.get(url)
+    if (seen_on_relay) return seen_on_relay
+  }
+  return { ...seen_on_relay_defaults }
 }
 export interface SeenOn {
   seen_on: Map<string, SeenOnRelay>
@@ -233,7 +259,8 @@ export interface LastCheck {
   url_and_query: string
   url: string
   timestamp: Timestamp
-  query: PubKeyString | 'All Repos' | 'All'
+  check_initiated_at: Timestamp | undefined
+  query: 'All Repos' // scope to add other queries eg 'All PRs and Issue' in the future
 }
 
 // interface EventRefParamReplaceable extends EventRefBase {

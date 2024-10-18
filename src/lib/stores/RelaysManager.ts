@@ -4,6 +4,7 @@ import {
   eventToIssue,
   eventToPrRoot,
   eventToRepoAnn,
+  extractOrCreateSeenOnRelay,
   type ARef,
   type AtLeastThreeArray,
   type PubKeyInfo,
@@ -25,6 +26,8 @@ import { type AddressPointer } from 'nostr-tools/nip19'
 import { base_relays } from './ndk'
 import { Metadata, RelayList } from 'nostr-tools/kinds'
 import { liveQuery } from 'dexie'
+import { aRefToAddressPointer } from '$lib/components/repo/utils'
+import { identifierRepoAnnsToRepoCollection } from './repo'
 
 class RelayManager {
   url: string
@@ -104,6 +107,7 @@ class RelayManager {
             .toArray()
           for (const entry of not_on_relays) {
             entry.seen_on.set(this.url, {
+              ...extractOrCreateSeenOnRelay(entry, this.url),
               last_check: unixNow(),
               seen: false,
               up_to_date: false,
@@ -118,14 +122,22 @@ class RelayManager {
   async fetchRepos() {}
 
   async fetchAllRepos() {
-    await this.connect()
     const checks = await db.last_checks.get(`${this.url}|`)
+    if (
+      checks &&
+      checks.check_initiated_at &&
+      checks.check_initiated_at > Date.now() - 3000
+    )
+      return
     db.last_checks.put({
       url_and_query: `${this.url}|`,
       url: this.url,
-      timestamp: unixNow(),
+      check_initiated_at: Date.now(),
+      timestamp: checks ? checks.timestamp : 0,
+      // timestamp: unixNow(),
       query: 'All Repos',
     })
+    await this.connect()
     return new Promise<void>((r) => {
       const sub = this.relay.subscribe(
         [
@@ -146,6 +158,13 @@ class RelayManager {
           oneose: async () => {
             sub.close()
             this.resetInactivityTimer()
+            db.last_checks.put({
+              url_and_query: `${this.url}|`,
+              url: this.url,
+              check_initiated_at: undefined,
+              timestamp: unixNow(),
+              query: 'All Repos',
+            })
             r()
           },
         }
@@ -155,19 +174,29 @@ class RelayManager {
 
   async fetchPubKeyRepos(pubkey: PubKeyString) {
     await this.connect()
-    const checks = await db.last_checks.get(`${this.url}|${pubkey}`)
-    db.last_checks.put({
-      url_and_query: `${this.url}|${pubkey}`,
-      url: this.url,
-      timestamp: unixNow(),
-      query: pubkey,
-    })
+    const info = (await db.pubkeys.get(pubkey)) || createPubKeyInfo(pubkey)
+    const seen_on = info.metadata.seen_on.get(this.url)
+    if (
+      seen_on &&
+      seen_on.children_check_initiated_at &&
+      seen_on.children_check_initiated_at > Date.now() - 3000
+    )
+      return
+    const new_seen_on = {
+      ...extractOrCreateSeenOnRelay(info.metadata, this.url),
+      children_check_initiated_at: Date.now(),
+    }
+    info.metadata.seen_on.set(this.url, new_seen_on)
+    await db.pubkeys.put(info, pubkey)
+
     return new Promise<void>((r) => {
       const sub = this.relay.subscribe(
         [
           {
             kinds: [repo_kind],
-            since: checks ? checks.timestamp - 60 * 10 : 0,
+            since: new_seen_on.last_check
+              ? new_seen_on.last_check - 60 * 10
+              : 0,
             // TODO: what if this last check failed to reach the relay?
             authors: [pubkey],
           },
@@ -179,6 +208,14 @@ class RelayManager {
             processRepoAnnFromRelay(repo_ann, this.url)
           },
           oneose: async () => {
+            const info =
+              (await db.pubkeys.get(pubkey)) || createPubKeyInfo(pubkey)
+            info.metadata.seen_on.set(this.url, {
+              ...extractOrCreateSeenOnRelay(info.metadata, this.url),
+              children_check_initiated_at: undefined,
+              last_children_check: unixNow(),
+            })
+            await db.pubkeys.put(info, pubkey)
             sub.close()
             this.resetInactivityTimer()
             r()
@@ -223,6 +260,7 @@ class RelayManager {
               found_metadata.add(event.pubkey)
               const seen_on = original.metadata.seen_on
               const seen_on_relay = {
+                ...extractOrCreateSeenOnRelay(original.metadata, this.url),
                 last_check: unixNow(),
                 seen: true,
                 up_to_date:
@@ -264,6 +302,7 @@ class RelayManager {
                     latest_seen_on.get(this.url)?.last_check
                   ) {
                     latest_seen_on.set(this.url, {
+                      ...extractOrCreateSeenOnRelay(latest.metadata, this.url),
                       last_check: unixNow(),
                       seen: true,
                       up_to_date: false,
@@ -287,6 +326,7 @@ class RelayManager {
             found_relay_list.add(event.pubkey)
             const seen_on = original.relays.seen_on
             const seen_on_relay = {
+              ...extractOrCreateSeenOnRelay(original.metadata, this.url),
               last_check: unixNow(),
               seen: true,
               up_to_date:
@@ -328,6 +368,7 @@ class RelayManager {
                   latest_seen_on.get(this.url)?.last_check
                 ) {
                   latest_seen_on.set(this.url, {
+                    ...extractOrCreateSeenOnRelay(latest.relays, this.url),
                     last_check: unixNow(),
                     seen: true,
                     up_to_date: false,
@@ -362,12 +403,14 @@ class RelayManager {
               (await db.pubkeys.get(pubkey)) || createPubKeyInfo(pubkey)
             if (missing_metadata.has(pubkey))
               record.metadata.seen_on.set(this.url, {
+                ...extractOrCreateSeenOnRelay(record.metadata, this.url),
                 last_check: unixNow(),
                 seen: false,
                 up_to_date: false,
               })
             if (missing_relays.has(pubkey))
               record.relays.seen_on.set(this.url, {
+                ...extractOrCreateSeenOnRelay(record.relays, this.url),
                 last_check: unixNow(),
                 seen: false,
                 up_to_date: false,
@@ -390,12 +433,13 @@ class RelayManager {
             const issue_or_pr = eventToIssue(event) || eventToPrRoot(event)
             if (issue_or_pr) {
               const table = issue_or_pr.kind === issue_kind ? db.issues : db.prs
+              const record = await table.get(event.id)
               const seen_on_relay = {
+                ...extractOrCreateSeenOnRelay(record, this.url),
                 last_check: unixNow(),
                 seen: true,
                 up_to_date: true,
               }
-              const record = await table.get(event.id)
               if (!record) {
                 const seen_on = new Map()
                 seen_on.set(this.url, seen_on_relay)
@@ -410,6 +454,7 @@ class RelayManager {
             }
           },
           oneose: async () => {
+            // TODO: update last check for
             r()
           },
         }
@@ -579,6 +624,7 @@ const processRepoAnnFromRelay = async (
   const original = await db.repos.get(repo_ann.uuid)
   const seen_on = original ? original.seen_on : new Map()
   const seen_on_relay = {
+    ...extractOrCreateSeenOnRelay(original, relay_url),
     last_check: unixNow(),
     seen: true,
     up_to_date:
@@ -603,6 +649,7 @@ const processRepoAnnFromRelay = async (
         seen_on_relay.last_check === latest_seen_on.get(relay_url)?.last_check
       ) {
         latest_seen_on.set(relay_url, {
+          ...extractOrCreateSeenOnRelay(latest, relay_url),
           last_check: unixNow(),
           seen: true,
           up_to_date: false,

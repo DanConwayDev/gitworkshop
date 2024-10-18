@@ -194,7 +194,7 @@ export const getRepoIssuesOrPrsObservable = (
   })
 }
 
-const identifierRepoAnnsToRepoCollection = (
+export const identifierRepoAnnsToRepoCollection = (
   repo_anns: (RepoAnn & SeenOn)[],
   pubkey: PubKeyString,
   identifier: string
