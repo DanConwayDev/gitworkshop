@@ -730,6 +730,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/node@npm:^22.7.7":
+  version: 22.7.7
+  resolution: "@types/node@npm:22.7.7"
+  dependencies:
+    undici-types: "npm:~6.19.2"
+  checksum: 10c0/07268a1e990ad9d9b1865092881317ea679a46eb6706d83a8874eec75fdddae6cfd6452e4e68b651561183e2a8f8548276f3155744bc402c2545978c19b70d65
+  languageName: node
+  linkType: hard
+
 "@types/ramda@npm:^0.30.2":
   version: 0.30.2
   resolution: "@types/ramda@npm:0.30.2"
@@ -2129,6 +2138,7 @@ __metadata:
     "@sveltejs/kit": "npm:^2.5.28"
     "@sveltejs/vite-plugin-svelte": "npm:^3.1.2"
     "@tailwindcss/typography": "npm:^0.5.15"
+    "@types/node": "npm:^22.7.7"
     "@types/ramda": "npm:^0.30.2"
     "@typescript-eslint/eslint-plugin": "npm:^8.6.0"
     "@typescript-eslint/parser": "npm:^8.6.0"
@@ -4210,6 +4220,13 @@ __metadata:
     tsc: bin/tsc
     tsserver: bin/tsserver
   checksum: 10c0/94eb47e130d3edd964b76da85975601dcb3604b0c848a36f63ac448d0104e93819d94c8bdf6b07c00120f2ce9c05256b8b6092d23cf5cf1c6fa911159e4d572f
+  languageName: node
+  linkType: hard
+
+"undici-types@npm:~6.19.2":
+  version: 6.19.8
+  resolution: "undici-types@npm:6.19.8"
+  checksum: 10c0/078afa5990fba110f6824823ace86073b4638f1d5112ee26e790155f481f2a868cc3e0615505b6f4282bdf74a3d8caad715fd809e870c2bb0704e3ea6082f344
   languageName: node
   linkType: hard
 
