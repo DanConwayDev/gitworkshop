@@ -25,7 +25,11 @@
   <ul class=" divide-y divide-base-400">
     {#each sort_youngest_first ? proposals_or_issues.sort((a, b) => (b.created_at || 0) - (a.created_at || 0)) : proposals_or_issues as proposal, index}
       {#if current_limit === 0 || index + 1 <= current_limit}
-        <ProposalsListItem {...proposal} {repo_naddr_override} {show_repo} />
+        <ProposalsListItem
+          issue_or_pr={proposal}
+          {repo_naddr_override}
+          {show_repo}
+        />
       {/if}
     {/each}
     {#if loading}

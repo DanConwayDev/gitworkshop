@@ -4,7 +4,6 @@
 <script lang="ts">
   import dayjs from 'dayjs'
   import relativeTime from 'dayjs/plugin/relativeTime'
-  import { summary_defaults } from './type'
   import { proposal_icon_path } from './icons'
   import UserHeader from '../users/UserHeader.svelte'
   import {
@@ -14,53 +13,53 @@
     proposal_status_open,
   } from '$lib/kinds'
   import { issue_icon_path } from '../issues/icons'
-  import { aToNaddr, naddrToPointer } from '../repo/utils'
+  import { aRefToAddressPointer, aToNaddr, naddrToPointer } from '../repo/utils'
   import { nip19 } from 'nostr-tools'
+  import type { IssueOrPrWithReferences } from '$lib/dbs/types'
 
   dayjs.extend(relativeTime)
   export let type: 'issue' | 'proposal' = 'proposal'
 
-  export let {
-    title,
-    descritpion,
-    id,
-    repo_a,
-    comments,
-    status,
-    status_date,
-    author,
-    created_at,
-  } = summary_defaults
+  export let issue_or_pr: IssueOrPrWithReferences | undefined = undefined
   export let show_repo: boolean = false
   export let repo_naddr_override: string | undefined = undefined
   let short_title: string
   let created_at_ago: string
-  let loading: boolean
   $: {
-    if (title.length > 70) short_title = title.slice(0, 65) + '...'
-    else if (title.length == 0) short_title = 'Untitled'
-    else short_title = title
-    created_at_ago = created_at ? dayjs(created_at * 1000).fromNow() : ''
-    loading = title.length === 0
+    if (!issue_or_pr) short_title = ''
+    else if (issue_or_pr.title.length > 70)
+      short_title = issue_or_pr.title.slice(0, 65) + '...'
+    else if (issue_or_pr.title.length == 0) short_title = 'Untitled'
+    else short_title = issue_or_pr.title
+    created_at_ago = issue_or_pr
+      ? dayjs(issue_or_pr.created_at * 1000).fromNow()
+      : ''
   }
   let repo_naddr = ''
   let repo_identifier = ''
   $: {
-    if (repo_a.length > 0) {
-      repo_naddr = repo_naddr_override || aToNaddr(repo_a) || ''
+    if (issue_or_pr) {
+      repo_naddr =
+        repo_naddr_override || aToNaddr(issue_or_pr.parent_ids[0]) || ''
       if (repo_naddr_override) {
-        repo_identifier = naddrToPointer(repo_naddr)?.identifier || ''
+        repo_identifier =
+          naddrToPointer(repo_naddr)?.identifier ||
+          aRefToAddressPointer(issue_or_pr.parent_ids[0])?.identifier ||
+          ''
       }
     }
   }
+  let comments = 0 // TODO count issue_or_pr.thread
 </script>
 
-<li class="flex p-2 pt-4 {!loading ? 'cursor-pointer hover:bg-base-200' : ''}">
+<li
+  class="flex p-2 pt-4 {issue_or_pr ? 'cursor-pointer hover:bg-base-200' : ''}"
+>
   <!-- <figure class="p-4 pl-0 text-color-primary"> -->
   <!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
-  {#if loading || !status}
+  {#if !issue_or_pr}
     <div class="skeleton h-5 w-5 flex-none pt-1"></div>
-  {:else if status === proposal_status_open}
+  {:else if issue_or_pr.status === proposal_status_open}
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
@@ -74,7 +73,7 @@
         {/each}
       {/if}
     </svg>
-  {:else if status === proposal_status_closed}
+  {:else if issue_or_pr.status === proposal_status_closed}
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
@@ -88,14 +87,14 @@
         {/each}
       {/if}
     </svg>
-  {:else if status === proposal_status_draft}
+  {:else if issue_or_pr.status === proposal_status_draft}
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
       class="h-5 w-5 flex-none fill-neutral-content pt-1"
       ><path d={proposal_icon_path.draft} /></svg
     >
-  {:else if status === proposal_status_applied}
+  {:else if issue_or_pr.status === proposal_status_applied}
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
@@ -111,11 +110,13 @@
     </svg>
   {/if}
   <a
-    href="/r/{repo_naddr}/{type}s/{nip19.noteEncode(id) || ''}"
+    href="/r/{repo_naddr}/{type}s/{issue_or_pr
+      ? nip19.noteEncode(issue_or_pr.uuid)
+      : ''}"
     class="ml-3 grow overflow-hidden text-xs text-neutral-content"
-    class:pointer-events-none={loading}
+    class:pointer-events-none={!issue_or_pr}
   >
-    {#if loading}
+    {#if !issue_or_pr}
       <div class="skeleton h-5 w-60 flex-none pt-1"></div>
       <div class="skeleton mb-1 mt-3 h-3 w-40 flex-none"></div>
     {:else}
@@ -144,7 +145,7 @@
           opened {created_at_ago}
         </li>
         <li class="inline">
-          <UserHeader user={author} inline={true} size="xs" />
+          <UserHeader user={issue_or_pr.author} inline={true} size="xs" />
         </li>
         {#if show_repo && repo_identifier.length > 0}
           <li class="ml-3 inline">
