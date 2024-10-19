@@ -471,16 +471,24 @@ class RelayManager {
       '#a': [a_ref],
       since:
         anns
-          .map((ann) =>
-            a_ref === repoToARef(ann)
-              ? // TODO: last check minus 10 minutes
-                ann.seen_on.get(this.url)?.last_children_check
-              : undefined
-          )
+          .map((ann) => {
+            if (a_ref === repoToARef(ann)) {
+              const seen_on = ann.seen_on.get(this.url)
+              if (seen_on) {
+                const ten_minutes = 10 * 60
+                if (seen_on.last_children_check > ten_minutes) {
+                  return seen_on.last_children_check - ten_minutes
+                } else {
+                  // seen_on.last_children_check defaults to 0
+                  return seen_on.last_children_check
+                }
+              }
+            }
+            return undefined
+          })
           .find((v) => !!v) || undefined,
     }))
 
-    // TODO: since
     await new Promise<void>((r) => {
       this.relay.subscribe(filters, {
         onevent: async (event) => {
