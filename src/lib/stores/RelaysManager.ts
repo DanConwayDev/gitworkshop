@@ -4,7 +4,9 @@ import {
   eventToIssue,
   eventToPrRoot,
   eventToRepoAnn,
+  eventToStatusRef,
   extractOrCreateSeenOnRelay,
+  IssueOrPrStatus,
   repoToARef,
   type ARef,
   type AtLeastThreeArray,
@@ -12,8 +14,13 @@ import {
   type PubKeyString,
   type RepoAnn,
 } from '$lib/dbs/types'
-import { issue_kind, patch_kind, repo_kind } from '$lib/kinds'
-import { aToAddressPointerAndARef } from '$lib/utils'
+import {
+  issue_kind,
+  patch_kind,
+  proposal_status_kinds,
+  repo_kind,
+} from '$lib/kinds'
+import { aToAddressPointerAndARef, getTagValue } from '$lib/utils'
 import {
   getInboxes,
   getOutboxes,
@@ -22,13 +29,14 @@ import {
   isHexKey,
   unixNow,
 } from 'applesauce-core/helpers'
-import { Relay } from 'nostr-tools'
+import { Relay, type Event } from 'nostr-tools'
 import { type AddressPointer } from 'nostr-tools/nip19'
 import { base_relays } from './ndk'
 import { Metadata, RelayList } from 'nostr-tools/kinds'
 import { liveQuery } from 'dexie'
 import { aRefToAddressPointer } from '$lib/components/repo/utils'
 import { identifierRepoAnnsToRepoCollection } from './repo'
+import memory_db from '$lib/dbs/InBrowserRelay'
 
 class RelayManager {
   url: string
@@ -447,6 +455,7 @@ class RelayManager {
     )
   }
 
+  tmp_statuses: Event[] = []
   async fetchIssuesAndPRsForRepo(a_refs: ARef[]) {
     await this.connect()
     const anns = (await db.repos.bulkGet(a_refs)).filter((ann) => !!ann)
@@ -467,7 +476,7 @@ class RelayManager {
       })
     await db.repos.bulkPut(anns)
     const filters = a_refs.map((a_ref) => ({
-      kinds: [issue_kind, patch_kind],
+      kinds: [issue_kind, patch_kind, ...proposal_status_kinds],
       '#a': [a_ref],
       since:
         anns
@@ -492,6 +501,11 @@ class RelayManager {
     await new Promise<void>((r) => {
       this.relay.subscribe(filters, {
         onevent: async (event) => {
+          if (proposal_status_kinds.includes(event.kind)) {
+            const processed = processStatusEvent(event)
+            if (!processed) this.tmp_statuses.push(event)
+            return
+          }
           const issue_or_pr = eventToIssue(event) || eventToPrRoot(event)
           if (issue_or_pr) {
             const table = issue_or_pr.kind === issue_kind ? db.issues : db.prs
@@ -521,54 +535,45 @@ class RelayManager {
             ann.seen_on.set(this.url, {
               ...extractOrCreateSeenOnRelay(ann, this.url),
               children_check_initiated_at: undefined,
-              check_initiated_at: unixNow(),
+              last_children_check: unixNow(),
             })
           })
           await db.repos.bulkPut(anns)
-
-          // TODO: update last check for
+          for (const event of this.tmp_statuses) {
+            await processStatusEvent(event)
+          }
+          this.tmp_statuses = []
           r()
         },
       })
     })
-    // await new Promise<void>(async (r) => {
-    //   // get status and replies
-    //   let issues = db.issues
-    //     .where('parent_ids').anyOf(a_refs).toArray();
+    await new Promise<void>(async (r) => {
+      // get status and replies
+      const comment_filters = []
+      for (const filter of filters) {
+        const issues = await db.issues
+          .filter((e) => e.parent_ids.includes(filter['#a'][0]))
+          .toArray()
+        const prs = await db.prs
+          .filter((e) => e.parent_ids.includes(filter['#a'][0]))
+          .toArray()
+        if (issues.length > 0 || prs.length > 0)
+          comment_filters.push({
+            kinds: [...proposal_status_kinds],
+            '#e': [...issues.map((v) => v.uuid), ...prs.map((v) => v.uuid)],
+            since: filter.since,
+          })
+      }
 
-    //     this.relay.subscribe(
-    //       [{ kinds: [ ...proposal_status_kinds, 1], '#a': a_refs }],
-    //       {
-    //         onevent: async (event) => {
-    //           const issue_or_pr = eventToIssue(event) || eventToPrRoot(event)
-    //           if (issue_or_pr) {
-    //             const table =
-    //               issue_or_pr.kind === issue_kind ? db.issues : db.prs
-    //             const seen_on_relay = {
-    //               last_check: unixNow(),
-    //               seen: true,
-    //               up_to_date: true,
-    //             }
-    //             const record = await table.get(event.id)
-    //             if (!record) {
-    //               const seen_on = new Map()
-    //               seen_on.set(this.url, seen_on_relay)
-    //               table.add({
-    //                 ...issue_or_pr,
-    //                 seen_on,
-    //               })
-    //             } else {
-    //               record.seen_on.set(this.url, seen_on_relay)
-    //               table.put(record)
-    //             }
-    //           }
-    //         },
-    //         oneose: async () => {
-    //           r()
-    //         },
-    //       }
-    //     )
-    // })
+      this.relay.subscribe(comment_filters, {
+        onevent: async (event) => {
+          memory_db.addEvent(event)
+        },
+        oneose: async () => {
+          r()
+        },
+      })
+    })
     // for each PR and Issue (and in db) get responses and responses to each response
     // get new PRs and Repos
     // find responses
@@ -654,12 +659,20 @@ class RelaysManager {
       (m) => `${repo_kind}:${m}:${address_pointer.identifier}` as ARef
     )
     const relays = await chooseRelaysForRepo(a, naddr_relays)
-
-    Promise.all(
+    const unsubscriber = memory_db.inserted.subscribe({
+      next(event: Event) {
+        if (proposal_status_kinds.includes(event.kind)) {
+          processStatusEvent(event)
+          return
+        }
+      },
+    })
+    await Promise.all(
       relays
         .slice(0, 4)
         .map((url) => this.get(url).fetchIssuesAndPRsForRepo(a_refs))
     )
+    unsubscriber()
   }
 
   fetchPubkeyInfoWithObserable(
@@ -730,6 +743,26 @@ class RelaysManager {
       }).unsubscribe
     })
   }
+}
+
+const processStatusEvent = async (event: Event): Promise<boolean> => {
+  const entity_id = getTagValue(event.tags, 'e')
+  if (!entity_id) return true
+  let record = await db.issues.get(entity_id)
+  let table: 'issues' | 'prs' = 'issues'
+  if (!record) {
+    record = await db.prs.get(entity_id)
+    table = 'prs'
+  }
+  if (!record) return false
+  const ref = eventToStatusRef(event)
+  if (record.status_refs.some((r) => ref.uuid === r.uuid)) return true
+  record.status_refs.push(ref)
+  record.status_refs.sort((a, b) => a.created_at - b.created_at)
+  record.status =
+    record.status_refs.map((s) => s.status).slice(-1)[0] || IssueOrPrStatus.Open
+  db[table].put(record, entity_id)
+  return true
 }
 
 const processRepoAnnFromRelay = async (

@@ -285,7 +285,7 @@ export interface WithNaddr {
 //   seen_on_relays: string[]
 // }
 
-enum IssueOrPrStatus {
+export enum IssueOrPrStatus {
   Open = 1630,
   Applied = 1631,
   Closed = 1632,
@@ -303,8 +303,19 @@ export function statusKindtoText(
   return 'Draft'
 }
 
-interface StatusRef extends EventRefBase {
+interface StatusRef extends EventAttribution {
   status: IssueOrPrStatus
+}
+
+/// must be status event
+export const eventToStatusRef = (event: Event): StatusRef => {
+  return {
+    uuid: event.id,
+    event_id: undefined,
+    status: event.kind as IssueOrPrStatus,
+    author: event.pubkey,
+    created_at: event.created_at,
+  }
 }
 interface IssueOrPrBase extends EventRefBase {
   title: string

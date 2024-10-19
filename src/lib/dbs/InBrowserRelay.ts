@@ -1,4 +1,6 @@
-import { openDB } from 'nostr-idb'
-const db = await openDB('InBrowserRelay')
+import { Database } from 'applesauce-core'
 
-export default db
+const memory_db = new Database()
+
+// TODO create persistant in browser cache and populate this db from it
+export default memory_db
