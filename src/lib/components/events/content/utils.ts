@@ -313,7 +313,7 @@ export const extractPatchDescription = (s: string): string | undefined => {
 }
 
 export const extractIssueTitle = (event: Event) =>
-  getTagValue(event.tags, 'subject') || event.content.split('\\n')[0]
+  getTagValue(event.tags, 'subject') || event.content.split('\n')[0]
 
 export const extractIssueDescription = (s: string): string => {
   const split = s.split('\n')
