@@ -29,10 +29,10 @@
       {/if}
     {/each}
     {#if loading}
-      <ProposalsListItem loading={true} />
+      <ProposalsListItem />
       {#if proposals_or_issues.length == 0}
-        <ProposalsListItem loading={true} />
-        <ProposalsListItem loading={true} />
+        <ProposalsListItem />
+        <ProposalsListItem />
       {/if}
     {:else if allow_more && limit !== 0 && proposals_or_issues.length > current_limit}
       <button

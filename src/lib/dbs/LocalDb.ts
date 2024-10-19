@@ -19,8 +19,8 @@ const db = new Dexie('localdb') as Dexie & SchemaV1
 
 db.version(1).stores({
   repos: '&uuid, identifier, author',
-  issues: '&uuid, parent_id',
-  prs: '&uuid, parent_id',
+  issues: '&uuid, parent_ids',
+  prs: '&uuid, parent_ids',
   pubkeys: '&pubkey',
   last_checks: '&url_and_query',
 })

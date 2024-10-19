@@ -5,6 +5,7 @@ import {
   eventToPrRoot,
   eventToRepoAnn,
   extractOrCreateSeenOnRelay,
+  repoToARef,
   type ARef,
   type AtLeastThreeArray,
   type PubKeyInfo,
@@ -33,8 +34,9 @@ class RelayManager {
   url: string
   repo_queue: Set<ARef> = new Set()
   pubkey_metadata_queue: Set<PubKeyString> = new Set()
-  set_repo_queue_timeout: boolean = false
-  set_pubkey_queue_timeout: boolean = false
+  set_repo_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined
+  set_pubkey_queue_timeout: ReturnType<typeof setTimeout> | undefined =
+    undefined
   relay: Relay
   inactivity_timer: NodeJS.Timeout | null = null
 
@@ -68,55 +70,76 @@ class RelayManager {
     this.repo_queue.add(a)
     await this.connect()
     if (!this.set_repo_queue_timeout) {
-      this.set_repo_queue_timeout = true
-      setTimeout(async () => this.fetchRepoAnnQueue(), 200)
+      this.set_repo_queue_timeout = setTimeout(
+        async () => this.fetchRepoAnnQueue(),
+        200
+      )
     }
   }
 
+  async fetchRepoAnnNow(a: ARef) {
+    this.repo_queue.add(a)
+    await this.fetchRepoAnnQueue()
+  }
   async fetchRepoAnnQueue() {
-    await this.connect()
-    const identifiers = new Set<string>()
-    this.repo_queue.forEach((v) => {
-      try {
-        identifiers.add(v.split(':')[2])
-      } catch {}
-    })
-    this.repo_queue.clear()
-    const found = new Set<string>()
-    const sub = this.relay.subscribe(
-      [
+    if (this.set_repo_queue_timeout) clearTimeout(this.set_repo_queue_timeout)
+
+    return new Promise<void>(async (resolve, reject) => {
+      // Set a timeout for the reject response
+      const timeout = setTimeout(() => {
+        sub.close() // Close the subscription if it times out
+        reject(
+          new Error(
+            this.relay.connected ? 'connection timeout' : 'no eose recieved'
+          )
+        )
+      }, 5000)
+      await this.connect()
+      const identifiers = new Set<string>()
+      this.repo_queue.forEach((v) => {
+        try {
+          identifiers.add(v.split(':')[2])
+        } catch {}
+      })
+      this.repo_queue.clear()
+      const found = new Set<string>()
+      const sub = this.relay.subscribe(
+        [
+          {
+            kinds: [repo_kind],
+            '#d': [...identifiers],
+          },
+        ],
         {
-          kinds: [repo_kind],
-          '#d': [...identifiers],
-        },
-      ],
-      {
-        onevent: async (event) => {
-          const repo_ann = eventToRepoAnn(event)
-          if (!repo_ann) return
-          found.add(repo_ann.uuid)
-          processRepoAnnFromRelay(repo_ann, this.url)
-        },
-        oneose: async () => {
-          sub.close()
-          this.resetInactivityTimer()
-          const not_on_relays = await db.repos
-            .where('identifier')
-            .anyOf([...identifiers])
-            .filter((repo) => !found.has(repo.uuid))
-            .toArray()
-          for (const entry of not_on_relays) {
-            entry.seen_on.set(this.url, {
-              ...extractOrCreateSeenOnRelay(entry, this.url),
-              last_check: unixNow(),
-              seen: false,
-              up_to_date: false,
-            })
-            db.repos.put(entry)
-          }
-        },
-      }
-    )
+          onevent: async (event) => {
+            const repo_ann = eventToRepoAnn(event)
+            if (!repo_ann) return
+            found.add(repo_ann.uuid)
+            processRepoAnnFromRelay(repo_ann, this.url)
+          },
+          oneose: async () => {
+            sub.close()
+            this.resetInactivityTimer()
+            const not_on_relays = await db.repos
+              .where('identifier')
+              .anyOf([...identifiers])
+              .filter((repo) => !found.has(repo.uuid))
+              .toArray()
+            for (const entry of not_on_relays) {
+              entry.seen_on.set(this.url, {
+                ...extractOrCreateSeenOnRelay(entry, this.url),
+                last_check: unixNow(),
+                seen: false,
+                up_to_date: false,
+              })
+              db.repos.put(entry)
+            }
+            clearTimeout(timeout)
+            resolve()
+          },
+        }
+      )
+    })
   }
 
   async fetchRepos() {}
@@ -229,8 +252,10 @@ class RelayManager {
     this.pubkey_metadata_queue.add(pubkey)
     await this.connect()
     if (!this.set_pubkey_queue_timeout) {
-      this.set_pubkey_queue_timeout = true
-      setTimeout(async () => this.fetchPubkeyQueue(), 200)
+      this.set_pubkey_queue_timeout = setTimeout(
+        async () => this.fetchPubkeyQueue(),
+        200
+      )
     }
   }
 
@@ -238,7 +263,7 @@ class RelayManager {
     await this.connect()
     const pubkeys = [...this.pubkey_metadata_queue]
     this.pubkey_metadata_queue.clear()
-    this.set_pubkey_queue_timeout = false
+    clearTimeout(this.set_pubkey_queue_timeout)
     const found_metadata = new Set<string>()
     const found_relay_list = new Set<string>()
     const sub = this.relay.subscribe(
@@ -424,46 +449,84 @@ class RelayManager {
 
   async fetchIssuesAndPRsForRepo(a_refs: ARef[]) {
     await this.connect()
+    const anns = (await db.repos.bulkGet(a_refs)).filter((ann) => !!ann)
+    if (
+      anns.length === a_refs.length &&
+      anns.every(
+        (ann) =>
+          ann.seen_on.get(this.url)?.children_check_initiated_at ||
+          0 > Date.now() - 5000 ||
+          false
+      )
+    )
+      anns.forEach((ann) => {
+        ann.seen_on.set(this.url, {
+          ...extractOrCreateSeenOnRelay(ann, this.url),
+          children_check_initiated_at: Date.now(),
+        })
+      })
+    await db.repos.bulkPut(anns)
+    const filters = a_refs.map((a_ref) => ({
+      kinds: [issue_kind, patch_kind],
+      '#a': [a_ref],
+      since:
+        anns
+          .map((ann) =>
+            a_ref === repoToARef(ann)
+              ? // TODO: last check minus 10 minutes
+                ann.seen_on.get(this.url)?.last_children_check
+              : undefined
+          )
+          .find((v) => !!v) || undefined,
+    }))
+
     // TODO: since
     await new Promise<void>((r) => {
-      this.relay.subscribe(
-        [{ kinds: [issue_kind, patch_kind], '#a': a_refs }],
-        {
-          onevent: async (event) => {
-            const issue_or_pr = eventToIssue(event) || eventToPrRoot(event)
-            if (issue_or_pr) {
-              const table = issue_or_pr.kind === issue_kind ? db.issues : db.prs
-              const record = await table.get(event.id)
-              const seen_on_relay = {
-                ...extractOrCreateSeenOnRelay(record, this.url),
-                last_check: unixNow(),
-                seen: true,
-                up_to_date: true,
-              }
-              if (!record) {
-                const seen_on = new Map()
-                seen_on.set(this.url, seen_on_relay)
-                table.add({
-                  ...issue_or_pr,
-                  seen_on,
-                })
-              } else {
-                record.seen_on.set(this.url, seen_on_relay)
-                table.put(record)
-              }
+      this.relay.subscribe(filters, {
+        onevent: async (event) => {
+          const issue_or_pr = eventToIssue(event) || eventToPrRoot(event)
+          if (issue_or_pr) {
+            const table = issue_or_pr.kind === issue_kind ? db.issues : db.prs
+            const record = await table.get(event.id)
+            const seen_on_relay = {
+              ...extractOrCreateSeenOnRelay(record, this.url),
+              last_check: unixNow(),
+              seen: true,
+              up_to_date: true,
             }
-          },
-          oneose: async () => {
-            // TODO: update last check for
-            r()
-          },
-        }
-      )
+            if (!record) {
+              const seen_on = new Map()
+              seen_on.set(this.url, seen_on_relay)
+              table.add({
+                ...issue_or_pr,
+                seen_on,
+              })
+            } else {
+              record.seen_on.set(this.url, seen_on_relay)
+              table.put(record)
+            }
+          }
+        },
+        oneose: async () => {
+          const anns = (await db.repos.bulkGet(a_refs)).filter((ann) => !!ann)
+          anns.forEach((ann) => {
+            ann.seen_on.set(this.url, {
+              ...extractOrCreateSeenOnRelay(ann, this.url),
+              children_check_initiated_at: undefined,
+              check_initiated_at: unixNow(),
+            })
+          })
+          await db.repos.bulkPut(anns)
+
+          // TODO: update last check for
+          r()
+        },
+      })
     })
     // await new Promise<void>(async (r) => {
     //   // get status and replies
     //   let issues = db.issues
-    //     .where('parent_id').anyOf(a_refs).toArray();
+    //     .where('parent_ids').anyOf(a_refs).toArray();
 
     //     this.relay.subscribe(
     //       [{ kinds: [ ...proposal_status_kinds, 1], '#a': a_refs }],
@@ -519,7 +582,7 @@ class RelaysManager {
 
   async fetchRepoAnn(a: ARef, naddr_relays: string[] | undefined = undefined) {
     const relay_urls = await chooseRelaysForRepo(a, naddr_relays)
-    Promise.all(
+    await Promise.all(
       relay_urls.map(async (r) => {
         let relay = this.relays.get(r)
         if (!relay) {
@@ -527,6 +590,23 @@ class RelaysManager {
           this.relays.set(r, relay)
         }
         await relay.fetchRepoAnn(a)
+      })
+    )
+  }
+
+  async fetchRepoAnnNow(
+    a: ARef,
+    naddr_relays: string[] | undefined = undefined
+  ) {
+    const relay_urls = await chooseRelaysForRepo(a, naddr_relays)
+    await Promise.all(
+      relay_urls.map(async (r) => {
+        let relay = this.relays.get(r)
+        if (!relay) {
+          relay = new RelayManager(r)
+          this.relays.set(r, relay)
+        }
+        await relay.fetchRepoAnnNow(a)
       })
     )
   }
@@ -544,6 +624,33 @@ class RelaysManager {
     const relays = await chooseRelaysForPubkey(pubkey)
     Promise.all(
       relays.slice(0, 4).map((url) => this.get(url).fetchPubKeyRepos(pubkey))
+    )
+  }
+
+  async fetchIssuesAndPRsForRepo(
+    a: ARef,
+    naddr_relays: string[] | undefined = undefined
+  ) {
+    const address_pointer = aRefToAddressPointer(a)
+    if (!address_pointer) return
+    const anns = await db.repos
+      .where('identifier')
+      .equals(address_pointer?.identifier)
+      .toArray()
+    const c = identifierRepoAnnsToRepoCollection(
+      anns,
+      address_pointer.pubkey,
+      address_pointer.identifier
+    )
+    const a_refs: ARef[] = c.maintainers.map(
+      (m) => `${repo_kind}:${m}:${address_pointer.identifier}` as ARef
+    )
+    const relays = await chooseRelaysForRepo(a, naddr_relays)
+
+    Promise.all(
+      relays
+        .slice(0, 4)
+        .map((url) => this.get(url).fetchIssuesAndPRsForRepo(a_refs))
     )
   }
 

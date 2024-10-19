@@ -108,13 +108,13 @@ export const ensureSelectedRepoCollection = (
           selected_issues.set(issues)
         }
       ).unsubscribe
-      selected_prs_unsubscriber = getRepoIssuesObservable(a).subscribe(
-        (prs) => {
-          selected_prs.set(prs)
-        }
-      ).unsubscribe
+      selected_prs_unsubscriber = getRepoPrsObservable(a).subscribe((prs) => {
+        selected_prs.set(prs)
+      }).unsubscribe
       // refresh data from relays
-      relays_manager.fetchRepoAnn(a, naddr_relays)
+      relays_manager.fetchRepoAnnNow(a, naddr_relays).then(() => {
+        relays_manager.fetchIssuesAndPRsForRepo(a, naddr_relays)
+      })
     }
   }
   return selected_repo_collection
@@ -190,7 +190,11 @@ export const getRepoIssuesOrPrsObservable = (
       )
       a_refs = repoToARefs(repo_collection)
     } catch {}
-    return db[issues_or_prs].where('uuid').anyOf(a_refs).toArray()
+    return db[issues_or_prs]
+      .filter((items) =>
+        items.parent_ids.some((id) => (a_refs as string[]).includes(id))
+      )
+      .toArray()
   })
 }
 

@@ -213,7 +213,7 @@ export const eventToRepoAnn = (event: Event): RepoAnn | undefined => {
 
 interface EventRefBase extends EventAttribution {
   kind: Kind
-  parent_id: (EventIdString | ARef)[]
+  parent_ids: (EventIdString | ARef)[]
 }
 
 export interface SeenOnRelay {
@@ -381,7 +381,7 @@ export const eventToIssueOrPr = (event: Event) => {
   return {
     uuid: event.id,
     event_id: undefined,
-    parent_id: a_refs,
+    parent_ids: a_refs,
     revision_parent_pr: undefined,
     kind: event.kind,
     author: event.pubkey,
