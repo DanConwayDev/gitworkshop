@@ -36,7 +36,7 @@ import { Metadata, RelayList } from 'nostr-tools/kinds'
 import { liveQuery } from 'dexie'
 import { aRefToAddressPointer } from '$lib/components/repo/utils'
 import { identifierRepoAnnsToRepoCollection } from './repo'
-import memory_db from '$lib/dbs/InBrowserRelay'
+import memory_db from '$lib/dbs/InMemoryRelay'
 
 class RelayManager {
   url: string
@@ -559,7 +559,7 @@ class RelayManager {
           .toArray()
         if (issues.length > 0 || prs.length > 0)
           comment_filters.push({
-            kinds: [...proposal_status_kinds],
+            kinds: [...proposal_status_kinds, 1],
             '#e': [...issues.map((v) => v.uuid), ...prs.map((v) => v.uuid)],
             since: filter.since,
           })
