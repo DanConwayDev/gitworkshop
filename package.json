@@ -49,7 +49,7 @@
     "dayjs": "^1.11.13",
     "dexie": "^4.0.8",
     "highlight.js": "^11.10.0",
-    "nostr-idb": "https://github.com/hzrd149/nostr-idb",
+    "nostr-idb": "^2.1.6",
     "nostr-tools": "^2.7.2",
     "parse-diff": "^0.11.1",
     "ramda": "^0.30.1",

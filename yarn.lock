@@ -2152,7 +2152,7 @@ __metadata:
     eslint-plugin-prettier: "npm:^5.2.1"
     eslint-plugin-svelte: "npm:^2.44.0"
     highlight.js: "npm:^11.10.0"
-    nostr-idb: "https://github.com/hzrd149/nostr-idb"
+    nostr-idb: "npm:^2.1.6"
     nostr-tools: "npm:^2.7.2"
     parse-diff: "npm:^0.11.1"
     postcss: "npm:^8.4.47"
@@ -3015,14 +3015,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"nostr-idb@https://github.com/hzrd149/nostr-idb":
+"nostr-idb@npm:^2.1.6":
   version: 2.1.6
-  resolution: "nostr-idb@https://github.com/hzrd149/nostr-idb.git#commit=6c5ea60901ba38a8320d1e0fa8780ce584cb9d8d"
+  resolution: "nostr-idb@npm:2.1.6"
   dependencies:
     debug: "npm:^4.3.6"
     idb: "npm:^8.0.0"
     nostr-tools: "npm:^2.7.1"
-  checksum: 10c0/35b63a0db39213c9cd8a21004570a20b5aa6123b88dd497d074838778b2ce22c5886ed44576545d2046e00a745959547a4fb8444de027f967376a6e3ca85062f
+  checksum: 10c0/7dacf51b96dbe0de3c7f06f158544467291e206208468ee149115a8b5c2bd8a2976337e289cfc90014a0c23ca48980a6a4cf119af3ae507e44109cd95098d9a5
   languageName: node
   linkType: hard
 

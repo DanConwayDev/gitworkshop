@@ -37,6 +37,7 @@ import { liveQuery } from 'dexie'
 import { aRefToAddressPointer } from '$lib/components/repo/utils'
 import { identifierRepoAnnsToRepoCollection } from './repo'
 import memory_db from '$lib/dbs/InMemoryRelay'
+import { CacheRelay, openDB } from 'nostr-idb'
 
 class RelayManager {
   url: string
@@ -45,12 +46,15 @@ class RelayManager {
   set_repo_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined
   set_pubkey_queue_timeout: ReturnType<typeof setTimeout> | undefined =
     undefined
-  relay: Relay
+  relay: Relay | CacheRelay
   inactivity_timer: NodeJS.Timeout | null = null
 
-  constructor(url: string) {
+  constructor(url: string, relay: Relay | CacheRelay | undefined = undefined) {
     this.url = url
-    this.relay = new Relay(url)
+    if (relay) this.relay = relay
+    else {
+      this.relay = new Relay(url)
+    }
   }
 
   async connect(): Promise<void> {
@@ -498,55 +502,57 @@ class RelayManager {
           .find((v) => !!v) || undefined,
     }))
 
-    await new Promise<void>((r) => {
-      this.relay.subscribe(filters, {
-        onevent: async (event) => {
-          if (proposal_status_kinds.includes(event.kind)) {
-            const processed = processStatusEvent(event)
-            if (!processed) this.tmp_statuses.push(event)
-            return
-          }
-          const issue_or_pr = eventToIssue(event) || eventToPrRoot(event)
-          if (issue_or_pr) {
-            const table = issue_or_pr.kind === issue_kind ? db.issues : db.prs
-            const record = await table.get(event.id)
-            const seen_on_relay = {
-              ...extractOrCreateSeenOnRelay(record, this.url),
-              last_check: unixNow(),
-              seen: true,
-              up_to_date: true,
+    if (this.url !== 'ws://nostr-idb-local')
+      await new Promise<void>((r) => {
+        this.relay.subscribe(filters, {
+          onevent: async (event) => {
+            if (proposal_status_kinds.includes(event.kind)) {
+              const processed = processStatusEvent(event)
+              if (!processed) this.tmp_statuses.push(event)
+              return
             }
-            if (!record) {
-              const seen_on = new Map()
-              seen_on.set(this.url, seen_on_relay)
-              table.add({
-                ...issue_or_pr,
-                seen_on,
+            const issue_or_pr = eventToIssue(event) || eventToPrRoot(event)
+            if (issue_or_pr) {
+              const table = issue_or_pr.kind === issue_kind ? db.issues : db.prs
+              const record = await table.get(event.id)
+              const seen_on_relay = {
+                ...extractOrCreateSeenOnRelay(record, this.url),
+                last_check: unixNow(),
+                seen: true,
+                up_to_date: true,
+              }
+              if (!record) {
+                const seen_on = new Map()
+                seen_on.set(this.url, seen_on_relay)
+                table.add({
+                  ...issue_or_pr,
+                  seen_on,
+                })
+              } else {
+                record.seen_on.set(this.url, seen_on_relay)
+                table.put(record)
+              }
+            }
+          },
+          oneose: async () => {
+            const anns = (await db.repos.bulkGet(a_refs)).filter((ann) => !!ann)
+            anns.forEach((ann) => {
+              ann.seen_on.set(this.url, {
+                ...extractOrCreateSeenOnRelay(ann, this.url),
+                children_check_initiated_at: undefined,
+                last_children_check: unixNow(),
               })
-            } else {
-              record.seen_on.set(this.url, seen_on_relay)
-              table.put(record)
-            }
-          }
-        },
-        oneose: async () => {
-          const anns = (await db.repos.bulkGet(a_refs)).filter((ann) => !!ann)
-          anns.forEach((ann) => {
-            ann.seen_on.set(this.url, {
-              ...extractOrCreateSeenOnRelay(ann, this.url),
-              children_check_initiated_at: undefined,
-              last_children_check: unixNow(),
             })
-          })
-          await db.repos.bulkPut(anns)
-          for (const event of this.tmp_statuses) {
-            await processStatusEvent(event)
-          }
-          this.tmp_statuses = []
-          r()
-        },
+            await db.repos.bulkPut(anns)
+            for (const event of this.tmp_statuses) {
+              await processStatusEvent(event)
+            }
+            this.tmp_statuses = []
+            r()
+          },
+        })
       })
-    })
+
     await new Promise<void>(async (r) => {
       // get status and replies
       const comment_filters = []
@@ -582,6 +588,17 @@ class RelayManager {
 
 class RelaysManager {
   relays: Map<string, RelayManager> = new Map()
+
+  async getCacheRelay() {
+    const url = 'ws://nostr-idb-local'
+    let relay = this.relays.get(url)
+    if (!relay) {
+      const relay_db = await openDB('LocalStorageRelay')
+      relay = new RelayManager(url, new CacheRelay(relay_db))
+      this.relays.set(url, relay)
+    }
+    return relay
+  }
 
   get(url: string) {
     const relay = this.relays.get(url)
@@ -659,20 +676,32 @@ class RelaysManager {
       (m) => `${repo_kind}:${m}:${address_pointer.identifier}` as ARef
     )
     const relays = await chooseRelaysForRepo(a, naddr_relays)
-    const unsubscriber = memory_db.inserted.subscribe({
+
+    let events_for_local: Event[] = []
+    const subscription = memory_db.inserted.subscribe({
       next(event: Event) {
         if (proposal_status_kinds.includes(event.kind)) {
           processStatusEvent(event)
           return
         }
+        events_for_local.push(event)
       },
     })
+    // get local events
+    const cache_relay = await this.getCacheRelay()
+    cache_relay.fetchIssuesAndPRsForRepo(a_refs)
+    events_for_local = []
+    // get events from relays
     await Promise.all(
       relays
         .slice(0, 4)
         .map((url) => this.get(url).fetchIssuesAndPRsForRepo(a_refs))
     )
-    unsubscriber()
+    subscription.unsubscribe()
+    // save new events from relays to local
+    for (const event of events_for_local) {
+      cache_relay.relay.publish(event)
+    }
   }
 
   fetchPubkeyInfoWithObserable(
