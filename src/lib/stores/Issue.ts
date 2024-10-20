@@ -17,7 +17,8 @@ export const selected_issue: Writable<
 let selected_issue_id: EventIdString | undefined = undefined
 let issue_unsubsriber: (() => void) | undefined = undefined
 export const selected_issue_replies: Writable<Event[]> = writable([])
-let issue_replies_unsubsriber: (() => void) | undefined = undefined
+let issue_replies_subscription: ZenObservable.Subscription | undefined =
+  undefined
 
 export const ensureIssueFull = (
   a_ref: ARef | undefined,
@@ -26,7 +27,7 @@ export const ensureIssueFull = (
   if (selected_issue_id === issue_id) return undefined
   selected_issue_id = issue_id
   if (issue_unsubsriber) issue_unsubsriber()
-  if (issue_replies_unsubsriber) issue_replies_unsubsriber()
+  if (issue_replies_subscription) issue_replies_subscription.unsubscribe()
   if (!issue_id) return undefined
   if (a_ref) ensureSelectedRepoCollection(a_ref)
 
@@ -38,7 +39,7 @@ export const ensureIssueFull = (
   selected_issue_replies.set([
     ...memory_db.getEventsForFilter({ '#e': [issue_id] }),
   ])
-  issue_replies_unsubsriber = memory_db.inserted.subscribe((event: Event) => {
+  issue_replies_subscription = memory_db.inserted.subscribe((event: Event) => {
     selected_issue_replies.update((events) => [...events, event])
-  }).unsubscribe
+  })
 }
