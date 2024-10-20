@@ -13,8 +13,8 @@
 
   // ensureProposalSummaries(undefined)
 
-  let example_repos = liveQuery(() => {
-    return db.repos
+  let example_repos = liveQuery(async () => {
+    return await db.repos
       .where('uuid')
       .anyOf([
         `${repo_kind}:a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d:ngit`,

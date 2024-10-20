@@ -7,10 +7,10 @@
 
   relays_manager.fetchAllRepos()
 
-  $: all_repos = liveQuery(() => {
+  $: all_repos = liveQuery(async () => {
     // TODO: check when last refershed repos for relays
     // call button
-    return db.repos.toArray()
+    return await db.repos.toArray()
   })
 </script>
 

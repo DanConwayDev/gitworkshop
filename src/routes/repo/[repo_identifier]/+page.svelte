@@ -6,8 +6,11 @@
 
   export let data: { repo_identifier: string }
   // TODO fetch from relays
-  $: repos = liveQuery(() => {
-    return db.repos.where('identifier').equals(data.repo_identifier).toArray()
+  $: repos = liveQuery(async () => {
+    return await db.repos
+      .where('identifier')
+      .equals(data.repo_identifier)
+      .toArray()
   })
 </script>
 

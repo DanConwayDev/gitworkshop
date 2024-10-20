@@ -26,8 +26,8 @@ export const ensureIssueFull = (
   if (issue_unsubsriber) issue_unsubsriber()
   if (a_ref) ensureSelectedRepoCollection(a_ref)
 
-  issue_unsubsriber = liveQuery(() => {
-    if (issue_id) return db.issues.get(issue_id)
+  issue_unsubsriber = liveQuery(async () => {
+    if (issue_id) return await db.issues.get(issue_id)
     return undefined
   }).subscribe((issue) => selected_issue.set(issue)).unsubscribe
 }

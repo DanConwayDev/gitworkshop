@@ -25,8 +25,8 @@
       relays_manager.fetchPubKeyRepos(pubkey)
     }
   }
-  $: repos = liveQuery(() => {
-    return db.repos
+  $: repos = liveQuery(async () => {
+    return await db.repos
       .where('author')
       .equals(pubkey || 'no pubkey')
       .toArray()

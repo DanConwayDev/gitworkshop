@@ -26,8 +26,8 @@ export const ensureProposalFull = (
   if (proposal_unsubsriber) proposal_unsubsriber()
   if (a_ref) ensureSelectedRepoCollection(a_ref)
 
-  proposal_unsubsriber = liveQuery(() => {
-    if (proposal_id) return db.prs.get(proposal_id)
+  proposal_unsubsriber = liveQuery(async () => {
+    if (proposal_id) return await db.prs.get(proposal_id)
     return undefined
   }).subscribe((proposal) => selected_proposal.set(proposal)).unsubscribe
 }
