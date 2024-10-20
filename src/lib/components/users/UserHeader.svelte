@@ -58,12 +58,13 @@
           class:h-3.5={(inline && size === 'sm') || size === 'xs'}
           class:w-3.5={(inline && size === 'sm') || size === 'xs'}
           class="rounded"
-          class:skeleton={!$info.metadata.fields && loading}
+          class:skeleton={!('image' in $info.metadata.fields) &&
+            !('picture' in $info.metadata.fields)}
           class:bg-neutral={!loading &&
             (!$info.metadata.fields ||
               (!$info.metadata.fields.image && !$info.metadata.fields.picture))}
         >
-          {#if $info.metadata.fields && ($info.metadata.fields?.image || $info.metadata.fields?.picture)}
+          {#if $info.metadata.fields?.image || $info.metadata.fields?.picture}
             <img
               class="my-0"
               src={$info.metadata.fields?.picture ||
