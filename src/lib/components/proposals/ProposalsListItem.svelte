@@ -7,6 +7,7 @@
   import { proposal_icon_path } from './icons'
   import UserHeader from '../users/UserHeader.svelte'
   import {
+    issue_kind,
     proposal_status_applied,
     proposal_status_closed,
     proposal_status_draft,
@@ -18,15 +19,17 @@
   import type { IssueOrPrWithReferences } from '$lib/dbs/types'
 
   dayjs.extend(relativeTime)
-  export let type: 'issue' | 'proposal' = 'proposal'
-
+  let type: 'issue' | 'proposal' = 'proposal'
+  $: {
+    type = issue_or_pr && issue_or_pr.kind === issue_kind ? 'issue' : 'proposal'
+  }
   export let issue_or_pr: IssueOrPrWithReferences | undefined = undefined
   export let show_repo: boolean = false
   export let repo_naddr_override: string | undefined = undefined
   let short_title: string
   let created_at_ago: string
   $: {
-    if (!issue_or_pr) short_title = ''
+    if (!issue_or_pr || !issue_or_pr.title) short_title = ''
     else if (issue_or_pr.title.length > 70)
       short_title = issue_or_pr.title.slice(0, 65) + '...'
     else if (issue_or_pr.title.length == 0) short_title = 'Untitled'

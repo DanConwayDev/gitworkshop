@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     ensureIssueFull,
-    selected_issue_full,
+    selected_issue,
     selected_issue_replies,
   } from '$lib/stores/Issue'
   import Thread from '$lib/wrappers/Thread.svelte'
@@ -12,7 +12,11 @@
   import { naddrToRepoA, neventOrNoteToHexId } from '$lib/components/repo/utils'
   import AlertError from '$lib/components/AlertError.svelte'
   import { selected_repo_collection } from '$lib/stores/repo'
-  import { selectedRepoCollectionToName } from '$lib/dbs/types'
+  import {
+    selectedRepoCollectionToName,
+    type ARef,
+    type EventIdString,
+  } from '$lib/dbs/types'
 
   export let data: {
     repo_naddr: string
@@ -20,35 +24,26 @@
   }
 
   let repo_naddr = data.repo_naddr
-  let a = ''
+  let a_ref: ARef | undefined = undefined
   $: {
-    const a_result = naddrToRepoA(repo_naddr)
-    if (a_result) a = a_result
+    a_ref = naddrToRepoA(repo_naddr)
   }
   $: name = selectedRepoCollectionToName($selected_repo_collection)
 
   let issue_nip19 = data.issue_nip19
-  let issue_id = ''
+  let issue_id: EventIdString | undefined = undefined
   let invalid_issue_ref = false
   $: {
-    const issue_nip19_result = neventOrNoteToHexId(issue_nip19)
-
-    if (issue_nip19_result) {
-      issue_id = issue_nip19_result
+    issue_id = neventOrNoteToHexId(issue_nip19)
+    if (issue_id) {
       invalid_issue_ref = false
-      ensureIssueFull(a, issue_id)
+      ensureIssueFull(a_ref, issue_id)
     } else {
       invalid_issue_ref = true
     }
   }
 
   let repo_error = false
-  let issue_error = false
-  $: {
-    issue_error =
-      !$selected_issue_full.summary.loading &&
-      $selected_issue_full.summary.created_at === 0
-  }
 
   let waited_5_secs = false
   setTimeout(() => {
@@ -57,11 +52,11 @@
 </script>
 
 <svelte:head>
-  <title>GitWorkshop: {name} - {$selected_issue_full.summary.title}</title>
+  <title>GitWorkshop: {name} - {$selected_issue?.title}</title>
 </svelte:head>
 
 <RepoPageWrapper {repo_naddr} with_side_bar={false} selected_tab="issues">
-  {#if invalid_issue_ref || (waited_5_secs && issue_error)}
+  {#if !$selected_issue && waited_5_secs}
     <Container>
       <AlertError>
         {#if invalid_issue_ref}
@@ -75,27 +70,22 @@
       </AlertError>
     </Container>
   {:else}
-    <ProposalHeader {...$selected_issue_full.summary} />
+    <ProposalHeader issue_or_pr={selected_issue} />
     <Container>
       <div class="mx-auto max-w-6xl lg:flex">
         <div class="md:mr-2 lg:w-2/3">
           <div class="max-w-4xl">
-            {#if $selected_issue_full.issue_event}
+            <!-- {#if $selected_issue}
               <Thread
                 type="issue"
-                event={$selected_issue_full.issue_event}
+                event={$selected_issue.event}
                 replies={$selected_issue_replies}
               />
-            {/if}
+            {/if} -->
           </div>
         </div>
         <div class="prose ml-2 hidden w-1/3 lg:flex">
-          <ProposalDetails
-            type="issue"
-            summary={$selected_issue_full.summary}
-            labels={$selected_issue_full.labels}
-            loading={$selected_issue_full.loading}
-          />
+          <ProposalDetails type="issue" issue_or_pr={selected_issue} />
         </div>
       </div>
     </Container>

@@ -6,11 +6,12 @@
   import { logged_in_user } from '$lib/stores/users'
   import { selected_repo_collection } from '$lib/stores/repo'
   import Compose from '$lib/components/events/Compose.svelte'
-  import { selected_proposal_full } from '$lib/stores/Proposal'
-  import { selected_issue_full } from '$lib/stores/Issue'
-  import type { IssueFull } from '$lib/components/issues/type'
-  import type { ProposalFull } from '$lib/components/proposals/type'
-  import { selectedRepoCollectionToRelays } from '$lib/dbs/types'
+  import { selected_proposal } from '$lib/stores/Proposal'
+  import { selected_issue } from '$lib/stores/Issue'
+  import {
+    selectedRepoCollectionToRelays,
+    type IssueOrPrWithReferences,
+  } from '$lib/dbs/types'
   import { tagRepoAnns } from '$lib/utils'
   import relays_manager from '$lib/stores/RelaysManager'
 
@@ -18,7 +19,7 @@
   export let event: Event
   export let sentFunction = () => {}
   let repo_identifier: string
-  let selected_proposal_or_issue: IssueFull | ProposalFull
+  let selected_proposal_or_issue: IssueOrPrWithReferences
 
   let submitting = false
   let submitted = false
@@ -27,7 +28,7 @@
     repo_identifier =
       ($selected_repo_collection && $selected_repo_collection.identifier) || ''
     selected_proposal_or_issue =
-      type === 'proposal' ? $selected_proposal_full : $selected_issue_full
+      type === 'proposal' ? $selected_proposal : $selected_issue
 
     edit_mode =
       repo_identifier.length > 0 &&

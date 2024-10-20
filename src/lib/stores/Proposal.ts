@@ -1,20 +1,33 @@
 import { type Event } from 'nostr-tools'
 import { writable, type Writable } from 'svelte/store'
-import {
-  type ProposalFull,
-  full_defaults,
-} from '$lib/components/proposals/type'
+import { ensureSelectedRepoCollection } from './repo'
+import type {
+  ARef,
+  EventIdString,
+  IssueOrPrWithReferences,
+  SeenOn,
+} from '$lib/dbs/types'
+import { liveQuery } from 'dexie'
+import db from '$lib/dbs/LocalDb'
 
-export const selected_proposal_full: Writable<ProposalFull> = writable({
-  ...full_defaults,
-})
-
+export const selected_proposal: Writable<
+  (IssueOrPrWithReferences & SeenOn) | undefined
+> = writable(undefined)
+let selected_proposal_id: EventIdString | undefined = undefined
+let proposal_unsubsriber: (() => void) | undefined = undefined
 export const selected_proposal_replies: Writable<Event[]> = writable([])
 
 export const ensureProposalFull = (
-  repo_a: string,
-  proposal_id_or_event: string | Event
+  a_ref: ARef | undefined,
+  proposal_id: EventIdString | undefined
 ) => {
-  if (repo_a && proposal_id_or_event) return undefined
-  else return undefined
+  if (selected_proposal_id === proposal_id) return undefined
+  selected_proposal_id = proposal_id
+  if (proposal_unsubsriber) proposal_unsubsriber()
+  if (a_ref) ensureSelectedRepoCollection(a_ref)
+
+  proposal_unsubsriber = liveQuery(() => {
+    if (proposal_id) return db.prs.get(proposal_id)
+    return undefined
+  }).subscribe((proposal) => selected_proposal.set(proposal)).unsubscribe
 }

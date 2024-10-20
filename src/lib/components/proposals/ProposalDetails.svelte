@@ -1,28 +1,28 @@
 <script lang="ts">
-  import { full_defaults, summary_defaults, type ProposalSummary } from './type'
   import UserHeader from '../users/UserHeader.svelte'
   import StatusSelector from './StatusSelector.svelte'
-  import type { IssueSummary } from '../issues/type'
+  import type { IssueOrPrWithReferences } from '$lib/dbs/types'
+  import type { Writable } from 'svelte/store'
 
   export let type: 'proposal' | 'issue' = 'proposal'
-  export let summary: ProposalSummary | IssueSummary = { ...summary_defaults }
-  export let { labels, loading } = { ...full_defaults }
+  export let issue_or_pr: Writable<IssueOrPrWithReferences | undefined>
+  let labels: string[] = []
 </script>
 
 <div class="max-w-md">
   <div>
-    {#if loading}
+    {#if !$issue_or_pr}
       <div class="skeleton my-3 h-5 w-20"></div>
       <div class="badge skeleton my-2 block w-60"></div>
       <div class="badge skeleton my-2 block w-40"></div>
     {:else}
       <h4>Author</h4>
-      <UserHeader user={summary.author} />
+      <UserHeader user={$issue_or_pr.author} />
     {/if}
   </div>
 
   <div>
-    {#if loading}
+    {#if !$issue_or_pr}
       <div class="skeleton my-3 h-5 w-20"></div>
       <div class="badge skeleton my-2 block w-60"></div>
       <div class="badge skeleton my-2 block w-40"></div>
@@ -30,14 +30,14 @@
       <h4>Status</h4>
       <StatusSelector
         {type}
-        status={summary.status}
-        proposal_or_issue_id={summary.id}
+        status={$issue_or_pr.status}
+        proposal_or_issue_id={$issue_or_pr.uuid}
       />
     {/if}
   </div>
 
   <div>
-    {#if loading}
+    {#if !$issue_or_pr}
       <div class="badge skeleton w-20"></div>
       <div class="badge skeleton w-20"></div>
     {:else}

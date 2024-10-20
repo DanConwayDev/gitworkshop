@@ -1,10 +1,7 @@
 <script lang="ts">
   import { ndk } from '$lib/stores/ndk'
   import { NDKEvent, NDKRelaySet } from '@nostr-dev-kit/ndk'
-  import {
-    selected_proposal_full,
-    selected_proposal_replies,
-  } from '$lib/stores/Proposal'
+  import { selected_proposal_replies } from '$lib/stores/Proposal'
   import {
     proposal_status_applied,
     proposal_status_closed,
@@ -66,18 +63,6 @@
     } catch {}
     try {
       let _ = await event.publish(NDKRelaySet.fromRelayUrls(relays, ndk))
-      selected_proposal_full.update((proposal_full) => {
-        if (proposal_full.summary.id !== proposal_or_issue_id)
-          return proposal_full
-        return {
-          ...proposal_full,
-          summary: {
-            ...proposal_full.summary,
-            status: new_status_kind,
-            status_date: event.created_at || 0,
-          },
-        }
-      })
       loading = false
     } catch {}
   }

@@ -2,7 +2,7 @@ import { nip19 } from 'nostr-tools'
 import { repo_kind } from '$lib/kinds'
 import type { Event } from 'nostr-tools'
 import type { AddressPointer } from 'nostr-tools/nip19'
-import type { ARef } from '$lib/dbs/types'
+import type { ARef, EventIdString } from '$lib/dbs/types'
 import { getTagValue, SeenRelaysSymbol } from 'applesauce-core/helpers'
 
 /** most servers will produce a CORS error so a proxy should be used */
@@ -98,7 +98,7 @@ export const aToNaddr = (
   return nip19.naddrEncode(a_ref)
 }
 
-export const neventOrNoteToHexId = (s: string): string | undefined => {
+export const neventOrNoteToHexId = (s: string): EventIdString | undefined => {
   try {
     const decoded = nip19.decode(s)
     if (decoded.type === 'note') return decoded.data
