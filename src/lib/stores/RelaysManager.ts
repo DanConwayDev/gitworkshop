@@ -37,7 +37,7 @@ import { liveQuery } from 'dexie'
 import { aRefToAddressPointer } from '$lib/components/repo/utils'
 import { identifierRepoAnnsToRepoCollection } from './repo'
 import memory_db from '$lib/dbs/InMemoryRelay'
-import { CacheRelay, openDB } from 'nostr-idb'
+import { CacheRelay, openDB, type Subscription } from 'nostr-idb'
 
 class RelayManager {
   url: string
@@ -95,17 +95,19 @@ class RelayManager {
   }
   async fetchRepoAnnQueue() {
     if (this.set_repo_queue_timeout) clearTimeout(this.set_repo_queue_timeout)
-
-    return new Promise<void>(async (resolve, reject) => {
+    let sub: Subscription | undefined
+    return new Promise<void>(async (resolve) => {
       // Set a timeout for the reject response
+      const timeout_ms = 5000
       const timeout = setTimeout(() => {
-        sub.close() // Close the subscription if it times out
-        reject(
-          new Error(
-            this.relay.connected ? 'connection timeout' : 'no eose recieved'
-          )
-        )
-      }, 5000)
+        if (sub) sub.close() // Close the subscription if it times out
+        resolve()
+        // reject(
+        //   new Error(
+        //     `${this.url} ${this.relay.connected ? 'connection timeout' : 'no eose recieved'} after ${timeout_ms / 1000}`
+        //   )
+        // )
+      }, timeout_ms)
       await this.connect()
       const identifiers = new Set<string>()
       this.repo_queue.forEach((v) => {
@@ -115,7 +117,7 @@ class RelayManager {
       })
       this.repo_queue.clear()
       const found = new Set<string>()
-      const sub = this.relay.subscribe(
+      sub = this.relay.subscribe(
         [
           {
             kinds: [repo_kind],
@@ -130,7 +132,7 @@ class RelayManager {
             processRepoAnnFromRelay(repo_ann, this.url)
           },
           oneose: async () => {
-            sub.close()
+            if (sub) sub.close()
             this.resetInactivityTimer()
             const not_on_relays = await db.repos
               .where('identifier')
@@ -571,14 +573,16 @@ class RelayManager {
           })
       }
 
-      this.relay.subscribe(comment_filters, {
-        onevent: async (event) => {
-          memory_db.addEvent(event)
-        },
-        oneose: async () => {
-          r()
-        },
-      })
+      if (comment_filters.length > 0)
+        this.relay.subscribe(comment_filters, {
+          onevent: async (event) => {
+            memory_db.addEvent(event)
+          },
+          oneose: async () => {
+            r()
+          },
+        })
+      else r()
     })
     // for each PR and Issue (and in db) get responses and responses to each response
     // get new PRs and Repos

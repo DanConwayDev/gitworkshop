@@ -748,6 +748,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/zen-observable@npm:^0.8.7":
+  version: 0.8.7
+  resolution: "@types/zen-observable@npm:0.8.7"
+  checksum: 10c0/c6c5ef1d759e1dae5bc598f9ef40a10a9535fd85d65cd7e236ad28fca627866d30b1db6b430d213161e946c5001799caf8293e7831de6841d8ac2e65400ff48f
+  languageName: node
+  linkType: hard
+
 "@typescript-eslint/eslint-plugin@npm:^8.6.0":
   version: 8.6.0
   resolution: "@typescript-eslint/eslint-plugin@npm:8.6.0"
@@ -2140,6 +2147,7 @@ __metadata:
     "@tailwindcss/typography": "npm:^0.5.15"
     "@types/node": "npm:^22.7.7"
     "@types/ramda": "npm:^0.30.2"
+    "@types/zen-observable": "npm:^0.8.7"
     "@typescript-eslint/eslint-plugin": "npm:^8.6.0"
     "@typescript-eslint/parser": "npm:^8.6.0"
     applesauce-core: "npm:^0.6.0"
