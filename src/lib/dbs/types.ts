@@ -321,6 +321,7 @@ interface IssueOrPrBase extends EventRefBase {
   title: string
   descritpion: string
   revision_parent_pr: EventIdString | undefined
+  event: Event
 }
 
 export interface IssueOrPrWithReferences extends IssueOrPrBase {
@@ -397,6 +398,7 @@ export const eventToIssueOrPr = (event: Event) => {
     kind: event.kind,
     author: event.pubkey,
     created_at: event.created_at,
+    event,
     status: IssueOrPrStatus.Open,
     status_refs: [],
     thread: [],

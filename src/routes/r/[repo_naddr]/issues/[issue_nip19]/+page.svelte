@@ -75,13 +75,13 @@
       <div class="mx-auto max-w-6xl lg:flex">
         <div class="md:mr-2 lg:w-2/3">
           <div class="max-w-4xl">
-            <!-- {#if $selected_issue}
+            {#if $selected_issue}
               <Thread
                 type="issue"
                 event={$selected_issue.event}
                 replies={$selected_issue_replies}
               />
-            {/if} -->
+            {/if}
           </div>
         </div>
         <div class="prose ml-2 hidden w-1/3 lg:flex">

@@ -1,4 +1,3 @@
-import type { NDKEvent } from '@nostr-dev-kit/ndk'
 import {
   selectedRepoCollectionToMaintainers,
   type ARef,
@@ -38,7 +37,7 @@ export function getTagMultiValue(
 
 /// mutates the event
 export function tagRepoAnns(
-  event: NDKEvent,
+  tags: string[][],
   repo_collection: SelectedRepoCollection,
   as_root: boolean = false,
   and_maintainers: boolean = false
@@ -51,17 +50,17 @@ export function tagRepoAnns(
   selectedRepoCollectionToMaintainers(repo_collection).forEach((m, i) => {
     if (
       and_maintainers &&
-      !event.tags.some((t) => t[0] === 'p' && t[1].includes(m))
+      !tags.some((t) => t[0] === 'p' && t[1].includes(m))
     ) {
-      event.tags.push(['p', m])
+      tags.push(['p', m])
     }
     if (
-      !event.tags.some(
+      !tags.some(
         (t) =>
           t[0] === 'a' && t[1].includes(`${m}:${repo_collection.identifier}`)
       )
     )
-      event.tags.push([
+      tags.push([
         'a',
         `${repo_kind}:${m}:${repo_collection.identifier}`,
         relay_hint,
