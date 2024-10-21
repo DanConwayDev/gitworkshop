@@ -14,20 +14,28 @@
   <Container>
     <div class="navbar">
       <div class="navbar-start">
-        <a href="/repos" class="btn btn-ghost btn-sm normal-case">Repos</a>
-      </div>
-      <div class="navbar-center">
-        <a class="align-middle text-lg" href="/">
-          <span class="text-purple-600">git</span><span class="text-white"
-            >workshop</span
-          ><span class="text-neutral">.dev</span>
+        <a class="h-8 overflow-hidden align-middle" href="/">
+          <img
+            src="/icons/icon.svg"
+            alt="gitworkshop.dev logo"
+            class="h-full max-w-full"
+          />
         </a>
       </div>
+      <div class="navbar-center"></div>
       <div class="navbar-end gap-4">
+        <a href="/repos" class="btn btn-ghost btn-sm normal-case">Repos</a>
+        <a href="/quick-start" class="btn btn-ghost btn-sm normal-case"
+          >Quick Start</a
+        >
         {#if logged_in_user}
           <div class="dropdown dropdown-end">
             <div tabindex="0" role="button" class="m-1">
-              <UserHeader user={logged_in_user} link_to_profile={false} />
+              <UserHeader
+                user={logged_in_user}
+                link_to_profile={false}
+                avatar_on_right
+              />
             </div>
             <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
             <ul

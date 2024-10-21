@@ -14,6 +14,7 @@
   export let avatar_only = false
   export let in_event_header = false
   export let link_to_profile = true
+  export let avatar_on_right = false
 
   $: info = relays_manager.fetchPubkeyInfoWithObserable(user || '')
   $: display_name = getName($info)
@@ -44,6 +45,7 @@
         class:inline-block={inline}
         class:align-middle={inline}
         class:flex-none={!inline}
+        class:order-1={avatar_on_right}
       >
         <div
           class:inline-block={inline}
@@ -77,9 +79,16 @@
       <div
         class:text-xl={size === 'full'}
         class:width-max-prose={size === 'full'}
-        class:pl-4={!inline && size === 'full'}
-        class:pl-3={!inline && size === 'md'}
-        class:pl-2={!inline && (size === 'sm' || size === 'xs')}
+        class:pl-4={!avatar_on_right && !inline && size === 'full'}
+        class:pl-3={!avatar_on_right && !inline && size === 'md'}
+        class:pl-2={!avatar_on_right &&
+          !inline &&
+          (size === 'sm' || size === 'xs')}
+        class:pr-4={avatar_on_right && !inline && size === 'full'}
+        class:pr-3={avatar_on_right && !inline && size === 'md'}
+        class:pr-2={avatar_on_right &&
+          !inline &&
+          (size === 'sm' || size === 'xs')}
         class:pl-0={inline}
         class:flex-auto={!inline}
         class:m-auto={!inline}
