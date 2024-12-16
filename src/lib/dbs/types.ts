@@ -3,6 +3,7 @@ import {
   extractPatchMessage,
 } from '$lib/components/events/content/utils'
 import { issue_kind, patch_kind, repo_kind } from '$lib/kinds'
+import type { WebSocketUrl } from '$lib/relay/RelaysManager'
 import { base_relays } from '$lib/stores/ndk'
 import {
   getTagMultiValue,
@@ -239,7 +240,7 @@ export const seen_on_relay_defaults: SeenOnRelay = {
 
 export const extractOrCreateSeenOnRelay = (
   entry: SeenOn | undefined,
-  url: string
+  url: WebSocketUrl
 ): SeenOnRelay => {
   if (entry) {
     const seen_on_relay = entry.seen_on.get(url)
@@ -248,7 +249,7 @@ export const extractOrCreateSeenOnRelay = (
   return { ...seen_on_relay_defaults }
 }
 export interface SeenOn {
-  seen_on: Map<string, SeenOnRelay>
+  seen_on: Map<WebSocketUrl, SeenOnRelay>
 }
 
 export interface AndLoading {
@@ -257,7 +258,7 @@ export interface AndLoading {
 
 export interface LastCheck {
   url_and_query: string
-  url: string
+  url: WebSocketUrl
   timestamp: Timestamp
   check_initiated_at: Timestamp | undefined
   query: 'All Repos' // scope to add other queries eg 'All PRs and Issue' in the future
@@ -416,9 +417,9 @@ export interface PubKeyMetadataInfo extends SeenOn {
 }
 
 export interface PubKeyRelayInfo extends SeenOn {
-  read: string[]
-  write: string[]
-  relay_hints_found: string[]
+  read: WebSocketUrl[]
+  write: WebSocketUrl[]
+  relay_hints_found: WebSocketUrl[]
   stamp: PubkeyEventStamp | undefined
 }
 export interface PubKeyInfo {
