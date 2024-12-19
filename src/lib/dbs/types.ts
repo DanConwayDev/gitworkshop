@@ -60,20 +60,28 @@ export interface SeenOnRelay {
 	last_check: Timestamp;
 	/// in progress start timestamp so we dont assume every check was successful
 	check_initiated_at: Timestamp | undefined;
-	seen: boolean;
-	up_to_date: boolean;
+	seen: boolean | undefined;
+	up_to_date: boolean | undefined;
 	// for Repos children are PR and issues and for pubkeys they are repo events, Pr and Issues
 	last_children_check: Timestamp;
 	children_check_initiated_at: Timestamp | undefined;
+	hints: RelayHint[];
+}
+
+interface RelayHint {
+	author: PubKeyString;
+	event_id: EventIdString;
+	created_at: Timestamp;
 }
 
 export const seen_on_relay_defaults: SeenOnRelay = {
 	last_check: 0,
 	check_initiated_at: undefined,
-	seen: false,
-	up_to_date: false,
+	seen: undefined,
+	up_to_date: undefined,
 	last_children_check: 0,
-	children_check_initiated_at: undefined
+	children_check_initiated_at: undefined,
+	hints: []
 };
 
 export const extractOrCreateSeenOnRelay = (
