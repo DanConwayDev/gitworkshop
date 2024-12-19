@@ -19,6 +19,7 @@
 		"@sveltejs/adapter-static": "^3.0.6",
 		"@sveltejs/kit": "^2.9.0",
 		"@sveltejs/vite-plugin-svelte": "^5.0.0",
+		"@types/node": "^22.10.2",
 		"autoprefixer": "^10.4.20",
 		"eslint": "^9.7.0",
 		"eslint-config-prettier": "^9.1.0",
@@ -37,6 +38,11 @@
 	},
 	"dependencies": {
 		"@tailwindcss/container-queries": "^0.1.1",
-		"@tailwindcss/typography": "^0.5.15"
+		"@tailwindcss/typography": "^0.5.15",
+		"applesauce-core": "^0.10.0",
+		"dexie": "^4.0.10",
+		"nostr-idb": "github:hzrd149/nostr-idb#98377e624a7d6da10517c09a356af9d82b392920",
+		"nostr-tools": "^2.10.4",
+		"rxjs": "^7.8.1"
 	}
 }
