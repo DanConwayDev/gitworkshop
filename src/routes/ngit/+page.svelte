@@ -10,18 +10,15 @@
 <Container>
   <div class="prose m-auto mt-8">
     <h2 class=""><span class="text-purple-600">n</span>git</h2>
-    <p>a command-line tool to send and review patches via nostr</p>
+    <p>nostr plugin for git</p>
     <ul>
       <li>
-        works seemlessly with <a href="https://gitworkshop.dev"
-          >gitworkshop.dev
-        </a>
+        clone a nostr repository, or add as a remote, by using the url format:<br /><code>nostr://&lt;pub|nip05-address&gt;/&ltidentifier&gt;</code>
       </li>
-      <li>fully compatable with nip34</li>
-      <li>
-        enables proposals to be managed as branches, similar to GitHub PRs via
-        optional nip34
-      </li>
+
+      <li>remote branches beginning with <code>pr/</code> are open PRs from contributors; <code>ngit&nbsp;list</code> can be used to view all PRs</li>
+      <li>to open a PR, push a branch with the prefix <code>pr/</code> or use <code>ngit&nbsp;send</code> for advanced options</li>
+      <li>publish a repository to nostr with <code>ngit&nbsp;init</code></li>
     </ul>
     <p>ngit and gitworkshop.dev are new, experimental and in an alpha state.</p>
 
@@ -63,78 +60,6 @@
     </div>
     <h3>Install</h3>
     <InstallNgit />
-    <h3>Commands</h3>
-    <p>run from the your product's git repository:</p>
-    <p>
-      <span class="rounded bg-neutral p-2 font-mono"
-        ><span class="py-5">ngit init</span></span
-      >
-      signal you are this repo's maintainer accepting proposals via nostr
-    </p>
-
-    <p>
-      <span class="rounded bg-neutral p-2 font-mono"
-        ><span class="py-5">ngit send</span></span
-      >
-      issue commits as a proposal
-    </p>
-    <p>
-      <span class="rounded bg-neutral p-2 font-mono"
-        ><span class="py-5">ngit list</span></span
-      >
-      list proposals; checkout, apply or donwload selected
-    </p>
-    <p>and when on a proposal branch:</p>
-    <p>
-      <span class="rounded bg-neutral p-2 font-mono"
-        ><span class="py-5">ngit push</span></span
-      >
-      send proposal revision
-    </p>
-    <p>
-      <span class="rounded bg-neutral p-2 font-mono"
-        ><span class="py-5">ngit pull</span></span
-      >
-      fetch and apply new proposal commits / revisions linked to branch
-    </p>
-    <h3>Protocol</h3>
-    <p>
-      <a href="/about">nip34</a> is a nostr protocol for sending git patches over
-      nostr, similar to how patches are sent via email which is a model used extensively
-      including in very large project such as the linux kernel
-    </p>
-    <p>ngit supports optional nip34 features to enable:</p>
-    <ul>
-      <li>
-        patches managed as branches, similar to GitHub PRs
-        <ul>
-          <li>
-            maintain commit ids, pgp signed commits, enabling merge with commits
-            pgp signed by the author, amend commits
-          </li>
-        </ul>
-      </li>
-      <li>
-        multiple maintainers for a repository and a pathway to smoothly
-        transition maintainership when a maintainer moves on
-      </li>
-      <li>
-        ensure that user who have already cloned the repository dont get scammed
-        by someone else issuing a repository event, pretending to be the
-        maintainer, and directing users to a malicious git server
-        <ul>
-          <li>
-            <span class="rounded bg-neutral p-2 font-mono"
-              ><span class="py-5">ngit init</span></span
-            >
-            creates an optional
-            <span class="bg-base-200 p-2 font-mono">maintainers.yaml</span> file
-            in the root of your repo that lists the authorised maintainers and desired
-            relays.
-          </li>
-        </ul>
-      </li>
-    </ul>
     <p>
       <a class="btn" href="/about">learn more</a>
     </p>

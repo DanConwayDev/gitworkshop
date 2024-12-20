@@ -28,6 +28,6 @@
   </p>
   <p>
     alternatively, if you have cargo installed run<code>cargo install ngit</code
-    >
+    > or build from source using <a class="link-primary" href="https://codeberg.org/danconwaydev/ngit-cli" target="_blank">this git clone url</a>.
   </p>
 </div>
