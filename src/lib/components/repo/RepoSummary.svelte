@@ -1,12 +1,12 @@
 <script lang="ts">
-	import type { RepoAnn, SeenOn } from '$lib/dbs/types';
+	import type { RepoTableItem } from '$lib/types';
 
-	export let repo_ann: (RepoAnn & SeenOn) | undefined = undefined;
+	export let repo_item: RepoTableItem | undefined = undefined;
 </script>
 
 <div>
-	{#if repo_ann}
-		{repo_ann.identifier}
+	{#if repo_item}
+		{repo_item.identifier}
 	{:else}
 		loading...
 	{/if}

@@ -1,13 +1,16 @@
-import type { ARef, PubKeyString, WebSocketUrl } from '$lib/dbs/types';
+import type { ARef, PubKeyString, WebSocketUrl } from '$lib/types';
 import { CacheRelay } from 'nostr-idb';
 import { Relay } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
 import { repo_kind } from '$lib/kinds';
-import { addSeenRelay, unixNow } from 'applesauce-core/helpers';
+import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
+import type Watcher from '$lib/processors/Watcher';
+import type { EventIdString } from '$lib/types';
 
 export class RelayManager {
 	url: WebSocketUrl;
+	watcher: Watcher;
 	repo_queue: Set<ARef> = new Set();
 	pubkey_metadata_queue: Set<PubKeyString> = new Set();
 	set_repo_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined;
@@ -15,8 +18,13 @@ export class RelayManager {
 	relay: Relay | CacheRelay;
 	inactivity_timer: NodeJS.Timeout | null = null;
 
-	constructor(url: WebSocketUrl, relay: Relay | CacheRelay | undefined = undefined) {
+	constructor(
+		url: WebSocketUrl,
+		watcher: Watcher,
+		relay: Relay | CacheRelay | undefined = undefined
+	) {
 		this.url = url;
+		this.watcher = watcher;
 		if (relay) this.relay = relay;
 		else {
 			this.relay = new Relay(url);
@@ -70,7 +78,15 @@ export class RelayManager {
 				],
 				{
 					onevent: async (event) => {
+						if (event.kind !== repo_kind) return;
 						addSeenRelay(event, this.url);
+						this.watcher.enqueueRelayUpdate({
+							type: 'found',
+							uuid: getEventUID(event) as ARef,
+							event_id: event.id as EventIdString,
+							table: 'repos',
+							url: this.url
+						});
 						memory_db.add(event);
 					},
 					oneose: async () => {

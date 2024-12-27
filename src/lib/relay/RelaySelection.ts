@@ -1,7 +1,13 @@
 import db from '$lib/dbs/LocalDb';
-import type { RepoAnn, SeenOn, WebSocketUrl } from '$lib/dbs/types';
+import {
+	isRelayCheck,
+	isRelayHint,
+	type RelayCheck,
+	type RelayHuristic,
+	type RelayScore
+} from '$lib/types';
 import { base_relays } from '$lib/query-centre/QueryCentreExternal';
-import { safeRelayUrls, unixNow } from 'applesauce-core/helpers';
+import { unixNow } from 'applesauce-core/helpers';
 
 export const chooseRelaysForAllRepos = async () => {
 	// TODO: expand this to more relays and fetch for different relays each time
@@ -17,34 +23,37 @@ export const chooseRelaysForAllRepos = async () => {
 	return base_relays.filter((_, index) => results[index]);
 };
 
-export const chooseRelaysForRepo = async (entry: RepoAnn & SeenOn) => {
-	const scores: Map<WebSocketUrl, number> = new Map();
-	// boost repo relays
-	(safeRelayUrls(entry.relays) as WebSocketUrl[]).forEach((relay) => {
-		scores.set(relay, 50);
-	});
-	entry.seen_on.forEach((seen_on, relay) => {
-		// boost relays with hints
-		if (seen_on.hints.length > 0) {
-			scores.set(relay, (scores.get(relay) || 0) + 20);
+export const calculateRelayScore = (
+	huristics: RelayHuristic[],
+	write_relay: boolean
+): RelayScore => {
+	let score = 0;
+	// boost if write relay
+	if (write_relay) score += 50;
+	// boost relays with hints
+	if (huristics.some((h) => isRelayHint(h))) {
+		score += 20;
+	}
+	// boost or penalise based on historic checks
+	const check = huristics.findLast(
+		(h) => isRelayCheck(h) && !h.is_child_check && typeof h.seen !== 'undefined'
+	) as RelayCheck | undefined;
+	if (check) {
+		let boost = 0;
+		if (check.seen) {
+			// boost up to date
+			if (check.up_to_date) boost = 30;
+			// boost seen but out of date
+			else boost = -10;
 		}
-		// boost seen
-		if (seen_on.seen !== undefined) {
-			let boost = 0;
-			const multiplier = getRecentTimestampMultiplier(seen_on.last_check);
-			if (seen_on.seen) {
-				// boost up to date
-				if (seen_on.up_to_date) boost = 30;
-				// boost seen but out of date
-				else boost = 10;
-			}
-			// penalise unseen
-			else boost = -30;
-			scores.set(relay, (scores.get(relay) || 0) + boost * multiplier);
-		}
-	});
+		// penalise unseen
+		else boost = -30;
+		score += boost * getRecentTimestampMultiplier(check.timestamp);
+	}
+	return score;
 };
 
+/// huristics based on recent timestamps are much more valuable
 function getRecentTimestampMultiplier(unixtime: number): number {
 	const now = unixNow();
 	const timeDiffSeconds = now - unixtime;

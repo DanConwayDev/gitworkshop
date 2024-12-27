@@ -1,11 +1,11 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { IssueOrPrWithReferences, LastCheck, PubKeyInfo, RepoAnn, SeenOn } from './types';
+import type { IssueOrPRTableItem, LastCheck, PubKeyTableItem, RepoTableItem } from '$lib/types';
 
 export interface SchemaV1 {
-	repos: EntityTable<RepoAnn & SeenOn, 'uuid'>;
-	issues: EntityTable<IssueOrPrWithReferences & SeenOn, 'uuid'>;
-	prs: EntityTable<IssueOrPrWithReferences & SeenOn, 'uuid'>;
-	pubkeys: EntityTable<PubKeyInfo, 'pubkey'>;
+	repos: EntityTable<RepoTableItem, 'uuid'>;
+	issues: EntityTable<IssueOrPRTableItem, 'uuid'>;
+	prs: EntityTable<IssueOrPRTableItem, 'uuid'>;
+	pubkeys: EntityTable<PubKeyTableItem, 'pubkey'>;
 	last_checks: EntityTable<LastCheck, 'url_and_query'>;
 }
 

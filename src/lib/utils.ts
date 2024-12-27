@@ -1,5 +1,5 @@
 import { nip19 } from 'nostr-tools';
-import { type ARef, type EventIdString } from './dbs/types';
+import { type ARef, type EventIdString } from './types';
 import type { AddressPointer } from 'nostr-tools/nip19';
 import { repo_kind } from './kinds';
 

@@ -15,9 +15,9 @@
 
 	<div>Repositories:</div>
 	<ul>
-		{#each $repos as repo_ann}
+		{#each $repos as repo_item}
 			<li>
-				<RepoSummary {repo_ann} />
+				<RepoSummary {repo_item} />
 			</li>
 		{/each}
 	</ul>
