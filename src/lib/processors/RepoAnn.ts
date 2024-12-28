@@ -1,11 +1,16 @@
 import db from '$lib/dbs/LocalDb';
-import { huristics_for_relay_default, type RepoAnn } from '$lib/types';
+import {
+	getDefaultHuristicsForRelay,
+	isRelayCheck,
+	isRelayUpdateRepoAnn,
+	type RepoAnn
+} from '$lib/types';
 import { repo_kind } from '$lib/kinds';
 import type {
 	ARef,
 	HuristicsForRelay,
 	RelayCheck,
-	RelayUpdateRepoAnn,
+	RelayUpdate,
 	RepoAnnBaseFields,
 	RepoTableItem
 } from '$lib/types';
@@ -14,39 +19,57 @@ import { getEventUID, unixNow } from 'applesauce-core/helpers';
 import { nip19, type NostrEvent } from 'nostr-tools';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
 
-async function processRepoAnn(
-	event: NostrEvent,
-	relay_updates?: RelayUpdateRepoAnn[]
-): Promise<void>;
-async function processRepoAnn(
-	event: undefined,
-	relay_updates: [RelayUpdateRepoAnn, ...RelayUpdateRepoAnn[]]
-): Promise<void>;
+async function processRepoAnn(event: NostrEvent | undefined, relay_updates: RelayUpdate[] = []) {
+	const relay_ann_updates = relay_updates.filter(isRelayUpdateRepoAnn);
+	if ((event && event.kind !== repo_kind) || relay_ann_updates.length === 0) return;
 
-async function processRepoAnn(
-	event: NostrEvent | undefined,
-	relay_updates: RelayUpdateRepoAnn[] = []
-) {
-	const entry = await getAndUpdateRepoTableItemOrCreateFromEvent(event || relay_updates[0].uuid);
+	const entry = await getAndUpdateRepoTableItemOrCreateFromEvent(
+		event || relay_ann_updates[0].uuid
+	);
 	if (!entry) return;
 
-	relay_updates.forEach((update) => {
-		const relay_info: HuristicsForRelay = entry.relays_info.get(update.url) || {
-			...huristics_for_relay_default
-		};
+	relay_ann_updates.forEach((update) => {
+		if (!isRelayUpdateRepoAnn(update)) return;
+		if (!entry.relays_info[update.url])
+			entry.relays_info[update.url] = {
+				...getDefaultHuristicsForRelay()
+			};
 		const relay_check: RelayCheck = {
 			timestamp: unixNow(),
 			is_child_check: false,
 			seen: true,
 			up_to_date: update.event_id === entry.event_id
 		};
-		relay_info.huristics.push(relay_check);
-		relay_info.score = calculateRelayScore(relay_info.huristics, entry.relays.includes(update.url));
-		entry.relays_info.set(update.url, relay_info);
+		processHuristic(entry.relays_info[update.url], entry.relays.includes(update.url), relay_check);
 	});
-	db.repos.put({
-		...entry
-	});
+	await db.repos.put(
+		{
+			...entry
+		},
+		entry.uuid
+	);
+}
+
+/// mutates relay_info to 1) add relay huristic, 2) update score and 3) remove superfluious huristics
+function processHuristic(
+	relay_info: HuristicsForRelay,
+	is_repo_relay: boolean,
+	relay_check: RelayCheck
+) {
+	relay_info.huristics = [
+		// remove any older huristics with same indicators
+		...relay_info.huristics.filter(
+			(v) =>
+				!isRelayCheck(v) ||
+				!(
+					v.is_child_check === relay_check.is_child_check &&
+					v.seen === relay_check.seen &&
+					v.up_to_date === relay_check.up_to_date
+				)
+		),
+		relay_check
+	];
+	relay_info.score = calculateRelayScore(relay_info.huristics, is_repo_relay);
 }
 
 async function getAndUpdateRepoTableItemOrCreateFromEvent(
@@ -64,7 +87,7 @@ async function getAndUpdateRepoTableItemOrCreateFromEvent(
 	if (!item_from_db && !repo_ann) return;
 	const entry: RepoTableItem = {
 		...(item_from_db || {
-			relays_info: new Map()
+			relays_info: {}
 		}),
 		...(repo_ann || {}),
 		last_activity: Math.max(

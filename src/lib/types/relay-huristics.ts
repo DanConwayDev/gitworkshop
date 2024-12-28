@@ -4,16 +4,21 @@ export interface WithRelaysInfo {
 	relays_info: RelaysInfo;
 }
 
-export type RelaysInfo = Map<WebSocketUrl, HuristicsForRelay>;
+export type RelaysInfo = {
+	[url in WebSocketUrl]: HuristicsForRelay;
+};
 
 export interface HuristicsForRelay {
 	// cached caculated scores efficency from huristics and relay list events
 	score: RelayScore;
 	huristics: RelayHuristic[];
 }
-export const huristics_for_relay_default: HuristicsForRelay = {
-	score: 0,
-	huristics: []
+
+export const getDefaultHuristicsForRelay = (): HuristicsForRelay => {
+	return {
+		score: 0,
+		huristics: []
+	};
 };
 
 export type RelayScore = number & { _brand?: 'RelayScore' };

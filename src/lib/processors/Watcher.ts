@@ -1,10 +1,9 @@
 import { addEventsToCache, isInCache } from '$lib/dbs/LocalRelayDb';
-import type { ARef, EventIdString, RelayUpdate, RelayUpdateRepoAnn } from '$lib/types';
+import type { ARef, EventIdString, RelayUpdate } from '$lib/types';
 import type { EventStore } from 'applesauce-core';
 import processRepoAnn from './RepoAnn';
 import type { NostrEvent } from 'nostr-tools';
 import { getEventUID } from 'applesauce-core/helpers';
-import { repo_kind } from '$lib/kinds';
 
 class Watcher {
 	/// this prevents multiple processes from attempting to update the same database line
@@ -95,8 +94,7 @@ async function processEventAndOrRelayUpdates(
 	event: NostrEvent | undefined,
 	relay_update_batch: RelayUpdate[] = []
 ) {
-	if (event?.kind === repo_kind)
-		await processRepoAnn(event, relay_update_batch as RelayUpdateRepoAnn[]);
+	await processRepoAnn(event, relay_update_batch);
 	// TODO add all processes that update custom db here
 	if (event) addEventsToCache([event]);
 }
