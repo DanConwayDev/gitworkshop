@@ -8,7 +8,7 @@ import type {
 	RepoAnn
 } from '$lib/types';
 
-export interface PubKeyTableItem extends LastActivity, WithRelaysInfo, PubKeyInfo {}
+export interface PubKeyTableItem extends WithRelaysInfo, PubKeyInfo {}
 
 export interface RepoTableItem extends LastActivity, WithRelaysInfo, RepoAnn {
 	/// undefined if no check has been carried out

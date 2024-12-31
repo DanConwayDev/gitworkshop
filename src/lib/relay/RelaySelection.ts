@@ -2,9 +2,11 @@ import db from '$lib/dbs/LocalDb';
 import {
 	isRelayCheck,
 	isRelayHint,
+	type PubKeyString,
 	type RelayCheck,
 	type RelayHuristic,
-	type RelayScore
+	type RelayScore,
+	type WebSocketUrl
 } from '$lib/types';
 import { base_relays } from '$lib/query-centre/QueryCentreExternal';
 import { unixNow } from 'applesauce-core/helpers';
@@ -74,3 +76,34 @@ function getRecentTimestampMultiplier(unixtime: number): number {
 		return 0.01; // Return 0.01 if the timestamp is older than 1 year
 	}
 }
+
+export const chooseRelaysForPubkey = async (pubkey: PubKeyString): Promise<WebSocketUrl[]> => {
+	const skip_if_X_relays = 2;
+	const returned_uptodate_events_X_seconds_ago = 60;
+
+	// prioritise connected relays?
+	// prioritise relays with items in queue, but not too many?
+	const record = await db.pubkeys.get(pubkey);
+
+	if (!record) return [...base_relays];
+
+	const recently_checked = [];
+
+	const scored_relays = Object.keys(record.relays_info).sort((a, b) => {
+		if (
+			record.relays_info[a as WebSocketUrl].huristics.some(
+				(v) =>
+					isRelayCheck(v) &&
+					v.up_to_date &&
+					v.timestamp > unixNow() - returned_uptodate_events_X_seconds_ago
+			)
+		) {
+			recently_checked.push(a);
+		}
+		return (
+			record.relays_info[b as WebSocketUrl].score - record.relays_info[a as WebSocketUrl].score
+		);
+	});
+	if (recently_checked.length >= skip_if_X_relays) return [];
+	return [scored_relays, ...base_relays].slice(0, 3) as WebSocketUrl[];
+};

@@ -10,7 +10,27 @@ export interface LastCheck {
 
 /** relay updates used by watcher to create relay huristics */
 
-export type RelayUpdate = RelayUpdateRepoAnn | RelayUpdatePRIssue;
+export type RelayUpdate = RelayUpdateUser | RelayUpdateRepoAnn | RelayUpdatePRIssue;
+
+export type RelayUpdateUser = RelayUpdateUserFound | RelayUpdateUserNotYetFound;
+export interface RelayUpdateUserFound extends RelayUpdateBase {
+	type: 'found';
+	event_id: EventIdString;
+	uuid: ARef;
+	table: 'pubkeys';
+}
+
+export interface RelayUpdateUserNotYetFound extends RelayUpdateBase {
+	type: 'finding' | 'not-found';
+	event_id: undefined;
+	// this includes kind for either metadata or relay list
+	uuid: ARef;
+	table: 'pubkeys';
+}
+
+export function isRelayUpdatePubkey(update: RelayUpdate): update is RelayUpdateUser {
+	return (update as RelayUpdateUser).table === 'pubkeys';
+}
 
 export interface RelayUpdateRepoAnn extends RelayUpdateBase {
 	uuid: ARef;

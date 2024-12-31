@@ -1,4 +1,4 @@
-import type { ARef, PubKeyString, WebSocketUrl } from '$lib/types';
+import { type ARef, type PubKeyString, type WebSocketUrl } from '$lib/types';
 import { CacheRelay } from 'nostr-idb';
 import { Relay } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
@@ -7,6 +7,7 @@ import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
 import type Watcher from '$lib/processors/Watcher';
 import type { EventIdString } from '$lib/types';
+import { Metadata, RelayList } from 'nostr-tools/kinds';
 
 export class RelayManager {
 	url: WebSocketUrl;
@@ -104,5 +105,75 @@ export class RelayManager {
 				}
 			);
 		});
+	}
+
+	async fetchPubkeyInfo(pubkey: PubKeyString) {
+		this.pubkey_metadata_queue.add(pubkey);
+		await this.connect();
+		if (!this.set_pubkey_queue_timeout) {
+			this.set_pubkey_queue_timeout = setTimeout(async () => this.fetchPubkeyQueue(), 200);
+		}
+	}
+
+	async fetchPubkeyQueue() {
+		await this.connect();
+		const pubkeys = [...this.pubkey_metadata_queue];
+		this.pubkey_metadata_queue.clear();
+		clearTimeout(this.set_pubkey_queue_timeout);
+		const found_metadata = new Set<string>();
+		const found_relay_list = new Set<string>();
+		const sub = this.relay.subscribe(
+			[
+				{
+					kinds: [Metadata, RelayList],
+					authors: pubkeys
+				}
+			],
+			{
+				onevent: async (event) => {
+					if (event.kind === Metadata || event.kind === RelayList) {
+						try {
+							addSeenRelay(event, this.url);
+							this.watcher.enqueueRelayUpdate({
+								type: 'found',
+								uuid: getEventUID(event) as ARef,
+								event_id: event.id as EventIdString,
+								table: 'pubkeys',
+								url: this.url
+							});
+							memory_db.add(event);
+						} catch {
+							/* empty */
+						}
+						(event.kind === Metadata ? found_metadata : found_relay_list).add(event.pubkey);
+					}
+				},
+				oneose: async () => {
+					sub.close();
+					this.resetInactivityTimer();
+					const pubkeys_set = new Set(pubkeys);
+					const missing_metadata = found_metadata.symmetricDifference(pubkeys_set);
+					const missing_relays = found_relay_list.symmetricDifference(pubkeys_set);
+					for (const pubkey of missing_metadata) {
+						this.watcher.enqueueRelayUpdate({
+							type: 'not-found',
+							uuid: `${Metadata}:${pubkey}` as ARef,
+							event_id: undefined,
+							table: 'pubkeys',
+							url: this.url
+						});
+					}
+					for (const pubkey of missing_relays) {
+						this.watcher.enqueueRelayUpdate({
+							type: 'not-found',
+							uuid: `${RelayList}:${pubkey}` as ARef,
+							event_id: undefined,
+							table: 'pubkeys',
+							url: this.url
+						});
+					}
+				}
+			}
+		);
 	}
 }

@@ -4,6 +4,9 @@ import type { EventStore } from 'applesauce-core';
 import processRepoAnn from './RepoAnn';
 import type { NostrEvent } from 'nostr-tools';
 import { getEventUID } from 'applesauce-core/helpers';
+import { repo_kind } from '$lib/kinds';
+import { Metadata, RelayList } from 'nostr-tools/kinds';
+import processPubkey from './Pubkey';
 
 class Watcher {
 	/// this prevents multiple processes from attempting to update the same database line
@@ -94,9 +97,19 @@ async function processEventAndOrRelayUpdates(
 	event: NostrEvent | undefined,
 	relay_update_batch: RelayUpdate[] = []
 ) {
-	await processRepoAnn(event, relay_update_batch);
-	// TODO add all processes that update custom db here
-	if (event) addEventsToCache([event]);
+	if (
+		(event && event.kind === repo_kind) ||
+		(relay_update_batch[0] && relay_update_batch[0].table === 'repos')
+	)
+		await processRepoAnn(event, relay_update_batch);
+	if (
+		(event && [Metadata, RelayList].includes(event.kind)) ||
+		(relay_update_batch[0] && relay_update_batch[0].table === 'pubkeys')
+	)
+		await processPubkey(event, relay_update_batch);
+	if (event)
+		// TODO add all processes that update custom db here
+		addEventsToCache([event]);
 }
 
 export default Watcher;
