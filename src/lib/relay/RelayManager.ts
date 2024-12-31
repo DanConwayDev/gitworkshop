@@ -37,6 +37,10 @@ export class RelayManager {
 		if (!this.relay.connected) {
 			await this.relay.connect();
 		}
+		if (!this.relay.connected) {
+			// nostr-tools relay doesnt reconnect so we create a new one
+			this.relay = new Relay(this.url);
+		}
 		this.resetInactivityTimer();
 	}
 
