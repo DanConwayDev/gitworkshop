@@ -105,5 +105,6 @@ export const chooseRelaysForPubkey = async (pubkey: PubKeyString): Promise<WebSo
 		);
 	});
 	if (recently_checked.length >= skip_if_X_relays) return [];
-	return [scored_relays, ...base_relays].slice(0, 3) as WebSocketUrl[];
+
+	return [...scored_relays, ...base_relays].slice(0, 3) as WebSocketUrl[];
 };
