@@ -3,7 +3,15 @@
 	import ReposSummaryList from '$lib/components/repo/ReposSummaryList.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre';
 	import { search_input, search_query } from '$lib/stores/search';
+	import { onMount } from 'svelte';
 
+	onMount(() => {
+		// Set focus on the input field when the component is mounted
+		const input = document.getElementById('search-field');
+		if (input) {
+			input.focus();
+		}
+	});
 	$: repos = query_centre.searchRepoAnns($search_query);
 	function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
@@ -31,7 +39,13 @@
 						clip-rule="evenodd"
 					/>
 				</svg>
-				<input type="text" class="grow" placeholder="Search" bind:value={$search_input} />
+				<input
+					id="search-field"
+					type="text"
+					class="grow"
+					placeholder="Search"
+					bind:value={$search_input}
+				/>
 			</label>
 		</form>
 	</div>
