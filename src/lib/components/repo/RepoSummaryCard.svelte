@@ -1,0 +1,101 @@
+<script lang="ts">
+	import { repoToNaddr } from '$lib/repos';
+	import type { Naddr, PubKeyString, RepoTableItem } from '$lib/types';
+
+	export let repo_item: RepoTableItem | undefined = undefined;
+
+	let short_name: string = 'Untitled';
+	$: {
+		if (repo_item) {
+			if ('name' in repo_item && repo_item.name.length > 45)
+				short_name = repo_item.name.slice(0, 45) + '...';
+			else if ('name' in repo_item && repo_item.name.length >= 0) short_name = repo_item.name;
+			else if (repo_item.identifier && repo_item.identifier.length > 45)
+				short_name = repo_item.identifier.slice(0, 45) + '...';
+			else if (repo_item.identifier && repo_item.identifier.length >= 0)
+				short_name = repo_item.identifier;
+		}
+	}
+
+	let short_descrption: string = '';
+	$: {
+		if (repo_item && 'description' in repo_item) {
+			if (repo_item.name.length > 50) short_name = repo_item.description.slice(0, 45) + '...';
+			else short_descrption = repo_item.description;
+		}
+	}
+
+	let author: PubKeyString | undefined = undefined;
+	$: {
+		if (repo_item) {
+			// if ('trusted_maintainer' in repo_item) author = repo_item.trusted_maintainer;
+			// else if ('pubkey' in repo_item) author = repo_item.pubkey;
+			// else if ('author' in repo_item) author = repo_item.author;
+			author = repo_item.author;
+		}
+	}
+
+	let maintainers: PubKeyString[] = [];
+	let additional_maintainers: PubKeyString[] = [];
+	$: {
+		if (repo_item && 'maintainers' in repo_item)
+			additional_maintainers = repo_item.maintainers.filter((pubkey) => pubkey !== author);
+		maintainers = author ? [author, ...additional_maintainers] : additional_maintainers;
+	}
+
+	let naddr: Naddr | undefined = undefined;
+	$: {
+		if (repo_item) {
+			naddr = repoToNaddr(repo_item);
+		}
+	}
+</script>
+
+<div class="bg-base-200 rounded-lg p-4" style={`min-height: ${maintainers.length * 1.325 + 2}rem;`}>
+	{#if !repo_item}
+		<div class="skeleton mb-2 h-5 w-40"></div>
+		<div class="w-100 skeleton h-4"></div>
+	{:else}
+		<a
+			class="link-primary break-words"
+			href="/r/{naddr}"
+			on:click={(event) => {
+				if (!naddr) {
+					event.preventDefault();
+				}
+			}}>{short_name}</a
+		>
+		{#if short_descrption.length > 0}
+			<p class="text-muted break-words pb-1 text-sm">
+				{short_descrption}
+			</p>
+		{/if}
+
+		<div class="break-words text-right text-xs text-slate-400">
+			{#if author}
+				<div
+					class="inline"
+					class:p-1={additional_maintainers.length > 0}
+					class:rounded-md={additional_maintainers.length > 0}
+					class:bg-base-400={additional_maintainers.length > 0}
+					class:text-white={additional_maintainers.length > 0}
+				>
+					{author}
+					<!-- <UserHeader user={author} inline={true} size="xs" /> -->
+				</div>
+				{#if additional_maintainers.length > 0}
+					<span>with</span>
+
+					<ul class="reposummarycard inline">
+						{#each additional_maintainers as user}
+							<li class="inline">
+								{user}
+								<!-- <UserHeader {user} inline={true} size="xs" /> -->
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			{/if}
+		</div>
+	{/if}
+</div>

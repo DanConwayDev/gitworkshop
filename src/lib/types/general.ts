@@ -9,6 +9,7 @@ export function isWebSocketUrl(url: string): url is WebSocketUrl {
 export type AtLeastThreeArray<T> = [T, T, T, ...T[]];
 export type PubKeyString = string;
 export type Npub = `npub1${string}`;
+export type Naddr = `naddr1${string}`;
 export type Timestamp = number;
 export type Kind = number;
 export type EventIdString = string;
