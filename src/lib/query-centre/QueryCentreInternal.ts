@@ -39,7 +39,7 @@ export class QueryCentreInternal {
 		return memory_db_query_store.createQuery(TimelineQuery, [{ kinds: [repo_kind] }]).pipe(
 			switchMap(() => {
 				return from(
-					db.repos.where('identifier').startsWithAnyOfIgnoreCase(query).distinct().toArray()
+					db.repos.where('searchWords').startsWithAnyOfIgnoreCase(query).distinct().toArray()
 				);
 			})
 		);

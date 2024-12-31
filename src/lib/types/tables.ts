@@ -15,6 +15,8 @@ export interface RepoTableItem extends LastActivity, WithRelaysInfo, RepoAnn {
 	issues: IssuesOrPrsByStatus | undefined;
 	/// undefined if no check has been carried out
 	PRs: IssuesOrPrsByStatus | undefined;
+	/// auto updated using dexie hooks
+	searchWords: string[];
 }
 
 export interface IssueOrPRTableItem

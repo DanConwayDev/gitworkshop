@@ -37,6 +37,9 @@
 	</div>
 
 	<div class="my-8">
-		<ReposSummaryList repos={$repos} title={`results for: ${$search_query}`} />
+		<ReposSummaryList
+			repos={$repos}
+			title={$search_query.length === 0 ? undefined : `results for: ${$search_query}`}
+		/>
 	</div>
 </Container>
