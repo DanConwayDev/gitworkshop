@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { repoToNaddr } from '$lib/repos';
 	import type { Naddr, PubKeyString, RepoTableItem } from '$lib/types';
+	import UserHeader from '../user/UserHeader.svelte';
 
 	export let repo_item: RepoTableItem | undefined = undefined;
 
@@ -80,8 +81,7 @@
 					class:bg-base-400={additional_maintainers.length > 0}
 					class:text-white={additional_maintainers.length > 0}
 				>
-					{author}
-					<!-- <UserHeader user={author} inline={true} size="xs" /> -->
+					<UserHeader user={author} inline={true} size="xs" />
 				</div>
 				{#if additional_maintainers.length > 0}
 					<span>with</span>
@@ -89,8 +89,7 @@
 					<ul class="reposummarycard inline">
 						{#each additional_maintainers as user}
 							<li class="inline">
-								{user}
-								<!-- <UserHeader {user} inline={true} size="xs" /> -->
+								<UserHeader {user} inline={true} size="xs" />
 							</li>
 						{/each}
 					</ul>
