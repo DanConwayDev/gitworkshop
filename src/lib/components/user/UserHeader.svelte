@@ -118,7 +118,7 @@
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								viewBox="0 0 16 16"
-								class="fill-base-content mr-1 inline h-4 w-4 flex-none opacity-50"
+								class="mr-1 inline h-4 w-4 flex-none fill-base-content opacity-50"
 							>
 								{#each icons_misc.link as d}
 									<path {d} />
@@ -134,7 +134,7 @@
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								viewBox="0 0 16 16"
-								class="fill-base-content mr-1 mt-1 inline h-4 w-4 flex-none opacity-50"
+								class="mr-1 mt-1 inline h-4 w-4 flex-none fill-base-content opacity-50"
 							>
 								{#each icons_misc.info as d}
 									<path {d} />

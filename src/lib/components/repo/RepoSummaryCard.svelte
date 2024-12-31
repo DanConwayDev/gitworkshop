@@ -52,7 +52,7 @@
 	}
 </script>
 
-<div class="bg-base-200 rounded-lg p-4" style={`min-height: ${maintainers.length * 1.325 + 2}rem;`}>
+<div class="rounded-lg bg-base-200 p-4" style={`min-height: ${maintainers.length * 1.325 + 2}rem;`}>
 	{#if !repo_item}
 		<div class="skeleton mb-2 h-5 w-40"></div>
 		<div class="w-100 skeleton h-4"></div>

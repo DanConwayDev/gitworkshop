@@ -31,7 +31,7 @@
 			<div class="navbar-center"></div>
 			<div class="navbar-end gap-4">
 				<form on:submit={handleSearch}>
-					<label class="input input-bordered input-sm flex items-center gap-2">
+					<label class="input input-sm input-bordered flex items-center gap-2">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							viewBox="0 0 16 16"
@@ -53,7 +53,7 @@
 						<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 						<ul
 							tabindex="0"
-							class="menu dropdown-content rounded-box bg-base-400 z-[1] -mr-4 p-2 shadow"
+							class="menu dropdown-content z-[1] -mr-4 rounded-box bg-base-400 p-2 shadow"
 						>
 							<li>[user placeholder]</li>
 							<li>

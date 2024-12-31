@@ -26,7 +26,7 @@
 	<div class="m-auto max-w-5xl">
 		<div class="grid gap-4 md:grid-cols-6">
 			<div class=""></div>
-			<div class="card bg-base-300 col-span-2">
+			<div class="card col-span-2 bg-base-300">
 				<div class="card-body">
 					<div class="card-title">
 						<h3>nostr</h3>
@@ -37,7 +37,7 @@
 					</div>
 				</div>
 			</div>
-			<div class="card bg-base-300 col-span-2">
+			<div class="card col-span-2 bg-base-300">
 				<div class="card-body">
 					<div class="card-title">
 						<h3>
