@@ -1,5 +1,4 @@
 import { type ARef, type PubKeyString, type WebSocketUrl } from '$lib/types';
-import { CacheRelay } from 'nostr-idb';
 import { Relay } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
 import { repo_kind } from '$lib/kinds';
@@ -16,20 +15,13 @@ export class RelayManager {
 	pubkey_metadata_queue: Set<PubKeyString> = new Set();
 	set_repo_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined;
 	set_pubkey_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined;
-	relay: Relay | CacheRelay;
+	relay: Relay;
 	inactivity_timer: NodeJS.Timeout | null = null;
 
-	constructor(
-		url: WebSocketUrl,
-		watcher: Watcher,
-		relay: Relay | CacheRelay | undefined = undefined
-	) {
+	constructor(url: WebSocketUrl, watcher: Watcher) {
 		this.url = url;
 		this.watcher = watcher;
-		if (relay) this.relay = relay;
-		else {
-			this.relay = new Relay(url);
-		}
+		this.relay = new Relay(url);
 	}
 
 	async connect(): Promise<void> {
