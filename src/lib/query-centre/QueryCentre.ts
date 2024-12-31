@@ -8,6 +8,10 @@ class QueryCentre {
 		this.external.fetchAllRepos();
 		return this.internal.fetchAllRepos();
 	}
+	searchRepoAnns(query: string) {
+		this.external.fetchAllRepos();
+		return this.internal.searchRepoAnns(query);
+	}
 }
 
 const query_centre = new QueryCentre();

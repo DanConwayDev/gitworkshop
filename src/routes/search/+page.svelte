@@ -4,7 +4,7 @@
 	import query_centre from '$lib/query-centre/QueryCentre';
 	import { search_input, search_query } from '$lib/stores/search';
 
-	let repos = query_centre.fetchAllRepos();
+	$: repos = query_centre.searchRepoAnns($search_query);
 	function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
 		search_query.set($search_input);
