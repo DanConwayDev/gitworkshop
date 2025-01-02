@@ -11,7 +11,7 @@ import type {
 	PubKeyString,
 	PubKeyTableItem,
 	RelayCheck,
-	RelayUpdate,
+	RelayUpdateUser,
 	WebSocketUrl
 } from '$lib/types';
 import {
@@ -21,19 +21,82 @@ import {
 	getProfileContent,
 	unixNow
 } from 'applesauce-core/helpers';
-import { type NostrEvent } from 'nostr-tools';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
+import type { WatcherPubkeyUpdate, WatcherUpdate } from '$lib/types/watcher';
 
-async function processPubkey(event: NostrEvent | undefined, relay_updates: RelayUpdate[] = []) {
-	const relay_ann_updates = relay_updates.filter(isRelayUpdatePubkey);
-	if (!(event && [Metadata, RelayList].includes(event.kind)) || relay_ann_updates.length === 0)
-		return;
-	const entry = await getAndUpdateOrCreatePubkeyTableItem(event || relay_ann_updates[0].uuid);
-	relay_ann_updates.forEach((update) => {
+export async function processPubkeyUpdates(updates: WatcherUpdate[]) {
+	const repo_updates = updates.filter(
+		(u) =>
+			!u.event ||
+			[Metadata, RelayList].includes(u.event.kind) ||
+			u.relay_updates.every((ru) => isRelayUpdatePubkey(ru))
+	) as WatcherPubkeyUpdate[];
+
+	if (repo_updates.length === 0) return;
+
+	const updated_entries = await getAndUpdatePubkeyTableItemsOrCreateFromEvent(repo_updates);
+
+	if (updated_entries.length === 0) return;
+
+	await db.pubkeys.bulkPut(updated_entries);
+}
+
+/// gets (or creates) and updates item
+async function getAndUpdatePubkeyTableItemsOrCreateFromEvent(
+	updates: WatcherPubkeyUpdate[]
+): Promise<PubKeyTableItem[]> {
+	const pubkeys: Set<PubKeyString> = new Set();
+	updates.forEach((u) => {
+		const uuid = u.event ? (getEventUID(u.event) as ARef) : u.relay_updates[0].uuid;
+		return pubkeys.add(uuid.split(':')[1]);
+	});
+	const items = await db.pubkeys.bulkGet([...pubkeys]);
+	const update_items: Map<PubKeyString, PubKeyTableItem> = new Map();
+	items.forEach((item) => {
+		if (item) update_items.set(item.pubkey, item);
+	});
+	updates.forEach((u) => {
+		const uuid = u.event ? (getEventUID(u.event) as ARef) : u.relay_updates[0].uuid;
+		const pubkey = uuid.split(':')[1] as PubKeyString;
+		const item = update_items.get(pubkey) || {
+			...createPubKeyInfo(pubkey),
+			relays_info: {}
+		};
+		if (u.event) {
+			if (u.event.kind === Metadata) {
+				try {
+					if (!item.metadata.stamp || item.metadata.stamp.created_at < u.event.created_at)
+						item.metadata = {
+							fields: getProfileContent(u.event),
+							stamp: { event_id: u.event.id, created_at: u.event.created_at }
+						};
+				} catch {
+					/* empty */
+				}
+			} else {
+				try {
+					if (!item.relays.stamp || item.relays.stamp.created_at < u.event.created_at)
+						item.relays = {
+							read: getInboxes(u.event) as WebSocketUrl[],
+							write: getOutboxes(u.event) as WebSocketUrl[],
+							stamp: { event_id: u.event.id, created_at: u.event.created_at }
+						};
+				} catch {
+					/* empty */
+				}
+			}
+		}
+		applyHuristicUpdates(item, u.relay_updates);
+	});
+	return [...update_items.values()];
+}
+
+function applyHuristicUpdates(item: PubKeyTableItem, relay_user_update: RelayUpdateUser[]) {
+	relay_user_update.forEach((update) => {
 		if (!isRelayUpdatePubkey(update)) return;
-		if (!entry.relays_info[update.url])
-			entry.relays_info[update.url] = {
+		if (!item.relays_info[update.url])
+			item.relays_info[update.url] = {
 				...getDefaultHuristicsForRelay()
 			};
 		const type = update.uuid.split(':')[0] === Metadata.toString() ? 'metadata' : 'relays';
@@ -43,22 +106,16 @@ async function processPubkey(event: NostrEvent | undefined, relay_updates: Relay
 			seen: update.type === 'finding' ? undefined : update.type === 'found',
 			up_to_date:
 				!!update.event_id &&
-				(!entry[type].stamp ||
-					!entry[type].stamp.event_id ||
-					update.event_id === entry[type].stamp.event_id)
+				(!item[type].stamp ||
+					!item[type].stamp.event_id ||
+					update.event_id === item[type].stamp.event_id)
 		};
 		processHuristic(
-			entry.relays_info[update.url],
-			entry.relays.write.includes(update.url),
+			item.relays_info[update.url],
+			item.relays.write.includes(update.url),
 			relay_check
 		);
 	});
-	await db.pubkeys.put(
-		{
-			...entry
-		},
-		entry.pubkey
-	);
 }
 
 /// mutates relay_info to 1) add relay huristic, 2) update score and 3) remove superfluious huristics
@@ -83,45 +140,4 @@ function processHuristic(
 	relay_info.score = calculateRelayScore(relay_info.huristics, is_repo_relay);
 }
 
-async function getAndUpdateOrCreatePubkeyTableItem(
-	event_or_aref: NostrEvent | ARef
-): Promise<PubKeyTableItem> {
-	const is_aref = isARef(event_or_aref);
-	const aref = is_aref ? event_or_aref : (getEventUID(event_or_aref) as ARef);
-	const pubkey = aref.split(':')[1] as PubKeyString;
-	const item = (await db.pubkeys.get(pubkey)) || {
-		...createPubKeyInfo(pubkey),
-		relays_info: {}
-	};
-	if (!is_aref) {
-		if (aref.split(':')[0] === Metadata.toString()) {
-			try {
-				if (!item.metadata.stamp || item.metadata.stamp.created_at < event_or_aref.created_at)
-					item.metadata = {
-						fields: getProfileContent(event_or_aref),
-						stamp: { event_id: event_or_aref.id, created_at: event_or_aref.created_at }
-					};
-			} catch {
-				/* empty */
-			}
-		} else {
-			try {
-				if (!item.relays.stamp || item.relays.stamp.created_at < event_or_aref.created_at)
-					item.relays = {
-						read: getInboxes(event_or_aref) as WebSocketUrl[],
-						write: getOutboxes(event_or_aref) as WebSocketUrl[],
-						stamp: { event_id: event_or_aref.id, created_at: event_or_aref.created_at }
-					};
-			} catch {
-				/* empty */
-			}
-		}
-	}
-	return item;
-}
-
-function isARef(a: ARef | NostrEvent): a is ARef {
-	return typeof a === 'string';
-}
-
-export default processPubkey;
+export default processPubkeyUpdates;

@@ -10,7 +10,7 @@ import type {
 	ARef,
 	HuristicsForRelay,
 	RelayCheck,
-	RelayUpdate,
+	RelayUpdateRepoAnn,
 	RepoAnnBaseFields,
 	RepoTableItem
 } from '$lib/types';
@@ -18,36 +18,76 @@ import { getTagMultiValue, getTagValue, getValueOfEachTagOccurence } from '$lib/
 import { getEventUID, unixNow } from 'applesauce-core/helpers';
 import { nip19, type NostrEvent } from 'nostr-tools';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
+import type { WatcherRepoUpdate, WatcherUpdate } from '$lib/types/watcher';
 
-async function processRepoAnn(event: NostrEvent | undefined, relay_updates: RelayUpdate[] = []) {
-	const relay_ann_updates = relay_updates.filter(isRelayUpdateRepoAnn);
-	if ((event && event.kind !== repo_kind) || relay_ann_updates.length === 0) return;
+export async function processRepoAnnUpdates(updates: WatcherUpdate[]) {
+	const repo_updates = updates.filter(
+		(u) =>
+			!u.event ||
+			u.event.kind === repo_kind ||
+			u.relay_updates.every((ru) => isRelayUpdateRepoAnn(ru))
+	) as WatcherRepoUpdate[];
 
-	const entry = await getAndUpdateRepoTableItemOrCreateFromEvent(
-		event || relay_ann_updates[0].uuid
+	if (repo_updates.length === 0) return;
+
+	const updated_entries = await getAndUpdateRepoTableItemsOrCreateFromEvent(repo_updates);
+
+	if (updated_entries.length === 0) return;
+
+	await db.repos.bulkPut(updated_entries);
+}
+
+/// gets and updates item, creates new item when event provided and no item exists, ignores if no items and no event
+async function getAndUpdateRepoTableItemsOrCreateFromEvent(
+	updates: WatcherRepoUpdate[]
+): Promise<RepoTableItem[]> {
+	const uuids = updates.map((u) =>
+		u.event ? (getEventUID(u.event) as ARef) : u.relay_updates[0].uuid
 	);
-	if (!entry) return;
+	const items = await db.repos.bulkGet(uuids);
+	return updates
+		.map((u) => {
+			const uuid = u.event ? (getEventUID(u.event) as ARef) : u.relay_updates[0].uuid;
+			const item = items.find((item) => item && item.uuid === uuid);
+			let repo_ann;
+			if (u.event) {
+				repo_ann = eventToRepoAnn(u.event);
+			}
+			if (!item && !repo_ann) return;
+			const updated_item = applyHuristicUpdates(
+				{
+					...(item || {
+						relays_info: {}
+					}),
+					...(repo_ann || {}),
+					last_activity: Math.max(item?.last_activity ?? 0, u.event ? u.event.created_at : 0)
+				} as RepoTableItem,
+				u.relay_updates
+			);
+			return updated_item;
+		})
+		.filter((u) => !!u);
+}
 
+function applyHuristicUpdates(
+	item: RepoTableItem,
+	relay_ann_updates: RelayUpdateRepoAnn[]
+): RepoTableItem {
 	relay_ann_updates.forEach((update) => {
 		if (!isRelayUpdateRepoAnn(update)) return;
-		if (!entry.relays_info[update.url])
-			entry.relays_info[update.url] = {
+		if (!item.relays_info[update.url])
+			item.relays_info[update.url] = {
 				...getDefaultHuristicsForRelay()
 			};
 		const relay_check: RelayCheck = {
 			timestamp: unixNow(),
 			is_child_check: false,
 			seen: true,
-			up_to_date: update.event_id === entry.event_id
+			up_to_date: update.event_id === item.event_id
 		};
-		processHuristic(entry.relays_info[update.url], entry.relays.includes(update.url), relay_check);
+		processHuristic(item.relays_info[update.url], item.relays.includes(update.url), relay_check);
 	});
-	await db.repos.put(
-		{
-			...entry
-		},
-		entry.uuid
-	);
+	return item;
 }
 
 /// mutates relay_info to 1) add relay huristic, 2) update score and 3) remove superfluious huristics
@@ -70,36 +110,6 @@ function processHuristic(
 		relay_check
 	];
 	relay_info.score = calculateRelayScore(relay_info.huristics, is_repo_relay);
-}
-
-async function getAndUpdateRepoTableItemOrCreateFromEvent(
-	event_or_aref: NostrEvent | ARef
-): Promise<RepoTableItem | undefined> {
-	const is_aref = isARef(event_or_aref);
-	const aref = is_aref ? event_or_aref : (getEventUID(event_or_aref) as ARef);
-	const item_from_db = await db.repos.get(aref);
-	if (!item_from_db && is_aref) return;
-	let repo_ann;
-	if (!is_aref) {
-		repo_ann = eventToRepoAnn(event_or_aref);
-		if (!repo_ann) return;
-	}
-	if (!item_from_db && !repo_ann) return;
-	const entry: RepoTableItem = {
-		...(item_from_db || {
-			relays_info: {}
-		}),
-		...(repo_ann || {}),
-		last_activity: Math.max(
-			item_from_db?.last_activity ?? 0,
-			!is_aref ? event_or_aref.created_at : 0
-		)
-	} as RepoTableItem;
-	return entry;
-}
-
-function isARef(a: ARef | NostrEvent): a is ARef {
-	return typeof a === 'string';
 }
 
 const eventToRepoAnnBaseFields = (event: NostrEvent): RepoAnnBaseFields | undefined => {
@@ -159,4 +169,4 @@ export const eventToRepoAnn = (event: NostrEvent): RepoAnn | undefined => {
 	};
 };
 
-export default processRepoAnn;
+export default processRepoAnnUpdates;

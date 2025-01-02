@@ -1,12 +1,13 @@
 import { addEventsToCache, isInCache } from '$lib/dbs/LocalRelayDb';
-import type { ARef, EventIdString, RelayUpdate } from '$lib/types';
+import { isRelayUpdatePubkey, type ARef, type EventIdString, type RelayUpdate } from '$lib/types';
 import type { EventStore } from 'applesauce-core';
-import processRepoAnn from './RepoAnn';
+import { processRepoAnnUpdates } from './RepoAnn';
 import type { NostrEvent } from 'nostr-tools';
 import { getEventUID } from 'applesauce-core/helpers';
 import { repo_kind } from '$lib/kinds';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import processPubkey from './Pubkey';
+import type { WatcherUpdate } from '$lib/types/watcher';
 
 class Watcher {
 	/// this prevents multiple processes from attempting to update the same database line
@@ -15,7 +16,9 @@ class Watcher {
 	/// but also a way of batch updates (relay updates are frequent) for efficency
 	///
 	/// watches in memory database for inserted nostr events that didnt originate
-	/// from the cache and processes them in a queue rather than async
+	/// from the cache and processes them in a queue rather than async. short delay
+	/// introduced to batch event updates that change the same table to reduce
+	/// reactivity computation
 	///
 	/// RelayUpdates are manually added via enqueueRelayUpdate which will be
 	/// in batches based on uuid, one every Xms or when event with uuid is received
@@ -29,7 +32,7 @@ class Watcher {
 			if (!isInCache(event)) this.enqueueEvent(event);
 		});
 		// to process relay updates for the next uuid in queue every Xms
-		setInterval(() => this.nextRelayUpdateBatch(), 100);
+		setInterval(() => this.nextRelayUpdateBatch(), 1000);
 	}
 
 	enqueueRelayUpdate(update: RelayUpdate) {
@@ -38,32 +41,55 @@ class Watcher {
 
 	enqueueEvent(event: NostrEvent) {
 		this.event_queue.push(event);
-		this.next();
+		this.nextEventBatch();
 	}
 
-	async next() {
+	async nextEventBatch() {
 		if (this.running) return;
-		const event = this.event_queue.shift();
-		if (event) {
+		const events = this.takeEventTableBatch();
+		if (events) {
 			this.running = true;
-			await processEventAndOrRelayUpdates(
-				event,
-				this.takeUIDBatchFromRelayUpdatesQueue(getEventUID(event)) || []
+			await processUpdates(
+				events.map((event) => ({
+					event,
+					relay_updates: this.takeUIDBatchFromRelayUpdatesQueue(getEventUID(event)) || []
+				}))
 			);
-			if (this.running) setTimeout(() => this.next(), 0);
+			if (this.running) setTimeout(() => this.nextEventBatch(), 100);
 			this.running = false;
 		}
+	}
+
+	takeEventTableBatch(): [NostrEvent, ...NostrEvent[]] | undefined {
+		if (!this.event_queue[0]) return undefined;
+		const table = eventKindToTable(this.event_queue[0].kind);
+		if (!table) {
+			//event shouldnt be here
+			this.event_queue.shift();
+			return undefined;
+		}
+		const relates_to_table: NostrEvent[] = [];
+		this.event_queue = this.event_queue.filter((e) => {
+			if (eventKindToTable(e.kind) === table) {
+				relates_to_table.push(e);
+				return false;
+			}
+			return true;
+		});
+		if (relates_to_table[0]) return relates_to_table as [NostrEvent, ...NostrEvent[]];
+		else return undefined;
 	}
 
 	async nextRelayUpdateBatch() {
 		if (this.running) return;
 		this.running = true;
-		const relay_updates_batch = this.takeUIDBatchFromRelayUpdatesQueue();
+		const relay_updates_batch = this.takeTableBatchFromRelayUpdatesQueue();
 		if (relay_updates_batch) {
-			await processEventAndOrRelayUpdates(undefined, relay_updates_batch);
+			const grouped = groupTableRelayUpdates(relay_updates_batch);
+			await processUpdates(grouped);
 		}
 		this.running = false;
-		this.next();
+		this.nextEventBatch();
 	}
 
 	takeUIDBatchFromRelayUpdatesQueue(
@@ -82,34 +108,47 @@ class Watcher {
 		if (relates_to_uuid[0]) return relates_to_uuid as [RelayUpdate, ...RelayUpdate[]];
 		else return;
 	}
+
+	takeTableBatchFromRelayUpdatesQueue(
+		table?: 'pubkeys' | 'repos' | 'prs' | 'issues'
+	): [RelayUpdate, ...RelayUpdate[]] | undefined {
+		if (!this.relay_update_queue[0]) return;
+		const relates_to_table: RelayUpdate[] = [];
+		const table_to_use = table || this.relay_update_queue[0].table;
+		this.relay_update_queue = this.relay_update_queue.filter((u) => {
+			if (u.table === table_to_use) {
+				relates_to_table.push(u);
+				return false;
+			}
+			return true;
+		});
+		if (relates_to_table[0]) return relates_to_table as [RelayUpdate, ...RelayUpdate[]];
+		else return;
+	}
 }
 
-async function processEventAndOrRelayUpdates(
-	event: NostrEvent,
-	relay_updates?: RelayUpdate[]
-): Promise<void>;
-async function processEventAndOrRelayUpdates(
-	event: undefined,
-	relay_updates: [RelayUpdate, ...RelayUpdate[]]
-): Promise<void>;
+async function processUpdates(updates: WatcherUpdate[]) {
+	await processRepoAnnUpdates(updates);
+	await processPubkey(updates);
+	addEventsToCache(updates.map((u) => u.event).filter((e) => e) as NostrEvent[]);
+}
 
-async function processEventAndOrRelayUpdates(
-	event: NostrEvent | undefined,
-	relay_update_batch: RelayUpdate[] = []
-) {
-	if (
-		(event && event.kind === repo_kind) ||
-		(relay_update_batch[0] && relay_update_batch[0].table === 'repos')
-	)
-		await processRepoAnn(event, relay_update_batch);
-	if (
-		(event && [Metadata, RelayList].includes(event.kind)) ||
-		(relay_update_batch[0] && relay_update_batch[0].table === 'pubkeys')
-	)
-		await processPubkey(event, relay_update_batch);
-	if (event)
-		// TODO add all processes that update custom db here
-		addEventsToCache([event]);
+export function eventKindToTable(
+	kind: number
+): ('pubkeys' | 'repos' | 'prs' | 'issues') | undefined {
+	if (kind === repo_kind) return 'repos';
+	if ([Metadata, RelayList].includes(kind)) return 'pubkeys';
+	return undefined;
+}
+
+function groupTableRelayUpdates(relay_updates: [RelayUpdate, ...RelayUpdate[]]): WatcherUpdate[] {
+	const map: Map<string, WatcherUpdate> = new Map();
+	relay_updates.forEach((u) => {
+		const key = isRelayUpdatePubkey(u) ? u.uuid.split(':')[1] : u.uuid;
+		const e = map.get(key) || { event: undefined, relay_updates: [] };
+		e.relay_updates.push(u);
+	});
+	return [...map.values()];
 }
 
 export default Watcher;
