@@ -1,11 +1,9 @@
-import { memory_db_query_store } from '$lib/dbs/InMemoryRelay';
 import db from '$lib/dbs/LocalDb';
 import { getCacheEventsForFilters } from '$lib/dbs/LocalRelayDb';
 import { repo_kind } from '$lib/kinds';
 import { createPubKeyInfo, type PubKeyString } from '$lib/types';
-import { TimelineQuery } from 'applesauce-core/queries';
+import { liveQuery } from 'dexie';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
-import { from, switchMap } from 'rxjs';
 
 const hydrated_in_memory_db: string[] = [];
 export class QueryCentreInternal {
@@ -15,20 +13,9 @@ export class QueryCentreInternal {
 			hydrated_in_memory_db.push('repo_ann');
 			getCacheEventsForFilters([{ kinds: [repo_kind] }]);
 		}
-		// get custom db entry
-
-		// using applesauce querystore instead of svelte's liveQuery because we don't want every updated to seen_on to trigger a refresh
-		return (
-			memory_db_query_store
-				.createQuery(TimelineQuery, [{ kinds: [repo_kind] }])
-				// .pipe(switchMap(from(db.repos.toArray())))
-				// .pipe(map((_) => async () => await db.repos.toArray()))
-				.pipe(
-					switchMap(() => {
-						return from(db.repos.toArray());
-					})
-				)
-		);
+		return liveQuery(async () => {
+			return await db.repos.toArray();
+		});
 	}
 	searchRepoAnns(query: string) {
 		// Populate memory_db from cache
@@ -37,14 +24,13 @@ export class QueryCentreInternal {
 			getCacheEventsForFilters([{ kinds: [repo_kind] }]);
 		}
 		if (query.length === 0) this.fetchAllRepos();
-
-		return memory_db_query_store.createQuery(TimelineQuery, [{ kinds: [repo_kind] }]).pipe(
-			switchMap(() => {
-				return from(
-					db.repos.where('searchWords').startsWithAnyOfIgnoreCase(query).distinct().toArray()
-				);
-			})
-		);
+		return liveQuery(async () => {
+			return await db.repos
+				.where('searchWords')
+				.startsWithAnyOfIgnoreCase(query)
+				.distinct()
+				.toArray();
+		});
 	}
 
 	fetchPubkey(pubkey: PubKeyString) {
@@ -54,20 +40,28 @@ export class QueryCentreInternal {
 			hydrated_in_memory_db.push(pubkey);
 			getCacheEventsForFilters([filter]);
 		}
-		return memory_db_query_store.createQuery(TimelineQuery, [filter]).pipe(
-			switchMap(() => {
-				return from(
-					db.pubkeys.get(pubkey).then((info) => {
-						return (
-							info || {
-								...createPubKeyInfo(pubkey),
-								relays_info: {}
-							}
-						);
-					})
-				);
-			})
-		);
+		// using applesauce querystore instead of svelte's liveQuery because we don't to reload on every to every pubkey
+		// note: for this to work we will need to ms before update has made its way into the db via watcher.
+		// return memory_db_query_store.createQuery(TimelineQuery, [filter]).pipe(
+		// 	switchMap((es) => {
+		// 		return from(
+		// 			db.pubkeys.get(pubkey).then((info) => {
+		// 				if (info) return info;
+		// 				const m = es.find((e) => e.kind === Metadata);
+		// 				return (
+		// 					info || {
+		// 						...createPubKeyInfo(pubkey),
+		// 						// for the few ms before the event has made it into the cache
+		// 						metadata: { fields: m ? getProfileContent(m) : {}, stamp: undefined }
+		// 					}
+		// 				);
+		// 			})
+		// 		);
+		// 	})
+		// );
+		return liveQuery(async () => {
+			return (await db.pubkeys.get(pubkey)) || { ...createPubKeyInfo(pubkey), relays_info: {} };
+		});
 	}
 }
 export default QueryCentreInternal;
