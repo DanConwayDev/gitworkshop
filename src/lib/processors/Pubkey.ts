@@ -26,16 +26,16 @@ import { Metadata, RelayList } from 'nostr-tools/kinds';
 import type { WatcherPubkeyUpdate, WatcherUpdate } from '$lib/types/watcher';
 
 export async function processPubkeyUpdates(updates: WatcherUpdate[]) {
-	const repo_updates = updates.filter(
+	const pubkey_updates = updates.filter(
 		(u) =>
 			!u.event ||
 			[Metadata, RelayList].includes(u.event.kind) ||
 			u.relay_updates.every((ru) => isRelayUpdatePubkey(ru))
 	) as WatcherPubkeyUpdate[];
 
-	if (repo_updates.length === 0) return;
+	if (pubkey_updates.length === 0) return;
 
-	const updated_entries = await getAndUpdatePubkeyTableItemsOrCreateFromEvent(repo_updates);
+	const updated_entries = await getAndUpdatePubkeyTableItemsOrCreateFromEvent(pubkey_updates);
 
 	if (updated_entries.length === 0) return;
 
@@ -88,6 +88,7 @@ async function getAndUpdatePubkeyTableItemsOrCreateFromEvent(
 			}
 		}
 		applyHuristicUpdates(item, u.relay_updates);
+		update_items.set(pubkey, item);
 	});
 	return [...update_items.values()];
 }

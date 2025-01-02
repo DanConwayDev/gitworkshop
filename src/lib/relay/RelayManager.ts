@@ -5,8 +5,9 @@ import { repo_kind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
 import type Watcher from '$lib/processors/Watcher';
-import type { EventIdString } from '$lib/types';
+import type { EventIdString, RelayUpdate } from '$lib/types';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
+import { eventKindToTable } from '$lib/processors/Watcher';
 
 export class RelayManager {
 	url: WebSocketUrl;
@@ -77,13 +78,16 @@ export class RelayManager {
 					onevent: async (event) => {
 						if (event.kind !== repo_kind) return;
 						addSeenRelay(event, this.url);
-						this.watcher.enqueueRelayUpdate({
-							type: 'found',
-							uuid: getEventUID(event) as ARef,
-							event_id: event.id as EventIdString,
-							table: 'repos',
-							url: this.url
-						});
+						const table = eventKindToTable(event.kind);
+						if (table) {
+							this.watcher.enqueueRelayUpdate({
+								type: 'found',
+								uuid: getEventUID(event) as ARef,
+								event_id: event.id as EventIdString,
+								table,
+								url: this.url
+							} as RelayUpdate);
+						}
 						memory_db.add(event);
 					},
 					oneose: async () => {
