@@ -2,7 +2,7 @@
 	import type { RepoTableItem } from '$lib/types';
 	import RepoSummaryCard from './RepoSummaryCard.svelte';
 
-	export let title: string = '';
+	export let title: string | undefined = undefined;
 	export let repos: RepoTableItem[] = [];
 	export let loading: boolean = false;
 	export let group_by: 'name' | 'identifier' | undefined = undefined;
@@ -29,7 +29,7 @@
 </script>
 
 <div class="min-width">
-	{#if title.length > 0}
+	{#if title && title.length > 0}
 		<div class="prose mb-3">
 			<h3>{title}</h3>
 		</div>
