@@ -8,38 +8,57 @@ export interface LastCheck {
 	query: 'All Repos'; // scope to add other queries eg 'All PRs and Issue' in the future
 }
 
+export interface RelayCheckTimestamp {
+	last_check: Timestamp | undefined;
+	last_update: Timestamp | undefined;
+}
 /** relay updates used by watcher to create relay huristics */
 
 export type RelayUpdate = RelayUpdateUser | RelayUpdateRepoAnn | RelayUpdatePRIssue;
 
-export type RelayUpdateUser = RelayUpdateUserFound | RelayUpdateUserNotYetFound;
-export interface RelayUpdateUserFound extends RelayUpdateBase {
-	type: 'found';
-	event_id: EventIdString;
-	uuid: ARef;
+export type RelayUpdateUser = (RelayUpdateFound | RelayUpdateNotFound | RelayUpdateChecked) & {
 	table: 'pubkeys';
+};
+export interface RelayUpdateFound extends RelayUpdateBase {
+	type: 'found';
+	created_at: Timestamp;
+	uuid: ARef;
 }
 
-export interface RelayUpdateUserNotYetFound extends RelayUpdateBase {
-	type: 'finding' | 'not-found';
-	event_id: undefined;
+export interface RelayUpdateNotFound extends RelayUpdateBase {
+	type: 'not-found';
 	// this includes kind for either metadata or relay list
 	uuid: ARef;
-	table: 'pubkeys';
+}
+
+export interface RelayUpdateChecked extends RelayUpdateBase {
+	type: 'checked';
+	// this includes kind for either metadata or relay list
+	uuid: ARef;
 }
 
 export function isRelayUpdatePubkey(update: RelayUpdate): update is RelayUpdateUser {
 	return (update as RelayUpdateUser).table === 'pubkeys';
 }
 
-export interface RelayUpdateRepoAnn extends RelayUpdateBase {
-	uuid: ARef;
-	event_id: EventIdString;
-	table: 'repos';
+export function isRelayUpdatePubkeyFound(
+	update: RelayUpdate
+): update is RelayUpdateFound & RelayUpdateUser {
+	return isRelayUpdatePubkey(update) && update.type === 'found';
 }
+
+export type RelayUpdateRepoAnn = (RelayUpdateFound | RelayUpdateNotFound | RelayUpdateChecked) & {
+	table: 'repos';
+};
 
 export function isRelayUpdateRepoAnn(update: RelayUpdate): update is RelayUpdateRepoAnn {
 	return (update as RelayUpdateRepoAnn).table === 'repos';
+}
+
+export function isRelayUpdateRepoFound(
+	update: RelayUpdate
+): update is RelayUpdateFound & RelayUpdateRepoAnn {
+	return isRelayUpdateRepoAnn(update) && update.type === 'found';
 }
 
 export interface RelayUpdatePRIssue extends RelayUpdateBase {
@@ -55,7 +74,7 @@ export function isRelayUpdatePRIssue(update: RelayUpdate): update is RelayUpdate
 }
 
 interface RelayUpdateBase {
-	type: 'found' | 'finding' | 'not-found';
+	type: 'found' | 'checked' | 'not-found';
 	url: WebSocketUrl;
 	uuid: ARef | EventIdString;
 }

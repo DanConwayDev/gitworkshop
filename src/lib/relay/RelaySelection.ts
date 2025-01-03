@@ -3,7 +3,7 @@ import {
 	isRelayCheck,
 	isRelayHint,
 	type PubKeyString,
-	type RelayCheck,
+	type RelayCheckTimestamp,
 	type RelayHuristic,
 	type RelayScore,
 	type WebSocketUrl
@@ -27,7 +27,8 @@ export const chooseRelaysForAllRepos = async () => {
 
 export const calculateRelayScore = (
 	huristics: RelayHuristic[],
-	write_relay: boolean
+	write_relay: boolean,
+	kinds: number[] = []
 ): RelayScore => {
 	let score = 0;
 	// boost if write relay
@@ -37,21 +38,26 @@ export const calculateRelayScore = (
 		score += 20;
 	}
 	// boost or penalise based on historic checks
-	const check = huristics.findLast(
-		(h) => isRelayCheck(h) && !h.is_child_check && typeof h.seen !== 'undefined'
-	) as RelayCheck | undefined;
-	if (check) {
-		let boost = 0;
-		if (check.seen) {
-			// boost up to date
-			if (check.up_to_date) boost = 30;
-			// boost seen but out of date
-			else boost = -10;
+	const checks = huristics
+		.filter(isRelayCheck)
+		.filter((h) => kinds.includes(h.kind))
+		.sort((a, b) => a.timestamp - b.timestamp);
+	let boost;
+	if (checks[0]) {
+		if (checks[0].up_to_date) {
+			boost = 30;
+		} else {
+			if (checks.find((h) => h.type === 'found')) {
+				// seen but out of date
+				boost = -10;
+			} else {
+				// never seen
+				boost = -30;
+			}
 		}
-		// penalise unseen
-		else boost = -30;
-		score += boost * getRecentTimestampMultiplier(check.timestamp);
+		score += boost * getRecentTimestampMultiplier(checks[0].timestamp);
 	}
+
 	return score;
 };
 
@@ -77,7 +83,9 @@ function getRecentTimestampMultiplier(unixtime: number): number {
 	}
 }
 
-export const chooseRelaysForPubkey = async (pubkey: PubKeyString): Promise<WebSocketUrl[]> => {
+export const chooseRelaysForPubkey = async (
+	pubkey: PubKeyString
+): Promise<{ url: WebSocketUrl; check_timestamps: RelayCheckTimestamp }[]> => {
 	const skip_if_X_relays = 2;
 	const returned_uptodate_events_X_seconds_ago = 60;
 
@@ -85,13 +93,17 @@ export const chooseRelaysForPubkey = async (pubkey: PubKeyString): Promise<WebSo
 	// prioritise relays with items in queue, but not too many?
 	const record = await db.pubkeys.get(pubkey);
 
-	if (!record) return [...base_relays];
+	if (!record)
+		return base_relays.map((url) => ({
+			url,
+			check_timestamps: { last_check: undefined, last_update: undefined }
+		}));
 
 	const recently_checked = [];
 
-	const scored_relays = Object.keys(record.relays_info).sort((a, b) => {
+	const scored_relays = (Object.keys(record.relays_info) as WebSocketUrl[]).sort((a, b) => {
 		if (
-			record.relays_info[a as WebSocketUrl].huristics.some(
+			record.relays_info[a].huristics.some(
 				(v) =>
 					isRelayCheck(v) &&
 					v.up_to_date &&
@@ -100,11 +112,20 @@ export const chooseRelaysForPubkey = async (pubkey: PubKeyString): Promise<WebSo
 		) {
 			recently_checked.push(a);
 		}
-		return (
-			record.relays_info[b as WebSocketUrl].score - record.relays_info[a as WebSocketUrl].score
-		);
+		return record.relays_info[b].score - record.relays_info[a].score;
 	});
 	if (recently_checked.length >= skip_if_X_relays) return [];
 
-	return [...scored_relays, ...base_relays].slice(0, 3) as WebSocketUrl[];
+	const selected = [...scored_relays, ...base_relays].slice(0, 3);
+	return selected.map((url) => ({
+		url,
+		check_timestamps: {
+			last_update: record.metadata.stamp?.created_at ?? undefined,
+			last_check:
+				record.relays_info[url]?.huristics.reduce(
+					(max, h) => (isRelayCheck(h) ? Math.max(max ?? 0, h.timestamp) : max),
+					undefined as number | undefined
+				) ?? undefined
+		}
+	}));
 };

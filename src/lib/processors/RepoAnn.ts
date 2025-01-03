@@ -2,7 +2,9 @@ import db from '$lib/dbs/LocalDb';
 import {
 	getDefaultHuristicsForRelay,
 	isRelayCheck,
+	isRelayCheckFound,
 	isRelayUpdateRepoAnn,
+	isRelayUpdateRepoFound,
 	type RepoAnn
 } from '$lib/types';
 import { repo_kind } from '$lib/kinds';
@@ -10,6 +12,8 @@ import type {
 	ARef,
 	HuristicsForRelay,
 	RelayCheck,
+	RelayCheckFound,
+	RelayUpdateFound,
 	RelayUpdateRepoAnn,
 	RepoAnnBaseFields,
 	RepoTableItem
@@ -79,12 +83,22 @@ function applyHuristicUpdates(
 			item.relays_info[update.url] = {
 				...getDefaultHuristicsForRelay()
 			};
-		const relay_check: RelayCheck = {
+		const created_at_on_relays = isRelayUpdateRepoFound(update)
+			? update.created_at
+			: item.relays_info[update.url].huristics.find(isRelayCheckFound)?.created_at;
+		const base = {
+			type: update.type,
 			timestamp: unixNow(),
-			is_child_check: false,
-			seen: true,
-			up_to_date: update.event_id === item.event_id
+			kind: Number(update.uuid.split(':')[0]),
+			up_to_date: !!created_at_on_relays && created_at_on_relays === item.created_at
 		};
+		const relay_check: RelayCheck =
+			base.type === 'found'
+				? ({
+						...base,
+						created_at: (update as RelayUpdateFound).created_at
+					} as RelayCheckFound)
+				: (base as RelayCheck);
 		processHuristic(item.relays_info[update.url], item.relays.includes(update.url), relay_check);
 	});
 	return item;
@@ -99,13 +113,7 @@ function processHuristic(
 	relay_info.huristics = [
 		// remove any older huristics with same indicators
 		...relay_info.huristics.filter(
-			(v) =>
-				!isRelayCheck(v) ||
-				!(
-					v.is_child_check === relay_check.is_child_check &&
-					v.seen === relay_check.seen &&
-					v.up_to_date === relay_check.up_to_date
-				)
+			(v) => !isRelayCheck(v) || v.type !== relay_check.type || relay_check.kind !== v.kind
 		),
 		relay_check
 	];

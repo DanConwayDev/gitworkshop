@@ -64,38 +64,41 @@ export function isRelayHint(huristic: RelayHuristic): huristic is RelayHint {
 	);
 }
 
-export interface RelayCheck {
-	/// if seen is undefined this is in progress start timestamp otherwise timestamp receieved
-	timestamp: Timestamp;
-	// true if checking for children (ie. for Repo: PRs/Issues/State of Repo, for PRs, comments, patches etc)
-	is_child_check: boolean;
-	/// undefined if check not yet complete, if is_check_check - true when at least one child event
-	seen: boolean | undefined;
-	/// undefined if check not yet complete or not seen, if is_check_check, true when has all (or most) child events
-	up_to_date: boolean | undefined;
+export type RelayCheck = RelayCheckFound | RelayCheckNotFound | RelayCheckWithSince;
+
+export interface RelayCheckFound extends RelayCheckBase {
+	type: 'found';
+	created_at: Timestamp;
 }
 
-export const relay_check_defaults: RelayCheck = {
-	timestamp: 0,
-	is_child_check: false,
-	seen: undefined,
-	up_to_date: undefined
-};
+export interface RelayCheckNotFound extends RelayCheckBase {
+	type: 'not-found';
+	// up_to_date: false;
+}
+
+export interface RelayCheckWithSince extends RelayCheckBase {
+	type: 'checked';
+}
+
+export interface RelayCheckBase {
+	timestamp: Timestamp;
+	kind: number;
+	up_to_date: boolean;
+}
 
 export function isRelayCheck(huristic: RelayHuristic): huristic is RelayCheck {
 	return (
 		typeof huristic === 'object' &&
 		huristic !== null &&
 		'timestamp' in huristic &&
-		(typeof (huristic as RelayCheck).timestamp === 'number' ||
-			(huristic as RelayCheck).timestamp === undefined) &&
-		'is_child_check' in huristic &&
-		typeof (huristic as RelayCheck).is_child_check === 'boolean' &&
-		'seen' in huristic &&
-		(typeof (huristic as RelayCheck).seen === 'boolean' ||
-			(huristic as RelayCheck).seen === undefined) &&
-		'up_to_date' in huristic &&
-		(typeof (huristic as RelayCheck).up_to_date === 'boolean' ||
-			(huristic as RelayCheck).up_to_date === undefined)
+		typeof (huristic as RelayCheckBase).timestamp === 'number' &&
+		'type' in huristic &&
+		((huristic as RelayCheckFound).type === 'found' ||
+			(huristic as RelayCheckNotFound).type === 'not-found' ||
+			(huristic as RelayCheckWithSince).type === 'checked')
 	);
+}
+
+export function isRelayCheckFound(huristic: RelayHuristic): huristic is RelayCheckFound {
+	return isRelayCheck(huristic) && (huristic as RelayCheckFound).type === 'found';
 }

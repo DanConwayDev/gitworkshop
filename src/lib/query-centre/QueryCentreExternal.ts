@@ -35,7 +35,11 @@ class QueryCentreExternal {
 
 	async fetchPubkey(pubkey: PubKeyString) {
 		const relays = await chooseRelaysForPubkey(pubkey);
-		Promise.all(relays.map((url) => this.get_relay(url).fetchPubkeyInfo(pubkey)));
+		Promise.all(
+			relays.map(({ url, check_timestamps }) =>
+				this.get_relay(url).fetchPubkeyInfo(pubkey, check_timestamps)
+			)
+		);
 	}
 }
 

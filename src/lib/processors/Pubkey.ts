@@ -3,7 +3,9 @@ import {
 	createPubKeyInfo,
 	getDefaultHuristicsForRelay,
 	isRelayCheck,
-	isRelayUpdatePubkey
+	isRelayCheckFound,
+	isRelayUpdatePubkey,
+	isRelayUpdatePubkeyFound
 } from '$lib/types';
 import type {
 	ARef,
@@ -11,7 +13,9 @@ import type {
 	PubKeyString,
 	PubKeyTableItem,
 	RelayCheck,
+	RelayCheckFound,
 	RelayUpdateUser,
+	RelayUpdateFound,
 	WebSocketUrl
 } from '$lib/types';
 import {
@@ -100,17 +104,27 @@ function applyHuristicUpdates(item: PubKeyTableItem, relay_user_update: RelayUpd
 			item.relays_info[update.url] = {
 				...getDefaultHuristicsForRelay()
 			};
-		const type = update.uuid.split(':')[0] === Metadata.toString() ? 'metadata' : 'relays';
-		const relay_check: RelayCheck = {
+		const property = update.uuid.split(':')[0] === Metadata.toString() ? 'metadata' : 'relays';
+
+		const created_at_on_relays = isRelayUpdatePubkeyFound(update)
+			? update.created_at
+			: item.relays_info[update.url].huristics.find(isRelayCheckFound)?.created_at;
+		const base = {
+			type: update.type,
 			timestamp: unixNow(),
-			is_child_check: false,
-			seen: update.type === 'finding' ? undefined : update.type === 'found',
+			kind: Number(update.uuid.split(':')[0]),
 			up_to_date:
-				!!update.event_id &&
-				(!item[type].stamp ||
-					!item[type].stamp.event_id ||
-					update.event_id === item[type].stamp.event_id)
+				!!created_at_on_relays &&
+				!!item[property].stamp &&
+				created_at_on_relays === item[property].stamp.created_at
 		};
+		const relay_check: RelayCheck =
+			base.type === 'found'
+				? ({
+						...base,
+						created_at: (update as RelayUpdateFound).created_at
+					} as RelayCheckFound)
+				: (base as RelayCheck);
 		processHuristic(
 			item.relays_info[update.url],
 			item.relays.write.includes(update.url),
@@ -128,13 +142,7 @@ function processHuristic(
 	relay_info.huristics = [
 		// remove any older huristics with same indicators
 		...relay_info.huristics.filter(
-			(v) =>
-				!isRelayCheck(v) ||
-				!(
-					v.is_child_check === relay_check.is_child_check &&
-					v.seen === relay_check.seen &&
-					v.up_to_date === relay_check.up_to_date
-				)
+			(v) => !isRelayCheck(v) || v.type !== relay_check.type || relay_check.kind !== v.kind
 		),
 		relay_check
 	];
