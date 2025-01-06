@@ -5,7 +5,7 @@ import { repo_kind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
 import type Watcher from '$lib/processors/Watcher';
-import type { RelayCheckTimestamp, RelayUpdate } from '$lib/types';
+import type { RelayCheckTimestamp, RelayUpdate, Timestamp } from '$lib/types';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import { eventKindToTable } from '$lib/processors/Watcher';
 
@@ -175,51 +175,68 @@ export class RelayManager {
 						}
 					}
 				}
+				console.log(`${this.url} - finished fetching from queue`);
+				this.fetching_queue = false;
 			}
 		});
 	}
 }
 
-/// create the smallest set of filters to find all (and only) profile events we haven't seen before.
-/// it finds the newest event we have (by last_update) and groups all where last_check is greater than this.
-/// it repeats this until all pubkeys are included in a filter
-/// if we dont have the event (last_update is undefined), its ok either use the last_check or a filter where since is undefined
-export function createFiltersGroupedBySince(
-	items: Map<PubKeyString, RelayCheckTimestamp>
-): (Filter & { authors: string[] })[] {
-	const replication_delay = 15 * 60;
-	// Sort the items by last_update in descending order, then by last_check in descending order
-	const sortedItems = Array.from(items.entries()).sort(([, a], [, b]) => {
-		if ((b?.last_update ?? 0) - (a?.last_update ?? 0) === 0) {
-			return (b?.last_check ?? 0) - (a?.last_check ?? 0);
+export const createFiltersGroupedBySince = (items: Map<PubKeyString, RelayCheckTimestamp>) => {
+	const replication_delay = 15 * 60; // 900 seconds
+	const authors_unkown_or_unchecked: PubKeyString[] = [];
+	let checked: {
+		pubkey: PubKeyString;
+		last_update: Timestamp;
+		check_from: Timestamp;
+	}[] = [];
+
+	const filters: (Filter & {
+		authors: string[];
+	})[] = [];
+
+	// put aside undefined last check for filter without since
+	items.forEach((t, pubkey) => {
+		if (!t.last_check || !t.last_update) {
+			authors_unkown_or_unchecked.push(pubkey);
+		} else {
+			checked.push({
+				pubkey,
+				// sometimes replication delay can be shortened
+				check_from: Math.max(t.last_check - replication_delay, t.last_update),
+				last_update: t.last_update
+			});
 		}
-		return (b?.last_update ?? 0) - (a?.last_update ?? 0);
 	});
 
-	const filters: (Filter & { authors: string[] })[] = [];
+	// sort earliest first
+	checked.sort((a, b) => a.check_from - b.check_from);
 
-	let entry = sortedItems.shift();
-	while (entry && entry[1]) {
-		const [pubkey, timestamp] = entry;
+	while (checked.length > 0) {
+		const entry = checked.shift();
+		if (!entry) continue;
+
 		const filter = {
 			kinds: [Metadata, RelayList],
-			authors: [pubkey],
-			since: timestamp.last_update
+			authors: [entry.pubkey],
+			since: entry.check_from
 		};
-		entry = sortedItems.shift();
-		while (entry) {
-			const [pubkey, timestamp] = entry;
-			if (
-				// if !filter.since we dont have any events at this point in the sorted array
-				!filter.since ||
-				// if our last_check is more recent than 'since' we should only get new events
-				(timestamp.last_check && timestamp.last_check - replication_delay > filter.since)
-			)
-				filter.authors.push(pubkey);
-			else break;
-			entry = sortedItems.shift();
-		}
+
+		checked = checked.filter((item) => {
+			if (item.check_from >= filter.since && item.last_update <= filter.since) {
+				filter.authors.push(item.pubkey);
+				return false;
+			}
+			return true;
+		});
 		filters.push(filter);
 	}
+
+	if (authors_unkown_or_unchecked.length > 0) {
+		filters.push({
+			kinds: [Metadata, RelayList],
+			authors: authors_unkown_or_unchecked
+		});
+	}
 	return filters;
-}
+};
