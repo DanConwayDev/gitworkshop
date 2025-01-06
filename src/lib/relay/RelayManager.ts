@@ -117,7 +117,17 @@ export class RelayManager {
 		}
 	}
 
+	fetching_queue = false;
 	async fetchPubkeyQueue() {
+		if (this.fetching_queue === true) {
+			console.log(`${this.url} - busy. items in queue ${this.pubkey_metadata_queue.size}`);
+			return setTimeout(() => {
+				this.fetchPubkeyQueue();
+			}, 1);
+		}
+
+		if (this.pubkey_metadata_queue.size === 0) return;
+		this.fetching_queue = true;
 		await this.connect();
 		const filters = createFiltersGroupedBySince(this.pubkey_metadata_queue);
 		this.pubkey_metadata_queue.clear();
