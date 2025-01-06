@@ -15,7 +15,7 @@
 	export let link_to_profile = true;
 	export let avatar_on_right = false;
 
-	$: info = query_centre.fetchPubkey(user);
+	$: info = query_centre.fetchPubkeyName(user);
 	$: display_name = getName($info);
 	$: loading = isPubKeyMetadataLoading($info);
 </script>

@@ -13,9 +13,27 @@ class QueryCentre {
 		this.external.fetchAllRepos();
 		return this.internal.searchRepoAnns(query);
 	}
-	fetchPubkey(pubkey: PubKeyString) {
+
+	async fetchPubkey(pubkey: PubKeyString) {
 		this.external.fetchPubkey(pubkey);
 		return this.internal.fetchPubkey(pubkey);
+	}
+
+	fetchPubkeyName(pubkey: PubKeyString) {
+		const obs = this.internal.fetchPubkey(pubkey);
+		setTimeout(
+			() =>
+				obs
+					.subscribe((e) => {
+						if (!e.metadata.stamp) {
+							this.external.fetchPubkey(pubkey);
+						}
+					})
+					.unsubscribe(),
+			// allow time for fetching from db
+			10
+		);
+		return obs;
 	}
 }
 
