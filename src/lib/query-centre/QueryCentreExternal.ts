@@ -1,8 +1,9 @@
 import { chooseRelaysForAllRepos, chooseRelaysForPubkey } from '$lib/relay/RelaySelection';
 import { RelayManager } from '$lib/relay/RelayManager';
-import type { AtLeastThreeArray, PubKeyString, WebSocketUrl } from '$lib/types';
+import type { AtLeastThreeArray, PubKeyString, Timestamp, WebSocketUrl } from '$lib/types';
 import Watcher from '$lib/processors/Watcher';
 import memory_db from '$lib/dbs/InMemoryRelay';
+import { unixNow } from 'applesauce-core/helpers';
 
 export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.damus.io',
@@ -33,7 +34,16 @@ class QueryCentreExternal {
 		Promise.all(relays.map((url) => this.get_relay(url).fetchAllRepos()));
 	}
 
+	pubkey_last_fetch: Map<PubKeyString, Timestamp> = new Map();
+	pubkey_fetched_recently(pubkey: PubKeyString, seconds: number): boolean {
+		const last = this.pubkey_last_fetch.get(pubkey);
+		return !last || last < unixNow() - seconds * 1000;
+	}
+
 	async fetchPubkey(pubkey: PubKeyString) {
+		if (this.pubkey_fetched_recently(pubkey, 60)) return;
+		this.pubkey_last_fetch.set(pubkey, unixNow());
+
 		const relays = await chooseRelaysForPubkey(pubkey);
 		Promise.all(
 			relays.map(({ url, check_timestamps }) =>
