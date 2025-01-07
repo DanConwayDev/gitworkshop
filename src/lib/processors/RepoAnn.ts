@@ -9,7 +9,7 @@ import {
 } from '$lib/types';
 import { repo_kind } from '$lib/kinds';
 import type {
-	ARef,
+	ARefP,
 	HuristicsForRelay,
 	RelayCheck,
 	RelayCheckFound,
@@ -46,12 +46,12 @@ async function getAndUpdateRepoTableItemsOrCreateFromEvent(
 	updates: ProcessorRepoUpdate[]
 ): Promise<RepoTableItem[]> {
 	const uuids = updates.map((u) =>
-		u.event ? (getEventUID(u.event) as ARef) : u.relay_updates[0].uuid
+		u.event ? (getEventUID(u.event) as ARefP) : u.relay_updates[0].uuid
 	);
 	const items = await db.repos.bulkGet(uuids);
 	return updates
 		.map((u) => {
-			const uuid = u.event ? (getEventUID(u.event) as ARef) : u.relay_updates[0].uuid;
+			const uuid = u.event ? (getEventUID(u.event) as ARefP) : u.relay_updates[0].uuid;
 			const item = items.find((item) => item && item.uuid === uuid);
 			let repo_ann;
 			if (u.event) {

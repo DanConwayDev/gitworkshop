@@ -8,7 +8,6 @@ import {
 	isRelayUpdatePubkeyFound
 } from '$lib/types';
 import type {
-	ARef,
 	HuristicsForRelay,
 	PubKeyString,
 	PubKeyTableItem,
@@ -16,7 +15,8 @@ import type {
 	RelayCheckFound,
 	RelayUpdateUser,
 	RelayUpdateFound,
-	WebSocketUrl
+	WebSocketUrl,
+	ARefR
 } from '$lib/types';
 import {
 	getEventUID,
@@ -52,7 +52,7 @@ async function getAndUpdatePubkeyTableItemsOrCreateFromEvent(
 ): Promise<PubKeyTableItem[]> {
 	const pubkeys: Set<PubKeyString> = new Set();
 	updates.forEach((u) => {
-		const uuid = u.event ? (getEventUID(u.event) as ARef) : u.relay_updates[0].uuid;
+		const uuid = u.event ? (getEventUID(u.event) as ARefR) : u.relay_updates[0].uuid;
 		return pubkeys.add(uuid.split(':')[1]);
 	});
 	const items = await db.pubkeys.bulkGet([...pubkeys]);
@@ -61,7 +61,7 @@ async function getAndUpdatePubkeyTableItemsOrCreateFromEvent(
 		if (item) update_items.set(item.pubkey, item);
 	});
 	updates.forEach((u) => {
-		const uuid = u.event ? (getEventUID(u.event) as ARef) : u.relay_updates[0].uuid;
+		const uuid = u.event ? (getEventUID(u.event) as ARefR) : u.relay_updates[0].uuid;
 		const pubkey = uuid.split(':')[1] as PubKeyString;
 		const item = update_items.get(pubkey) || {
 			...createPubKeyInfo(pubkey),

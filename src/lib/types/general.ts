@@ -13,7 +13,11 @@ export type Naddr = `naddr1${string}`;
 export type Timestamp = number;
 export type Kind = number;
 export type EventIdString = string;
-export type ARef = `${Kind}:${PubKeyString}:${string}`;
+export type ARef = ARefP | ARefR;
+/// Address Pointer Reference for Non-Parametized Replaceable
+export type ARefR = `${Kind}:${PubKeyString}`;
+/// Address Pointer Reference for Parametized Replaceable
+export type ARefP = `${Kind}:${PubKeyString}:${string}`;
 
 /** general event referencing  */
 export interface EventAttribution {

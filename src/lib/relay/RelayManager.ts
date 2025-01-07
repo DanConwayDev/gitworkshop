@@ -1,9 +1,16 @@
-import { type ARef, type PubKeyString, type WebSocketUrl } from '$lib/types';
 import { Relay, type Filter } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
 import { repo_kind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
-import type { RelayCheckTimestamp, RelayUpdate, Timestamp } from '$lib/types';
+import type {
+	ARefP,
+	PubKeyString,
+	WebSocketUrl,
+	RelayCheckTimestamp,
+	RelayUpdate,
+	Timestamp,
+	ARefR
+} from '$lib/types';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import type Processor from '$lib/processors/Processor';
 import { eventKindToTable } from '$lib/processors/Processor';
@@ -11,7 +18,7 @@ import { eventKindToTable } from '$lib/processors/Processor';
 export class RelayManager {
 	url: WebSocketUrl;
 	processor: Processor;
-	repo_queue: Set<ARef> = new Set();
+	repo_queue: Set<ARefP> = new Set();
 	set_repo_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined;
 	relay: Relay;
 	inactivity_timer: NodeJS.Timeout | null = null;
@@ -76,7 +83,7 @@ export class RelayManager {
 						if (table) {
 							this.processor.enqueueRelayUpdate({
 								type: 'found',
-								uuid: getEventUID(event) as ARef,
+								uuid: getEventUID(event),
 								created_at: event.created_at,
 								table,
 								url: this.url
@@ -142,7 +149,7 @@ export class RelayManager {
 						addSeenRelay(event, this.url);
 						this.processor.enqueueRelayUpdate({
 							type: 'found',
-							uuid: getEventUID(event) as ARef,
+							uuid: getEventUID(event) as ARefR,
 							created_at: event.created_at,
 							table: 'pubkeys',
 							url: this.url
@@ -164,7 +171,7 @@ export class RelayManager {
 						if (filter.since) {
 							this.processor.enqueueRelayUpdate({
 								type: 'checked',
-								uuid: `${Metadata}:${pubkey}` as ARef,
+								uuid: `${Metadata}:${pubkey}` as ARefR,
 								table: 'pubkeys',
 								url: this.url
 							});
@@ -172,7 +179,7 @@ export class RelayManager {
 							if (!found_metadata.has(pubkey)) {
 								this.processor.enqueueRelayUpdate({
 									type: 'not-found',
-									uuid: `${Metadata}:${pubkey}` as ARef,
+									uuid: `${Metadata}:${pubkey}` as ARefR,
 									table: 'pubkeys',
 									url: this.url
 								});
@@ -180,7 +187,7 @@ export class RelayManager {
 							if (!found_metadata.has(pubkey)) {
 								this.processor.enqueueRelayUpdate({
 									type: 'not-found',
-									uuid: `${RelayList}:${pubkey}` as ARef,
+									uuid: `${RelayList}:${pubkey}` as ARefR,
 									table: 'pubkeys',
 									url: this.url
 								});

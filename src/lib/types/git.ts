@@ -1,6 +1,6 @@
 /** git-specific types */
 
-import type { PubKeyString, EventIdString, ARef, ReplaceableEventAttribution } from '$lib/types';
+import type { PubKeyString, EventIdString, ReplaceableEventAttribution, ARefP } from '$lib/types';
 
 export interface RepoAnnBaseFields {
 	identifier: string;
@@ -32,5 +32,5 @@ export interface IssueOrPrBase {
 	descritpion: string;
 	status: IssueOrPrStatus;
 	tags: string[];
-	repos: ARef[];
+	repos: ARefP[];
 }
