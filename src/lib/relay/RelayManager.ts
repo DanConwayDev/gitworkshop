@@ -41,11 +41,7 @@ export class RelayManager {
 		this.inactivity_timer = setTimeout(() => {
 			this.relay.close();
 			this.relay = new Relay(this.url);
-		}, 10000); // 10 seconds of inactivity
-	}
-
-	closeRelayAfterInactivity() {
-		this.resetInactivityTimer(); // Start the inactivity timer
+		}, 60000); // 60 seconds of inactivity
 	}
 
 	async fetchAllRepos() {
