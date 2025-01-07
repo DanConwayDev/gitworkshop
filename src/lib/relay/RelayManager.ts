@@ -3,15 +3,14 @@ import { Relay, type Filter } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
 import { repo_kind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
-import memory_db from '$lib/dbs/InMemoryRelay';
-import type Watcher from '$lib/processors/Watcher';
 import type { RelayCheckTimestamp, RelayUpdate, Timestamp } from '$lib/types';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
-import { eventKindToTable } from '$lib/processors/Watcher';
+import type Processor from '$lib/processors/Processor';
+import { eventKindToTable } from '$lib/processors/Processor';
 
 export class RelayManager {
 	url: WebSocketUrl;
-	watcher: Watcher;
+	processor: Processor;
 	repo_queue: Set<ARef> = new Set();
 	pubkey_metadata_queue: Map<PubKeyString, RelayCheckTimestamp> = new Map();
 	set_repo_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined;
@@ -19,9 +18,9 @@ export class RelayManager {
 	relay: Relay;
 	inactivity_timer: NodeJS.Timeout | null = null;
 
-	constructor(url: WebSocketUrl, watcher: Watcher) {
+	constructor(url: WebSocketUrl, processor: Processor) {
 		this.url = url;
-		this.watcher = watcher;
+		this.processor = processor;
 		this.relay = new Relay(url);
 	}
 
@@ -81,7 +80,7 @@ export class RelayManager {
 						addSeenRelay(event, this.url);
 						const table = eventKindToTable(event.kind);
 						if (table) {
-							this.watcher.enqueueRelayUpdate({
+							this.processor.enqueueRelayUpdate({
 								type: 'found',
 								uuid: getEventUID(event) as ARef,
 								created_at: event.created_at,
@@ -89,7 +88,7 @@ export class RelayManager {
 								url: this.url
 							} as RelayUpdate);
 						}
-						memory_db.add(event);
+						this.processor.enqueueEvent(event);
 					},
 					oneose: async () => {
 						sub.close();
@@ -120,7 +119,6 @@ export class RelayManager {
 	fetching_queue = false;
 	async fetchPubkeyQueue() {
 		if (this.fetching_queue === true) {
-			console.log(`${this.url} - busy. items in queue ${this.pubkey_metadata_queue.size}`);
 			return setTimeout(() => {
 				this.fetchPubkeyQueue();
 			}, 1);
@@ -139,14 +137,14 @@ export class RelayManager {
 				if (event.kind === Metadata || event.kind === RelayList) {
 					try {
 						addSeenRelay(event, this.url);
-						this.watcher.enqueueRelayUpdate({
+						this.processor.enqueueRelayUpdate({
 							type: 'found',
 							uuid: getEventUID(event) as ARef,
 							created_at: event.created_at,
 							table: 'pubkeys',
 							url: this.url
 						});
-						memory_db.add(event);
+						this.processor.enqueueEvent(event);
 					} catch {
 						/* empty */
 					}
@@ -159,7 +157,7 @@ export class RelayManager {
 				for (const filter of filters) {
 					for (const pubkey of filter.authors) {
 						if (filter.since) {
-							this.watcher.enqueueRelayUpdate({
+							this.processor.enqueueRelayUpdate({
 								type: 'checked',
 								uuid: `${Metadata}:${pubkey}` as ARef,
 								table: 'pubkeys',
@@ -167,7 +165,7 @@ export class RelayManager {
 							});
 						} else {
 							if (!found_metadata.has(pubkey)) {
-								this.watcher.enqueueRelayUpdate({
+								this.processor.enqueueRelayUpdate({
 									type: 'not-found',
 									uuid: `${Metadata}:${pubkey}` as ARef,
 									table: 'pubkeys',
@@ -175,7 +173,7 @@ export class RelayManager {
 								});
 							}
 							if (!found_metadata.has(pubkey)) {
-								this.watcher.enqueueRelayUpdate({
+								this.processor.enqueueRelayUpdate({
 									type: 'not-found',
 									uuid: `${RelayList}:${pubkey}` as ARef,
 									table: 'pubkeys',
@@ -185,7 +183,6 @@ export class RelayManager {
 						}
 					}
 				}
-				console.log(`${this.url} - finished fetching from queue`);
 				this.fetching_queue = false;
 			}
 		});

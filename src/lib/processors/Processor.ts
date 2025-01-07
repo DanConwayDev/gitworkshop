@@ -1,36 +1,32 @@
 import { addEventsToCache, isInCache } from '$lib/dbs/LocalRelayDb';
 import { isRelayUpdatePubkey, type ARef, type EventIdString, type RelayUpdate } from '$lib/types';
-import type { EventStore } from 'applesauce-core';
 import { processRepoAnnUpdates } from './RepoAnn';
 import type { NostrEvent } from 'nostr-tools';
-import { getEventUID } from 'applesauce-core/helpers';
+import { getEventUID, isReplaceable } from 'applesauce-core/helpers';
 import { repo_kind } from '$lib/kinds';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import processPubkey from './Pubkey';
-import type { WatcherUpdate } from '$lib/types/watcher';
+import type { ProcessorUpdate } from '$lib/types/processor';
 
-class Watcher {
-	/// this prevents multiple processes from attempting to update the same database line
-	/// at the same time and causing some updates to be lost. it's basically
-	/// a work-around for the lack of support for locking of idb data items
+class Processor {
+	/// Processes all new data points to update LocalDb or send events to the InMemoryDB
+	/// on the main thread via QueryCentreExternal.
+	///
+	/// uses queues to prevents multiple processes from attempting to update the same
+	/// database line at the same time and causing some updates to be lost. it's
+	/// basically a work-around for the lack of support for locking of idb data items
 	/// but also a way of batch updates (relay updates are frequent) for efficency
 	///
-	/// watches in memory database for inserted nostr events that didnt originate
-	/// from the cache and processes them in a queue rather than async. short delay
-	/// introduced to batch event updates that change the same table to reduce
-	/// reactivity computation
-	///
-	/// RelayUpdates are manually added via enqueueRelayUpdate which will be
-	/// in batches based on uuid, one every Xms or when event with uuid is received
+	/// introducing a short delay and batching events and updates significantly reduces
+	/// reactivity computation on the main thread.
 
 	event_queue: NostrEvent[] = [];
 	relay_update_queue: RelayUpdate[] = [];
 	running: boolean = false;
+	sendToInMemoryCacheOnMainThead: (event: NostrEvent) => void;
 
-	constructor(EventStore: EventStore) {
-		EventStore.database.inserted.subscribe((event) => {
-			if (!isInCache(event)) this.enqueueEvent(event);
-		});
+	constructor(sendToInMemoryCacheOnMainThead: (event: NostrEvent) => void) {
+		this.sendToInMemoryCacheOnMainThead = sendToInMemoryCacheOnMainThead;
 		// to process relay updates for the next uuid in queue every Xms
 		setInterval(() => this.nextRelayUpdateBatch(), 1000);
 	}
@@ -39,9 +35,33 @@ class Watcher {
 		this.relay_update_queue.push(update);
 	}
 
-	enqueueEvent(event: NostrEvent) {
+	seen_events: Set<EventIdString> = new Set();
+	seen_replaceable_events: Map<string, number> = new Map();
+
+	// returns seen_in_this_session
+	enqueueEvent(event: NostrEvent): boolean {
+		// ignore events already seen
+		if (isReplaceable(event.kind)) {
+			const id = getEventUID(event);
+			const created_at = this.seen_replaceable_events.get(id);
+			if (created_at && created_at > event.created_at) {
+				return false;
+			}
+			this.seen_replaceable_events.set(id, event.created_at);
+		} else if (this.seen_events.has(event.id)) {
+			return false;
+		} else {
+			this.seen_events.add(event.id);
+		}
+
+		// send to main thread in_memory_db
+		this.sendToInMemoryCacheOnMainThead(event);
+		// don't process events processed in previous sessions
+		if (isInCache(event)) return true;
+		// queue event and process next
 		this.event_queue.push(event);
 		this.nextEventBatch();
+		return true;
 	}
 
 	async nextEventBatch() {
@@ -127,7 +147,7 @@ class Watcher {
 	}
 }
 
-async function processUpdates(updates: WatcherUpdate[]) {
+async function processUpdates(updates: ProcessorUpdate[]) {
 	await processRepoAnnUpdates(updates);
 	await processPubkey(updates);
 	addEventsToCache(updates.map((u) => u.event).filter((e) => e) as NostrEvent[]);
@@ -141,8 +161,8 @@ export function eventKindToTable(
 	return undefined;
 }
 
-function groupTableRelayUpdates(relay_updates: [RelayUpdate, ...RelayUpdate[]]): WatcherUpdate[] {
-	const map: Map<string, WatcherUpdate> = new Map();
+function groupTableRelayUpdates(relay_updates: [RelayUpdate, ...RelayUpdate[]]): ProcessorUpdate[] {
+	const map: Map<string, ProcessorUpdate> = new Map();
 	relay_updates.forEach((u) => {
 		const key = isRelayUpdatePubkey(u) ? u.uuid.split(':')[1] : u.uuid;
 		const e = map.get(key) || { event: undefined, relay_updates: [] };
@@ -151,4 +171,4 @@ function groupTableRelayUpdates(relay_updates: [RelayUpdate, ...RelayUpdate[]]):
 	return [...map.values()];
 }
 
-export default Watcher;
+export default Processor;

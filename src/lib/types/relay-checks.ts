@@ -12,7 +12,7 @@ export interface RelayCheckTimestamp {
 	last_check: Timestamp | undefined;
 	last_update: Timestamp | undefined;
 }
-/** relay updates used by watcher to create relay huristics */
+/** relay updates used by processor to create relay huristics */
 
 export type RelayUpdate = RelayUpdateUser | RelayUpdateRepoAnn | RelayUpdatePRIssue;
 

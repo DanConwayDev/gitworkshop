@@ -27,15 +27,15 @@ import {
 } from 'applesauce-core/helpers';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
-import type { WatcherPubkeyUpdate, WatcherUpdate } from '$lib/types/watcher';
+import type { ProcessorPubkeyUpdate, ProcessorUpdate } from '$lib/types/processor';
 
-export async function processPubkeyUpdates(updates: WatcherUpdate[]) {
+export async function processPubkeyUpdates(updates: ProcessorUpdate[]) {
 	const pubkey_updates = updates.filter(
 		(u) =>
 			!u.event ||
 			[Metadata, RelayList].includes(u.event.kind) ||
 			u.relay_updates.every((ru) => isRelayUpdatePubkey(ru))
-	) as WatcherPubkeyUpdate[];
+	) as ProcessorPubkeyUpdate[];
 
 	if (pubkey_updates.length === 0) return;
 
@@ -48,7 +48,7 @@ export async function processPubkeyUpdates(updates: WatcherUpdate[]) {
 
 /// gets (or creates) and updates item
 async function getAndUpdatePubkeyTableItemsOrCreateFromEvent(
-	updates: WatcherPubkeyUpdate[]
+	updates: ProcessorPubkeyUpdate[]
 ): Promise<PubKeyTableItem[]> {
 	const pubkeys: Set<PubKeyString> = new Set();
 	updates.forEach((u) => {

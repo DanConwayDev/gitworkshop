@@ -1,6 +1,5 @@
 import { addEvents, getEventsForFilters, IndexCache, openDB, type NostrIDB } from 'nostr-idb';
 import type { Filter, NostrEvent } from 'nostr-tools';
-import memory_db from './InMemoryRelay';
 
 let cache_relay_db: NostrIDB | undefined = undefined;
 let cache_relay_index: IndexCache | undefined = undefined;
@@ -40,7 +39,6 @@ export async function getCacheEventsForFilters(filters: Filter[]): Promise<Nostr
 	const events = await getEventsForFilters(cache_relay_db, filters, cache_relay_index);
 	events.forEach((event) => {
 		markInCache(event);
-		memory_db.add(event);
 	});
 	return events;
 }
