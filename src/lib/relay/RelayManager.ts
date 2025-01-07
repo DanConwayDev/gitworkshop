@@ -12,9 +12,7 @@ export class RelayManager {
 	url: WebSocketUrl;
 	processor: Processor;
 	repo_queue: Set<ARef> = new Set();
-	pubkey_metadata_queue: Map<PubKeyString, RelayCheckTimestamp> = new Map();
 	set_repo_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined;
-	set_pubkey_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined;
 	relay: Relay;
 	inactivity_timer: NodeJS.Timeout | null = null;
 
@@ -107,13 +105,21 @@ export class RelayManager {
 		});
 	}
 
+	pubkey_metadata_queue: Map<PubKeyString, RelayCheckTimestamp> = new Map();
+	set_pubkey_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined;
+	fetch_pubkey_info_promises = new PromiseManager<PubKeyString, undefined>();
+
 	async fetchPubkeyInfo(pubkey: PubKeyString, check_timestamp: RelayCheckTimestamp) {
-		// TODO: capture last_check and last_created_at
-		this.pubkey_metadata_queue.set(pubkey, check_timestamp);
-		await this.connect();
-		if (!this.set_pubkey_queue_timeout) {
-			this.set_pubkey_queue_timeout = setTimeout(async () => this.fetchPubkeyQueue(), 200);
+		if (!this.pubkey_metadata_queue.has(pubkey)) {
+			this.pubkey_metadata_queue.set(pubkey, check_timestamp);
+			await this.connect();
+			if (!this.set_pubkey_queue_timeout) {
+				this.set_pubkey_queue_timeout = setTimeout(async () => {
+					this.fetchPubkeyQueue();
+				}, 200);
+			}
 		}
+		await this.fetch_pubkey_info_promises.addPromise(pubkey, 10 * 1000);
 	}
 
 	fetching_queue = false;
@@ -130,6 +136,7 @@ export class RelayManager {
 		const filters = createFiltersGroupedBySince(this.pubkey_metadata_queue);
 		this.pubkey_metadata_queue.clear();
 		clearTimeout(this.set_pubkey_queue_timeout);
+		this.set_pubkey_queue_timeout = undefined;
 		const found_metadata = new Set<string>();
 		const found_relay_list = new Set<string>();
 		const sub = this.relay.subscribe(filters, {
@@ -145,6 +152,7 @@ export class RelayManager {
 							url: this.url
 						});
 						this.processor.enqueueEvent(event);
+						this.fetch_pubkey_info_promises.resolvePromises(event.pubkey);
 					} catch {
 						/* empty */
 					}
@@ -156,6 +164,7 @@ export class RelayManager {
 				this.resetInactivityTimer();
 				for (const filter of filters) {
 					for (const pubkey of filter.authors) {
+						this.fetch_pubkey_info_promises.resolvePromises(pubkey);
 						if (filter.since) {
 							this.processor.enqueueRelayUpdate({
 								type: 'checked',
@@ -247,3 +256,57 @@ export const createFiltersGroupedBySince = (items: Map<PubKeyString, RelayCheckT
 	}
 	return filters;
 };
+
+class PromiseManager<T, R = void> {
+	private promises: Map<T, Promise<R>> = new Map();
+	private resolvers: Map<T, (value?: R | PromiseLike<R>) => void> = new Map();
+	private timeoutIds: Map<T, NodeJS.Timeout> = new Map();
+
+	// Method to add a new promise for a given key with an optional timeout
+	addPromise(key: T, timeout?: number): Promise<R> {
+		// If a promise already exists for this key, return it
+		if (this.promises.has(key)) {
+			return this.promises.get(key)!; // Non-null assertion
+		}
+
+		// Create a new promise and store it
+		const promise = new Promise<R>((resolve, reject) => {
+			this.resolvers.set(key, resolve as (value: R | PromiseLike<R> | undefined) => void);
+
+			// Set a timeout if specified
+			if (timeout) {
+				const timeoutId = setTimeout(() => {
+					reject(new Error(`Promise for key "${key}" timed out after ${timeout} ms`));
+					this.cleanup(key); // Clean up on timeout
+				}, timeout);
+				this.timeoutIds.set(key, timeoutId);
+			}
+		});
+
+		// Store the promise in the map
+		this.promises.set(key, promise);
+
+		// Return the promise
+		return promise;
+	}
+
+	// Method to resolve all promises for a given key
+	resolvePromises(key: T, value?: R): void {
+		const resolver = this.resolvers.get(key);
+		if (resolver) {
+			resolver(value); // Call the resolver function with the provided value
+			this.cleanup(key); // Clean up after resolving
+		}
+	}
+
+	// Cleanup method to remove promise, resolver, and timeout
+	private cleanup(key: T): void {
+		this.promises.delete(key); // Remove the promise from the map
+		this.resolvers.delete(key); // Clean up the resolver
+		const timeoutId = this.timeoutIds.get(key);
+		if (timeoutId) {
+			clearTimeout(timeoutId); // Clear the timeout if it exists
+			this.timeoutIds.delete(key); // Clean up the timeout ID
+		}
+	}
+}

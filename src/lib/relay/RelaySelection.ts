@@ -83,12 +83,10 @@ function getRecentTimestampMultiplier(unixtime: number): number {
 	}
 }
 
+/// returns prioritised list of relays and timestamp info
 export const chooseRelaysForPubkey = async (
 	pubkey: PubKeyString
 ): Promise<{ url: WebSocketUrl; check_timestamps: RelayCheckTimestamp }[]> => {
-	const skip_if_X_relays = 2;
-	const returned_uptodate_events_X_seconds_ago = 60;
-
 	// prioritise connected relays?
 	// prioritise relays with items in queue, but not too many?
 	const record = await db.pubkeys.get(pubkey);
@@ -99,24 +97,14 @@ export const chooseRelaysForPubkey = async (
 			check_timestamps: { last_check: undefined, last_update: undefined }
 		}));
 
-	const recently_checked = [];
-
 	const scored_relays = (Object.keys(record.relays_info) as WebSocketUrl[]).sort((a, b) => {
-		if (
-			record.relays_info[a].huristics.some(
-				(v) =>
-					isRelayCheck(v) &&
-					v.up_to_date &&
-					v.timestamp > unixNow() - returned_uptodate_events_X_seconds_ago
-			)
-		) {
-			recently_checked.push(a);
-		}
 		return record.relays_info[b].score - record.relays_info[a].score;
 	});
-	if (recently_checked.length >= skip_if_X_relays) return [];
 
-	const selected = [...scored_relays, ...base_relays].slice(0, 3);
+	const selected = [
+		...scored_relays,
+		...base_relays.filter((base_url) => !scored_relays.includes(base_url))
+	];
 	return selected.map((url) => ({
 		url,
 		check_timestamps: {

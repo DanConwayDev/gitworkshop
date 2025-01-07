@@ -27,27 +27,9 @@ class QueryCentre {
 		return this.internal.searchRepoAnns(query);
 	}
 
-	async fetchPubkey(pubkey: PubKeyString) {
-		this.external_worker.postMessage({ method: 'fetchPubkey', args: [pubkey] });
-		return this.internal.fetchPubkey(pubkey);
-	}
-
 	fetchPubkeyName(pubkey: PubKeyString) {
-		this.external_worker.postMessage({ method: 'fetchPubkey', args: [pubkey] });
-
-		const obs = this.internal.fetchPubkey(pubkey);
-		setTimeout(
-			() =>
-				obs
-					.subscribe((e) => {
-						if (!e.metadata.stamp) {
-							// this.external_worker.postMessage({ method: 'fetchPubkey', args: [pubkey] });
-						}
-					})
-					.unsubscribe(),
-			10
-		);
-		return obs;
+		this.external_worker.postMessage({ method: 'fetchPubkeyName', args: [pubkey] });
+		return this.internal.fetchPubkey(pubkey);
 	}
 }
 
