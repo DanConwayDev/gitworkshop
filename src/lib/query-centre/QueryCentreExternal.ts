@@ -13,7 +13,7 @@ export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.damus.io',
 	'wss://nos.lol',
 	'wss://relay.nostr.band',
-	'wss://purplerelay.com' // reliability untested
+	'wss://relay.primal.net'
 ];
 
 class QueryCentreExternal {
