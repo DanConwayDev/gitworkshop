@@ -1,13 +1,15 @@
-import type {
-	LastActivity,
-	WithRelaysInfo,
-	PubKeyInfo,
-	NonReplaceableEventAttribution,
-	IssuesOrPrsByStatus,
-	IssueOrPrBase,
-	RepoAnn,
-	ARefP,
-	PubKeyString
+import {
+	type LastActivity,
+	type WithRelaysInfo,
+	type PubKeyInfo,
+	type NonReplaceableEventAttribution,
+	type IssuesOrPrsByStatus,
+	type IssueOrPrBase,
+	type RepoAnn,
+	type ARefP,
+	type PubKeyString,
+	isARefP,
+	type RepoRef
 } from '$lib/types';
 import { aRefPToAddressPointer } from '$lib/utils';
 
@@ -25,12 +27,14 @@ export interface RepoTableItem extends LastActivity, WithRelaysInfo, Partial<Rep
 	searchWords: string[];
 }
 
-export function repoTableItemDefaults(a_ref: ARefP): RepoTableItem {
-	const pointer = aRefPToAddressPointer(a_ref);
+export function repoTableItemDefaults(a_ref: ARefP | string): RepoTableItem {
+	const { identifier, pubkey } = isARefP(a_ref)
+		? aRefPToAddressPointer(a_ref)
+		: { identifier: 'unknown', pubkey: '' };
 	return {
-		uuid: a_ref,
-		identifier: pointer.identifier,
-		author: pointer.pubkey,
+		uuid: a_ref as RepoRef,
+		identifier,
+		author: pubkey,
 		relays_info: {},
 		last_activity: 0,
 		issues: undefined,

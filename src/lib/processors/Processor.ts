@@ -1,11 +1,18 @@
 import { addEventsToCache, isInCache } from '$lib/dbs/LocalRelayDb';
-import { isRelayUpdatePubkey, type ARef, type EventIdString, type RelayUpdate } from '$lib/types';
+import {
+	isRelayUpdatePubkey,
+	type ARef,
+	type EventIdString,
+	type Nip05AddressStandardized,
+	type PubKeyString,
+	type RelayUpdate
+} from '$lib/types';
 import { processRepoAnnUpdates } from './RepoAnn';
 import type { NostrEvent } from 'nostr-tools';
 import { getEventUID, isReplaceable } from 'applesauce-core/helpers';
 import { repo_kind } from '$lib/kinds';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
-import processPubkey from './Pubkey';
+import processPubkey, { processNip05 } from './Pubkey';
 import type { ProcessorUpdate } from '$lib/types/processor';
 
 class Processor {
@@ -37,6 +44,15 @@ class Processor {
 
 	seen_events: Set<EventIdString> = new Set();
 	seen_replaceable_events: Map<string, number> = new Map();
+
+	enqueueNip05(nip05: Nip05AddressStandardized, pubkey: PubKeyString, relays: string[] = []) {
+		// run when next avaiable free
+		if (this.running)
+			return setTimeout(() => {
+				this.enqueueNip05(nip05, pubkey, relays);
+			}, 1);
+		processNip05(nip05, pubkey, relays);
+	}
 
 	// returns seen_in_this_session
 	enqueueEvent(event: NostrEvent): boolean {

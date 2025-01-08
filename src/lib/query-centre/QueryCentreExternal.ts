@@ -4,11 +4,17 @@ import {
 	chooseRelaysForRepo
 } from '$lib/relay/RelaySelection';
 import { RelayManager } from '$lib/relay/RelayManager';
-import type { ARefP, AtLeastThreeArray, PubKeyString, WebSocketUrl } from '$lib/types';
+import type {
+	ARefP,
+	AtLeastThreeArray,
+	Nip05AddressStandardized,
+	PubKeyString,
+	WebSocketUrl
+} from '$lib/types';
 import { unixNow } from 'applesauce-core/helpers';
 import { getCacheEventsForFilters } from '$lib/dbs/LocalRelayDb';
 import { issue_kind, patch_kind, proposal_status_kinds, repo_kind } from '$lib/kinds';
-import type { Filter } from 'nostr-tools';
+import { nip05 as nip05NostrTools, type Filter } from 'nostr-tools';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import Processor from '$lib/processors/Processor';
 import db from '$lib/dbs/LocalDb';
@@ -137,6 +143,13 @@ class QueryCentreExternal {
 			record = await db.pubkeys.get(pubkey);
 		}
 	}
+
+	async fetchNip05(nip05: Nip05AddressStandardized) {
+		const pointer = await nip05NostrTools.queryProfile(nip05);
+		if (pointer) {
+			this.processor.enqueueNip05(nip05, pointer.pubkey, pointer.relays);
+		}
+	}
 }
 
 const external = new QueryCentreExternal();
@@ -153,6 +166,9 @@ self.onmessage = async (event) => {
 			break;
 		case 'fetchPubkeyName':
 			result = await external.fetchPubkeyName(args[0]);
+			break;
+		case 'fetchNip05':
+			result = await external.fetchNip05(args[0]);
 			break;
 		default:
 			console.error('Unknown method:', method);

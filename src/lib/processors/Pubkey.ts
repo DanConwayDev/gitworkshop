@@ -4,8 +4,10 @@ import {
 	getDefaultHuristicsForRelay,
 	isRelayCheck,
 	isRelayCheckFound,
+	isRelayHintFromNip05,
 	isRelayUpdatePubkey,
-	isRelayUpdatePubkeyFound
+	isRelayUpdatePubkeyFound,
+	isWebSocketUrl
 } from '$lib/types';
 import type {
 	HuristicsForRelay,
@@ -16,7 +18,10 @@ import type {
 	RelayUpdateUser,
 	RelayUpdateFound,
 	WebSocketUrl,
-	ARefR
+	ARefR,
+	Nip05AddressStandardized,
+	RelayHintFromNip05,
+	RelayHuristic
 } from '$lib/types';
 import {
 	getEventUID,
@@ -28,6 +33,38 @@ import {
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import type { ProcessorPubkeyUpdate, ProcessorUpdate } from '$lib/types/processor';
+
+export async function processNip05(
+	nip05: Nip05AddressStandardized,
+	pubkey: PubKeyString,
+	relays: string[] = []
+) {
+	const records = await db.pubkeys.where('verified_nip05.address').equals(nip05).toArray();
+	records.forEach((record) => {
+		record.verified_nip05 = record.verified_nip05.filter((c) => c.address !== nip05);
+	});
+	const record = records.find((r) => r.pubkey === pubkey) ||
+		(await db.pubkeys.get(pubkey)) || {
+			...createPubKeyInfo(pubkey),
+			relays_info: {},
+			verified_nip05: []
+		};
+	const valid_relays = relays.filter(isWebSocketUrl);
+	record.verified_nip05.push({
+		address: nip05,
+		timestamp: unixNow(),
+		relays: valid_relays
+	});
+	valid_relays.forEach((relay) => {
+		const hint: RelayHintFromNip05 = { timestamp: unixNow() };
+		if (!record.relays_info[relay])
+			record.relays_info[relay] = {
+				...getDefaultHuristicsForRelay()
+			};
+		processHuristic(record.relays_info[relay], record.relays?.write.includes(relay), hint);
+	});
+	await db.pubkeys.bulkPut([...records.filter((r) => r.pubkey !== pubkey), record]);
+}
 
 export async function processPubkeyUpdates(updates: ProcessorUpdate[]) {
 	const pubkey_updates = updates.filter(
@@ -136,17 +173,20 @@ function applyHuristicUpdates(item: PubKeyTableItem, relay_user_update: RelayUpd
 /// mutates relay_info to 1) add relay huristic, 2) update score and 3) remove superfluious huristics
 function processHuristic(
 	relay_info: HuristicsForRelay,
-	is_repo_relay: boolean,
-	relay_check: RelayCheck
+	is_in_relay_list: boolean,
+	huristic: RelayHuristic
 ) {
 	relay_info.huristics = [
 		// remove any older huristics with same indicators
-		...relay_info.huristics.filter(
-			(v) => !isRelayCheck(v) || v.type !== relay_check.type || relay_check.kind !== v.kind
-		),
-		relay_check
+		...relay_info.huristics.filter((v) => {
+			if (isRelayCheck(huristic))
+				return !isRelayCheck(v) || v.type !== huristic.type || huristic.kind !== v.kind;
+			if (isRelayHintFromNip05(huristic)) return false;
+			return true;
+		}),
+		huristic
 	];
-	relay_info.score = calculateRelayScore(relay_info.huristics, is_repo_relay);
+	relay_info.score = calculateRelayScore(relay_info.huristics, is_in_relay_list);
 }
 
 export default processPubkeyUpdates;

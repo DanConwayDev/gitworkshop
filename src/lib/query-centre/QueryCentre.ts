@@ -1,4 +1,10 @@
-import type { ARefP, PubKeyString } from '$lib/types';
+import {
+	isRepoRef,
+	standardizeNip05,
+	type Nip05Address,
+	type PubKeyString,
+	type RepoRef
+} from '$lib/types';
 import { isEvent } from 'applesauce-core/helpers';
 import QueryCentreInternal from './QueryCentreInternal';
 import memory_db from '$lib/dbs/InMemoryRelay';
@@ -22,8 +28,8 @@ class QueryCentre {
 		this.external_worker.postMessage({ method: 'fetchAllRepos', args: [] });
 		return this.internal.fetchAllRepos();
 	}
-	fetchRepo(a_ref: ARefP) {
-		this.external_worker.postMessage({ method: 'fetchRepo', args: [a_ref] });
+	fetchRepo(a_ref: RepoRef | string) {
+		if (isRepoRef(a_ref)) this.external_worker.postMessage({ method: 'fetchRepo', args: [a_ref] });
 		return this.internal.fetchRepo(a_ref);
 	}
 	searchRepoAnns(query: string) {
@@ -34,6 +40,12 @@ class QueryCentre {
 	fetchPubkeyName(pubkey: PubKeyString) {
 		this.external_worker.postMessage({ method: 'fetchPubkeyName', args: [pubkey] });
 		return this.internal.fetchPubkey(pubkey);
+	}
+
+	fetchNip05(nip05: Nip05Address) {
+		const standardized_nip05 = standardizeNip05(nip05);
+		this.external_worker.postMessage({ method: 'fetchNip05', args: [standardized_nip05] });
+		return this.internal.fetchNip05(standardized_nip05);
 	}
 }
 

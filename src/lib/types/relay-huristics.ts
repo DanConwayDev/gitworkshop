@@ -28,18 +28,18 @@ export function isRelayScore(n: number): n is RelayScore {
 }
 
 // RelayHint, SeenOn (Up-to-date, out-of-date, incomplete (missing statem Issues and PRs), missing), CheckOnDate,
-export type RelayHuristic = RelayHint | RelayHintFromBech32 | RelayCheck;
+export type RelayHuristic = RelayHint | RelayHintFromNip05 | RelayCheck;
 
-export interface RelayHintFromBech32 {
+export interface RelayHintFromNip05 {
 	timestamp: Timestamp;
 }
 
-export function isRelayHintFromBech32(huristic: RelayHuristic): huristic is RelayHintFromBech32 {
+export function isRelayHintFromNip05(huristic: RelayHuristic): huristic is RelayHintFromNip05 {
 	return (
 		typeof huristic === 'object' &&
 		huristic !== null &&
 		'timestamp' in huristic &&
-		typeof (huristic as RelayHintFromBech32).timestamp === 'number' &&
+		typeof (huristic as RelayHintFromNip05).timestamp === 'number' &&
 		!('is_child_check' in huristic)
 	);
 }

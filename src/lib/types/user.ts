@@ -5,9 +5,12 @@ import {
 	type Npub,
 	type EventIdString,
 	type PubKeyTableItem,
-	isRelayCheck
+	isRelayCheck,
+	isPubkeyString,
+	type Nip05AddressStandardized,
+	isNip05Standardized
 } from '$lib/types';
-import { isHexKey, unixNow, type ProfileContent } from 'applesauce-core/helpers';
+import { unixNow, type ProfileContent } from 'applesauce-core/helpers';
 import { npubEncode } from 'nostr-tools/nip19';
 
 interface PubkeyEventStamp {
@@ -25,17 +28,28 @@ export interface PubKeyRelayInfo {
 	write: WebSocketUrl[];
 	stamp: PubkeyEventStamp | undefined;
 }
+
+export interface Nip05Check {
+	address: Nip05AddressStandardized;
+	timestamp: Timestamp;
+	relays: WebSocketUrl[];
+}
 export interface PubKeyInfo {
 	pubkey: PubKeyString;
-	npub: Npub;
+	npub: Npub | Nip05AddressStandardized | 'InvalidHexPubKey';
 	metadata: PubKeyMetadataInfo;
 	relays: PubKeyRelayInfo;
+	verified_nip05: Nip05Check[];
 }
 
-export const createPubKeyInfo = (pubkey: PubKeyString): PubKeyInfo => {
+export const createPubKeyInfo = (input: PubKeyString | Nip05AddressStandardized): PubKeyInfo => {
 	return {
-		pubkey: pubkey,
-		npub: isHexKey(pubkey) ? npubEncode(pubkey) : 'npub1invalidkey',
+		pubkey: input,
+		npub: isNip05Standardized(input)
+			? input
+			: isPubkeyString(input)
+				? npubEncode(input)
+				: 'InvalidHexPubKey',
 		metadata: {
 			fields: {},
 			stamp: undefined
@@ -44,7 +58,8 @@ export const createPubKeyInfo = (pubkey: PubKeyString): PubKeyInfo => {
 			read: [],
 			write: [],
 			stamp: undefined
-		}
+		},
+		verified_nip05: []
 	};
 };
 

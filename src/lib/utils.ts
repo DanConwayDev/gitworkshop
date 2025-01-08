@@ -74,7 +74,7 @@ export const addressPointerToARefP = (address_pointer: AddressPointer): ARefP =>
 	return `${address_pointer.kind}:${address_pointer.pubkey}:${address_pointer.identifier}`;
 };
 
-export const naddrToRepoA = (s: string): ARef | undefined => {
+export const naddrToRepoA = (s: string): RepoRef | undefined => {
 	const pointer = naddrToPointer(s);
 	if (pointer && pointer.kind === repo_kind)
 		return `${repo_kind}:${pointer.pubkey}:${pointer.identifier}`;

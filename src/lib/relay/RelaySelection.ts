@@ -2,6 +2,7 @@ import db from '$lib/dbs/LocalDb';
 import {
 	isRelayCheck,
 	isRelayHint,
+	isRelayHintFromNip05,
 	type ARefP,
 	type PubKeyString,
 	type RelayCheckTimestamp,
@@ -35,6 +36,11 @@ export const calculateRelayScore = (
 	let score = 0;
 	// boost if write relay
 	if (write_relay) score += 50;
+	// boost relays listed in nip05
+	const nip05_hint = huristics.find((h) => isRelayHintFromNip05(h));
+	if (nip05_hint) {
+		score += 50 * getRecentTimestampMultiplier(nip05_hint.timestamp);
+	}
 	// boost relays with hints
 	if (huristics.some((h) => isRelayHint(h))) {
 		score += 20;

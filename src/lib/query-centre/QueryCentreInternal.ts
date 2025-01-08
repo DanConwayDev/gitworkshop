@@ -1,5 +1,12 @@
 import db from '$lib/dbs/LocalDb';
-import { createPubKeyInfo, repoTableItemDefaults, type ARefP, type PubKeyString } from '$lib/types';
+import {
+	createPubKeyInfo,
+	isRepoRef,
+	repoTableItemDefaults,
+	type Nip05AddressStandardized,
+	type PubKeyString,
+	type RepoRef
+} from '$lib/types';
 import { liveQuery } from 'dexie';
 
 export class QueryCentreInternal {
@@ -8,13 +15,15 @@ export class QueryCentreInternal {
 			return await db.repos.toArray();
 		});
 	}
-	fetchRepo(a_ref: ARefP) {
+	fetchRepo(a_ref: RepoRef | string) {
 		return liveQuery(async () => {
-			return (
-				(await db.repos.get(a_ref)) || {
-					...repoTableItemDefaults(a_ref)
-				}
-			);
+			if (isRepoRef(a_ref)) {
+				const record = await db.repos.get(a_ref);
+				if (record) return record;
+			}
+			return {
+				...repoTableItemDefaults(a_ref)
+			};
 		});
 	}
 	searchRepoAnns(query: string) {
@@ -50,6 +59,17 @@ export class QueryCentreInternal {
 		// );
 		return liveQuery(async () => {
 			return (await db.pubkeys.get(pubkey)) || { ...createPubKeyInfo(pubkey), relays_info: {} };
+		});
+	}
+
+	fetchNip05(nip05: Nip05AddressStandardized) {
+		return liveQuery(async () => {
+			return (
+				(await db.pubkeys.where('verified_nip05.address').equals(nip05)) || {
+					...createPubKeyInfo(nip05),
+					relays_info: {}
+				}
+			);
 		});
 	}
 }
