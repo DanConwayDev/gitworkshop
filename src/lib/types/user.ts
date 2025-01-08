@@ -53,7 +53,7 @@ export const isPubKeyMetadataLoading = (info: PubKeyTableItem | undefined): bool
 	if (Object.keys(info.metadata.fields).length === 0) {
 		return Object.keys(info.relays_info).some((url) =>
 			info.relays_info[url as WebSocketUrl].huristics.some(
-				(v) => isRelayCheck(v) && v.timestamp > unixNow() - 20 && !v.seen
+				(v) => isRelayCheck(v) && v.timestamp > unixNow() - 20 && !v.up_to_date
 			)
 		);
 	}
