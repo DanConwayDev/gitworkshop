@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createPubkeyFiltersGroupedBySince } from './RelayManager';
 import type { Filter } from 'nostr-tools';
+import { createPubkeyFiltersGroupedBySince } from './filters';
 
 describe('createFiltersGroupedBySince', () => {
 	const replication_delay = 15 * 60; // 900 seconds
