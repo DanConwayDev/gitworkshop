@@ -8,21 +8,20 @@
 	let short_name: string = 'Untitled';
 	$: {
 		if (repo_item) {
-			if ('name' in repo_item && repo_item.name.length > 45)
-				short_name = repo_item.name.slice(0, 45) + '...';
-			else if ('name' in repo_item && repo_item.name.length >= 0) short_name = repo_item.name;
-			else if (repo_item.identifier && repo_item.identifier.length > 45)
-				short_name = repo_item.identifier.slice(0, 45) + '...';
-			else if (repo_item.identifier && repo_item.identifier.length >= 0)
-				short_name = repo_item.identifier;
+			const value = repo_item.name ?? repo_item.identifier;
+			if (value) {
+				short_name = value.length > 45 ? value.slice(0, 45) + '...' : value;
+			}
 		}
 	}
 
-	let short_descrption: string = '';
+	let short_description: string = '';
 	$: {
-		if (repo_item && 'description' in repo_item) {
-			if (repo_item.name.length > 50) short_name = repo_item.description.slice(0, 45) + '...';
-			else short_descrption = repo_item.description;
+		if (repo_item?.description) {
+			short_description =
+				repo_item.description.length > 50
+					? repo_item.description.slice(0, 45) + '...'
+					: repo_item.description;
 		}
 	}
 
@@ -40,7 +39,7 @@
 	let additional_maintainers: PubKeyString[] = [];
 	$: {
 		if (repo_item && 'maintainers' in repo_item)
-			additional_maintainers = repo_item.maintainers.filter((pubkey) => pubkey !== author);
+			additional_maintainers = (repo_item.maintainers || []).filter((pubkey) => pubkey !== author);
 		maintainers = author ? [author, ...additional_maintainers] : additional_maintainers;
 	}
 
@@ -66,9 +65,9 @@
 				}
 			}}>{short_name}</a
 		>
-		{#if short_descrption.length > 0}
+		{#if short_description.length > 0}
 			<p class="text-muted break-words pb-1 text-sm">
-				{short_descrption}
+				{short_description}
 			</p>
 		{/if}
 
