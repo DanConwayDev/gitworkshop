@@ -2,10 +2,12 @@ import db from '$lib/dbs/LocalDb';
 import {
 	isRelayCheck,
 	isRelayHint,
+	type ARefP,
 	type PubKeyString,
 	type RelayCheckTimestamp,
 	type RelayHuristic,
 	type RelayScore,
+	type RepoTableItem,
 	type WebSocketUrl
 } from '$lib/types';
 import { base_relays } from '$lib/query-centre/QueryCentreExternal';
@@ -117,3 +119,43 @@ export const chooseRelaysForPubkey = async (
 		}
 	}));
 };
+
+/// returns prioritised list of relays and timestamp info
+export const chooseRelaysForRepo = async (
+	a_ref: ARefP
+): Promise<{ url: WebSocketUrl; check_timestamps: RelayCheckTimestamp }[]> => {
+	// prioritise connected relays?
+	// prioritise relays with items in queue, but not too many?
+	const record = await db.repos.get(a_ref);
+
+	if (!record)
+		return base_relays.map((url) => ({
+			url,
+			check_timestamps: { last_check: undefined, last_update: undefined }
+		}));
+
+	const scored_relays = (Object.keys(record.relays_info) as WebSocketUrl[]).sort((a, b) => {
+		return record.relays_info[b].score - record.relays_info[a].score;
+	});
+
+	const selected = [
+		...scored_relays,
+		...base_relays.filter((base_url) => !scored_relays.includes(base_url))
+	];
+	return selected.map((url) => ({
+		url,
+		check_timestamps: repoTableItemToRelayCheckTimestamp(record, url)
+	}));
+};
+
+export const repoTableItemToRelayCheckTimestamp = (
+	record: RepoTableItem,
+	relay_url: WebSocketUrl
+): RelayCheckTimestamp => ({
+	last_update: record.last_activity ?? undefined,
+	last_check:
+		record.relays_info[relay_url]?.huristics.reduce(
+			(max, h) => (isRelayCheck(h) ? Math.max(max ?? 0, h.timestamp) : max),
+			undefined as number | undefined
+		) ?? undefined
+});

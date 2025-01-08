@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createFiltersGroupedBySince } from './RelayManager';
+import { createPubkeyFiltersGroupedBySince } from './RelayManager';
 import type { Filter } from 'nostr-tools';
 
 describe('createFiltersGroupedBySince', () => {
@@ -11,7 +11,7 @@ describe('createFiltersGroupedBySince', () => {
 	describe('when no items are provided', () => {
 		it('should return an empty array', () => {
 			const items = new Map();
-			result = createFiltersGroupedBySince(items);
+			result = createPubkeyFiltersGroupedBySince(items);
 			expect(result).toEqual([]);
 		});
 	});
@@ -20,7 +20,7 @@ describe('createFiltersGroupedBySince', () => {
 		beforeEach(() => {
 			const items = new Map();
 			items.set('author1', { last_check: 10000, last_update: 9000 });
-			result = createFiltersGroupedBySince(items);
+			result = createPubkeyFiltersGroupedBySince(items);
 		});
 
 		it('should return a filter with that author', () => {
@@ -39,7 +39,7 @@ describe('createFiltersGroupedBySince', () => {
 			items.set('author1', { last_check: 10000, last_update: 8000 });
 			items.set('author2', { last_check: 9500, last_update: 7000 });
 			items.set('author3', { last_check: 9000, last_update: 7500 });
-			result = createFiltersGroupedBySince(items);
+			result = createPubkeyFiltersGroupedBySince(items);
 		});
 
 		it('should return a single filter with all authors', () => {
@@ -58,7 +58,7 @@ describe('createFiltersGroupedBySince', () => {
 			items.set('author1', { last_check: 10000, last_update: 8500 });
 			items.set('author2', { last_check: 9500, last_update: 7000 });
 			items.set('author3', { last_check: 9000, last_update: 7500 });
-			result = createFiltersGroupedBySince(items);
+			result = createPubkeyFiltersGroupedBySince(items);
 		});
 
 		it('should return two filters', () => {
@@ -89,7 +89,7 @@ describe('createFiltersGroupedBySince', () => {
 			items.set('author1', { last_check: 10000, last_update: 8000 });
 			items.set('author2', { last_check: 9500, last_update: 7000 });
 			items.set('author3', { last_check: 7000, last_update: 8000 });
-			result = createFiltersGroupedBySince(items);
+			result = createPubkeyFiltersGroupedBySince(items);
 		});
 
 		it('since should be the last_update', () => {
@@ -102,7 +102,7 @@ describe('createFiltersGroupedBySince', () => {
 			const items = new Map();
 			items.set('author1', { last_check: 10000, last_update: undefined });
 			items.set('author2', { last_check: 9500, last_update: 7000 });
-			result = createFiltersGroupedBySince(items);
+			result = createPubkeyFiltersGroupedBySince(items);
 		});
 		it('should be included in a filter with since undefined', () => {
 			expect(result).toHaveLength(2);
@@ -116,7 +116,7 @@ describe('createFiltersGroupedBySince', () => {
 			const items = new Map();
 			items.set('author1', { last_check: undefined, last_update: 10000 });
 			items.set('author2', { last_check: 9500, last_update: 7000 });
-			result = createFiltersGroupedBySince(items);
+			result = createPubkeyFiltersGroupedBySince(items);
 		});
 		it('should be included in a filter with since undefined', () => {
 			expect(result).toHaveLength(2);

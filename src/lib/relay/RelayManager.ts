@@ -1,25 +1,26 @@
-import { Relay, type Filter } from 'nostr-tools';
+import { Relay, type Filter, type NostrEvent } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
-import { repo_kind } from '$lib/kinds';
+import { issue_kind, patch_kind, proposal_status_kinds, repo_kind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import type {
-	ARefP,
 	PubKeyString,
 	WebSocketUrl,
 	RelayCheckTimestamp,
 	RelayUpdate,
 	Timestamp,
-	ARefR
+	ARefR,
+	RepoRef
 } from '$lib/types';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import type Processor from '$lib/processors/Processor';
 import { eventKindToTable } from '$lib/processors/Processor';
+import { aRefPToAddressPointer, getRepoRefs } from '$lib/utils';
+import type { Subscription } from 'nostr-tools/abstract-relay';
+import { repoTableItemToRelayCheckTimestamp } from './RelaySelection';
 
 export class RelayManager {
 	url: WebSocketUrl;
 	processor: Processor;
-	repo_queue: Set<ARefP> = new Set();
-	set_repo_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined;
 	relay: Relay;
 	inactivity_timer: NodeJS.Timeout | null = null;
 
@@ -125,18 +126,18 @@ export class RelayManager {
 		await this.fetch_pubkey_info_promises.addPromise(pubkey, 10 * 1000);
 	}
 
-	fetching_queue = false;
+	fetching_pubkey_queue = false;
 	async fetchPubkeyQueue() {
-		if (this.fetching_queue === true) {
+		if (this.fetching_pubkey_queue === true) {
 			return setTimeout(() => {
 				this.fetchPubkeyQueue();
 			}, 1);
 		}
 
 		if (this.pubkey_metadata_queue.size === 0) return;
-		this.fetching_queue = true;
+		this.fetching_pubkey_queue = true;
 		await this.connect();
-		const filters = createFiltersGroupedBySince(this.pubkey_metadata_queue);
+		const filters = createPubkeyFiltersGroupedBySince(this.pubkey_metadata_queue);
 		this.pubkey_metadata_queue.clear();
 		clearTimeout(this.set_pubkey_queue_timeout);
 		this.set_pubkey_queue_timeout = undefined;
@@ -195,14 +196,144 @@ export class RelayManager {
 						}
 					}
 				}
-				this.fetching_queue = false;
+				this.fetching_pubkey_queue = false;
+			}
+		});
+	}
+
+	repo_queue: Map<RepoRef, RelayCheckTimestamp> = new Map();
+	set_repo_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined;
+	fetch_repo_promises = new PromiseManager<RepoRef, undefined>();
+
+	async fetchRepo(a_ref: RepoRef, check_timestamp: RelayCheckTimestamp) {
+		if (!this.repo_queue.has(a_ref)) {
+			this.repo_queue.set(a_ref, check_timestamp);
+			await this.connect();
+			if (!this.set_repo_queue_timeout) {
+				this.set_repo_queue_timeout = setTimeout(async () => {
+					this.fetchRepoQueue();
+				}, 200);
+			}
+		}
+		await this.fetch_repo_promises.addPromise(a_ref, 20 * 1000);
+	}
+
+	fetching_repo_queue = false;
+
+	async fetchRepoQueue() {
+		if (this.fetching_repo_queue === true) {
+			return setTimeout(() => {
+				this.fetchRepoQueue();
+			}, 1);
+		}
+
+		if (this.repo_queue.size === 0) return;
+		this.fetching_repo_queue = true;
+		await this.connect();
+		// read to process the queue
+		const a_refs = new Map(this.repo_queue);
+		this.repo_queue.clear();
+		clearTimeout(this.set_repo_queue_timeout);
+		this.set_repo_queue_timeout = undefined;
+		// add all repos with same identifier to queue
+		(
+			await db.repos
+				.where('identifier')
+				.anyOf([...new Set<RepoRef>([...a_refs.keys()])])
+				.toArray()
+		).forEach((record) => {
+			a_refs.set(record.uuid, repoTableItemToRelayCheckTimestamp(record, this.url));
+		});
+		// next bit
+		const found_a_ref = new Set<RepoRef>();
+		const searched_a_refs = new Set<RepoRef>(a_refs.keys());
+		const found_children = new Set<RepoRef>();
+
+		const filters = [...createRepoIdentifierFilters(a_refs), ...createRepoChildrenFilters(a_refs)];
+
+		const onevent = (event: NostrEvent) => {
+			if (event.kind === repo_kind) {
+				addSeenRelay(event, this.url);
+				const repo_ref = getEventUID(event) as RepoRef;
+				this.processor.enqueueRelayUpdate({
+					type: 'found',
+					uuid: repo_ref,
+					created_at: event.created_at,
+					table: 'repos',
+					url: this.url
+				});
+				this.processor.enqueueEvent(event);
+				found_a_ref.add(repo_ref);
+			} else if (event.kind === issue_kind || event.kind === patch_kind) {
+				addSeenRelay(event, this.url);
+				this.processor.enqueueRelayUpdate({
+					type: 'found',
+					uuid: event.id,
+					table: event.kind === issue_kind ? 'issues' : 'prs',
+					url: this.url
+				});
+				this.processor.enqueueEvent(event);
+				getRepoRefs(event).forEach((repo_ref) => {
+					found_children.add(repo_ref);
+				});
+			} else {
+				// TODO statuses
+			}
+		};
+		const onEose = (sub: Subscription) => {
+			sub.close();
+			this.resetInactivityTimer();
+			for (const a_ref of searched_a_refs) {
+				if (filters.some((f) => f['#d'] && f['#d'].includes(a_ref) && !f.since)) {
+					this.processor.enqueueRelayUpdate({
+						type: 'checked',
+						uuid: a_ref,
+						table: 'repos',
+						url: this.url
+					});
+				} else {
+					if (!found_a_ref.has(a_ref)) {
+						this.processor.enqueueRelayUpdate({
+							type: 'not-found',
+							uuid: a_ref,
+							table: 'repos',
+							url: this.url
+						});
+					}
+				}
+			}
+			// TODO process found_children for relay huristics
+			found_a_ref.intersection(searched_a_refs).forEach((a_ref) => {
+				this.fetch_repo_promises.resolvePromises(a_ref);
+			});
+			// search for children of newly found a_refs (perhaps from other maintainers)
+			const discovered_a_refs = found_a_ref.difference(searched_a_refs);
+			if (discovered_a_refs.size > 0) {
+				this.relay.subscribe(createRepoChildrenFilters(discovered_a_refs), {
+					onevent,
+					oneose: () => {
+						// TODO process found_children for relay huristics
+						this.fetching_repo_queue = false;
+					}
+				});
+			} else {
+				this.fetching_repo_queue = false;
+			}
+		};
+		const sub = this.relay.subscribe(filters, {
+			onevent,
+			oneose: () => {
+				onEose(sub);
 			}
 		});
 	}
 }
 
-export const createFiltersGroupedBySince = (items: Map<PubKeyString, RelayCheckTimestamp>) => {
-	const replication_delay = 15 * 60; // 900 seconds
+const replication_delay = 15 * 60; // 900 seconds
+
+export const createPubkeyFiltersGroupedBySince = (
+	items: Map<PubKeyString, RelayCheckTimestamp>
+) => {
 	const authors_unkown_or_unchecked: PubKeyString[] = [];
 	let checked: {
 		pubkey: PubKeyString;
@@ -257,6 +388,61 @@ export const createFiltersGroupedBySince = (items: Map<PubKeyString, RelayCheckT
 			authors: authors_unkown_or_unchecked
 		});
 	}
+	return filters;
+};
+
+export const createRepoIdentifierFilters = (items: Map<RepoRef, RelayCheckTimestamp>) => {
+	const identifiers = new Map<string, number>();
+
+	items.forEach((t, a_ref) => {
+		const identifier = aRefPToAddressPointer(a_ref).identifier;
+		const map_entry = identifiers.get(identifier) || 0;
+		identifiers.set(
+			identifier,
+			Math.min(map_entry, t.last_check ? t.last_check - replication_delay : 0)
+		);
+	});
+	const filters: Filter[] = [];
+	identifiers.forEach((since, identifier) => {
+		filters.push({
+			kinds: [repo_kind],
+			'#d': [identifier],
+			since
+		});
+	});
+	// TODO this could be improved to group by since like we do with pubkeys
+	return filters;
+};
+
+export const createRepoChildrenFilters = (
+	items: Map<RepoRef, RelayCheckTimestamp> | Set<RepoRef>
+) => {
+	if (items instanceof Set) {
+		return [
+			{
+				kinds: [issue_kind, patch_kind, ...proposal_status_kinds],
+				'#a': [...items]
+			}
+		];
+	}
+	const sinces = new Map<number, RepoRef[]>();
+	const filters: Filter[] = [];
+	items.forEach((t, a_ref) => {
+		const since = t.last_check ? t.last_check - replication_delay : 0;
+		const map_item = sinces.get(since) || [];
+		map_item.push(a_ref);
+		sinces.set(since, map_item);
+	});
+	sinces.forEach((a_refs, since) => {
+		const filter: Filter = {
+			kinds: [issue_kind, patch_kind, ...proposal_status_kinds],
+			'#a': a_refs
+		};
+		if (since > 0) {
+			filter.since = since;
+		}
+		filters.push(filter);
+	});
 	return filters;
 };
 

@@ -1,5 +1,5 @@
-import { nip19 } from 'nostr-tools';
-import { type ARef, type EventIdString } from './types';
+import { nip19, type NostrEvent } from 'nostr-tools';
+import { isRepoRef, type ARef, type ARefP, type EventIdString, type RepoRef } from './types';
 import type { AddressPointer } from 'nostr-tools/nip19';
 import { repo_kind } from './kinds';
 
@@ -23,19 +23,19 @@ function isAddressPointer(a: ARef | AddressPointer): a is AddressPointer {
 	return typeof a !== 'string';
 }
 
-export function aToAddressPointerAndARef(a: ARef | AddressPointer):
+export function aToAddressPointerAndARef(a: ARefP | AddressPointer):
 	| {
-			a_ref: ARef;
+			a_ref: ARefP;
 			address_pointer: AddressPointer;
 	  }
 	| undefined {
 	if (isAddressPointer(a)) {
 		return {
-			a_ref: addressPointerToARef(a),
+			a_ref: addressPointerToARefP(a),
 			address_pointer: a
 		};
 	} else {
-		const address_pointer = aRefToAddressPointer(a);
+		const address_pointer = aRefPToAddressPointer(a);
 		if (address_pointer) {
 			return {
 				address_pointer: address_pointer,
@@ -53,8 +53,16 @@ export const naddrToPointer = (s: string): AddressPointer | undefined => {
 	return decoded.data as AddressPointer;
 };
 
+export const aRefPToAddressPointer = (
+	a: ARefP,
+	relays: string[] | undefined = undefined
+): AddressPointer => {
+	const [k, pubkey, identifier] = a.split(':');
+	return { kind: Number(k), pubkey, identifier, relays };
+};
+
 export const aRefToAddressPointer = (
-	a: ARef | string,
+	a: ARefP | string,
 	relays: string[] | undefined = undefined
 ): AddressPointer | undefined => {
 	if (a.split(':').length !== 3) return undefined;
@@ -62,7 +70,7 @@ export const aRefToAddressPointer = (
 	return { kind: Number(k), pubkey, identifier, relays };
 };
 
-export const addressPointerToARef = (address_pointer: AddressPointer): ARef => {
+export const addressPointerToARefP = (address_pointer: AddressPointer): ARefP => {
 	return `${address_pointer.kind}:${address_pointer.pubkey}:${address_pointer.identifier}`;
 };
 
@@ -89,3 +97,8 @@ export const neventOrNoteToHexId = (s: string): EventIdString | undefined => {
 	}
 	return undefined;
 };
+
+export const getRepoRefs = (event: NostrEvent): RepoRef[] =>
+	event.tags
+		.filter((t) => t[0] && t[0] === 'a' && t[1] && isRepoRef(t[1]))
+		.map((t) => t[1]) as RepoRef[];

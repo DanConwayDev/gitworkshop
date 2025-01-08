@@ -1,13 +1,18 @@
-import { chooseRelaysForAllRepos, chooseRelaysForPubkey } from '$lib/relay/RelaySelection';
+import {
+	chooseRelaysForAllRepos,
+	chooseRelaysForPubkey,
+	chooseRelaysForRepo
+} from '$lib/relay/RelaySelection';
 import { RelayManager } from '$lib/relay/RelayManager';
-import type { AtLeastThreeArray, PubKeyString, WebSocketUrl } from '$lib/types';
+import type { ARefP, AtLeastThreeArray, PubKeyString, WebSocketUrl } from '$lib/types';
 import { unixNow } from 'applesauce-core/helpers';
 import { getCacheEventsForFilters } from '$lib/dbs/LocalRelayDb';
-import { repo_kind } from '$lib/kinds';
+import { issue_kind, patch_kind, proposal_status_kinds, repo_kind } from '$lib/kinds';
 import type { Filter } from 'nostr-tools';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import Processor from '$lib/processors/Processor';
 import db from '$lib/dbs/LocalDb';
+import { aRefPToAddressPointer } from '$lib/utils';
 
 export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.damus.io',
@@ -50,6 +55,53 @@ class QueryCentreExternal {
 		await this.hydrate_from_cache_db([{ kinds: [repo_kind] }]);
 		const relays = await chooseRelaysForAllRepos();
 		await Promise.all(relays.map((url) => this.get_relay(url).fetchAllRepos()));
+	}
+
+	async fetchRepo(a_ref: ARefP) {
+		const pointer = aRefPToAddressPointer(a_ref);
+		if (!pointer) return;
+		await this.hydrate_from_cache_db([
+			{
+				kinds: [repo_kind],
+				'#d': [pointer.identifier]
+			},
+			{
+				kinds: [issue_kind, patch_kind, ...proposal_status_kinds],
+				'#a': [pointer.identifier]
+			}
+		]);
+		let record = await db.repos.get(a_ref);
+		const relays_tried: WebSocketUrl[] = [];
+		// only loop if repo announcement not found
+		let count = 0;
+		while (count === 0 || !record || !record.created_at) {
+			count++;
+			const relays = (await chooseRelaysForRepo(a_ref))
+				.filter(
+					({ url, check_timestamps }) =>
+						// skip relays just tried
+						!relays_tried.includes(url) &&
+						// and relays checked within 30 seconds
+						(!check_timestamps.last_check || check_timestamps.last_check < unixNow() - 30 * 1000)
+				)
+				// try repo relays + 3 others limited to 6 at each try
+				.slice(0, Math.min((record && record.relays ? record.relays.length : 0) + 3, 6));
+			if (relays.length === 0) {
+				// TODO lookup all other relays known by LocalDb and try those
+				break;
+			}
+			relays.forEach(({ url }) => relays_tried.push(url));
+			try {
+				await Promise.all(
+					relays.map(({ url, check_timestamps }) =>
+						this.get_relay(url).fetchRepo(a_ref, check_timestamps)
+					)
+				);
+			} catch {
+				/* empty */
+			}
+			record = await db.repos.get(a_ref);
+		}
 	}
 
 	async fetchPubkeyName(pubkey: PubKeyString) {
@@ -95,6 +147,9 @@ self.onmessage = async (event) => {
 	switch (method) {
 		case 'fetchAllRepos':
 			result = await external.fetchAllRepos();
+			break;
+		case 'fetchRepo':
+			result = await external.fetchRepo(args[0]);
 			break;
 		case 'fetchPubkeyName':
 			result = await external.fetchPubkeyName(args[0]);

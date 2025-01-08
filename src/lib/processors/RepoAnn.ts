@@ -99,7 +99,11 @@ function applyHuristicUpdates(
 						created_at: (update as RelayUpdateFound).created_at
 					} as RelayCheckFound)
 				: (base as RelayCheck);
-		processHuristic(item.relays_info[update.url], item.relays.includes(update.url), relay_check);
+		processHuristic(
+			item.relays_info[update.url],
+			!!item.relays && item.relays.includes(update.url),
+			relay_check
+		);
 	});
 	return item;
 }

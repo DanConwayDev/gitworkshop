@@ -1,4 +1,4 @@
-import type { PubKeyString } from '$lib/types';
+import type { ARefP, PubKeyString } from '$lib/types';
 import { isEvent } from 'applesauce-core/helpers';
 import QueryCentreInternal from './QueryCentreInternal';
 import memory_db from '$lib/dbs/InMemoryRelay';
@@ -21,6 +21,10 @@ class QueryCentre {
 	fetchAllRepos() {
 		this.external_worker.postMessage({ method: 'fetchAllRepos', args: [] });
 		return this.internal.fetchAllRepos();
+	}
+	fetchRepo(a_ref: ARefP) {
+		this.external_worker.postMessage({ method: 'fetchRepo', args: [a_ref] });
+		return this.internal.fetchRepo(a_ref);
 	}
 	searchRepoAnns(query: string) {
 		this.external_worker.postMessage({ method: 'fetchAllRepos', args: [] });

@@ -1,11 +1,20 @@
 import db from '$lib/dbs/LocalDb';
-import { createPubKeyInfo, type PubKeyString } from '$lib/types';
+import { createPubKeyInfo, repoTableItemDefaults, type ARefP, type PubKeyString } from '$lib/types';
 import { liveQuery } from 'dexie';
 
 export class QueryCentreInternal {
 	fetchAllRepos() {
 		return liveQuery(async () => {
 			return await db.repos.toArray();
+		});
+	}
+	fetchRepo(a_ref: ARefP) {
+		return liveQuery(async () => {
+			return (
+				(await db.repos.get(a_ref)) || {
+					...repoTableItemDefaults(a_ref)
+				}
+			);
 		});
 	}
 	searchRepoAnns(query: string) {

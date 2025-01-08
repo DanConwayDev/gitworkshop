@@ -1,4 +1,4 @@
-import type { WebSocketUrl, Timestamp, EventIdString, ARef } from '$lib/types';
+import type { WebSocketUrl, Timestamp, EventIdString, ARef, RepoRef } from '$lib/types';
 
 export interface LastCheck {
 	url_and_query: string;
@@ -49,6 +49,7 @@ export function isRelayUpdatePubkeyFound(
 
 export type RelayUpdateRepoAnn = (RelayUpdateFound | RelayUpdateNotFound | RelayUpdateChecked) & {
 	table: 'repos';
+	uuid: RepoRef;
 };
 
 export function isRelayUpdateRepoAnn(update: RelayUpdate): update is RelayUpdateRepoAnn {

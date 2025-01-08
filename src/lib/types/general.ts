@@ -19,6 +19,16 @@ export type ARefR = `${Kind}:${PubKeyString}`;
 /// Address Pointer Reference for Parametized Replaceable
 export type ARefP = `${Kind}:${PubKeyString}:${string}`;
 
+function isStringANumber(str: string) {
+	return /^\d+$/.test(str);
+}
+
+export const isARefP = (s: string): s is ARefP => {
+	const split = s.split(':');
+	if (split.length === 3 && isStringANumber(split[0])) return true;
+	return false;
+};
+
 /** general event referencing  */
 export interface EventAttribution {
 	uuid: EventIdString | ARef;

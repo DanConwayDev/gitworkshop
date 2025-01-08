@@ -1,7 +1,19 @@
 /** git-specific types */
 
-import type { PubKeyString, EventIdString, ReplaceableEventAttribution, ARefP } from '$lib/types';
+import { repo_kind } from '$lib/kinds';
+import {
+	type PubKeyString,
+	type EventIdString,
+	type ReplaceableEventAttribution,
+	type ARefP,
+	isARefP
+} from '$lib/types';
 
+export type RepoRef = ARefP;
+
+export const isRepoRef = (s: string): s is RepoRef => {
+	return isARefP(s) && s.startsWith(repo_kind.toString());
+};
 export interface RepoAnnBaseFields {
 	identifier: string;
 	unique_commit: string | undefined;
