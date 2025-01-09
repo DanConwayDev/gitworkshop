@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { search_input, search_query } from '$lib/stores/search';
-	import Container from './Container.svelte';
+	import Container from './wrappers/Container.svelte';
 
 	export let logged_in_user: { user_profile_goes_here: boolean } | undefined = undefined;
 	export let nip07_plugin: boolean | undefined = undefined;
