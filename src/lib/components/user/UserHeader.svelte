@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { icons_misc } from '../icons';
-	import { isPubKeyMetadataLoading, type PubKeyString } from '$lib/types';
+	import { createPubKeyInfo, isPubKeyMetadataLoading, type PubKeyString } from '$lib/types';
 	import query_centre from '$lib/query-centre/QueryCentre';
 	import { getName } from '$lib/types';
 	import CopyField from '../CopyField.svelte';
@@ -24,7 +24,8 @@
 		avatar_on_right?: boolean;
 	} = $props();
 
-	let info = query_centre.fetchPubkeyName(user);
+	let info_query = query_centre.fetchPubkeyName(user);
+	let info = $derived(info_query.current ?? { ...createPubKeyInfo(user), relays_info: {} });
 
 	let display_name = $derived(getName(info));
 	let loading = $derived(isPubKeyMetadataLoading(info));

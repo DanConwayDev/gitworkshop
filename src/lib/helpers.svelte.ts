@@ -19,10 +19,9 @@ export function stateQuery<T>(
 }
 
 // this is custom but DanConwayDev suggested it for inclusion in the library
-export function liveQueryState<T, I>(
+export function liveQueryState<T>(
 	querier: () => T | Promise<T | undefined>,
-	dependencies: () => unknown[] = () => [],
-	default_state: I
-): T | I {
-	return $derived(stateQuery(querier, dependencies).current || default_state);
+	dependencies: () => unknown[] = () => []
+): { current?: T } {
+	return stateQuery(querier, dependencies);
 }

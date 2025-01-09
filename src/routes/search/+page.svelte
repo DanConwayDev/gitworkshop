@@ -12,7 +12,8 @@
 			input.focus();
 		}
 	});
-	$: repos = query_centre.searchRepoAnns($search_query);
+	let repos_query = query_centre.searchRepoAnns($search_query);
+	let repos = $derived(repos_query.current ?? []);
 	function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
 		search_query.set($search_input);
@@ -25,7 +26,7 @@
 
 <Container>
 	<div class="m-8 mx-auto max-w-lg">
-		<form on:submit={handleSearch}>
+		<form onsubmit={handleSearch}>
 			<label class="input input-bordered flex items-center gap-2">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -52,7 +53,7 @@
 
 	<div class="my-8">
 		<ReposSummaryList
-			repos={$repos}
+			{repos}
 			title={$search_query.length === 0 ? undefined : `results for: ${$search_query}`}
 		/>
 	</div>

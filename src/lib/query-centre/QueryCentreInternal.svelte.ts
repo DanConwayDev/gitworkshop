@@ -1,36 +1,29 @@
 import db from '$lib/dbs/LocalDb';
 import { liveQueryState } from '$lib/helpers.svelte';
 import {
-	createPubKeyInfo,
-	repoTableItemDefaults,
 	type RepoTableItem,
 	type Nip05AddressStandardized,
 	type PubKeyString,
 	type PubKeyTableItem,
 	type RepoRef
 } from '$lib/types';
-import { liveQuery } from 'dexie';
 
 export class QueryCentreInternal {
 	fetchAllRepos() {
-		return liveQuery(async () => {
-			return await db.repos.toArray();
-		});
+		return liveQueryState(async () => db.repos.toArray());
 	}
 	fetchRepo(a_ref: RepoRef | string) {
-		return liveQueryState<RepoTableItem, RepoTableItem>(
+		return liveQueryState(
 			async () => db.repos.get(a_ref as RepoRef), // if its not RepoRef it we will just return the default value
-			() => [a_ref],
-			repoTableItemDefaults(a_ref)
+			() => [a_ref]
 		);
 	}
 	searchRepoAnns(query: string) {
 		if (query.length === 0) this.fetchAllRepos();
-		return liveQueryState<RepoTableItem[], []>(
+		return liveQueryState<RepoTableItem[]>(
 			async () =>
 				db.repos.where('searchWords').startsWithAnyOfIgnoreCase(query).distinct().toArray(),
-			() => [query],
-			[]
+			() => [query]
 		);
 	}
 
@@ -54,7 +47,7 @@ export class QueryCentreInternal {
 		// 		);
 		// 	})
 		// );
-		return liveQueryState<PubKeyTableItem, PubKeyTableItem>(
+		return liveQueryState<PubKeyTableItem>(
 			// async () => db.pubkeys.get(pubkey),
 			async () => {
 				const record = await db.pubkeys.get(pubkey);
@@ -68,13 +61,12 @@ export class QueryCentreInternal {
 						}
 					: record;
 			},
-			() => [pubkey],
-			{ ...createPubKeyInfo(pubkey), relays_info: {} }
+			() => [pubkey]
 		);
 	}
 
 	fetchNip05(nip05: Nip05AddressStandardized) {
-		return liveQueryState<PubKeyTableItem, PubKeyTableItem>(
+		return liveQueryState<PubKeyTableItem>(
 			async () => {
 				const records = await db.pubkeys.where('verified_nip05.address').equals(nip05).toArray();
 				if (records && records[0]) {
@@ -89,8 +81,7 @@ export class QueryCentreInternal {
 				}
 				return undefined;
 			},
-			() => [nip05],
-			{ ...createPubKeyInfo(nip05), relays_info: {} }
+			() => [nip05]
 		);
 	}
 }
