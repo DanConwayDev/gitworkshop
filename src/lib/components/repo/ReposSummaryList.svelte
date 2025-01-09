@@ -2,15 +2,20 @@
 	import type { RepoTableItem } from '$lib/types';
 	import RepoSummaryCard from './RepoSummaryCard.svelte';
 
-	export let title: string | undefined = undefined;
-	export let repos: RepoTableItem[] = [];
-	export let loading: boolean = false;
-	export let group_by: 'name' | 'identifier' | undefined = undefined;
+	let {
+		title = undefined,
+		repos = [],
+		loading = false,
+		group_by = undefined
+	}: {
+		title?: string | undefined;
+		repos?: RepoTableItem[];
+		loading?: boolean;
+		group_by?: 'name' | 'identifier' | undefined;
+	} = $props();
 
-	let grouped_repos: RepoTableItem[][] = [];
-	let selected_group: string | undefined = undefined;
-	$: {
-		grouped_repos = [];
+	let grouped_repos: RepoTableItem[][] = $derived.by(() => {
+		const grouped_repos: RepoTableItem[][] = [];
 		repos.forEach((ann) => {
 			if (!group_by) {
 				grouped_repos.push([ann]);
@@ -25,7 +30,9 @@
 			});
 			if (!added_to_group) grouped_repos.push([ann]);
 		});
-	}
+		return grouped_repos;
+	});
+	let selected_group: string | undefined = $state(undefined);
 </script>
 
 <div class="min-width">
@@ -47,11 +54,11 @@
 					{/each}
 				{:else if group_by}
 					<div class="stack">
-						<!-- svelte-ignore a11y-click-events-have-key-events -->
-						<!-- svelte-ignore a11y-no-static-element-interactions -->
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="flex min-h-28 cursor-pointer items-center rounded-lg border border-base-400 bg-base-200 p-4 hover:bg-base-300"
-							on:click={() => {
+							onclick={() => {
 								selected_group = group[0][group_by];
 							}}
 						>
@@ -92,7 +99,7 @@
 				{/each}
 			</div>
 			<div class="modal-action">
-				<button class="btn btn-sm" on:click={() => (selected_group = undefined)}>Close</button>
+				<button class="btn btn-sm" onclick={() => (selected_group = undefined)}>Close</button>
 			</div>
 		</div>
 	</div>

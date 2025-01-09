@@ -3,52 +3,31 @@
 	import type { Naddr, PubKeyString, RepoTableItem } from '$lib/types';
 	import UserHeader from '../user/UserHeader.svelte';
 
-	export let repo_item: RepoTableItem | undefined = undefined;
+	let { repo_item = undefined }: { repo_item: RepoTableItem | undefined } = $props();
 
-	let short_name: string = 'Untitled';
-	$: {
-		if (repo_item) {
-			const value = repo_item.name ?? repo_item.identifier;
-			if (value) {
-				short_name = value.length > 45 ? value.slice(0, 45) + '...' : value;
-			}
-		}
-	}
+	let short_name = $derived.by(() => {
+		const n = repo_item ? (repo_item.name ?? repo_item.identifier) : 'Untitled';
+		return n.length > 45 ? `${n.slice(0, 45)}...` : n;
+	});
 
-	let short_description: string = '';
-	$: {
-		if (repo_item?.description) {
-			short_description =
-				repo_item.description.length > 50
-					? repo_item.description.slice(0, 45) + '...'
-					: repo_item.description;
-		}
-	}
+	let short_description = $derived.by(() => {
+		const description = repo_item?.description ?? '';
+		return description.length > 50 ? `${description.slice(0, 45)}...` : description;
+	});
 
-	let author: PubKeyString | undefined = undefined;
-	$: {
-		if (repo_item) {
-			// if ('trusted_maintainer' in repo_item) author = repo_item.trusted_maintainer;
-			// else if ('pubkey' in repo_item) author = repo_item.pubkey;
-			// else if ('author' in repo_item) author = repo_item.author;
-			author = repo_item.author;
-		}
-	}
+	let author: PubKeyString | undefined = $derived(repo_item?.author);
 
-	let maintainers: PubKeyString[] = [];
-	let additional_maintainers: PubKeyString[] = [];
-	$: {
-		if (repo_item && 'maintainers' in repo_item)
-			additional_maintainers = (repo_item.maintainers || []).filter((pubkey) => pubkey !== author);
-		maintainers = author ? [author, ...additional_maintainers] : additional_maintainers;
-	}
+	// TODO repo_item.maintainers is an array so new items or item updatew wont be reactive
+	let additional_maintainers: PubKeyString[] = $derived(
+		repo_item?.maintainers?.filter((pubkey) => pubkey !== author) || []
+	);
 
-	let naddr: Naddr | undefined = undefined;
-	$: {
-		if (repo_item) {
-			naddr = repoToNaddr(repo_item);
-		}
-	}
+	let maintainers: PubKeyString[] = $derived([
+		...(author ? [author] : []),
+		...(additional_maintainers || [])
+	]);
+
+	let naddr: Naddr | undefined = $derived(repo_item ? repoToNaddr(repo_item) : undefined);
 </script>
 
 <div class="rounded-lg bg-base-200 p-4" style={`min-height: ${maintainers.length * 1.325 + 2}rem;`}>
@@ -59,7 +38,7 @@
 		<a
 			class="link-primary break-words"
 			href="/r/{naddr}"
-			on:click={(event) => {
+			onclick={(event) => {
 				if (!naddr) {
 					event.preventDefault();
 				}

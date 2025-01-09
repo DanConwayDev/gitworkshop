@@ -2,7 +2,6 @@ import { nip19, type NostrEvent } from 'nostr-tools';
 import { isRepoRef, type ARef, type ARefP, type EventIdString, type RepoRef } from './types';
 import type { AddressPointer } from 'nostr-tools/nip19';
 import { repo_kind } from './kinds';
-import { liveQuery } from 'dexie';
 
 // get value of first occurance of tag
 export function getTagValue(tags: string[][], name: string): string | undefined {
@@ -103,21 +102,3 @@ export const getRepoRefs = (event: NostrEvent): RepoRef[] =>
 	event.tags
 		.filter((t) => t[0] && t[0] === 'a' && t[1] && isRepoRef(t[1]))
 		.map((t) => t[1]) as RepoRef[];
-
-/// this is taken from https://github.com/dexie/Dexie.js/pull/2116
-/// this should be taken from the dexie when it is merged
-export function stateQuery<T>(
-	querier: () => T | Promise<T>,
-	dependencies?: () => unknown[]
-): { current?: T } {
-	const query = $state<{ current?: T }>({ current: undefined });
-	$effect(() => {
-		dependencies?.();
-		return liveQuery(querier).subscribe((result) => {
-			if (result !== undefined) {
-				query.current = result;
-			}
-		}).unsubscribe;
-	});
-	return query;
-}

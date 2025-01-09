@@ -6,8 +6,8 @@ import {
 	type RepoRef
 } from '$lib/types';
 import { isEvent } from 'applesauce-core/helpers';
-import QueryCentreInternal from './QueryCentreInternal';
 import memory_db from '$lib/dbs/InMemoryRelay';
+import QueryCentreInternal from './QueryCentreInternal.svelte';
 
 class QueryCentre {
 	internal = new QueryCentreInternal();

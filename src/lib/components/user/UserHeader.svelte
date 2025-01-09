@@ -6,28 +6,38 @@
 	import { getName } from '$lib/types';
 	import CopyField from '../CopyField.svelte';
 
-	export let user: PubKeyString;
+	let {
+		user,
+		inline = false,
+		size = 'md',
+		avatar_only = false,
+		in_event_header = false,
+		link_to_profile = true,
+		avatar_on_right = false
+	}: {
+		user: PubKeyString;
+		inline?: boolean;
+		size?: 'xs' | 'sm' | 'md' | 'full';
+		avatar_only?: boolean;
+		in_event_header?: boolean;
+		link_to_profile?: boolean;
+		avatar_on_right?: boolean;
+	} = $props();
 
-	export let inline = false;
-	export let size: 'xs' | 'sm' | 'md' | 'full' = 'md';
-	export let avatar_only = false;
-	export let in_event_header = false;
-	export let link_to_profile = true;
-	export let avatar_on_right = false;
+	let info = query_centre.fetchPubkeyName(user);
 
-	$: info = query_centre.fetchPubkeyName(user);
-	$: display_name = getName($info);
-	$: loading = isPubKeyMetadataLoading($info);
+	let display_name = $derived(getName(info));
+	let loading = $derived(isPubKeyMetadataLoading(info));
 </script>
 
-{#if $info}
-	<!-- svelte-ignore a11y-click-events-have-key-events -->
-	<!-- svelte-ignore a11y-no-static-element-interactions -->
+{#if info}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class:inline-block={inline}
 		class:cursor-pointer={link_to_profile}
-		on:click={() => {
-			if (link_to_profile) goto(`/p/${$info.npub}`);
+		onclick={() => {
+			if (link_to_profile) goto(`/p/${info.npub}`);
 		}}
 	>
 		<div
@@ -59,16 +69,16 @@
 					class:h-3.5={(inline && size === 'sm') || size === 'xs'}
 					class:w-3.5={(inline && size === 'sm') || size === 'xs'}
 					class="rounded"
-					class:skeleton={!('image' in $info.metadata.fields) &&
-						!('picture' in $info.metadata.fields)}
+					class:skeleton={!('image' in info.metadata.fields) &&
+						!('picture' in info.metadata.fields)}
 					class:bg-neutral={!loading &&
-						(!$info.metadata.fields ||
-							(!$info.metadata.fields.image && !$info.metadata.fields.picture))}
+						(!info.metadata.fields ||
+							(!info.metadata.fields.image && !info.metadata.fields.picture))}
 				>
-					{#if $info.metadata.fields?.image || $info.metadata.fields?.picture}
+					{#if info.metadata.fields?.image || info.metadata.fields?.picture}
 						<img
 							class="my-0"
-							src={$info.metadata.fields?.picture || $info.metadata.fields?.image}
+							src={info.metadata.fields?.picture || info.metadata.fields?.image}
 							alt={display_name}
 						/>
 					{/if}
@@ -101,17 +111,13 @@
 					<span class:font-bold={in_event_header || size === 'full'}>{display_name}</span>
 				{/if}
 				{#if size === 'full'}
-					<CopyField icon={icons_misc.key} content={$info.npub} no_border truncate={[10, 10]} />
-					{#if $info.metadata.fields && $info.metadata.fields.lud16}
-						<CopyField
-							icon={icons_misc.lightning}
-							content={$info.metadata.fields.lud16}
-							no_border
-						/>
+					<CopyField icon={icons_misc.key} content={info.npub} no_border truncate={[10, 10]} />
+					{#if info.metadata.fields && info.metadata.fields.lud16}
+						<CopyField icon={icons_misc.lightning} content={info.metadata.fields.lud16} no_border />
 					{/if}
-					{#if $info.metadata.fields && $info.metadata.fields.website}
+					{#if info.metadata.fields && info.metadata.fields.website}
 						<a
-							href={$info.metadata.fields.website}
+							href={info.metadata.fields.website}
 							target="_blank"
 							class="items items-top mt-1 flex w-full opacity-60"
 						>
@@ -125,11 +131,11 @@
 								{/each}
 							</svg>
 							<div class="link-secondary text-sm">
-								{$info.metadata.fields.website}
+								{info.metadata.fields.website}
 							</div>
 						</a>
 					{/if}
-					{#if size === 'full' && $info.metadata.fields && $info.metadata.fields.about}
+					{#if size === 'full' && info.metadata.fields && info.metadata.fields.about}
 						<div class="items items-top flex max-w-md opacity-60">
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -145,8 +151,8 @@
 								<div class="w.max-lg skeleton h-3"></div>
 							{:else}
 								<div class="text-sm">
-									{$info.metadata.fields?.about}
-									<!-- <ParsedContent content={$info.metadata.fields?.about} /> -->
+									{info.metadata.fields?.about}
+									<!-- <ParsedContent content={info.metadata.fields?.about} /> -->
 								</div>
 							{/if}
 						</div>

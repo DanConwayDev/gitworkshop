@@ -22,7 +22,7 @@ importers:
         version: 4.12.23(postcss@8.4.49)
       dexie:
         specifier: ^4.0.10
-        version: https://codeload.github.com/oliverdowling/Dexie.js/tar.gz/216ec560d09fb259413374b66754dbc97bc79a15
+        version: 4.0.10
       nostr-idb:
         specifier: github:hzrd149/nostr-idb#98377e624a7d6da10517c09a356af9d82b392920
         version: https://codeload.github.com/hzrd149/nostr-idb/tar.gz/98377e624a7d6da10517c09a356af9d82b392920(typescript@5.7.2)
@@ -1586,9 +1586,8 @@ packages:
   devalue@5.1.1:
     resolution: {integrity: sha512-maua5KUiapvEwiEAe+XnlZ3Rh0GD+qI1J/nb9vrJc3muPXvcF/8gXYTWF76+5DAqHyDUtOIImEuo0YKE9mshVw==}
 
-  dexie@https://codeload.github.com/oliverdowling/Dexie.js/tar.gz/216ec560d09fb259413374b66754dbc97bc79a15:
-    resolution: {tarball: https://codeload.github.com/oliverdowling/Dexie.js/tar.gz/216ec560d09fb259413374b66754dbc97bc79a15}
-    version: 4.0.10
+  dexie@4.0.10:
+    resolution: {integrity: sha512-eM2RzuR3i+M046r2Q0Optl3pS31qTWf8aFuA7H9wnsHTwl8EPvroVLwvQene/6paAs39Tbk6fWZcn2aZaHkc/w==}
 
   didyoumean@1.2.2:
     resolution: {integrity: sha512-gxtyfqMg7GKyhQmb056K7M3xszy/myH8w+B4RT+QXBQsvAOdc3XymqDDPHx1BgPgsdAA5SIifona89YtRATDzw==}
@@ -4744,7 +4743,7 @@ snapshots:
 
   devalue@5.1.1: {}
 
-  dexie@https://codeload.github.com/oliverdowling/Dexie.js/tar.gz/216ec560d09fb259413374b66754dbc97bc79a15: {}
+  dexie@4.0.10: {}
 
   didyoumean@1.2.2: {}
 
