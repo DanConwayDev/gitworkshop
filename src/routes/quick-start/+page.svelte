@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Container from '$lib/components/wrappers/Container.svelte';
+	import Container from '$lib/components/Container.svelte';
 	import InstallNgit from '$lib/components/InstallNgit.svelte';
 </script>
 

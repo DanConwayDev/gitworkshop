@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { search } from '$lib/internal_states.svelte';
-	import Container from './wrappers/Container.svelte';
+	import Container from './Container.svelte';
 
 	let {
 		logged_in_user = undefined,

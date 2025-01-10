@@ -1,19 +1,13 @@
 <script lang="ts">
 	import { repoToNaddr } from '$lib/repos';
-	import type { Naddr, PubKeyString, RepoTableItem } from '$lib/types';
+	import { getRepoShortDescription, getRepoShortName } from '$lib/type-helpers/repo';
+	import { type Naddr, type PubKeyString, type RepoTableItem } from '$lib/types';
 	import UserHeader from '../user/UserHeader.svelte';
 
 	let { repo_item = undefined }: { repo_item: RepoTableItem | undefined } = $props();
 
-	let short_name = $derived.by(() => {
-		const n = repo_item ? (repo_item.name ?? repo_item.identifier) : 'Untitled';
-		return n.length > 45 ? `${n.slice(0, 45)}...` : n;
-	});
-
-	let short_description = $derived.by(() => {
-		const description = repo_item?.description ?? '';
-		return description.length > 50 ? `${description.slice(0, 45)}...` : description;
-	});
+	let short_name = $derived.by(() => getRepoShortName(repo_item));
+	let short_description = $derived.by(() => getRepoShortDescription(repo_item));
 
 	let author: PubKeyString | undefined = $derived(repo_item?.author);
 
@@ -37,7 +31,7 @@
 	{:else}
 		<a
 			class="link-primary break-words"
-			href="/r/{naddr}"
+			href="/{naddr}"
 			onclick={(event) => {
 				if (!naddr) {
 					event.preventDefault();
