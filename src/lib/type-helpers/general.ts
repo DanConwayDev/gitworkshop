@@ -23,3 +23,13 @@ export const recentlyCompletedCheck = (item: WithRelaysInfo): boolean =>
 			(h) => isRelayCheck(h) && h.up_to_date && h.timestamp > unixNow() - 60 * 3
 		)
 	);
+
+export const lastSuccessfulCheck = (item: WithRelaysInfo): number | null => {
+	let max: number = 0;
+	Object.keys(item.relays_info).forEach((relay) => {
+		item.relays_info[relay as WebSocketUrl].huristics.forEach((h) => {
+			if (isRelayCheck(h) && h.up_to_date) max = Math.max(h.timestamp, max);
+		});
+	});
+	return max === 0 ? null : max;
+};

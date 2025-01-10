@@ -5,14 +5,27 @@
 	import { repoTableItemDefaults, type RepoRef } from '$lib/types';
 	import UserHeader from '../user/UserHeader.svelte';
 	import RelayCheckReport from '../RelayCheckReport.svelte';
-	import { isStrugglingToFindItem } from '$lib/type-helpers/general';
+	import { isStrugglingToFindItem, lastSuccessfulCheck } from '$lib/type-helpers/general';
+	import { network_status } from '$lib/internal_states.svelte';
+	import dayjs from 'dayjs';
+	import relativeTime from 'dayjs/plugin/relativeTime';
+	import OfflineBanner from '../OfflineBanner.svelte';
 
 	let { a_ref }: { a_ref: RepoRef } = $props();
 	let record_query = query_centre.fetchRepo(a_ref);
 	let repo = $derived(record_query.current ?? repoTableItemDefaults(a_ref));
+
+	dayjs.extend(relativeTime);
+	const getLastSuccessfulCheckTimeAgo = () => {
+		const lastCheckTimestamp = lastSuccessfulCheck(repo);
+		return lastCheckTimestamp ? dayjs(lastCheckTimestamp * 1000).fromNow() : 'never';
+	};
 </script>
 
 {#if repo}
+	{#if network_status.offline}
+		<OfflineBanner msg={`repository data last refreshed ${getLastSuccessfulCheckTimeAgo()}`} />
+	{/if}
 	<RepoHeader {repo}></RepoHeader>
 	<Container>
 		{#if !repo.created_at}
