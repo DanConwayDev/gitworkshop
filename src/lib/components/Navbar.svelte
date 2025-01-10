@@ -1,19 +1,28 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { search_input, search_query } from '$lib/stores/search';
+	import { search } from '$lib/internal_states.svelte';
 	import Container from './wrappers/Container.svelte';
 
-	export let logged_in_user: { user_profile_goes_here: boolean } | undefined = undefined;
-	export let nip07_plugin: boolean | undefined = undefined;
-	export let login_function = () => {};
-	export let singup_function = () => {};
+	let {
+		logged_in_user = undefined,
+		nip07_plugin = undefined,
+		login_function = () => {},
+		singup_function = () => {}
+	}: {
+		logged_in_user: { user_profile_goes_here: boolean } | undefined;
+		nip07_plugin: boolean | undefined;
+		login_function: () => void;
+		singup_function: () => void;
+	} = $props();
+
 	// this was be an import from users store
 	let logout = () => {};
 
+	let search_input = $state(search.text);
 	function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
-		search_query.set($search_input);
-		if ($search_input.length > 0) goto(`/search`);
+		search.text = search_input;
+		if (search_input.length > 0) goto(`/search`);
 	}
 </script>
 
@@ -30,7 +39,7 @@
 			</div>
 			<div class="navbar-center"></div>
 			<div class="navbar-end gap-4">
-				<form on:submit={handleSearch}>
+				<form onsubmit={handleSearch}>
 					<label class="input input-sm input-bordered flex items-center gap-2">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -44,24 +53,24 @@
 								clip-rule="evenodd"
 							/>
 						</svg>
-						<input type="text" class="grow" placeholder="Search" bind:value={$search_input} />
+						<input type="text" class="grow" placeholder="Search" bind:value={search_input} />
 					</label>
 				</form>
 				{#if logged_in_user}
 					<div class="dropdown dropdown-end">
 						<div tabindex="0" role="button" class="m-1">[user placeholder]</div>
-						<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 						<ul
 							tabindex="0"
 							class="menu dropdown-content z-[1] -mr-4 rounded-box bg-base-400 p-2 shadow"
 						>
 							<li>[user placeholder]</li>
 							<li>
-								<!-- svelte-ignore a11y-no-static-element-interactions -->
 								<!-- svelte-ignore a11y_click_events_have_key_events -->
 								<!-- svelte-ignore a11y_missing_attribute -->
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
 								<a
-									on:click={() => {
+									onclick={() => {
 										logout();
 									}}>Logout</a
 								>
@@ -72,14 +81,14 @@
 					<div class="skeleton h-8 w-20"></div>
 				{:else if nip07_plugin}
 					<button
-						on:click={() => {
+						onclick={() => {
 							login_function();
 						}}
 						class="btn btn-ghost btn-sm normal-case">Login</button
 					>
 				{:else}
 					<button
-						on:click={() => {
+						onclick={() => {
 							singup_function();
 						}}
 						class="btn btn-ghost btn-sm normal-case">Sign up</button
