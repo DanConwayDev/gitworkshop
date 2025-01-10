@@ -6,13 +6,14 @@
 	import { isStrugglingToFindItem } from '$lib/type-helpers/general';
 	import RepoMenu from './RepoMenu.svelte';
 	import type { RepoPage } from '$lib/types/ui';
+	import { network_status } from '$lib/internal_states.svelte';
 
 	let { repo }: { repo?: RepoTableItem } = $props();
 
 	let selected_tab: RepoPage = 'about';
 	let short_name = $derived(getRepoShortName(repo));
 	let repo_link = '/naddr';
-	let struggling = $derived(repo ? isStrugglingToFindItem(repo) : false);
+	let struggling = $derived(repo ? !network_status.offline && isStrugglingToFindItem(repo) : false);
 </script>
 
 <div class="border-b border-accent-content bg-base-300">

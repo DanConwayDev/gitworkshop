@@ -1,12 +1,15 @@
 <script lang="ts">
 	import { issue_icon_path } from '$lib/components/issues/icons';
 	import { proposal_icon_path as pr_icon_path } from '$lib/components/prs/icons';
+	import { network_status } from '$lib/internal_states.svelte';
 	import { recentlyCompletedCheck } from '$lib/type-helpers/general';
 	import { IssueOrPrStatus, type RepoTableItem } from '$lib/types';
 	import type { RepoPage } from '$lib/types/ui';
 
 	let { repo, selected_tab = 'about' }: { repo?: RepoTableItem; selected_tab: RepoPage } = $props();
-	let recently_completed_check = $derived(repo ? recentlyCompletedCheck(repo) : false);
+	let recently_completed_check = $derived(
+		network_status.offline || (repo ? recentlyCompletedCheck(repo) : false)
+	);
 	let readme_available = false;
 	let repo_link = '/naddr';
 	let open_prs_count = $derived(
