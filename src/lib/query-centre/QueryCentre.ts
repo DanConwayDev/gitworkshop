@@ -7,10 +7,10 @@ import {
 } from '$lib/types';
 import { isEvent } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
-import QueryCentreInternal from './QueryCentreInternal.svelte';
+import db from '$lib/dbs/LocalDb';
+import { liveQueryState } from '$lib/helpers.svelte';
 
 class QueryCentre {
-	internal = new QueryCentreInternal();
 	external_worker: Worker;
 
 	constructor() {
@@ -26,26 +26,34 @@ class QueryCentre {
 
 	fetchAllRepos() {
 		this.external_worker.postMessage({ method: 'fetchAllRepos', args: [] });
-		return this.internal.fetchAllRepos();
+		return liveQueryState(() => db.repos.toArray());
 	}
+
 	fetchRepo(a_ref: RepoRef | string) {
 		if (isRepoRef(a_ref)) this.external_worker.postMessage({ method: 'fetchRepo', args: [a_ref] });
-		return this.internal.fetchRepo(a_ref);
+		// if a_ref its not RepoRef it we will just return the undefined
+		return liveQueryState(() => db.repos.get(a_ref as RepoRef));
 	}
+
 	searchRepoAnns(query: string) {
 		this.external_worker.postMessage({ method: 'fetchAllRepos', args: [] });
-		return this.internal.searchRepoAnns(query);
+		if (query.length === 0) this.fetchAllRepos();
+		return liveQueryState(() =>
+			db.repos.where('searchWords').startsWithAnyOfIgnoreCase(query).distinct().toArray()
+		);
 	}
 
 	fetchPubkeyName(pubkey: PubKeyString) {
 		this.external_worker.postMessage({ method: 'fetchPubkeyName', args: [pubkey] });
-		return this.internal.fetchPubkey(pubkey);
+		return liveQueryState(() => db.pubkeys.get(pubkey));
 	}
 
 	fetchNip05(nip05: Nip05Address) {
 		const standardized_nip05 = standardizeNip05(nip05);
 		this.external_worker.postMessage({ method: 'fetchNip05', args: [standardized_nip05] });
-		return this.internal.fetchNip05(standardized_nip05);
+		return liveQueryState(() =>
+			db.pubkeys.where('verified_nip05.address').equals(standardized_nip05).first()
+		);
 	}
 }
 
