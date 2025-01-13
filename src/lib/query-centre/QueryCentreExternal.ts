@@ -19,7 +19,11 @@ import { Metadata, RelayList } from 'nostr-tools/kinds';
 import Processor from '$lib/processors/Processor';
 import db from '$lib/dbs/LocalDb';
 import { aRefPToAddressPointer } from '$lib/utils';
-import { workerMessageFetchedRepo } from '$lib/types/worker-msgs';
+import {
+	workerMessageFetchedNip05,
+	workerMessageFetchedPubkey,
+	workerMessageFetchedRepo
+} from '$lib/types/worker-msgs';
 
 export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.damus.io',
@@ -144,12 +148,15 @@ class QueryCentreExternal {
 			}
 			record = await db.pubkeys.get(pubkey);
 		}
+		self.postMessage(workerMessageFetchedPubkey(pubkey));
 	}
 
 	async fetchNip05(nip05: Nip05AddressStandardized) {
 		const pointer = await nip05NostrTools.queryProfile(nip05);
 		if (pointer) {
 			this.processor.enqueueNip05(nip05, pointer.pubkey, pointer.relays);
+			await this.fetchPubkeyName(pointer.pubkey);
+			self.postMessage(workerMessageFetchedNip05(nip05));
 		}
 	}
 }

@@ -69,8 +69,7 @@ export async function processNip05(
 export async function processPubkeyUpdates(updates: ProcessorUpdate[]) {
 	const pubkey_updates = updates.filter(
 		(u) =>
-			!u.event ||
-			[Metadata, RelayList].includes(u.event.kind) ||
+			(u.event && [Metadata, RelayList].includes(u.event.kind)) ||
 			u.relay_updates.every((ru) => isRelayUpdatePubkey(ru))
 	) as ProcessorPubkeyUpdate[];
 

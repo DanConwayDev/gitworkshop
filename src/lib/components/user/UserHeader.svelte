@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { icons_misc } from '../icons';
-	import { createPubKeyInfo, isPubKeyMetadataLoading, type PubKeyString } from '$lib/types';
+	import { createPubKeyInfo, type PubKeyString } from '$lib/types';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { getName } from '$lib/types';
 	import CopyField from '../CopyField.svelte';
+	import { onMount } from 'svelte';
 
 	let {
 		user,
@@ -25,13 +26,26 @@
 	} = $props();
 
 	let info_query = query_centre.fetchPubkeyName(user);
-	let info = $derived(info_query.current ?? { ...createPubKeyInfo(user), relays_info: {} });
-
+	// prevent flashing with pubkey when info in db (allow db record to load before showing loading)
+	let mounting = $state(true);
+	onMount(() => {
+		setTimeout(() => (mounting = false), 100);
+	});
+	let info = $derived(
+		// show loading until record is created in db by fetchPubkeyName
+		info_query.current ?? {
+			...createPubKeyInfo(user),
+			relays_info: {},
+			loading: true
+		}
+	);
+	// let info = $derived(info_query.current);
 	let display_name = $derived(getName(info));
-	let loading = $derived(isPubKeyMetadataLoading(info));
+	let not_found_and_loading = $derived(info.loading && !info.metadata.stamp);
+	let pic_url = $derived(info.metadata.fields.image ?? info.metadata.fields.picture ?? undefined);
 </script>
 
-{#if info}
+{#if info && (info.metadata.stamp || !mounting)}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
@@ -70,19 +84,11 @@
 					class:h-3.5={(inline && size === 'sm') || size === 'xs'}
 					class:w-3.5={(inline && size === 'sm') || size === 'xs'}
 					class="rounded"
-					class:skeleton={!info.metadata.stamp &&
-						!('image' in info.metadata.fields) &&
-						!('picture' in info.metadata.fields)}
-					class:bg-neutral={!loading &&
-						(!info.metadata.fields ||
-							(!info.metadata.fields.image && !info.metadata.fields.picture))}
+					class:skeleton={not_found_and_loading}
+					class:bg-neutral={!pic_url}
 				>
-					{#if info.metadata.fields?.image || info.metadata.fields?.picture}
-						<img
-							class="my-0"
-							src={info.metadata.fields?.picture || info.metadata.fields?.image}
-							alt={display_name}
-						/>
+					{#if pic_url}
+						<img class="my-0" src={pic_url} alt={display_name} />
 					{/if}
 				</div>
 			</div>
@@ -102,7 +108,7 @@
 				class:hidden={avatar_only}
 				class:opacity-40={in_event_header}
 			>
-				{#if loading}
+				{#if not_found_and_loading}
 					<div
 						class="skeleton w-24"
 						class:h-4={size === 'md'}
@@ -149,7 +155,7 @@
 								{/each}
 							</svg>
 
-							{#if loading}
+							{#if not_found_and_loading}
 								<div class="w.max-lg skeleton h-3"></div>
 							{:else}
 								<div class="text-sm">
