@@ -70,7 +70,8 @@
 					class:h-3.5={(inline && size === 'sm') || size === 'xs'}
 					class:w-3.5={(inline && size === 'sm') || size === 'xs'}
 					class="rounded"
-					class:skeleton={!('image' in info.metadata.fields) &&
+					class:skeleton={!info.metadata.stamp &&
+						!('image' in info.metadata.fields) &&
 						!('picture' in info.metadata.fields)}
 					class:bg-neutral={!loading &&
 						(!info.metadata.fields ||
