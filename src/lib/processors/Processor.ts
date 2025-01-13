@@ -183,6 +183,7 @@ function groupTableRelayUpdates(relay_updates: [RelayUpdate, ...RelayUpdate[]]):
 		const key = isRelayUpdatePubkey(u) ? u.uuid.split(':')[1] : u.uuid;
 		const e = map.get(key) || { event: undefined, relay_updates: [] };
 		e.relay_updates.push(u);
+		map.set(key, e);
 	});
 	return [...map.values()];
 }
