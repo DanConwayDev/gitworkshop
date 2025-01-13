@@ -2,14 +2,16 @@
 	import { issue_icon_path } from '$lib/components/issues/icons';
 	import { proposal_icon_path as pr_icon_path } from '$lib/components/prs/icons';
 	import { network_status } from '$lib/internal_states.svelte';
-	import { recentlyCompletedCheck } from '$lib/type-helpers/general';
 	import { IssueOrPrStatus, type RepoTableItem } from '$lib/types';
-	import type { RepoPage } from '$lib/types/ui';
+	import type { RepoPage, WithLoading } from '$lib/types/ui';
 
-	let { repo, selected_tab = 'about' }: { repo?: RepoTableItem; selected_tab: RepoPage } = $props();
-	let recently_completed_check = $derived(
-		network_status.offline || (repo ? recentlyCompletedCheck(repo) : false)
-	);
+	let {
+		repo,
+		selected_tab = 'about'
+	}: { repo?: RepoTableItem & WithLoading; selected_tab: RepoPage } = $props();
+
+	let loading = $derived(network_status.offline || !repo || repo.loading);
+
 	let readme_available = false;
 	let repo_link = '/naddr';
 	let open_prs_count = $derived(
@@ -43,12 +45,13 @@
 					<path d={pr_icon_path.open_pull} />
 				</svg>
 				Proposals
-				{#if !recently_completed_check}
-					<span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
-				{:else if open_prs_count > 0}
+				{#if open_prs_count > 0}
 					<span class="badge badge-neutral badge-sm ml-2">
 						{open_prs_count}
 					</span>
+				{/if}
+				{#if loading}
+					<span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
 				{/if}
 			</a>
 			<a href={`${repo_link}/issues`} class="tab" class:tab-active={selected_tab === 'issues'}>
@@ -62,12 +65,13 @@
 					{/each}
 				</svg>
 				Issues
-				{#if !recently_completed_check}
-					<span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
-				{:else if open_issues_count > 0}
+				{#if open_issues_count > 0}
 					<span class="badge badge-neutral badge-sm ml-2">
 						{open_issues_count}
 					</span>
+				{/if}
+				{#if loading}
+					<span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
 				{/if}
 			</a>
 		{/if}

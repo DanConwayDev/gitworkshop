@@ -12,6 +12,7 @@ import {
 	type RepoRef
 } from '$lib/types';
 import { aRefPToAddressPointer } from '$lib/utils';
+import type { WithLoading } from './ui';
 
 export interface PubKeyTableItem extends WithRelaysInfo, PubKeyInfo {}
 
@@ -27,8 +28,9 @@ export interface RepoTableItem extends LastActivity, WithRelaysInfo, Partial<Rep
 	searchWords: string[];
 }
 
-export function repoTableItemDefaults(a_ref: ARefP | string): RepoTableItem {
-	const { identifier, pubkey } = isARefP(a_ref)
+export function repoTableItemDefaults(a_ref: ARefP | string): RepoTableItem & WithLoading {
+	const isP = isARefP(a_ref);
+	const { identifier, pubkey } = isP
 		? aRefPToAddressPointer(a_ref)
 		: { identifier: 'unknown', pubkey: '' };
 	return {
@@ -39,7 +41,9 @@ export function repoTableItemDefaults(a_ref: ARefP | string): RepoTableItem {
 		last_activity: 0,
 		issues: undefined,
 		PRs: undefined,
-		searchWords: [...[]]
+		searchWords: [...[]],
+		// external fetch is only called if valid RepoRef
+		loading: isP
 	};
 }
 

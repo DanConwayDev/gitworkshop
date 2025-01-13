@@ -5,10 +5,10 @@
 	import { getRepoShortName } from '$lib/type-helpers/repo';
 	import { isStrugglingToFindItem } from '$lib/type-helpers/general';
 	import RepoMenu from './RepoMenu.svelte';
-	import type { RepoPage } from '$lib/types/ui';
+	import type { RepoPage, WithLoading } from '$lib/types/ui';
 	import { network_status } from '$lib/internal_states.svelte';
 
-	let { repo }: { repo?: RepoTableItem } = $props();
+	let { repo }: { repo?: RepoTableItem & WithLoading } = $props();
 
 	let selected_tab: RepoPage = 'about';
 	let short_name = $derived(getRepoShortName(repo));

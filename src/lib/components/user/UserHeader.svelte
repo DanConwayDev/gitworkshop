@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { icons_misc } from '../icons';
 	import { createPubKeyInfo, isPubKeyMetadataLoading, type PubKeyString } from '$lib/types';
-	import query_centre from '$lib/query-centre/QueryCentre';
+	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { getName } from '$lib/types';
 	import CopyField from '../CopyField.svelte';
 

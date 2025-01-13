@@ -9,6 +9,7 @@ import { isEvent } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
 import db from '$lib/dbs/LocalDb';
 import { liveQueryState } from '$lib/helpers.svelte';
+import { isFetchedRepo, type WorkerMsg } from '$lib/types/worker-msgs';
 
 class QueryCentre {
 	external_worker: Worker;
@@ -17,9 +18,12 @@ class QueryCentre {
 		this.external_worker = new Worker(new URL('./QueryCentreExternal.ts', import.meta.url), {
 			type: 'module'
 		});
-		this.external_worker.onmessage = (msg: MessageEvent) => {
-			if (isEvent(msg)) {
-				memory_db.add(msg);
+		this.external_worker.onmessage = (msg: MessageEvent<WorkerMsg>) => {
+			const { data } = msg;
+			if (!data) {
+				// do nothing
+			} else if (isEvent(data)) {
+				memory_db.add(data);
 			}
 		};
 	}
@@ -30,9 +34,26 @@ class QueryCentre {
 	}
 
 	fetchRepo(a_ref: RepoRef | string) {
-		if (isRepoRef(a_ref)) this.external_worker.postMessage({ method: 'fetchRepo', args: [a_ref] });
+		let loading = $state(isRepoRef(a_ref));
+		if (isRepoRef(a_ref)) {
+			this.external_worker.postMessage({ method: 'fetchRepo', args: [a_ref] });
+			const handler = (msg: MessageEvent<WorkerMsg>) => {
+				if (msg.data && isFetchedRepo(msg.data)) {
+					loading = false;
+					this.external_worker.removeEventListener('message', handler);
+				}
+			};
+			this.external_worker.addEventListener('message', handler);
+		}
 		// if a_ref its not RepoRef it we will just return the undefined
-		return liveQueryState(() => db.repos.get(a_ref as RepoRef));
+		return liveQueryState(
+			async () => {
+				const r = await db.repos.get(a_ref as RepoRef);
+				if (r) return { ...r, loading };
+				else return undefined;
+			},
+			() => [loading]
+		);
 	}
 
 	searchRepoAnns(query: string) {

@@ -2,7 +2,7 @@
 	import Container from '$lib/components/Container.svelte';
 	import ReposSummaryList from '$lib/components/repo/ReposSummaryList.svelte';
 	import { onMount } from 'svelte';
-	import query_centre from '$lib/query-centre/QueryCentre';
+	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { search } from '$lib/internal_states.svelte';
 
 	onMount(() => {

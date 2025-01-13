@@ -19,6 +19,7 @@ import { Metadata, RelayList } from 'nostr-tools/kinds';
 import Processor from '$lib/processors/Processor';
 import db from '$lib/dbs/LocalDb';
 import { aRefPToAddressPointer } from '$lib/utils';
+import { workerMessageFetchedRepo } from '$lib/types/worker-msgs';
 
 export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.damus.io',
@@ -108,6 +109,7 @@ class QueryCentreExternal {
 			}
 			record = await db.repos.get(a_ref);
 		}
+		self.postMessage(workerMessageFetchedRepo(a_ref));
 	}
 
 	async fetchPubkeyName(pubkey: PubKeyString) {
