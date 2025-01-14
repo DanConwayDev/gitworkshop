@@ -24,6 +24,8 @@ export type ARefR = `${Kind}:${PubKeyString}`;
 /// Address Pointer Reference for Parametized Replaceable
 export type ARefP = `${Kind}:${PubKeyString}:${string}`;
 
+export const isEventIdString = (s: EventIdString | ARef): s is EventIdString => !s.includes(':');
+
 function isStringANumber(str: string) {
 	return /^\d+$/.test(str);
 }

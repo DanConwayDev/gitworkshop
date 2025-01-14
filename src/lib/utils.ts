@@ -19,6 +19,15 @@ export function getTagMultiValue(tags: string[][], name: string): string[] | und
 	return foundTag ? foundTag.slice(1) : undefined;
 }
 
+export const getParentUuid = (reply: NostrEvent): EventIdString | ARef | undefined => {
+	const t =
+		reply.tags.find((tag) => tag.length === 4 && tag[3] === 'reply') ||
+		reply.tags.find((tag) => tag.length === 4 && tag[3] === 'root') ||
+		// include events that don't use nip 10 markers
+		reply.tags.find((tag) => tag.length < 4 && ['e', 'a'].includes(tag[0]));
+	return t ? t[1] : undefined;
+};
+
 function isAddressPointer(a: ARef | AddressPointer): a is AddressPointer {
 	return typeof a !== 'string';
 }

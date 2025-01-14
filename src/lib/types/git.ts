@@ -6,7 +6,8 @@ import {
 	type EventIdString,
 	type ReplaceableEventAttribution,
 	type ARefP,
-	isARefP
+	isARefP,
+	type NonReplaceableEventAttribution
 } from '$lib/types';
 
 export type RepoRef = ARefP;
@@ -41,8 +42,10 @@ export type IssuesOrPrsByStatus = {
 
 export interface IssueOrPrBase {
 	title: string;
-	descritpion: string;
+	description: string;
 	status: IssueOrPrStatus;
 	tags: string[];
 	repos: ARefP[];
 }
+
+export interface Issue extends NonReplaceableEventAttribution, IssueOrPrBase {}

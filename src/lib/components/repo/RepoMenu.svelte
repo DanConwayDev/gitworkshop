@@ -20,8 +20,8 @@
 			: 0
 	);
 	let open_issues_count = $derived(
-		repo && repo.PRs
-			? repo.PRs[IssueOrPrStatus.Open].length + repo.PRs[IssueOrPrStatus.Draft].length
+		repo && repo.issues
+			? repo.issues[IssueOrPrStatus.Open].length + repo.issues[IssueOrPrStatus.Draft].length
 			: 0
 	);
 </script>

@@ -2,17 +2,30 @@ import {
 	type LastActivity,
 	type WithRelaysInfo,
 	type PubKeyInfo,
-	type NonReplaceableEventAttribution,
 	type IssuesOrPrsByStatus,
-	type IssueOrPrBase,
 	type RepoAnn,
 	type ARefP,
 	type PubKeyString,
 	isARefP,
-	type RepoRef
+	type RepoRef,
+	type Issue,
+	type LastCheck
 } from '$lib/types';
 import { aRefPToAddressPointer } from '$lib/utils';
+import type { EntityTable } from 'dexie';
 import type { WithLoading } from './ui';
+
+export interface SchemaV1 {
+	repos: EntityTable<RepoTableItem, 'uuid'>;
+	issues: EntityTable<IssueOrPRTableItem, 'uuid'>;
+	prs: EntityTable<IssueOrPRTableItem, 'uuid'>;
+	pubkeys: EntityTable<PubKeyTableItem, 'pubkey'>;
+	last_checks: EntityTable<LastCheck, 'url_and_query'>;
+}
+
+export type LocalDbSchema = SchemaV1;
+
+export type LocalDbTableNames = keyof LocalDbSchema;
 
 export interface PubKeyTableItem extends WithRelaysInfo, PubKeyInfo {}
 
@@ -47,8 +60,4 @@ export function repoTableItemDefaults(a_ref: ARefP | string): RepoTableItem & Wi
 	};
 }
 
-export interface IssueOrPRTableItem
-	extends NonReplaceableEventAttribution,
-		LastActivity,
-		WithRelaysInfo,
-		IssueOrPrBase {}
+export interface IssueOrPRTableItem extends LastActivity, WithRelaysInfo, Issue {}

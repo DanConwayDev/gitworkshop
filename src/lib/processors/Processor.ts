@@ -3,17 +3,27 @@ import {
 	isRelayUpdatePubkey,
 	type ARef,
 	type EventIdString,
+	type LocalDbTableNames,
 	type Nip05AddressStandardized,
 	type PubKeyString,
-	type RelayUpdate
+	type RelayUpdate,
+	type RepoRef
 } from '$lib/types';
-import { processRepoAnnUpdates } from './RepoAnn';
 import type { NostrEvent } from 'nostr-tools';
 import { getEventUID, isReplaceable } from 'applesauce-core/helpers';
-import { repo_kind } from '$lib/kinds';
+import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import processPubkey, { processNip05 } from './Pubkey';
-import type { ProcessorUpdate } from '$lib/types/processor';
+import type {
+	DbItemsCollection,
+	DbItemsKeysCollection,
+	ProcessorUpdate
+} from '$lib/types/processor';
+import { getRepoRefs } from '$lib/utils';
+import db from '$lib/dbs/LocalDb';
+import { getRepoRef } from '$lib/type-helpers/repo';
+import processRepoAnnUpdates from './RepoAnn';
+import processIssueUpdates from './Issue';
 
 class Processor {
 	/// Processes all new data points to update LocalDb or send events to the InMemoryDB
@@ -82,38 +92,20 @@ class Processor {
 
 	async nextEventBatch() {
 		if (this.running) return;
-		const events = this.takeEventTableBatch();
-		if (events) {
+		if (this.event_queue.length > 0) {
+			const events = this.event_queue;
+			this.event_queue = [];
 			this.running = true;
 			await processUpdates(
 				events.map((event) => ({
 					event,
 					relay_updates: this.takeUIDBatchFromRelayUpdatesQueue(getEventUID(event)) || []
 				}))
+				// TODO return unprocessed
 			);
 			if (this.running) setTimeout(() => this.nextEventBatch(), 100);
 			this.running = false;
 		}
-	}
-
-	takeEventTableBatch(): [NostrEvent, ...NostrEvent[]] | undefined {
-		if (!this.event_queue[0]) return undefined;
-		const table = eventKindToTable(this.event_queue[0].kind);
-		if (!table) {
-			//event shouldnt be here
-			this.event_queue.shift();
-			return undefined;
-		}
-		const relates_to_table: NostrEvent[] = [];
-		this.event_queue = this.event_queue.filter((e) => {
-			if (eventKindToTable(e.kind) === table) {
-				relates_to_table.push(e);
-				return false;
-			}
-			return true;
-		});
-		if (relates_to_table[0]) return relates_to_table as [NostrEvent, ...NostrEvent[]];
-		else return undefined;
 	}
 
 	async nextRelayUpdateBatch() {
@@ -123,6 +115,7 @@ class Processor {
 		if (relay_updates_batch) {
 			const grouped = groupTableRelayUpdates(relay_updates_batch);
 			await processUpdates(grouped);
+			// TODO return unprocessed
 		}
 		this.running = false;
 		this.nextEventBatch();
@@ -146,7 +139,7 @@ class Processor {
 	}
 
 	takeTableBatchFromRelayUpdatesQueue(
-		table?: 'pubkeys' | 'repos' | 'prs' | 'issues'
+		table?: LocalDbTableNames
 	): [RelayUpdate, ...RelayUpdate[]] | undefined {
 		if (!this.relay_update_queue[0]) return;
 		const relates_to_table: RelayUpdate[] = [];
@@ -163,17 +156,105 @@ class Processor {
 	}
 }
 
-async function processUpdates(updates: ProcessorUpdate[]) {
-	await processRepoAnnUpdates(updates);
-	await processPubkey(updates);
+async function processUpdates(updates: ProcessorUpdate[]): Promise<ProcessorUpdate[]> {
+	const items = await getExistingItemsToUpdate(updates);
+	let remaining_updates = updates;
+	[processPubkey, processRepoAnnUpdates, processIssueUpdates].forEach((processor_fn) => {
+		remaining_updates = processor_fn(items, remaining_updates);
+	});
+	await Promise.all([
+		items.repos.size === 0 ? Promise.resolve([]) : db.repos.bulkPut([...items.repos.values()]),
+		items.pubkeys.size === 0
+			? Promise.resolve([])
+			: db.pubkeys.bulkPut([...items.pubkeys.values()]),
+		items.issues.size === 0 ? Promise.resolve([]) : db.issues.bulkPut([...items.issues.values()]),
+		items.prs.size === 0 ? Promise.resolve([]) : db.prs.bulkPut([...items.prs.values()])
+	]);
 	addEventsToCache(updates.map((u) => u.event).filter((e) => e) as NostrEvent[]);
+	return remaining_updates;
 }
 
-export function eventKindToTable(
-	kind: number
-): ('pubkeys' | 'repos' | 'prs' | 'issues') | undefined {
+async function getExistingItemsToUpdate(updates: ProcessorUpdate[]): Promise<DbItemsCollection> {
+	const keys = identifyExistingItemsToUpdate(updates);
+	const [repo_items, pubkey_items, issue_items, pr_items] = await Promise.all([
+		keys.repos.size === 0 ? Promise.resolve([]) : db.repos.bulkGet([...keys.repos]),
+		keys.pubkeys.size === 0 ? Promise.resolve([]) : db.pubkeys.bulkGet([...keys.pubkeys]),
+		keys.issues.size === 0 ? Promise.resolve([]) : db.issues.bulkGet([...keys.issues]),
+		keys.prs.size === 0 ? Promise.resolve([]) : db.prs.bulkGet([...keys.prs])
+	]);
+	const table_items: DbItemsCollection = {
+		repos: new Map(),
+		pubkeys: new Map(),
+		issues: new Map(),
+		prs: new Map()
+	};
+	repo_items.forEach((r) => {
+		if (r) table_items.repos.set(getRepoRef(r), r);
+	});
+	pubkey_items.forEach((r) => {
+		if (r) table_items.pubkeys.set(r.pubkey, r);
+	});
+	issue_items.forEach((r) => {
+		if (r) table_items.issues.set(r.uuid, r);
+	});
+	pr_items.forEach((r) => {
+		if (r) table_items.prs.set(r.uuid, r);
+	});
+	return table_items;
+}
+
+function identifyExistingItemsToUpdate(updates: ProcessorUpdate[]): DbItemsKeysCollection {
+	const exiting_db_item_keys: DbItemsKeysCollection = {
+		repos: new Set(),
+		pubkeys: new Set(),
+		issues: new Set(),
+		prs: new Set()
+	};
+	updates.forEach((u) => {
+		if (u.event) {
+			switch (u.event.kind) {
+				case repo_kind:
+					exiting_db_item_keys.repos.add(getEventUID(u.event) as RepoRef);
+					break;
+				case Metadata:
+				case RelayList:
+					exiting_db_item_keys.pubkeys.add(u.event.pubkey);
+					break;
+
+				case issue_kind: {
+					exiting_db_item_keys.issues.add(u.event.id);
+					getRepoRefs(u.event).forEach((r) => exiting_db_item_keys.repos.add(r));
+					break;
+				}
+				case patch_kind: {
+					// TODO only if root patch
+					exiting_db_item_keys.issues.add(u.event.id);
+					getRepoRefs(u.event).forEach((r) => exiting_db_item_keys.repos.add(r));
+					break;
+				}
+			}
+		} else {
+			switch (u.relay_updates[0].table) {
+				case 'repos':
+					exiting_db_item_keys.repos.add(u.relay_updates[0].uuid);
+					break;
+				case 'pubkeys':
+					exiting_db_item_keys.pubkeys.add(u.relay_updates[0].uuid.split(':')[1]);
+					break;
+				case 'issues':
+					exiting_db_item_keys.issues.add(u.relay_updates[0].uuid);
+					break;
+			}
+		}
+	});
+	return exiting_db_item_keys;
+}
+
+export function eventKindToTable(kind: number): LocalDbTableNames | undefined {
 	if (kind === repo_kind) return 'repos';
 	if ([Metadata, RelayList].includes(kind)) return 'pubkeys';
+	if (kind === issue_kind) return 'issues';
+	if (kind === patch_kind) return 'prs';
 	return undefined;
 }
 

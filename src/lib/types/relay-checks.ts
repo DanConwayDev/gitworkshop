@@ -14,7 +14,7 @@ export interface RelayCheckTimestamp {
 }
 /** relay updates used by processor to create relay huristics */
 
-export type RelayUpdate = RelayUpdateUser | RelayUpdateRepoAnn | RelayUpdatePRIssue;
+export type RelayUpdate = RelayUpdateUser | RelayUpdateRepoAnn | RelayUpdateIssue | RelayUpdatePR;
 
 export type RelayUpdateUser = (RelayUpdateFound | RelayUpdateNotFound | RelayUpdateChecked) & {
 	table: 'pubkeys';
@@ -22,19 +22,19 @@ export type RelayUpdateUser = (RelayUpdateFound | RelayUpdateNotFound | RelayUpd
 export interface RelayUpdateFound extends RelayUpdateBase {
 	type: 'found';
 	created_at: Timestamp;
-	uuid: ARef;
+	uuid: ARef | EventIdString;
 }
 
 export interface RelayUpdateNotFound extends RelayUpdateBase {
 	type: 'not-found';
 	// this includes kind for either metadata or relay list
-	uuid: ARef;
+	uuid: ARef | EventIdString;
 }
 
 export interface RelayUpdateChecked extends RelayUpdateBase {
 	type: 'checked';
 	// this includes kind for either metadata or relay list
-	uuid: ARef;
+	uuid: ARef | EventIdString;
 }
 
 export function isRelayUpdatePubkey(update: RelayUpdate): update is RelayUpdateUser {
@@ -62,15 +62,35 @@ export function isRelayUpdateRepoFound(
 	return isRelayUpdateRepoAnn(update) && update.type === 'found';
 }
 
-export interface RelayUpdatePRIssue extends RelayUpdateBase {
-	table: 'prs' | 'issues';
+export interface RelayUpdateIssue extends RelayUpdateBase {
+	table: 'issues';
 	uuid: EventIdString;
 }
 
-export function isRelayUpdatePRIssue(update: RelayUpdate): update is RelayUpdatePRIssue {
+export function isRelayUpdateIssue(update: RelayUpdate): update is RelayUpdateIssue {
+	return (update as RelayUpdateIssue).table === 'issues';
+}
+
+export function isRelayUpdateIssueFound(
+	update: RelayUpdate
+): update is RelayUpdateFound & RelayUpdateIssue {
+	return isRelayUpdateIssue(update) && update.type === 'found';
+}
+
+export interface RelayUpdatePR extends RelayUpdateBase {
+	table: 'prs';
+	uuid: EventIdString;
+}
+
+export function isRelayUpdatePR(update: RelayUpdate): update is RelayUpdatePR {
+	return (update as RelayUpdatePR).table === 'prs';
+}
+
+export function isRelayUpdatePRIssue(
+	update: RelayUpdate
+): update is RelayUpdateIssue | RelayUpdatePR {
 	return (
-		(update as RelayUpdatePRIssue).table === 'prs' ||
-		(update as RelayUpdatePRIssue).table === 'issues'
+		(update as RelayUpdatePR).table === 'prs' || (update as RelayUpdateIssue).table === 'issues'
 	);
 }
 

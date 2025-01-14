@@ -1,4 +1,3 @@
-import db from '$lib/dbs/LocalDb';
 import {
 	getDefaultHuristicsForRelay,
 	isRelayCheck,
@@ -22,56 +21,32 @@ import { getTagMultiValue, getTagValue, getValueOfEachTagOccurence } from '$lib/
 import { getEventUID, unixNow } from 'applesauce-core/helpers';
 import { nip19, type NostrEvent } from 'nostr-tools';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
-import type { ProcessorRepoUpdate, ProcessorUpdate } from '$lib/types/processor';
+import { isProcessorRepoUpdate, type UpdateProcessor } from '$lib/types/processor';
 
-export async function processRepoAnnUpdates(updates: ProcessorUpdate[]) {
-	const repo_updates = updates.filter(
-		(u) =>
-			!u.event ||
-			u.event.kind === repo_kind ||
-			u.relay_updates.every((ru) => isRelayUpdateRepoAnn(ru))
-	) as ProcessorRepoUpdate[];
-
-	if (repo_updates.length === 0) return;
-
-	const updated_entries = await getAndUpdateRepoTableItemsOrCreateFromEvent(repo_updates);
-
-	if (updated_entries.length === 0) return;
-
-	await db.repos.bulkPut(updated_entries);
-}
-
-/// gets and updates item, creates new item when event provided and no item exists, ignores if no items and no event
-async function getAndUpdateRepoTableItemsOrCreateFromEvent(
-	updates: ProcessorRepoUpdate[]
-): Promise<RepoTableItem[]> {
-	const uuids = updates.map((u) =>
-		u.event ? (getEventUID(u.event) as ARefP) : u.relay_updates[0].uuid
-	);
-	const items = await db.repos.bulkGet(uuids);
-	return updates
-		.map((u) => {
-			const uuid = u.event ? (getEventUID(u.event) as ARefP) : u.relay_updates[0].uuid;
-			const item = items.find((item) => item && item.uuid === uuid);
-			let repo_ann;
-			if (u.event) {
-				repo_ann = eventToRepoAnn(u.event);
-			}
-			if (!item && !repo_ann) return;
-			const updated_item = applyHuristicUpdates(
-				{
-					...(item || {
-						relays_info: {}
-					}),
-					...(repo_ann || {}),
-					last_activity: Math.max(item?.last_activity ?? 0, u.event ? u.event.created_at : 0)
-				} as RepoTableItem,
-				u.relay_updates
-			);
-			return updated_item;
-		})
-		.filter((u) => !!u);
-}
+const processRepoAnnUpdates: UpdateProcessor = (items, updates) => {
+	return updates.filter((u) => {
+		if (!isProcessorRepoUpdate(u)) return true;
+		const uuid = u.event ? (getEventUID(u.event) as ARefP) : u.relay_updates[0].uuid;
+		const item = items.repos.get(uuid);
+		let repo_ann;
+		if (u.event) {
+			repo_ann = eventToRepoAnn(u.event);
+		}
+		if (!item && !repo_ann) return true;
+		const updated_item = applyHuristicUpdates(
+			{
+				...(item || {
+					relays_info: {}
+				}),
+				...(repo_ann || {}),
+				last_activity: Math.max(item?.last_activity ?? 0, u.event ? u.event.created_at : 0)
+			} as RepoTableItem,
+			u.relay_updates
+		);
+		items.repos.set(uuid, updated_item);
+		return false;
+	});
+};
 
 function applyHuristicUpdates(
 	item: RepoTableItem,

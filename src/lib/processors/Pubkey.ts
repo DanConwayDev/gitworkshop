@@ -32,7 +32,7 @@ import {
 } from 'applesauce-core/helpers';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
-import type { ProcessorPubkeyUpdate, ProcessorUpdate } from '$lib/types/processor';
+import { isProcessorPubkeyUpdate, type UpdateProcessor } from '$lib/types/processor';
 
 export async function processNip05(
 	nip05: Nip05AddressStandardized,
@@ -66,40 +66,13 @@ export async function processNip05(
 	await db.pubkeys.bulkPut([...records.filter((r) => r.pubkey !== pubkey), record]);
 }
 
-export async function processPubkeyUpdates(updates: ProcessorUpdate[]) {
-	const pubkey_updates = updates.filter(
-		(u) =>
-			(u.event && [Metadata, RelayList].includes(u.event.kind)) ||
-			u.relay_updates.every((ru) => isRelayUpdatePubkey(ru))
-	) as ProcessorPubkeyUpdate[];
-
-	if (pubkey_updates.length === 0) return;
-
-	const updated_entries = await getAndUpdatePubkeyTableItemsOrCreateFromEvent(pubkey_updates);
-
-	if (updated_entries.length === 0) return;
-
-	await db.pubkeys.bulkPut(updated_entries);
-}
-
-/// gets (or creates) and updates item
-async function getAndUpdatePubkeyTableItemsOrCreateFromEvent(
-	updates: ProcessorPubkeyUpdate[]
-): Promise<PubKeyTableItem[]> {
-	const pubkeys: Set<PubKeyString> = new Set();
-	updates.forEach((u) => {
-		const uuid = u.event ? (getEventUID(u.event) as ARefR) : u.relay_updates[0].uuid;
-		return pubkeys.add(uuid.split(':')[1]);
-	});
-	const items = await db.pubkeys.bulkGet([...pubkeys]);
-	const update_items: Map<PubKeyString, PubKeyTableItem> = new Map();
-	items.forEach((item) => {
-		if (item) update_items.set(item.pubkey, item);
-	});
-	updates.forEach((u) => {
+const processPubkeyUpdates: UpdateProcessor = (items, updates) => {
+	return updates.filter((u) => {
+		if (!isProcessorPubkeyUpdate(u)) return true;
 		const uuid = u.event ? (getEventUID(u.event) as ARefR) : u.relay_updates[0].uuid;
 		const pubkey = uuid.split(':')[1] as PubKeyString;
-		const item = update_items.get(pubkey) || {
+
+		const item = items.pubkeys.get(pubkey) || {
 			...createPubKeyInfo(pubkey),
 			relays_info: {}
 		};
@@ -114,7 +87,7 @@ async function getAndUpdatePubkeyTableItemsOrCreateFromEvent(
 				} catch {
 					/* empty */
 				}
-			} else {
+			} else if (u.event.kind === RelayList) {
 				try {
 					if (!item.relays.stamp || item.relays.stamp.created_at < u.event.created_at)
 						item.relays = {
@@ -128,10 +101,10 @@ async function getAndUpdatePubkeyTableItemsOrCreateFromEvent(
 			}
 		}
 		applyHuristicUpdates(item, u.relay_updates);
-		update_items.set(pubkey, item);
+		items.pubkeys.set(pubkey, item);
+		return false;
 	});
-	return [...update_items.values()];
-}
+};
 
 function applyHuristicUpdates(item: PubKeyTableItem, relay_user_update: RelayUpdateUser[]) {
 	relay_user_update.forEach((update) => {
