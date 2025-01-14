@@ -9,10 +9,10 @@
 		login_function = () => {},
 		singup_function = () => {}
 	}: {
-		logged_in_user: { user_profile_goes_here: boolean } | undefined;
-		nip07_plugin: boolean | undefined;
-		login_function: () => void;
-		singup_function: () => void;
+		logged_in_user?: { user_profile_goes_here: boolean } | undefined;
+		nip07_plugin?: boolean | undefined;
+		login_function?: () => void;
+		singup_function?: () => void;
 	} = $props();
 
 	// this was be an import from users store
