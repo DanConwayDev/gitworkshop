@@ -93,7 +93,7 @@ class QueryCentreExternal {
 						// skip relays just tried
 						!relays_tried.includes(url) &&
 						// and relays checked within 30 seconds
-						(!check_timestamps.last_check || check_timestamps.last_check < unixNow() - 30 * 1000)
+						(!check_timestamps.last_check || check_timestamps.last_check < unixNow() - 30)
 				)
 				// try repo relays + 3 others limited to 6 at each try
 				.slice(0, Math.min((record && record.relays ? record.relays.length : 0) + 3, 6));
