@@ -1,3 +1,4 @@
+import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
 import type { WebSocketUrl, Timestamp, EventIdString, ARef, RepoRef } from '$lib/types';
 
 export interface LastCheck {
@@ -11,10 +12,16 @@ export interface LastCheck {
 export interface RelayCheckTimestamp {
 	last_check: Timestamp | undefined;
 	last_update: Timestamp | undefined;
+	last_child_check: Timestamp | undefined;
 }
 /** relay updates used by processor to create relay huristics */
 
-export type RelayUpdate = RelayUpdateUser | RelayUpdateRepoAnn | RelayUpdateIssue | RelayUpdatePR;
+export type RelayUpdate =
+	| RelayUpdateUser
+	| RelayUpdateRepoAnn
+	| RelayUpdateRepoChildren
+	| RelayUpdateIssue
+	| RelayUpdatePR;
 
 export type RelayUpdateUser = (RelayUpdateFound | RelayUpdateNotFound | RelayUpdateChecked) & {
 	table: 'pubkeys';
@@ -47,13 +54,43 @@ export function isRelayUpdatePubkeyFound(
 	return isRelayUpdatePubkey(update) && update.type === 'found';
 }
 
+export type RelayUpdateRep = RelayUpdateRepoAnn | RelayUpdateRepoChildren;
+
+export function isRelayUpdateRepo(update: RelayUpdate): update is RelayUpdateRep {
+	return (update as RelayUpdateRep).table === 'repos';
+}
+
 export type RelayUpdateRepoAnn = (RelayUpdateFound | RelayUpdateNotFound | RelayUpdateChecked) & {
 	table: 'repos';
 	uuid: RepoRef;
+	kinds: [30617];
 };
 
 export function isRelayUpdateRepoAnn(update: RelayUpdate): update is RelayUpdateRepoAnn {
-	return (update as RelayUpdateRepoAnn).table === 'repos';
+	return (
+		(update as RelayUpdateRepoAnn).table === 'repos' &&
+		(update as RelayUpdateRepoAnn).kinds.length === 1 &&
+		(update as RelayUpdateRepoAnn).kinds[0] == repo_kind
+	);
+}
+
+export type RelayUpdateRepoChildren = (
+	| RelayUpdateFound
+	| RelayUpdateNotFound
+	| RelayUpdateChecked
+) & {
+	table: 'repos';
+	uuid: RepoRef;
+	kinds: [1617, 1621];
+};
+
+export function isRelayUpdateRepoChildren(update: RelayUpdate): update is RelayUpdateRepoChildren {
+	return (
+		(update as RelayUpdateRepoChildren).table === 'repos' &&
+		(update as RelayUpdateRepoChildren).kinds.length === 2 &&
+		(update as RelayUpdateRepoChildren).kinds.includes(patch_kind) &&
+		(update as RelayUpdateRepoChildren).kinds.includes(issue_kind)
+	);
 }
 
 export function isRelayUpdateRepoFound(
@@ -98,4 +135,5 @@ interface RelayUpdateBase {
 	type: 'found' | 'checked' | 'not-found';
 	url: WebSocketUrl;
 	uuid: ARef | EventIdString;
+	kinds: number[];
 }

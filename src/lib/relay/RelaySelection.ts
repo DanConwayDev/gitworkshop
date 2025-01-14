@@ -13,6 +13,7 @@ import {
 } from '$lib/types';
 import { base_relays } from '$lib/query-centre/QueryCentreExternal';
 import { unixNow } from 'applesauce-core/helpers';
+import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
 
 export const chooseRelaysForAllRepos = async () => {
 	// TODO: expand this to more relays and fetch for different relays each time
@@ -48,7 +49,7 @@ export const calculateRelayScore = (
 	// boost or penalise based on historic checks
 	const checks = huristics
 		.filter(isRelayCheck)
-		.filter((h) => kinds.includes(h.kind))
+		.filter((h) => kinds.some((k) => h.kinds.includes(k)))
 		.sort((a, b) => a.timestamp - b.timestamp);
 	let boost;
 	if (checks[0]) {
@@ -102,7 +103,11 @@ export const chooseRelaysForPubkey = async (
 	if (!record)
 		return base_relays.map((url) => ({
 			url,
-			check_timestamps: { last_check: undefined, last_update: undefined }
+			check_timestamps: {
+				last_check: undefined,
+				last_child_check: undefined,
+				last_update: undefined
+			}
 		}));
 
 	const scored_relays = (Object.keys(record.relays_info) as WebSocketUrl[]).sort((a, b) => {
@@ -121,7 +126,8 @@ export const chooseRelaysForPubkey = async (
 				record.relays_info[url]?.huristics.reduce(
 					(max, h) => (isRelayCheck(h) ? Math.max(max ?? 0, h.timestamp) : max),
 					undefined as number | undefined
-				) ?? undefined
+				) ?? undefined,
+			last_child_check: undefined
 		}
 	}));
 };
@@ -137,7 +143,11 @@ export const chooseRelaysForRepo = async (
 	if (!record)
 		return base_relays.map((url) => ({
 			url,
-			check_timestamps: { last_check: undefined, last_update: undefined }
+			check_timestamps: {
+				last_check: undefined,
+				last_child_check: undefined,
+				last_update: undefined
+			}
 		}));
 
 	const scored_relays = (Object.keys(record.relays_info) as WebSocketUrl[]).sort((a, b) => {
@@ -161,7 +171,16 @@ export const repoTableItemToRelayCheckTimestamp = (
 	last_update: record.last_activity ?? undefined,
 	last_check:
 		record.relays_info[relay_url]?.huristics.reduce(
-			(max, h) => (isRelayCheck(h) ? Math.max(max ?? 0, h.timestamp) : max),
+			(max, h) =>
+				isRelayCheck(h) && h.kinds.includes(repo_kind) ? Math.max(max ?? 0, h.timestamp) : max,
+			undefined as number | undefined
+		) ?? undefined,
+	last_child_check:
+		record.relays_info[relay_url]?.huristics.reduce(
+			(max, h) =>
+				isRelayCheck(h) && h.kinds.includes(issue_kind) && h.kinds.includes(patch_kind)
+					? Math.max(max ?? 0, h.timestamp)
+					: max,
 			undefined as number | undefined
 		) ?? undefined
 });

@@ -22,7 +22,7 @@ import type {
 import { getRepoRefs } from '$lib/utils';
 import db from '$lib/dbs/LocalDb';
 import { getRepoRef } from '$lib/type-helpers/repo';
-import processRepoAnnUpdates from './RepoAnn';
+import processRepoUpdates from './Repo';
 import processIssueUpdates from './Issue';
 
 class Processor {
@@ -159,7 +159,7 @@ class Processor {
 async function processUpdates(updates: ProcessorUpdate[]): Promise<ProcessorUpdate[]> {
 	const items = await getExistingItemsToUpdate(updates);
 	let remaining_updates = updates;
-	[processPubkey, processRepoAnnUpdates, processIssueUpdates].forEach((processor_fn) => {
+	[processPubkey, processRepoUpdates, processIssueUpdates].forEach((processor_fn) => {
 		remaining_updates = processor_fn(items, remaining_updates);
 	});
 	await Promise.all([

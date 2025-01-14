@@ -82,7 +82,7 @@ export interface RelayCheckWithSince extends RelayCheckBase {
 
 export interface RelayCheckBase {
 	timestamp: Timestamp;
-	kind: number;
+	kinds: [number];
 	up_to_date: boolean;
 }
 

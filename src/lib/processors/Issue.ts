@@ -110,7 +110,7 @@ function applyHuristicUpdates(
 		const base = {
 			type: update.type,
 			timestamp: unixNow(),
-			kind: Number(update.uuid.split(':')[0]),
+			kinds: update.kinds,
 			up_to_date: !!created_at_on_relays && created_at_on_relays === item.created_at
 		};
 		const relay_check: RelayCheck = isRelayUpdateIssueFound(update)
@@ -138,7 +138,10 @@ function processHuristic(
 	relay_info.huristics = [
 		// remove any older huristics with same indicators
 		...relay_info.huristics.filter(
-			(v) => !isRelayCheck(v) || v.type !== relay_check.type || relay_check.kind !== v.kind
+			(v) =>
+				!isRelayCheck(v) ||
+				v.type !== relay_check.type ||
+				relay_check.kinds.join() !== v.kinds.join()
 		),
 		relay_check
 	];

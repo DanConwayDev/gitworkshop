@@ -121,7 +121,7 @@ function applyHuristicUpdates(item: PubKeyTableItem, relay_user_update: RelayUpd
 		const base = {
 			type: update.type,
 			timestamp: unixNow(),
-			kind: Number(update.uuid.split(':')[0]),
+			kinds: update.kinds,
 			up_to_date:
 				!!created_at_on_relays &&
 				!!item[property].stamp &&
@@ -152,7 +152,9 @@ function processHuristic(
 		// remove any older huristics with same indicators
 		...relay_info.huristics.filter((v) => {
 			if (isRelayCheck(huristic))
-				return !isRelayCheck(v) || v.type !== huristic.type || huristic.kind !== v.kind;
+				return (
+					!isRelayCheck(v) || v.type !== huristic.type || huristic.kinds.join() !== v.kinds.join()
+				);
 			if (isRelayHintFromNip05(huristic)) return false;
 			return true;
 		}),

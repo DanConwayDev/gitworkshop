@@ -2,7 +2,7 @@ import {
 	getDefaultHuristicsForRelay,
 	isRelayCheck,
 	isRelayCheckFound,
-	isRelayUpdateRepoAnn,
+	isRelayUpdateRepo,
 	isRelayUpdateRepoFound,
 	type RepoAnn
 } from '$lib/types';
@@ -13,7 +13,7 @@ import type {
 	RelayCheck,
 	RelayCheckFound,
 	RelayUpdateFound,
-	RelayUpdateRepoAnn,
+	RelayUpdateRep,
 	RepoAnnBaseFields,
 	RepoTableItem
 } from '$lib/types';
@@ -23,7 +23,7 @@ import { nip19, type NostrEvent } from 'nostr-tools';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
 import { isProcessorRepoUpdate, type UpdateProcessor } from '$lib/types/processor';
 
-const processRepoAnnUpdates: UpdateProcessor = (items, updates) => {
+const processRepoUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
 		if (!isProcessorRepoUpdate(u)) return true;
 		const uuid = u.event ? (getEventUID(u.event) as ARefP) : u.relay_updates[0].uuid;
@@ -50,10 +50,10 @@ const processRepoAnnUpdates: UpdateProcessor = (items, updates) => {
 
 function applyHuristicUpdates(
 	item: RepoTableItem,
-	relay_ann_updates: RelayUpdateRepoAnn[]
+	relay_ann_updates: RelayUpdateRep[]
 ): RepoTableItem {
 	relay_ann_updates.forEach((update) => {
-		if (!isRelayUpdateRepoAnn(update)) return;
+		if (!isRelayUpdateRepo(update)) return;
 		if (!item.relays_info[update.url])
 			item.relays_info[update.url] = {
 				...getDefaultHuristicsForRelay()
@@ -64,7 +64,7 @@ function applyHuristicUpdates(
 		const base = {
 			type: update.type,
 			timestamp: unixNow(),
-			kind: Number(update.uuid.split(':')[0]),
+			kinds: update.kinds,
 			up_to_date: !!created_at_on_relays && created_at_on_relays === item.created_at
 		};
 		const relay_check: RelayCheck =
@@ -92,7 +92,10 @@ function processHuristic(
 	relay_info.huristics = [
 		// remove any older huristics with same indicators
 		...relay_info.huristics.filter(
-			(v) => !isRelayCheck(v) || v.type !== relay_check.type || relay_check.kind !== v.kind
+			(v) =>
+				!isRelayCheck(v) ||
+				v.type !== relay_check.type ||
+				relay_check.kinds.join('') !== v.kinds.join('')
 		),
 		relay_check
 	];
@@ -156,4 +159,4 @@ export const eventToRepoAnn = (event: NostrEvent): RepoAnn | undefined => {
 	};
 };
 
-export default processRepoAnnUpdates;
+export default processRepoUpdates;

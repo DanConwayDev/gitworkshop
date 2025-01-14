@@ -107,7 +107,7 @@ export const createRepoChildrenFilters = (
 	const sinces = new Map<number, RepoRef[]>();
 	const filters: Filter[] = [];
 	items.forEach((t, a_ref) => {
-		const since = t.last_check ? t.last_check - replication_delay : 0;
+		const since = t.last_child_check ? t.last_child_check - replication_delay : 0;
 		const map_item = sinces.get(since) || [];
 		map_item.push(a_ref);
 		sinces.set(since, map_item);

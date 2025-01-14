@@ -8,7 +8,9 @@ import type {
 	RelayCheckTimestamp,
 	RelayUpdate,
 	ARefR,
-	RepoRef
+	RepoRef,
+	RelayUpdateRepoAnn,
+	RelayUpdateRepoChildren
 } from '$lib/types';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import type Processor from '$lib/processors/Processor';
@@ -155,6 +157,7 @@ export class RelayManager {
 						this.processor.enqueueRelayUpdate({
 							type: 'found',
 							uuid: getEventUID(event) as ARefR,
+							kinds: [event.kind],
 							created_at: event.created_at,
 							table: 'pubkeys',
 							url: this.url
@@ -177,6 +180,7 @@ export class RelayManager {
 							this.processor.enqueueRelayUpdate({
 								type: 'checked',
 								uuid: `${Metadata}:${pubkey}` as ARefR,
+								kinds: [Metadata],
 								table: 'pubkeys',
 								url: this.url
 							});
@@ -185,6 +189,7 @@ export class RelayManager {
 								this.processor.enqueueRelayUpdate({
 									type: 'not-found',
 									uuid: `${Metadata}:${pubkey}` as ARefR,
+									kinds: [Metadata],
 									table: 'pubkeys',
 									url: this.url
 								});
@@ -193,6 +198,7 @@ export class RelayManager {
 								this.processor.enqueueRelayUpdate({
 									type: 'not-found',
 									uuid: `${RelayList}:${pubkey}` as ARefR,
+									kinds: [RelayList],
 									table: 'pubkeys',
 									url: this.url
 								});
@@ -262,10 +268,11 @@ export class RelayManager {
 				this.processor.enqueueRelayUpdate({
 					type: 'found',
 					uuid: repo_ref,
+					kinds: [event.kind],
 					created_at: event.created_at,
 					table: 'repos',
 					url: this.url
-				});
+				} as RelayUpdateRepoAnn);
 				this.processor.enqueueEvent(event);
 				found_a_ref.add(repo_ref);
 			} else if (event.kind === issue_kind || event.kind === patch_kind) {
@@ -273,6 +280,7 @@ export class RelayManager {
 				this.processor.enqueueRelayUpdate({
 					type: 'found',
 					uuid: event.id,
+					kinds: [event.kind],
 					table: event.kind === issue_kind ? 'issues' : 'prs',
 					url: this.url
 				});
@@ -288,21 +296,30 @@ export class RelayManager {
 			sub.close();
 			this.resetInactivityTimer();
 			for (const a_ref of searched_a_refs) {
+				this.processor.enqueueRelayUpdate({
+					type: 'checked',
+					uuid: a_ref,
+					table: 'repos',
+					kinds: [patch_kind, issue_kind],
+					url: this.url
+				} as RelayUpdateRepoChildren);
 				if (filters.some((f) => f['#d'] && f['#d'].includes(a_ref) && !f.since)) {
 					this.processor.enqueueRelayUpdate({
 						type: 'checked',
 						uuid: a_ref,
+						kinds: [repo_kind],
 						table: 'repos',
 						url: this.url
-					});
+					} as RelayUpdateRepoAnn);
 				} else {
 					if (!found_a_ref.has(a_ref)) {
 						this.processor.enqueueRelayUpdate({
 							type: 'not-found',
 							uuid: a_ref,
+							kinds: [repo_kind],
 							table: 'repos',
 							url: this.url
-						});
+						} as RelayUpdateRepoAnn);
 					}
 				}
 			}

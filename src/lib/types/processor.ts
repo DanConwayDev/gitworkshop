@@ -2,7 +2,7 @@ import type { NostrEvent } from 'nostr-tools';
 import {
 	isRelayUpdateIssue,
 	isRelayUpdatePubkey,
-	isRelayUpdateRepoAnn,
+	isRelayUpdateRepo,
 	type RelayUpdate,
 	type RelayUpdateIssue,
 	type RelayUpdateRepoAnn,
@@ -44,8 +44,7 @@ export interface ProcessorRepoUpdate {
 }
 
 export const isProcessorRepoUpdate = (u: ProcessorUpdate): u is ProcessorRepoUpdate =>
-	(u.event && u.event.kind === repo_kind) ||
-	u.relay_updates.every((ru) => isRelayUpdateRepoAnn(ru));
+	(u.event && u.event.kind === repo_kind) || u.relay_updates.every((ru) => isRelayUpdateRepo(ru));
 
 export interface ProcessorPubkeyUpdate {
 	event: (NostrEvent & { kind: Metadata | RelayList }) | undefined;
