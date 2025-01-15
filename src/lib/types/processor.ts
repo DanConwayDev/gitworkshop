@@ -1,10 +1,12 @@
 import type { NostrEvent } from 'nostr-tools';
 import {
 	isRelayUpdateIssue,
+	isRelayUpdatePR,
 	isRelayUpdatePubkey,
 	isRelayUpdateRepo,
 	type RelayUpdate,
 	type RelayUpdateIssue,
+	type RelayUpdatePR,
 	type RelayUpdateRepoAnn,
 	type RelayUpdateUser
 } from './relay-checks';
@@ -13,6 +15,7 @@ import type { RepoRef } from './git';
 import type { EventIdString, PubKeyString } from './general';
 import type { IssueOrPRTableItem, PubKeyTableItem, RepoTableItem } from './tables';
 import { issue_kind, repo_kind } from '$lib/kinds';
+import { eventIsPrRoot } from '$lib/utils';
 
 export type UpdateProcessor = (
 	existing_items: DbItemsCollection,
@@ -61,3 +64,11 @@ export interface ProcessorIssueUpdate {
 
 export const isProcessorIssueUpdate = (u: ProcessorUpdate): u is ProcessorIssueUpdate =>
 	(u.event && u.event.kind === issue_kind) || u.relay_updates.every((ru) => isRelayUpdateIssue(ru));
+
+export interface ProcessorPrUpdate {
+	event: (NostrEvent & { kind: 1617 }) | undefined;
+	relay_updates: RelayUpdatePR[];
+}
+
+export const isProcessorPrUpdate = (u: ProcessorUpdate): u is ProcessorPrUpdate =>
+	(u.event && eventIsPrRoot(u.event)) || u.relay_updates.every((ru) => isRelayUpdatePR(ru));

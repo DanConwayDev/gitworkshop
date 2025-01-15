@@ -6,7 +6,6 @@ import type {
 	PubKeyString,
 	WebSocketUrl,
 	RelayCheckTimestamp,
-	RelayUpdate,
 	ARefR,
 	RepoRef,
 	RelayUpdateRepoAnn,
@@ -15,7 +14,7 @@ import type {
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import type Processor from '$lib/processors/Processor';
 import { eventKindToTable } from '$lib/processors/Processor';
-import { getRepoRefs } from '$lib/utils';
+import { eventIsPrRoot, getRepoRefs } from '$lib/utils';
 import type { Subscription } from 'nostr-tools/abstract-relay';
 import { repoTableItemToRelayCheckTimestamp } from './RelaySelection';
 import {
@@ -91,10 +90,11 @@ export class RelayManager {
 							this.processor.enqueueRelayUpdate({
 								type: 'found',
 								uuid: getEventUID(event),
+								kinds: [event.kind],
 								created_at: event.created_at,
 								table,
 								url: this.url
-							} as RelayUpdate);
+							} as RelayUpdateRepoAnn);
 						}
 						this.processor.enqueueEvent(event);
 					},
@@ -275,7 +275,7 @@ export class RelayManager {
 				} as RelayUpdateRepoAnn);
 				this.processor.enqueueEvent(event);
 				found_a_ref.add(repo_ref);
-			} else if (event.kind === issue_kind || event.kind === patch_kind) {
+			} else if (event.kind === issue_kind || eventIsPrRoot(event)) {
 				addSeenRelay(event, this.url);
 				this.processor.enqueueRelayUpdate({
 					type: 'found',

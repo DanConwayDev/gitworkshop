@@ -123,6 +123,11 @@ export function isRelayUpdatePR(update: RelayUpdate): update is RelayUpdatePR {
 	return (update as RelayUpdatePR).table === 'prs';
 }
 
+export function isRelayUpdatePRFound(
+	update: RelayUpdate
+): update is RelayUpdateFound & RelayUpdatePR {
+	return isRelayUpdatePR(update) && update.type === 'found';
+}
 export function isRelayUpdatePRIssue(
 	update: RelayUpdate
 ): update is RelayUpdateIssue | RelayUpdatePR {

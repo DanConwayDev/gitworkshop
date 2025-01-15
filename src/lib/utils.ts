@@ -1,7 +1,7 @@
 import { nip19, type NostrEvent } from 'nostr-tools';
 import { isRepoRef, type ARef, type ARefP, type EventIdString, type RepoRef } from './types';
 import type { AddressPointer } from 'nostr-tools/nip19';
-import { repo_kind } from './kinds';
+import { patch_kind, repo_kind } from './kinds';
 
 // get value of first occurance of tag
 export function getTagValue(tags: string[][], name: string): string | undefined {
@@ -111,3 +111,11 @@ export const getRepoRefs = (event: NostrEvent): RepoRef[] =>
 	event.tags
 		.filter((t) => t[0] && t[0] === 'a' && t[1] && isRepoRef(t[1]))
 		.map((t) => t[1]) as RepoRef[];
+
+export const eventIsPrRoot = (event: NostrEvent): event is NostrEvent & { kind: 1621 } => {
+	const hashtags = getValueOfEachTagOccurence(event.tags, 't');
+	return (
+		event.kind == patch_kind && hashtags.includes('root') && !hashtags.includes('revision-root')
+	);
+	/// TODO root and revisions root
+};

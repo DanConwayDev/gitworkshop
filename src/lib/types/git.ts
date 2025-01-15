@@ -49,3 +49,5 @@ export interface IssueOrPrBase {
 }
 
 export interface Issue extends NonReplaceableEventAttribution, IssueOrPrBase {}
+
+export interface Pr extends NonReplaceableEventAttribution, IssueOrPrBase {}
