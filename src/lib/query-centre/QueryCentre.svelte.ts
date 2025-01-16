@@ -38,7 +38,7 @@ class QueryCentre {
 		return liveQueryState(() => db.repos.toArray());
 	}
 
-	fetchRepo(a_ref: RepoRef | string) {
+	fetchRepo(a_ref: RepoRef | string | undefined) {
 		let loading = $state(isRepoRef(a_ref));
 		if (isRepoRef(a_ref)) {
 			const handler = (msg: MessageEvent<WorkerMsg>) => {
@@ -53,9 +53,11 @@ class QueryCentre {
 		// if a_ref its not RepoRef it we will just return the undefined
 		return liveQueryState(
 			async () => {
-				const r = await db.repos.get(a_ref as RepoRef);
-				if (r) return { ...r, loading };
-				else return undefined;
+				if (isRepoRef(a_ref)) {
+					const r = await db.repos.get(a_ref as RepoRef);
+					if (r) return { ...r, loading };
+					else return undefined;
+				} else return undefined;
 			},
 			() => [loading]
 		);
@@ -104,12 +106,9 @@ class QueryCentre {
 		// if a_ref its not RepoRef it we will just return the undefined
 		return liveQueryState(
 			async () => {
-				const r = await db.pubkeys
-					.where('verified_nip05.address')
-					.equals(standardized_nip05)
-					.first();
-				if (r) return { ...r, loading };
-				else return undefined;
+				const r = await db.pubkeys.where('verified_nip05').equals(standardized_nip05).first();
+				if (r) return { user: r, loading };
+				else return { user: undefined, loading };
 			},
 			() => [loading]
 		);

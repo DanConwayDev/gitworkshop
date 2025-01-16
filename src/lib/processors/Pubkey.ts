@@ -39,9 +39,9 @@ export async function processNip05(
 	pubkey: PubKeyString,
 	relays: string[] = []
 ) {
-	const records = await db.pubkeys.where('verified_nip05.address').equals(nip05).toArray();
+	const records = await db.pubkeys.where('verified_nip05').equals(nip05).toArray();
 	records.forEach((record) => {
-		record.verified_nip05 = record.verified_nip05.filter((c) => c.address !== nip05);
+		record.verified_nip05 = record.verified_nip05.filter((c) => c !== nip05);
 	});
 	const record = records.find((r) => r.pubkey === pubkey) ||
 		(await db.pubkeys.get(pubkey)) || {
@@ -50,11 +50,8 @@ export async function processNip05(
 			verified_nip05: []
 		};
 	const valid_relays = relays.filter(isWebSocketUrl);
-	record.verified_nip05.push({
-		address: nip05,
-		timestamp: unixNow(),
-		relays: valid_relays
-	});
+	record.verified_nip05.push(nip05);
+	record.nip05_relays = [...valid_relays];
 	valid_relays.forEach((relay) => {
 		const hint: RelayHintFromNip05 = { timestamp: unixNow() };
 		if (!record.relays_info[relay])

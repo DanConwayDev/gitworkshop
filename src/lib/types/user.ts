@@ -29,17 +29,13 @@ export interface PubKeyRelayInfo {
 	stamp: PubkeyEventStamp | undefined;
 }
 
-export interface Nip05Check {
-	address: Nip05AddressStandardized;
-	timestamp: Timestamp;
-	relays: WebSocketUrl[];
-}
 export interface PubKeyInfo {
 	pubkey: PubKeyString;
 	npub: Npub | Nip05AddressStandardized | 'InvalidHexPubKey';
 	metadata: PubKeyMetadataInfo;
 	relays: PubKeyRelayInfo;
-	verified_nip05: Nip05Check[];
+	verified_nip05: Nip05AddressStandardized[];
+	nip05_relays: WebSocketUrl[];
 }
 
 export const createPubKeyInfo = (input: PubKeyString | Nip05AddressStandardized): PubKeyInfo => {
@@ -59,7 +55,8 @@ export const createPubKeyInfo = (input: PubKeyString | Nip05AddressStandardized)
 			write: [],
 			stamp: undefined
 		},
-		verified_nip05: []
+		verified_nip05: [],
+		nip05_relays: []
 	};
 };
 

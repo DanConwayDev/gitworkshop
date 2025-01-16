@@ -7,7 +7,7 @@ db.version(1).stores({
 	repos: '&uuid, identifier, author, *searchWords',
 	issues: '&uuid, parent_ids',
 	prs: '&uuid, parent_ids',
-	pubkeys: '&pubkey, verified_nip05.address',
+	pubkeys: '&pubkey, *verified_nip05',
 	last_checks: '&url_and_query'
 });
 

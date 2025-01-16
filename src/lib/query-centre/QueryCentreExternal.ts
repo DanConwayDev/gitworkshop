@@ -156,8 +156,8 @@ class QueryCentreExternal {
 		if (pointer) {
 			this.processor.enqueueNip05(nip05, pointer.pubkey, pointer.relays);
 			await this.fetchPubkeyName(pointer.pubkey);
-			self.postMessage(workerMessageFetchedNip05(nip05));
 		}
+		self.postMessage(workerMessageFetchedNip05(nip05));
 	}
 }
 
