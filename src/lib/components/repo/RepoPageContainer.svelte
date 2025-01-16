@@ -10,8 +10,9 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import OfflineBanner from '../OfflineBanner.svelte';
+	import type { Snippet } from 'svelte';
 
-	let { a_ref }: { a_ref: RepoRef } = $props();
+	let { a_ref, children }: { a_ref: RepoRef; children: Snippet } = $props();
 	let record_query = query_centre.fetchRepo(a_ref);
 	let repo = $derived(record_query.current ?? repoTableItemDefaults(a_ref));
 
@@ -34,7 +35,7 @@
 				<RelayCheckReport item={repo} />
 			{/if}
 		{:else}
-			<h1>{repo.identifier}</h1>
+			{@render children?.()}
 		{/if}
 	</Container>
 {/if}

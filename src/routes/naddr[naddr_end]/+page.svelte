@@ -1,13 +1,9 @@
 <script lang="ts">
-	import RepoPage from '$lib/components/repo/RepoPageContainer.svelte';
-	import { naddrToRepoA } from '$lib/utils';
+	import type { RepoRef } from '$lib/types';
 
-	export let data: { repo_naddr: string };
-	let repo_naddr = data.repo_naddr;
+	let { data }: { data: { a_ref: RepoRef } } = $props();
 
-	let a_ref = naddrToRepoA(repo_naddr);
+	let { a_ref } = data;
 </script>
 
-{#if a_ref}
-	<RepoPage {a_ref} />
-{/if}
+<div>REPO HOMPAGE PLACHOLDER {a_ref}</div>

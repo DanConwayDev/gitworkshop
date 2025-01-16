@@ -56,10 +56,14 @@ export function aToAddressPointerAndARef(a: ARefP | AddressPointer):
 }
 
 export const naddrToPointer = (s: string): AddressPointer | undefined => {
-	const decoded = nip19.decode(s);
-	if (typeof decoded.data === 'string' || !Object.keys(decoded.data).includes('identifier'))
+	try {
+		const decoded = nip19.decode(s);
+		if ('identifier' in (decoded.data as AddressPointer)) {
+			return decoded.data as AddressPointer;
+		}
+	} catch {
 		return undefined;
-	return decoded.data as AddressPointer;
+	}
 };
 
 export const aRefPToAddressPointer = (
