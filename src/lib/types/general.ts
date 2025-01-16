@@ -1,4 +1,5 @@
 import { isHexKey, safeRelayUrl } from 'applesauce-core/helpers';
+import { nip19 } from 'nostr-tools';
 
 /** general nostr / helper */
 export type WebSocketUrl = `wss://${string}` | `ws://${string}`;
@@ -14,6 +15,16 @@ export const isPubkeyString = (s: string): s is PubKeyString => {
 };
 
 export type Npub = `npub1${string}`;
+
+export const isNpub = (s: unknown): s is Naddr => {
+	try {
+		if (nip19.decode(s as string).type === 'npub') return true;
+	} catch {
+		/* empty */
+	}
+	return false;
+};
+
 export type Naddr = `naddr1${string}`;
 export type Timestamp = number;
 export type Kind = number;
