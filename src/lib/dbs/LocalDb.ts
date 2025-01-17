@@ -5,8 +5,8 @@ const db = new Dexie('localdb') as Dexie & LocalDbSchema;
 
 db.version(1).stores({
 	repos: '&uuid, identifier, author, *searchWords',
-	issues: '&uuid, parent_ids',
-	prs: '&uuid, parent_ids',
+	issues: '&uuid, parent_ids, *repos',
+	prs: '&uuid, parent_ids, *repos',
 	pubkeys: '&pubkey, *verified_nip05',
 	last_checks: '&url_and_query'
 });

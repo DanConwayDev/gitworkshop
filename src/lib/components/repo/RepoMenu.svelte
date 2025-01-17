@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { issue_icon_path } from '$lib/components/issues/icons';
-	import { proposal_icon_path as pr_icon_path } from '$lib/components/prs/icons';
+	import { pr_icon_path as pr_icon_path } from '$lib/components/prs/icons';
 	import { network_status } from '$lib/internal_states.svelte';
 	import { IssueOrPrStatus, type RepoRoute, type RepoTableItem } from '$lib/types';
 	import type { RepoPage, WithLoading } from '$lib/types/ui';

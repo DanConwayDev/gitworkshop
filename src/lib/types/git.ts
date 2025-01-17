@@ -45,7 +45,7 @@ export interface IssueOrPrBase {
 	description: string;
 	status: IssueOrPrStatus;
 	tags: string[];
-	repos: ARefP[];
+	repos: RepoRef[];
 }
 
 export interface Issue extends NonReplaceableEventAttribution, IssueOrPrBase {}

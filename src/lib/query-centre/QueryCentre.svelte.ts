@@ -71,6 +71,10 @@ class QueryCentre {
 		);
 	}
 
+	fetchIssues(a_ref: RepoRef) {
+		return liveQueryState(() => db.issues.where('repos').equals(a_ref).toArray());
+	}
+
 	fetchPubkeyName(pubkey: PubKeyString) {
 		let loading = $state(true);
 		const handler = (msg: MessageEvent<WorkerMsg>) => {
