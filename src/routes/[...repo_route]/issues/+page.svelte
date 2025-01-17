@@ -1,5 +1,5 @@
 <script lang="ts">
-	import PrOrIssueList from '$lib/components/prs-or-issues/PrOrIssueList.svelte';
+	import PrOrIssueByStatus from '$lib/components/prs-or-issues/PrOrIssueByStatus.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import type { RepoRoute, RepoRef } from '$lib/types';
 	import { repoRouteToARef } from '$lib/utils';
@@ -16,8 +16,4 @@
 	let issues = $derived(issues_query?.current ?? []);
 </script>
 
-<div>issues page {a_ref}</div>
-<PrOrIssueList type="issue" table_items={issues} {repo_route} />
-{#each issues as issue}
-	<div>{issue.title}</div>
-{/each}
+<PrOrIssueByStatus type="issue" table_items={issues} {repo_route} />
