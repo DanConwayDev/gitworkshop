@@ -4,6 +4,9 @@ export interface WithRelaysInfo {
 	relays_info: RelaysInfo;
 }
 
+export const isWithRelaysInfo = (e?: unknown): e is WithRelaysInfo =>
+	!!e && typeof e === 'object' && 'relays_info' in e;
+
 export type RelaysInfo = {
 	[url in WebSocketUrl]: HuristicsForRelay;
 };

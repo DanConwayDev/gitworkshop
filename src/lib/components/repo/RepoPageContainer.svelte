@@ -12,7 +12,11 @@
 	import OfflineBanner from '../OfflineBanner.svelte';
 	import type { Snippet } from 'svelte';
 
-	let { a_ref, children }: { a_ref: RepoRef | undefined; children: Snippet } = $props();
+	let {
+		a_ref,
+		identifier,
+		children
+	}: { a_ref: RepoRef | undefined; identifier?: string; children: Snippet } = $props();
 	let record_query = query_centre.fetchRepo(a_ref);
 	let repo = $derived(record_query.current ?? (a_ref ? repoTableItemDefaults(a_ref) : undefined));
 
@@ -26,7 +30,7 @@
 {#if repo && network_status.offline}
 	<OfflineBanner msg={`repository data last refreshed ${getLastSuccessfulCheckTimeAgo(repo)}`} />
 {/if}
-<RepoHeader {repo}></RepoHeader>
+<RepoHeader {repo} {identifier}></RepoHeader>
 <Container>
 	{#if repo}
 		{#if !repo.created_at}

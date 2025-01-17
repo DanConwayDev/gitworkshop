@@ -17,7 +17,7 @@
 	);
 </script>
 
-<RepoPage {a_ref}>
+<RepoPage {a_ref} identifier={data.identifier}>
 	{@render children?.()}
 </RepoPage>
 {#if !a_ref}

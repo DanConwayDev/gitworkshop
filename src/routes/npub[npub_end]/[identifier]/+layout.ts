@@ -11,6 +11,7 @@ export const load = ({ params }: { params: { npub_end: string; identifier: strin
 		}
 	}
 	return {
-		a_ref
+		a_ref,
+		identifier: params.identifier
 	};
 };

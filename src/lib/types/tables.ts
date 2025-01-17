@@ -9,7 +9,8 @@ import {
 	isARefP,
 	type RepoRef,
 	type Issue,
-	type LastCheck
+	type LastCheck,
+	isWithRelaysInfo
 } from '$lib/types';
 import { aRefPToAddressPointer } from '$lib/utils';
 import type { EntityTable } from 'dexie';
@@ -40,6 +41,13 @@ export interface RepoTableItem extends LastActivity, WithRelaysInfo, Partial<Rep
 	/// auto updated using dexie hooks
 	searchWords: string[];
 }
+
+export const isRepoTableItem = (repo?: unknown): repo is RepoTableItem =>
+	isWithRelaysInfo(repo) &&
+	'uuid' in repo &&
+	'identifier' in repo &&
+	'author' in repo &&
+	'issues' in repo;
 
 export function repoTableItemDefaults(a_ref: ARefP | string): RepoTableItem & WithLoading {
 	const isP = isARefP(a_ref);
