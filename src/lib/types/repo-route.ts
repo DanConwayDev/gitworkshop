@@ -45,7 +45,7 @@ export const isRepoRouteString = (s: string | undefined): s is RepoRouteString =
 	return isNip05(split[0]) || isNpub(split[0]);
 };
 
-export const extractRepoRoute = (s: RepoRouteString): RepoRoute | undefined => {
+export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 	if (!s) return undefined;
 	if (isNaddr(s)) {
 		return {
