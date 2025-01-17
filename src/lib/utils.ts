@@ -1,5 +1,13 @@
 import { nip19, type NostrEvent } from 'nostr-tools';
-import { isRepoRef, type ARef, type ARefP, type EventIdString, type RepoRef } from './types';
+import {
+	isRepoRef,
+	type ARef,
+	type ARefP,
+	type EventIdString,
+	type PubKeyString,
+	type RepoRef,
+	type RepoRoute
+} from './types';
 import type { AddressPointer } from 'nostr-tools/nip19';
 import { patch_kind, repo_kind } from './kinds';
 
@@ -64,6 +72,18 @@ export const naddrToPointer = (s: string): AddressPointer | undefined => {
 	} catch {
 		return undefined;
 	}
+};
+
+export const repoRouteToARef = (
+	repo_route: RepoRoute,
+	nip05_result?: { user?: { pubkey: PubKeyString } }
+): RepoRef | undefined => {
+	if (repo_route.type === 'nip05') {
+		return nip05_result && nip05_result.user
+			? (`${repo_kind}:${nip05_result.user.pubkey}:${repo_route.identifier}` as RepoRef)
+			: undefined;
+	}
+	return `${repo_kind}:${repo_route.pubkey}:${repo_route.identifier}` as RepoRef;
 };
 
 export const aRefPToAddressPointer = (

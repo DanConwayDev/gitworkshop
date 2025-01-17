@@ -16,21 +16,14 @@
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import OfflineBanner from '../OfflineBanner.svelte';
 	import type { Snippet } from 'svelte';
-	import { repo_kind } from '$lib/kinds';
+	import { repoRouteToARef } from '$lib/utils';
 
 	let { repo_route, children }: { repo_route: RepoRoute; children: Snippet } = $props();
 
 	let nip05_query =
 		repo_route.type === 'nip05' ? query_centre.fetchNip05(repo_route.nip05) : undefined;
 	let nip05_result = $derived(nip05_query ? nip05_query.current : undefined);
-	let a_ref: RepoRef | undefined = $derived.by(() => {
-		if (repo_route.type === 'nip05') {
-			return nip05_result && nip05_result.user
-				? (`${repo_kind}:${nip05_result.user.pubkey}:${repo_route.identifier}` as RepoRef)
-				: undefined;
-		}
-		return `${repo_kind}:${repo_route.pubkey}:${repo_route.identifier}` as RepoRef;
-	});
+	let a_ref: RepoRef | undefined = $derived(repoRouteToARef(repo_route, nip05_result));
 
 	let record_query = $derived(query_centre.fetchRepo(a_ref));
 	let repo = $derived(record_query.current ?? (a_ref ? repoTableItemDefaults(a_ref) : undefined));
