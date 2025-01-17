@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { isRepoTableItem, type RepoTableItem } from '$lib/types';
+	import { isRepoTableItem, type RepoRoute, type RepoTableItem } from '$lib/types';
 	import UserHeader from '../user/UserHeader.svelte';
 	import Container from '../Container.svelte';
 	import { getRepoShortName } from '$lib/type-helpers/repo';
@@ -8,11 +8,11 @@
 	import type { RepoPage, WithLoading } from '$lib/types/ui';
 	import { network_status } from '$lib/internal_states.svelte';
 
-	let { repo, identifier }: { repo?: RepoTableItem & WithLoading; identifier?: string } = $props();
+	let { repo, repo_route }: { repo?: RepoTableItem & WithLoading; repo_route: RepoRoute } =
+		$props();
 
 	let selected_tab: RepoPage = 'about';
-	let short_name = $derived(!repo && identifier ? identifier : getRepoShortName(repo));
-	let repo_link = '/naddr';
+	let short_name = $derived(!repo ? repo_route.identifier : getRepoShortName(repo));
 	let struggling = $derived(
 		repo && isRepoTableItem(repo) ? !network_status.offline && isStrugglingToFindItem(repo) : false
 	);
@@ -20,15 +20,9 @@
 
 <div class="border-b border-accent-content bg-base-300">
 	<Container no_wrap={true}>
-		{#if !repo && !identifier}
-			<div class="p-3">
-				<div class="skeleton h-6 w-28 bg-base-200"></div>
-			</div>
-		{:else}
-			<a href={repo_link} class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
-				>{short_name}</a
-			>
-		{/if}
+		<a href={`/${repo_route.s}`} class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
+			>{short_name}</a
+		>
 		{#if repo && !repo.created_at && struggling}
 			<span class="text-xs text-warning">
 				struggling to find referenced repository event by <div
@@ -38,6 +32,6 @@
 				</div>
 			</span>
 		{/if}
-		<RepoMenu {selected_tab} {repo} />
+		<RepoMenu {selected_tab} {repo} {repo_route} />
 	</Container>
 </div>

@@ -45,7 +45,7 @@
 {#if repo && network_status.offline}
 	<OfflineBanner msg={`repository data last refreshed ${getLastSuccessfulCheckTimeAgo(repo)}`} />
 {/if}
-<RepoHeader {repo} identifier={repo_route.identifier}></RepoHeader>
+<RepoHeader {repo} {repo_route}></RepoHeader>
 <Container>
 	{#if repo}
 		{#if !repo.created_at}

@@ -10,31 +10,6 @@ import {
 } from '$lib/types';
 import { nip19 } from 'nostr-tools';
 
-export type RepoRouteType = 'npub' | 'naddr' | 'nip05';
-
-export type RepoRoute = RepoRouteNpub | RepoRouteNaddr | RepoRouteNip05;
-
-interface RepoRouteNpub {
-	type: 'npub';
-	identifier: string;
-	pubkey: PubKeyString;
-	relays?: string[];
-}
-
-interface RepoRouteNaddr {
-	type: 'naddr';
-	identifier: string;
-	pubkey: PubKeyString;
-	relays?: string[];
-}
-
-interface RepoRouteNip05 {
-	type: 'nip05';
-	identifier: string;
-	nip05: Nip05Address;
-	relays?: string[];
-}
-
 export type RepoRouteString = `${Npub}/${string}` | Naddr | `${Nip05Address}/${string}`;
 
 export const isRepoRouteString = (s: string | undefined): s is RepoRouteString => {
@@ -45,11 +20,40 @@ export const isRepoRouteString = (s: string | undefined): s is RepoRouteString =
 	return isNip05(split[0]) || isNpub(split[0]);
 };
 
+export type RepoRouteType = 'npub' | 'naddr' | 'nip05';
+
+export type RepoRoute = RepoRouteNpub | RepoRouteNaddr | RepoRouteNip05;
+
+interface RepoRouteBase {
+	type: RepoRouteType;
+	identifier: string;
+	s: RepoRouteString;
+}
+
+interface RepoRouteNpub extends RepoRouteBase {
+	type: 'npub';
+	pubkey: PubKeyString;
+	relays?: string[];
+}
+
+interface RepoRouteNaddr extends RepoRouteBase {
+	type: 'naddr';
+	pubkey: PubKeyString;
+	relays?: string[];
+}
+
+interface RepoRouteNip05 extends RepoRouteBase {
+	type: 'nip05';
+	nip05: Nip05Address;
+	relays?: string[];
+}
+
 export const extractRepoRoute = (s: string): RepoRoute | undefined => {
-	if (!s) return undefined;
+	if (!isRepoRouteString(s)) return;
 	if (isNaddr(s)) {
 		return {
 			type: 'naddr',
+			s,
 			...nip19.decode(s).data
 		};
 	}
@@ -58,6 +62,7 @@ export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 	if (isNip05(split[0])) {
 		return {
 			type: 'nip05',
+			s,
 			nip05: split[0],
 			identifier: split[1]
 		};
@@ -65,6 +70,7 @@ export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 	if (isNpub(split[0])) {
 		return {
 			type: 'npub',
+			s,
 			pubkey: nip19.decode(split[0]).data as string,
 			identifier: split[1]
 		};
