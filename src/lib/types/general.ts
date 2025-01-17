@@ -16,7 +16,7 @@ export const isPubkeyString = (s: string): s is PubKeyString => {
 
 export type Npub = `npub1${string}`;
 
-export const isNpub = (s: unknown): s is Naddr => {
+export const isNpub = (s: unknown): s is Npub => {
 	try {
 		if (nip19.decode(s as string).type === 'npub') return true;
 	} catch {
@@ -26,6 +26,16 @@ export const isNpub = (s: unknown): s is Naddr => {
 };
 
 export type Naddr = `naddr1${string}`;
+
+export const isNaddr = (s: unknown): s is Naddr => {
+	try {
+		if (nip19.decode(s as string).type === 'naddr') return true;
+	} catch {
+		/* empty */
+	}
+	return false;
+};
+
 export type Timestamp = number;
 export type Kind = number;
 export type EventIdString = string;
