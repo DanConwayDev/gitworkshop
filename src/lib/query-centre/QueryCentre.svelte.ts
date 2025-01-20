@@ -8,13 +8,14 @@ import {
 import { isEvent } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
 import db from '$lib/dbs/LocalDb';
-import { liveQueryState } from '$lib/helpers.svelte';
+import { inMemoryRelayTimeline, liveQueryState } from '$lib/helpers.svelte';
 import {
 	isFetchedNip05,
 	isFetchedPubkey,
 	isFetchedRepo,
 	type WorkerMsg
 } from '$lib/types/worker-msgs';
+import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 
 class QueryCentre {
 	external_worker: Worker;
@@ -120,6 +121,11 @@ class QueryCentre {
 			},
 			() => [loading]
 		);
+	}
+
+	fetchActions(a_ref: RepoRef) {
+		this.external_worker.postMessage({ method: 'fetchActions', args: [a_ref] });
+		return inMemoryRelayTimeline(createFetchActionsFilter(a_ref));
 	}
 }
 

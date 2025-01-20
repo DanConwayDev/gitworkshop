@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { issue_icon_path } from '$lib/components/issues/icons';
 	import { pr_icon_path as pr_icon_path } from '$lib/components/prs/icons';
+	import { icons_misc } from '$lib/icons';
 	import { network_status } from '$lib/internal_states.svelte';
 	import { IssueOrPrStatus, type RepoRoute, type RepoTableItem } from '$lib/types';
 	import type { RepoPage, WithLoading } from '$lib/types/ui';
@@ -74,6 +75,18 @@
 			{#if loading}
 				<span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
 			{/if}
+		</a>
+		<a href={`/${repo_route.s}/actions`} class="tab" class:tab-active={selected_tab === 'actions'}>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				viewBox="0 0 24 24"
+				class="mb-1 mr-1 h-4 w-4 flex-none fill-base-content pt-1 opacity-50"
+			>
+				{#each icons_misc.actions as p}
+					<path d={p} />
+				{/each}
+			</svg>
+			Actions (experimental)
 		</a>
 	</div>
 	<div class="flex-grow"></div>

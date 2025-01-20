@@ -22,6 +22,7 @@ import {
 	createRepoChildrenFilters,
 	createRepoIdentifierFilters
 } from './filters';
+import { createFetchActionsFilter } from './filters/actions';
 
 export class RelayManager {
 	url: WebSocketUrl;
@@ -346,6 +347,21 @@ export class RelayManager {
 			oneose: () => {
 				onEose(sub);
 			}
+		});
+	}
+
+	async fetchActions(a_ref: RepoRef): Promise<void> {
+		await this.connect();
+		await new Promise<void>((r) => {
+			const sub = this.relay.subscribe(createFetchActionsFilter(a_ref), {
+				onevent: async (event) => {
+					this.processor.sendToInMemoryCacheOnMainThead(event);
+				},
+				oneose: () => {
+					sub.close();
+					r();
+				}
+			});
 		});
 	}
 }

@@ -9,6 +9,7 @@ import type {
 	AtLeastThreeArray,
 	Nip05AddressStandardized,
 	PubKeyString,
+	RepoRef,
 	WebSocketUrl
 } from '$lib/types';
 import { unixNow } from 'applesauce-core/helpers';
@@ -24,6 +25,7 @@ import {
 	workerMessageFetchedPubkey,
 	workerMessageFetchedRepo
 } from '$lib/types/worker-msgs';
+import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 
 export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.damus.io',
@@ -159,6 +161,16 @@ class QueryCentreExternal {
 		}
 		self.postMessage(workerMessageFetchedNip05(nip05));
 	}
+
+	async fetchActions(a_ref: RepoRef) {
+		await this.hydrate_from_cache_db(createFetchActionsFilter(a_ref));
+		const relays = (await chooseRelaysForRepo(a_ref)).slice(0, 6);
+		try {
+			await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchActions(a_ref)));
+		} catch {
+			/* empty */
+		}
+	}
 }
 
 const external = new QueryCentreExternal();
@@ -178,6 +190,9 @@ self.onmessage = async (event) => {
 			break;
 		case 'fetchNip05':
 			result = await external.fetchNip05(args[0]);
+			break;
+		case 'fetchActions':
+			result = await external.fetchActions(args[0]);
 			break;
 		default:
 			console.error('Unknown method:', method);
