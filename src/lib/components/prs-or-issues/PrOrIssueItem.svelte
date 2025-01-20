@@ -28,7 +28,7 @@
 		const n = table_item ? table_item.title : 'Untitled';
 		return n.length > 70 ? `${n.slice(0, 65)}...` : n;
 	});
-	let comments = 1;
+	let comments = 0;
 </script>
 
 <li class="flex p-2 pt-4 {table_item ? 'cursor-pointer hover:bg-base-200' : ''}">

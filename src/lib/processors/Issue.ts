@@ -19,7 +19,7 @@ import type {
 	RelayUpdateIssue,
 	RepoRef
 } from '$lib/types';
-import { getParentUuid, getTagValue, getValueOfEachTagOccurence } from '$lib/utils';
+import { getParentUuid, getValueOfEachTagOccurence } from '$lib/utils';
 import { unixNow } from 'applesauce-core/helpers';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
 import {
@@ -28,6 +28,7 @@ import {
 	type UpdateProcessor
 } from '$lib/types/processor';
 import type { NostrEvent } from 'nostr-tools';
+import { extractIssueDescription, extractIssueTitle } from '$lib/git-utils';
 
 const processIssueUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
@@ -150,10 +151,8 @@ function processHuristic(
 
 const eventToIssueBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
 	if (event.kind !== issue_kind) return undefined;
-	const title = (getTagValue(event.tags, 'title') ?? event.content.split('\n')[0] ?? '').trim();
-	const description = (
-		event.content.startsWith(title) ? event.content.substring(title.length) : event.content
-	).trim();
+	const title = extractIssueTitle(event);
+	const description = extractIssueDescription(event);
 
 	const repos = event.tags
 		.filter((t) => t[1] && t[0] === 'a' && t[1].startsWith(repo_kind.toString()))
