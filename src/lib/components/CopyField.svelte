@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { icons_misc } from './icons';
+	import { icons_misc } from '$lib/icons';
 
 	export let label: string = '';
 	export let content: string = '';

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { icons_misc } from '../icons';
+	import { icons_misc } from '$lib/icons';
 	import { createPubKeyInfo, type PubKeyString } from '$lib/types';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { getName } from '$lib/types';
