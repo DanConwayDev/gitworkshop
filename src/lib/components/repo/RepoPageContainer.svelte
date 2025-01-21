@@ -15,10 +15,21 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import OfflineBanner from '../OfflineBanner.svelte';
-	import type { Snippet } from 'svelte';
+	import { type Snippet } from 'svelte';
 	import { repoRouteToARef } from '$lib/utils';
+	import RepoDetails from './RepoDetails.svelte';
 
-	let { repo_route, children }: { repo_route: RepoRoute; children: Snippet } = $props();
+	let {
+		repo_route,
+		with_sidebar,
+		show_sidebar_on_mobile,
+		children
+	}: {
+		repo_route: RepoRoute;
+		with_sidebar: boolean;
+		show_sidebar_on_mobile: boolean;
+		children: Snippet;
+	} = $props();
 
 	let nip05_query =
 		repo_route.type === 'nip05' ? query_centre.fetchNip05(repo_route.nip05) : undefined;
@@ -39,7 +50,8 @@
 	<OfflineBanner msg={`repository data last refreshed ${getLastSuccessfulCheckTimeAgo(repo)}`} />
 {/if}
 <RepoHeader {repo} {repo_route}></RepoHeader>
-<Container>
+
+{#snippet contents()}
 	{#if repo}
 		{#if !repo.created_at}
 			{#if !isStrugglingToFindItem(repo)}
@@ -55,5 +67,28 @@
 		{:else}
 			<div>could not find user information for {repo_route.nip05}</div>
 		{/if}
+	{/if}
+{/snippet}
+
+<Container>
+	{#if with_sidebar}
+		<div class="mt-2 md:flex">
+			<div class="md:mr-2 md:w-2/3">
+				{@render contents()}
+			</div>
+			<div
+				class:hidden={!show_sidebar_on_mobile}
+				class=" rounded-lg border border-base-400 md:flex md:w-1/3 md:border-none"
+			>
+				<div class="border-b border-base-400 bg-base-300 px-6 py-3 md:hidden">
+					<h4 class="">Repository Details</h4>
+				</div>
+				<div class="prose my-3 w-full px-6 md:ml-2 md:px-0">
+					<RepoDetails {repo} {a_ref} {repo_route} />
+				</div>
+			</div>
+		</div>
+	{:else}
+		{@render contents()}
 	{/if}
 </Container>

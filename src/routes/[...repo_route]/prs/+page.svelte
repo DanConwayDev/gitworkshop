@@ -1,6 +1,5 @@
 <script lang="ts">
 	import PrOrIssueByStatus from '$lib/components/prs-or-issues/PrOrIssueByStatus.svelte';
-	import ContainerWithRepoDetailsSidebar from '$lib/components/repo/ContainerWithRepoDetailsSidebar.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import type { RepoRoute, RepoRef } from '$lib/types';
 	import { repoRouteToARef } from '$lib/utils';
@@ -17,6 +16,4 @@
 	let prs = $derived(prs_query?.current ?? []);
 </script>
 
-<ContainerWithRepoDetailsSidebar {a_ref} {repo_route}>
-	<PrOrIssueByStatus type="pr" table_items={prs} {repo_route} />
-</ContainerWithRepoDetailsSidebar>
+<PrOrIssueByStatus type="pr" table_items={prs} {repo_route} />
