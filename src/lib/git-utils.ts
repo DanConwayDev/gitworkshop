@@ -1,5 +1,6 @@
-import type { NostrEvent } from 'nostr-tools';
+import { nip19, type NostrEvent } from 'nostr-tools';
 import { getTagValue } from './utils';
+import type { RepoRoute } from './types';
 
 export const isCoverLetter = (s: string): boolean => {
 	return s.indexOf('PATCH 0/') > 0;
@@ -59,4 +60,12 @@ const extractIssueDescriptionFromContent = (s: string): string => {
 	const split = s.split('\n');
 	if (split.length === 0) return '';
 	return s.substring(split[0].length) || '';
+};
+
+export const repoRouteToNostrUrl = (repo_route: RepoRoute): string => {
+	if (repo_route.type === 'nip05') return `nostr://${repo_route.nip05}/${repo_route.identifier}`;
+	const relay_hint = repo_route?.relays?.[0]
+		? `/${encodeURI(repo_route.relays[0].replace('wss://', ''))}`
+		: '';
+	return `nostr://${nip19.npubEncode(repo_route.pubkey)}${relay_hint}/${repo_route.identifier}`;
 };
