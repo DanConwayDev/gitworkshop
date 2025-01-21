@@ -66,9 +66,11 @@
 		</div>
 		<div class="flex-auto"></div>
 		<div class="flex-none">
-			<a class="btn btn-success btn-sm h-full text-base-400" href={`${repo_route.s}/issues/new`}>
-				create issue
-			</a>
+			{#if type === 'issue'}
+				<a class="btn btn-success btn-sm h-full text-base-400" href={`${repo_route.s}/issues/new`}>
+					create issue
+				</a>
+			{/if}
 		</div>
 	</div>
 	{#if !loading && filtered_items.length === 0}
