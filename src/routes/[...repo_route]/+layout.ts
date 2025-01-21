@@ -19,5 +19,5 @@ export const load = ({ params, url }: { params: { repo_route: string }; url: str
 		redirect(301, `/${invalid_route.replace(new RegExp(`^r\\/`), '')}`);
 	}
 
-	return { repo_route, with_repo_sidebar, show_sidebar_on_moible };
+	return { url: url_string, repo_route, with_repo_sidebar, show_sidebar_on_moible };
 };

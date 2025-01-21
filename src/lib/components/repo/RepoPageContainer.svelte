@@ -20,11 +20,13 @@
 	import RepoDetails from './RepoDetails.svelte';
 
 	let {
+		url,
 		repo_route,
 		with_sidebar,
 		show_sidebar_on_mobile,
 		children
 	}: {
+		url: string;
 		repo_route: RepoRoute;
 		with_sidebar: boolean;
 		show_sidebar_on_mobile: boolean;
@@ -49,7 +51,7 @@
 {#if repo && network_status.offline}
 	<OfflineBanner msg={`repository data last refreshed ${getLastSuccessfulCheckTimeAgo(repo)}`} />
 {/if}
-<RepoHeader {repo} {repo_route}></RepoHeader>
+<RepoHeader {repo} {repo_route} {url}></RepoHeader>
 
 {#snippet contents()}
 	{#if repo}

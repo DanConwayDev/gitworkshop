@@ -4,16 +4,16 @@
 	import { icons_misc } from '$lib/icons';
 	import { network_status } from '$lib/internal_states.svelte';
 	import { IssueOrPrStatus, type RepoRoute, type RepoTableItem } from '$lib/types';
-	import type { RepoPage, WithLoading } from '$lib/types/ui';
+	import type { WithLoading } from '$lib/types/ui';
 
 	let {
 		repo,
 		repo_route,
-		selected_tab = 'about'
+		url
 	}: {
 		repo?: RepoTableItem & WithLoading;
 		repo_route: RepoRoute;
-		selected_tab: RepoPage;
+		url: string;
 	} = $props();
 
 	let loading = $derived(network_status.offline || !repo || repo.loading);
@@ -34,11 +34,19 @@
 <div class="flex border-b border-base-400">
 	<div role="tablist" class="tabs tabs-bordered flex-none">
 		{#if readme_available}
-			<a href={`$/${repo_route.s}`} class="tab" class:tab-active={selected_tab === 'about'}>
+			<a
+				href={`$/${repo_route.s}`}
+				class="tab"
+				class:tab-active={url.includes(`${repo_route.s}/about`) || url.endsWith(repo_route.s)}
+			>
 				About
 			</a>
 		{/if}
-		<a href={`/${repo_route.s}/prs`} class="tab" class:tab-active={selected_tab === 'proposals'}>
+		<a
+			href={`/${repo_route.s}/prs`}
+			class="tab"
+			class:tab-active={url.includes(`${repo_route.s}/prs`)}
+		>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -56,7 +64,11 @@
 				<span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
 			{/if}
 		</a>
-		<a href={`/${repo_route.s}/issues`} class="tab" class:tab-active={selected_tab === 'issues'}>
+		<a
+			href={`/${repo_route.s}/issues`}
+			class="tab"
+			class:tab-active={url.includes(`${repo_route.s}/issues`)}
+		>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -76,7 +88,11 @@
 				<span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
 			{/if}
 		</a>
-		<a href={`/${repo_route.s}/actions`} class="tab" class:tab-active={selected_tab === 'actions'}>
+		<a
+			href={`/${repo_route.s}/actions`}
+			class="tab"
+			class:tab-active={url.includes(`${repo_route.s}/actions`)}
+		>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 24 24"

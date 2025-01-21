@@ -5,13 +5,15 @@
 	import { getRepoShortName } from '$lib/type-helpers/repo';
 	import { isStrugglingToFindItem } from '$lib/type-helpers/general';
 	import RepoMenu from './RepoMenu.svelte';
-	import type { RepoPage, WithLoading } from '$lib/types/ui';
+	import type { WithLoading } from '$lib/types/ui';
 	import { network_status } from '$lib/internal_states.svelte';
 
-	let { repo, repo_route }: { repo?: RepoTableItem & WithLoading; repo_route: RepoRoute } =
-		$props();
+	let {
+		repo,
+		repo_route,
+		url
+	}: { repo?: RepoTableItem & WithLoading; repo_route: RepoRoute; url: string } = $props();
 
-	let selected_tab: RepoPage = 'about';
 	let short_name = $derived(!repo ? repo_route.identifier : getRepoShortName(repo));
 	let struggling = $derived(
 		repo && isRepoTableItem(repo) ? !network_status.offline && isStrugglingToFindItem(repo) : false
@@ -32,6 +34,6 @@
 				</div>
 			</span>
 		{/if}
-		<RepoMenu {selected_tab} {repo} {repo_route} />
+		<RepoMenu {repo} {repo_route} {url} />
 	</Container>
 </div>
