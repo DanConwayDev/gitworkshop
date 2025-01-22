@@ -20,11 +20,6 @@ import { Metadata, RelayList } from 'nostr-tools/kinds';
 import Processor from '$lib/processors/Processor';
 import db from '$lib/dbs/LocalDb';
 import { aRefPToAddressPointer } from '$lib/utils';
-import {
-	workerMessageFetchedNip05,
-	workerMessageFetchedPubkey,
-	workerMessageFetchedRepo
-} from '$lib/types/worker-msgs';
 import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 
 export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
@@ -83,7 +78,7 @@ class QueryCentreExternal {
 				'#a': [pointer.identifier]
 			}
 		]);
-		let record = await db.repos.get(a_ref);
+		const record = await db.repos.get(a_ref);
 		const relays_tried: WebSocketUrl[] = [];
 		// only loop if repo announcement not found
 		let count = 0;
@@ -113,9 +108,7 @@ class QueryCentreExternal {
 			} catch {
 				/* empty */
 			}
-			record = await db.repos.get(a_ref);
 		}
-		self.postMessage(workerMessageFetchedRepo(a_ref));
 	}
 
 	async fetchPubkeyRepos(pubkey: PubKeyString) {
@@ -126,7 +119,7 @@ class QueryCentreExternal {
 
 	async fetchPubkeyName(pubkey: PubKeyString) {
 		await this.hydrate_from_cache_db([{ kinds: [Metadata, RelayList], authors: [pubkey] }]);
-		let record = await db.pubkeys.get(pubkey);
+		const record = await db.pubkeys.get(pubkey);
 		const relays_tried: WebSocketUrl[] = [];
 		// only fetch from relays if no metadata in db
 		while (!record || !record.metadata.stamp) {
@@ -154,10 +147,7 @@ class QueryCentreExternal {
 			} catch {
 				/* empty */
 			}
-			record = await db.pubkeys.get(pubkey);
 		}
-		self.postMessage(workerMessageFetchedPubkey(pubkey));
-		return record;
 	}
 
 	async fetchNip05(nip05: Nip05AddressStandardized) {
@@ -166,7 +156,6 @@ class QueryCentreExternal {
 			this.processor.enqueueNip05(nip05, pointer.pubkey, pointer.relays);
 			await this.fetchPubkeyName(pointer.pubkey);
 		}
-		self.postMessage(workerMessageFetchedNip05(nip05));
 	}
 
 	async fetchActions(a_ref: RepoRef) {
@@ -183,7 +172,7 @@ class QueryCentreExternal {
 const external = new QueryCentreExternal();
 
 self.onmessage = async (event) => {
-	const { method, args } = event.data;
+	const { method, args, request_identifier } = event.data;
 	let result;
 	switch (method) {
 		case 'fetchAllRepos':
@@ -209,5 +198,5 @@ self.onmessage = async (event) => {
 			break;
 	}
 
-	self.postMessage(result);
+	self.postMessage({ request_identifier, result });
 };

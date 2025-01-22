@@ -9,13 +9,8 @@ import { isEvent } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
 import db from '$lib/dbs/LocalDb';
 import { inMemoryRelayTimeline, liveQueryState } from '$lib/helpers.svelte';
-import {
-	isFetchedNip05,
-	isFetchedPubkey,
-	isFetchedRepo,
-	type WorkerMsg
-} from '$lib/types/worker-msgs';
 import { createFetchActionsFilter } from '$lib/relay/filters/actions';
+import type { NostrEvent } from 'nostr-tools';
 
 class QueryCentre {
 	external_worker: Worker;
@@ -24,12 +19,13 @@ class QueryCentre {
 		this.external_worker = new Worker(new URL('./QueryCentreExternal.ts', import.meta.url), {
 			type: 'module'
 		});
-		this.external_worker.onmessage = (msg: MessageEvent<WorkerMsg>) => {
-			const { data } = msg;
-			if (!data) {
-				// do nothing
-			} else if (isEvent(data)) {
-				memory_db.add(data);
+		this.external_worker.onmessage = (msg: MessageEvent<NostrEvent | unknown>) => {
+			try {
+				if (isEvent(msg?.data)) {
+					memory_db.add(msg.data);
+				}
+			} catch {
+				/* empty */
 			}
 		};
 	}
@@ -39,17 +35,33 @@ class QueryCentre {
 		return liveQueryState(() => db.repos.toArray());
 	}
 
-	fetchRepo(a_ref: RepoRef | string | undefined) {
-		let loading = $state(isRepoRef(a_ref));
-		if (isRepoRef(a_ref)) {
-			const handler = (msg: MessageEvent<WorkerMsg>) => {
-				if (msg.data && isFetchedRepo(msg.data) && msg.data.a_ref === a_ref) {
-					loading = false;
-					this.external_worker.removeEventListener('message', handler);
+	awaitExternalWorker<T>(call: { method: string; args: unknown[]; request_identifier?: string }) {
+		const c = {
+			...call,
+			request_identifier: call.request_identifier || JSON.stringify(call)
+		};
+		return new Promise<T>((r) => {
+			const handler = (msg: MessageEvent<{ request_identifier: string; result: T }>) => {
+				try {
+					if (msg.data.request_identifier === c.request_identifier) {
+						this.external_worker.removeEventListener('message', handler);
+						r(msg.data.result);
+					}
+				} catch {
+					/* empty */
 				}
 			};
 			this.external_worker.addEventListener('message', handler);
-			this.external_worker.postMessage({ method: 'fetchRepo', args: [a_ref] });
+			this.external_worker.postMessage(c);
+		});
+	}
+
+	fetchRepo(a_ref: RepoRef | string | undefined) {
+		let loading = $state(isRepoRef(a_ref));
+		if (isRepoRef(a_ref)) {
+			this.awaitExternalWorker({ method: 'fetchRepo', args: [a_ref] }).then(() => {
+				loading = false;
+			});
 		}
 		// if a_ref its not RepoRef it we will just return the undefined
 		return liveQueryState(
@@ -87,14 +99,9 @@ class QueryCentre {
 
 	fetchPubkeyName(pubkey: PubKeyString) {
 		let loading = $state(true);
-		const handler = (msg: MessageEvent<WorkerMsg>) => {
-			if (msg.data && isFetchedPubkey(msg.data) && msg.data.pubkey === pubkey) {
-				loading = false;
-				this.external_worker.removeEventListener('message', handler);
-			}
-		};
-		this.external_worker.addEventListener('message', handler);
-		this.external_worker.postMessage({ method: 'fetchPubkeyName', args: [pubkey] });
+		this.awaitExternalWorker({ method: 'fetchPubkeyName', args: [pubkey] }).then(() => {
+			loading = false;
+		});
 		// if a_ref its not RepoRef it we will just return the undefined
 		return liveQueryState(
 			async () => {
@@ -109,14 +116,9 @@ class QueryCentre {
 	fetchNip05(nip05: Nip05Address) {
 		let loading = $state(true);
 		const standardized_nip05 = standardizeNip05(nip05);
-		const handler = (msg: MessageEvent<WorkerMsg>) => {
-			if (msg.data && isFetchedNip05(msg.data) && msg.data.nip05 === nip05) {
-				loading = false;
-				this.external_worker.removeEventListener('message', handler);
-			}
-		};
-		this.external_worker.addEventListener('message', handler);
-		this.external_worker.postMessage({ method: 'fetchNip05', args: [standardized_nip05] });
+		this.awaitExternalWorker({ method: 'fetchNip05', args: [standardized_nip05] }).then(() => {
+			loading = false;
+		});
 		// if a_ref its not RepoRef it we will just return the undefined
 		return liveQueryState(
 			async () => {
