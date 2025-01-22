@@ -14,7 +14,8 @@
 		avatar_only = false,
 		in_event_header = false,
 		link_to_profile = true,
-		avatar_on_right = false
+		avatar_on_right = false,
+		no_avatar = false
 	}: {
 		user: PubKeyString;
 		inline?: boolean;
@@ -23,6 +24,7 @@
 		in_event_header?: boolean;
 		link_to_profile?: boolean;
 		avatar_on_right?: boolean;
+		no_avatar?: boolean;
 	} = $props();
 
 	let info_query = query_centre.fetchPubkeyName(user);
@@ -70,6 +72,7 @@
 				class:align-middle={inline}
 				class:flex-none={!inline}
 				class:order-1={avatar_on_right}
+				class:hidden={no_avatar}
 			>
 				<div
 					class:inline-block={inline}
