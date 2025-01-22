@@ -36,6 +36,33 @@ export const isNaddr = (s: unknown): s is Naddr => {
 	return false;
 };
 
+export type Nnote = `note1${string}`;
+
+export const isNnote = (s: unknown): s is Naddr => {
+	try {
+		if (nip19.decode(s as string).type === 'note') return true;
+	} catch {
+		/* empty */
+	}
+	return false;
+};
+
+export type Nevent = `nevent1${string}`;
+
+export const isNevent = (s: unknown): s is Naddr => {
+	try {
+		if (nip19.decode(s as string).type === 'nevent') return true;
+	} catch {
+		/* empty */
+	}
+	return false;
+};
+
+export type EventBech32 = Naddr | Nevent | Nnote;
+
+export const isEventBech32 = (s: unknown): s is EventBech32 =>
+	isNaddr(s) || isNevent(s) || isNnote(s);
+
 export type Timestamp = number;
 export type Kind = number;
 export type EventIdString = string;
