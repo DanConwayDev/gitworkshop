@@ -72,8 +72,8 @@
 	{/if}
 {/snippet}
 
-<Container>
-	{#if with_sidebar}
+{#if with_sidebar}
+	<Container>
 		<div class="mt-2 md:flex">
 			<div class="md:mr-2 md:w-2/3">
 				{@render contents()}
@@ -90,7 +90,7 @@
 				</div>
 			</div>
 		</div>
-	{:else}
-		{@render contents()}
-	{/if}
-</Container>
+	</Container>
+{:else}
+	{@render contents()}
+{/if}

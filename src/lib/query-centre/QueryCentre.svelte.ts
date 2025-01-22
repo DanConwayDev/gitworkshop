@@ -1,6 +1,7 @@
 import {
 	isRepoRef,
 	standardizeNip05,
+	type EventIdString,
 	type Nip05Address,
 	type PubKeyString,
 	type RepoRef
@@ -93,8 +94,16 @@ class QueryCentre {
 		return liveQueryState(() => db.issues.where('repos').equals(a_ref).toArray());
 	}
 
+	fetchIssue(issue_id: EventIdString) {
+		return liveQueryState(() => db.issues.get(issue_id));
+	}
+
 	fetchPrs(a_ref: RepoRef) {
 		return liveQueryState(() => db.prs.where('repos').equals(a_ref).toArray());
+	}
+
+	fetchPr(pr_id: EventIdString) {
+		return liveQueryState(() => db.issues.get(pr_id));
 	}
 
 	fetchPubkeyName(pubkey: PubKeyString) {

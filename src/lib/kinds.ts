@@ -11,9 +11,9 @@ export const proposal_status_kinds: number[] = [
 	proposal_status_draft
 ];
 
-export function statusKindtoText(kind: number, type: 'proposal' | 'issue'): string {
+export function statusKindtoText(kind: number, type: 'pr' | 'issue'): string {
 	if (kind === proposal_status_open) return 'Open';
-	if (type === 'proposal' && kind === proposal_status_applied) return 'Applied';
+	if (type === 'pr' && kind === proposal_status_applied) return 'Applied';
 	if (type === 'issue' && kind === proposal_status_applied) return 'Resolved';
 	if (kind === proposal_status_closed) return 'Closed';
 	return 'Draft';
