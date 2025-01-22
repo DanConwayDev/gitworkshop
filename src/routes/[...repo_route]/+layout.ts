@@ -1,7 +1,13 @@
-import { extractRepoRoute, extractUserRoute } from '$lib/types';
+import { extractRepoRoute, extractUserRoute, type RepoRouteData } from '$lib/types';
 import { redirect } from '@sveltejs/kit';
 
-export const load = ({ params, url }: { params: { repo_route: string }; url: string }) => {
+export const load = ({
+	params,
+	url
+}: {
+	params: { repo_route: string };
+	url: string;
+}): RepoRouteData | undefined => {
 	const url_string = url.toString();
 
 	const repo_route = extractRepoRoute(params.repo_route);
@@ -10,11 +16,11 @@ export const load = ({ params, url }: { params: { repo_route: string }; url: str
 		const with_repo_sidebar = ['', '/about', '/issues', '/prs', '/actions'].some((page) =>
 			url_string.endsWith(`${repo_route?.s}${page}`)
 		);
-		const show_sidebar_on_moible = ['', '/about'].some((page) =>
+		const show_sidebar_on_mobile = ['', '/about'].some((page) =>
 			url_string.endsWith(`${repo_route?.s}${page}`)
 		);
 
-		return { url: url_string, repo_route, with_repo_sidebar, show_sidebar_on_moible };
+		return { url: url_string, repo_route, with_repo_sidebar, show_sidebar_on_mobile };
 	}
 
 	// params.repo_route is also a catch all for other routes

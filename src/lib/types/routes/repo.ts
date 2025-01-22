@@ -6,7 +6,8 @@ import {
 	type Nip05Address,
 	isNpub,
 	isNaddr,
-	isNip05
+	isNip05,
+	type UserRoute
 } from '$lib/types';
 import { nip19 } from 'nostr-tools';
 
@@ -77,3 +78,12 @@ export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 	}
 	return undefined;
 };
+
+/// whats returned by the load function at +layouts.ts at the repo_route level
+export interface RepoRouteData {
+	url: string;
+	repo_route?: RepoRoute;
+	user_route?: UserRoute;
+	with_repo_sidebar?: boolean;
+	show_sidebar_on_mobile?: boolean;
+}
