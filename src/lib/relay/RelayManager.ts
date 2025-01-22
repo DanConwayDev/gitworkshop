@@ -58,17 +58,17 @@ export class RelayManager {
 		}, 60000); // 60 seconds of inactivity
 	}
 
-	async fetchAllRepos() {
-		const checks = await db.last_checks.get(`${this.url}|`);
+	async fetchAllRepos(pubkey?: PubKeyString) {
+		const checks = await db.last_checks.get(`${this.url}|${pubkey}`);
 		if (checks && checks.check_initiated_at && checks.check_initiated_at > Date.now() - 3000)
 			return;
 		db.last_checks.put({
-			url_and_query: `${this.url}|`,
+			url_and_query: `${this.url}|${pubkey}`,
 			url: this.url,
 			check_initiated_at: Date.now(),
 			timestamp: checks ? checks.timestamp : 0,
 			// timestamp: unixNow(),
-			query: 'All Repos'
+			query: pubkey ? pubkey : 'All Repos'
 		});
 		await this.connect();
 		return new Promise<void>((r) => {
@@ -76,7 +76,7 @@ export class RelayManager {
 				[
 					{
 						kinds: [repo_kind],
-						since: checks ? Math.round(checks.timestamp - 60 * 10) : 0
+						since: !pubkey && checks ? Math.round(checks.timestamp - 60 * 10) : 0
 						// TODO: what if this last check failed to reach the relay?
 						// limit: 100,
 						// TODO request next batch if 100 recieved
@@ -103,11 +103,11 @@ export class RelayManager {
 						sub.close();
 						this.resetInactivityTimer();
 						db.last_checks.put({
-							url_and_query: `${this.url}|`,
+							url_and_query: `${this.url}|${pubkey}`,
 							url: this.url,
 							check_initiated_at: undefined,
 							timestamp: unixNow(),
-							query: 'All Repos'
+							query: pubkey ? pubkey : 'All Repos'
 						});
 						r();
 					}

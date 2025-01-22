@@ -1,12 +1,19 @@
 import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
-import type { WebSocketUrl, Timestamp, EventIdString, ARef, RepoRef } from '$lib/types';
+import type {
+	WebSocketUrl,
+	Timestamp,
+	EventIdString,
+	ARef,
+	RepoRef,
+	PubKeyString
+} from '$lib/types';
 
 export interface LastCheck {
-	url_and_query: string;
+	url_and_query: `${WebSocketUrl}|` | `${WebSocketUrl}|${PubKeyString}`;
 	url: WebSocketUrl;
 	timestamp: Timestamp;
 	check_initiated_at: Timestamp | undefined;
-	query: 'All Repos'; // scope to add other queries eg 'All PRs and Issue' in the future
+	query: 'All Repos' | PubKeyString; // scope to add other queries eg 'All PRs and Issue' in the future
 }
 
 export interface RelayCheckTimestamp {

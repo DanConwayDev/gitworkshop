@@ -73,7 +73,7 @@ class QueryCentre {
 	}
 
 	fetchPubkeyRepos(pubkey: PubKeyString) {
-		this.external_worker.postMessage({ method: 'fetchPubkeyRepos', args: [] });
+		this.external_worker.postMessage({ method: 'fetchPubkeyRepos', args: [pubkey] });
 		return liveQueryState(() => db.repos.where('author').equals(pubkey).toArray());
 	}
 

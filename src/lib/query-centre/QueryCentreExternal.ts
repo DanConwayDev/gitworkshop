@@ -118,6 +118,12 @@ class QueryCentreExternal {
 		self.postMessage(workerMessageFetchedRepo(a_ref));
 	}
 
+	async fetchPubkeyRepos(pubkey: PubKeyString) {
+		await this.hydrate_from_cache_db([{ kinds: [repo_kind], authors: [pubkey] }]);
+		const relays = await chooseRelaysForPubkey(pubkey);
+		await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchAllRepos(pubkey)));
+	}
+
 	async fetchPubkeyName(pubkey: PubKeyString) {
 		await this.hydrate_from_cache_db([{ kinds: [Metadata, RelayList], authors: [pubkey] }]);
 		let record = await db.pubkeys.get(pubkey);
@@ -151,6 +157,7 @@ class QueryCentreExternal {
 			record = await db.pubkeys.get(pubkey);
 		}
 		self.postMessage(workerMessageFetchedPubkey(pubkey));
+		return record;
 	}
 
 	async fetchNip05(nip05: Nip05AddressStandardized) {
@@ -184,6 +191,9 @@ self.onmessage = async (event) => {
 			break;
 		case 'fetchRepo':
 			result = await external.fetchRepo(args[0]);
+			break;
+		case 'fetchPubkeyRepos':
+			result = await external.fetchPubkeyRepos(args[0]);
 			break;
 		case 'fetchPubkeyName':
 			result = await external.fetchPubkeyName(args[0]);
