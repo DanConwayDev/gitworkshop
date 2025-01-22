@@ -1,6 +1,6 @@
 <script lang="ts">
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
-	import type { UserRoute } from '$lib/types/user-route';
+	import type { UserRoute } from '$lib/types';
 	import Container from '../Container.svelte';
 	import ReposSummaryList from '../repo/ReposSummaryList.svelte';
 	import UserHeader from './UserHeader.svelte';

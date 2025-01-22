@@ -1,7 +1,6 @@
 <script lang="ts">
 	import RepoPageContainer from '$lib/components/repo/RepoPageContainer.svelte';
-	import type { RepoRoute } from '$lib/types';
-	import type { UserRoute } from '$lib/types/user-route';
+	import type { RepoRoute, UserRoute } from '$lib/types';
 	import type { Snippet } from 'svelte';
 
 	let {

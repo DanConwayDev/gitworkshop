@@ -1,8 +1,7 @@
 <script lang="ts">
 	import AboutPage from '$lib/components/repo/AboutPage.svelte';
 	import UserPage from '$lib/components/user/UserPage.svelte';
-	import type { RepoRoute } from '$lib/types';
-	import type { UserRoute } from '$lib/types/user-route';
+	import type { RepoRoute, UserRoute } from '$lib/types';
 
 	let { data }: { data: { repo_route?: RepoRoute; user_route?: UserRoute } } = $props();
 </script>
