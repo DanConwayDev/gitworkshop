@@ -114,6 +114,24 @@ class QueryCentreExternal {
 		await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchAllRepos(pubkey)));
 	}
 
+	async fetchIssueThread(a_ref: RepoRef, id: EventIdString) {
+		const table_item = await db.issues.get(id);
+		const ids: EventIdString[] = [];
+		if (table_item) {
+			// TODO get know child events to also search for
+		}
+		await this.hydrate_from_cache_db([{ '#e': [id, ...ids] }]);
+		// TODO create chooseRelaysForIssue, that uses the Repo scoring but its own last checked
+		const relays = await chooseRelaysForRepo(a_ref);
+		try {
+			await Promise.all(
+				relays.map(({ url }) => this.get_relay(url).fetchIssueThread(a_ref, id, ids))
+			);
+		} catch {
+			/* empty */
+		}
+	}
+
 	async fetchPubkeyName(pubkey: PubKeyString) {
 		await this.hydrate_from_cache_db([{ kinds: [Metadata, RelayList], authors: [pubkey] }]);
 		const record = await db.pubkeys.get(pubkey);
@@ -180,6 +198,9 @@ self.onmessage = async (event) => {
 			break;
 		case 'fetchPubkeyRepos':
 			result = await external.fetchPubkeyRepos(args[0]);
+			break;
+		case 'fetchIssueThread':
+			result = await external.fetchIssueThread(args[0], args[1]);
 			break;
 		case 'fetchPubkeyName':
 			result = await external.fetchPubkeyName(args[0]);

@@ -98,6 +98,12 @@ class QueryCentre {
 		return liveQueryState(() => db.issues.get(issue_id));
 	}
 
+	fetchIssueThread(a_ref: RepoRef, issue_id: EventIdString) {
+		this.external_worker.postMessage({ method: 'fetchIssueThread', args: [a_ref, issue_id] });
+		// dynamically add in all the new replies and tagged events
+		return inMemoryRelayTimeline([{ '#e': [issue_id] }]);
+	}
+
 	fetchPrs(a_ref: RepoRef) {
 		return liveQueryState(() => db.prs.where('repos').equals(a_ref).toArray());
 	}

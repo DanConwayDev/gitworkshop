@@ -9,9 +9,10 @@ import type {
 	ARefR,
 	RepoRef,
 	RelayUpdateRepoAnn,
-	RelayUpdateRepoChildren
+	RelayUpdateRepoChildren,
+	EventIdString
 } from '$lib/types';
-import { Metadata, RelayList } from 'nostr-tools/kinds';
+import { Metadata, Reaction, RelayList } from 'nostr-tools/kinds';
 import type Processor from '$lib/processors/Processor';
 import { eventKindToTable } from '$lib/processors/Processor';
 import { eventIsPrRoot, getRepoRefs } from '$lib/utils';
@@ -23,6 +24,7 @@ import {
 	createRepoIdentifierFilters
 } from './filters';
 import { createFetchActionsFilter } from './filters/actions';
+import { addEventsToCache } from '$lib/dbs/LocalRelayDb';
 
 export class RelayManager {
 	url: WebSocketUrl;
@@ -347,6 +349,47 @@ export class RelayManager {
 			oneose: () => {
 				onEose(sub);
 			}
+		});
+	}
+
+	async fetchIssueThread(
+		a_ref: RepoRef,
+		id: EventIdString,
+		known_replies: EventIdString[] = []
+	): Promise<EventIdString[]> {
+		await this.connect();
+		return await new Promise((r) => {
+			let ids_searched: EventIdString[] = [];
+			let ids_to_find: EventIdString[] = [id, ...known_replies];
+			let sub: Subscription;
+			const onevent = (event: NostrEvent) => {
+				this.processor.sendToInMemoryCacheOnMainThead(event);
+				const kind_not_to_cache = [Reaction];
+				if (!kind_not_to_cache.includes(event.kind)) addEventsToCache([event]);
+				// TODO selectively process (add to Issue Thread info)
+				const kinds_not_to_request_replys_for = [Reaction];
+				if (!kinds_not_to_request_replys_for.includes(event.kind)) ids_to_find.push(event.id);
+			};
+			const onEose = (sub: Subscription) => {
+				sub.close();
+				findNext();
+			};
+			const findNext = () => {
+				this.resetInactivityTimer();
+				ids_searched = [...ids_searched, ...ids_to_find];
+				// TODO get from other relays via db.issues.get(id)
+				if (ids_to_find.length === 0) r(ids_searched);
+				else {
+					sub = this.relay.subscribe([{ '#e': [...ids_to_find] }], {
+						onevent,
+						oneose: () => {
+							onEose(sub);
+						}
+					});
+					ids_to_find = [];
+				}
+			};
+			findNext();
 		});
 	}
 
