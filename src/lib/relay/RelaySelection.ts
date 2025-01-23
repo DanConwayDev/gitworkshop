@@ -8,6 +8,7 @@ import {
 	type RelayCheckTimestamp,
 	type RelayHuristic,
 	type RelayScore,
+	type RepoRef,
 	type RepoTableItem,
 	type WebSocketUrl
 } from '$lib/types';
@@ -133,7 +134,7 @@ export const chooseRelaysForPubkey = async (
 };
 
 /// returns prioritised list of relays and timestamp info
-export const chooseRelaysForRepo = async (
+export const getRankedRelaysForRepo = async (
 	a_ref: ARefP
 ): Promise<{ url: WebSocketUrl; check_timestamps: RelayCheckTimestamp }[]> => {
 	// prioritise connected relays?
@@ -162,6 +163,27 @@ export const chooseRelaysForRepo = async (
 		url,
 		check_timestamps: repoTableItemToRelayCheckTimestamp(record, url)
 	}));
+};
+
+/// choose upto 6 relays. if there less than 6 repo relays, it will include the next 3 most likely relays to have the relivant events
+export const chooseRelaysForRepo = async (
+	a_ref: RepoRef,
+	excluding: WebSocketUrl[] = [],
+	repo_table_item?: RepoTableItem
+): Promise<{ url: WebSocketUrl; check_timestamps: RelayCheckTimestamp }[]> => {
+	const record = repo_table_item || (await db.repos.get(a_ref));
+	return (
+		(await getRankedRelaysForRepo(a_ref))
+			.filter(
+				({ url, check_timestamps }) =>
+					// skip relays just tried
+					!excluding.includes(url) &&
+					// and relays checked within 30 seconds
+					(!check_timestamps.last_check || check_timestamps.last_check < unixNow() - 30)
+			)
+			// try repo relays + 3 others limited to 6 at each try
+			.slice(0, Math.min((record && record.relays ? record.relays.length : 0) + 3, 6))
+	);
 };
 
 export const repoTableItemToRelayCheckTimestamp = (

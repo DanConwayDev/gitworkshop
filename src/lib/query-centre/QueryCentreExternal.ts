@@ -4,13 +4,15 @@ import {
 	chooseRelaysForRepo
 } from '$lib/relay/RelaySelection';
 import { RelayManager } from '$lib/relay/RelayManager';
-import type {
-	ARefP,
-	AtLeastThreeArray,
-	Nip05AddressStandardized,
-	PubKeyString,
-	RepoRef,
-	WebSocketUrl
+import {
+	isWebSocketUrl,
+	type ARefP,
+	type AtLeastThreeArray,
+	type EventIdString,
+	type Nip05AddressStandardized,
+	type PubKeyString,
+	type RepoRef,
+	type WebSocketUrl
 } from '$lib/types';
 import { unixNow } from 'applesauce-core/helpers';
 import { getCacheEventsForFilters } from '$lib/dbs/LocalRelayDb';
@@ -78,22 +80,14 @@ class QueryCentreExternal {
 				'#a': [pointer.identifier]
 			}
 		]);
-		const record = await db.repos.get(a_ref);
+		let record = await db.repos.get(a_ref);
 		const relays_tried: WebSocketUrl[] = [];
+		let new_repo_relays_found = false;
 		// only loop if repo announcement not found
 		let count = 0;
-		while (count === 0 || !record || !record.created_at) {
+		while (count === 0 || !record || !record.created_at || new_repo_relays_found) {
 			count++;
-			const relays = (await chooseRelaysForRepo(a_ref))
-				.filter(
-					({ url, check_timestamps }) =>
-						// skip relays just tried
-						!relays_tried.includes(url) &&
-						// and relays checked within 30 seconds
-						(!check_timestamps.last_check || check_timestamps.last_check < unixNow() - 30)
-				)
-				// try repo relays + 3 others limited to 6 at each try
-				.slice(0, Math.min((record && record.relays ? record.relays.length : 0) + 3, 6));
+			const relays = await chooseRelaysForRepo(a_ref, relays_tried, record);
 			if (relays.length === 0) {
 				// TODO lookup all other relays known by LocalDb and try those
 				break;
@@ -108,6 +102,9 @@ class QueryCentreExternal {
 			} catch {
 				/* empty */
 			}
+			record = await db.repos.get(a_ref);
+			new_repo_relays_found =
+				record?.relays?.some((r) => isWebSocketUrl(r) && !relays_tried.includes(r)) ?? false;
 		}
 	}
 
@@ -160,7 +157,7 @@ class QueryCentreExternal {
 
 	async fetchActions(a_ref: RepoRef) {
 		await this.hydrate_from_cache_db(createFetchActionsFilter(a_ref));
-		const relays = (await chooseRelaysForRepo(a_ref)).slice(0, 6);
+		const relays = await chooseRelaysForRepo(a_ref);
 		try {
 			await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchActions(a_ref)));
 		} catch {
