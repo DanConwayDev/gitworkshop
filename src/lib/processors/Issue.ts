@@ -17,7 +17,8 @@ import type {
 	RelayCheck,
 	RelayCheckFound,
 	RelayUpdateIssue,
-	RepoRef
+	RepoRef,
+	WithEvent
 } from '$lib/types';
 import { getParentUuid, getValueOfEachTagOccurence } from '$lib/utils';
 import { unixNow } from 'applesauce-core/helpers';
@@ -168,13 +169,14 @@ const eventToIssueBaseFields = (event: NostrEvent): IssueOrPrBase | undefined =>
 	};
 };
 
-export const eventToIssue = (event: NostrEvent): Issue | undefined => {
+export const eventToIssue = (event: NostrEvent): (Issue & WithEvent) | undefined => {
 	const base = eventToIssueBaseFields(event);
 	if (!base) return undefined;
 	return {
 		uuid: event.id,
 		author: event.pubkey,
 		created_at: event.created_at,
+		event,
 		...base
 	};
 };

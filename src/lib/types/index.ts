@@ -7,3 +7,4 @@ export * from './relay-checks';
 export * from './routes/repo';
 export * from './routes/user';
 export * from './activity-tracking';
+export * from './threads';

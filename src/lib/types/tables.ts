@@ -15,6 +15,7 @@ import {
 import { aRefPToAddressPointer } from '$lib/utils';
 import type { EntityTable } from 'dexie';
 import type { WithLoading } from './ui';
+import type { NostrEvent } from 'nostr-tools';
 
 export interface SchemaV1 {
 	repos: EntityTable<RepoTableItem, 'uuid'>;
@@ -68,4 +69,8 @@ export function repoTableItemDefaults(a_ref: ARefP | string): RepoTableItem & Wi
 	};
 }
 
-export interface IssueOrPRTableItem extends LastActivity, WithRelaysInfo, Issue {}
+export interface IssueOrPRTableItem extends LastActivity, WithRelaysInfo, Issue, WithEvent {}
+
+export interface WithEvent {
+	event: NostrEvent;
+}
