@@ -6,6 +6,7 @@
 	import { neventOrNoteToHexId, repoRouteToARef } from '$lib/utils';
 	import Container from '$lib/components/Container.svelte';
 	import Thread from '$lib/components/event/Thread.svelte';
+	import PrOrIssueDetails from '$lib/components/prs-or-issues/PrOrIssueDetails.svelte';
 
 	let {
 		data
@@ -30,8 +31,25 @@
 
 <PrOrIssueHeader type="issue" {table_item} />
 <Container>
+	{#if table_item}
+		<div class="mx-auto max-w-6xl lg:flex">
+			<div class="md:mr-2 lg:w-2/3">
+				<div class="max-w-4xl">
+					<Thread
+						type="issue"
+						event={table_item.event}
+						replies={thread_events}
+						show_compose={false}
+					/>
+				</div>
+			</div>
+			<div class="prose ml-2 hidden w-1/3 lg:flex">
+				<PrOrIssueDetails type="issue" {table_item} />
+			</div>
+		</div>
+	{/if}
+</Container>
+
+<Container>
 	<Compose content="try pasting in a npub or nprofile" />
 </Container>
-{#if table_item}
-	<Thread type="issue" event={table_item.event} replies={thread_events} show_compose={false} />
-{/if}
