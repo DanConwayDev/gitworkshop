@@ -4,12 +4,16 @@ import {
 	type ARef,
 	type ARefP,
 	type EventIdString,
+	type Naddr,
+	type Nevent,
+	type Nnote,
 	type PubKeyString,
 	type RepoRef,
 	type RepoRoute
 } from './types';
 import type { AddressPointer } from 'nostr-tools/nip19';
 import { patch_kind, repo_kind } from './kinds';
+import { getSeenRelays, isReplaceable } from 'applesauce-core/helpers';
 
 // get value of first occurance of tag
 export function getTagValue(tags: string[][], name: string): string | undefined {
@@ -129,6 +133,28 @@ export const neventOrNoteToHexId = (s: string): EventIdString | undefined => {
 		/* empty */
 	}
 	return undefined;
+};
+
+export const nostEventToNeventOrNaddr = (event: NostrEvent): Naddr | Nevent | Nnote | undefined => {
+	const relays: string[] = [...(getSeenRelays(event) ?? [])].slice(0, 1);
+
+	if (isReplaceable(event.kind)) {
+		return nip19.naddrEncode({
+			kind: event.kind,
+			pubkey: event.pubkey,
+			identifier: getTagValue(event.tags, 'd') ?? '',
+			relays
+		});
+	} else if (relays.length > 0) {
+		return nip19.neventEncode({
+			kind: event.kind,
+			id: event.id,
+			relays,
+			author: event.pubkey
+		});
+	} else {
+		return nip19.noteEncode(event.id);
+	}
 };
 
 export const getRepoRefs = (event: NostrEvent): RepoRef[] =>

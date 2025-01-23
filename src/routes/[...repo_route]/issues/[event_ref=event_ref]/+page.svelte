@@ -5,6 +5,7 @@
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { neventOrNoteToHexId, repoRouteToARef } from '$lib/utils';
 	import Container from '$lib/components/Container.svelte';
+	import EventWrapper from '$lib/components/event/EventWrapper.svelte';
 
 	let {
 		data
@@ -32,7 +33,7 @@
 	<Compose content="try pasting in a npub or nprofile" />
 </Container>
 {#each thread_events as event}
-	<div>
+	<EventWrapper {event} type="issue">
 		{event.content}
-	</div>
+	</EventWrapper>
 {/each}
