@@ -1,13 +1,13 @@
 <script lang="ts">
 	import AboutPage from '$lib/components/repo/AboutPage.svelte';
 	import UserPage from '$lib/components/user/UserPage.svelte';
-	import type { RepoRouteData } from '$lib/types';
+	import { isRepoRouteData, isUserRouteData, type RouteData } from '$lib/types';
 
-	let { data }: { data: RepoRouteData } = $props();
+	let { data }: { data: RouteData } = $props();
 </script>
 
-{#if data.repo_route}
+{#if isRepoRouteData(data)}
 	<AboutPage />
-{:else if data.user_route}
+{:else if isUserRouteData(data)}
 	<UserPage user_route={data.user_route} />
 {/if}

@@ -1,10 +1,10 @@
 <script lang="ts">
 	import UserHeader from '$lib/components/user/UserHeader.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
-	import type { RepoRoute, RepoRef } from '$lib/types';
+	import type { RepoRef, RepoRouteData } from '$lib/types';
 	import { repoRouteToARef } from '$lib/utils';
 
-	let { data }: { data: { repo_route: RepoRoute } } = $props();
+	let { data }: { data: RepoRouteData } = $props();
 
 	let { repo_route } = data;
 	let nip05_query =

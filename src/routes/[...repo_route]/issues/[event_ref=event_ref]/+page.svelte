@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { EventBech32, RepoRouteData } from '$lib/types';
+	import type { PrOrIssueRouteData } from '$lib/types';
 	import Compose from '$lib/components/compose/Compose.svelte';
 	import PrOrIssueHeader from '$lib/components/prs-or-issues/PrOrIssueHeader.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
@@ -9,7 +9,7 @@
 	let {
 		data
 	}: {
-		data: RepoRouteData & { event_ref: EventBech32 };
+		data: PrOrIssueRouteData;
 	} = $props();
 
 	// TODO - handle naddr

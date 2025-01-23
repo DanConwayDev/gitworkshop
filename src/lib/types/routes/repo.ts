@@ -7,7 +7,8 @@ import {
 	isNpub,
 	isNaddr,
 	isNip05,
-	type UserRoute
+	type UserRoute,
+	type EventBech32
 } from '$lib/types';
 import { nip19 } from 'nostr-tools';
 
@@ -80,10 +81,25 @@ export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 };
 
 /// whats returned by the load function at +layouts.ts at the repo_route level
-export interface RepoRouteData {
+export type RouteData = RouteDataBase & (RepoRouteData | UserRouteData);
+
+export interface UserRouteData extends RouteDataBase {
+	user_route: UserRoute;
+}
+
+export const isUserRouteData = (data: RouteData): data is UserRouteData => 'user_route' in data;
+
+export interface RepoRouteData extends RouteDataBase {
+	repo_route: RepoRoute;
+	with_repo_sidebar: boolean;
+	show_sidebar_on_mobile: boolean;
+}
+export const isRepoRouteData = (data: RouteData): data is RepoRouteData => 'repo_route' in data;
+
+interface RouteDataBase {
 	url: string;
-	repo_route?: RepoRoute;
-	user_route?: UserRoute;
-	with_repo_sidebar?: boolean;
-	show_sidebar_on_mobile?: boolean;
+}
+
+export interface PrOrIssueRouteData extends RepoRouteData {
+	event_ref: EventBech32;
 }

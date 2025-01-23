@@ -1,4 +1,4 @@
-import { type EventBech32, type RepoRouteData } from '$lib/types';
+import { type EventBech32, type PrOrIssueRouteData, type RepoRouteData } from '$lib/types';
 
 export const load = ({
 	params,
@@ -6,6 +6,6 @@ export const load = ({
 }: {
 	params: { event_ref: EventBech32 };
 	parent: RepoRouteData;
-}) => {
+}): PrOrIssueRouteData => {
 	return { ...parent, event_ref: params.event_ref };
 };
