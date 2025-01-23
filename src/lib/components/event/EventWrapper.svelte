@@ -79,6 +79,11 @@
 								content={`nostr:${nostEventToNeventOrNaddr(event)}`}
 							/>
 							<CopyField
+								label="gitworkshop.dev"
+								content={`https://gitworkshop.dev/${nostEventToNeventOrNaddr(event)}`}
+								border_color="secondary"
+							/>
+							<CopyField
 								label="njump"
 								content={`https://njump.me/${nostEventToNeventOrNaddr(event)}`}
 								border_color="secondary"
