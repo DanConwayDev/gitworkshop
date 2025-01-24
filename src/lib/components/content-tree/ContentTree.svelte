@@ -33,6 +33,7 @@
 	import Tag from './Tag.svelte';
 	import type { AtLeastOneArray } from '$lib/types';
 	import Mention from './Mention.svelte';
+	import EmbeddedEvent from './EmbeddedEvent.svelte';
 	let { node }: { node: ContentSchema | Node } = $props();
 </script>
 
@@ -46,7 +47,7 @@
 	{:else if isTextNode(n) && (n.marks || []).some((m) => isTagMark(m))}
 		<Tag node={n as TextNode & { marks: AtLeastOneArray<TagMark> & Mark[] }} />
 	{:else if isNEventNode(n)}
-		<div class="event-node">TODO - Event Node Content</div>
+		<EmbeddedEvent nevent_attr={n.attrs} />
 	{:else if isNAddrNode(n)}
 		<div class="addr-node">TODO - Address Node Content</div>
 	{:else if isTweetNode(n)}
