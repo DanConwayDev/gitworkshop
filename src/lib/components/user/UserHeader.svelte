@@ -17,7 +17,7 @@
 		avatar_on_right = false,
 		no_avatar = false
 	}: {
-		user: PubKeyString;
+		user?: PubKeyString;
 		inline?: boolean;
 		size?: 'xs' | 'sm' | 'md' | 'full';
 		avatar_only?: boolean;
@@ -27,7 +27,7 @@
 		no_avatar?: boolean;
 	} = $props();
 
-	let info_query = query_centre.fetchPubkeyName(user);
+	let info_query = $derived(user ? query_centre.fetchPubkeyName(user) : undefined);
 	// prevent flashing with pubkey when info in db (allow db record to load before showing loading)
 	let mounting = $state(true);
 	onMount(() => {
@@ -35,8 +35,8 @@
 	});
 	let info = $derived(
 		// show loading until record is created in db by fetchPubkeyName
-		info_query.current ?? {
-			...createPubKeyInfo(user),
+		info_query?.current ?? {
+			...createPubKeyInfo(user || ''),
 			relays_info: {},
 			loading: true
 		}
