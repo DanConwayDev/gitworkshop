@@ -7,6 +7,7 @@ export function isWebSocketUrl(url: string): url is WebSocketUrl {
 	return !!safeRelayUrl(url);
 }
 
+export type AtLeastOneArray<T> = [T, ...T[]];
 export type AtLeastThreeArray<T> = [T, T, T, ...T[]];
 export type PubKeyString = string;
 
