@@ -1,6 +1,7 @@
 import { liveQuery } from 'dexie';
 import type { Filter, NostrEvent } from 'nostr-tools';
 import { memory_db_query_store } from './dbs/InMemoryRelay';
+import type { NEventAttributes } from 'nostr-editor';
 
 /// this is taken and adapted from https://github.com/dexie/Dexie.js/pull/2116
 /// when merged the version from the library should be used
@@ -35,6 +36,20 @@ export function inMemoryRelayTimeline(filters: Filter[], dependencies?: () => un
 		dependencies?.();
 		const sub = memory_db_query_store.timeline(filters).subscribe((events) => {
 			result.timeline = [...events];
+		});
+		return () => {
+			sub.unsubscribe();
+		};
+	});
+	return result;
+}
+
+export function inMemoryRelayEvent(event_ref: NEventAttributes, dependencies?: () => unknown[]) {
+	const result = $state<{ event: NostrEvent | undefined }>({ event: undefined });
+	$effect(() => {
+		dependencies?.();
+		const sub = memory_db_query_store.event(event_ref.id).subscribe((event) => {
+			result.event = event;
 		});
 		return () => {
 			sub.unsubscribe();

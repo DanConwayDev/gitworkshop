@@ -25,6 +25,7 @@ import {
 } from './filters';
 import { createFetchActionsFilter } from './filters/actions';
 import { addEventsToCache } from '$lib/dbs/LocalRelayDb';
+import type { NEventAttributes } from 'nostr-editor';
 
 export class RelayManager {
 	url: WebSocketUrl;
@@ -392,7 +393,22 @@ export class RelayManager {
 			findNext();
 		});
 	}
-
+	async fetchEvent(event_ref: NEventAttributes): Promise<NostrEvent | undefined> {
+		await this.connect();
+		return await new Promise<NostrEvent | undefined>((r) => {
+			const sub = this.relay.subscribe([{ ids: [event_ref.id] }], {
+				onevent: async (event) => {
+					if (event.id !== event_ref.id) return;
+					this.processor.sendToInMemoryCacheOnMainThead(event);
+					r(event);
+				},
+				oneose: () => {
+					sub.close();
+					r(undefined);
+				}
+			});
+		});
+	}
 	async fetchActions(a_ref: RepoRef): Promise<void> {
 		await this.connect();
 		await new Promise<void>((r) => {

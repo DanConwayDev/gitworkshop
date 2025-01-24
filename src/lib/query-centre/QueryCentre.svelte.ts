@@ -9,9 +9,10 @@ import {
 import { isEvent } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
 import db from '$lib/dbs/LocalDb';
-import { inMemoryRelayTimeline, liveQueryState } from '$lib/helpers.svelte';
+import { inMemoryRelayEvent, inMemoryRelayTimeline, liveQueryState } from '$lib/helpers.svelte';
 import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NostrEvent } from 'nostr-tools';
+import type { NEventAttributes } from 'nostr-editor';
 
 class QueryCentre {
 	external_worker: Worker;
@@ -110,6 +111,11 @@ class QueryCentre {
 
 	fetchPr(pr_id: EventIdString) {
 		return liveQueryState(() => db.issues.get(pr_id));
+	}
+
+	fetchEvent(event_ref: NEventAttributes) {
+		this.external_worker.postMessage({ method: 'fetchEvent', args: [event_ref] });
+		return inMemoryRelayEvent(event_ref);
 	}
 
 	fetchPubkeyName(pubkey: PubKeyString) {

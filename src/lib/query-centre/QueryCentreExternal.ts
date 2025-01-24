@@ -23,6 +23,7 @@ import Processor from '$lib/processors/Processor';
 import db from '$lib/dbs/LocalDb';
 import { aRefPToAddressPointer } from '$lib/utils';
 import { createFetchActionsFilter } from '$lib/relay/filters/actions';
+import type { NEventAttributes } from 'nostr-editor';
 
 export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.damus.io',
@@ -58,7 +59,9 @@ class QueryCentreExternal {
 			cached.forEach((event) => {
 				this.processor.enqueueEvent(event);
 			});
+			return cached;
 		}
+		return [];
 	}
 
 	async fetchAllRepos() {
@@ -132,6 +135,48 @@ class QueryCentreExternal {
 		}
 	}
 
+	async fetchEvent(event_ref: NEventAttributes) {
+		const cached = await this.hydrate_from_cache_db([{ ids: [event_ref.id] }]);
+		if (cached.length > 0) return;
+		let tried: WebSocketUrl[] = [];
+		const relays = event_ref.relays.filter((r) => isWebSocketUrl(r));
+		if (relays.length > 0) {
+			tried = [...tried, ...relays];
+			const res = await Promise.all(relays.map((url) => this.get_relay(url).fetchEvent(event_ref)));
+			if (res.some((e) => e?.id === event_ref.id)) return;
+		}
+
+		if (event_ref.author) {
+			const user_relays = (await chooseRelaysForPubkey(event_ref.author)).filter(
+				({ url }) => !tried.includes(url)
+			);
+			if (user_relays.length > 0) {
+				const res = await Promise.all(
+					user_relays.map(({ url }) => {
+						tried.push(url);
+						return this.get_relay(url).fetchEvent(event_ref);
+					})
+				);
+				if (res.some((e) => e?.id === event_ref.id)) return;
+			}
+		}
+
+		const other_relays = (await chooseRelaysForPubkey(event_ref.author)).filter(
+			({ url }) => !tried.includes(url)
+		);
+		if (other_relays.length > 0) {
+			const res = await Promise.all(
+				other_relays.map(({ url }) => {
+					tried.push(url);
+					return this.get_relay(url).fetchEvent(event_ref);
+				})
+			);
+			if (res.some((e) => e?.id === event_ref.id)) return;
+		}
+
+		return tried;
+	}
+
 	async fetchPubkeyName(pubkey: PubKeyString) {
 		await this.hydrate_from_cache_db([{ kinds: [Metadata, RelayList], authors: [pubkey] }]);
 		const record = await db.pubkeys.get(pubkey);
@@ -202,6 +247,10 @@ self.onmessage = async (event) => {
 		case 'fetchIssueThread':
 			result = await external.fetchIssueThread(args[0], args[1]);
 			break;
+		case 'fetchEvent':
+			result = await external.fetchEvent(args[0]);
+			break;
+
 		case 'fetchPubkeyName':
 			result = await external.fetchPubkeyName(args[0]);
 			break;
