@@ -46,7 +46,7 @@
 		"daisyui": "^4.12.23",
 		"dayjs": "^1.11.13",
 		"dexie": "^4.0.10",
-		"nostr-editor": "github:DanConwayDev/nostr-editor#pr/add-typeguards",
+		"nostr-editor": "v0.0.4-pre.6",
 		"nostr-idb": "github:hzrd149/nostr-idb#98377e624a7d6da10517c09a356af9d82b392920",
 		"nostr-tools": "^2.10.4",
 		"rxjs": "^7.8.1",
