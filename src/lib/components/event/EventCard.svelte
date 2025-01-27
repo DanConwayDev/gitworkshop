@@ -5,10 +5,9 @@
 	import ContentTree from '../content-tree/ContentTree.svelte';
 	let { event, type }: { type: 'issue' | 'pr'; event: NostrEvent } = $props();
 
-	let node = nostrEventToDocTree(event);
+	let node = $derived(nostrEventToDocTree(event));
 </script>
 
 <EventWrapper {event} {type}>
 	<ContentTree {node} />
-	<!-- {JSON.stringify(node)} -->
 </EventWrapper>
