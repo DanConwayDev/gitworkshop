@@ -1,6 +1,12 @@
 import { nip19, type NostrEvent } from 'nostr-tools';
 import { getTagValue } from './utils';
-import type { RepoRoute } from './types';
+import {
+	isRepoRef,
+	isWebSocketUrl,
+	type RepoRef,
+	type RepoRoute,
+	type WebSocketUrl
+} from './types';
 
 export const isCoverLetter = (s: string): boolean => {
 	return s.indexOf('PATCH 0/') > 0;
@@ -69,3 +75,12 @@ export const repoRouteToNostrUrl = (repo_route: RepoRoute): string => {
 		: '';
 	return `nostr://${nip19.npubEncode(repo_route.pubkey)}${relay_hint}/${repo_route.identifier}`;
 };
+
+export const extractRepoRefsFromPrOrIssue = (
+	event: NostrEvent
+): { a_ref: RepoRef; relays: WebSocketUrl[] }[] =>
+	event.tags.flatMap((t) =>
+		t[1] && t[0] === 'a' && isRepoRef(t[1])
+			? [{ a_ref: t[1], relays: isWebSocketUrl(t[2]) ? [t[2]] : [] }]
+			: []
+	);
