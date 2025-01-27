@@ -63,10 +63,12 @@
 {/snippet}
 
 {#snippet nodeStandardTipTapSnippet(n: Node)}
-	{#if isParagraphNode(n) && n.content !== undefined}
-		<p>
-			{#each n.content as child}{@render nodeSnippet(child)}{/each}
-		</p>
+	{#if isParagraphNode(n)}
+		{#if n.content !== undefined}
+			<p>
+				{#each n.content as child}{@render nodeSnippet(child)}{/each}
+			</p>
+		{/if}
 	{:else if isTextNode(n)}
 		{@render textSnippet(n)}
 	{:else if isHeadingNode(n)}
@@ -108,6 +110,7 @@
 			Your browser does not support the video tag.
 		</video>
 	{:else}
+		{JSON.stringify(n)}
 		UNHANDLED SNIPPET
 		{#if 'content' in n && Array.isArray(n.content)}
 			{#each (n as { content: Node[] }).content as child}{@render nodeSnippet(child)}{/each}
