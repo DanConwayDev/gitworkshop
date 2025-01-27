@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { search } from '$lib/internal_states.svelte';
+	import { search } from '$lib/store.svelte';
 	import Container from './Container.svelte';
 
 	let {

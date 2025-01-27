@@ -3,7 +3,7 @@
 	import ReposSummaryList from '$lib/components/repo/ReposSummaryList.svelte';
 	import { onMount } from 'svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
-	import { search } from '$lib/internal_states.svelte';
+	import { search } from '$lib/store.svelte';
 
 	onMount(() => {
 		// Set focus on the input field when the component is mounted

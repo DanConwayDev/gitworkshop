@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { extractIssueTitle, extractRepoRefsFromPrOrIssue } from '$lib/git-utils';
-	import { selected_a_ref } from '$lib/internal_states.svelte';
+	import { selected_a_ref } from '$lib/store.svelte';
 	import { nip19, type NostrEvent } from 'nostr-tools';
 
 	let { event }: { event: NostrEvent & { kind: 1621 } } = $props();

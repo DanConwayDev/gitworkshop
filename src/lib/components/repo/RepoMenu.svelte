@@ -2,7 +2,7 @@
 	import { issue_icon_path } from '$lib/components/issues/icons';
 	import { pr_icon_path as pr_icon_path } from '$lib/components/prs/icons';
 	import { icons_misc } from '$lib/icons';
-	import { network_status } from '$lib/internal_states.svelte';
+	import { network_status } from '$lib/store.svelte';
 	import { IssueOrPrStatus, type RepoRoute, type RepoTableItem } from '$lib/types';
 	import type { WithLoading } from '$lib/types/ui';
 

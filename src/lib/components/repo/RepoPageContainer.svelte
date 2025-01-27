@@ -11,7 +11,7 @@
 	import UserHeader from '../user/UserHeader.svelte';
 	import RelayCheckReport from '../RelayCheckReport.svelte';
 	import { isStrugglingToFindItem, lastSuccessfulCheck } from '$lib/type-helpers/general';
-	import { network_status } from '$lib/internal_states.svelte';
+	import { network_status } from '$lib/store.svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import OfflineBanner from '../OfflineBanner.svelte';

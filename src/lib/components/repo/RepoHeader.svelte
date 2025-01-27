@@ -6,7 +6,7 @@
 	import { isStrugglingToFindItem } from '$lib/type-helpers/general';
 	import RepoMenu from './RepoMenu.svelte';
 	import type { WithLoading } from '$lib/types/ui';
-	import { network_status } from '$lib/internal_states.svelte';
+	import { network_status } from '$lib/store.svelte';
 
 	let {
 		repo,
