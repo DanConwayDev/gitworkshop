@@ -16,6 +16,8 @@ import { base_relays } from '$lib/query-centre/QueryCentreExternal';
 import { unixNow } from 'applesauce-core/helpers';
 import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
 
+export const chooseBaseRelays = () => [...base_relays];
+
 export const chooseRelaysForAllRepos = async () => {
 	// TODO: expand this to more relays and fetch for different relays each time
 	const results = await Promise.all(

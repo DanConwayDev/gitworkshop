@@ -1,4 +1,5 @@
 import {
+	chooseBaseRelays,
 	chooseRelaysForAllRepos,
 	chooseRelaysForPubkey,
 	chooseRelaysForRepo
@@ -161,12 +162,10 @@ class QueryCentreExternal {
 			}
 		}
 
-		const other_relays = (await chooseRelaysForPubkey(event_ref.author)).filter(
-			({ url }) => !tried.includes(url)
-		);
+		const other_relays = chooseBaseRelays().filter((url) => !tried.includes(url));
 		if (other_relays.length > 0) {
 			const res = await Promise.all(
-				other_relays.map(({ url }) => {
+				other_relays.map((url) => {
 					tried.push(url);
 					return this.get_relay(url).fetchEvent(event_ref);
 				})
