@@ -7,6 +7,7 @@ import {
 	type Naddr,
 	type Nevent,
 	type Nnote,
+	type Npub,
 	type PubKeyString,
 	type RepoRef,
 	type RepoRoute
@@ -122,6 +123,11 @@ export const aToNaddr = (a: string | AddressPointer): `naddr1${string}` | undefi
 	const a_ref = typeof a === 'string' ? aRefToAddressPointer(a) : a;
 	if (!a_ref) return undefined;
 	return nip19.naddrEncode(a_ref);
+};
+
+export const repoRefToPubkeyLink = (a_ref: RepoRef): `${Npub}/${string}` => {
+	const pointer = aRefPToAddressPointer(a_ref);
+	return `${nip19.npubEncode(pointer.pubkey)}/${pointer.identifier}`;
 };
 
 export const neventOrNoteToHexId = (s: string): EventIdString | undefined => {

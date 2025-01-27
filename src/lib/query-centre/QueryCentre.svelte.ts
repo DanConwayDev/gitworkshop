@@ -13,6 +13,7 @@ import { inMemoryRelayEvent, inMemoryRelayTimeline, liveQueryState } from '$lib/
 import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NostrEvent } from 'nostr-tools';
 import type { NEventAttributes } from 'nostr-editor';
+import store from '$lib/store.svelte';
 
 class QueryCentre {
 	external_worker: Worker;
@@ -137,10 +138,29 @@ class QueryCentre {
 	fetchNip05(nip05: Nip05Address) {
 		let loading = $state(true);
 		const standardized_nip05 = standardizeNip05(nip05);
-		this.awaitExternalWorker({ method: 'fetchNip05', args: [standardized_nip05] }).then(() => {
+		if (store.repo_route?.type === 'nip05' && store.repo_route?.nip05 === nip05) {
+			store.route_nip05_pubkey_loading = true;
+		}
+
+		const processResult = (pubkey: PubKeyString | undefined) => {
+			if (store.repo_route?.type === 'nip05' && store.repo_route?.nip05 === nip05) {
+				if (pubkey) store.route_nip05_pubkey = pubkey;
+				store.route_nip05_pubkey_loading = false;
+			}
 			loading = false;
-		});
-		// if a_ref its not RepoRef it we will just return the undefined
+		};
+		db.pubkeys
+			.where('verified_nip05')
+			.equals(standardized_nip05)
+			.first()
+			.then((table_item) => {
+				if (table_item) processResult(table_item.pubkey);
+				else {
+					this.awaitExternalWorker({ method: 'fetchNip05', args: [standardized_nip05] }).then((p) =>
+						processResult(p as PubKeyString | undefined)
+					);
+				}
+			});
 		return liveQueryState(
 			async () => {
 				const r = await db.pubkeys.where('verified_nip05').equals(standardized_nip05).first();

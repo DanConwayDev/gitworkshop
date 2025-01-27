@@ -214,8 +214,9 @@ class QueryCentreExternal {
 		const pointer = await nip05NostrTools.queryProfile(nip05);
 		if (pointer) {
 			this.processor.enqueueNip05(nip05, pointer.pubkey, pointer.relays);
-			await this.fetchPubkeyName(pointer.pubkey);
+			this.fetchPubkeyName(pointer.pubkey);
 		}
+		return pointer?.pubkey ?? undefined;
 	}
 
 	async fetchActions(a_ref: RepoRef) {
