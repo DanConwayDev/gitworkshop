@@ -1,28 +1,35 @@
 <script lang="ts">
 	import { icons_misc } from '$lib/icons';
 
-	export let label: string = '';
-	export let content: string = '';
-	export let border_color = 'primary';
-	export let no_border = false;
-	export let icon: undefined | string[] = undefined;
-	export let truncate: undefined | [number, number] = undefined;
+	let {
+		label = '',
+		content = '',
+		border_color = 'primary',
+		no_border = false,
+		icon,
+		truncate
+	}: {
+		label?: string;
+		content: string;
+		border_color?: string;
+		no_border?: boolean;
+		icon?: string[];
+		truncate?: [number, number];
+	} = $props();
+
 	const truncatedContent = () => {
 		if (truncate && content.length > truncate[0] + truncate[1] + 3) {
 			return `${content.substring(0, truncate[0])}...${content.substring(content.length - 1 - truncate[1])}`;
 		}
 		return content;
 	};
-	let copied = false;
+	let copied = $state(false);
 </script>
 
-<!-- eslint-disable-next-line svelte/valid-compile -->
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div
-	class="group cursor-pointer"
+<button
+	class="group w-full cursor-pointer text-left"
 	class:mt-3={!no_border}
-	on:click={async () => {
+	onclick={async () => {
 		try {
 			await navigator.clipboard.writeText(content);
 			copied = true;
@@ -44,8 +51,10 @@
 		class:border={!no_border}
 		class:p-3={!no_border}
 		class:text-success={copied}
+		class:border-success={copied}
 	>
-		{#if icon}<svg
+		{#if icon}
+			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
 				class="mr-1 mt-1 inline h-4 w-4 flex-none fill-base-content opacity-50"
@@ -58,6 +67,9 @@
 		<div class="truncate text-sm" class:flex-auto={!no_border} class:flex-none={no_border}>
 			{truncatedContent()}
 		</div>
+		{#if label.length === 0 && copied}<div class="mx-1 text-sm">
+				(copied&nbsp;to&nbsp;clipboard)
+			</div>{/if}
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 16 16"
@@ -70,4 +82,4 @@
 			{/each}
 		</svg>
 	</div>
-</div>
+</button>
