@@ -1,4 +1,5 @@
 /** repo-route types */
+import { repo_kind } from '$lib/kinds';
 import {
 	type PubKeyString,
 	type Npub,
@@ -8,8 +9,10 @@ import {
 	isNaddr,
 	isNip05,
 	type UserRoute,
-	type EventBech32
+	type EventBech32,
+	type RepoRef
 } from '$lib/types';
+import { addressPointerToRepoRef } from '$lib/utils';
 import { nip19 } from 'nostr-tools';
 
 export type RepoRouteString = `${Npub}/${string}` | Naddr | `${Nip05Address}/${string}`;
@@ -26,9 +29,16 @@ export type RepoRouteType = 'npub' | 'naddr' | 'nip05';
 
 export type RepoRoute = RepoRouteNpub | RepoRouteNaddr | RepoRouteNip05;
 
+export const isRepoRoute = (route?: RepoRoute | UserRoute): route is RepoRoute =>
+	!!route && typeof route === 'object' && 'identifier' in route;
+
+export const routeToRepoRef = (route?: RepoRoute | UserRoute): RepoRef | undefined =>
+	!!route && typeof route === 'object' && 'a_ref' in route ? route.a_ref : undefined;
+
 interface RepoRouteBase {
 	type: RepoRouteType;
 	identifier: string;
+	relays?: string[];
 	s: RepoRouteString;
 }
 
@@ -36,27 +46,37 @@ interface RepoRouteNpub extends RepoRouteBase {
 	type: 'npub';
 	pubkey: PubKeyString;
 	relays?: string[];
+	a_ref: RepoRef;
 }
 
 interface RepoRouteNaddr extends RepoRouteBase {
 	type: 'naddr';
 	pubkey: PubKeyString;
-	relays?: string[];
+	a_ref: RepoRef;
 }
 
-interface RepoRouteNip05 extends RepoRouteBase {
+type RepoRouteNip05 = RepoRouteNip05Found | RepoRouteNip05Base;
+
+interface RepoRouteNip05Base extends RepoRouteBase {
 	type: 'nip05';
 	nip05: Nip05Address;
-	relays?: string[];
+	loading: boolean;
+}
+export interface RepoRouteNip05Found extends RepoRouteNip05Base {
+	pubkey: PubKeyString;
+	loading: false;
+	a_ref: RepoRef;
 }
 
 export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 	if (!isRepoRouteString(s)) return;
 	if (isNaddr(s)) {
+		const { data } = nip19.decode(s);
 		return {
 			type: 'naddr',
 			s,
-			...nip19.decode(s).data
+			...data,
+			a_ref: addressPointerToRepoRef(data)
 		};
 	}
 	const split = s.split('/');
@@ -66,15 +86,18 @@ export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 			type: 'nip05',
 			s,
 			nip05: split[0],
-			identifier: split[1]
+			identifier: split[1],
+			loading: false
 		};
 	}
 	if (isNpub(split[0])) {
+		const pubkey = nip19.decode(split[0]).data as PubKeyString;
 		return {
 			type: 'npub',
 			s,
-			pubkey: nip19.decode(split[0]).data as string,
-			identifier: split[1]
+			pubkey,
+			identifier: split[1],
+			a_ref: `${repo_kind}:${pubkey}:${split[1]}`
 		};
 	}
 	return undefined;

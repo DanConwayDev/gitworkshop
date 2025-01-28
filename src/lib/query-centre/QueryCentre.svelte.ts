@@ -14,6 +14,7 @@ import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NostrEvent } from 'nostr-tools';
 import type { NEventAttributes } from 'nostr-editor';
 import store from '$lib/store.svelte';
+import { repo_kind } from '$lib/kinds';
 
 class QueryCentre {
 	external_worker: Worker;
@@ -138,14 +139,20 @@ class QueryCentre {
 	fetchNip05(nip05: Nip05Address) {
 		let loading = $state(true);
 		const standardized_nip05 = standardizeNip05(nip05);
-		if (store.repo_route?.type === 'nip05' && store.repo_route?.nip05 === nip05) {
-			store.route_nip05_pubkey_loading = true;
+		if (store.route?.type === 'nip05' && store.route?.nip05 === nip05) {
+			store.route.loading = true;
 		}
-
 		const processResult = (pubkey: PubKeyString | undefined) => {
-			if (store.repo_route?.type === 'nip05' && store.repo_route?.nip05 === nip05) {
-				if (pubkey) store.route_nip05_pubkey = pubkey;
-				store.route_nip05_pubkey_loading = false;
+			if (store.route?.type === 'nip05' && store.route?.nip05 === nip05) {
+				store.route = {
+					...store.route,
+					pubkey,
+					loading: false,
+					a_ref:
+						'identifier' in store.route && pubkey
+							? `${repo_kind}:${pubkey}:${store.route.identifier}`
+							: undefined
+				};
 			}
 			loading = false;
 		};

@@ -15,19 +15,27 @@ export type UserRoute = UserRouteNpub | UserRouteNip05;
 
 interface UserRouteBase {
 	type: UserRouteType;
+	relays?: string[];
 	s: UserRouteString;
 }
 
 interface UserRouteNpub extends UserRouteBase {
 	type: 'npub';
 	pubkey: PubKeyString;
-	relays?: string[];
 }
 
-interface UserRouteNip05 extends UserRouteBase {
+type UserRouteNip05 = UserRouteNip05Base | UserRouteNip05Found;
+interface UserRouteNip05Base extends UserRouteBase {
 	type: 'nip05';
 	nip05: Nip05Address;
-	relays?: string[];
+	loading: boolean;
+}
+
+interface UserRouteNip05Found extends UserRouteNip05Base {
+	type: 'nip05';
+	nip05: Nip05Address;
+	loading: false;
+	pubkey: PubKeyString;
 }
 
 export const extractUserRoute = (s: string): UserRoute | undefined => {
@@ -36,7 +44,8 @@ export const extractUserRoute = (s: string): UserRoute | undefined => {
 		return {
 			type: 'nip05',
 			s,
-			nip05: s
+			nip05: s,
+			loading: false
 		};
 	}
 	if (isNpub(s)) {
