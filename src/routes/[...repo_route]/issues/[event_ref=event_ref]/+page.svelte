@@ -1,12 +1,13 @@
 <script lang="ts">
-	import type { PrOrIssueRouteData, RepoRef } from '$lib/types';
+	import { routeToRepoRef, type PrOrIssueRouteData, type RepoRef } from '$lib/types';
 	import Compose from '$lib/components/compose/Compose.svelte';
 	import PrOrIssueHeader from '$lib/components/prs-or-issues/PrOrIssueHeader.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
-	import { neventOrNoteToHexId, repoRouteToARef } from '$lib/utils';
+	import { neventOrNoteToHexId } from '$lib/utils';
 	import Container from '$lib/components/Container.svelte';
 	import Thread from '$lib/components/event/Thread.svelte';
 	import PrOrIssueDetails from '$lib/components/prs-or-issues/PrOrIssueDetails.svelte';
+	import store from '$lib/store.svelte';
 
 	let {
 		data
@@ -14,11 +15,9 @@
 		data: PrOrIssueRouteData;
 	} = $props();
 
-	let { repo_route, event_ref } = data;
-	let nip05_query =
-		repo_route.type === 'nip05' ? query_centre.fetchNip05(repo_route.nip05) : undefined;
-	let nip05_result = $derived(nip05_query ? nip05_query.current : undefined);
-	let a_ref: RepoRef | undefined = $derived(repoRouteToARef(repo_route, nip05_result));
+	let { event_ref } = data;
+
+	let a_ref: RepoRef | undefined = $derived(routeToRepoRef(store.route));
 
 	// TODO - handle naddr
 	let id = neventOrNoteToHexId(event_ref);

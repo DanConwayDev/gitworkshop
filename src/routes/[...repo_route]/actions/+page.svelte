@@ -1,17 +1,10 @@
 <script lang="ts">
 	import UserHeader from '$lib/components/user/UserHeader.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
-	import type { RepoRef, RepoRouteData } from '$lib/types';
-	import { repoRouteToARef } from '$lib/utils';
+	import store from '$lib/store.svelte';
+	import { routeToRepoRef, type RepoRef } from '$lib/types';
 
-	let { data }: { data: RepoRouteData } = $props();
-
-	let { repo_route } = data;
-	let nip05_query =
-		repo_route.type === 'nip05' ? query_centre.fetchNip05(repo_route.nip05) : undefined;
-	let nip05_result = $derived(nip05_query ? nip05_query.current : undefined);
-	let a_ref: RepoRef | undefined = $derived(repoRouteToARef(repo_route, nip05_result));
-	// the above lines are required to extract the RepoRef from the page route
+	let a_ref: RepoRef | undefined = $derived(routeToRepoRef(store.route));
 
 	// below is the basic pattern to get an array of events based on a nostr filter.
 	// `actions_events` is a svelt 5 $state so it is dynamtically updated.
