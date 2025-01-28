@@ -1,25 +1,19 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import store, { search } from '$lib/store.svelte';
-	import { onMount } from 'svelte';
 	import Container from './Container.svelte';
+	import LoginModal from './LoginModal.svelte';
 	import UserHeader from './user/UserHeader.svelte';
 
 	// this was be an import from users store
 	let show_login_modal = $state(true);
 	let show_manage_accounts_modal = $state(false);
-	let nip07_plugin: boolean | undefined = $state(undefined);
 	let search_input = $state(search.text);
 	function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
 		search.text = search_input;
 		if (search_input.length > 0) goto(`/search`);
 	}
-	onMount(() => {
-		setTimeout(() => {
-			nip07_plugin = 'nostr' in window;
-		});
-	});
 </script>
 
 <div class="bg-base-400">
@@ -157,23 +151,9 @@
 	</div>
 {/if}
 {#if show_login_modal}
-	<div class="modal" class:modal-open={show_login_modal}>
-		<div class="modal-box max-w-lg text-wrap">
-			<div class="prose"><h4 class="text-center">Sign in</h4></div>
-			<div class="my-3 flex space-x-1">
-				{#if nip07_plugin}
-					<button class="btn flex-grow">Browser <br /> Extension</button>
-					<div class="divider divider-horizontal"></div>
-				{/if}
-				<button class="btn flex-grow">Nostr Connect</button>
-				<div class="divider divider-horizontal"></div>
-				<button class="btn flex-grow">Private Key</button>
-			</div>
-			<div class="divider">OR</div>
-			<button class="btn w-full">Sign up</button>
-			<div class="modal-action">
-				<button class="btn btn-sm" onclick={() => (show_login_modal = false)}>Close</button>
-			</div>
-		</div>
-	</div>
+	<LoginModal
+		done={() => {
+			show_login_modal = false;
+		}}
+	/>
 {/if}
