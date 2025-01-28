@@ -50,7 +50,11 @@
 					<div class="dropdown dropdown-end">
 						<div tabindex="0" role="button" class="m-1">
 							{#if store.logged_in_account}
-								<UserHeader user={store.logged_in_account.pubkey} link_to_profile={false} />
+								<UserHeader
+									user={store.logged_in_account.pubkey}
+									link_to_profile={false}
+									avatar_only={true}
+								/>
 							{:else}
 								<button class="btn btn-ghost btn-sm normal-case">Login</button>
 							{/if}
