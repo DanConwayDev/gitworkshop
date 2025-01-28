@@ -94,3 +94,9 @@ function truncate(s: string, truncate_above = 20): string {
 	if (s.length < truncate_above || truncate_above < 5) return s;
 	return `${s.substring(0, truncate_above - 3)}...`;
 }
+
+export interface AccountSummary {
+	pubkey: PubKeyString;
+	id: string;
+	type: string;
+}

@@ -1,29 +1,25 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { search } from '$lib/store.svelte';
+	import store, { search } from '$lib/store.svelte';
+	import { onMount } from 'svelte';
 	import Container from './Container.svelte';
-
-	let {
-		logged_in_user = undefined,
-		nip07_plugin = undefined,
-		login_function = () => {},
-		singup_function = () => {}
-	}: {
-		logged_in_user?: { user_profile_goes_here: boolean } | undefined;
-		nip07_plugin?: boolean | undefined;
-		login_function?: () => void;
-		singup_function?: () => void;
-	} = $props();
+	import UserHeader from './user/UserHeader.svelte';
 
 	// this was be an import from users store
-	let logout = () => {};
-
+	let show_login_modal = $state(true);
+	let show_manage_accounts_modal = $state(false);
+	let nip07_plugin: boolean | undefined = $state(undefined);
 	let search_input = $state(search.text);
 	function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
 		search.text = search_input;
 		if (search_input.length > 0) goto(`/search`);
 	}
+	onMount(() => {
+		setTimeout(() => {
+			nip07_plugin = 'nostr' in window;
+		});
+	});
 </script>
 
 <div class="bg-base-400">
@@ -37,7 +33,7 @@
 				<a href="/" class="btn btn-ghost btn-sm normal-case">Home</a>
 				<a href="/quick-start" class="btn btn-ghost btn-sm normal-case">Quick Start</a>
 			</div>
-			<div class="navbar-center"></div>
+			<div class="navbar-cente"></div>
 			<div class="navbar-end gap-4">
 				<form onsubmit={handleSearch}>
 					<label class="input input-sm input-bordered flex items-center gap-2">
@@ -56,45 +52,128 @@
 						<input type="text" class="grow" placeholder="Search" bind:value={search_input} />
 					</label>
 				</form>
-				{#if logged_in_user}
+				{#if store.logged_in_account || store.accounts.length > 0}
 					<div class="dropdown dropdown-end">
-						<div tabindex="0" role="button" class="m-1">[user placeholder]</div>
+						<div tabindex="0" role="button" class="m-1">
+							{#if store.logged_in_account}
+								<UserHeader user={store.logged_in_account.pubkey} link_to_profile={false} />
+							{:else}
+								<button class="btn btn-ghost btn-sm normal-case">Login</button>
+							{/if}
+						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 						<ul
 							tabindex="0"
 							class="menu dropdown-content z-[1] -mr-4 rounded-box bg-base-400 p-2 shadow"
 						>
-							<li>[user placeholder]</li>
+							{#each store.accounts as account}
+								<li>
+									<button
+										class:bg-base-300={store.logged_in_account &&
+											store.logged_in_account.id === account.id}
+										onclick={() => {
+											// TODO when applesauce v0.11.0 is released do this:
+											// account_manager.setActive(account.id)
+										}}
+									>
+										<UserHeader user={account.pubkey} link_to_profile={false} />
+									</button>
+								</li>
+							{/each}
 							<li>
-								<!-- svelte-ignore a11y_click_events_have_key_events -->
-								<!-- svelte-ignore a11y_missing_attribute -->
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<a
+								<button
 									onclick={() => {
-										logout();
-									}}>Logout</a
+										show_manage_accounts_modal = true;
+									}}>Manage Account</button
+								>
+							</li>
+							<li>
+								<button
+									onclick={() => {
+										// TODO when applesauce v0.11.0 is released do this:
+										// account_manager.clearActive()
+									}}>Logout</button
 								>
 							</li>
 						</ul>
 					</div>
-				{:else if nip07_plugin === undefined}
-					<div class="skeleton h-8 w-20"></div>
-				{:else if nip07_plugin}
-					<button
-						onclick={() => {
-							login_function();
-						}}
-						class="btn btn-ghost btn-sm normal-case">Login</button
-					>
 				{:else}
 					<button
 						onclick={() => {
-							singup_function();
+							show_login_modal = true;
 						}}
-						class="btn btn-ghost btn-sm normal-case">Sign up</button
+						class="btn btn-ghost btn-sm normal-case">Login / Create Account</button
 					>
 				{/if}
 			</div>
 		</div>
 	</Container>
 </div>
+
+{#if show_manage_accounts_modal}
+	<div class="modal" class:modal-open={show_manage_accounts_modal}>
+		<div class="modal-box max-w-lg text-wrap">
+			<div class="prose mb-5"><h3>Manage Accounts</h3></div>
+			{#each store.accounts as account}
+				<div
+					class="flex items-center rounded-lg p-2"
+					class:bg-base-300={store.logged_in_account?.id === account.id}
+				>
+					<button
+						class="flex flex-grow"
+						onclick={() => {
+							// TODO when applesauce v0.11.0 is released do this:
+							// account_manager.setActive(account.id)
+						}}
+					>
+						<div>
+							<UserHeader user={account.pubkey} link_to_profile={false} />
+						</div>
+						<div class="flex-grow"></div>
+					</button>
+					<div class="px-3 text-sm text-neutral-content">{account.type}</div>
+					<button
+						class="btn btn-error btn-xs"
+						onclick={() => {
+							// TODO when applesauce v0.11.0 is released do this:
+							// account_manager.removeAccount(account.id)
+						}}>Remove</button
+					>
+				</div>
+			{/each}
+			<button
+				class="btn btn-ghost btn-sm mt-2 normal-case"
+				onclick={() => {
+					show_login_modal = true;
+				}}>Add Account</button
+			>
+
+			<div class="modal-action">
+				<button class="btn btn-sm" onclick={() => (show_manage_accounts_modal = false)}
+					>Close</button
+				>
+			</div>
+		</div>
+	</div>
+{/if}
+{#if show_login_modal}
+	<div class="modal" class:modal-open={show_login_modal}>
+		<div class="modal-box max-w-lg text-wrap">
+			<div class="prose"><h4 class="text-center">Sign in</h4></div>
+			<div class="my-3 flex space-x-1">
+				{#if nip07_plugin}
+					<button class="btn flex-grow">Browser <br /> Extension</button>
+					<div class="divider divider-horizontal"></div>
+				{/if}
+				<button class="btn flex-grow">Nostr Connect</button>
+				<div class="divider divider-horizontal"></div>
+				<button class="btn flex-grow">Private Key</button>
+			</div>
+			<div class="divider">OR</div>
+			<button class="btn w-full">Sign up</button>
+			<div class="modal-action">
+				<button class="btn btn-sm" onclick={() => (show_login_modal = false)}>Close</button>
+			</div>
+		</div>
+	</div>
+{/if}
