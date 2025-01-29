@@ -11,8 +11,12 @@ export type AtLeastOneArray<T> = [T, ...T[]];
 export type AtLeastThreeArray<T> = [T, T, T, ...T[]];
 export type PubKeyString = string;
 
-export const isPubkeyString = (s: string): s is PubKeyString => {
-	return isHexKey(s);
+export const isPubkeyString = (s?: string): s is PubKeyString => {
+	try {
+		return !!s && isHexKey(s);
+	} catch {
+		return false;
+	}
 };
 
 export type Npub = `npub1${string}`;

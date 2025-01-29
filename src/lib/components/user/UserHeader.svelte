@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { icons_misc } from '$lib/icons';
-	import { createPubKeyInfo, type PubKeyString } from '$lib/types';
+	import { createPubKeyInfo, isPubkeyString, type PubKeyString } from '$lib/types';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { getName } from '$lib/types';
 	import CopyField from '../CopyField.svelte';
@@ -27,7 +27,9 @@
 		no_avatar?: boolean;
 	} = $props();
 
-	let info_query = $derived(user ? query_centre.fetchPubkeyName(user) : undefined);
+	let info_query = $derived(
+		isPubkeyString(user) ? query_centre.fetchPubkeyName($state.snapshot(user)) : undefined
+	);
 	// prevent flashing with pubkey when info in db (allow db record to load before showing loading)
 	let mounting = $state(true);
 	onMount(() => {
