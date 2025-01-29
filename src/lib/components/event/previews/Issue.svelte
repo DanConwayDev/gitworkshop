@@ -27,7 +27,7 @@
 	);
 </script>
 
-<div>
+<span>
 	{#if repo_link}
 		Git Issue for <a class="opacity-50" href={`/${repo_link}`}>{repo_identifier}</a>:
 		<a href={`/${repo_link}/issues/${nevent}`}>{extractIssueTitle(event)}</a> by
@@ -35,4 +35,4 @@
 		Git Issue not linked to a repository (badly formatted):
 		<a href={`/${nevent}`}>{extractIssueTitle(event)}</a> by
 	{/if}
-</div>
+</span>
