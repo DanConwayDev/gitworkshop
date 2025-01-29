@@ -1,9 +1,11 @@
 import { liveQuery } from 'dexie';
-import type { Filter, NostrEvent } from 'nostr-tools';
+import { nip19, type Filter, type NostrEvent } from 'nostr-tools';
 import { memory_db_query_store } from './dbs/InMemoryRelay';
 import type { NEventAttributes } from 'nostr-editor';
 import {
 	type Nip05Address,
+	type Npub,
+	type PubKeyString,
 	type RepoRef,
 	type RepoRouteNip05String,
 	type RepoRouteString,
@@ -81,9 +83,37 @@ export class RepoRouteStringCreator {
 	private pointer = $derived(
 		this.a_ref ? aRefPToAddressPointer(this.a_ref, this.relays) : undefined
 	);
-	private profile_query = $derived(
+
+	private nip_creator = $derived(
 		this.pointer && store.url_pref === 'nip05'
-			? query_centre.fetchPubkeyName(this.pointer.pubkey)
+			? new UserRouteStringCreator(this.pointer.pubkey)
+			: undefined
+	);
+
+	s: RepoRouteString | undefined = $derived.by(() => {
+		if (this.pointer && this.a_ref) {
+			if (store.url_pref === 'naddr') return aToNaddr(this.pointer);
+			else if (store.url_pref === 'nip05' && this.nip_creator?.s) {
+				return `${this.nip_creator.s}/${this.pointer.identifier}` as RepoRouteNip05String;
+			} else return repoRefToPubkeyLink(this.a_ref);
+		}
+		return undefined;
+	});
+
+	constructor(a_ref_or_table_item: RepoRef | RepoTableItem, relay?: WebSocketUrl) {
+		const is_a_ref = typeof a_ref_or_table_item == 'string';
+		this.a_ref = is_a_ref ? a_ref_or_table_item : repoToRepoRef(a_ref_or_table_item);
+		this.explicit_relay = relay;
+	}
+}
+const firstRelay = (relays: string[] = []) => (!relays[0] ? [] : [relays[0]]);
+
+export class UserRouteStringCreator {
+	private pubkey: PubKeyString | undefined = $state(undefined);
+
+	private profile_query = $derived(
+		this.pubkey && store.url_pref === 'nip05'
+			? query_centre.fetchPubkeyName(this.pubkey)
 			: undefined
 	);
 	private nip05_query = $derived.by(() => {
@@ -97,7 +127,7 @@ export class RepoRouteStringCreator {
 	private nip05: Nip05Address | undefined = $derived.by(() => {
 		const profile = this.nip05_query?.current?.user;
 		if (!profile) return undefined;
-		if (profile.pubkey == this.pointer?.pubkey && profile.verified_nip05[0]) {
+		if (profile.pubkey == this.pubkey && profile.verified_nip05[0]) {
 			return profile.verified_nip05[0].slice(
 				profile.verified_nip05[0].startsWith('_@') ? 2 : 0
 			) as Nip05Address;
@@ -105,21 +135,12 @@ export class RepoRouteStringCreator {
 		return undefined;
 	});
 
-	s: RepoRouteString | undefined = $derived.by(() => {
-		if (this.pointer && this.a_ref) {
-			if (store.url_pref === 'naddr') return aToNaddr(this.pointer);
-			else if (store.url_pref === 'nip05' && this.nip05) {
-				return `${this.nip05}/${this.pointer.identifier}` as RepoRouteNip05String;
-			} else return repoRefToPubkeyLink(this.a_ref);
-		}
+	s: Nip05Address | Npub | undefined = $derived.by(() => {
+		return !this.pubkey ? undefined : (this.nip05 ?? nip19.npubEncode(this.pubkey));
 		return undefined;
 	});
 
-	constructor(a_ref_or_table_item: RepoRef | RepoTableItem, relay?: WebSocketUrl) {
-		const is_a_ref = typeof a_ref_or_table_item == 'string';
-		this.a_ref = is_a_ref ? a_ref_or_table_item : repoToRepoRef(a_ref_or_table_item);
-		this.explicit_relay = relay;
+	constructor(pubkey: PubKeyString) {
+		this.pubkey = pubkey;
 	}
 }
-
-const firstRelay = (relays: string[] = []) => (!relays[0] ? [] : [relays[0]]);

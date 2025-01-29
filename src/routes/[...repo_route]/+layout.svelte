@@ -42,7 +42,7 @@
 		store.route = undefined;
 	});
 	onMount(() => {
-		if (store.original_url_pref) {
+		if (!store.original_url_pref) {
 			if (isRepoRouteData(data)) {
 				store.original_url_pref = data.repo_route.type;
 			} else if (isUserRouteData(data)) {
