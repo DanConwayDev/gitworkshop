@@ -15,7 +15,9 @@ import {
 import { addressPointerToRepoRef } from '$lib/utils';
 import { nip19 } from 'nostr-tools';
 
-export type RepoRouteString = `${Npub}/${string}` | Naddr | `${Nip05Address}/${string}`;
+export type RepoRouteNpubString = `${Npub}/${string}`;
+export type RepoRouteNip05String = `${Nip05Address}/${string}`;
+export type RepoRouteString = RepoRouteNpubString | Naddr | RepoRouteNip05String;
 
 export const isRepoRouteString = (s: string | undefined): s is RepoRouteString => {
 	if (!s) return false;

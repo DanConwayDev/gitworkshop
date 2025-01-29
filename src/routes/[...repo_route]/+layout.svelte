@@ -3,8 +3,8 @@
 	import RepoPageContainer from '$lib/components/repo/RepoPageContainer.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store from '$lib/store.svelte';
-	import { isRepoRouteData, isUserRouteData, type RepoRef, type RouteData } from '$lib/types';
-	import { onDestroy, type Snippet } from 'svelte';
+	import { isRepoRouteData, isUserRouteData, type RouteData } from '$lib/types';
+	import { onDestroy, onMount, type Snippet } from 'svelte';
 
 	let {
 		data,
@@ -30,14 +30,25 @@
 	$effect(() => {
 		if (
 			store.route &&
+			data.url &&
 			data.url.endsWith(store.route.s) &&
 			'a_ref' in store.route &&
 			store.readme[store.route.a_ref]?.failed
-		)
-			goto(`${store.route.s}/prs`);
+		) {
+			goto(`/${store.route.s}/prs`);
+		}
 	});
 	onDestroy(() => {
 		store.route = undefined;
+	});
+	onMount(() => {
+		if (store.original_url_pref) {
+			if (isRepoRouteData(data)) {
+				store.original_url_pref = data.repo_route.type;
+			} else if (isUserRouteData(data)) {
+				store.original_url_pref = data.user_route.type;
+			}
+		}
 	});
 </script>
 

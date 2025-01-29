@@ -15,6 +15,8 @@ export const network_status: { offline: boolean } = $state({
 });
 
 class Store {
+	original_url_pref: undefined | 'nip05' | 'npub' | 'naddr' = $state(undefined);
+	url_pref: 'nip05' | 'npub' | 'naddr' = $derived(this.original_url_pref || 'nip05');
 	route?: RepoRoute | UserRoute = $state(undefined);
 
 	logged_in_account?: AccountSummary = $state(undefined);

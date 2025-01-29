@@ -123,7 +123,7 @@ export const naddrToRepoA = (s: string): RepoRef | undefined => {
 	return undefined;
 };
 
-export const aToNaddr = (a: string | AddressPointer): `naddr1${string}` | undefined => {
+export const aToNaddr = (a: string | AddressPointer): Naddr | undefined => {
 	const a_ref = typeof a === 'string' ? aRefToAddressPointer(a) : a;
 	if (!a_ref) return undefined;
 	return nip19.naddrEncode(a_ref);

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { repoToNaddr } from '$lib/repos';
+	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
 	import { getRepoShortDescription, getRepoShortName } from '$lib/type-helpers/repo';
-	import { type Naddr, type PubKeyString, type RepoTableItem } from '$lib/types';
+	import { type PubKeyString, type RepoRouteString, type RepoTableItem } from '$lib/types';
 	import UserHeader from '../user/UserHeader.svelte';
 
 	let { repo_item = undefined }: { repo_item: RepoTableItem | undefined } = $props();
@@ -21,7 +21,8 @@
 		...(additional_maintainers || [])
 	]);
 
-	let naddr: Naddr | undefined = $derived(repo_item ? repoToNaddr(repo_item) : undefined);
+	let link_creator = $derived(repo_item ? new RepoRouteStringCreator(repo_item) : undefined);
+	let repo_link: RepoRouteString | undefined = $derived(link_creator ? link_creator.s : undefined);
 </script>
 
 <div class="rounded-lg bg-base-200 p-4" style={`min-height: ${maintainers.length * 1.325 + 2}rem;`}>
@@ -31,9 +32,9 @@
 	{:else}
 		<a
 			class="link-primary break-words"
-			href="/{naddr}"
+			href="/{repo_link}"
 			onclick={(event) => {
-				if (!naddr) {
+				if (!repo_link) {
 					event.preventDefault();
 				}
 			}}>{short_name}</a
