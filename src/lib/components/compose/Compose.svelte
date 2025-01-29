@@ -28,7 +28,8 @@
 				NostrExtension.configure({
 					extend: {
 						nprofile: { addNodeView: () => SvelteNodeViewRenderer(MentionEditor) },
-						nevent: { addNodeView: () => SvelteNodeViewRenderer(EmbeddedEventEditor) }
+						nevent: { addNodeView: () => SvelteNodeViewRenderer(EmbeddedEventEditor) },
+						naddr: { addNodeView: () => SvelteNodeViewRenderer(EmbeddedEventEditor) }
 					},
 					link: { autolink: true } // needed for markdown links
 				})

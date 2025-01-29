@@ -2,21 +2,23 @@
 	import type { Snippet } from 'svelte';
 	import FromNow from '../FromNow.svelte';
 	import UserHeader from '../user/UserHeader.svelte';
-	import type { NEventAttributes } from 'nostr-editor';
+	import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
 	import type { NostrEvent } from 'nostr-tools';
 	let {
-		nevent_attr,
+		n_attr,
 		event,
 		disable_links = false,
 		children
 	}: {
 		event?: NostrEvent;
-		nevent_attr?: NEventAttributes;
+		n_attr?: NEventAttributes | NAddrAttributes;
 		disable_links?: boolean;
 		children?: Snippet;
 	} = $props();
 
-	let author = $derived(event ? event.pubkey : (nevent_attr?.author ?? undefined));
+	let author = $derived(
+		event ? event.pubkey : n_attr?.type === 'naddr' ? n_attr.pubkey : (n_attr?.author ?? undefined)
+	);
 	let created_at = $derived(event?.created_at ?? undefined);
 </script>
 

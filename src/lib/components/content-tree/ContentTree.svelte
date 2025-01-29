@@ -47,7 +47,7 @@
 	{:else if isTextNode(n) && (n.marks || []).some((m) => isTagMark(m))}
 		<Tag node={n as TextNode & { marks: AtLeastOneArray<TagMark> & Mark[] }} />
 	{:else if isNEventNode(n)}
-		<EmbeddedEvent nevent_attr={n.attrs} />
+		<EmbeddedEvent n_attr={n.attrs} />
 	{:else if isNAddrNode(n)}
 		<div class="addr-node">TODO - Address Node Content</div>
 	{:else if isTweetNode(n)}

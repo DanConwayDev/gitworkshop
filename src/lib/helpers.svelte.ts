@@ -1,7 +1,7 @@
 import { liveQuery } from 'dexie';
 import { nip19, type Filter, type NostrEvent } from 'nostr-tools';
 import { memory_db_query_store } from './dbs/InMemoryRelay';
-import type { NEventAttributes } from 'nostr-editor';
+import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
 import {
 	type Nip05Address,
 	type Npub,
@@ -58,11 +58,19 @@ export function inMemoryRelayTimeline(filters: Filter[], dependencies?: () => un
 	return result;
 }
 
-export function inMemoryRelayEvent(event_ref: NEventAttributes, dependencies?: () => unknown[]) {
+export function inMemoryRelayEvent(
+	event_ref: NEventAttributes | NAddrAttributes,
+	dependencies?: () => unknown[]
+) {
 	const result = $state<{ event: NostrEvent | undefined }>({ event: undefined });
 	$effect(() => {
 		dependencies?.();
-		const sub = memory_db_query_store.event(event_ref.id).subscribe((event) => {
+
+		const sub = (
+			event_ref.type === 'naddr'
+				? memory_db_query_store.replaceable(event_ref.kind, event_ref.pubkey, event_ref.identifier)
+				: memory_db_query_store.event(event_ref.id)
+		).subscribe((event) => {
 			result.event = event;
 		});
 		return () => {

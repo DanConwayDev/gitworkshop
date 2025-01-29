@@ -12,7 +12,7 @@ import db from '$lib/dbs/LocalDb';
 import { inMemoryRelayEvent, inMemoryRelayTimeline, liveQueryState } from '$lib/helpers.svelte';
 import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NostrEvent } from 'nostr-tools';
-import type { NEventAttributes } from 'nostr-editor';
+import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
 import store from '$lib/store.svelte';
 import { repo_kind } from '$lib/kinds';
 
@@ -115,7 +115,7 @@ class QueryCentre {
 		return liveQueryState(() => db.issues.get(pr_id));
 	}
 
-	fetchEvent(event_ref: NEventAttributes) {
+	fetchEvent(event_ref: NEventAttributes | NAddrAttributes) {
 		this.external_worker.postMessage({ method: 'fetchEvent', args: [event_ref] });
 		return inMemoryRelayEvent(event_ref);
 	}
