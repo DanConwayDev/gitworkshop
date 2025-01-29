@@ -1,11 +1,23 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { AmberClipboardSigner, NostrConnectSigner } from 'applesauce-signer';
+	import {
+		AmberClipboardSigner,
+		ExtensionSigner,
+		NostrConnectSigner,
+		SimpleSigner
+	} from 'applesauce-signer';
+	import {
+		AmberClipboardAccount,
+		ExtensionAccount,
+		SimpleAccount
+	} from 'applesauce-accounts/accounts';
 	import QRCode from 'svelte-qrcode';
 	import { icons_misc } from '$lib/icons';
 	import CopyField from './CopyField.svelte';
 	import { nip19 } from 'nostr-tools';
 	import { isWebSocketUrl } from '$lib/types';
+	import accounts_manager from '$lib/accounts';
+	import { isHexKey } from 'applesauce-core/helpers';
 	let { done }: { done: () => void } = $props();
 
 	let nip07_plugin: boolean | undefined = $state('nostr' in window);
@@ -27,6 +39,15 @@
 			nip07_plugin = 'nostr' in window;
 		}, 1000);
 	});
+
+	function hexToUint8Array(hex: string) {
+		const length = hex.length / 2;
+		const uint8Array = new Uint8Array(length);
+		for (let i = 0; i < length; i++) {
+			uint8Array[i] = parseInt(hex.substr(i * 2, 2), 16);
+		}
+		return uint8Array;
+	}
 </script>
 
 {#snippet waiting(text: string, back: () => void)}
@@ -75,16 +96,24 @@
 				autofocus
 				type="text"
 				placeholder="nsec1..."
-				onpaste={(event) => {
+				onpaste={async (event) => {
 					const s = event.clipboardData?.getData('text');
 					try {
-						let r = nip19.decode(s as `nsec1${string}`);
-						if (r.type === 'nsec') {
-							// const signer = new SimpleSigner(r.type);
-							// account_mannager.addAccount(new SimpleAccount(signer.getPublicKey(),signer));
-							// account_mannager.switchAccount(pubkey);
-							complete();
+						let hex;
+						if (s && isHexKey(s)) {
+							hex = hexToUint8Array(s);
+						} else {
+							let r = nip19.decode(s as `nsec1${string}`);
+							if (r.type === 'nsec') {
+								hex = r.data;
+							}
 						}
+						const signer = new SimpleSigner(hex);
+						const pubkey = await signer.getPublicKey();
+						const account = new SimpleAccount(pubkey, signer);
+						accounts_manager.addAccount(account);
+						accounts_manager.setActive(account);
+						complete();
 					} catch {
 						private_key_invalid = true;
 						/* empty */
@@ -172,10 +201,11 @@
 						onclick={async () => {
 							try {
 								amber = true;
-								// const signer = new AmberClipboardSigner();
-								// const pubkey = await signer.getPublicKey();
-								// account_mannager.addAccount(new AmberAccount(pubkey));
-								// account_mannager.switchAccount(pubkey);
+								const signer = new AmberClipboardSigner();
+								const pubkey = await signer.getPublicKey();
+								const account = new AmberClipboardAccount(pubkey);
+								accounts_manager.addAccount(account);
+								accounts_manager.setActive(account);
 								complete();
 							} catch {
 								amber = false;
@@ -210,9 +240,10 @@
 							let pubkey = await (
 								window as unknown as { nostr: { getPublicKey: () => Promise<PubKeyString> } }
 							).nostr.getPublicKey();
-							// const account = account_mannager.addAccount(new ExtensionAccount(pubkey))
-							// account_mannager.switchAccount(account)
-							console.log(pubkey);
+							const signer = new ExtensionSigner();
+							const account = new ExtensionAccount(pubkey, signer);
+							accounts_manager.addAccount(account);
+							accounts_manager.setActive(account);
 							complete();
 						}}>Browser <br /> Extension</button
 					>
@@ -222,7 +253,6 @@
 					class="btn flex-grow"
 					onclick={() => {
 						nostr_connect = true;
-						// let c = new NostrConnectSigner()
 					}}>Nostr Connect</button
 				>
 				<div class="divider divider-horizontal"></div>
