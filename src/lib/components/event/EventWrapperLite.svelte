@@ -7,8 +7,14 @@
 	let {
 		nevent_attr,
 		event,
+		disable_links = false,
 		children
-	}: { event?: NostrEvent; nevent_attr?: NEventAttributes; children?: Snippet } = $props();
+	}: {
+		event?: NostrEvent;
+		nevent_attr?: NEventAttributes;
+		disable_links?: boolean;
+		children?: Snippet;
+	} = $props();
 
 	let author = $derived(event ? event.pubkey : (nevent_attr?.author ?? undefined));
 	let created_at = $derived(event?.created_at ?? undefined);
@@ -21,7 +27,7 @@
 				{@render children?.()}
 			</div>
 			<div class="badge bg-base-400 text-neutral-400">
-				<UserHeader user={author} inline />
+				<UserHeader user={author} inline link_to_profile={!disable_links} />
 			</div>
 		</div>
 		{#if created_at}<span class="m-auto flex-none py-1 text-xs"

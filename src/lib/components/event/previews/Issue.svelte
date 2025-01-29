@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { extractIssueTitle, extractRepoRefsFromPrOrIssue } from '$lib/git-utils';
+	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
 	import store from '$lib/store.svelte';
-	import { routeToRepoRef, type WebSocketUrl } from '$lib/types';
-	import { repoRefToPubkeyLink } from '$lib/utils';
+	import { routeToRepoRef, type RepoRouteString, type WebSocketUrl } from '$lib/types';
 	import { nip19, type NostrEvent } from 'nostr-tools';
 
 	let { event, relay_hint }: { event: NostrEvent; relay_hint?: WebSocketUrl } = $props();
@@ -14,9 +14,9 @@
 	let a_ref = $derived(issue_in_selected_repo ? route_a_ref : (repo_refs[0]?.a_ref ?? undefined));
 	let repo_identifier = $derived(a_ref?.split(':')[2] ?? '');
 
-	let repo_link = $derived(
-		issue_in_selected_repo ? store.route?.s : a_ref ? repoRefToPubkeyLink(a_ref) : undefined
-	);
+	let link_creator = $derived(a_ref ? new RepoRouteStringCreator(a_ref) : undefined);
+	let repo_link: RepoRouteString | undefined = $derived(link_creator ? link_creator.s : undefined);
+
 	let nevent = $derived(
 		nip19.neventEncode({
 			id: event.id,

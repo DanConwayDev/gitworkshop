@@ -7,6 +7,7 @@
 	import MentionEditor from '$lib/components/content-tree/MentionEditor.svelte';
 	import { Markdown } from 'tiptap-markdown';
 	import ContentTree from '../content-tree/ContentTree.svelte';
+	import EmbeddedEventEditor from '../content-tree/EmbeddedEventEditor.svelte';
 
 	let {
 		content = ''
@@ -25,7 +26,10 @@
 					transformPastedText: true
 				}),
 				NostrExtension.configure({
-					extend: { nprofile: { addNodeView: () => SvelteNodeViewRenderer(MentionEditor) } },
+					extend: {
+						nprofile: { addNodeView: () => SvelteNodeViewRenderer(MentionEditor) },
+						nevent: { addNodeView: () => SvelteNodeViewRenderer(EmbeddedEventEditor) }
+					},
 					link: { autolink: true } // needed for markdown links
 				})
 			],
