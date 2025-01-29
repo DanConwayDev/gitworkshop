@@ -2,23 +2,26 @@
 	import { issue_icon_path } from '$lib/components/issues/icons';
 	import { pr_icon_path as pr_icon_path } from '$lib/components/prs/icons';
 	import { icons_misc } from '$lib/icons';
-	import { network_status } from '$lib/store.svelte';
+	import store, { network_status } from '$lib/store.svelte';
 	import { IssueOrPrStatus, type RepoRoute, type RepoTableItem } from '$lib/types';
 	import type { WithLoading } from '$lib/types/ui';
 
 	let {
 		repo,
-		repo_route,
 		url
 	}: {
 		repo?: RepoTableItem & WithLoading;
-		repo_route: RepoRoute;
 		url: string;
 	} = $props();
 
 	let loading = $derived(network_status.offline || !repo || repo.loading);
 
-	let readme_available = false;
+	let repo_route = $derived(store.route as RepoRoute);
+	let readme_available = $derived(
+		!('a_ref' in repo_route) ||
+			!store.readme[repo_route.a_ref] ||
+			!store.readme[repo_route.a_ref]?.failed
+	);
 	let open_prs_count = $derived(
 		repo && repo.PRs
 			? repo.PRs[IssueOrPrStatus.Open].length + repo.PRs[IssueOrPrStatus.Draft].length
@@ -35,7 +38,7 @@
 	<div role="tablist" class="tabs tabs-bordered flex-none">
 		{#if readme_available}
 			<a
-				href={`$/${repo_route.s}`}
+				href={`/${repo_route.s}`}
 				class="tab"
 				class:tab-active={url.includes(`${repo_route.s}/about`) || url.endsWith(repo_route.s)}
 			>

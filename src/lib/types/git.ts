@@ -51,3 +51,15 @@ export interface IssueOrPrBase {
 export interface Issue extends NonReplaceableEventAttribution, IssueOrPrBase {}
 
 export interface Pr extends NonReplaceableEventAttribution, IssueOrPrBase {}
+
+export interface RepoReadme {
+	md: string;
+	loading: boolean;
+	failed: boolean;
+}
+
+export const readme_defaults: RepoReadme = {
+	md: '',
+	loading: true,
+	failed: false
+};

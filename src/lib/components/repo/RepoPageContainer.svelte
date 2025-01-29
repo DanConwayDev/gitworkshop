@@ -47,7 +47,7 @@
 {#if repo && network_status.offline}
 	<OfflineBanner msg={`repository data last refreshed ${getLastSuccessfulCheckTimeAgo(repo)}`} />
 {/if}
-<RepoHeader {repo} {repo_route} {url}></RepoHeader>
+<RepoHeader {repo} {url}></RepoHeader>
 
 {#snippet contents()}
 	{#if repo}

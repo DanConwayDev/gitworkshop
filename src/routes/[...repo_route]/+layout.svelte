@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import RepoPageContainer from '$lib/components/repo/RepoPageContainer.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store from '$lib/store.svelte';
-	import { isRepoRouteData, isUserRouteData, type RouteData } from '$lib/types';
+	import { isRepoRouteData, isUserRouteData, type RepoRef, type RouteData } from '$lib/types';
 	import { onDestroy, type Snippet } from 'svelte';
 
 	let {
@@ -26,6 +27,15 @@
 	} else {
 		store.route = undefined;
 	}
+	$effect(() => {
+		if (
+			store.route &&
+			data.url.endsWith(store.route.s) &&
+			'a_ref' in store.route &&
+			store.readme[store.route.a_ref]?.failed
+		)
+			goto(`${store.route.s}/prs`);
+	});
 	onDestroy(() => {
 		store.route = undefined;
 	});

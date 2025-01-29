@@ -1,4 +1,10 @@
-import { type AccountSummary, type RepoRoute, type UserRoute } from './types';
+import {
+	type AccountSummary,
+	type RepoReadme,
+	type RepoRef,
+	type RepoRoute,
+	type UserRoute
+} from './types';
 
 export const search = $state({
 	text: ''
@@ -13,6 +19,8 @@ class Store {
 
 	logged_in_account?: AccountSummary = $state(undefined);
 	accounts: AccountSummary[] = $state([]);
+
+	readme: { [key in RepoRef]: RepoReadme } = $state({});
 }
 
 const store = new Store();

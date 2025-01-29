@@ -16,3 +16,8 @@ export const nostrEventToDocTree = (event: NostrEvent): ContentSchema => {
 	editor.commands.setEventContent(event);
 	return editor.getJSON() as ContentSchema;
 };
+
+export const stringToDocTree = (s: string): ContentSchema => {
+	editor.commands.setContent(s);
+	return editor.getJSON() as ContentSchema;
+};
