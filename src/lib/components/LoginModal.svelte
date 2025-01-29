@@ -1,11 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import {
-		AmberClipboardSigner,
-		ExtensionSigner,
-		NostrConnectSigner,
-		SimpleSigner
-	} from 'applesauce-signer';
+	import { AmberClipboardSigner, ExtensionSigner, SimpleSigner } from 'applesauce-signer';
 	import {
 		AmberClipboardAccount,
 		ExtensionAccount,
@@ -27,8 +22,10 @@
 	let private_key_invalid = $state(false);
 	let amber = $state(false);
 	let nostr_connect = $state(false);
+	let nostr_connect_feature_toggle = $state(false);
 	let bunker_url_invalid = $state(false);
 	let connection_relay_invalid = $state(false);
+	let signup_feature_toggle = $state(false);
 	let success = $state(false);
 	const complete = () => {
 		success = true;
@@ -173,10 +170,11 @@
 				onpaste={(event) => {
 					const s = event.clipboardData?.getData('text');
 					try {
-						let client = NostrConnectSigner.fromBunkerURI(
-							s
-							// TODO listen on relay
-						);
+						if (!s) bunker_url_invalid = true;
+						// let client = NostrConnectSigner.fromBunkerURI(
+						// 	s
+						// 	// TODO listen on relay
+						// );
 					} catch {
 						bunker_url_invalid = true;
 					}
@@ -203,7 +201,7 @@
 								amber = true;
 								const signer = new AmberClipboardSigner();
 								const pubkey = await signer.getPublicKey();
-								const account = new AmberClipboardAccount(pubkey);
+								const account = new AmberClipboardAccount(pubkey, signer);
 								accounts_manager.addAccount(account);
 								accounts_manager.setActive(account);
 								complete();
@@ -238,7 +236,7 @@
 						onclick={async () => {
 							nip07 = true;
 							let pubkey = await (
-								window as unknown as { nostr: { getPublicKey: () => Promise<PubKeyString> } }
+								window as unknown as { nostr: { getPublicKey: () => Promise<string> } }
 							).nostr.getPublicKey();
 							const signer = new ExtensionSigner();
 							const account = new ExtensionAccount(pubkey, signer);
@@ -249,13 +247,15 @@
 					>
 					<div class="divider divider-horizontal"></div>
 				{/if}
-				<button
-					class="btn flex-grow"
-					onclick={() => {
-						nostr_connect = true;
-					}}>Nostr Connect</button
-				>
-				<div class="divider divider-horizontal"></div>
+				{#if nostr_connect_feature_toggle}
+					<button
+						class="btn flex-grow"
+						onclick={() => {
+							nostr_connect = true;
+						}}>Nostr Connect</button
+					>
+					<div class="divider divider-horizontal"></div>
+				{/if}
 				<button
 					class="btn flex-grow"
 					onclick={() => {
@@ -263,8 +263,10 @@
 					}}>Private Key</button
 				>
 			</div>
-			<div class="divider">OR</div>
-			<button class="btn w-full">Sign up</button>
+			{#if signup_feature_toggle}
+				<div class="divider">OR</div>
+				<button class="btn w-full">Sign up</button>
+			{/if}
 			<div class="modal-action">
 				<button class="btn btn-sm" onclick={done}>Close</button>
 			</div>
