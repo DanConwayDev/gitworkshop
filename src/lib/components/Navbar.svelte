@@ -7,7 +7,7 @@
 	import UserHeader from './user/UserHeader.svelte';
 
 	// this was be an import from users store
-	let show_login_modal = $state(true);
+	let show_login_modal = $state(false);
 	let show_manage_accounts_modal = $state(false);
 	let search_input = $state(search.text);
 	function handleSearch(event: SubmitEvent) {
