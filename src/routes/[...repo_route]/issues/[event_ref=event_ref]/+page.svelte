@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { routeToRepoRef, type PrOrIssueRouteData, type RepoRef } from '$lib/types';
-	import Compose from '$lib/components/compose/Compose.svelte';
 	import PrOrIssueHeader from '$lib/components/prs-or-issues/PrOrIssueHeader.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { neventOrNoteToHexId } from '$lib/utils';
@@ -39,7 +38,7 @@
 						event={table_item.event}
 						issue_or_pr_table_item={table_item}
 						replies={thread_events}
-						show_compose={false}
+						show_compose={true}
 					/>
 				</div>
 			</div>
@@ -48,8 +47,4 @@
 			</div>
 		</div>
 	{/if}
-</Container>
-
-<Container>
-	<Compose content="try pasting in a npub or nprofile" />
 </Container>

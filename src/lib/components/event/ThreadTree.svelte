@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { IssueOrPRTableItem, ThreadTreeNode } from '$lib/types';
+	import ComposeReply from '../compose/ComposeReply.svelte';
 	import EventCard from './EventCard.svelte';
 	import ThreadWrapper from './ThreadWrapper.svelte';
 
@@ -12,6 +13,7 @@
 		issue_or_pr_table_item: IssueOrPRTableItem;
 		show_compose: boolean;
 	} = $props();
+	let just_replied = $state(false);
 	const countReplies = (tree: ThreadTreeNode, starting: number = 0): number => {
 		return (
 			tree.child_nodes.length + tree.child_nodes.reduce((a, c) => a + countReplies(c), starting)
@@ -119,8 +121,17 @@
 				{/each}
 			</ThreadWrapper>
 		{/each}
-		{#if show_compose}
-			<!-- <ComposeReply {issue_or_pr_table_item} event={tree.event} /> -->
+		{#if show_compose && !just_replied}
+			<ComposeReply
+				{issue_or_pr_table_item}
+				event={tree.event}
+				sentFunction={() => {
+					just_replied = true;
+					setTimeout(() => {
+						just_replied = false;
+					}, 2000);
+				}}
+			/>
 		{/if}
 	</ThreadWrapper>
 {/if}
