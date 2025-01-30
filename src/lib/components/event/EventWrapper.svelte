@@ -5,14 +5,24 @@
 	import { nostEventToNeventOrNaddr } from '$lib/utils';
 	import CopyField from '../CopyField.svelte';
 	import type { Snippet } from 'svelte';
+	import store from '$lib/store.svelte';
+	import ComposeReply from '../compose/ComposeReply.svelte';
+	import type { IssueOrPRTableItem } from '$lib/types';
 
-	let { event, type, children }: { type: 'issue' | 'pr'; event: NostrEvent; children: Snippet } =
-		$props();
+	let {
+		event,
+		issue_or_pr_table_item,
+		children
+	}: {
+		event: NostrEvent;
+		issue_or_pr_table_item?: IssueOrPRTableItem;
+
+		children: Snippet;
+	} = $props();
 
 	let show_compose = $state(false);
 	let show_raw_json_modal = $state(false);
 	let show_share_modal = $state(false);
-	let logged_in_user = $state(false);
 	const replySent = () => {
 		show_compose = false;
 	};
@@ -21,7 +31,7 @@
 <div class="max-w-4xl border-b border-base-300 p-3 pl-3">
 	<div class="flex">
 		<div class="flex-auto">
-			<UserHeader user={event.pubkey} in_event_header={true} />
+			<UserHeader user={$state.snapshot(event.pubkey)} in_event_header={true} />
 		</div>
 		<span class="m-auto text-xs"><FromNow unix_seconds={event.created_at} /></span>
 		<div class="m-auto ml-2">
@@ -96,7 +106,7 @@
 					</div>
 				{/if}
 			{/if}
-			{#if !show_compose && logged_in_user}
+			{#if !show_compose && store.logged_in_account}
 				<div class="tooltip align-middle" data-tip="reply">
 					<!-- svelte-ignore a11y_consider_explicit_label -->
 					<button
@@ -117,7 +127,7 @@
 	</div>
 	<div class="ml-11">
 		{@render children?.()}
-		{#if show_compose}
+		{#if show_compose && issue_or_pr_table_item}
 			<div class="">
 				<div class="flex">
 					<div class="flex-auto"></div>
@@ -128,8 +138,8 @@
 						class="btn btn-circle btn-ghost btn-sm right-2 top-2">✕</button
 					>
 				</div>
-				<div class="">
-					<!-- <ComposeReply {type} {event} sentFunction={() => replySent()} /> -->
+				<div>
+					<ComposeReply {event} {issue_or_pr_table_item} sentFunction={() => replySent()} />
 				</div>
 			</div>
 		{/if}

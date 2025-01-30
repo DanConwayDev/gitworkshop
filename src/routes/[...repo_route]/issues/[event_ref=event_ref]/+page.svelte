@@ -37,6 +37,7 @@
 					<Thread
 						type="issue"
 						event={table_item.event}
+						issue_or_pr_table_item={table_item}
 						replies={thread_events}
 						show_compose={false}
 					/>

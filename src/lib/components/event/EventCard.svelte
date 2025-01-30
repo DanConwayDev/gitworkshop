@@ -3,11 +3,15 @@
 	import EventWrapper from './EventWrapper.svelte';
 	import { nostrEventToDocTree } from '$lib/doc_tree';
 	import ContentTree from '../content-tree/ContentTree.svelte';
-	let { event, type }: { type: 'issue' | 'pr'; event: NostrEvent } = $props();
+	import type { IssueOrPRTableItem } from '$lib/types';
+	let {
+		event,
+		issue_or_pr_table_item
+	}: { event: NostrEvent; issue_or_pr_table_item?: IssueOrPRTableItem } = $props();
 
 	let node = $derived(nostrEventToDocTree(event));
 </script>
 
-<EventWrapper {event} {type}>
+<EventWrapper {event} {issue_or_pr_table_item}>
 	<ContentTree {node} />
 </EventWrapper>

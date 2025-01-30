@@ -1,5 +1,24 @@
 import type { NostrEvent } from 'nostr-tools';
-import type { ThreadTreeNode } from './types';
+import type { IssueOrPRTableItem, ThreadTreeNode } from './types';
+
+export const getStandardnip10ReplyTags = (
+	event: NostrEvent,
+	issue_or_pr_table_item: IssueOrPRTableItem
+): string[][] => {
+	return [
+		['e', getRootId(event, issue_or_pr_table_item), '', 'root'],
+		['e', event.id, '', 'reply']
+	];
+};
+
+/** to get the proposal revision id rather than the root proposal */
+const getRootId = (event: NostrEvent, issue_or_pr_table_item: IssueOrPRTableItem): string => {
+	// exclude 'a' references to repo events
+	const root_tag = event.tags.find((t) => t[0] === 'e' && t.length === 4 && t[3] === 'root');
+	if (root_tag) return root_tag[1];
+	if (event.tags.some((t) => t[0] === 't' && t[1] === 'root')) return event.id;
+	return issue_or_pr_table_item.uuid;
+};
 
 export const getParentId = (reply: NostrEvent): string | undefined => {
 	const t =
