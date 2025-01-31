@@ -113,8 +113,10 @@
 	</div>
 	<div class="flex-grow pt-2">
 		<div
-			class="prose w-full border-2"
-			class:border-primary={!submitting}
+			class="prose w-full rounded-md border border-primary"
+			class:focus-within:ring-2={!submitting}
+			class:focus-within:ring-primary={!submitting}
+			class:focus-within:focus:outline-none={!submitting}
 			class:border-base-300={submitting}
 		>
 			{#if editor}<EditorContent editor={$editor} class="tiptap-editor" />{/if}
@@ -150,5 +152,11 @@
 	}
 	:global(.prose .tiptap-editor p:last-child) {
 		margin-bottom: 0;
+	}
+	:global(.tiptap-editor .ProseMirror) {
+		border: none; /* Remove border */
+		outline: none; /* Remove default outline */
+		box-shadow: none; /* Remove any box shadow */
+		padding: 0; /* Reset padding if needed */
 	}
 </style>
