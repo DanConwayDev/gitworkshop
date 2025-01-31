@@ -119,7 +119,7 @@
 			class:focus-within:focus:outline-none={!submitting}
 			class:border-base-300={submitting}
 		>
-			{#if editor}<EditorContent editor={$editor} class="tiptap-editor" />{/if}
+			{#if editor}<EditorContent editor={$editor} class="tiptap-editor p-2" />{/if}
 		</div>
 		<div class="flex">
 			<div class="flex-auto"></div>
