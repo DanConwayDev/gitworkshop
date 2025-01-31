@@ -117,7 +117,7 @@
 			class:border-primary={!submitting}
 			class:border-base-300={submitting}
 		>
-			{#if editor}<EditorContent editor={$editor} />{/if}
+			{#if editor}<EditorContent editor={$editor} class="tiptap-editor" />{/if}
 		</div>
 		<div class="flex">
 			<div class="flex-auto"></div>
@@ -143,3 +143,12 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	:global(.prose .tiptap-editor p:first-child) {
+		margin-top: 0;
+	}
+	:global(.prose .tiptap-editor p:last-child) {
+		margin-bottom: 0;
+	}
+</style>
