@@ -1,10 +1,13 @@
 import db from '$lib/dbs/LocalDb';
 import {
+	isPubkeyString,
 	isRelayCheck,
 	isRelayHint,
 	isRelayHintFromNip05,
-	type ARefP,
+	isRepoRef,
+	isWebSocketUrl,
 	type PubKeyString,
+	type PubKeyTableItem,
 	type RelayCheckTimestamp,
 	type RelayHuristic,
 	type RelayScore,
@@ -135,13 +138,69 @@ export const chooseRelaysForPubkey = async (
 	}));
 };
 
+export const getPubkeyInboxRelays = async (
+	pubkey_or_table_item: PubKeyString | PubKeyTableItem,
+	in_ui_thread = false
+): Promise<WebSocketUrl[]> => {
+	const record = isPubkeyString(pubkey_or_table_item)
+		? await db.pubkeys.get(pubkey_or_table_item)
+		: pubkey_or_table_item;
+
+	if (!record || record.relays.read.length === 0) {
+		if (in_ui_thread) return [];
+		else {
+			// TODO fetch pubkey info
+			return [];
+		}
+	}
+	return record.relays.read;
+};
+
+export const getPubkeyOutboxRelays = async (
+	pubkey_or_table_item: PubKeyString | PubKeyTableItem,
+	in_ui_thread = false
+): Promise<WebSocketUrl[]> => {
+	const record = isPubkeyString(pubkey_or_table_item)
+		? await db.pubkeys.get(pubkey_or_table_item)
+		: pubkey_or_table_item;
+
+	if (!record || record.relays.write.length === 0) {
+		if (in_ui_thread) return [];
+		else {
+			// TODO fetch pubkey info
+			return [];
+		}
+	}
+	return record.relays.write;
+};
+
+export const getRepoInboxRelays = async (
+	a_ref_or_repo_table_item: RepoTableItem
+): Promise<WebSocketUrl[]> => {
+	const record = isRepoRef(a_ref_or_repo_table_item)
+		? await db.repos.get(a_ref_or_repo_table_item)
+		: a_ref_or_repo_table_item;
+	const repo_relays = record?.relays?.filter(isWebSocketUrl) ?? [];
+	if (repo_relays.length > 2) {
+		return repo_relays;
+	}
+	const best_guess_relays = await chooseRelaysForRepo(
+		record || a_ref_or_repo_table_item,
+		[],
+		false
+	);
+	return best_guess_relays.map(({ url }) => url);
+};
+
 /// returns prioritised list of relays and timestamp info
 export const getRankedRelaysForRepo = async (
-	a_ref: ARefP
+	a_ref_or_repo_table_item: RepoRef | RepoTableItem
 ): Promise<{ url: WebSocketUrl; check_timestamps: RelayCheckTimestamp }[]> => {
 	// prioritise connected relays?
 	// prioritise relays with items in queue, but not too many?
-	const record = await db.repos.get(a_ref);
+	const record = isRepoRef(a_ref_or_repo_table_item)
+		? await db.repos.get(a_ref_or_repo_table_item)
+		: a_ref_or_repo_table_item;
 
 	if (!record)
 		return base_relays.map((url) => ({
@@ -169,19 +228,24 @@ export const getRankedRelaysForRepo = async (
 
 /// choose upto 6 relays. if there less than 6 repo relays, it will include the next 3 most likely relays to have the relivant events
 export const chooseRelaysForRepo = async (
-	a_ref: RepoRef,
+	a_ref_or_repo_table_item: RepoRef | RepoTableItem,
 	excluding: WebSocketUrl[] = [],
-	repo_table_item?: RepoTableItem
+	ignore_recently_checked = true
 ): Promise<{ url: WebSocketUrl; check_timestamps: RelayCheckTimestamp }[]> => {
-	const record = repo_table_item || (await db.repos.get(a_ref));
+	const record = isRepoRef(a_ref_or_repo_table_item)
+		? await db.repos.get(a_ref_or_repo_table_item)
+		: a_ref_or_repo_table_item;
+	const ranked = await getRankedRelaysForRepo(record || a_ref_or_repo_table_item);
 	return (
-		(await getRankedRelaysForRepo(a_ref))
+		ranked
 			.filter(
 				({ url, check_timestamps }) =>
 					// skip relays just tried
 					!excluding.includes(url) &&
 					// and relays checked within 30 seconds
-					(!check_timestamps.last_check || check_timestamps.last_check < unixNow() - 30)
+					(!ignore_recently_checked ||
+						!check_timestamps.last_check ||
+						check_timestamps.last_check < unixNow() - 30)
 			)
 			// try repo relays + 3 others limited to 6 at each try
 			.slice(0, Math.min((record && record.relays ? record.relays.length : 0) + 3, 6))

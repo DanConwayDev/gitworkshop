@@ -10,7 +10,8 @@ import {
 	type RepoRef,
 	type Issue,
 	type LastCheck,
-	isWithRelaysInfo
+	isWithRelaysInfo,
+	type OutboxItem
 } from '$lib/types';
 import { aRefPToAddressPointer } from '$lib/utils';
 import type { EntityTable } from 'dexie';
@@ -23,6 +24,7 @@ export interface SchemaV1 {
 	prs: EntityTable<IssueOrPRTableItem, 'uuid'>;
 	pubkeys: EntityTable<PubKeyTableItem, 'pubkey'>;
 	last_checks: EntityTable<LastCheck, 'url_and_query'>;
+	outbox: EntityTable<OutboxItem, 'id'>;
 }
 
 export type LocalDbSchema = SchemaV1;

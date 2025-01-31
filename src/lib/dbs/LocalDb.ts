@@ -8,7 +8,8 @@ db.version(1).stores({
 	issues: '&uuid, parent_ids, *repos',
 	prs: '&uuid, parent_ids, *repos',
 	pubkeys: '&pubkey, *verified_nip05',
-	last_checks: '&url_and_query'
+	last_checks: '&url_and_query',
+	outbox: '&event.id'
 });
 
 // Add hooks that will index "message" for full-text search:

@@ -34,6 +34,11 @@ class QueryCentre {
 		};
 	}
 
+	async publishEvent(event: NostrEvent) {
+		const item = await db.outbox.get(event.id);
+		if (!item) this.external_worker.postMessage({ method: 'publishEvent', args: [event] });
+	}
+
 	fetchAllRepos() {
 		this.external_worker.postMessage({ method: 'fetchAllRepos', args: [] });
 		return liveQueryState(() => db.repos.toArray());

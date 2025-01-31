@@ -131,6 +131,7 @@
 						just_replied = false;
 					}, 2000);
 				}}
+				autofocus={false}
 			/>
 		{/if}
 	</ThreadWrapper>

@@ -5,6 +5,7 @@ import {
 	type EventIdString,
 	type LocalDbTableNames,
 	type Nip05AddressStandardized,
+	type OutboxRelayProcessorUpdate,
 	type PubKeyString,
 	type RelayUpdate,
 	type RepoRef
@@ -25,6 +26,7 @@ import { getRepoRef } from '$lib/type-helpers/repo';
 import processRepoUpdates from './Repo';
 import processIssueUpdates from './Issue';
 import processPrUpdates from './Pr';
+import { processOutboxUpdates } from './Outbox';
 
 class Processor {
 	/// Processes all new data points to update LocalDb or send events to the InMemoryDB
@@ -39,6 +41,7 @@ class Processor {
 	/// reactivity computation on the main thread.
 
 	event_queue: NostrEvent[] = [];
+	outbox_update_queue: OutboxRelayProcessorUpdate[] = [];
 	relay_update_queue: RelayUpdate[] = [];
 	running: boolean = false;
 	sendToInMemoryCacheOnMainThead: (event: NostrEvent) => void;
@@ -47,6 +50,12 @@ class Processor {
 		this.sendToInMemoryCacheOnMainThead = sendToInMemoryCacheOnMainThead;
 		// to process relay updates for the next uuid in queue every Xms
 		setInterval(() => this.nextRelayUpdateBatch(), 1000);
+		// process outbox updates more frequently as ther are less of them
+		setInterval(() => this.nextOutboxUpdates(), 99);
+	}
+
+	enqueueOutboxUpdate(update: OutboxRelayProcessorUpdate) {
+		this.outbox_update_queue.push(update);
 	}
 
 	enqueueRelayUpdate(update: RelayUpdate) {
@@ -154,6 +163,15 @@ class Processor {
 		});
 		if (relates_to_table[0]) return relates_to_table as [RelayUpdate, ...RelayUpdate[]];
 		else return;
+	}
+
+	async nextOutboxUpdates() {
+		if (this.running) return;
+		this.running = true;
+		const updates = this.outbox_update_queue;
+		this.outbox_update_queue = [];
+		await processOutboxUpdates(updates);
+		this.running = false;
 	}
 }
 

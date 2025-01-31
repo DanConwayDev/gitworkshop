@@ -12,8 +12,8 @@ import {
 
 export type RepoRef = ARefP;
 
-export const isRepoRef = (s: string | undefined): s is RepoRef => {
-	return !!s && isARefP(s) && s.startsWith(repo_kind.toString());
+export const isRepoRef = (s?: unknown): s is RepoRef => {
+	return !!s && typeof s === 'string' && isARefP(s) && s.startsWith(repo_kind.toString());
 };
 export interface RepoAnnBaseFields {
 	identifier: string;

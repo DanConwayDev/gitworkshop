@@ -15,23 +15,27 @@
 	import { unixNow } from 'applesauce-core/helpers';
 	import { getStandardnip10ReplyTags } from '$lib/thread_tree';
 	import type { IssueOrPRTableItem } from '$lib/types';
+	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 
 	let {
 		event,
 		issue_or_pr_table_item,
-		sentFunction
+		sentFunction,
+		autofocus = true
 	}: {
 		event: NostrEvent;
 		issue_or_pr_table_item: IssueOrPRTableItem;
 		sentFunction: () => void;
+		autofocus: boolean;
 	} = $props();
 
-	let signing = $state(false);
 	let submitting = $state(false);
+	let signed = $state(false);
+	let rejected_by_signer = $state(false);
 
 	const submit = async () => {
 		$editor.setEditable(false);
-		signing = true;
+		submitting = true;
 		let table_item = $state.snapshot(issue_or_pr_table_item);
 		let tags: string[][] = [];
 		[
@@ -45,37 +49,42 @@
 			if (t.length > 1 && !tags.some((e) => e[0] === t[0] && e[1] === t[1]))
 				tags.push(t[0] === 't' ? ['t', t[1].slice(1).toLocaleLowerCase()] : t);
 		});
-		let reply = await accounts_manager.getActive()?.signEvent(
-			$state.snapshot({
-				kind: reply_kind,
-				created_at: unixNow(),
-				tags: $state.snapshot(tags),
-				content: $state.snapshot(content)
-			})
-		);
-		signing = false;
-		submitting = true;
-		// TODO fetched this relay info whilst composing
-		let for_outbox = {
-			event: reply,
-			relay_groups: [
-				{ type: 'outbox', relays: [] },
-				{ type: 'tagged_user_inbox', npub: '', marker: 'root', relays: [] },
-				{ type: 'tagged_user_inbox', npub: '', marker: 'reply', relays: [] },
-				{ type: 'tagged_user_inbox', npub: '', relays: [] },
-				{ type: 'repo', a_ref: '', relays: [] },
-				{ type: 'repo', a_ref: '', relays: [] }
-			]
+		const rejectedBySigner = () => {
+			rejected_by_signer = true;
+			setTimeout(() => {
+				$editor.setEditable(true);
+				submitting = false;
+				signed = false;
+			}, 2000);
 		};
-		// TODO add to outbox queue
-		// TODO unless in offline mode, wait fot it to be recieved by at least 1 relay
-		// sentFunction();
+		try {
+			let reply = await accounts_manager.getActive()?.signEvent(
+				$state.snapshot({
+					kind: reply_kind,
+					created_at: unixNow(),
+					tags: $state.snapshot(tags),
+					content: $state.snapshot(content)
+				})
+			);
+			if (reply) {
+				signed = true;
+				query_centre.publishEvent(reply);
+				sentFunction();
+			} else {
+				rejectedBySigner();
+			}
+		} catch {
+			rejectedBySigner();
+		}
 	};
 
 	let editor = $state() as Readable<Editor>;
 	let content = $derived($editor ? $editor.getText() : '');
 	let person_tags = $state(event.tags.filter((t) => t[0] && t[0] === 'p'));
 	let editor_tags = $derived(editor ? ($editor.storage.nostr as NostrStorage).getEditorTags() : []);
+
+	// TODO querycentre.ensureRecentPubkeyRelays() for each tagged user so sends to correct relays
+
 	onMount(() => {
 		editor = createEditor({
 			extensions: [
@@ -92,7 +101,8 @@
 					},
 					link: { autolink: true } // needed for markdown links
 				})
-			]
+			],
+			autofocus
 		});
 	});
 </script>
@@ -102,22 +112,28 @@
 		<UserHeader avatar_only={true} user={store.logged_in_account?.pubkey} />
 	</div>
 	<div class="flex-grow pt-2">
-		{#if !submitting}
-			<div class="prose w-full border-2 border-primary">
-				{#if editor}<EditorContent editor={$editor} />{/if}
-			</div>
-		{/if}
+		<div
+			class="prose w-full border-2"
+			class:border-primary={!submitting}
+			class:border-base-300={submitting}
+		>
+			{#if editor}<EditorContent editor={$editor} />{/if}
+		</div>
 		<div class="flex">
 			<div class="flex-auto"></div>
 			<button
 				onclick={submit}
-				disabled={submitting || signing || content.length === 0}
+				disabled={submitting || content.length === 0}
 				class="align-right btn btn-primary btn-sm mt-2 align-bottom"
 			>
-				{#if signing}
-					Signing
-				{:else if submitting}
-					TODO Sending
+				{#if submitting}
+					{#if rejected_by_signer}
+						Rejected by Signer
+					{:else if !signed}
+						Signing
+					{:else}
+						Sending
+					{/if}
 				{:else if !store.logged_in_account}
 					Login before Sending
 				{:else}

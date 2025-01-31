@@ -61,6 +61,43 @@ export class RelayManager {
 		}, 60000); // 60 seconds of inactivity
 	}
 
+	async publishEvent(event: NostrEvent) {
+		return Promise.race([
+			(async (): Promise<{ success: boolean; msg: string }> => {
+				try {
+					await this.connect();
+					const msg = await this.relay.publish(event);
+					this.processor.enqueueOutboxUpdate({
+						id: event.id,
+						relay: this.url,
+						success: true,
+						msg
+					});
+					return { success: true, msg };
+				} catch (error) {
+					this.processor.enqueueOutboxUpdate({
+						id: event.id,
+						relay: this.url,
+						success: false,
+						msg: `${error}`
+					});
+					return { success: false, msg: `${error}` };
+				}
+			})(),
+			new Promise<{ success: boolean; msg: string }>((r) => {
+				setTimeout(() => {
+					this.processor.enqueueOutboxUpdate({
+						id: event.id,
+						relay: this.url,
+						success: false,
+						msg: `timeout internal`
+					});
+					r({ success: false, msg: `timeout internal` });
+				}, 30 * 1000);
+			})
+		]);
+	}
+
 	async fetchAllRepos(pubkey?: PubKeyString) {
 		const checks = await db.last_checks.get(`${this.url}|${pubkey}`);
 		if (checks && checks.check_initiated_at && checks.check_initiated_at > Date.now() - 3000)
