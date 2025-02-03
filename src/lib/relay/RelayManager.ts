@@ -10,7 +10,8 @@ import type {
 	RepoRef,
 	RelayUpdateRepoAnn,
 	RelayUpdateRepoChildren,
-	EventIdString
+	EventIdString,
+	RepoCheckLevel
 } from '$lib/types';
 import { Metadata, Reaction, RelayList } from 'nostr-tools/kinds';
 import type Processor from '$lib/processors/Processor';
@@ -98,6 +99,54 @@ export class RelayManager {
 		]);
 	}
 
+	onEvent(event: NostrEvent) {
+		addSeenRelay(event, this.url);
+		if (event.kind == repo_kind) {
+			const table = eventKindToTable(event.kind);
+			if (table) {
+				this.processor.enqueueRelayUpdate({
+					type: 'found',
+					uuid: getEventUID(event),
+					kinds: [event.kind],
+					created_at: event.created_at,
+					table,
+					url: this.url
+				} as RelayUpdateRepoAnn);
+			}
+			this.processor.enqueueEvent(event);
+		} else if (event.kind === Metadata || event.kind === RelayList) {
+			try {
+				this.processor.enqueueRelayUpdate({
+					type: 'found',
+					uuid: getEventUID(event) as ARefR,
+					kinds: [event.kind],
+					created_at: event.created_at,
+					table: 'pubkeys',
+					url: this.url
+				});
+				this.processor.enqueueEvent(event);
+				this.fetch_pubkey_info_promises.resolvePromises(event.pubkey);
+			} catch {
+				/* empty */
+			}
+		} else if (event.kind === issue_kind || eventIsPrRoot(event)) {
+			this.processor.enqueueRelayUpdate({
+				type: 'found',
+				uuid: event.id,
+				kinds: [event.kind],
+				table: event.kind === issue_kind ? 'issues' : 'prs',
+				url: this.url
+			});
+			this.processor.enqueueEvent(event);
+		} else {
+			// TODO patch kind where ? eventIsPrRoot()
+			// TODO statuses
+			this.processor.sendToInMemoryCacheOnMainThead(event);
+			const kind_not_to_cache = [Reaction];
+			if (!kind_not_to_cache.includes(event.kind)) addEventsToCache([event]);
+		}
+	}
+
 	async fetchAllRepos(pubkey?: PubKeyString) {
 		const checks = await db.last_checks.get(`${this.url}|${pubkey}`);
 		if (checks && checks.check_initiated_at && checks.check_initiated_at > Date.now() - 3000)
@@ -123,22 +172,7 @@ export class RelayManager {
 					}
 				],
 				{
-					onevent: async (event) => {
-						if (event.kind !== repo_kind) return;
-						addSeenRelay(event, this.url);
-						const table = eventKindToTable(event.kind);
-						if (table) {
-							this.processor.enqueueRelayUpdate({
-								type: 'found',
-								uuid: getEventUID(event),
-								kinds: [event.kind],
-								created_at: event.created_at,
-								table,
-								url: this.url
-							} as RelayUpdateRepoAnn);
-						}
-						this.processor.enqueueEvent(event);
-					},
+					onevent: this.onEvent,
 					oneose: async () => {
 						sub.close();
 						this.resetInactivityTimer();
@@ -193,21 +227,7 @@ export class RelayManager {
 		const sub = this.relay.subscribe(filters, {
 			onevent: async (event) => {
 				if (event.kind === Metadata || event.kind === RelayList) {
-					try {
-						addSeenRelay(event, this.url);
-						this.processor.enqueueRelayUpdate({
-							type: 'found',
-							uuid: getEventUID(event) as ARefR,
-							kinds: [event.kind],
-							created_at: event.created_at,
-							table: 'pubkeys',
-							url: this.url
-						});
-						this.processor.enqueueEvent(event);
-						this.fetch_pubkey_info_promises.resolvePromises(event.pubkey);
-					} catch {
-						/* empty */
-					}
+					this.onEvent(event);
 					(event.kind === Metadata ? found_metadata : found_relay_list).add(event.pubkey);
 				}
 			},
@@ -303,29 +323,10 @@ export class RelayManager {
 		const filters = [...createRepoIdentifierFilters(a_refs), ...createRepoChildrenFilters(a_refs)];
 
 		const onevent = (event: NostrEvent) => {
+			this.onEvent(event);
 			if (event.kind === repo_kind) {
-				addSeenRelay(event, this.url);
-				const repo_ref = getEventUID(event) as RepoRef;
-				this.processor.enqueueRelayUpdate({
-					type: 'found',
-					uuid: repo_ref,
-					kinds: [event.kind],
-					created_at: event.created_at,
-					table: 'repos',
-					url: this.url
-				} as RelayUpdateRepoAnn);
-				this.processor.enqueueEvent(event);
-				found_a_ref.add(repo_ref);
+				found_a_ref.add(getEventUID(event) as RepoRef);
 			} else if (event.kind === issue_kind || eventIsPrRoot(event)) {
-				addSeenRelay(event, this.url);
-				this.processor.enqueueRelayUpdate({
-					type: 'found',
-					uuid: event.id,
-					kinds: [event.kind],
-					table: event.kind === issue_kind ? 'issues' : 'prs',
-					url: this.url
-				});
-				this.processor.enqueueEvent(event);
 				getRepoRefs(event).forEach((repo_ref) => {
 					found_children.add(repo_ref);
 				});
