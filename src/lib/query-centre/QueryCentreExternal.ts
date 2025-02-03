@@ -32,6 +32,7 @@ import db from '$lib/dbs/LocalDb';
 import { aRefPToAddressPointer } from '$lib/utils';
 import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NEventAttributes } from 'nostr-editor';
+import SubscriberManager from '$lib/SubscriberManager';
 
 export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.damus.io',
@@ -157,9 +158,13 @@ class QueryCentreExternal {
 		await Promise.all(relays.map((url) => this.get_relay(url).fetchAllRepos()));
 	}
 
+	subscriber_manager = new SubscriberManager();
+
 	async fetchRepo(a_ref: ARefP) {
 		const pointer = aRefPToAddressPointer(a_ref);
 		if (!pointer) return;
+		const query = `fetchRepo${a_ref}`;
+		if (this.subscriber_manager.add(query)) return;
 		await this.hydrate_from_cache_db([
 			{
 				kinds: [repo_kind],
@@ -186,7 +191,10 @@ class QueryCentreExternal {
 			try {
 				await Promise.all(
 					relays.map(({ url, check_timestamps }) =>
-						this.get_relay(url).fetchRepo(a_ref, check_timestamps)
+						(async () => {
+							const unsubsriber = await this.get_relay(url).fetchRepo(a_ref, check_timestamps);
+							this.subscriber_manager.addUnsubsriber(query, unsubsriber);
+						})()
 					)
 				);
 			} catch {
@@ -196,6 +204,11 @@ class QueryCentreExternal {
 			new_repo_relays_found =
 				record?.relays?.some((r) => isWebSocketUrl(r) && !relays_tried.includes(r)) ?? false;
 		}
+		return;
+	}
+
+	fetchRepoUnsubscribe(a_ref: ARefP) {
+		this.subscriber_manager.remove(`fetchRepo${a_ref}`);
 	}
 
 	async fetchPubkeyRepos(pubkey: PubKeyString) {
@@ -329,6 +342,9 @@ self.onmessage = async (event) => {
 			break;
 		case 'fetchRepo':
 			result = await external.fetchRepo(args[0]);
+			break;
+		case 'fetchRepoUnsubscribe':
+			result = await external.fetchRepoUnsubscribe(args[0]);
 			break;
 		case 'fetchPubkeyRepos':
 			result = await external.fetchPubkeyRepos(args[0]);

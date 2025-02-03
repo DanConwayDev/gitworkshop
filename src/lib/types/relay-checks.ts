@@ -21,6 +21,17 @@ export interface RelayCheckTimestamp {
 	last_update: Timestamp | undefined;
 	last_child_check: Timestamp | undefined;
 }
+
+export type RepoCheckLevel =
+	/**
+	 * key kinds prs and issues (planned: statuses, repo state) that tag the RepoRef of that of other maintainers
+	 */
+	| 'children'
+	/**
+	 * children and quality events that tag them ie not reactions but comments, zaps etc.
+	 */
+	| 'quality_grandchildren';
+
 /** relay updates used by processor to create relay huristics */
 
 export type RelayUpdate =

@@ -16,11 +16,16 @@ import { aRefPToAddressPointer, aToNaddr, repoRefToPubkeyLink } from './utils';
 import store from './store.svelte';
 import { repoToRepoRef } from './repos';
 import query_centre from './query-centre/QueryCentre.svelte';
+import { onDestroy as onDestroySvelte } from 'svelte';
 
 /// this is taken and adapted from https://github.com/dexie/Dexie.js/pull/2116
 /// when merged the version from the library should be used
 
-export function liveQueryState<T>(querier: () => T | Promise<T>, dependencies?: () => unknown[]) {
+export function liveQueryState<T>(
+	querier: () => T | Promise<T>,
+	dependencies?: () => unknown[],
+	onDestroy?: () => void
+) {
 	const query = $state<{ current?: T; isLoading: boolean; error?: unknown }>({
 		current: undefined,
 		isLoading: true,
@@ -41,6 +46,11 @@ export function liveQueryState<T>(querier: () => T | Promise<T>, dependencies?: 
 			}
 		).unsubscribe;
 	});
+
+	onDestroySvelte(() => {
+		onDestroy?.();
+	});
+
 	return query;
 }
 

@@ -2,16 +2,17 @@ import { Relay, type NostrEvent } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
 import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
-import type {
-	PubKeyString,
-	WebSocketUrl,
-	RelayCheckTimestamp,
-	ARefR,
-	RepoRef,
-	RelayUpdateRepoAnn,
-	RelayUpdateRepoChildren,
-	EventIdString,
-	RepoCheckLevel
+import {
+	type PubKeyString,
+	type WebSocketUrl,
+	type RelayCheckTimestamp,
+	type ARefR,
+	type RepoRef,
+	type RelayUpdateRepoAnn,
+	type RelayUpdateRepoChildren,
+	type EventIdString,
+	type RepoCheckLevel,
+	type ARefP
 } from '$lib/types';
 import { Metadata, Reaction, RelayList } from 'nostr-tools/kinds';
 import type Processor from '$lib/processors/Processor';
@@ -27,6 +28,7 @@ import {
 import { createFetchActionsFilter } from './filters/actions';
 import { addEventsToCache } from '$lib/dbs/LocalRelayDb';
 import type { NEventAttributes } from 'nostr-editor';
+import SubscriberManager from '$lib/SubscriberManager';
 
 export class RelayManager {
 	url: WebSocketUrl;
@@ -274,9 +276,16 @@ export class RelayManager {
 
 	repo_queue: Map<RepoRef, RelayCheckTimestamp> = new Map();
 	set_repo_queue_timeout: ReturnType<typeof setTimeout> | undefined = undefined;
-	fetch_repo_promises = new PromiseManager<RepoRef, undefined>();
+	fetch_repo_promises = new PromiseManager<RepoRef, () => void>();
 
-	async fetchRepo(a_ref: RepoRef, check_timestamp: RelayCheckTimestamp) {
+	async fetchRepo(
+		a_ref: RepoRef,
+		check_timestamp: RelayCheckTimestamp,
+		level: RepoCheckLevel = 'children'
+	) {
+		if (level === 'quality_grandchildren') {
+			console.log('TODO: handle quality_grandchildren');
+		}
 		if (!this.repo_queue.has(a_ref)) {
 			this.repo_queue.set(a_ref, check_timestamp);
 			await this.connect();
@@ -286,7 +295,7 @@ export class RelayManager {
 				}, 200);
 			}
 		}
-		await this.fetch_repo_promises.addPromise(a_ref, 20 * 1000);
+		return this.fetch_repo_promises.addPromise(a_ref, 20 * 1000);
 	}
 
 	fetching_repo_queue = false;
@@ -315,10 +324,10 @@ export class RelayManager {
 		).forEach((record) => {
 			a_refs.set(record.uuid, repoTableItemToRelayCheckTimestamp(record, this.url));
 		});
-		// next bit
 		const found_a_ref = new Set<RepoRef>();
-		const searched_a_refs = new Set<RepoRef>(a_refs.keys());
-		const found_children = new Set<RepoRef>();
+		const a_refs_to_search = new Set<RepoRef>(a_refs.keys());
+		const searched_a_refs = new Set<RepoRef>();
+		const found_issues_and_pr_roots = new Set<EventIdString>();
 
 		const filters = [...createRepoIdentifierFilters(a_refs), ...createRepoChildrenFilters(a_refs)];
 
@@ -328,16 +337,17 @@ export class RelayManager {
 				found_a_ref.add(getEventUID(event) as RepoRef);
 			} else if (event.kind === issue_kind || eventIsPrRoot(event)) {
 				getRepoRefs(event).forEach((repo_ref) => {
-					found_children.add(repo_ref);
+					found_a_ref.add(repo_ref);
 				});
+				found_issues_and_pr_roots.add(event.id);
 			} else {
 				// TODO statuses
 			}
 		};
-		const onEose = (sub: Subscription) => {
+		const onEoseRecursivelyGetDisoveredARefResults = async (sub: Subscription) => {
 			sub.close();
 			this.resetInactivityTimer();
-			for (const a_ref of searched_a_refs) {
+			for (const a_ref of a_refs_to_search) {
 				this.processor.enqueueRelayUpdate({
 					type: 'checked',
 					uuid: a_ref,
@@ -365,30 +375,115 @@ export class RelayManager {
 					}
 				}
 			}
-			// TODO process found_children for relay huristics
-			found_a_ref.intersection(searched_a_refs).forEach((a_ref) => {
-				this.fetch_repo_promises.resolvePromises(a_ref);
-			});
-			// search for children of newly found a_refs (perhaps from other maintainers)
-			const discovered_a_refs = found_a_ref.difference(searched_a_refs);
-			if (discovered_a_refs.size > 0) {
-				this.relay.subscribe(createRepoChildrenFilters(discovered_a_refs), {
-					onevent,
-					oneose: () => {
-						// TODO process found_children for relay huristics
-						this.fetching_repo_queue = false;
-					}
+			a_refs_to_search.forEach((a) => searched_a_refs.add(a));
+			a_refs_to_search.clear();
+			const getDiscovered = () => searched_a_refs.difference(found_a_ref);
+
+			while (getDiscovered().size > 0) {
+				await new Promise<void>((r) => {
+					const sub = this.relay.subscribe(createRepoChildrenFilters(getDiscovered()), {
+						onevent,
+						oneose: () => {
+							onEoseRecursivelyGetDisoveredARefResults(sub);
+							r();
+						}
+					});
 				});
-			} else {
-				this.fetching_repo_queue = false;
 			}
 		};
+
 		const sub = this.relay.subscribe(filters, {
 			onevent,
-			oneose: () => {
-				onEose(sub);
+			oneose: async () => {
+				await onEoseRecursivelyGetDisoveredARefResults(sub);
+				searched_a_refs.forEach((a_ref) => {
+					const unsubsriber = this.watchRepo(
+						a_ref,
+						// these are actually the tags found for the whole queue but it doesnt matter too much
+						{ a_tags: [...found_a_ref], e_tags: [...found_issues_and_pr_roots] }
+					);
+					this.fetch_repo_promises.resolvePromises(a_ref, unsubsriber);
+				});
 			}
 		});
+	}
+
+	watching_a_refs = new Map<RepoRef, { a_tags: (ARefR | ARefP)[]; e_tags: EventIdString[] }>();
+	watch_repos_sub: Subscription | undefined = undefined;
+	subscriber_manager = new SubscriberManager();
+
+	watchRepo(a_ref: RepoRef, events: { a_tags: (ARefR | ARefP)[]; e_tags: EventIdString[] }) {
+		const query = `watchRepos${a_ref}`;
+		this.subscriber_manager.add(query);
+		this.updateReposWatch(a_ref, events);
+		const interval_id = setInterval(() => this.resetInactivityTimer(), 50000);
+
+		const unsubriber = () => {
+			clearInterval(interval_id);
+			if (this.subscriber_manager.remove(query)) {
+				this.removeRepoWatcher(a_ref);
+			}
+		};
+		this.subscriber_manager.addUnsubsriber(query, unsubriber);
+
+		return unsubriber;
+	}
+
+	removeRepoWatcher(a_ref: RepoRef) {
+		this.watching_a_refs.delete(a_ref);
+		if (this.watching_a_refs.size === 0) {
+			this.watch_repos_sub?.close();
+		} else {
+			// no need to refresh the subscrition without the a_ref, its doing no harm
+		}
+	}
+
+	/**
+	 * update events to watch related to a RepoRef we are watching
+	 * @param a_ref RepoRef of the repository we are currently watching
+	 * @param events additional event tags to watch related to the repo
+	 */
+	updateReposWatch(a_ref: RepoRef, events: { a_tags: (ARefR | ARefP)[]; e_tags: EventIdString[] }) {
+		const query_a_tags = new Set<ARefR | ARefP>();
+		const query_e_tags = new Set<EventIdString>();
+
+		this.watching_a_refs.forEach(({ a_tags, e_tags }) => {
+			a_tags.forEach((tag) => query_a_tags.add(tag));
+			e_tags.forEach((tag) => query_e_tags.add(tag));
+		});
+
+		let change = false;
+
+		events.a_tags.forEach((t) => {
+			if (!change && !query_a_tags.has(t)) change = true;
+			query_a_tags.add(t);
+		});
+
+		events.e_tags.forEach((t) => {
+			if (!change && !query_e_tags.has(t)) change = true;
+			query_e_tags.add(t);
+		});
+
+		if (change) {
+			this.watch_repos_sub?.close();
+			this.watch_repos_sub = this.relay.subscribe(
+				[
+					{
+						'#a': query_a_tags.size == 0 ? undefined : [...query_a_tags],
+						'#e': query_e_tags.size == 0 ? undefined : [...query_e_tags],
+						since: unixNow()
+					},
+					{
+						kinds: [repo_kind, issue_kind, patch_kind],
+						since: unixNow()
+					}
+				],
+				{
+					onevent: (event) => this.onEvent(event),
+					eoseTimeout: 60 * 60 * 1000
+				}
+			);
+		}
 	}
 
 	async fetchIssueThread(

@@ -68,7 +68,7 @@ class QueryCentre {
 	fetchRepo(a_ref: RepoRef | string | undefined) {
 		let loading = $state(isRepoRef(a_ref));
 		if (isRepoRef(a_ref)) {
-			this.awaitExternalWorker({ method: 'fetchRepo', args: [a_ref] }).then(() => {
+			this.awaitExternalWorker<() => void>({ method: 'fetchRepo', args: [a_ref] }).then(() => {
 				loading = false;
 			});
 		}
@@ -81,7 +81,11 @@ class QueryCentre {
 					else return undefined;
 				} else return undefined;
 			},
-			() => [loading]
+			() => [loading],
+			() => {
+				if (isRepoRef(a_ref))
+					this.external_worker.postMessage({ method: 'fetchRepoUnsubscribe', args: [a_ref] });
+			}
 		);
 	}
 
@@ -185,7 +189,7 @@ class QueryCentre {
 
 	fetchActions(a_ref: RepoRef) {
 		this.external_worker.postMessage({ method: 'fetchActions', args: [a_ref] });
-		return inMemoryRelayTimeline(createFetchActionsFilter(a_ref));
+		return inMemoryRelayTimeline(createFetchActionsFilter(a_ref), () => [a_ref]);
 	}
 }
 
