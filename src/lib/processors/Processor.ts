@@ -13,7 +13,7 @@ import {
 import type { NostrEvent } from 'nostr-tools';
 import { getEventUID, isReplaceable } from 'applesauce-core/helpers';
 import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
-import { Metadata, RelayList } from 'nostr-tools/kinds';
+import { Metadata, Reaction, RelayList } from 'nostr-tools/kinds';
 import processPubkey, { processNip05 } from './Pubkey';
 import type {
 	DbItemsCollection,
@@ -80,6 +80,10 @@ class Processor {
 		this.sendToInMemoryCacheOnMainThead(event);
 		// don't process events processed in previous sessions
 		if (isInCache(event)) return true;
+		// add to cache
+		const kind_not_to_cache = [Reaction];
+		// TODO - do we only want to save event related to repos the user is interested in?
+		if (!kind_not_to_cache.includes(event.kind)) addEventsToCache([event]);
 		// queue event and process next
 		this.event_queue.push(event);
 		if (event.kind === 30617) console.log(`batching ${event.id}`);
@@ -202,7 +206,6 @@ async function processUpdates(updates: ProcessorUpdate[]): Promise<ProcessorUpda
 		items.issues.size === 0 ? Promise.resolve([]) : db.issues.bulkPut([...items.issues.values()]),
 		items.prs.size === 0 ? Promise.resolve([]) : db.prs.bulkPut([...items.prs.values()])
 	]);
-	addEventsToCache(updates.map((u) => u.event).filter((e) => e) as NostrEvent[]);
 	return remaining_updates;
 }
 

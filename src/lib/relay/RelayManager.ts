@@ -103,6 +103,7 @@ export class RelayManager {
 
 	onEvent(event: NostrEvent) {
 		addSeenRelay(event, this.url);
+		this.processor.enqueueEvent(event);
 		if (event.kind == repo_kind) {
 			const table = eventKindToTable(event.kind);
 			if (table) {
@@ -115,7 +116,6 @@ export class RelayManager {
 					url: this.url
 				} as RelayUpdateRepoAnn);
 			}
-			this.processor.enqueueEvent(event);
 		} else if (event.kind === Metadata || event.kind === RelayList) {
 			try {
 				this.processor.enqueueRelayUpdate({
@@ -126,7 +126,6 @@ export class RelayManager {
 					table: 'pubkeys',
 					url: this.url
 				});
-				this.processor.enqueueEvent(event);
 				this.fetch_pubkey_info_promises.resolvePromises(event.pubkey);
 			} catch {
 				/* empty */
@@ -139,13 +138,9 @@ export class RelayManager {
 				table: event.kind === issue_kind ? 'issues' : 'prs',
 				url: this.url
 			});
-			this.processor.enqueueEvent(event);
 		} else {
 			// TODO patch kind where ? eventIsPrRoot()
 			// TODO statuses
-			this.processor.sendToInMemoryCacheOnMainThead(event);
-			const kind_not_to_cache = [Reaction];
-			if (!kind_not_to_cache.includes(event.kind)) addEventsToCache([event]);
 		}
 	}
 
