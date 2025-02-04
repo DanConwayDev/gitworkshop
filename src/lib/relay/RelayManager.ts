@@ -169,7 +169,7 @@ export class RelayManager {
 					}
 				],
 				{
-					onevent: this.onEvent,
+					onevent: (event) => this.onEvent(event),
 					oneose: async () => {
 						sub.close();
 						this.resetInactivityTimer();
@@ -377,7 +377,7 @@ export class RelayManager {
 			while (getDiscovered().size > 0) {
 				await new Promise<void>((r) => {
 					const sub = this.relay.subscribe(createRepoChildrenFilters(getDiscovered()), {
-						onevent,
+						onevent: (event) => onevent(event),
 						oneose: () => {
 							onEoseRecursivelyGetDisoveredARefResults(sub);
 							r();
@@ -388,7 +388,7 @@ export class RelayManager {
 		};
 
 		const sub = this.relay.subscribe(filters, {
-			onevent,
+			onevent: (event) => onevent(event),
 			oneose: async () => {
 				await onEoseRecursivelyGetDisoveredARefResults(sub);
 				searched_a_refs.forEach((a_ref) => {
@@ -494,7 +494,7 @@ export class RelayManager {
 			let ids_to_find: EventIdString[] = [id, ...known_replies];
 			let sub: Subscription;
 			const onevent = (event: NostrEvent) => {
-				this.processor.sendToInMemoryCacheOnMainThead(event);
+				this.onEvent(event);
 				const kind_not_to_cache = [Reaction];
 				if (!kind_not_to_cache.includes(event.kind)) addEventsToCache([event]);
 				// TODO selectively process (add to Issue Thread info)
@@ -512,7 +512,7 @@ export class RelayManager {
 				if (ids_to_find.length === 0) r(ids_searched);
 				else {
 					sub = this.relay.subscribe([{ '#e': [...ids_to_find] }], {
-						onevent,
+						onevent: (event) => onevent(event),
 						oneose: () => {
 							onEose(sub);
 						}
@@ -529,7 +529,7 @@ export class RelayManager {
 			const sub = this.relay.subscribe([{ ids: [event_ref.id] }], {
 				onevent: async (event) => {
 					if (event.id !== event_ref.id) return;
-					this.processor.sendToInMemoryCacheOnMainThead(event);
+					this.onEvent(event);
 					r(event);
 				},
 				oneose: () => {
@@ -543,9 +543,7 @@ export class RelayManager {
 		await this.connect();
 		await new Promise<void>((r) => {
 			const sub = this.relay.subscribe(createFetchActionsFilter(a_ref), {
-				onevent: async (event) => {
-					this.processor.sendToInMemoryCacheOnMainThead(event);
-				},
+				onevent: (event) => this.onEvent(event),
 				oneose: () => {
 					sub.close();
 					r();

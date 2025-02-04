@@ -86,7 +86,6 @@ class Processor {
 		if (!kind_not_to_cache.includes(event.kind)) addEventsToCache([event]);
 		// queue event and process next
 		this.event_queue.push(event);
-		if (event.kind === 30617) console.log(`batching ${event.id}`);
 		this.nextEventBatch();
 		return true;
 	}

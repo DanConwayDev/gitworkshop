@@ -1,4 +1,5 @@
 import {
+	base_relays,
 	chooseBaseRelays,
 	chooseRelaysForAllRepos,
 	chooseRelaysForPubkey,
@@ -11,7 +12,6 @@ import { RelayManager } from '$lib/relay/RelayManager';
 import {
 	isWebSocketUrl,
 	type ARefP,
-	type AtLeastThreeArray,
 	type EventIdString,
 	type Nip05AddressStandardized,
 	type OutboxItem,
@@ -34,13 +34,6 @@ import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NEventAttributes } from 'nostr-editor';
 import SubscriberManager from '$lib/SubscriberManager';
 import { createRepoChildrenFilters, createRepoIdentifierFilters } from '$lib/relay/filters';
-
-export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
-	'wss://relay.damus.io',
-	'wss://nos.lol',
-	'wss://relay.nostr.band',
-	'wss://relay.primal.net'
-];
 
 class QueryCentreExternal {
 	// processor = new Processor(self.postMessage);

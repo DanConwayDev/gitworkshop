@@ -6,6 +6,7 @@ import {
 	isRelayHintFromNip05,
 	isRepoRef,
 	isWebSocketUrl,
+	type AtLeastThreeArray,
 	type PubKeyString,
 	type PubKeyTableItem,
 	type RelayCheckTimestamp,
@@ -15,9 +16,15 @@ import {
 	type RepoTableItem,
 	type WebSocketUrl
 } from '$lib/types';
-import { base_relays } from '$lib/query-centre/QueryCentreExternal';
 import { unixNow } from 'applesauce-core/helpers';
 import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
+
+export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
+	'wss://relay.damus.io',
+	'wss://nos.lol',
+	'wss://relay.nostr.band',
+	'wss://relay.primal.net'
+];
 
 export const chooseBaseRelays = () => [...base_relays];
 
