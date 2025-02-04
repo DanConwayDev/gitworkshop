@@ -47,7 +47,8 @@ export interface ProcessorRepoUpdate {
 }
 
 export const isProcessorRepoUpdate = (u: ProcessorUpdate): u is ProcessorRepoUpdate =>
-	(u.event && u.event.kind === repo_kind) || u.relay_updates.every((ru) => isRelayUpdateRepo(ru));
+	(u.event && u.event.kind === repo_kind) ||
+	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdateRepo(ru)));
 
 export interface ProcessorPubkeyUpdate {
 	event: (NostrEvent & { kind: Metadata | RelayList }) | undefined;
@@ -55,7 +56,7 @@ export interface ProcessorPubkeyUpdate {
 }
 export const isProcessorPubkeyUpdate = (u: ProcessorUpdate): u is ProcessorPubkeyUpdate =>
 	(u.event && [Metadata, RelayList].includes(u.event.kind)) ||
-	u.relay_updates.every((ru) => isRelayUpdatePubkey(ru));
+	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdatePubkey(ru)));
 
 export interface ProcessorIssueUpdate {
 	event: (NostrEvent & { kind: 1621 }) | undefined;
@@ -63,7 +64,8 @@ export interface ProcessorIssueUpdate {
 }
 
 export const isProcessorIssueUpdate = (u: ProcessorUpdate): u is ProcessorIssueUpdate =>
-	(u.event && u.event.kind === issue_kind) || u.relay_updates.every((ru) => isRelayUpdateIssue(ru));
+	(u.event && u.event.kind === issue_kind) ||
+	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdateIssue(ru)));
 
 export interface ProcessorPrUpdate {
 	event: (NostrEvent & { kind: 1617 }) | undefined;
@@ -71,4 +73,5 @@ export interface ProcessorPrUpdate {
 }
 
 export const isProcessorPrUpdate = (u: ProcessorUpdate): u is ProcessorPrUpdate =>
-	(u.event && eventIsPrRoot(u.event)) || u.relay_updates.every((ru) => isRelayUpdatePR(ru));
+	(u.event && eventIsPrRoot(u.event)) ||
+	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdatePR(ru)));

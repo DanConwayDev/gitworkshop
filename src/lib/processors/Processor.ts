@@ -96,13 +96,17 @@ class Processor {
 			const events = this.event_queue;
 			this.event_queue = [];
 			this.running = true;
-			await processUpdates(
-				events.map((event) => ({
-					event,
-					relay_updates: this.takeUIDBatchFromRelayUpdatesQueue(getEventUID(event)) || []
-				}))
-				// TODO return unprocessed
-			);
+			try {
+				await processUpdates(
+					events.map((event) => ({
+						event,
+						relay_updates: this.takeUIDBatchFromRelayUpdatesQueue(getEventUID(event)) || []
+					}))
+					// TODO return unprocessed
+				);
+			} catch (error) {
+				console.log(error);
+			}
 			if (this.running) setTimeout(() => this.nextEventBatch(), 100);
 			this.running = false;
 		}
