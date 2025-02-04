@@ -400,6 +400,7 @@ export class RelayManager {
 					const unsubsriber = this.watchRepo(
 						a_ref,
 						// these are actually the tags found for the whole queue but it doesnt matter too much
+						// TODO: why are we getting grandchildren here? if we are we should get all known ones from db.repos as this just covers those recieved since last check
 						{ a_tags: [...found_a_ref], e_tags: [...found_issues_and_pr_roots] }
 					);
 					this.fetch_repo_promises.resolvePromises(a_ref, unsubsriber);

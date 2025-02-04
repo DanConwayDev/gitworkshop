@@ -164,7 +164,8 @@ class QueryCentreExternal {
 		const pointer = aRefPToAddressPointer(a_ref);
 		if (!pointer) return;
 		const query = `fetchRepo${a_ref}`;
-		if (this.subscriber_manager.add(query)) return;
+		const already_fetching = !this.subscriber_manager.add(query);
+		if (already_fetching) return;
 		await this.hydrate_from_cache_db([
 			{
 				kinds: [repo_kind],
