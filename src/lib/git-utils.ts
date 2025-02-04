@@ -1,12 +1,16 @@
 import { nip19, type NostrEvent } from 'nostr-tools';
-import { getTagValue } from './utils';
+import { getRootUuid, getTagValue } from './utils';
 import {
+	getIssueOrPrStatus,
+	isEventIdString,
 	isRepoRef,
 	isWebSocketUrl,
 	type RepoRef,
 	type RepoRoute,
+	type StatusHistoryItem,
 	type WebSocketUrl
 } from './types';
+import { status_kinds } from './kinds';
 
 export const isCoverLetter = (s: string): boolean => {
 	return s.indexOf('PATCH 0/') > 0;
@@ -84,3 +88,18 @@ export const extractRepoRefsFromPrOrIssue = (
 			? [{ a_ref: t[1], relays: isWebSocketUrl(t[2]) ? [t[2]] : [] }]
 			: []
 	);
+
+export const extractStatusRootId = (event: NostrEvent) => {
+	if (!status_kinds.includes(event.kind)) return undefined;
+	const root = getRootUuid(event);
+	if (root && isEventIdString(root)) return root;
+	return undefined;
+};
+
+export const eventToStatusHistoryItem = (event?: NostrEvent): StatusHistoryItem | undefined => {
+	if (!event) return undefined;
+	const status = getIssueOrPrStatus(event.kind);
+	if (!status) return undefined;
+	const { pubkey, created_at } = event;
+	return { pubkey, created_at, status };
+};

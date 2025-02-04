@@ -12,7 +12,7 @@ import {
 } from '$lib/types';
 import type { NostrEvent } from 'nostr-tools';
 import { getEventUID, isReplaceable } from 'applesauce-core/helpers';
-import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
+import { issue_kind, patch_kind, repo_kind, status_kinds } from '$lib/kinds';
 import { Metadata, Reaction, RelayList } from 'nostr-tools/kinds';
 import processPubkey, { processNip05 } from './Pubkey';
 import type {
@@ -27,6 +27,7 @@ import processRepoUpdates from './Repo';
 import processIssueUpdates from './Issue';
 import processPrUpdates from './Pr';
 import { processOutboxUpdates } from './Outbox';
+import { extractStatusRootId } from '$lib/git-utils';
 
 class Processor {
 	/// Processes all new data points to update LocalDb or send events to the InMemoryDB
@@ -97,13 +98,17 @@ class Processor {
 			this.event_queue = [];
 			this.running = true;
 			try {
-				await processUpdates(
+				const remaining_updates = await processUpdates(
 					events.map((event) => ({
 						event,
 						relay_updates: this.takeUIDBatchFromRelayUpdatesQueue(getEventUID(event)) || []
 					}))
-					// TODO return unprocessed
 				);
+				// add remaining updates back into queues
+				remaining_updates.forEach((u) => {
+					if (u.event) this.event_queue.push(u.event);
+					u.relay_updates.forEach((ru) => this.relay_update_queue.push(ru));
+				});
 			} catch (error) {
 				console.log(error);
 			}
@@ -270,6 +275,16 @@ function identifyExistingItemsToUpdate(updates: ProcessorUpdate[]): DbItemsKeysC
 					getRepoRefs(u.event).forEach((r) => exiting_db_item_keys.repos.add(r));
 					break;
 				}
+				default:
+					if (status_kinds.includes(u.event.kind)) {
+						const root_id = extractStatusRootId(u.event);
+						if (root_id) {
+							// the status event doesnt make clear what type of table so we get both
+							exiting_db_item_keys.issues.add(root_id);
+							exiting_db_item_keys.prs.add(root_id);
+						}
+					}
+					break;
 			}
 		} else {
 			switch (u.relay_updates[0].table) {

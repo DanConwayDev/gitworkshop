@@ -1,6 +1,5 @@
 import {
 	getDefaultHuristicsForRelay,
-	isEventIdString,
 	isRelayCheck,
 	isRelayCheckFound,
 	isRelayUpdateIssue,
@@ -14,13 +13,15 @@ import type {
 	Issue,
 	IssueOrPrBase,
 	IssueOrPRTableItem,
+	PubKeyString,
 	RelayCheck,
 	RelayCheckFound,
 	RelayUpdateIssue,
 	RepoRef,
+	StatusHistoryItem,
 	WithEvent
 } from '$lib/types';
-import { getParentUuid, getValueOfEachTagOccurence } from '$lib/utils';
+import { getRootUuid, getValueOfEachTagOccurence } from '$lib/utils';
 import { unixNow } from 'applesauce-core/helpers';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
 import {
@@ -29,7 +30,11 @@ import {
 	type UpdateProcessor
 } from '$lib/types/processor';
 import type { NostrEvent } from 'nostr-tools';
-import { extractIssueDescription, extractIssueTitle } from '$lib/git-utils';
+import {
+	eventToStatusHistoryItem,
+	extractIssueDescription,
+	extractIssueTitle
+} from '$lib/git-utils';
 
 const processIssueUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
@@ -42,10 +47,22 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 		if (u.event) {
 			base_issue = eventToIssue(u.event);
 		}
+		const status_item = eventToStatusHistoryItem(u.event);
+		if (status_item) {
+			if (!item) {
+				// either, issue hasn't been recieved yet or status applies to a PR
+				// retain the update for processing later
+				// TODO - we cant just try and process this every <100ms
+				return true;
+			}
+			processNewStatus(item, status_item);
+		}
 		if (!item && !base_issue) {
-			// TODO this could be status update before the issue has been found
+			// shouldn't get here - are we processing an event kind we shouldnt?
+			// retaining anyway
 			return true;
 		}
+
 		const updated_item = applyHuristicUpdates(
 			{
 				...(item || {
@@ -59,7 +76,7 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 		items.issues.set(uuid, updated_item);
 		updated_item.repos.forEach((a_ref) => {
 			const repo = items.repos.get(a_ref);
-			// TODO we should create an RepoTableItem without a event just from a reference
+			// TODO for the repo to stay up to date we need to ensure it is processed
 			if (!repo) return;
 			if (!repo.issues) {
 				repo.issues = {
@@ -78,6 +95,7 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 					repo.issues[kind] = repo.issues[kind].filter((uuid) => uuid !== updated_item.uuid);
 				}
 			});
+			items.repos.set(a_ref, repo);
 		});
 		return false;
 	});
@@ -85,11 +103,11 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 
 const getIssueId = (u: ProcessorIssueUpdate): EventIdString | undefined => {
 	if (u.event) {
-		if (u.event && u.event.kind === issue_kind) return u.event.id;
+		if (u.event.kind === issue_kind) return u.event.id;
 		// TODO get the root
-		else {
-			const uuid = getParentUuid(u.event);
-			if (uuid && isEventIdString(uuid)) return uuid;
+		else if (status_kinds.includes(u.event.kind)) {
+			const uuid = getRootUuid(u.event);
+			if (uuid) return uuid;
 		}
 	} else if (!u.event && u.relay_updates[0]) {
 		return u.relay_updates[0].uuid;
@@ -164,6 +182,7 @@ const eventToIssueBaseFields = (event: NostrEvent): IssueOrPrBase | undefined =>
 		title,
 		description,
 		status: status_kind_open,
+		status_history: [],
 		repos,
 		tags
 	};
@@ -180,5 +199,22 @@ export const eventToIssue = (event: NostrEvent): (Issue & WithEvent) | undefined
 		...base
 	};
 };
+
+export const processNewStatus = (item: IssueOrPRTableItem, status_item: StatusHistoryItem) => {
+	if (item.status_history.some((h) => statusHistoryMatch(h, status_item))) return;
+	item.status_history.push(status_item);
+	const maintainers = item.repos.map((r) => r.split(':')[1]) as PubKeyString[];
+	const authorised = [item.author, ...maintainers];
+	const sorted = item.status_history
+		.filter((h) => authorised.includes(h.pubkey))
+		.sort((a, b) => b.created_at - a.created_at);
+	if (sorted[0]) {
+		item.status = sorted[0].status;
+	} else {
+		item.status = IssueOrPrStatus.Open;
+	}
+};
+const statusHistoryMatch = (a: StatusHistoryItem, b: StatusHistoryItem): boolean =>
+	a.created_at === b.created_at && a.pubkey === b.pubkey && a.status === b.status;
 
 export default processIssueUpdates;

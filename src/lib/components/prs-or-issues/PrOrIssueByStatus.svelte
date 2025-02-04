@@ -15,9 +15,15 @@
 		loading?: boolean;
 	} = $props();
 
-	let status = $state(IssueOrPrStatus.Open);
+	let status = $state(IssueOrPrStatus.Applied);
 
-	let filtered_items = $derived(table_items.filter((e) => e.status === status));
+	let filtered_items = $derived(
+		table_items.filter((e) => {
+			if (status === IssueOrPrStatus.Open)
+				return [IssueOrPrStatus.Open, IssueOrPrStatus.Draft].includes(e.status);
+			return e.status === status;
+		})
+	);
 </script>
 
 <div class="mt-2 rounded-tr-lg border border-base-400">
@@ -34,9 +40,7 @@
 					}}
 				>
 					{table_items.filter((t) =>
-						(status === IssueOrPrStatus.Open ? [status, IssueOrPrStatus.Draft] : [status]).includes(
-							t.status
-						)
+						[IssueOrPrStatus.Open, IssueOrPrStatus.Draft].includes(t.status)
 					).length} Open
 				</button>
 				<button

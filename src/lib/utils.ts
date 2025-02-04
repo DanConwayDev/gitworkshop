@@ -41,6 +41,15 @@ export const getParentUuid = (reply: NostrEvent): EventIdString | ARef | undefin
 	return t ? t[1] : undefined;
 };
 
+export const getRootUuid = (event: NostrEvent): EventIdString | ARef | undefined => {
+	const t =
+		event.tags.find((tag) => tag.length === 4 && tag[3] === 'root') ||
+		event.tags.find((tag) => tag.length === 4 && tag[3] === 'reply') ||
+		// include events that don't use nip 10 markers
+		event.tags.find((tag) => tag.length < 4 && ['e', 'a'].includes(tag[0]));
+	return t ? t[1] : undefined;
+};
+
 function isAddressPointer(a: ARef | AddressPointer): a is AddressPointer {
 	return typeof a !== 'string';
 }

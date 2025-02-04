@@ -35,6 +35,18 @@ export enum IssueOrPrStatus {
 	Closed = 1632,
 	Draft = 1633
 }
+export const getIssueOrPrStatus = (kind: number): IssueOrPrStatus | undefined => {
+	if (Object.values(IssueOrPrStatus).includes(kind as IssueOrPrStatus)) {
+		return kind as IssueOrPrStatus;
+	}
+	return undefined;
+};
+
+export interface StatusHistoryItem {
+	status: IssueOrPrStatus;
+	pubkey: PubKeyString;
+	created_at: number;
+}
 
 export type IssuesOrPrsByStatus = {
 	[K in IssueOrPrStatus]: EventIdString[];
@@ -44,6 +56,7 @@ export interface IssueOrPrBase {
 	title: string;
 	description: string;
 	status: IssueOrPrStatus;
+	status_history: StatusHistoryItem[];
 	tags: string[];
 	repos: RepoRef[];
 }
