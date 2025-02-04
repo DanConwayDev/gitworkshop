@@ -475,7 +475,8 @@ export class RelayManager {
 						since: unixNow()
 					},
 					{
-						kinds: [repo_kind, issue_kind, patch_kind],
+						// children kinds but for all repos on relay
+						kinds: createRepoChildrenFilters(new Set([]))[0].kinds,
 						since: unixNow()
 					}
 				],

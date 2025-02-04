@@ -24,7 +24,7 @@ import {
 } from '$lib/types';
 import { unixNow } from 'applesauce-core/helpers';
 import { addEventsToCache, getCacheEventsForFilters } from '$lib/dbs/LocalRelayDb';
-import { issue_kind, patch_kind, proposal_status_kinds, repo_kind } from '$lib/kinds';
+import { repo_kind } from '$lib/kinds';
 import { nip05 as nip05NostrTools, type Filter, type NostrEvent } from 'nostr-tools';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import Processor from '$lib/processors/Processor';
@@ -33,6 +33,7 @@ import { aRefPToAddressPointer } from '$lib/utils';
 import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NEventAttributes } from 'nostr-editor';
 import SubscriberManager from '$lib/SubscriberManager';
+import { createRepoChildrenFilters, createRepoIdentifierFilters } from '$lib/relay/filters';
 
 export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.damus.io',
@@ -167,14 +168,8 @@ class QueryCentreExternal {
 		const already_fetching = !this.subscriber_manager.add(query);
 		if (already_fetching) return;
 		await this.hydrate_from_cache_db([
-			{
-				kinds: [repo_kind],
-				'#d': [pointer.identifier]
-			},
-			{
-				kinds: [issue_kind, patch_kind, ...proposal_status_kinds],
-				'#a': [pointer.identifier]
-			}
+			...createRepoIdentifierFilters(new Set([a_ref])),
+			...createRepoChildrenFilters(new Set([a_ref]))
 		]);
 		let record = await db.repos.get(a_ref);
 		const relays_tried: WebSocketUrl[] = [];
