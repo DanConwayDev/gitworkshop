@@ -1,9 +1,9 @@
 <script lang="ts">
 	import {
-		proposal_status_applied,
-		proposal_status_closed,
-		proposal_status_draft,
-		proposal_status_open
+		status_kind_applied,
+		status_kind_closed,
+		status_kind_draft,
+		status_kind_open
 	} from '$lib/kinds';
 	import { nip19 } from 'nostr-tools';
 	import { pr_icon_path } from '../prs/icons';
@@ -36,7 +36,7 @@
 	<!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
 	{#if !table_item}
 		<div class="skeleton h-5 w-5 flex-none pt-1"></div>
-	{:else if table_item.status === proposal_status_open}
+	{:else if table_item.status === status_kind_open}
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 16 16"
@@ -50,7 +50,7 @@
 				{/each}
 			{/if}
 		</svg>
-	{:else if table_item.status === proposal_status_closed}
+	{:else if table_item.status === status_kind_closed}
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 16 16"
@@ -64,13 +64,13 @@
 				{/each}
 			{/if}
 		</svg>
-	{:else if table_item.status === proposal_status_draft}
+	{:else if table_item.status === status_kind_draft}
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 16 16"
 			class="h-5 w-5 flex-none fill-neutral-content pt-1"><path d={pr_icon_path.draft} /></svg
 		>
-	{:else if table_item.status === proposal_status_applied}
+	{:else if table_item.status === status_kind_applied}
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 16 16"

@@ -1,4 +1,4 @@
-import { issue_kind, patch_kind, proposal_status_kinds, repo_kind } from '$lib/kinds';
+import { issue_kind, patch_kind, status_kinds, repo_kind } from '$lib/kinds';
 import type { PubKeyString, RelayCheckTimestamp, RepoRef, Timestamp } from '$lib/types';
 import { aRefPToAddressPointer } from '$lib/utils';
 import type { Filter } from 'nostr-tools';
@@ -105,7 +105,7 @@ export const createRepoChildrenFilters = (
 	if (items instanceof Set) {
 		return [
 			{
-				kinds: [issue_kind, patch_kind, ...proposal_status_kinds],
+				kinds: [issue_kind, patch_kind, ...status_kinds],
 				'#a': [...items]
 			}
 		];
@@ -120,7 +120,7 @@ export const createRepoChildrenFilters = (
 	});
 	sinces.forEach((a_refs, since) => {
 		const filter: Filter = {
-			kinds: [issue_kind, patch_kind, ...proposal_status_kinds],
+			kinds: [issue_kind, patch_kind, ...status_kinds],
 			'#a': a_refs
 		};
 		if (since > 0) {

@@ -1,21 +1,21 @@
 export const reply_kind: number = 1;
 
-export const proposal_status_open: number = 1630;
-export const proposal_status_applied: number = 1631;
-export const proposal_status_closed: number = 1632;
-export const proposal_status_draft: number = 1633;
-export const proposal_status_kinds: number[] = [
-	proposal_status_open,
-	proposal_status_applied,
-	proposal_status_closed,
-	proposal_status_draft
+export const status_kind_open: number = 1630;
+export const status_kind_applied: number = 1631;
+export const status_kind_closed: number = 1632;
+export const status_kind_draft: number = 1633;
+export const status_kinds: number[] = [
+	status_kind_open,
+	status_kind_applied,
+	status_kind_closed,
+	status_kind_draft
 ];
 
 export function statusKindtoText(kind: number, type: 'pr' | 'issue'): string {
-	if (kind === proposal_status_open) return 'Open';
-	if (type === 'pr' && kind === proposal_status_applied) return 'Applied';
-	if (type === 'issue' && kind === proposal_status_applied) return 'Resolved';
-	if (kind === proposal_status_closed) return 'Closed';
+	if (kind === status_kind_open) return 'Open';
+	if (type === 'pr' && kind === status_kind_applied) return 'Applied';
+	if (type === 'issue' && kind === status_kind_applied) return 'Resolved';
+	if (kind === status_kind_closed) return 'Closed';
 	return 'Draft';
 }
 

@@ -7,7 +7,7 @@ import {
 	isRelayUpdatePRFound,
 	IssueOrPrStatus
 } from '$lib/types';
-import { patch_kind, proposal_status_kinds, proposal_status_open, repo_kind } from '$lib/kinds';
+import { patch_kind, status_kinds, status_kind_open, repo_kind } from '$lib/kinds';
 import type {
 	EventIdString,
 	HuristicsForRelay,
@@ -69,7 +69,7 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 					[IssueOrPrStatus.Draft]: []
 				};
 			}
-			proposal_status_kinds.forEach((status_kind) => {
+			status_kinds.forEach((status_kind) => {
 				if (!repo.PRs) return; // to stop typescript complaining
 				const kind = status_kind as IssueOrPrStatus; // to stop typescript complaining
 				if (kind === updated_item.status && !repo.PRs[kind].includes(updated_item.uuid)) {
@@ -163,7 +163,7 @@ const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
 	return {
 		title,
 		description,
-		status: proposal_status_open,
+		status: status_kind_open,
 		repos,
 		tags
 	};

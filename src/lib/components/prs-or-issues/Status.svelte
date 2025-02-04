@@ -1,9 +1,9 @@
 <script lang="ts">
 	import {
-		proposal_status_applied,
-		proposal_status_closed,
-		proposal_status_draft,
-		proposal_status_open,
+		status_kind_applied,
+		status_kind_closed,
+		status_kind_draft,
+		status_kind_open,
 		statusKindtoText
 	} from '$lib/kinds';
 	import { IssueOrPrStatus } from '$lib/types';
@@ -23,20 +23,18 @@
 	<div
 		tabIndex={0}
 		role="button"
-		class:btn-success={status && status === proposal_status_open}
-		class:btn-primary={status && status === proposal_status_applied}
-		class:btn-neutral={!status ||
-			status === proposal_status_draft ||
-			status === proposal_status_closed}
+		class:btn-success={status && status === status_kind_open}
+		class:btn-primary={status && status === status_kind_applied}
+		class:btn-neutral={!status || status === status_kind_draft || status === status_kind_closed}
 		class:cursor-default={!edit_mode}
 		class:no-animation={!edit_mode}
-		class:hover:bg-success={!edit_mode && status && status === proposal_status_open}
-		class:hover:bg-primary={!edit_mode && status && status === proposal_status_applied}
-		class:hover:bg-neutral={(!edit_mode && status && status === proposal_status_draft) ||
-			status === proposal_status_closed}
+		class:hover:bg-success={!edit_mode && status && status === status_kind_open}
+		class:hover:bg-primary={!edit_mode && status && status === status_kind_applied}
+		class:hover:bg-neutral={(!edit_mode && status && status === status_kind_draft) ||
+			status === status_kind_closed}
 		class="btn btn-success btn-sm align-middle"
 	>
-		{#if status === proposal_status_open}
+		{#if status === status_kind_open}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 18 18"
@@ -50,8 +48,8 @@
 					{/each}
 				{/if}
 			</svg>
-			{statusKindtoText(proposal_status_open, type)}
-		{:else if status === proposal_status_applied}
+			{statusKindtoText(status_kind_open, type)}
+		{:else if status === status_kind_applied}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -65,8 +63,8 @@
 					{/each}
 				{/if}
 			</svg>
-			{statusKindtoText(proposal_status_applied, type)}
-		{:else if status === proposal_status_closed}
+			{statusKindtoText(status_kind_applied, type)}
+		{:else if status === status_kind_closed}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -80,14 +78,14 @@
 					{/each}
 				{/if}
 			</svg>
-			{statusKindtoText(proposal_status_closed, type)}
-		{:else if status === proposal_status_draft}
+			{statusKindtoText(status_kind_closed, type)}
+		{:else if status === status_kind_draft}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
 				class="h-5 w-5 flex-none fill-neutral-content pt-1"><path d={pr_icon_path.draft} /></svg
 			>
-			{statusKindtoText(proposal_status_draft, type)}
+			{statusKindtoText(status_kind_draft, type)}
 		{:else}
 			{status}
 		{/if}
