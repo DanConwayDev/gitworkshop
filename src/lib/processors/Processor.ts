@@ -62,8 +62,7 @@ class Processor {
 		this.relay_update_queue.push(update);
 	}
 
-	seen_events: Set<EventIdString> = new Set();
-	seen_replaceable_events: Map<string, number> = new Map();
+	seen_on_tracker = new SeenOnTracker();
 
 	enqueueNip05(nip05: Nip05AddressStandardized, pubkey: PubKeyString, relays: string[] = []) {
 		// run when next avaiable free
@@ -76,26 +75,14 @@ class Processor {
 
 	// returns seen_in_this_session
 	enqueueEvent(event: NostrEvent): boolean {
-		// ignore events already seen
-		if (isReplaceable(event.kind)) {
-			const id = getEventUID(event);
-			const created_at = this.seen_replaceable_events.get(id);
-			if (created_at && created_at > event.created_at) {
-				return false;
-			}
-			this.seen_replaceable_events.set(id, event.created_at);
-		} else if (this.seen_events.has(event.id)) {
-			return false;
-		} else {
-			this.seen_events.add(event.id);
-		}
-
+		if (this.seen_on_tracker.seen(event)) return false;
 		// send to main thread in_memory_db
 		this.sendToInMemoryCacheOnMainThead(event);
 		// don't process events processed in previous sessions
 		if (isInCache(event)) return true;
 		// queue event and process next
 		this.event_queue.push(event);
+		if (event.kind === 30617) console.log(`batching ${event.id}`);
 		this.nextEventBatch();
 		return true;
 	}
@@ -172,6 +159,30 @@ class Processor {
 		this.outbox_update_queue = [];
 		await processOutboxUpdates(updates);
 		this.running = false;
+	}
+}
+
+class SeenOnTracker {
+	private seen_events: Set<EventIdString> = new Set();
+	private seen_replaceable_events: Map<string, number> = new Map();
+
+	/**
+	 * returns true if its not been seen and isn't an old version of a replaceable that has been seen, otherwise false
+	 */
+	seen(event: NostrEvent): boolean {
+		if (isReplaceable(event.kind)) {
+			const id = getEventUID(event);
+			const created_at = this.seen_replaceable_events.get(id);
+			if (created_at && created_at > event.created_at) {
+				return true;
+			}
+			this.seen_replaceable_events.set(id, event.created_at);
+		} else if (this.seen_events.has(event.id)) {
+			return true;
+		} else {
+			this.seen_events.add(event.id);
+		}
+		return false;
 	}
 }
 
