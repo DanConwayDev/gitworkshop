@@ -317,6 +317,19 @@ class QueryCentreExternal {
 		return pointer?.pubkey ?? undefined;
 	}
 
+	listenForActions(a_ref: RepoRef) {
+		const query = `listenForActions${a_ref}`;
+		if (this.subscriber_manager.add(query)) {
+			action_dvm_relays.forEach((url) => {
+				this.subscriber_manager.addUnsubsriber(query, this.get_relay(url).listenForActions(a_ref));
+			});
+		}
+	}
+
+	stopListeningForActions(a_ref: RepoRef) {
+		this.subscriber_manager.remove(`listenForActions${a_ref}`);
+	}
+
 	async fetchActions(a_ref: RepoRef) {
 		await this.hydrate_from_cache_db(createFetchActionsFilter(a_ref));
 		const relays = await chooseRelaysForRepo(a_ref);
@@ -364,6 +377,12 @@ self.onmessage = async (event) => {
 			break;
 		case 'fetchActions':
 			result = await external.fetchActions(args[0]);
+			break;
+		case 'listenForActions':
+			result = await external.listenForActions(args[0]);
+			break;
+		case 'stopListeningForActions':
+			result = await external.stopListeningForActions(args[0]);
 			break;
 		default:
 			console.error('Unknown method:', method);

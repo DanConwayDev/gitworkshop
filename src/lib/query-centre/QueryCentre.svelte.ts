@@ -10,7 +10,7 @@ import { isEvent } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
 import db from '$lib/dbs/LocalDb';
 import { inMemoryRelayEvent, inMemoryRelayTimeline, liveQueryState } from '$lib/helpers.svelte';
-import { createFetchActionsFilter } from '$lib/relay/filters/actions';
+import { createActionsNowFilter, createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NostrEvent } from 'nostr-tools';
 import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
 import store from '$lib/store.svelte';
@@ -196,6 +196,20 @@ class QueryCentre {
 				else return { user: undefined, loading };
 			},
 			() => [loading]
+		);
+	}
+
+	/**
+	 * listen for new events tagged with a_ref on hardcoded DVM relays until dropped
+	 */
+	listenForActions(a_ref: RepoRef) {
+		this.external_worker.postMessage({ method: 'listenForActions', args: [a_ref] });
+		return inMemoryRelayTimeline(
+			createActionsNowFilter(a_ref),
+			() => [],
+			() => {
+				this.external_worker.postMessage({ method: 'stopListeningForActions', args: [a_ref] });
+			}
 		);
 	}
 

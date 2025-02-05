@@ -1,6 +1,6 @@
 import { Relay, type NostrEvent } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
-import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
+import { action_dvm_kind, issue_kind, patch_kind, repo_kind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import {
 	type PubKeyString,
@@ -408,10 +408,12 @@ export class RelayManager {
 	watch_repos_sub: Subscription | undefined = undefined;
 	subscriber_manager = new SubscriberManager();
 
-	watchRepo(a_ref: RepoRef, events: { a_tags: (ARefR | ARefP)[]; e_tags: EventIdString[] }) {
+	watchRepo(a_ref: RepoRef, events?: { a_tags: (ARefR | ARefP)[]; e_tags: EventIdString[] }) {
 		const query = `watchRepos${a_ref}`;
 		this.subscriber_manager.add(query);
-		this.updateReposWatch(a_ref, events);
+		this.connect().then(() => {
+			this.updateReposWatch(a_ref, events);
+		});
 		const interval_id = setInterval(() => this.resetInactivityTimer(), 50000);
 
 		const unsubriber = () => {
@@ -439,7 +441,10 @@ export class RelayManager {
 	 * @param a_ref RepoRef of the repository we are currently watching
 	 * @param events additional event tags to watch related to the repo
 	 */
-	updateReposWatch(a_ref: RepoRef, events: { a_tags: (ARefR | ARefP)[]; e_tags: EventIdString[] }) {
+	updateReposWatch(
+		a_ref: RepoRef,
+		events?: { a_tags: (ARefR | ARefP)[]; e_tags: EventIdString[] }
+	) {
 		const query_a_tags = new Set<ARefR | ARefP>();
 		const query_e_tags = new Set<EventIdString>();
 
@@ -450,12 +455,12 @@ export class RelayManager {
 
 		let change = false;
 
-		events.a_tags.forEach((t) => {
+		[a_ref, ...(events?.a_tags ?? [])].forEach((t) => {
 			if (!change && !query_a_tags.has(t)) change = true;
 			query_a_tags.add(t);
 		});
 
-		events.e_tags.forEach((t) => {
+		(events?.e_tags ?? []).forEach((t) => {
 			if (!change && !query_e_tags.has(t)) change = true;
 			query_e_tags.add(t);
 		});
@@ -471,7 +476,11 @@ export class RelayManager {
 					},
 					{
 						// children kinds but for all repos on relay
-						kinds: createRepoChildrenFilters(new Set([]))[0].kinds,
+						kinds: [
+							...(createRepoChildrenFilters(new Set([]))[0].kinds ?? []),
+							// We dont want to add action_dvm_kind to createRepoChildrenFilters as we dont want load of outdated actions
+							action_dvm_kind
+						],
 						since: unixNow()
 					}
 				],
@@ -538,6 +547,10 @@ export class RelayManager {
 				}
 			});
 		});
+	}
+
+	listenForActions(a_ref: RepoRef): () => void {
+		return this.watchRepo(a_ref);
 	}
 	async fetchActions(a_ref: RepoRef): Promise<void> {
 		await this.connect();

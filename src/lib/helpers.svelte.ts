@@ -56,7 +56,11 @@ export function liveQueryState<T>(
 	return query;
 }
 
-export function inMemoryRelayTimeline(filters: Filter[], dependencies?: () => unknown[]) {
+export function inMemoryRelayTimeline(
+	filters: Filter[],
+	dependencies?: () => unknown[],
+	onDestroy?: () => void
+) {
 	const result = $state<{ timeline: NostrEvent[] }>({ timeline: [] });
 	$effect(() => {
 		dependencies?.();
@@ -66,6 +70,10 @@ export function inMemoryRelayTimeline(filters: Filter[], dependencies?: () => un
 		return () => {
 			sub.unsubscribe();
 		};
+	});
+
+	onDestroySvelte(() => {
+		onDestroy?.();
 	});
 	return result;
 }
