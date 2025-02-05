@@ -99,37 +99,38 @@ class QueryCentreExternal {
 		]);
 		const relay_logs = new Map<WebSocketUrl, OutboxRelayLog>();
 		// note as we are providing a table item, this will probably wont be async
-		await Promise.all([
-			...users.map((u) =>
-				(async (): Promise<void> => {
-					const pubkey_relays =
-						u.pubkey === event.pubkey
-							? await getPubkeyOutboxRelays(u)
-							: await getPubkeyInboxRelays(u);
-					pubkey_relays.forEach((r) => {
-						let log = relay_logs.get(r);
-						if (!log) {
-							log = { url: r, success: false, groups: [], attempts: [] };
-							relay_logs.set(r, log);
-						}
-						log.groups.push(u.pubkey);
-					});
-				})()
-			),
-			...repos.map((repo) =>
-				(async (): Promise<void> => {
-					const repo_relays = await getRepoInboxRelays(repo);
-					repo_relays.forEach((r) => {
-						let log = relay_logs.get(r);
-						if (!log) {
-							log = { url: r, success: false, groups: [], attempts: [] };
-							relay_logs.set(r, log);
-						}
-						log.groups.push(repo.uuid);
-					});
-				})()
-			)
-		]);
+		if (event.kind !== action_dvm_kind)
+			await Promise.all([
+				...users.map((u) =>
+					(async (): Promise<void> => {
+						const pubkey_relays =
+							u.pubkey === event.pubkey
+								? await getPubkeyOutboxRelays(u)
+								: await getPubkeyInboxRelays(u);
+						pubkey_relays.forEach((r) => {
+							let log = relay_logs.get(r);
+							if (!log) {
+								log = { url: r, success: false, groups: [], attempts: [] };
+								relay_logs.set(r, log);
+							}
+							log.groups.push(u.pubkey);
+						});
+					})()
+				),
+				...repos.map((repo) =>
+					(async (): Promise<void> => {
+						const repo_relays = await getRepoInboxRelays(repo);
+						repo_relays.forEach((r) => {
+							let log = relay_logs.get(r);
+							if (!log) {
+								log = { url: r, success: false, groups: [], attempts: [] };
+								relay_logs.set(r, log);
+							}
+							log.groups.push(repo.uuid);
+						});
+					})()
+				)
+			]);
 
 		if (event.kind === action_dvm_kind) {
 			action_dvm_relays.forEach((r) => {

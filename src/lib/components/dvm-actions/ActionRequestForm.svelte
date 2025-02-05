@@ -89,6 +89,9 @@
 			});
 			if (request) {
 				signed = true;
+				// this commit restricted the broadcast of action_dvm_kind to just the hardcoded relays
+				// and not the inbox relays of the pubkeys tagged or the repo relays.
+				// TODO: think about which relays should recieve this
 				// TODO: do we really need to wait for the event to be broadly sent?
 				//       we just need to be be received by one of the dvm relays before continuing
 				await query_centre.publishEvent(request);
