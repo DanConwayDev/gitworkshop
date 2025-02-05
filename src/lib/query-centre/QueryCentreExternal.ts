@@ -1,4 +1,5 @@
 import {
+	action_dvm_relays,
 	base_relays,
 	chooseBaseRelays,
 	chooseRelaysForAllRepos,
@@ -24,7 +25,7 @@ import {
 } from '$lib/types';
 import { unixNow } from 'applesauce-core/helpers';
 import { addEventsToCache, getCacheEventsForFilters } from '$lib/dbs/LocalRelayDb';
-import { repo_kind } from '$lib/kinds';
+import { action_dvm_kind, repo_kind } from '$lib/kinds';
 import { nip05 as nip05NostrTools, type Filter, type NostrEvent } from 'nostr-tools';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import Processor from '$lib/processors/Processor';
@@ -130,6 +131,16 @@ class QueryCentreExternal {
 			)
 		]);
 
+		if (event.kind === action_dvm_kind) {
+			action_dvm_relays.forEach((r) => {
+				let log = relay_logs.get(r);
+				if (!log) {
+					log = { url: r, success: false, groups: [], attempts: [] };
+					relay_logs.set(r, log);
+				}
+				log.groups.push('Action DVM');
+			});
+		}
 		await db.outbox.put({ ...item, relay_logs: [...relay_logs.values()] });
 
 		relay_logs.forEach(async (log) => {

@@ -1,24 +1,11 @@
 <script lang="ts">
-	import UserHeader from '$lib/components/user/UserHeader.svelte';
-	import query_centre from '$lib/query-centre/QueryCentre.svelte';
+	import ActionLauncher from '$lib/components/dvm-actions/ActionLauncher.svelte';
 	import store from '$lib/store.svelte';
 	import { routeToRepoRef, type RepoRef } from '$lib/types';
 
 	let a_ref: RepoRef | undefined = $derived(routeToRepoRef(store.route));
-
-	// below is the basic pattern to get an array of events based on a nostr filter.
-	// `actions_events` is a svelt 5 $state so it is dynamtically updated.
-	// query_centre.fetchActions() returns the state from the InMemoryRelay after
-	// initiating a request to the QueryCentreExternal to populate the InMemoryRelay
-	// with events found on in the local cache and on external relays.
-	let actions_query = $derived(a_ref ? query_centre.fetchActions(a_ref) : undefined);
-	let actions_events = $derived(actions_query ? actions_query.timeline : []);
 </script>
 
-<div>{a_ref}</div>
-{#each actions_events as event}
-	<div>
-		<UserHeader user={event.pubkey} />
-		<div>{event.content}</div>
-	</div>
-{/each}
+{#if a_ref}
+	<ActionLauncher {a_ref} />
+{/if}

@@ -36,8 +36,12 @@ export function statusKindtoText(kind: number, type: 'pr' | 'issue'): string {
 
 export const repo_kind: number = 30617;
 
+export const repo_state_kind: number = 30618;
+
 export const patch_kind: number = 1617;
 
 export const issue_kind: number = 1621;
 export const Issue = 1621;
 export type Issue = typeof Issue;
+
+export const action_dvm_kind: number = 6900;

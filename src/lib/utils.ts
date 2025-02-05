@@ -108,14 +108,16 @@ export const aRefPToAddressPointer = (
 	return { kind: Number(k), pubkey, identifier, relays };
 };
 
-export const aRefToAddressPointer = (
+export function aRefToAddressPointer(a: string, relays?: string[]): AddressPointer | undefined;
+export function aRefToAddressPointer(a: ARefP, relays?: string[]): AddressPointer;
+export function aRefToAddressPointer(
 	a: ARefP | string,
 	relays: string[] | undefined = undefined
-): AddressPointer | undefined => {
+): AddressPointer | undefined {
 	if (a.split(':').length !== 3) return undefined;
 	const [k, pubkey, identifier] = a.split(':');
 	return { kind: Number(k), pubkey, identifier, relays };
-};
+}
 
 export const addressPointerToARefP = (address_pointer: AddressPointer): ARefP => {
 	return `${address_pointer.kind}:${address_pointer.pubkey}:${address_pointer.identifier}`;
@@ -132,11 +134,13 @@ export const naddrToRepoA = (s: string): RepoRef | undefined => {
 	return undefined;
 };
 
-export const aToNaddr = (a: string | AddressPointer): Naddr | undefined => {
+export function aToNaddr(a: string): Naddr | undefined;
+export function aToNaddr(a: AddressPointer): Naddr;
+export function aToNaddr(a) {
 	const a_ref = typeof a === 'string' ? aRefToAddressPointer(a) : a;
 	if (!a_ref) return undefined;
 	return nip19.naddrEncode(a_ref);
-};
+}
 
 export const repoRefToPubkeyLink = (a_ref: RepoRef): `${Npub}/${string}` => {
 	const pointer = aRefPToAddressPointer(a_ref);

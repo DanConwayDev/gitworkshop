@@ -1,4 +1,4 @@
-import { issue_kind, patch_kind, status_kinds, repo_kind } from '$lib/kinds';
+import { issue_kind, patch_kind, status_kinds, repo_kind, repo_state_kind } from '$lib/kinds';
 import type { PubKeyString, RelayCheckTimestamp, RepoRef, Timestamp } from '$lib/types';
 import { aRefPToAddressPointer } from '$lib/utils';
 import type { Filter } from 'nostr-tools';
@@ -72,7 +72,7 @@ export const createRepoIdentifierFilters = (
 	if (items instanceof Set) {
 		return [
 			{
-				kinds: [repo_kind],
+				kinds: [repo_kind, repo_state_kind],
 				'#d': [...items]
 			}
 		];
@@ -90,7 +90,7 @@ export const createRepoIdentifierFilters = (
 	const filters: Filter[] = [];
 	identifiers.forEach((since, identifier) => {
 		filters.push({
-			kinds: [repo_kind],
+			kinds: [repo_kind, repo_state_kind],
 			'#d': [identifier],
 			since
 		});

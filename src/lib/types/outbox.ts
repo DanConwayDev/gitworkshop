@@ -12,7 +12,7 @@ export interface OutboxItem {
 export interface OutboxRelayLog {
 	url: WebSocketUrl;
 	success: boolean;
-	groups: (PubKeyString | RepoRef)[];
+	groups: (PubKeyString | RepoRef | 'Action DVM')[];
 	try_after_timestamp?: number; // unix seconds
 	attempts: OutboxSendAttempt[];
 }

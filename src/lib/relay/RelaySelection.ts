@@ -26,6 +26,8 @@ export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.primal.net'
 ];
 
+export const action_dvm_relays: WebSocketUrl[] = ['wss://soloco.nl/'];
+
 export const chooseBaseRelays = () => [...base_relays];
 
 export const chooseRelaysForAllRepos = async () => {
