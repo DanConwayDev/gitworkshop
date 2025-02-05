@@ -15,6 +15,7 @@ import type { NostrEvent } from 'nostr-tools';
 import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
 import store from '$lib/store.svelte';
 import { repo_kind } from '$lib/kinds';
+import { liveQuery } from 'dexie';
 
 class QueryCentre {
 	external_worker: Worker;
@@ -34,9 +35,20 @@ class QueryCentre {
 		};
 	}
 
+	/**
+	 * publish event to tagged npub's inbox relays and repo relays of tagged a_refs
+	 * awaits the succesful broadcast to 'broadly sent'
+	 *
+	 */
 	async publishEvent(event: NostrEvent) {
 		const item = await db.outbox.get(event.id);
 		if (!item) this.external_worker.postMessage({ method: 'publishEvent', args: [event] });
+		await new Promise<void>((r) => {
+			liveQuery(async () => {
+				const item = await db.outbox.get(event.id);
+				if (item?.broadly_sent) r();
+			});
+		});
 	}
 
 	fetchAllRepos() {
