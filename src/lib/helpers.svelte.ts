@@ -1,8 +1,8 @@
 import { liveQuery } from 'dexie';
 import { nip19, type Filter, type NostrEvent } from 'nostr-tools';
 import { memory_db_query_store } from './dbs/InMemoryRelay';
-import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
 import {
+	isRepoRef,
 	type Nip05Address,
 	type Npub,
 	type PubKeyString,
@@ -17,6 +17,8 @@ import store from './store.svelte';
 import { repoToRepoRef } from './repos';
 import query_centre from './query-centre/QueryCentre.svelte';
 import { onDestroy as onDestroySvelte } from 'svelte';
+import type { AddressPointer, EventPointer } from 'nostr-tools/nip19';
+import { repo_kind } from './kinds';
 
 /// this is taken and adapted from https://github.com/dexie/Dexie.js/pull/2116
 /// when merged the version from the library should be used
@@ -69,15 +71,15 @@ export function inMemoryRelayTimeline(filters: Filter[], dependencies?: () => un
 }
 
 export function inMemoryRelayEvent(
-	event_ref: NEventAttributes | NAddrAttributes,
+	event_ref: EventPointer | AddressPointer | undefined,
 	dependencies?: () => unknown[]
 ) {
 	const result = $state<{ event: NostrEvent | undefined }>({ event: undefined });
 	$effect(() => {
 		dependencies?.();
-
+		if (!event_ref) return;
 		const sub = (
-			event_ref.type === 'naddr'
+			'identifier' in event_ref
 				? memory_db_query_store.replaceable(event_ref.kind, event_ref.pubkey, event_ref.identifier)
 				: memory_db_query_store.event(event_ref.id)
 		).subscribe((event) => {
@@ -91,37 +93,34 @@ export function inMemoryRelayEvent(
 }
 
 export class RepoRouteStringCreator {
-	private table_item: RepoTableItem | undefined = $state(undefined);
-	private a_ref: RepoRef | undefined = $state(undefined);
-	private explicit_relay: WebSocketUrl | undefined = $state(undefined);
-
-	private relays = $derived(
-		this.explicit_relay ? [this.explicit_relay] : firstRelay(this.table_item?.relays)
-	);
-	private pointer = $derived(
-		this.a_ref ? aRefPToAddressPointer(this.a_ref, this.relays) : undefined
-	);
-
+	private a_ref: RepoRef;
+	private pointer: AddressPointer | undefined = undefined;
 	private nip_creator = $derived(
 		this.pointer && store.url_pref === 'nip05'
 			? new UserRouteStringCreator(this.pointer.pubkey)
 			: undefined
 	);
-
-	s: RepoRouteString | undefined = $derived.by(() => {
+	s: RepoRouteString = $derived.by(() => {
 		if (this.pointer && this.a_ref) {
 			if (store.url_pref === 'naddr') return aToNaddr(this.pointer);
 			else if (store.url_pref === 'nip05' && this.nip_creator?.s) {
 				return `${this.nip_creator.s}/${this.pointer.identifier}` as RepoRouteNip05String;
 			} else return repoRefToPubkeyLink(this.a_ref);
 		}
-		return undefined;
+		// unreachable see https://github.com/sveltejs/svelte/issues/11116
+		return `${repo_kind}:<a_ref and pointer will never be undefined>:<svelte-5-sucks>` as RepoRouteString;
 	});
 
 	constructor(a_ref_or_table_item: RepoRef | RepoTableItem, relay?: WebSocketUrl) {
-		const is_a_ref = typeof a_ref_or_table_item == 'string';
-		this.a_ref = is_a_ref ? a_ref_or_table_item : repoToRepoRef(a_ref_or_table_item);
-		this.explicit_relay = relay;
+		this.a_ref = isRepoRef(a_ref_or_table_item)
+			? a_ref_or_table_item
+			: repoToRepoRef(a_ref_or_table_item);
+		const relays = relay
+			? [relay]
+			: isRepoRef(a_ref_or_table_item)
+				? []
+				: firstRelay(a_ref_or_table_item?.relays);
+		this.pointer = aRefPToAddressPointer(this.a_ref, relays);
 	}
 }
 const firstRelay = (relays: string[] = []) => (!relays[0] ? [] : [relays[0]]);
