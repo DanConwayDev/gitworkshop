@@ -15,7 +15,7 @@
 		loading?: boolean;
 	} = $props();
 
-	let status = $state(IssueOrPrStatus.Applied);
+	let status = $state(IssueOrPrStatus.Open);
 
 	let filtered_items = $derived(
 		table_items.filter((e) => {
