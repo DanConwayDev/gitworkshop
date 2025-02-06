@@ -37,8 +37,8 @@ export const extractPatchTitle = (event: NostrEvent): string | undefined =>
 		extractPatchTitleFromContent(event.content) ??
 		''
 	)
-		.split('/r')[0]
-		.split('/n')[0];
+		.split('\r')[0]
+		.split('\n')[0];
 
 /** this doesn't work for all patch formats and options */
 const extractPatchTitleFromContent = (s: string): string | undefined => {
