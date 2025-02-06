@@ -120,7 +120,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 24 24"
-				class="flex-none fill-success-content"
+				class="h-5 w-5 flex-none fill-success-content"
 				><path
 					fill="currentColor"
 					d="M11.646 15.146L5.854 9.354a.5.5 0 0 1 .353-.854h11.586a.5.5 0 0 1 .353.854l-5.793 5.792a.5.5 0 0 1-.707 0"

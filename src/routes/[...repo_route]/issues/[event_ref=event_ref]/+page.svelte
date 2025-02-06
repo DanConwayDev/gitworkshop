@@ -27,7 +27,7 @@
 	let thread_events = $derived(thread_query?.timeline ?? []);
 </script>
 
-<PrOrIssueHeader type="issue" {table_item} />
+<PrOrIssueHeader {table_item} />
 <Container>
 	{#if table_item}
 		<div class="mx-auto max-w-6xl lg:flex">
@@ -43,7 +43,7 @@
 				</div>
 			</div>
 			<div class="prose ml-2 hidden w-1/3 lg:flex">
-				<PrOrIssueDetails type="issue" {table_item} />
+				<PrOrIssueDetails {table_item} />
 			</div>
 		</div>
 	{/if}

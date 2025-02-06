@@ -1,8 +1,9 @@
 <script lang="ts">
 	import type { IssueOrPRTableItem } from '$lib/types';
 	import UserHeader from '../user/UserHeader.svelte';
+	import StatusSelector from './StatusSelector.svelte';
 
-	let { type, table_item }: { type: 'pr' | 'issue'; table_item?: IssueOrPRTableItem } = $props();
+	let { table_item }: { table_item?: IssueOrPRTableItem } = $props();
 	let labels = $state([]);
 </script>
 
@@ -25,7 +26,7 @@
 			<div class="badge skeleton my-2 block w-40"></div>
 		{:else}
 			<h4>Status</h4>
-			<!-- <StatusSelector {type} status={table_item.status} pr_or_issue_id={table_item.uuid} /> -->
+			<StatusSelector item={table_item} />
 		{/if}
 	</div>
 
