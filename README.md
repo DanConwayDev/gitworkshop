@@ -2,7 +2,7 @@
 
 decentralised alternative to github over nostr
 
-a web site (or PWA) to collaborate on issues and code proposals for git repositories via nostr
+a web site (or PWA) to collaborate on issues and code PRs for git repositories via nostr
 
 available at https://gitworkshop.dev or can be run locally with the same experience as https://gitworkshop.dev doesnt host any data
 
@@ -36,6 +36,6 @@ gitworkshop.dev runs internal and external components and logic in seperate thre
 
 ## Contributions Welcome!
 
-use ngit to submit proposals!
+use ngit to submit PRs!
 
-[gitworkshop.dev/repo/ngit](https://gitworkshop.dev/repo/gitworkshop) to report issues and see proposals
+[gitworkshop.dev/repo/ngit](https://gitworkshop.dev/repo/gitworkshop) to report issues and see PRs

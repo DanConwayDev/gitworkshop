@@ -26,10 +26,10 @@ describe('extractPatchMessage', () => {
 	test('cover letter', () => {
 		expect(
 			extractPatchMessage(
-				`From 8a45afcacd035de474e142e29cbdfa979d23f751 Mon Sep 17 00:00:00 2001\nSubject: [PATCH 0/2] testing multiple revisions of multi patch proposal with cover letter\n\nhere is the cover letter description`
+				`From 8a45afcacd035de474e142e29cbdfa979d23f751 Mon Sep 17 00:00:00 2001\nSubject: [PATCH 0/2] testing multiple revisions of multi patch PR with cover letter\n\nhere is the cover letter description`
 			)
 		).toEqual(
-			'testing multiple revisions of multi patch proposal with cover letter\n\nhere is the cover letter description'
+			'testing multiple revisions of multi patch PR with cover letter\n\nhere is the cover letter description'
 		);
 	});
 

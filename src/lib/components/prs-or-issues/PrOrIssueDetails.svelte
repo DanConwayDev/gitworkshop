@@ -25,8 +25,7 @@
 			<div class="badge skeleton my-2 block w-40"></div>
 		{:else}
 			<h4>Status</h4>
-			TODO
-			<!-- <StatusSelector {type} status={table_item.status} proposal_or_issue_id={table_item.uuid} /> -->
+			<!-- <StatusSelector {type} status={table_item.status} pr_or_issue_id={table_item.uuid} /> -->
 		{/if}
 	</div>
 

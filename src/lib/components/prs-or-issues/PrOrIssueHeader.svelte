@@ -34,7 +34,7 @@
 					{#if !logged_in_user}
 						<Status {type} status={table_item.status} edit_mode={false} />
 						<!-- {:else}
-						<StatusSelector {type} {status} proposal_or_issue_id={id} /> -->
+						<StatusSelector {type} {status} pr_or_issue_id={id} /> -->
 					{/if}
 				</div>
 				<div class="mr-3 inline align-middle">

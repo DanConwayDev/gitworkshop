@@ -29,7 +29,7 @@
 							<li>
 								browse <a href="/repos" class="link link-primary">gitworkshop.dev/repos</a> for the repository
 							</li>
-							<li>explore proposals and issues</li>
+							<li>explore PRs and issues</li>
 							<li>
 								copy the git clone url (or press the green clone button to copy the clone command)
 							</li>
@@ -47,7 +47,7 @@
 								</div>
 							</li>
 						</ul>
-						<h4>3. submit proposal</h4>
+						<h4>3. submit PR</h4>
 						<div>
 							<ul>
 								<li>
@@ -82,14 +82,14 @@
 								</li>
 							</ul>
 						</div>
-						<h4>4. view proposals</h4>
+						<h4>4. view PRs</h4>
 						<div>
 							<ul>
 								<li>
 									<div>
 										<div>
-											for open proposals view remote branches with prefix `pr/` for example using
-											git command:
+											for open PRs view remote branches with prefix `pr/` for example using git
+											command:
 										</div>
 										<div class="not-prose text-sm">
 											<div>
@@ -112,14 +112,13 @@
 								</li>
 							</ul>
 						</div>
-						<h4>5. update proposal</h4>
+						<h4>5. update PR</h4>
 						<div>
 							<ul>
 								<li>
 									<div>
 										<div>
-											if you are the proposal author, or a maintainer you can add commits to a
-											proposal:
+											if you are the PR author, or a maintainer you can add commits to a PR:
 										</div>
 										<div class="not-prose text-sm">
 											<div>
@@ -237,14 +236,14 @@
 								</li>
 							</ul>
 						</div>
-						<h4>3. view proposals</h4>
+						<h4>3. view PRs</h4>
 						<div>
 							<ul>
 								<li>
 									<div>
 										<div>
-											for open proposals view remote branches with prefix `pr/` for example using
-											git command:
+											for open PRs view remote branches with prefix `pr/` for example using git
+											command:
 										</div>
 										<div class="not-prose text-sm">
 											<div>
@@ -267,14 +266,12 @@
 								</li>
 							</ul>
 						</div>
-						<h4>4. merge / incorporate proposals</h4>
+						<h4>4. merge / incorporate PRs</h4>
 						<div>
 							<ul>
 								<li>
 									<div>
-										<div>
-											the proposal status will be automatically updated if you merge the branch:
-										</div>
+										<div>the PR status will be automatically updated if you merge the branch:</div>
 										<div class="not-prose text-sm">
 											<div>
 												<code><span class="text-yellow-600">git</span> checkout master</code>

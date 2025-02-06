@@ -57,7 +57,7 @@
 			>
 				<path d={pr_icon_path.open_pull} />
 			</svg>
-			Proposals
+			PRs
 			{#if open_prs_count > 0}
 				<span class="badge badge-neutral badge-sm ml-2">
 					{open_prs_count}

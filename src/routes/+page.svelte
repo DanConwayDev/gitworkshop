@@ -82,9 +82,7 @@
 							<span class="text-purple-600">git</span>workshop<span class="text-neutral">.dev</span>
 						</h3>
 					</div>
-					<div class="prose">
-						A nostr web client to manage and discuss issues and code proposals
-					</div>
+					<div class="prose">A nostr web client to manage and discuss issues and code PRs</div>
 				</div>
 			</div>
 			<div class="card bg-base-300">
@@ -122,9 +120,9 @@
 		</p>
 		<p>
 			Gitworkshop.dev, git-remote-nostr and ngit are tools to enable code collaboration over nostr.
-			Gitworkshop.dev provides a visual interface to discuss proposals and open issues.
-			git-remote-nostr enables proposal creation, review and incorporation using standard git
-			tooling. ngit handles repository setup and advanced proposal submission.
+			Gitworkshop.dev provides a visual interface to discuss PRs and open issues. git-remote-nostr
+			enables PR creation, review and incorporation using standard git tooling. ngit handles
+			repository setup and advanced PR submission.
 		</p>
 		<div class="flex justify-end">
 			<a href="/about" class="btn btn-secondary text-right">details</a>
@@ -159,8 +157,7 @@
 						</div>
 						<div>
 							<code
-								><span class="text-green-600"
-									>// use pr/ branch prefix to create a nostr proposal</span
+								><span class="text-green-600">// use pr/ branch prefix to create a nostr PR</span
 								></code
 							>
 						</div>
@@ -175,8 +172,7 @@
 						</div>
 						<div>
 							<code
-								><span class="text-green-600">// any branch with pr/ prefix is nostr proposal</span
-								></code
+								><span class="text-green-600">// any branch with pr/ prefix is nostr PR</span></code
 							>
 						</div>
 						<div>
@@ -243,7 +239,7 @@
 									<div>
 										<code
 											><span class="text-green-600"
-												>// pushing merged commits updates proposal status</span
+												>// pushing merged commits updates PR status</span
 											></code
 										>
 									</div>

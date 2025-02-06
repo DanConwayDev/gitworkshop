@@ -11,7 +11,7 @@ export const getStandardnip10ReplyTags = (
 	];
 };
 
-/** to get the proposal revision id rather than the root proposal */
+/** to get the PR revision id rather than the root PR */
 const getRootId = (event: NostrEvent, issue_or_pr_table_item: IssueOrPRTableItem): string => {
 	// exclude 'a' references to repo events
 	const root_tag = event.tags.find((t) => t[0] === 'e' && t.length === 4 && t[3] === 'root');
