@@ -20,7 +20,7 @@ import { eventIsPrRoot } from '$lib/utils';
 export type UpdateProcessor = (
 	existing_items: DbItemsCollection,
 	updates: ProcessorUpdate[]
-) => ProcessorUpdate[];
+) => ProcessorUpdate[] | Promise<ProcessorUpdate[]>;
 
 export interface DbItemsKeysCollection {
 	repos: Set<RepoRef>;

@@ -201,11 +201,15 @@ class SeenOnTracker {
 async function processUpdates(updates: ProcessorUpdate[]): Promise<ProcessorUpdate[]> {
 	const items = await getExistingItemsToUpdate(updates);
 	let remaining_updates = updates;
-	[processPubkey, processRepoUpdates, processIssueUpdates, processPrUpdates].forEach(
-		(processor_fn) => {
-			remaining_updates = processor_fn(items, remaining_updates);
-		}
-	);
+	for (const processor_fn of [
+		processPubkey,
+		processRepoUpdates,
+		processIssueUpdates,
+		processPrUpdates
+	]) {
+		remaining_updates = await Promise.resolve(processor_fn(items, remaining_updates));
+	}
+
 	await Promise.all([
 		items.repos.size === 0 ? Promise.resolve([]) : db.repos.bulkPut([...items.repos.values()]),
 		items.pubkeys.size === 0

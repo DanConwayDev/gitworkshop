@@ -4,12 +4,14 @@ import {
 	isRelayCheckFound,
 	isRelayUpdateRepo,
 	isRelayUpdateRepoFound,
+	IssueOrPrStatus,
 	type RepoAnn
 } from '$lib/types';
 import { repo_kind } from '$lib/kinds';
 import type {
 	ARefP,
 	HuristicsForRelay,
+	IssuesOrPrsByStatus,
 	RelayCheck,
 	RelayCheckFound,
 	RelayUpdateFound,
@@ -21,22 +23,37 @@ import { getTagMultiValue, getTagValue, getValueOfEachTagOccurence } from '$lib/
 import { getEventUID, unixNow } from 'applesauce-core/helpers';
 import { nip19, type NostrEvent } from 'nostr-tools';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
-import { isProcessorRepoUpdate, type UpdateProcessor } from '$lib/types/processor';
+import {
+	isProcessorRepoUpdate,
+	type ProcessorUpdate,
+	type UpdateProcessor
+} from '$lib/types/processor';
+import db from '$lib/dbs/LocalDb';
 
-const processRepoUpdates: UpdateProcessor = (items, updates) => {
-	return updates.filter((u) => {
-		if (!isProcessorRepoUpdate(u)) return true;
+const processRepoUpdates: UpdateProcessor = async (items, updates) => {
+	const retained_updates: ProcessorUpdate[] = [];
+
+	for (const u of updates) {
+		if (!isProcessorRepoUpdate(u)) {
+			retained_updates.push(u);
+			continue;
+		}
 		const uuid = u.event ? (getEventUID(u.event) as ARefP) : u.relay_updates[0].uuid;
 		const item = items.repos.get(uuid);
 		let repo_ann;
 		if (u.event) {
 			repo_ann = eventToRepoAnn(u.event);
 		}
-		if (!item && !repo_ann) return true;
+		if (!item && !repo_ann) {
+			retained_updates.push(u);
+			continue;
+		}
 		const updated_item = applyHuristicUpdates(
 			{
 				...(item || {
-					relays_info: {}
+					relays_info: {},
+					// if !item, repo_ann must be RepoAnn
+					...(await getPrsAndIssues(repo_ann as RepoAnn))
 				}),
 				...(repo_ann || {}),
 				last_activity: Math.max(item?.last_activity ?? 0, u.event ? u.event.created_at : 0)
@@ -44,9 +61,34 @@ const processRepoUpdates: UpdateProcessor = (items, updates) => {
 			u.relay_updates
 		);
 		items.repos.set(uuid, updated_item);
-		return false;
-	});
+	}
+	return retained_updates;
 };
+
+async function getPrsAndIssues(repo_ann: RepoAnn) {
+	const [issues, PRs] = await Promise.all([
+		db.issues.where('repos').equals(repo_ann.uuid).toArray(),
+		db.prs.where('repos').equals(repo_ann.uuid).toArray()
+	]);
+	const issues_by_status: IssuesOrPrsByStatus = {
+		[IssueOrPrStatus.Open]: [],
+		[IssueOrPrStatus.Applied]: [],
+		[IssueOrPrStatus.Closed]: [],
+		[IssueOrPrStatus.Draft]: []
+	};
+	issues.forEach((issue) => issues_by_status[issue.status].push(issue.uuid));
+	const PRs_by_status: IssuesOrPrsByStatus = {
+		[IssueOrPrStatus.Open]: [],
+		[IssueOrPrStatus.Applied]: [],
+		[IssueOrPrStatus.Closed]: [],
+		[IssueOrPrStatus.Draft]: []
+	};
+	PRs.forEach((pr) => PRs_by_status[pr.status].push(pr.uuid));
+	return {
+		issues: issues_by_status,
+		PRs: PRs_by_status
+	};
+}
 
 function applyHuristicUpdates(
 	item: RepoTableItem,
