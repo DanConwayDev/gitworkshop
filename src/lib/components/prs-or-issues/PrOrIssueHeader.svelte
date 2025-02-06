@@ -11,7 +11,6 @@
 		const n = table_item ? table_item.title : 'Untitled';
 		return n.length > 70 ? `${n.slice(0, 65)}...` : n;
 	});
-
 	let logged_in_user = false;
 </script>
 

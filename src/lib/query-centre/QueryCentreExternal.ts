@@ -234,9 +234,23 @@ class QueryCentreExternal {
 		// TODO create chooseRelaysForIssue, that uses the Repo scoring but its own last checked
 		const relays = await chooseRelaysForRepo(a_ref);
 		try {
-			await Promise.all(
-				relays.map(({ url }) => this.get_relay(url).fetchIssueThread(a_ref, id, ids))
-			);
+			await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchThread(a_ref, id, ids)));
+		} catch {
+			/* empty */
+		}
+	}
+
+	async fetchPrThread(a_ref: RepoRef, id: EventIdString) {
+		const table_item = await db.prs.get(id);
+		const ids: EventIdString[] = [];
+		if (table_item) {
+			// TODO get know child events to also search for
+		}
+		await this.hydrate_from_cache_db([{ '#e': [id, ...ids] }]);
+		// TODO create chooseRelaysForPr, that uses the Repo scoring but its own last checked
+		const relays = await chooseRelaysForRepo(a_ref);
+		try {
+			await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchThread(a_ref, id, ids)));
 		} catch {
 			/* empty */
 		}
@@ -372,6 +386,10 @@ self.onmessage = async (event) => {
 		case 'fetchIssueThread':
 			result = await external.fetchIssueThread(args[0], args[1]);
 			break;
+		case 'fetchPrThread':
+			result = await external.fetchPrThread(args[0], args[1]);
+			break;
+
 		case 'fetchEvent':
 			result = await external.fetchEvent(args[0]);
 			break;

@@ -14,7 +14,7 @@
 		event?: NostrEvent;
 		n_attr?: NEventAttributes | NAddrAttributes;
 		disable_links?: boolean;
-		name_first: boolean;
+		name_first?: boolean;
 		children?: Snippet;
 	} = $props();
 

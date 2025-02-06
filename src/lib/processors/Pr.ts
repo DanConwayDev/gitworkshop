@@ -29,7 +29,12 @@ import {
 	type UpdateProcessor
 } from '$lib/types/processor';
 import type { NostrEvent } from 'nostr-tools';
-import { extractPatchDescription, extractPatchTitle } from '$lib/git-utils';
+import {
+	eventToStatusHistoryItem,
+	extractPatchDescription,
+	extractPatchTitle
+} from '$lib/git-utils';
+import { processNewStatus } from './Issue';
 
 const processPrUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
@@ -42,10 +47,22 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 		if (u.event) {
 			base_pr = eventToPr(u.event);
 		}
+		const status_item = eventToStatusHistoryItem(u.event);
+		if (status_item) {
+			if (!item) {
+				// either, PR hasn't been recieved yet or status applies to an Issue
+				// retain the update for processing later
+				// TODO - we cant just try and process this every <100ms
+				return true;
+			}
+			processNewStatus(item, status_item);
+		}
 		if (!item && !base_pr) {
-			// TODO this could be status update before the pr has been found
+			// shouldn't get here - are we processing an event kind we shouldnt?
+			// retaining anyway
 			return true;
 		}
+
 		const updated_item = applyHuristicUpdates(
 			{
 				...(item || {
@@ -59,7 +76,6 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 		items.prs.set(uuid, updated_item);
 		updated_item.repos.forEach((a_ref) => {
 			const repo = items.repos.get(a_ref);
-			// TODO we should create an RepoTableItem without a event just from a reference
 			if (!repo) return;
 			if (!repo.PRs) {
 				repo.PRs = {
@@ -165,6 +181,7 @@ const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
 		title,
 		description,
 		status: status_kind_open,
+		status_history: [],
 		repos,
 		tags
 	};

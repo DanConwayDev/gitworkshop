@@ -133,7 +133,13 @@ class QueryCentre {
 	}
 
 	fetchPr(pr_id: EventIdString) {
-		return liveQueryState(() => db.issues.get(pr_id));
+		return liveQueryState(() => db.prs.get(pr_id));
+	}
+
+	fetchPrThread(a_ref: RepoRef, pr_id: EventIdString) {
+		this.external_worker.postMessage({ method: 'fetchPrThread', args: [a_ref, pr_id] });
+		// dynamically add in all the new replies and tagged events
+		return inMemoryRelayTimeline([{ '#e': [pr_id] }]);
 	}
 
 	fetchEvent(event_ref: NEventAttributes | NAddrAttributes) {

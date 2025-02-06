@@ -544,7 +544,7 @@ export class RelayManager {
 		}
 	}
 
-	async fetchIssueThread(
+	async fetchThread(
 		a_ref: RepoRef,
 		id: EventIdString,
 		known_replies: EventIdString[] = []
@@ -584,6 +584,7 @@ export class RelayManager {
 			findNext();
 		});
 	}
+
 	async fetchEvent(event_ref: NEventAttributes): Promise<NostrEvent | undefined> {
 		await this.connect();
 		return await new Promise<NostrEvent | undefined>((r) => {
