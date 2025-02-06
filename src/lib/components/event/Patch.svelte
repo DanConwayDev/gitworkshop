@@ -7,14 +7,16 @@
 	import { getTagValue } from 'applesauce-core/helpers';
 	import { extractPatchMessage } from '$lib/git-utils';
 	import ContentTree from '../content-tree/ContentTree.svelte';
-	import { stringToDocTree } from '$lib/doc_tree';
+	import { nostrEventToDocTree } from '$lib/doc_tree';
 
 	let { event }: { event: NostrEvent } = $props();
 
 	let commit_id_shorthand = getTagValue(event, 'commit')?.substring(0, 8) || '[commit_id unknown]';
 	let commit_message =
 		getTagValue(event, 'description') || extractPatchMessage(event.content) || '[untitled]';
-	let commit_message_node = $derived(stringToDocTree(commit_message));
+	let commit_message_node = $derived(
+		nostrEventToDocTree({ content: commit_message, tags: [] } as unknown as NostrEvent)
+	);
 
 	let files = parseDiff(event.content);
 	let expand_files = $state(files.map(() => false));
