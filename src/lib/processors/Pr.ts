@@ -161,6 +161,7 @@ const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
 
 	const tags = getValueOfEachTagOccurence(event.tags, 't');
 	return {
+		type: 'pr',
 		title,
 		description,
 		status: status_kind_open,

@@ -53,6 +53,7 @@ export type IssuesOrPrsByStatus = {
 };
 
 export interface IssueOrPrBase {
+	type: 'issue' | 'pr';
 	title: string;
 	description: string;
 	status: IssueOrPrStatus;
@@ -61,9 +62,11 @@ export interface IssueOrPrBase {
 	repos: RepoRef[];
 }
 
-export interface Issue extends NonReplaceableEventAttribution, IssueOrPrBase {}
+export interface IssueOrPr extends NonReplaceableEventAttribution, IssueOrPrBase {}
 
-export interface Pr extends NonReplaceableEventAttribution, IssueOrPrBase {}
+export type Issue = IssueOrPr;
+
+export type Pr = IssueOrPr;
 
 export interface RepoReadme {
 	md: string;

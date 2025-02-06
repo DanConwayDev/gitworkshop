@@ -8,10 +8,10 @@ import {
 	type PubKeyString,
 	isARefP,
 	type RepoRef,
-	type Issue,
 	type LastCheck,
 	isWithRelaysInfo,
-	type OutboxItem
+	type OutboxItem,
+	type IssueOrPr
 } from '$lib/types';
 import { aRefPToAddressPointer } from '$lib/utils';
 import type { EntityTable } from 'dexie';
@@ -71,7 +71,7 @@ export function repoTableItemDefaults(a_ref: ARefP | string): RepoTableItem & Wi
 	};
 }
 
-export interface IssueOrPRTableItem extends LastActivity, WithRelaysInfo, Issue, WithEvent {}
+export interface IssueOrPRTableItem extends LastActivity, WithRelaysInfo, IssueOrPr, WithEvent {}
 
 export interface WithEvent {
 	event: NostrEvent;

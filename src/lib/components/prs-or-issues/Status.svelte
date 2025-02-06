@@ -13,8 +13,14 @@
 	let {
 		status = IssueOrPrStatus.Open,
 		type,
-		edit_mode = false
-	}: { status: IssueOrPrStatus; type: 'pr' | 'issue'; edit_mode: boolean } = $props();
+		edit_mode = false,
+		xs = false
+	}: {
+		status: IssueOrPrStatus;
+		type: 'pr' | 'issue';
+		edit_mode?: boolean;
+		xs?: boolean;
+	} = $props();
 </script>
 
 {#if !status}
@@ -32,13 +38,19 @@
 		class:hover:bg-primary={!edit_mode && status && status === status_kind_applied}
 		class:hover:bg-neutral={(!edit_mode && status && status === status_kind_draft) ||
 			status === status_kind_closed}
-		class="btn btn-success btn-sm align-middle"
+		class:btn-xs={xs}
+		class:btn-sm={!xs}
+		class="btn btn-success align-middle"
 	>
 		{#if status === status_kind_open}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 18 18"
-				class="h-5 w-5 flex-none fill-success-content pt-1"
+				class:h-4={xs}
+				class:w-4={xs}
+				class:h-5={!xs}
+				class:w-5={!xs}
+				class="flex-none fill-success-content"
 			>
 				{#if type === 'pr'}
 					<path d={pr_icon_path.open_patch} />
@@ -53,7 +65,12 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="h-5 w-5 flex-none fill-primary-content pt-1"
+				class:pt-1={!xs}
+				class:h-4={xs}
+				class:w-4={xs}
+				class:h-5={!xs}
+				class:w-5={!xs}
+				class="flex-none fill-primary-content"
 			>
 				{#if type === 'pr'}
 					<path d={pr_icon_path.applied} />
@@ -68,7 +85,12 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="h-5 w-5 flex-none fill-neutral-content pt-1"
+				class:pt-1={!xs}
+				class:h-4={xs}
+				class:w-4={xs}
+				class:h-5={!xs}
+				class:w-5={!xs}
+				class="flex-none fill-neutral-content"
 			>
 				{#if type === 'pr'}
 					<path d={pr_icon_path.close} />
@@ -83,7 +105,12 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="h-5 w-5 flex-none fill-neutral-content pt-1"><path d={pr_icon_path.draft} /></svg
+				class:pt-1={!xs}
+				class:h-4={xs}
+				class:w-4={xs}
+				class:h-5={!xs}
+				class:w-5={!xs}
+				class="flex-none fill-neutral-content"><path d={pr_icon_path.draft} /></svg
 			>
 			{statusKindtoText(status_kind_draft, type)}
 		{:else}
@@ -93,7 +120,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 24 24"
-				class="h-5 w-5 flex-none fill-success-content"
+				class="flex-none fill-success-content"
 				><path
 					fill="currentColor"
 					d="M11.646 15.146L5.854 9.354a.5.5 0 0 1 .353-.854h11.586a.5.5 0 0 1 .353.854l-5.793 5.792a.5.5 0 0 1-.707 0"

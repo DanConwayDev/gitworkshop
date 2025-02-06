@@ -76,7 +76,6 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 		items.issues.set(uuid, updated_item);
 		updated_item.repos.forEach((a_ref) => {
 			const repo = items.repos.get(a_ref);
-			// TODO for the repo to stay up to date we need to ensure it is processed
 			if (!repo) return;
 			if (!repo.issues) {
 				repo.issues = {
@@ -179,6 +178,7 @@ const eventToIssueBaseFields = (event: NostrEvent): IssueOrPrBase | undefined =>
 
 	const tags = getValueOfEachTagOccurence(event.tags, 't');
 	return {
+		type: 'issue',
 		title,
 		description,
 		status: status_kind_open,
