@@ -73,5 +73,6 @@ export interface ProcessorPrUpdate {
 }
 
 export const isProcessorPrUpdate = (u: ProcessorUpdate): u is ProcessorPrUpdate =>
+	(u.event && [...Status].includes(u.event.kind)) ||
 	(u.event && eventIsPrRoot(u.event)) ||
 	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdatePR(ru)));

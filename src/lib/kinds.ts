@@ -39,6 +39,8 @@ export const repo_kind: number = 30617;
 export const repo_state_kind: number = 30618;
 
 export const patch_kind: number = 1617;
+export const Patch = 1617;
+export type Patch = typeof Issue;
 
 export const issue_kind: number = 1621;
 export const Issue = 1621;
