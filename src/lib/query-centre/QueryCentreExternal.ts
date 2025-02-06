@@ -34,7 +34,12 @@ import { aRefPToAddressPointer } from '$lib/utils';
 import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NEventAttributes } from 'nostr-editor';
 import SubscriberManager from '$lib/SubscriberManager';
-import { createRepoChildrenFilters, createRepoIdentifierFilters } from '$lib/relay/filters';
+import {
+	createRepoChildrenFilters,
+	createRepoIdentifierFilters,
+	createRepoChildrenStatusFilters
+} from '$lib/relay/filters';
+import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
 
 class QueryCentreExternal {
 	// processor = new Processor(self.postMessage);
@@ -172,11 +177,12 @@ class QueryCentreExternal {
 		const query = `fetchRepo${a_ref}`;
 		const already_fetching = !this.subscriber_manager.add(query);
 		if (already_fetching) return;
+		let record = await db.repos.get(a_ref);
 		await this.hydrate_from_cache_db([
 			...createRepoIdentifierFilters(new Set([a_ref])),
-			...createRepoChildrenFilters(new Set([a_ref]))
+			...createRepoChildrenFilters(new Set([a_ref])),
+			...(record ? createRepoChildrenStatusFilters(getIssuesAndPrsIdsFromRepoItem(record)) : [])
 		]);
-		let record = await db.repos.get(a_ref);
 		const relays_tried: WebSocketUrl[] = [];
 		let new_repo_relays_found = false;
 		// only loop if repo announcement not found

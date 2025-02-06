@@ -1,5 +1,11 @@
 import { naddrEncode } from 'nostr-tools/nip19';
-import type { Naddr, RepoRef, RepoTableItem } from './types';
+import {
+	IssueOrPrStatus,
+	type EventIdString,
+	type Naddr,
+	type RepoRef,
+	type RepoTableItem
+} from './types';
 import { repo_kind } from './kinds';
 
 export function repoToNaddr(repo: RepoTableItem): Naddr {
@@ -15,3 +21,18 @@ export function repoToNaddr(repo: RepoTableItem): Naddr {
 export function repoToRepoRef(repo: RepoTableItem): RepoRef {
 	return `${repo_kind}:${repo.author}:${repo.identifier}`;
 }
+
+export const getIssuesAndPrsIdsFromRepoItem = (repo_item: RepoTableItem) => {
+	const s = new Set<EventIdString>();
+	(Object.values(IssueOrPrStatus) as IssueOrPrStatus[]).forEach((status) => {
+		if (repo_item.PRs)
+			repo_item.PRs?.[status as IssueOrPrStatus]?.forEach((id) => {
+				s.add(id);
+			});
+		if (repo_item.issues)
+			repo_item.issues?.[status as IssueOrPrStatus]?.forEach((id) => {
+				s.add(id);
+			});
+	});
+	return s;
+};

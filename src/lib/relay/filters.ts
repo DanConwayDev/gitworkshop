@@ -1,5 +1,11 @@
 import { issue_kind, patch_kind, status_kinds, repo_kind, repo_state_kind } from '$lib/kinds';
-import type { PubKeyString, RelayCheckTimestamp, RepoRef, Timestamp } from '$lib/types';
+import type {
+	EventIdString,
+	PubKeyString,
+	RelayCheckTimestamp,
+	RepoRef,
+	Timestamp
+} from '$lib/types';
 import { aRefPToAddressPointer } from '$lib/utils';
 import type { Filter } from 'nostr-tools';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
@@ -69,6 +75,7 @@ export const createPubkeyFiltersGroupedBySince = (
 export const createRepoIdentifierFilters = (
 	items: Map<RepoRef, RelayCheckTimestamp> | Set<RepoRef>
 ) => {
+	if (items.size === 0) return [];
 	if (items instanceof Set) {
 		return [
 			{
@@ -102,6 +109,7 @@ export const createRepoIdentifierFilters = (
 export const createRepoChildrenFilters = (
 	items: Map<RepoRef, RelayCheckTimestamp> | Set<RepoRef>
 ) => {
+	if (items.size === 0) return [];
 	if (items instanceof Set) {
 		return [
 			{
@@ -129,4 +137,39 @@ export const createRepoChildrenFilters = (
 		filters.push(filter);
 	});
 	return filters;
+};
+
+/**
+ *
+ * @param repo_items just used to create the since timestamps
+ * @param children
+ * @returns
+ */
+export const createRepoChildrenStatusFilters = (
+	children: Set<EventIdString>,
+	repo_timestamps?: Map<RepoRef, RelayCheckTimestamp>
+) => {
+	if (children.size === 0) return [];
+	if (!repo_timestamps) {
+		return [
+			{
+				kinds: [...status_kinds],
+				'#e': [...children]
+			}
+		];
+	}
+	let earliest_since = 0;
+
+	repo_timestamps.forEach((t) => {
+		const since = t.last_child_check ? t.last_child_check - replication_delay : 0;
+		if (since > earliest_since) earliest_since = since;
+	});
+
+	return [
+		{
+			kinds: [...status_kinds],
+			'#e': [...children],
+			since: earliest_since === 0 ? undefined : earliest_since
+		}
+	];
 };

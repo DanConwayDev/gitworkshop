@@ -12,23 +12,26 @@ import {
 	type RelayUpdateRepoChildren,
 	type EventIdString,
 	type RepoCheckLevel,
-	type ARefP
+	type ARefP,
+	type RepoTableItem
 } from '$lib/types';
 import { Metadata, Reaction, RelayList } from 'nostr-tools/kinds';
 import type Processor from '$lib/processors/Processor';
 import { eventKindToTable } from '$lib/processors/Processor';
-import { eventIsPrRoot, getRepoRefs } from '$lib/utils';
+import { aRefPToAddressPointer, eventIsPrRoot, getRepoRefs } from '$lib/utils';
 import type { Subscription } from 'nostr-tools/abstract-relay';
 import { repoTableItemToRelayCheckTimestamp } from './RelaySelection';
 import {
 	createPubkeyFiltersGroupedBySince,
 	createRepoChildrenFilters,
+	createRepoChildrenStatusFilters,
 	createRepoIdentifierFilters
 } from './filters';
 import { createFetchActionsFilter } from './filters/actions';
 import { addEventsToCache } from '$lib/dbs/LocalRelayDb';
 import type { NEventAttributes } from 'nostr-editor';
 import SubscriberManager from '$lib/SubscriberManager';
+import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
 
 export class RelayManager {
 	url: WebSocketUrl;
@@ -278,6 +281,7 @@ export class RelayManager {
 		check_timestamp: RelayCheckTimestamp,
 		level: RepoCheckLevel = 'children'
 	) {
+		// children is also getting children statuses
 		if (level === 'quality_grandchildren') {
 			console.log('TODO: handle quality_grandchildren');
 		}
@@ -306,43 +310,73 @@ export class RelayManager {
 		this.fetching_repo_queue = true;
 		await this.connect();
 		// read to process the queue
-		const a_refs = new Map(this.repo_queue);
+		const original_a_refs_with_timestamps = new Map(this.repo_queue);
 		this.repo_queue.clear();
+
+		const searched_a_refs = new Set<RepoRef>([...original_a_refs_with_timestamps.keys()]);
+		const unsearched_a_refs = new Set<RepoRef>();
+		let last_a_refs_searched = new Set<RepoRef>();
+		const repo_ann_received = new Set<RepoRef>();
+		const searched_issues_and_pr_roots = new Set<EventIdString>();
+		const unsearched_issues_and_pr_roots = new Set<EventIdString>();
+
+		const markAsSearched = () => {
+			last_a_refs_searched = new Set([...searched_a_refs]);
+			unsearched_a_refs.forEach((e) => searched_a_refs.add(e));
+			unsearched_a_refs.clear();
+			unsearched_issues_and_pr_roots.forEach((e) => searched_issues_and_pr_roots.add(e));
+			unsearched_issues_and_pr_roots.clear();
+		};
+		const addUnsearchedIssuesAndPrsFromRepoItem = (repo_item: RepoTableItem) => {
+			getIssuesAndPrsIdsFromRepoItem(repo_item).forEach((id) => {
+				if (!searched_issues_and_pr_roots.has(id)) unsearched_issues_and_pr_roots.add(id);
+			});
+		};
+
 		clearTimeout(this.set_repo_queue_timeout);
 		this.set_repo_queue_timeout = undefined;
 		// add all repos with same identifier to queue
 		(
 			await db.repos
 				.where('identifier')
-				.anyOf([...new Set<RepoRef>([...a_refs.keys()])])
+				.anyOf([...new Set<RepoRef>([...original_a_refs_with_timestamps.keys()])])
 				.toArray()
 		).forEach((record) => {
-			a_refs.set(record.uuid, repoTableItemToRelayCheckTimestamp(record, this.url));
+			original_a_refs_with_timestamps.set(
+				record.uuid,
+				repoTableItemToRelayCheckTimestamp(record, this.url)
+			);
+			addUnsearchedIssuesAndPrsFromRepoItem(record);
 		});
-		const found_a_ref = new Set<RepoRef>();
-		const a_refs_to_search = new Set<RepoRef>(a_refs.keys());
-		const searched_a_refs = new Set<RepoRef>();
-		const found_issues_and_pr_roots = new Set<EventIdString>();
 
-		const filters = [...createRepoIdentifierFilters(a_refs), ...createRepoChildrenFilters(a_refs)];
+		const filters = [
+			...createRepoIdentifierFilters(original_a_refs_with_timestamps),
+			...createRepoChildrenFilters(original_a_refs_with_timestamps),
+			...createRepoChildrenStatusFilters(
+				unsearched_issues_and_pr_roots,
+				original_a_refs_with_timestamps
+			)
+		];
+		markAsSearched();
 
 		const onevent = (event: NostrEvent) => {
 			this.onEvent(event);
 			if (event.kind === repo_kind) {
-				found_a_ref.add(getEventUID(event) as RepoRef);
+				const a_ref = getEventUID(event) as RepoRef;
+				if (!searched_a_refs.has(a_ref)) unsearched_a_refs.add(a_ref);
+				repo_ann_received.add(a_ref);
 			} else if (event.kind === issue_kind || eventIsPrRoot(event)) {
-				getRepoRefs(event).forEach((repo_ref) => {
-					found_a_ref.add(repo_ref);
+				getRepoRefs(event).forEach((a_ref) => {
+					if (!searched_a_refs.has(a_ref)) unsearched_a_refs.add(a_ref);
 				});
-				found_issues_and_pr_roots.add(event.id);
-			} else {
-				// TODO statuses
+				if (!searched_issues_and_pr_roots.has(event.id))
+					unsearched_issues_and_pr_roots.add(event.id);
 			}
 		};
 		const onEoseRecursivelyGetDisoveredARefResults = async (sub: Subscription) => {
 			sub.close();
 			this.resetInactivityTimer();
-			for (const a_ref of a_refs_to_search) {
+			for (const a_ref of last_a_refs_searched) {
 				this.processor.enqueueRelayUpdate({
 					type: 'checked',
 					uuid: a_ref,
@@ -350,33 +384,53 @@ export class RelayManager {
 					kinds: [patch_kind, issue_kind],
 					url: this.url
 				} as RelayUpdateRepoChildren);
-				if (filters.some((f) => f['#d'] && f['#d'].includes(a_ref) && !f.since)) {
+				const filtered_for_a_ref_without_since = filters.some(
+					(f) =>
+						'#d' in f &&
+						f['#d'] &&
+						f['#d'].includes(aRefPToAddressPointer(a_ref).identifier) &&
+						!f.since &&
+						f.kinds?.includes(repo_kind)
+				);
+
+				if (filtered_for_a_ref_without_since && !repo_ann_received.has(a_ref)) {
 					this.processor.enqueueRelayUpdate({
-						type: 'checked',
+						type: 'not-found',
 						uuid: a_ref,
 						kinds: [repo_kind],
 						table: 'repos',
 						url: this.url
 					} as RelayUpdateRepoAnn);
 				} else {
-					if (!found_a_ref.has(a_ref)) {
-						this.processor.enqueueRelayUpdate({
-							type: 'not-found',
-							uuid: a_ref,
-							kinds: [repo_kind],
-							table: 'repos',
-							url: this.url
-						} as RelayUpdateRepoAnn);
-					}
+					this.processor.enqueueRelayUpdate({
+						type: repo_ann_received.has(a_ref) ? 'found' : 'checked',
+						uuid: a_ref,
+						kinds: [repo_kind],
+						table: 'repos',
+						url: this.url
+					} as RelayUpdateRepoAnn);
 				}
 			}
-			a_refs_to_search.forEach((a) => searched_a_refs.add(a));
-			a_refs_to_search.clear();
-			const getDiscovered = () => searched_a_refs.difference(found_a_ref);
 
-			while (getDiscovered().size > 0) {
+			while (unsearched_a_refs.size > 0 || unsearched_issues_and_pr_roots.size > 0) {
+				if (unsearched_a_refs.size > 0) {
+					(
+						await db.repos
+							.where('identifier')
+							.anyOf([...unsearched_a_refs])
+							.toArray()
+					).forEach((record) => {
+						addUnsearchedIssuesAndPrsFromRepoItem(record);
+					});
+				}
 				await new Promise<void>((r) => {
-					const sub = this.relay.subscribe(createRepoChildrenFilters(getDiscovered()), {
+					const filters = [
+						...createRepoIdentifierFilters(unsearched_a_refs),
+						...createRepoChildrenFilters(unsearched_a_refs),
+						...createRepoChildrenStatusFilters(unsearched_issues_and_pr_roots)
+					];
+					markAsSearched();
+					const sub = this.relay.subscribe(filters, {
 						onevent: (event) => onevent(event),
 						oneose: () => {
 							onEoseRecursivelyGetDisoveredARefResults(sub);
@@ -392,12 +446,10 @@ export class RelayManager {
 			oneose: async () => {
 				await onEoseRecursivelyGetDisoveredARefResults(sub);
 				searched_a_refs.forEach((a_ref) => {
-					const unsubsriber = this.watchRepo(
-						a_ref,
-						// these are actually the tags found for the whole queue but it doesnt matter too much
-						// TODO: why are we getting grandchildren here? if we are we should get all known ones from db.repos as this just covers those recieved since last check
-						{ a_tags: [...found_a_ref], e_tags: [...found_issues_and_pr_roots] }
-					);
+					const unsubsriber = this.watchRepo(a_ref, {
+						a_tags: [...searched_a_refs],
+						e_tags: [...searched_issues_and_pr_roots]
+					});
 					this.fetch_repo_promises.resolvePromises(a_ref, unsubsriber);
 				});
 			}
@@ -477,7 +529,7 @@ export class RelayManager {
 					{
 						// children kinds but for all repos on relay
 						kinds: [
-							...(createRepoChildrenFilters(new Set([]))[0].kinds ?? []),
+							...(createRepoChildrenFilters(new Set([]))[0]?.kinds ?? []),
 							// We dont want to add action_dvm_kind to createRepoChildrenFilters as we dont want load of outdated actions
 							action_dvm_kind
 						],
