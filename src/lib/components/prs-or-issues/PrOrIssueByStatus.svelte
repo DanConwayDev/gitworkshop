@@ -71,7 +71,7 @@
 		<div class="flex-auto"></div>
 		<div class="flex-none">
 			{#if type === 'issue'}
-				<a class="btn btn-success btn-sm h-full text-base-400" href={`${repo_route.s}/issues/new`}>
+				<a class="btn btn-success btn-sm h-full text-base-400" href={`/${repo_route.s}/issues/new`}>
 					create issue
 				</a>
 			{/if}
