@@ -87,7 +87,7 @@
 								<button
 									onclick={() => {
 										show_manage_accounts_modal = true;
-									}}>Manage Account</button
+									}}>Manage Accounts</button
 								>
 							</li>
 							<li>
