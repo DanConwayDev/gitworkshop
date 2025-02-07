@@ -46,8 +46,7 @@
 			...editor_tags,
 			...table_item.repos.map((a) => ['a', a])
 		].forEach((t) => {
-			if (t.length > 1 && !tags.some((e) => e[0] === t[0] && e[1] === t[1]))
-				tags.push(t[0] === 't' ? ['t', t[1].slice(1).toLocaleLowerCase()] : t);
+			if (t.length > 1 && !tags.some((e) => e[0] === t[0] && e[1] === t[1])) tags.push(t);
 		});
 		const rejectedBySigner = () => {
 			rejected_by_signer = true;
