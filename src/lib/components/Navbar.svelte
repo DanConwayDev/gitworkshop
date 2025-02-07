@@ -75,7 +75,11 @@
 											// account_manager.setActive(account.id)
 										}}
 									>
-										<UserHeader user={account.pubkey} link_to_profile={false} />
+										<UserHeader
+											user={account.pubkey}
+											link_to_profile={store.logged_in_account &&
+												store.logged_in_account.id === account.id}
+										/>
 									</button>
 								</li>
 							{/each}
