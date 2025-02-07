@@ -16,18 +16,43 @@
 				class="flex items-center rounded-lg p-2"
 				class:bg-base-300={store.logged_in_account?.id === account.id}
 			>
-				<button
-					class="flex flex-grow"
-					onclick={() => {
-						accounts_manager.setActive(account.id);
-					}}
-				>
-					<div>
-						<UserHeader user={account.pubkey} link_to_profile={false} />
+				{#if store.logged_in_account?.id === account.id}
+					<div class="flex flex-grow">
+						<button
+							onclick={() => {
+								accounts_manager.setActive(account.id);
+							}}
+						>
+							<div>
+								<UserHeader user={account.pubkey} link_to_profile={false} />
+							</div>
+						</button>
+						{#if store.logged_in_account?.id === account.id}
+							<div class="flex h-full flex-grow items-center justify-center">
+								<button
+									class="btn btn-ghost btn-sm mt-2 normal-case"
+									onclick={() => {
+										accounts_manager.clearActive();
+									}}>Logout</button
+								>
+							</div>
+						{/if}
 					</div>
-					<div class="flex-grow"></div>
-				</button>
-				<div class="px-3 text-sm text-neutral-content">{account.type}</div>
+					<div class="px-3 text-sm text-neutral-content">{account.type}</div>
+				{:else}
+					<button
+						class="flex flex-grow items-center"
+						onclick={() => {
+							accounts_manager.setActive(account.id);
+						}}
+					>
+						<div>
+							<UserHeader user={account.pubkey} link_to_profile={false} />
+						</div>
+						<div class="flex-grow"></div>
+						<div class="px-3 text-sm text-neutral-content">{account.type}</div>
+					</button>
+				{/if}
 				<button
 					class="btn btn-error btn-xs"
 					onclick={() => {
@@ -39,12 +64,16 @@
 				>
 			</div>
 		{/each}
-		<button
-			class="btn btn-ghost btn-sm mt-2 normal-case"
-			onclick={() => {
-				show_login_modal = true;
-			}}>Add Account</button
-		>
+		<div class="flex">
+			<button
+				class="btn btn-ghost btn-sm mt-2 normal-case"
+				onclick={() => {
+					show_login_modal = true;
+				}}>Add Account</button
+			>
+
+			<div class="flex-grow"></div>
+		</div>
 
 		<div class="modal-action">
 			<button class="btn btn-sm" onclick={done}>Close</button>
