@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import accounts_manager from '$lib/accounts';
 	import store, { search } from '$lib/store.svelte';
 	import Container from './Container.svelte';
 	import LoginModal from './LoginModal.svelte';
@@ -71,8 +72,7 @@
 										class:bg-base-300={store.logged_in_account &&
 											store.logged_in_account.id === account.id}
 										onclick={() => {
-											// TODO when applesauce v0.11.0 is released do this:
-											// account_manager.setActive(account.id)
+											accounts_manager.setActive(account.id);
 										}}
 									>
 										<UserHeader
@@ -93,8 +93,7 @@
 							<li>
 								<button
 									onclick={() => {
-										// TODO when applesauce v0.11.0 is released do this:
-										// account_manager.clearActive()
+										accounts_manager.clearActive();
 									}}>Logout</button
 								>
 							</li>
