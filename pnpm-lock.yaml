@@ -45,8 +45,8 @@ importers:
         specifier: ^11.11.1
         version: 11.11.1
       nostr-editor:
-        specifier: 0.0.4-pre.7
-        version: 0.0.4-pre.7(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/extension-image@2.11.2(@tiptap/core@2.11.5(@tiptap/pm@2.11.5)))(@tiptap/extension-link@2.11.2(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5)(linkifyjs@4.2.0)(nostr-tools@2.10.4(typescript@5.7.3))(prosemirror-markdown@1.13.1)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(tiptap-markdown@0.8.10(@tiptap/core@2.11.5(@tiptap/pm@2.11.5)))
+        specifier: 0.0.4-pre.12
+        version: 0.0.4-pre.12(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/extension-image@2.11.2(@tiptap/core@2.11.5(@tiptap/pm@2.11.5)))(@tiptap/extension-link@2.11.2(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5)(linkifyjs@4.2.0)(nostr-tools@2.10.4(typescript@5.7.3))(prosemirror-markdown@1.13.1)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(tiptap-markdown@0.8.10(@tiptap/core@2.11.5(@tiptap/pm@2.11.5)))
       nostr-idb:
         specifier: github:hzrd149/nostr-idb#98377e624a7d6da10517c09a356af9d82b392920
         version: https://codeload.github.com/hzrd149/nostr-idb/tar.gz/98377e624a7d6da10517c09a356af9d82b392920(typescript@5.7.3)
@@ -2553,8 +2553,8 @@ packages:
     resolution: {integrity: sha512-bdok/XvKII3nUpklnV6P2hxtMNrCboOjAcyBuQnWEhO665FwrSNRxU+AqpsyvO6LgGYPspN+lu5CLtw4jPRKNA==}
     engines: {node: '>=0.10.0'}
 
-  nostr-editor@0.0.4-pre.7:
-    resolution: {integrity: sha512-Xg+562ywJLLUa2nZ+XoJDarqRjx7fdc2/oKNuuxoAitp95LFTXGyupDBigJs8Q9o9GVpGLsfCbXTeIGT/b9G8g==}
+  nostr-editor@0.0.4-pre.12:
+    resolution: {integrity: sha512-vztmbEKxt2jnO1JEoprwVf3s4TN4D3B0fcsrhckOITR1KaDX88QhIG+qTee92xp+n96vYj4GQt0W06rSv3NXHA==}
     engines: {node: '>=18.16.1'}
     peerDependencies:
       '@tiptap/core': ^2.6.6
@@ -6166,7 +6166,7 @@ snapshots:
 
   normalize-range@0.1.2: {}
 
-  nostr-editor@0.0.4-pre.7(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/extension-image@2.11.2(@tiptap/core@2.11.5(@tiptap/pm@2.11.5)))(@tiptap/extension-link@2.11.2(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5)(linkifyjs@4.2.0)(nostr-tools@2.10.4(typescript@5.7.3))(prosemirror-markdown@1.13.1)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(tiptap-markdown@0.8.10(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))):
+  nostr-editor@0.0.4-pre.12(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/extension-image@2.11.2(@tiptap/core@2.11.5(@tiptap/pm@2.11.5)))(@tiptap/extension-link@2.11.2(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5)(linkifyjs@4.2.0)(nostr-tools@2.10.4(typescript@5.7.3))(prosemirror-markdown@1.13.1)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(tiptap-markdown@0.8.10(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))):
     dependencies:
       '@tiptap/core': 2.11.5(@tiptap/pm@2.11.5)
       '@tiptap/extension-image': 2.11.2(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))
