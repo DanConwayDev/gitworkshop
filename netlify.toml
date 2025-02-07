@@ -5,6 +5,7 @@
     for = "/.well-known/nostr.json"
     [headers.values]
     Access-Control-Allow-Origin = "*"
+[[headers]]
     for = "/manifest.json"
     [headers.values]
     Content-Type = "application/manifest+json"
