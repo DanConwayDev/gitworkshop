@@ -22,6 +22,15 @@ export function repoToRepoRef(repo: RepoTableItem): RepoRef {
 	return `${repo_kind}:${repo.author}:${repo.identifier}`;
 }
 
+export function repoToMaintainerRepoRefs(repo: RepoTableItem): Set<RepoRef> {
+	const s = new Set<RepoRef>();
+	s.add(`${repo_kind}:${repo.author}:${repo.identifier}`);
+	repo.maintainers?.forEach((m) => {
+		s.add(`${repo_kind}:${m}:${repo.identifier}`);
+	});
+	return s;
+}
+
 export const getIssuesAndPrsIdsFromRepoItem = (repo_item: RepoTableItem) => {
 	const s = new Set<EventIdString>();
 	(Object.values(IssueOrPrStatus) as IssueOrPrStatus[]).forEach((status) => {
