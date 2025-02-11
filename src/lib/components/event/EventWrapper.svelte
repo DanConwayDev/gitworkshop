@@ -142,7 +142,7 @@
 			{/if}
 		</div>
 	</div>
-	<div class="ml-11">
+	<div class="sm:ml-11">
 		{@render children?.()}
 		{#if show_compose && issue_or_pr_table_item}
 			<div class="">

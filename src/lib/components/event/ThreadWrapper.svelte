@@ -18,7 +18,7 @@
 					onclick={() => {
 						toggle_replies();
 					}}
-					class="-ml-1 -mt-8"
+					class="-ml-1 -mt-1 sm:-ml-1 sm:-mt-8"
 					class:absolute={show_replies}
 				>
 					<svg
