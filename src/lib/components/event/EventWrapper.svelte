@@ -4,7 +4,7 @@
 	import UserHeader from '../user/UserHeader.svelte';
 	import { nostEventToNeventOrNaddr } from '$lib/utils';
 	import CopyField from '../CopyField.svelte';
-	import type { Snippet } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
 	import store from '$lib/store.svelte';
 	import ComposeReply from '../compose/ComposeReply.svelte';
 	import type { IssueOrPRTableItem } from '$lib/types';
@@ -23,9 +23,28 @@
 	let show_compose = $state(false);
 	let show_raw_json_modal = $state(false);
 	let show_share_modal = $state(false);
+	let modal_open = $derived(show_raw_json_modal || show_share_modal);
 	const replySent = () => {
 		show_compose = false;
 	};
+	const closeModals = () => {
+		show_raw_json_modal = false;
+		show_share_modal = false;
+	};
+	onMount(() => {
+		window.addEventListener('keydown', (event) => {
+			if (modal_open && event.key === 'Escape') closeModals();
+		});
+		window.addEventListener('click', (event) => {
+			const target = event.target as HTMLElement;
+			if (
+				modal_open &&
+				target.classList.contains('modal-open') &&
+				!target.classList.contains('modal-box')
+			)
+				closeModals();
+		});
+	});
 </script>
 
 <div class="max-w-4xl border-b border-base-300 p-3 pl-3">
@@ -53,16 +72,14 @@
 					>
 				</div>
 				{#if show_raw_json_modal}
-					<div class="modal" class:modal-open={show_raw_json_modal}>
+					<dialog class="modal" class:modal-open={show_raw_json_modal}>
 						<div class="modal-box max-w-full text-wrap text-xs">
 							<code class="w-full">{JSON.stringify(event)}</code>
 							<div class="modal-action">
-								<button class="btn btn-sm" onclick={() => (show_raw_json_modal = false)}
-									>Close</button
-								>
+								<button class="btn btn-sm" onclick={closeModals}>Close</button>
 							</div>
 						</div>
-					</div>
+					</dialog>
 				{/if}
 				<div class="tooltip align-middle" data-tip="share">
 					<button
@@ -81,7 +98,7 @@
 					>
 				</div>
 				{#if show_share_modal}
-					<div class="modal" class:modal-open={show_share_modal}>
+					<dialog class="modal" class:modal-open={show_share_modal}>
 						<div class="modal-box max-w-lg text-wrap">
 							<div class="prose"><h3>Share</h3></div>
 							<CopyField
@@ -100,10 +117,10 @@
 							/>
 							<CopyField label="raw event id" content={event.id} border_color="neutral-content" />
 							<div class="modal-action">
-								<button class="btn btn-sm" onclick={() => (show_share_modal = false)}>Close</button>
+								<button class="btn btn-sm" onclick={closeModals}>Close</button>
 							</div>
 						</div>
-					</div>
+					</dialog>
 				{/if}
 			{/if}
 			{#if !show_compose && store.logged_in_account}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { RepoTableItem } from '$lib/types';
+	import { onMount } from 'svelte';
 	import RepoSummaryCard from './RepoSummaryCard.svelte';
 
 	let {
@@ -33,6 +34,21 @@
 		return grouped_repos;
 	});
 	let selected_group: string | undefined = $state(undefined);
+
+	let modalDone = () => {
+		selected_group = undefined;
+	};
+
+	onMount(() => {
+		window.addEventListener('keydown', (event) => {
+			if (event.key === 'Escape') modalDone();
+		});
+		window.addEventListener('click', (event) => {
+			const target = event.target as HTMLElement;
+			if (target.classList.contains('modal-open') && !target.classList.contains('modal-box'))
+				modalDone();
+		});
+	});
 </script>
 
 <div class="min-width">
@@ -86,7 +102,7 @@
 	{/if}
 </div>
 {#if selected_group}
-	<div class="modal modal-open">
+	<dialog class="modal modal-open">
 		<div class="modal-box max-w-full text-wrap text-xs">
 			<div class="prose max-w-full">
 				<h3 class="mb-3 max-w-full text-center">
@@ -99,8 +115,8 @@
 				{/each}
 			</div>
 			<div class="modal-action">
-				<button class="btn btn-sm" onclick={() => (selected_group = undefined)}>Close</button>
+				<button class="btn btn-sm" onclick={modalDone}>Close</button>
 			</div>
 		</div>
-	</div>
+	</dialog>
 {/if}

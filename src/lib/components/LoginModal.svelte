@@ -35,6 +35,15 @@
 		setTimeout(() => {
 			nip07_plugin = 'nostr' in window;
 		}, 1000);
+
+		window.addEventListener('keydown', (event) => {
+			if (event.key === 'Escape') done();
+		});
+		window.addEventListener('click', (event) => {
+			const target = event.target as HTMLElement;
+			if (target.classList.contains('modal-open') && !target.classList.contains('modal-box'))
+				done();
+		});
 	});
 
 	function hexToUint8Array(hex: string) {
@@ -62,7 +71,7 @@
 	</div>
 {/snippet}
 
-<div class="modal modal-open">
+<dialog class="modal modal-open">
 	<div class="modal-box max-w-lg text-wrap">
 		{#if success}
 			<div class="py-9 text-center">
@@ -272,4 +281,4 @@
 			</div>
 		{/if}
 	</div>
-</div>
+</dialog>

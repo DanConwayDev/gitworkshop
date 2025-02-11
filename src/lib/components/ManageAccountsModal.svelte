@@ -1,14 +1,29 @@
 <script lang="ts">
 	import accounts_manager from '$lib/accounts';
 	import store from '$lib/store.svelte';
+	import { onMount } from 'svelte';
 	import LoginModal from './LoginModal.svelte';
 	import UserHeader from './user/UserHeader.svelte';
 	let { done }: { done: () => void } = $props();
 
+	onMount(() => {
+		window.addEventListener('keydown', (event) => {
+			if (!show_login_modal && event.key === 'Escape') done();
+		});
+		window.addEventListener('click', (event) => {
+			const target = event.target as HTMLElement;
+			if (
+				!show_login_modal &&
+				target.classList.contains('modal-open') &&
+				!target.classList.contains('modal-box')
+			)
+				done();
+		});
+	});
 	let show_login_modal = $state(false);
 </script>
 
-<div class="modal modal-open">
+<dialog class="modal modal-open">
 	<div class="modal-box max-w-lg text-wrap">
 		<div class="prose mb-5"><h3>Manage Accounts</h3></div>
 		{#each store.accounts as account}
@@ -79,7 +94,7 @@
 			<button class="btn btn-sm" onclick={done}>Close</button>
 		</div>
 	</div>
-</div>
+</dialog>
 
 {#if show_login_modal}
 	<LoginModal

@@ -26,7 +26,7 @@
 		event: NostrEvent;
 		issue_or_pr_table_item: IssueOrPRTableItem;
 		sentFunction: () => void;
-		autofocus: boolean;
+		autofocus?: boolean;
 	} = $props();
 
 	let submitting = $state(false);
