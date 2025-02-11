@@ -45,7 +45,7 @@
 								clip-rule="evenodd"
 							/>
 						</svg>
-						<input type="text" class="grow" placeholder="Search" bind:value={search_input} />
+						<input type="text" class="grow" placeholder="Find Repo by Name" bind:value={search_input} />
 					</label>
 				</form>
 				{#if store.logged_in_account || store.accounts.length > 0}

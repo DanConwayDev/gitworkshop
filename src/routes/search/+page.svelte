@@ -39,7 +39,7 @@
 				id="search-field"
 				type="text"
 				class="grow"
-				placeholder="Search"
+				placeholder="Find Repo by Name"
 				bind:value={search.text}
 			/>
 		</label>
