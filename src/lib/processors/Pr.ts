@@ -175,7 +175,9 @@ const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
 		.filter((t) => t[1] && t[0] === 'a' && t[1].startsWith(repo_kind.toString()))
 		.map((t) => t[1]) as RepoRef[];
 
-	const tags = getValueOfEachTagOccurence(event.tags, 't');
+	const tags = getValueOfEachTagOccurence(event.tags, 't').filter(
+		(t) => t !== 'root' && t !== 'revision-root'
+	);
 	return {
 		type: 'pr',
 		title,
