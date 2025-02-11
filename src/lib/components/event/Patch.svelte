@@ -48,10 +48,9 @@
 
 <div class="">
 	<div class="flex rounded-t bg-base-300 p-1">
-		<article class="prose ml-2 max-w-4xl flex-grow break-words font-mono text-sm">
+		<article class="prose ml-2 max-w-4xl flex-grow break-words font-mono prose-p:text-sm">
 			<ContentTree node={commit_message_node} />
 		</article>
-		<div class="flex-none p-1 align-middle text-xs text-neutral">commit</div>
 	</div>
 
 	<div class="flex p-3">
