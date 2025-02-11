@@ -1,4 +1,11 @@
-import { addEvents, getEventsForFilters, IndexCache, openDB, type NostrIDB } from 'nostr-idb';
+import {
+	addEvents,
+	clearDB,
+	getEventsForFilters,
+	IndexCache,
+	openDB,
+	type NostrIDB
+} from 'nostr-idb';
 import type { Filter, NostrEvent } from 'nostr-tools';
 
 let cache_relay_db: NostrIDB | undefined = undefined;
@@ -52,4 +59,9 @@ export async function addEventsToCache(events: NostrEvent[]) {
 			cache_relay_index.addEventToIndexes(event);
 		}
 	}
+}
+
+export async function clearLocalRelayDb() {
+	const { cache_relay_db, cache_relay_index } = await getCacheRelayDb();
+	await clearDB(cache_relay_db);
 }

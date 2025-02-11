@@ -5,11 +5,13 @@
 	import Container from './Container.svelte';
 	import LoginModal from './LoginModal.svelte';
 	import ManageAccountsModal from './ManageAccountsModal.svelte';
+	import SettingsModal from './SettingsModal.svelte';
 	import UserHeader from './user/UserHeader.svelte';
 
 	// this was be an import from users store
 	let show_login_modal = $state(false);
 	let show_manage_accounts_modal = $state(false);
+	let show_settings_modal = $state(false);
 	let search_input = $state(search.text);
 	function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
@@ -129,6 +131,13 @@
 							<li>
 								<button
 									onclick={() => {
+										show_settings_modal = true;
+									}}>Settings</button
+								>
+							</li>
+							<li>
+								<button
+									onclick={() => {
 										accounts_manager.clearActive();
 									}}>Logout</button
 								>
@@ -155,6 +164,15 @@
 		}}
 	/>
 {/if}
+
+{#if show_settings_modal}
+	<SettingsModal
+		done={() => {
+			show_settings_modal = false;
+		}}
+	/>
+{/if}
+
 {#if show_login_modal}
 	<LoginModal
 		done={() => {
