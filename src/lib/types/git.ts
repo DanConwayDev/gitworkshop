@@ -7,14 +7,29 @@ import {
 	type ReplaceableEventAttribution,
 	type ARefP,
 	isARefP,
-	type NonReplaceableEventAttribution
+	type NonReplaceableEventAttribution,
+	type Naddr
 } from '$lib/types';
+import { nip19 } from 'nostr-tools';
 
 export type RepoRef = ARefP;
 
 export const isRepoRef = (s?: unknown): s is RepoRef => {
 	return !!s && typeof s === 'string' && isARefP(s) && s.startsWith(repo_kind.toString());
 };
+
+export const isRepoNaddr = (s: unknown): s is Naddr => {
+	try {
+		const t = nip19.decode(s as string);
+		if (t.type === 'naddr' && t.data.kind === repo_kind) {
+			return true;
+		}
+	} catch {
+		/* empty */
+	}
+	return false;
+};
+
 export interface RepoAnnBaseFields {
 	identifier: string;
 	unique_commit: string | undefined;

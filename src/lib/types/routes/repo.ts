@@ -10,7 +10,8 @@ import {
 	isNip05,
 	type UserRoute,
 	type EventBech32,
-	type RepoRef
+	type RepoRef,
+	isRepoNaddr
 } from '$lib/types';
 import { addressPointerToRepoRef } from '$lib/utils';
 import { nip19 } from 'nostr-tools';
@@ -21,7 +22,7 @@ export type RepoRouteString = RepoRouteNpubString | Naddr | RepoRouteNip05String
 
 export const isRepoRouteString = (s: string | undefined): s is RepoRouteString => {
 	if (!s) return false;
-	if (isNaddr(s)) return true;
+	if (isRepoNaddr(s)) return true;
 	const split = s.split('/');
 	if (split.length !== 2 || split[1].length === 0) return false;
 	return isNip05(split[0]) || isNpub(split[0]);
