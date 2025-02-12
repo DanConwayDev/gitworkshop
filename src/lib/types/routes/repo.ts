@@ -73,7 +73,7 @@ export interface RepoRouteNip05Found extends RepoRouteNip05Base {
 
 export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 	if (!isRepoRouteString(s)) return;
-	if (isNaddr(s)) {
+	if (isRepoNaddr(s)) {
 		const { data } = nip19.decode(s);
 		return {
 			type: 'naddr',

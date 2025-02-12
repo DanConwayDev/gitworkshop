@@ -5,12 +5,12 @@ export const load = ({
 	params,
 	url
 }: {
-	params: { repo_route: string };
+	params: { repo_or_user_route: string };
 	url: string;
 }): RouteData | undefined => {
 	const url_string = url.toString();
 
-	const repo_route = extractRepoRoute(params.repo_route);
+	const repo_route = extractRepoRoute(params.repo_or_user_route);
 	if (repo_route) {
 		// pages with repo sidebar
 		const with_repo_sidebar = ['', '/about', '/issues', '/prs', '/actions'].some((page) =>
@@ -23,21 +23,10 @@ export const load = ({
 		return { url: url_string, repo_route, with_repo_sidebar, show_sidebar_on_mobile };
 	}
 
-	// params.repo_route is also a catch all for other routes
-	const not_valid_repo_route = params.repo_route;
-
-	const user_route = extractUserRoute(not_valid_repo_route);
+	const user_route = extractUserRoute(params.repo_or_user_route);
 	if (user_route) {
 		// user sub-routes cannot be used as would be interpreted as a repo identifier
 		return { url: url_string, user_route };
 	}
-
-	// not repo_route or user_route at this point
-	// redirects
-	if (not_valid_repo_route.startsWith('r/')) {
-		redirect(301, `/${not_valid_repo_route.replace(new RegExp(`^r\\/`), '')}`);
-	}
-	if (not_valid_repo_route.startsWith('p/')) {
-		redirect(301, `/${not_valid_repo_route.replace(new RegExp(`^p\\/`), '')}`);
-	}
+	// other routes should be captured by [...rest]
 };
