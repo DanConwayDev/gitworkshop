@@ -102,12 +102,13 @@
 						<div class="modal-box max-w-lg text-wrap">
 							<div class="prose"><h3>Share</h3></div>
 							<CopyField
-								label="nostr address"
-								content={`nostr:${nostEventToNeventOrNaddr(event)}`}
-							/>
-							<CopyField
 								label="gitworkshop.dev"
 								content={`https://gitworkshop.dev/${nostEventToNeventOrNaddr(event)}`}
+								border_color="secondary"
+							/>
+							<CopyField
+								label="nostr address"
+								content={`nostr:${nostEventToNeventOrNaddr(event)}`}
 								border_color="secondary"
 							/>
 							<CopyField
