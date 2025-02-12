@@ -27,10 +27,11 @@
 		no_avatar?: boolean;
 	} = $props();
 
+	let pubkey = $state.snapshot(user);
 	let info_query = $derived(
-		isPubkeyString(user) ? query_centre.fetchPubkeyName(user) : undefined
+		isPubkeyString(pubkey) ? query_centre.fetchPubkeyName(pubkey) : undefined
 	);
-	// prevent flashing with user when info in db (allow db record to load before showing loading)
+	// prevent flashing with pubkey when info in db (allow db record to load before showing loading)
 	let mounting = $state(true);
 	onMount(() => {
 		setTimeout(() => (mounting = false), 100);
@@ -38,7 +39,7 @@
 	let info = $derived(
 		// show loading until record is created in db by fetchPubkeyName
 		info_query?.current ?? {
-			...createPubKeyInfo(user || ''),
+			...createPubKeyInfo(pubkey || ''),
 			relays_info: {},
 			loading: true
 		}
@@ -49,7 +50,7 @@
 	let pic_url = $derived(info.metadata.fields.image ?? info.metadata.fields.picture ?? undefined);
 	let hovered = $state(false);
 	let user_link_creator = $derived(
-		user && hovered ? new UserRouteStringCreator(user) : undefined
+		pubkey && hovered ? new UserRouteStringCreator(pubkey) : undefined
 	);
 </script>
 
