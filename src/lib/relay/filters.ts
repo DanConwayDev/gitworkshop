@@ -91,7 +91,7 @@ export const createRepoIdentifierFilters = (
 		const map_entry = identifiers.get(identifier) || 0;
 		identifiers.set(
 			identifier,
-			Math.min(map_entry, t.last_check ? t.last_check - replication_delay : 0)
+			Math.min(map_entry, t.last_child_check ? t.last_child_check - replication_delay : 0)
 		);
 	});
 	const filters: Filter[] = [];
