@@ -16,7 +16,7 @@ import { aRefPToAddressPointer, aToNaddr, repoRefToPubkeyLink } from './utils';
 import store from './store.svelte';
 import { repoToRepoRef } from './repos';
 import query_centre from './query-centre/QueryCentre.svelte';
-import { onDestroy as onDestroySvelte } from 'svelte';
+import { onDestroy as onDestroySvelte, untrack } from 'svelte';
 import type { AddressPointer, EventPointer } from 'nostr-tools/nip19';
 import { repo_kind } from './kinds';
 
@@ -143,9 +143,9 @@ export class UserRouteStringCreator {
 	);
 	private nip05_query = $derived.by(() => {
 		if (this.profile_query?.current?.metadata.fields.nip05) {
-			return query_centre.fetchNip05(
-				this.profile_query.current?.metadata.fields.nip05 as Nip05Address
-			);
+			return untrack(() =>query_centre.fetchNip05(
+				this.profile_query?.current?.metadata.fields.nip05 as Nip05Address
+			));
 		} else return undefined;
 	});
 

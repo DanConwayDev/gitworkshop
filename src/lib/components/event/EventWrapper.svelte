@@ -50,7 +50,7 @@
 <div class="max-w-4xl border-b border-base-300 p-3 pl-3">
 	<div class="flex">
 		<div class="flex-auto">
-			<UserHeader user={$state.snapshot(event.pubkey)} in_event_header={true} />
+			<UserHeader user={event.pubkey} in_event_header={true} />
 		</div>
 		<span class="m-auto text-xs"><FromNow unix_seconds={event.created_at} /></span>
 		<div class="m-auto ml-2">
