@@ -12,6 +12,8 @@
 			input.focus();
 		}
 	});
+	let loading_query = $derived(query_centre.fetchAllRepos());
+	let loading = $derived(loading_query.loading);
 	let repos_query = $derived(query_centre.searchRepoAnns(search.text));
 	let repos = $derived(repos_query.current ?? []);
 </script>
@@ -46,9 +48,16 @@
 	</div>
 
 	<div class="my-8">
-		<ReposSummaryList
-			{repos}
-			title={search.text.length === 0 ? undefined : `results for: ${search.text}`}
-		/>
+		{#if repos.length > 0 || !loading }
+			<ReposSummaryList
+				{repos}
+				title={search.text.length === 0 ? undefined : `results for: ${search.text}`}
+			/>
+		{/if}
+		{#if loading}
+			<div class="flex justify-center">
+				<div class="loading loading-spinner loading-lg"></div>
+			</div>
+		{/if}
 	</div>
 </Container>

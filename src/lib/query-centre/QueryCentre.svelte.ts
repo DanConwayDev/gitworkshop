@@ -52,8 +52,12 @@ class QueryCentre {
 	}
 
 	fetchAllRepos() {
-		this.external_worker.postMessage({ method: 'fetchAllRepos', args: [] });
-		return liveQueryState(() => db.repos.toArray());
+		let current = $state({loading: true});
+
+		this.awaitExternalWorker({ method: 'fetchAllRepos', args: [] }).then(() => {
+			current.loading = false;
+		});
+		return current
 	}
 
 	awaitExternalWorker<T>(call: { method: string; args: unknown[]; request_identifier?: string }) {
@@ -102,8 +106,6 @@ class QueryCentre {
 	}
 
 	searchRepoAnns(query: string) {
-		this.external_worker.postMessage({ method: 'fetchAllRepos', args: [] });
-		if (query.length === 0) this.fetchAllRepos();
 		return liveQueryState(() =>
 			db.repos.where('searchWords').startsWithAnyOfIgnoreCase(query).distinct().toArray()
 		);
