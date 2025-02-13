@@ -73,11 +73,11 @@
 				</div>
 				{#if show_raw_json_modal}
 					<dialog class="modal" class:modal-open={show_raw_json_modal}>
-						<div class="modal-box max-w-full text-wrap text-xs">
-							<code class="w-full">{JSON.stringify(event)}</code>
-							<div class="modal-action">
-								<button class="btn btn-sm" onclick={closeModals}>Close</button>
+						<div class="modal-box relative max-w-full text-wrap text-xs">
+							<div class="overflow-y-auto overflow-x-hidden h-full">
+								<pre class="whitespace-pre-wrap">{JSON.stringify(event, null, 2)}</pre>
 							</div>
+							<button class="btn btn-sm absolute bottom-4 right-4 z-10" onclick={closeModals}>Close</button> <!-- Floating button -->
 						</div>
 					</dialog>
 				{/if}
