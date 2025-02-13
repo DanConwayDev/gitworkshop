@@ -1,5 +1,5 @@
 /** repo-route types */
-import { type PubKeyString, type Npub, type Nip05Address, isNpub, isNip05 } from '$lib/types';
+import { type PubKeyString, type Npub, type Nip05Address, isNpub, isNip05, type RepoRoute } from '$lib/types';
 import { nip19 } from 'nostr-tools';
 
 export type UserRouteString = `${Npub}` | `${Nip05Address}`;
@@ -12,6 +12,9 @@ export const isUserRouteString = (s: string | undefined): s is UserRouteString =
 export type UserRouteType = 'npub' | 'nip05';
 
 export type UserRoute = UserRouteNpub | UserRouteNip05;
+
+export const isUserRoute = (route?: RepoRoute | UserRoute): route is UserRoute =>
+	!!route && typeof route === 'object' && !('identifier' in route);
 
 interface UserRouteBase {
 	type: UserRouteType;

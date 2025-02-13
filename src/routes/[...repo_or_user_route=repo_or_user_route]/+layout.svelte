@@ -3,7 +3,7 @@
 	import RepoPageContainer from '$lib/components/repo/RepoPageContainer.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store from '$lib/store.svelte';
-	import { isRepoRoute, isRepoRouteData, isUserRouteData, type RepoRoute, type RouteData, type UserRoute } from '$lib/types';
+	import { isRepoRoute, isRepoRouteData, isUserRouteData, isUserRoute, type RepoRoute, type RouteData, type UserRoute } from '$lib/types';
 	import { onDestroy, onMount, type Snippet } from 'svelte';
 
 	let {
@@ -28,15 +28,17 @@
 				store.route = data.repo_route;
 			}
 		} else if (isUserRouteData(data)) {
-			if (data.user_route.type ==='nip05' && (
-				!store.route
-				|| store.route.type !== 'nip05'
-				|| data.user_route.nip05 !== store.route.nip05)
-			) {
-				// fetchNip05 will update route_nip05_pubkey if response matches data.user_route.nip05
-				query_centre.fetchNip05(data.user_route.nip05);
+			if (!isUserRoute(store.route) || store.route.s !== data.user_route.s) {
+				if (data.user_route.type ==='nip05' && (
+					!store.route
+					|| store.route.type !== 'nip05'
+					|| data.user_route.nip05 !== store.route.nip05)
+				) {
+					// fetchNip05 will update route_nip05_pubkey if response matches data.user_route.nip05
+					query_centre.fetchNip05(data.user_route.nip05);
+				}
+				store.route = data.user_route;
 			}
-			store.route = data.user_route;
 		} else if (store.route) {
 			store.route = undefined;
 		}
