@@ -7,6 +7,7 @@
 	import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
 	import Repo from '../event/previews/Repo.svelte';
 	import Patch from '../event/previews/Patch.svelte';
+	import EventCard from '../event/EventCard.svelte';
 
 	let {
 		n_attr,
@@ -23,7 +24,8 @@
 </script>
 
 <!-- {#if e.event}<EventCard type="issue" event={e.event} />{/if} -->
-<div class="rounded-lg border border-base-300" class:border-neutral-content={edit_mode?.selected}>
+<div class="rounded-lg border border-base-300 bg-base-200" class:border-neutral-content={edit_mode?.selected}>
+{#if edit_mode || !e.event}
 	<EventWrapperLite {n_attr} event={e.event} disable_links={!!edit_mode}>
 		{#if e.event?.kind === issue_kind}
 			<Issue event={e.event} />
@@ -37,4 +39,7 @@
 			loading event preview
 		{/if}
 	</EventWrapperLite>
+{:else}
+	<EventCard event={e.event} embedded={true}/>
+{/if}
 </div>

@@ -12,11 +12,12 @@
 	let {
 		event,
 		issue_or_pr_table_item,
+		embedded = false,
 		children
 	}: {
 		event: NostrEvent;
 		issue_or_pr_table_item?: IssueOrPRTableItem;
-
+		embedded?: boolean;
 		children: Snippet;
 	} = $props();
 
@@ -124,7 +125,7 @@
 					</dialog>
 				{/if}
 			{/if}
-			{#if !show_compose && store.logged_in_account}
+			{#if !embedded && !show_compose && store.logged_in_account}
 				<div class="tooltip align-middle" data-tip="reply">
 					<!-- svelte-ignore a11y_consider_explicit_label -->
 					<button
@@ -143,7 +144,7 @@
 			{/if}
 		</div>
 	</div>
-	<div class="sm:ml-11">
+	<div class:md:ml-11={!embedded}>
 		{@render children?.()}
 		{#if show_compose && issue_or_pr_table_item}
 			<div class="">
