@@ -3,7 +3,7 @@
 	import RepoPageContainer from '$lib/components/repo/RepoPageContainer.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store from '$lib/store.svelte';
-	import { isRepoRouteData, isUserRouteData, type RouteData } from '$lib/types';
+	import { isRepoRoute, isRepoRouteData, isUserRouteData, type RepoRoute, type RouteData, type UserRoute } from '$lib/types';
 	import { onDestroy, onMount, type Snippet } from 'svelte';
 
 	let {
@@ -14,20 +14,33 @@
 		children: Snippet;
 	} = $props();
 
-	if (isRepoRouteData(data) || isUserRouteData(data)) {
+	const updateStore = (data:RouteData) => {
 		if (isRepoRouteData(data)) {
-			store.route = data.repo_route;
+			if (!isRepoRoute(store.route) || store.route.s !== data.repo_route.s) {
+				if (data.repo_route.type ==='nip05' && (
+					!store.route
+					|| store.route.type !== 'nip05'
+					|| data.repo_route.nip05 !== store.route.nip05)
+				) {
+					// fetchNip05 will update route_nip05_pubkey if response matches data.user_route.nip05
+					query_centre.fetchNip05(data.repo_route.nip05);
+				}
+				store.route = data.repo_route;
+			}
 		} else if (isUserRouteData(data)) {
+			if (data.user_route.type ==='nip05' && (
+				!store.route
+				|| store.route.type !== 'nip05'
+				|| data.user_route.nip05 !== store.route.nip05)
+			) {
+				// fetchNip05 will update route_nip05_pubkey if response matches data.user_route.nip05
+				query_centre.fetchNip05(data.user_route.nip05);
+			}
 			store.route = data.user_route;
+		} else if (store.route) {
+			store.route = undefined;
 		}
-		if (store.route && store.route.type === 'nip05') {
-			// fetchNip05 will update route_nip05_pubkey if response matches data.user_route.nip05
-			query_centre.fetchNip05(store.route.nip05);
-		}
-	} else {
-		store.route = undefined;
-	}
-	$effect(() => {
+
 		if (
 			store.route &&
 			data.url &&
@@ -37,11 +50,16 @@
 		) {
 			goto(`/${store.route.s}/prs`);
 		}
+	}
+	updateStore(data);
+	$effect(() => {
+		updateStore(data)
 	});
 	onDestroy(() => {
 		store.route = undefined;
 	});
 	onMount(() => {
+		// TODO turn this into a app setting 
 		if (!store.original_url_pref) {
 			if (isRepoRouteData(data)) {
 				store.original_url_pref = data.repo_route.type;
