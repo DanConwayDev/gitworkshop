@@ -30,6 +30,18 @@ export const isNpub = (s: unknown): s is Npub => {
 	return false;
 };
 
+export type Nprofile = `nprofile1${string}`;
+
+export const isNprofile = (s: unknown): s is Nprofile => {
+	try {
+		if (nip19.decode(s as string).type === 'nprofile') return true;
+	} catch {
+		/* empty */
+	}
+	return false;
+};
+
+
 export type Naddr = `naddr1${string}`;
 
 export const isNaddr = (s: unknown): s is Naddr => {

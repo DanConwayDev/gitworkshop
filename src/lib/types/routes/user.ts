@@ -1,12 +1,13 @@
 /** repo-route types */
-import { type PubKeyString, type Npub, type Nip05Address, isNpub, isNip05, type RepoRoute } from '$lib/types';
+import { type PubKeyString, type Npub, type Nip05Address, isNpub, isNip05, type RepoRoute, isNprofile } from '$lib/types';
 import { nip19 } from 'nostr-tools';
+import type { ProfilePointer } from 'nostr-tools/nip19';
 
 export type UserRouteString = `${Npub}` | `${Nip05Address}`;
 
 export const isUserRouteString = (s: string | undefined): s is UserRouteString => {
 	if (!s) return false;
-	return isNip05(s) || isNpub(s);
+	return isNip05(s) || isNpub(s) || isNprofile(s);
 };
 
 export type UserRouteType = 'npub' | 'nip05';
@@ -58,5 +59,15 @@ export const extractUserRoute = (s: string): UserRoute | undefined => {
 			pubkey: nip19.decode(s).data as string
 		};
 	}
+	if (isNprofile(s)) {
+		let p = nip19.decode(s).data as ProfilePointer;
+		return {
+			type: 'npub',
+			s,
+			pubkey: p.pubkey,
+			// relays: TODO
+		};
+	}
+
 	return undefined;
 };

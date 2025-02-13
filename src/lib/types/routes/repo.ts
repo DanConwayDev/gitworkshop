@@ -6,15 +6,16 @@ import {
 	type Naddr,
 	type Nip05Address,
 	isNpub,
-	isNaddr,
 	isNip05,
 	type UserRoute,
 	type EventBech32,
 	type RepoRef,
-	isRepoNaddr
+	isRepoNaddr,
+	isNprofile
 } from '$lib/types';
 import { addressPointerToRepoRef } from '$lib/utils';
 import { nip19 } from 'nostr-tools';
+import type { ProfilePointer } from 'nostr-tools/nip19';
 
 export type RepoRouteNpubString = `${Npub}/${string}`;
 export type RepoRouteNip05String = `${Nip05Address}/${string}`;
@@ -25,7 +26,7 @@ export const isRepoRouteString = (s: string | undefined): s is RepoRouteString =
 	if (isRepoNaddr(s)) return true;
 	const split = s.split('/');
 	if (split.length !== 2 || split[1].length === 0) return false;
-	return isNip05(split[0]) || isNpub(split[0]);
+	return isNip05(split[0]) || isNpub(split[0]) || isNprofile(split[0]);
 };
 
 export type RepoRouteType = 'npub' | 'naddr' | 'nip05';
@@ -80,6 +81,7 @@ export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 			s,
 			...data,
 			a_ref: addressPointerToRepoRef(data)
+			// TODO relays
 		};
 	}
 	const split = s.split('/');
@@ -101,6 +103,17 @@ export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 			pubkey,
 			identifier: split[1],
 			a_ref: `${repo_kind}:${pubkey}:${split[1]}`
+		};
+	}
+	if (isNprofile(s)) {
+		let p = nip19.decode(s).data as ProfilePointer;
+		return {
+			type: 'npub',
+			s,
+			pubkey: p.pubkey,
+			identifier: split[1],
+			a_ref: `${repo_kind}:${p.pubkey}:${split[1]}`
+			// relays: TODO
 		};
 	}
 	return undefined;
