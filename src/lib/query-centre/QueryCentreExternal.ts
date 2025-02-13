@@ -40,6 +40,7 @@ import {
 	createRepoChildrenStatusFilters
 } from '$lib/relay/filters';
 import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
+import type { EventPointer } from 'nostr-tools/nip19';
 
 class QueryCentreExternal {
 	// processor = new Processor(self.postMessage);
@@ -256,11 +257,11 @@ class QueryCentreExternal {
 		}
 	}
 
-	async fetchEvent(event_ref: NEventAttributes) {
+	async fetchEvent(event_ref: NEventAttributes | EventPointer) {
 		const cached = await this.hydrate_from_cache_db([{ ids: [event_ref.id] }]);
 		if (cached.length > 0) return;
 		let tried: WebSocketUrl[] = [];
-		const relays = event_ref.relays.filter((r) => isWebSocketUrl(r));
+		const relays = (event_ref.relays ?? []).filter((r) => isWebSocketUrl(r));
 		if (relays.length > 0) {
 			tried = [...tried, ...relays];
 			const res = await Promise.all(relays.map((url) => this.get_relay(url).fetchEvent(event_ref)));

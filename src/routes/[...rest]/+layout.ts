@@ -1,5 +1,6 @@
 import { extractRepoRoute, extractUserRoute, type RouteData } from '$lib/types';
 import { redirect } from '@sveltejs/kit';
+import { nip19 } from 'nostr-tools';
 
 export const load = ({
 	params,
@@ -7,7 +8,7 @@ export const load = ({
 }: {
 	params: { rest: string };
 	url: string;
-}): void => {
+}): { rest: string } => {
 	const url_string = url.toString();
 
 	// redirects
@@ -20,11 +21,5 @@ export const load = ({
 	if (params.rest.startsWith('e/')) {
 		redirect(301, `/${params.rest.replace(new RegExp(`^e\\/`), '')}`);
 	}
-
-	// TODO redirect issue kind nevents to repo route
-	// TODO redirect pr root kind nevents to repo route
-	// TODO redirect responses to issues and prs to repo route
-	// TODO redirect repo state announcements
-	// TODO handle links to event that don't relate git stuff
-
+	return { rest: params.rest}
 };

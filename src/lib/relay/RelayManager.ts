@@ -32,6 +32,7 @@ import { addEventsToCache } from '$lib/dbs/LocalRelayDb';
 import type { NEventAttributes } from 'nostr-editor';
 import SubscriberManager from '$lib/SubscriberManager';
 import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
+import type { EventPointer } from 'nostr-tools/nip19';
 
 export class RelayManager {
 	url: WebSocketUrl;
@@ -586,7 +587,7 @@ export class RelayManager {
 		});
 	}
 
-	async fetchEvent(event_ref: NEventAttributes): Promise<NostrEvent | undefined> {
+	async fetchEvent(event_ref: NEventAttributes | EventPointer): Promise<NostrEvent | undefined> {
 		await this.connect();
 		return await new Promise<NostrEvent | undefined>((r) => {
 			const sub = this.relay.subscribe([{ ids: [event_ref.id] }], {

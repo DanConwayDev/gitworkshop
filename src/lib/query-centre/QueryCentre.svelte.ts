@@ -16,6 +16,7 @@ import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
 import store from '$lib/store.svelte';
 import { repo_kind } from '$lib/kinds';
 import { liveQuery } from 'dexie';
+import type { EventPointer } from 'nostr-tools/nip19';
 
 class QueryCentre {
 	external_worker: Worker;
@@ -144,7 +145,8 @@ class QueryCentre {
 		return inMemoryRelayTimeline([{ '#e': [pr_id] }]);
 	}
 
-	fetchEvent(event_ref: NEventAttributes | NAddrAttributes) {
+	fetchEvent(event_ref: NEventAttributes | EventPointer | NAddrAttributes) {
+		// TODO add loading
 		this.external_worker.postMessage({ method: 'fetchEvent', args: [event_ref] });
 		return inMemoryRelayEvent(event_ref);
 	}
