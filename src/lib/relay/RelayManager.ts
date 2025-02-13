@@ -445,6 +445,7 @@ export class RelayManager {
 			onevent: (event) => onevent(event),
 			oneose: async () => {
 				await onEoseRecursivelyGetDisoveredARefResults(sub);
+				this.fetching_repo_queue = false;
 				searched_a_refs.forEach((a_ref) => {
 					const unsubsriber = this.watchRepo(a_ref, {
 						a_tags: [...searched_a_refs],
