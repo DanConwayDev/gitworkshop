@@ -147,7 +147,8 @@ class QueryCentre {
 
 	fetchEvent(event_ref: NEventAttributes | EventPointer | NAddrAttributes) {
 		// TODO add loading
-		this.external_worker.postMessage({ method: 'fetchEvent', args: [event_ref] });
+		// TODO support for fetching naddr - right now they will display if in cache
+		if (!('type' in event_ref) || event_ref.type !== 'naddr') this.external_worker.postMessage({ method: 'fetchEvent', args: [event_ref] });
 		return inMemoryRelayEvent(event_ref);
 	}
 
