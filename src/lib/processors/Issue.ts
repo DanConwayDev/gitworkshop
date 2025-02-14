@@ -8,6 +8,7 @@ import {
 } from '$lib/types';
 import { issue_kind, status_kinds, status_kind_open, repo_kind } from '$lib/kinds';
 import type {
+	ChildEventRef,
 	EventIdString,
 	HuristicsForRelay,
 	Issue,
@@ -67,10 +68,7 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 				// TODO - we cant just try and process this every <100ms
 				return true;
 			}
-			if (!item.quality_children.some((c) => c.id === quality_child.id)) {
-				item.quality_children.push(quality_child);
-				item.quality_children_count = item.quality_children.length;
-			}
+			processQualityChild(item, quality_child);
 		}
 
 		if (!item && !base_issue) {
@@ -214,9 +212,10 @@ export const eventToIssue = (event: NostrEvent): (Issue & WithEvent) | undefined
 	};
 };
 
-export const processQualityChild = (item: IssueOrPRTableItem, event: NostrEvent) => {
-	if (!item.quality_children.some((r) => r.id === event.id)) {
-		item.quality_children.push({ id: event.id, kind: event.kind, pubkey: event.pubkey });
+export const processQualityChild = (item: IssueOrPRTableItem, quality_child: ChildEventRef ) => {
+	if (!item.quality_children.some((c) => c.id === quality_child.id)) {
+		item.quality_children.push(quality_child);
+		item.quality_children_count = item.quality_children.length;
 	}
 };
 

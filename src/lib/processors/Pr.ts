@@ -35,7 +35,7 @@ import {
 	extractPatchDescription,
 	extractPatchTitle
 } from '$lib/git-utils';
-import { processNewStatus } from './Issue';
+import { processNewStatus, processQualityChild } from './Issue';
 
 const processPrUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
@@ -72,10 +72,7 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 				// TODO - we cant just try and process this every <100ms
 				return true;
 			}
-			if (!item.quality_children.some((c) => c.id === quality_child.id)) {
-				item.quality_children.push(quality_child);
-				item.quality_children_count = item.quality_children.length;
-			}
+			processQualityChild(item, quality_child);
 		}
 
 		const updated_item = applyHuristicUpdates(
