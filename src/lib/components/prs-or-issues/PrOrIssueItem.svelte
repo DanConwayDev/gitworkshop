@@ -117,6 +117,9 @@
 				{:else}
 					<div class="text-sm text-base-content">
 						{short_title}
+						{#each table_item.tags as tag}
+							<div class="badge badge-secondary mx-1">{tag}</div>
+						{/each}
 					</div>
 					<ul class="pt-2">
 						<li class="mr-3 inline">
