@@ -17,12 +17,12 @@ db.repos.hook('creating', function (_primKey, repo_item: RepoTableItem) {
 	if (typeof repo_item.identifier == 'string') repo_item.searchWords = getSearchWords(repo_item);
 });
 db.repos.hook('updating', function (mods, _primKey, repo_item: RepoTableItem) {
-	if ('identifier' in mods || 'name' in mods || 'description' in mods)
+	if ('identifier' in mods || 'name' in mods || 'description' in mods || 'tags' in mods)
 		return { searchWords: getSearchWords(repo_item) };
 	else return { searchWords: repo_item.searchWords };
 });
 function getSearchWords(repo_item: RepoTableItem) {
-	const s = `${repo_item.identifier} ${repo_item.name} ${repo_item.description}`;
+	const s = `${repo_item.identifier} ${repo_item.name} ${repo_item.description} ${(repo_item.tags ?? []).join(' ')}`;
 	const delimiters = /[;,|.\s\-:/]+/;
 	return s.split(delimiters);
 }
