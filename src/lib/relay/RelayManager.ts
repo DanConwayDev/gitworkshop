@@ -1,6 +1,6 @@
 import { Relay, type NostrEvent } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
-import { action_dvm_kind, issue_kind, patch_kind, repo_kind } from '$lib/kinds';
+import { action_dvm_kind, issue_kind, patch_kind, QualityChildKinds, repo_kind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import {
 	type PubKeyString,
@@ -558,9 +558,6 @@ export class RelayManager {
 			let sub: Subscription;
 			const onevent = (event: NostrEvent) => {
 				this.onEvent(event);
-				const kind_not_to_cache = [Reaction];
-				if (!kind_not_to_cache.includes(event.kind)) addEventsToCache([event]);
-				// TODO selectively process (add to Issue Thread info)
 				const kinds_not_to_request_replys_for = [Reaction];
 				if (!kinds_not_to_request_replys_for.includes(event.kind)) ids_to_find.push(event.id);
 			};

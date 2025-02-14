@@ -5,12 +5,13 @@ import {
 	isEventIdString,
 	isRepoRef,
 	isWebSocketUrl,
+	type ChildEventRef,
 	type RepoRef,
 	type RepoRoute,
 	type StatusHistoryItem,
 	type WebSocketUrl
 } from './types';
-import { status_kinds } from './kinds';
+import { QualityChildKinds, status_kinds } from './kinds';
 
 export const isCoverLetter = (s: string): boolean => {
 	return s.indexOf('PATCH 0/') > 0;
@@ -89,8 +90,7 @@ export const extractRepoRefsFromPrOrIssue = (
 			: []
 	);
 
-export const extractStatusRootId = (event: NostrEvent) => {
-	if (!status_kinds.includes(event.kind)) return undefined;
+export const extractRootIdIfNonReplaceable = (event: NostrEvent) => {
 	const root = getRootUuid(event);
 	if (root && isEventIdString(root)) return root;
 	return undefined;
@@ -103,3 +103,10 @@ export const eventToStatusHistoryItem = (event?: NostrEvent): StatusHistoryItem 
 	const { pubkey, created_at } = event;
 	return { pubkey, created_at, status };
 };
+
+export const eventToQualityChild = (event?: NostrEvent ): ChildEventRef | undefined => {
+	if (!event || !QualityChildKinds.includes(event.kind)) return undefined;
+	const { id, kind, pubkey } = event;
+	return { id, kind, pubkey };
+};
+

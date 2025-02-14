@@ -1,3 +1,5 @@
+import { ShortTextNote, Zap } from "nostr-tools/kinds";
+
 export const reply_kind: number = 1;
 
 export const StatusOpen = 1630;
@@ -47,3 +49,15 @@ export const Issue = 1621;
 export type Issue = typeof Issue;
 
 export const action_dvm_kind: number = 6900;
+
+export const LegacyGitReply = 1622;
+export type LegacyGitReply = typeof LegacyGitReply;
+
+export const CommentKinds = [ShortTextNote, LegacyGitReply];
+export type CommentKinds =
+	| typeof ShortTextNote
+	| typeof LegacyGitReply;
+
+	export const QualityChildKinds = [...CommentKinds, Zap];
+export type QualityChildKinds = CommentKinds | typeof Zap;
+

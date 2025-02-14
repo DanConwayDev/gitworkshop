@@ -67,12 +67,20 @@ export type IssuesOrPrsByStatus = {
 	[K in IssueOrPrStatus]: EventIdString[];
 };
 
+export type ChildEventRef = {
+	id: EventIdString;
+	kind: number,
+	pubkey: PubKeyString;
+}
+
 export interface IssueOrPrBase {
 	type: 'issue' | 'pr';
 	title: string;
 	description: string;
 	status: IssueOrPrStatus;
 	status_history: StatusHistoryItem[];
+	quality_children: ChildEventRef[];
+	quality_children_count: number;
 	tags: string[];
 	repos: RepoRef[];
 }

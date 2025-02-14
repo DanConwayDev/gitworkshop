@@ -31,9 +31,11 @@ import {
 } from '$lib/types/processor';
 import type { NostrEvent } from 'nostr-tools';
 import {
+	eventToQualityChild,
 	eventToStatusHistoryItem,
 	extractIssueDescription,
-	extractIssueTitle
+	extractIssueTitle,
+	extractRootIdIfNonReplaceable
 } from '$lib/git-utils';
 
 const processIssueUpdates: UpdateProcessor = (items, updates) => {
@@ -57,6 +59,20 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 			}
 			processNewStatus(item, status_item);
 		}
+		const quality_child = eventToQualityChild(u.event);
+		if (quality_child) {
+			if (!item) {
+				// either, issue hasn't been recieved yet or quality_child relates to a PR
+				// retain the update for processing later
+				// TODO - we cant just try and process this every <100ms
+				return true;
+			}
+			if (!item.quality_children.some((c) => c.id === quality_child.id)) {
+				item.quality_children.push(quality_child);
+				item.quality_children_count = item.quality_children.length;
+			}
+		}
+
 		if (!item && !base_issue) {
 			// shouldn't get here - are we processing an event kind we shouldnt?
 			// retaining anyway
@@ -103,11 +119,7 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 const getIssueId = (u: ProcessorIssueUpdate): EventIdString | undefined => {
 	if (u.event) {
 		if (u.event.kind === issue_kind) return u.event.id;
-		// TODO get the root
-		else if (status_kinds.includes(u.event.kind)) {
-			const uuid = getRootUuid(u.event);
-			if (uuid) return uuid;
-		}
+		return extractRootIdIfNonReplaceable(u.event);
 	} else if (!u.event && u.relay_updates[0]) {
 		return u.relay_updates[0].uuid;
 	}
@@ -183,6 +195,8 @@ const eventToIssueBaseFields = (event: NostrEvent): IssueOrPrBase | undefined =>
 		description,
 		status: status_kind_open,
 		status_history: [],
+		quality_children: [],
+		quality_children_count: 0,
 		repos,
 		tags
 	};
@@ -198,6 +212,13 @@ export const eventToIssue = (event: NostrEvent): (Issue & WithEvent) | undefined
 		event,
 		...base
 	};
+};
+
+export const processQualityChild = (item: IssueOrPRTableItem, event: NostrEvent) => {
+	if (!item.quality_children.some((r) => r.id === event.id)) {
+		const c = {}
+		item.quality_children.push({id: event.id, kind: event.kind, pubkey: event.pubkey});
+	}
 };
 
 export const processNewStatus = (item: IssueOrPRTableItem, status_item: StatusHistoryItem) => {

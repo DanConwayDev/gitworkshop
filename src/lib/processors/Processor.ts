@@ -12,7 +12,7 @@ import {
 } from '$lib/types';
 import type { NostrEvent } from 'nostr-tools';
 import { getEventUID, isReplaceable } from 'applesauce-core/helpers';
-import { issue_kind, patch_kind, repo_kind, status_kinds } from '$lib/kinds';
+import { issue_kind, patch_kind, QualityChildKinds, repo_kind, status_kinds } from '$lib/kinds';
 import { Metadata, Reaction, RelayList } from 'nostr-tools/kinds';
 import processPubkey, { processNip05 } from './Pubkey';
 import type {
@@ -27,7 +27,7 @@ import processRepoUpdates from './Repo';
 import processIssueUpdates from './Issue';
 import processPrUpdates from './Pr';
 import { processOutboxUpdates } from './Outbox';
-import { extractStatusRootId } from '$lib/git-utils';
+import { extractRootIdIfNonReplaceable } from '$lib/git-utils';
 
 class Processor {
 	/// Processes all new data points to update LocalDb or send events to the InMemoryDB
@@ -280,10 +280,10 @@ function identifyExistingItemsToUpdate(updates: ProcessorUpdate[]): DbItemsKeysC
 					break;
 				}
 				default:
-					if (status_kinds.includes(u.event.kind)) {
-						const root_id = extractStatusRootId(u.event);
+					if ([...status_kinds, ...QualityChildKinds].includes(u.event.kind)) {
+						const root_id = extractRootIdIfNonReplaceable(u.event);
 						if (root_id) {
-							// the status event doesnt make clear what type of table so we get both
+							// the event doesnt make clear what type of table so we get both
 							exiting_db_item_keys.issues.add(root_id);
 							exiting_db_item_keys.prs.add(root_id);
 						}

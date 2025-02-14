@@ -30,6 +30,7 @@ import {
 } from '$lib/types/processor';
 import type { NostrEvent } from 'nostr-tools';
 import {
+	eventToQualityChild,
 	eventToStatusHistoryItem,
 	extractPatchDescription,
 	extractPatchTitle
@@ -63,6 +64,20 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 			return true;
 		}
 
+		const quality_child = eventToQualityChild(u.event);
+		if (quality_child) {
+			if (!item) {
+				// either, issue hasn't been recieved yet or quality_child relates to a PR
+				// retain the update for processing later
+				// TODO - we cant just try and process this every <100ms
+				return true;
+			}
+			if (!item.quality_children.some((c) => c.id === quality_child.id)) {
+				item.quality_children.push(quality_child);
+				item.quality_children_count = item.quality_children.length;
+			}
+		}
+		
 		const updated_item = applyHuristicUpdates(
 			{
 				...(item || {
@@ -184,6 +199,8 @@ const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
 		description,
 		status: status_kind_open,
 		status_history: [],
+		quality_children: [],
+		quality_children_count: 0,
 		repos,
 		tags
 	};
