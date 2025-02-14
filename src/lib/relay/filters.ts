@@ -1,4 +1,4 @@
-import { issue_kind, patch_kind, status_kinds, repo_kind, repo_state_kind } from '$lib/kinds';
+import { issue_kind, patch_kind, status_kinds, repo_kind, repo_state_kind, QualityChildKinds } from '$lib/kinds';
 import type {
 	EventIdString,
 	PubKeyString,
@@ -145,7 +145,7 @@ export const createRepoChildrenFilters = (
  * @param children
  * @returns
  */
-export const createRepoChildrenStatusFilters = (
+export const createRepoChildrenStatusAndQualityFilters = (
 	children: Set<EventIdString>,
 	repo_timestamps?: Map<RepoRef, RelayCheckTimestamp>
 ) => {
@@ -153,7 +153,7 @@ export const createRepoChildrenStatusFilters = (
 	if (!repo_timestamps) {
 		return [
 			{
-				kinds: [...status_kinds],
+				kinds: [...status_kinds, ...QualityChildKinds],
 				'#e': [...children]
 			}
 		];
@@ -167,7 +167,7 @@ export const createRepoChildrenStatusFilters = (
 
 	return [
 		{
-			kinds: [...status_kinds],
+			kinds: [...status_kinds, ...QualityChildKinds],
 			'#e': [...children],
 			since: earliest_since === 0 ? undefined : earliest_since
 		}

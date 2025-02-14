@@ -37,7 +37,7 @@ import SubscriberManager from '$lib/SubscriberManager';
 import {
 	createRepoChildrenFilters,
 	createRepoIdentifierFilters,
-	createRepoChildrenStatusFilters
+	createRepoChildrenStatusAndQualityFilters
 } from '$lib/relay/filters';
 import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
 import type { EventPointer } from 'nostr-tools/nip19';
@@ -182,7 +182,7 @@ class QueryCentreExternal {
 		await this.hydrate_from_cache_db([
 			...createRepoIdentifierFilters(new Set([a_ref])),
 			...createRepoChildrenFilters(new Set([a_ref])),
-			...(record ? createRepoChildrenStatusFilters(getIssuesAndPrsIdsFromRepoItem(record)) : [])
+			...(record ? createRepoChildrenStatusAndQualityFilters(getIssuesAndPrsIdsFromRepoItem(record)) : [])
 		]);
 		const relays_tried: WebSocketUrl[] = [];
 		let new_repo_relays_found = false;

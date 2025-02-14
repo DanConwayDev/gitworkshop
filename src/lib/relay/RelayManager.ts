@@ -24,7 +24,7 @@ import { repoTableItemToRelayCheckTimestamp } from './RelaySelection';
 import {
 	createPubkeyFiltersGroupedBySince,
 	createRepoChildrenFilters,
-	createRepoChildrenStatusFilters,
+	createRepoChildrenStatusAndQualityFilters,
 	createRepoIdentifierFilters
 } from './filters';
 import { createFetchActionsFilter } from './filters/actions';
@@ -352,7 +352,7 @@ export class RelayManager {
 		const filters = [
 			...createRepoIdentifierFilters(original_a_refs_with_timestamps),
 			...createRepoChildrenFilters(original_a_refs_with_timestamps),
-			...createRepoChildrenStatusFilters(
+			...createRepoChildrenStatusAndQualityFilters(
 				unsearched_issues_and_pr_roots,
 				original_a_refs_with_timestamps
 			)
@@ -427,7 +427,7 @@ export class RelayManager {
 					const filters = [
 						...createRepoIdentifierFilters(unsearched_a_refs),
 						...createRepoChildrenFilters(unsearched_a_refs),
-						...createRepoChildrenStatusFilters(unsearched_issues_and_pr_roots)
+						...createRepoChildrenStatusAndQualityFilters(unsearched_issues_and_pr_roots)
 					];
 					markAsSearched();
 					const sub = this.relay.subscribe(filters, {
