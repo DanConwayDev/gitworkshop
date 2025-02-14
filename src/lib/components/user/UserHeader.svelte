@@ -16,7 +16,7 @@
 		link_to_profile = true,
 		avatar_on_right = false,
 		no_avatar = false,
-		in_group = false,
+		in_group = false
 	}: {
 		user: PubKeyString;
 		inline?: boolean;
@@ -31,7 +31,9 @@
 
 	let pubkey = $derived(user);
 
-	let info_query = $derived(isPubkeyString(pubkey) ? query_centre.fetchPubkeyName(pubkey) : undefined);
+	let info_query = $derived(
+		isPubkeyString(pubkey) ? query_centre.fetchPubkeyName(pubkey) : undefined
+	);
 	// prevent flashing with pubkey when info in db (allow db record to load before showing loading)
 	let mounting = $state(true);
 	onMount(() => {
@@ -50,7 +52,9 @@
 	let not_found_and_loading = $derived(info.loading && !info.metadata.stamp);
 	let pic_url = $derived(info.metadata.fields.image ?? info.metadata.fields.picture ?? undefined);
 	let hovered = $state(false);
-	let user_link_creator = $derived(pubkey && hovered ? new UserRouteStringCreator(pubkey) : undefined);
+	let user_link_creator = $derived(
+		pubkey && hovered ? new UserRouteStringCreator(pubkey) : undefined
+	);
 	let user_link = $derived(user_link_creator?.s ?? info.npub);
 </script>
 

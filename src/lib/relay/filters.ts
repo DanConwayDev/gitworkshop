@@ -1,4 +1,11 @@
-import { issue_kind, patch_kind, status_kinds, repo_kind, repo_state_kind, QualityChildKinds } from '$lib/kinds';
+import {
+	issue_kind,
+	patch_kind,
+	status_kinds,
+	repo_kind,
+	repo_state_kind,
+	QualityChildKinds
+} from '$lib/kinds';
 import type {
 	EventIdString,
 	PubKeyString,

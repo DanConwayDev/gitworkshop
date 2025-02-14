@@ -8,9 +8,9 @@
 		isRepoRouteData,
 		isUserRouteData,
 		isUserRoute,
-		type RouteData,
+		type RouteData
 	} from '$lib/types';
-	import { onDestroy, onMount, type Snippet } from 'svelte';
+	import { onDestroy, type Snippet } from 'svelte';
 
 	let {
 		data,

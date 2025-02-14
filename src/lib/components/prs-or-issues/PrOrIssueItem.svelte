@@ -31,18 +31,14 @@
 		return n.length > 70 ? `${n.slice(0, 65)}...` : n;
 	});
 	let comments_refs = $derived(
-		!table_item
-			? []
-			: table_item.quality_children.filter((r) => CommentKinds.includes(r.kind))
+		!table_item ? [] : table_item.quality_children.filter((r) => CommentKinds.includes(r.kind))
 	);
 	let commenters = $derived(
-		new Set([...comments_refs.map((r)=>r.pubkey).filter((p) => p !== table_item?.author)])
+		new Set([...comments_refs.map((r) => r.pubkey).filter((p) => p !== table_item?.author)])
 	);
 </script>
 
-<li class="flex @container p-2 {table_item ? 'cursor-pointer hover:bg-base-200' : ''}">
-
-
+<li class="flex p-2 @container {table_item ? 'cursor-pointer hover:bg-base-200' : ''}">
 	<!-- <figure class="p-4 pl-0 text-color-primary"> -->
 	<!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
 	<div class="pt-2">
@@ -82,7 +78,8 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="h-5 w-5 flex-none fill-neutral-content pt-1">
+				class="h-5 w-5 flex-none fill-neutral-content pt-1"
+			>
 				<title>Draft</title>
 				<path d={pr_icon_path.draft} />
 			</svg>
@@ -92,7 +89,9 @@
 				viewBox="0 0 16 16"
 				class="h-5 w-5 flex-none fill-primary pt-1"
 			>
-				<title>{#if type === 'pr'}Applied{:else if type === 'issue'}Resolved{/if}</title>
+				<title
+					>{#if type === 'pr'}Applied{:else if type === 'issue'}Resolved{/if}</title
+				>
 				{#if type === 'pr'}
 					<path d={pr_icon_path.applied} />
 				{:else if type === 'issue'}
@@ -106,7 +105,7 @@
 	<a
 		href="/{repo_route ? repo_route.s : 'TODO'}/{type}s/{nip19.noteEncode(table_item?.uuid ?? '') ||
 			''}"
-		class="ml-3 grow overflow-hidden text-xs text-neutral-content flex"
+		class="ml-3 flex grow overflow-hidden text-xs text-neutral-content"
 		class:pointer-events-none={!table_item}
 	>
 		<div class="flex flex-grow pt-2">
@@ -128,20 +127,20 @@
 						<li class="inline">
 							<UserHeader user={table_item.author} inline={true} size="xs" />
 						</li>
-				{#if comments_refs.length > 0}
-					<li class="ml-2 inline align-middle opacity-50 @lg:hidden">
-						<!-- http://icon-sets.iconify.design/octicon/comment-16/ -->
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							class="inline-block h-3 w-3 flex-none fill-base-content pt-0"
-							viewBox="0 0 16 16"
-							><path
-								d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"
-							/></svg
-						>
-						{comments_refs.length}
-					</li>
-				{/if}
+						{#if comments_refs.length > 0}
+							<li class="ml-2 inline align-middle opacity-50 @lg:hidden">
+								<!-- http://icon-sets.iconify.design/octicon/comment-16/ -->
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									class="inline-block h-3 w-3 flex-none fill-base-content pt-0"
+									viewBox="0 0 16 16"
+									><path
+										d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"
+									/></svg
+								>
+								{comments_refs.length}
+							</li>
+						{/if}
 
 						{#if show_repo && repo_route}
 							<li class="ml-3 inline">
@@ -155,16 +154,16 @@
 			</div>
 		</div>
 		<div class="hidden @lg:flex">
-			<div class="items-center flex p-4 opacity-50">
+			<div class="flex items-center p-4 opacity-50">
 				<UserAvatarGroup users={[...commenters]} />
 			</div>
-			<div class="items-center flex">
+			<div class="flex items-center">
 				{#if comments_refs.length > 0}
-					<li class="mr-3 inline align-middle opacity-50 h-5">
+					<li class="mr-3 inline h-5 align-middle opacity-50">
 						<!-- http://icon-sets.iconify.design/octicon/comment-16/ -->
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
-							class="inline-block h-4 w-4 flex-none fill-base-content mr-1"
+							class="mr-1 inline-block h-4 w-4 flex-none fill-base-content"
 							viewBox="0 0 16 16"
 							><path
 								d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"

@@ -3,7 +3,7 @@
 	import UserHeader from './UserHeader.svelte';
 
 	let {
-		users = [],
+		users = []
 	}: {
 		users?: PubKeyString[];
 	} = $props();
@@ -11,29 +11,19 @@
 	let max_show = 4;
 </script>
 
-
-
 <div class="avatar-group -space-x-2 rtl:space-x-reverse">
-  {#each users.slice(0,max_show) as user}
-    <div class="avatar border-none">
-		<div class="">
-			<UserHeader 
-				{user} 
-				avatar_only 
-				inline
-				size="md"
-				link_to_profile={false}
-				in_group
-			/>
-
+	{#each users.slice(0, max_show) as user}
+		<div class="avatar border-none">
+			<div class="">
+				<UserHeader {user} avatar_only inline size="md" link_to_profile={false} in_group />
+			</div>
 		</div>
-    </div>
-  {/each}
-  {#if users.length > max_show}
-	 <div class="avatar placeholder border-none h-5">
-    	<div class="bg-neutral text-neutral-content">
-		<span class="opacity-50 text-xs">+{users.length - max_show}</span>
+	{/each}
+	{#if users.length > max_show}
+		<div class="avatar placeholder h-5 border-none">
+			<div class="bg-neutral text-neutral-content">
+				<span class="text-xs opacity-50">+{users.length - max_show}</span>
+			</div>
 		</div>
-	</div>
-  {/if}
+	{/if}
 </div>

@@ -212,7 +212,7 @@ export const eventToIssue = (event: NostrEvent): (Issue & WithEvent) | undefined
 	};
 };
 
-export const processQualityChild = (item: IssueOrPRTableItem, quality_child: ChildEventRef ) => {
+export const processQualityChild = (item: IssueOrPRTableItem, quality_child: ChildEventRef) => {
 	if (!item.quality_children.some((c) => c.id === quality_child.id)) {
 		item.quality_children.push(quality_child);
 		item.quality_children_count = item.quality_children.length;
