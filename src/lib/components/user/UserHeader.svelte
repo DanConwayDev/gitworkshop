@@ -15,7 +15,8 @@
 		in_event_header = false,
 		link_to_profile = true,
 		avatar_on_right = false,
-		no_avatar = false
+		no_avatar = false,
+		in_group = false,
 	}: {
 		user: PubKeyString;
 		inline?: boolean;
@@ -25,6 +26,7 @@
 		link_to_profile?: boolean;
 		avatar_on_right?: boolean;
 		no_avatar?: boolean;
+		in_group?: boolean;
 	} = $props();
 
 	let info_query = $derived(isPubkeyString(user) ? query_centre.fetchPubkeyName(user) : undefined);
@@ -80,7 +82,6 @@
 		class:items-center={!inline}
 	>
 		<div
-			class="avatar"
 			class:inline-block={inline}
 			class:align-middle={inline}
 			class:flex-none={!inline}
@@ -88,6 +89,7 @@
 			class:hidden={no_avatar}
 		>
 			<div
+				class:avatar={!in_group}
 				class:inline-block={inline}
 				class:h-32={!inline && size === 'full'}
 				class:w-32={!inline && size === 'full'}
@@ -99,7 +101,8 @@
 				class:w-5={inline && size === 'md'}
 				class:h-3.5={(inline && size === 'sm') || size === 'xs'}
 				class:w-3.5={(inline && size === 'sm') || size === 'xs'}
-				class="rounded"
+				class:rounded={!in_group}
+				class:rounded-full={in_group}
 				class:skeleton={not_found_and_loading}
 				class:bg-neutral={!pic_url}
 			>
