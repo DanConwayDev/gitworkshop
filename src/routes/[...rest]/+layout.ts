@@ -11,5 +11,8 @@ export const load = ({ params }: { params: { rest: string } }): { rest: string }
 	if (params.rest.startsWith('e/')) {
 		redirect(301, `/${params.rest.replace(new RegExp(`^e\\/`), '')}`);
 	}
+	if (params.rest.startsWith('repos')) {
+		redirect(301, `/search`);
+	}
 	return { rest: params.rest };
 };
