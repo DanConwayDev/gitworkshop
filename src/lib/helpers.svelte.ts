@@ -143,9 +143,9 @@ export class UserRouteStringCreator {
 	);
 	private nip05_query = $derived.by(() => {
 		if (this.profile_query?.current?.metadata.fields.nip05) {
-			return untrack(() =>query_centre.fetchNip05(
-				this.profile_query?.current?.metadata.fields.nip05 as Nip05Address
-			));
+			return untrack(() =>
+				query_centre.fetchNip05(this.profile_query?.current?.metadata.fields.nip05 as Nip05Address)
+			);
 		} else return undefined;
 	});
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import {
-	CommentKinds,
+		CommentKinds,
 		status_kind_applied,
 		status_kind_closed,
 		status_kind_draft,
@@ -29,7 +29,11 @@
 		const n = table_item ? table_item.title : 'Untitled';
 		return n.length > 70 ? `${n.slice(0, 65)}...` : n;
 	});
-	let comments = $derived(!table_item ? 0 : table_item.quality_children.filter((r) => CommentKinds.includes(r.kind)).length);
+	let comments = $derived(
+		!table_item
+			? 0
+			: table_item.quality_children.filter((r) => CommentKinds.includes(r.kind)).length
+	);
 </script>
 
 <li class="flex p-2 pt-4 {table_item ? 'cursor-pointer hover:bg-base-200' : ''}">

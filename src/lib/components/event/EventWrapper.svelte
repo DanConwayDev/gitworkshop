@@ -75,10 +75,13 @@
 				{#if show_raw_json_modal}
 					<dialog class="modal" class:modal-open={show_raw_json_modal}>
 						<div class="modal-box relative max-w-full text-wrap text-xs">
-							<div class="overflow-y-auto overflow-x-hidden h-full">
+							<div class="h-full overflow-y-auto overflow-x-hidden">
 								<pre class="whitespace-pre-wrap">{JSON.stringify(event, null, 2)}</pre>
 							</div>
-							<button class="btn btn-sm absolute bottom-4 right-4 z-10" onclick={closeModals}>Close</button> <!-- Floating button -->
+							<button class="btn btn-sm absolute bottom-4 right-4 z-10" onclick={closeModals}
+								>Close</button
+							>
+							<!-- Floating button -->
 						</div>
 					</dialog>
 				{/if}

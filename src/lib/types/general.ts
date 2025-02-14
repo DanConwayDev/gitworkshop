@@ -41,7 +41,6 @@ export const isNprofile = (s: unknown): s is Nprofile => {
 	return false;
 };
 
-
 export type Naddr = `naddr1${string}`;
 
 export const isNaddr = (s: unknown): s is Naddr => {

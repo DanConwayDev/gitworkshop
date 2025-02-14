@@ -53,12 +53,12 @@ class QueryCentre {
 	}
 
 	fetchAllRepos() {
-		let current = $state({loading: true});
+		let current = $state({ loading: true });
 
 		this.awaitExternalWorker({ method: 'fetchAllRepos', args: [] }).then(() => {
 			current.loading = false;
 		});
-		return current
+		return current;
 	}
 
 	awaitExternalWorker<T>(call: { method: string; args: unknown[]; request_identifier?: string }) {
@@ -148,7 +148,8 @@ class QueryCentre {
 	fetchEvent(event_ref: NEventAttributes | EventPointer | NAddrAttributes) {
 		// TODO add loading
 		// TODO support for fetching naddr - right now they will display if in cache
-		if (!('type' in event_ref) || event_ref.type !== 'naddr') this.external_worker.postMessage({ method: 'fetchEvent', args: [event_ref] });
+		if (!('type' in event_ref) || event_ref.type !== 'naddr')
+			this.external_worker.postMessage({ method: 'fetchEvent', args: [event_ref] });
 		return inMemoryRelayEvent(event_ref);
 	}
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import NotFound404Page from '$lib/components/NotFound404Page.svelte';
-import AboutPage from '$lib/components/repo/AboutPage.svelte';
+	import AboutPage from '$lib/components/repo/AboutPage.svelte';
 	import UserPage from '$lib/components/user/UserPage.svelte';
 	import { isRepoRouteData, isUserRouteData, type RouteData } from '$lib/types';
 

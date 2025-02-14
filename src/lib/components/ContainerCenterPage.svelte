@@ -3,17 +3,17 @@
 	// negative margin 24 matches the margin of the footer
 </script>
 
-<div class="flex items-center justify-center h-screen center-of-gw-screen -mb-24">
-    <slot />
+<div class="center-of-gw-screen -mb-24 flex h-screen items-center justify-center">
+	<slot />
 </div>
 
 <style>
-    .center-of-gw-screen {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: calc(100vh - 130px);
-        text-align: center;
-    }
+	.center-of-gw-screen {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		height: calc(100vh - 130px);
+		text-align: center;
+	}
 </style>

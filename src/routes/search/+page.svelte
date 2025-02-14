@@ -48,7 +48,7 @@
 	</div>
 
 	<div class="my-8">
-		{#if repos.length > 0 || !loading }
+		{#if repos.length > 0 || !loading}
 			<ReposSummaryList
 				{repos}
 				title={search.text.length === 0 ? undefined : `results for: ${search.text}`}

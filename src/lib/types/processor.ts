@@ -59,12 +59,12 @@ export const isProcessorPubkeyUpdate = (u: ProcessorUpdate): u is ProcessorPubke
 	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdatePubkey(ru)));
 
 export interface ProcessorIssueUpdate {
-	event: (NostrEvent & { kind: Status | Issue | QualityChildKinds}) | undefined;
+	event: (NostrEvent & { kind: Status | Issue | QualityChildKinds }) | undefined;
 	relay_updates: RelayUpdateIssue[];
 }
 
 export const isProcessorIssueUpdate = (u: ProcessorUpdate): u is ProcessorIssueUpdate =>
-	(u.event && [Issue, ...Status, ...QualityChildKinds ].includes(u.event.kind)) ||
+	(u.event && [Issue, ...Status, ...QualityChildKinds].includes(u.event.kind)) ||
 	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdateIssue(ru)));
 
 export interface ProcessorPrUpdate {

@@ -1,4 +1,4 @@
-import { ShortTextNote, Zap } from "nostr-tools/kinds";
+import { ShortTextNote, Zap } from 'nostr-tools/kinds';
 
 export const reply_kind: number = 1;
 
@@ -54,10 +54,7 @@ export const LegacyGitReply = 1622;
 export type LegacyGitReply = typeof LegacyGitReply;
 
 export const CommentKinds = [ShortTextNote, LegacyGitReply];
-export type CommentKinds =
-	| typeof ShortTextNote
-	| typeof LegacyGitReply;
+export type CommentKinds = typeof ShortTextNote | typeof LegacyGitReply;
 
-	export const QualityChildKinds = [...CommentKinds, Zap];
+export const QualityChildKinds = [...CommentKinds, Zap];
 export type QualityChildKinds = CommentKinds | typeof Zap;
-

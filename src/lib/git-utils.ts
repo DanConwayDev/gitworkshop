@@ -11,7 +11,7 @@ import {
 	type StatusHistoryItem,
 	type WebSocketUrl
 } from './types';
-import { QualityChildKinds, status_kinds } from './kinds';
+import { QualityChildKinds } from './kinds';
 
 export const isCoverLetter = (s: string): boolean => {
 	return s.indexOf('PATCH 0/') > 0;
@@ -104,9 +104,8 @@ export const eventToStatusHistoryItem = (event?: NostrEvent): StatusHistoryItem 
 	return { pubkey, created_at, status };
 };
 
-export const eventToQualityChild = (event?: NostrEvent ): ChildEventRef | undefined => {
+export const eventToQualityChild = (event?: NostrEvent): ChildEventRef | undefined => {
 	if (!event || !QualityChildKinds.includes(event.kind)) return undefined;
 	const { id, kind, pubkey } = event;
 	return { id, kind, pubkey };
 };
-

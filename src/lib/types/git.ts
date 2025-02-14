@@ -69,9 +69,9 @@ export type IssuesOrPrsByStatus = {
 
 export type ChildEventRef = {
 	id: EventIdString;
-	kind: number,
+	kind: number;
 	pubkey: PubKeyString;
-}
+};
 
 export interface IssueOrPrBase {
 	type: 'issue' | 'pr';

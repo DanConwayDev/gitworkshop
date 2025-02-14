@@ -24,22 +24,25 @@
 </script>
 
 <!-- {#if e.event}<EventCard type="issue" event={e.event} />{/if} -->
-<div class="rounded-lg border border-base-300 bg-base-200" class:border-neutral-content={edit_mode?.selected}>
-{#if edit_mode || !e.event}
-	<EventWrapperLite {n_attr} event={e.event} disable_links={!!edit_mode}>
-		{#if e.event?.kind === issue_kind}
-			<Issue event={e.event} />
-		{:else if e.event?.kind === patch_kind}
-			<Patch event={e.event} />
-		{:else if e.event?.kind === repo_kind}
-			<Repo event={e.event} />
-		{:else if e.event}
-			kind: {e.event?.kind}
-		{:else}
-			loading event preview
-		{/if}
-	</EventWrapperLite>
-{:else}
-	<EventCard event={e.event} embedded={true}/>
-{/if}
+<div
+	class="rounded-lg border border-base-300 bg-base-200"
+	class:border-neutral-content={edit_mode?.selected}
+>
+	{#if edit_mode || !e.event}
+		<EventWrapperLite {n_attr} event={e.event} disable_links={!!edit_mode}>
+			{#if e.event?.kind === issue_kind}
+				<Issue event={e.event} />
+			{:else if e.event?.kind === patch_kind}
+				<Patch event={e.event} />
+			{:else if e.event?.kind === repo_kind}
+				<Repo event={e.event} />
+			{:else if e.event}
+				kind: {e.event?.kind}
+			{:else}
+				loading event preview
+			{/if}
+		</EventWrapperLite>
+	{:else}
+		<EventCard event={e.event} embedded={true} />
+	{/if}
 </div>

@@ -216,8 +216,8 @@ export const eventToIssue = (event: NostrEvent): (Issue & WithEvent) | undefined
 
 export const processQualityChild = (item: IssueOrPRTableItem, event: NostrEvent) => {
 	if (!item.quality_children.some((r) => r.id === event.id)) {
-		const c = {}
-		item.quality_children.push({id: event.id, kind: event.kind, pubkey: event.pubkey});
+		const c = {};
+		item.quality_children.push({ id: event.id, kind: event.kind, pubkey: event.pubkey });
 	}
 };
 

@@ -11,10 +11,11 @@
 	let {
 		event,
 		issue_or_pr_table_item,
-		embedded = false,
-	}: { event: NostrEvent; issue_or_pr_table_item?: IssueOrPRTableItem;
+		embedded = false
+	}: {
+		event: NostrEvent;
+		issue_or_pr_table_item?: IssueOrPRTableItem;
 		embedded?: boolean;
-
 	} = $props();
 
 	let node = $derived(nostrEventToDocTree(event));
@@ -23,31 +24,31 @@
 	let content_container: HTMLDivElement;
 	let show_more = $state(false);
 	let is_truncated = $state(false);
-    let resize_observer: ResizeObserver;
+	let resize_observer: ResizeObserver;
 
-    const checkTruncation = () => {
-        if (content_container) {
-            is_truncated = content_container.scrollHeight > content_container.clientHeight;
-        }
-    };
+	const checkTruncation = () => {
+		if (content_container) {
+			is_truncated = content_container.scrollHeight > content_container.clientHeight;
+		}
+	};
 
-    onMount(() => {
-        resize_observer = new ResizeObserver(checkTruncation);
-        if (content_container) {
-            resize_observer.observe(content_container);
-        }
-    });
+	onMount(() => {
+		resize_observer = new ResizeObserver(checkTruncation);
+		if (content_container) {
+			resize_observer.observe(content_container);
+		}
+	});
 
-    onDestroy(() => {
-        if (content_container) {
-            resize_observer.unobserve(content_container);
-        }
-        resize_observer.disconnect();
-    });
+	onDestroy(() => {
+		if (content_container) {
+			resize_observer.unobserve(content_container);
+		}
+		resize_observer.disconnect();
+	});
 
-    $effect(() => {
-        checkTruncation();
-    });
+	$effect(() => {
+		checkTruncation();
+	});
 </script>
 
 <div class="relative">
@@ -71,15 +72,13 @@
 	</div>
 
 	{#if enable_truncation && is_truncated && !show_more}
-	<div class="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-base-400  to-transparent"></div>
-	<div class="absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-2">
-			<button
-			class="mt-2 btn btn-sm btn-neutral"
-			onclick={() => show_more = !show_more}
-			>
-			{show_more ? 'Show Less' : 'Show More'}
+		<div
+			class="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-base-400 to-transparent"
+		></div>
+		<div class="absolute bottom-0 left-1/2 mb-2 -translate-x-1/2 transform">
+			<button class="btn btn-neutral btn-sm mt-2" onclick={() => (show_more = !show_more)}>
+				{show_more ? 'Show Less' : 'Show More'}
 			</button>
 		</div>
 	{/if}
-
 </div>

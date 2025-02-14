@@ -77,7 +77,7 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 				item.quality_children_count = item.quality_children.length;
 			}
 		}
-		
+
 		const updated_item = applyHuristicUpdates(
 			{
 				...(item || {
