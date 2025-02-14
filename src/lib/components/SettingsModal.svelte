@@ -1,9 +1,5 @@
 <script lang="ts">
-	import accounts_manager from '$lib/accounts';
-	import store from '$lib/store.svelte';
 	import { onMount } from 'svelte';
-	import LoginModal from './LoginModal.svelte';
-	import UserHeader from './user/UserHeader.svelte';
 	import { clearLocalRelayDb } from '$lib/dbs/LocalRelayDb';
 	import db from '$lib/dbs/LocalDb';
 	let { done }: { done: () => void } = $props();

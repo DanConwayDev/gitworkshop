@@ -1,6 +1,6 @@
 import { Relay, type NostrEvent } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
-import { action_dvm_kind, issue_kind, patch_kind, QualityChildKinds, repo_kind } from '$lib/kinds';
+import { action_dvm_kind, issue_kind, patch_kind, repo_kind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import {
 	type PubKeyString,
@@ -28,7 +28,6 @@ import {
 	createRepoIdentifierFilters
 } from './filters';
 import { createFetchActionsFilter } from './filters/actions';
-import { addEventsToCache } from '$lib/dbs/LocalRelayDb';
 import type { NEventAttributes } from 'nostr-editor';
 import SubscriberManager from '$lib/SubscriberManager';
 import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';

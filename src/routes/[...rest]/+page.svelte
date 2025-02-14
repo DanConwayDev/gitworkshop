@@ -2,11 +2,10 @@
 	import { goto } from '$app/navigation';
 	import ContainerCenterPage from '$lib/components/ContainerCenterPage.svelte';
 	import NotFound404Page from '$lib/components/NotFound404Page.svelte';
-	import { extractRepoRefsFromPrOrIssue } from '$lib/git-utils';
 	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
 	import { Issue } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
-	import type { EventIdString, Nevent, Nnote, RepoRef } from '$lib/types';
+	import type { Nevent, Nnote, RepoRef } from '$lib/types';
 	import { eventIsPrRoot } from '$lib/utils';
 	import { nip19 } from 'nostr-tools';
 
@@ -17,7 +16,9 @@
 		try {
 			let d = nip19.decode(event_ref);
 			if (d.type === 'nevent' || d.type === 'note' || d.type === 'naddr') return d;
-		} catch {}
+		} catch {
+			/* empty */
+		}
 		return undefined;
 	});
 

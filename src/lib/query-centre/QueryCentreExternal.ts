@@ -32,7 +32,7 @@ import Processor from '$lib/processors/Processor';
 import db from '$lib/dbs/LocalDb';
 import { aRefPToAddressPointer } from '$lib/utils';
 import { createFetchActionsFilter } from '$lib/relay/filters/actions';
-import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
+import type { NEventAttributes } from 'nostr-editor';
 import SubscriberManager from '$lib/SubscriberManager';
 import {
 	createRepoChildrenFilters,

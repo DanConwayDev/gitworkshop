@@ -53,7 +53,7 @@ class QueryCentre {
 	}
 
 	fetchAllRepos() {
-		let current = $state({ loading: true });
+		const current = $state({ loading: true });
 
 		this.awaitExternalWorker({ method: 'fetchAllRepos', args: [] }).then(() => {
 			current.loading = false;

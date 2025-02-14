@@ -106,7 +106,7 @@ export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 		};
 	}
 	if (isNprofile(s)) {
-		let p = nip19.decode(s).data as ProfilePointer;
+		const p = nip19.decode(s).data as ProfilePointer;
 		return {
 			type: 'npub',
 			s,

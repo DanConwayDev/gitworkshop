@@ -8,9 +8,7 @@
 		isRepoRouteData,
 		isUserRouteData,
 		isUserRoute,
-		type RepoRoute,
 		type RouteData,
-		type UserRoute
 	} from '$lib/types';
 	import { onDestroy, onMount, type Snippet } from 'svelte';
 

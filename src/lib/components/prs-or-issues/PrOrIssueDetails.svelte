@@ -4,7 +4,6 @@
 	import StatusSelector from './StatusSelector.svelte';
 
 	let { table_item }: { table_item?: IssueOrPRTableItem } = $props();
-	let labels = $state([]);
 </script>
 
 <div class="max-w-md">

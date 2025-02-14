@@ -68,7 +68,7 @@ export const extractUserRoute = (s: string): UserRoute | undefined => {
 		};
 	}
 	if (isNprofile(s)) {
-		let p = nip19.decode(s).data as ProfilePointer;
+		const p = nip19.decode(s).data as ProfilePointer;
 		return {
 			type: 'npub',
 			s,

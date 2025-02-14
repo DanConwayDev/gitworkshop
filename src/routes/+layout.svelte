@@ -4,7 +4,6 @@
 
 	import Navbar from '$lib/components/Navbar.svelte';
 	import '../app.css';
-	import Container from '$lib/components/Container.svelte';
 	let { children } = $props();
 </script>
 

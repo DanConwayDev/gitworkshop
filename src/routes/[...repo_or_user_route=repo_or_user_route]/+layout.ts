@@ -1,5 +1,4 @@
 import { extractRepoRoute, extractUserRoute, type RouteData } from '$lib/types';
-import { redirect } from '@sveltejs/kit';
 
 export const load = ({
 	params,
