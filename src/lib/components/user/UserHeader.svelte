@@ -29,7 +29,9 @@
 		in_group?: boolean;
 	} = $props();
 
-	let info_query = $derived(isPubkeyString(user) ? query_centre.fetchPubkeyName(user) : undefined);
+	let pubkey = $derived(user);
+
+	let info_query = $derived(isPubkeyString(pubkey) ? query_centre.fetchPubkeyName(pubkey) : undefined);
 	// prevent flashing with pubkey when info in db (allow db record to load before showing loading)
 	let mounting = $state(true);
 	onMount(() => {
@@ -38,7 +40,7 @@
 	let info = $derived(
 		// show loading until record is created in db by fetchPubkeyName
 		info_query?.current ?? {
-			...createPubKeyInfo(user || ''),
+			...createPubKeyInfo(pubkey || ''),
 			relays_info: {},
 			loading: true
 		}
@@ -48,12 +50,12 @@
 	let not_found_and_loading = $derived(info.loading && !info.metadata.stamp);
 	let pic_url = $derived(info.metadata.fields.image ?? info.metadata.fields.picture ?? undefined);
 	let hovered = $state(false);
-	let user_link_creator = $derived(user && hovered ? new UserRouteStringCreator(user) : undefined);
+	let user_link_creator = $derived(pubkey && hovered ? new UserRouteStringCreator(pubkey) : undefined);
 	let user_link = $derived(user_link_creator?.s ?? info.npub);
 </script>
 
 {#if info && (info.metadata.stamp || !mounting)}
-	{#if user && link_to_profile && size !== 'full'}
+	{#if pubkey && link_to_profile && size !== 'full'}
 		<a
 			onmouseenter={() => {
 				hovered = true;
