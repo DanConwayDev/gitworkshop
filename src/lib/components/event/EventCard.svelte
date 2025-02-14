@@ -54,8 +54,8 @@
 	<div
 		bind:this={content_container}
 		class={`overflow-hidden transition-all duration-300`}
-		class:max-h-[1000px]={!embedded && enable_truncation && !show_more}
-		class:max-h-[250px]={embedded && !show_more}
+		class:max-h-[1250px]={!embedded && enable_truncation && !show_more}
+		class:max-h-[400px]={embedded && !show_more}
 	>
 		{#if status_kinds.includes(event.kind)}
 			<StatusCard {event} {issue_or_pr_table_item} />
