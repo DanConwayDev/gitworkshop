@@ -71,7 +71,10 @@
 				</label>
 			</div>
 		</div>
-
+		<label class="label cursor-pointer max-w-xs">
+			<span class="text-left">Experimental mode</span>
+			<input type="checkbox" class="toggle toggle-success" bind:checked={store.stored_experimental} />
+		</label>
 		<div class="divider"></div>
 
 		<div class="mt-2 flex items-center justify-center">

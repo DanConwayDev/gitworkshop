@@ -32,6 +32,7 @@
 			? repo.issues[IssueOrPrStatus.Open].length + repo.issues[IssueOrPrStatus.Draft].length
 			: 0
 	);
+	let enable_actions = $derived(store.experimental);
 </script>
 
 <div class="flex border-b border-base-400">
@@ -91,22 +92,24 @@
 				<span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
 			{/if}
 		</a>
-		<a
-			href={`/${repo_route.s}/actions`}
-			class="tab"
-			class:tab-active={url.includes(`${repo_route.s}/actions`)}
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				viewBox="0 0 24 24"
-				class="mb-1 mr-1 h-4 w-4 flex-none fill-base-content pt-1 opacity-50"
+		{#if enable_actions}
+			<a
+				href={`/${repo_route.s}/actions`}
+				class="tab"
+				class:tab-active={url.includes(`${repo_route.s}/actions`)}
 			>
-				{#each icons_misc.actions as p}
-					<path d={p} />
-				{/each}
-			</svg>
-			Actions (experimental)
-		</a>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					class="mb-1 mr-1 h-4 w-4 flex-none fill-base-content pt-1 opacity-50"
+				>
+					{#each icons_misc.actions as p}
+						<path d={p} />
+					{/each}
+				</svg>
+				Actions (experimental)
+			</a>
+		{/if}
 	</div>
 	<div class="flex-grow"></div>
 </div>
