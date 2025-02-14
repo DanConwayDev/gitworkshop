@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { clearLocalRelayDb } from '$lib/dbs/LocalRelayDb';
 	import db from '$lib/dbs/LocalDb';
+	import store from '$lib/store.svelte';
 	let { done }: { done: () => void } = $props();
 
 	onMount(() => {
@@ -25,10 +26,54 @@
 		location.reload();
 	}
 </script>
-
 <dialog class="modal modal-open">
-	<div class="modal-box max-w-lg text-wrap">
+	<div class="modal-box max-w-lg text-wrap overflow-hidden">
 		<div class="prose mb-5"><h3>Settings</h3></div>
+
+		<div>
+			<div class="mb-2 font-bold">URL format:</div>
+			<label class="flex items-start mb-2">
+				<input class="radio radio-sm mr-2" type="radio" name="url-pref" value={null} bind:group={store.stored_url_pref} />
+					<div class="flex flex-col break-all">
+						<span>
+							<span class="font-bold">default</span>
+							<span class="text-gray-500 ml-2"> nip05</span>
+						</span>
+					</div>
+			</label>
+			<div class="flex flex-col">
+				<label class="flex items-start mb-2">
+					<input class="radio radio-sm mr-2" type="radio" name="url-pref" value="nip05" bind:group={store.stored_url_pref} />
+					<div class="flex flex-col break-all">
+						<span>
+							<span class="font-bold">&lt;nip05&gt;/&lt;identifier&gt;</span>
+							<span class="text-gray-500">only if nip05 can be verified. eg. gitworkshop.dev/vitorpamplona.com/amethyst</span>
+						</span>
+					</div>
+				</label>
+				<label class="flex items-start mb-2">
+					<input class="radio radio-sm mr-2" type="radio" name="url-pref" value="npub" bind:group={store.stored_url_pref} />
+					<div class="flex flex-col break-all">
+						<span>
+							<span class="font-bold">&lt;npub&gt;/&lt;identifier&gt;</span>
+							<span class="text-gray-500">eg. gitworkshop.dev/npub1gcxzte5zlkncx26j68ez60fzkvtkm9e0vrwdcvsjakxf9mu9qewqlfnj5z/amethyst</span>
+						</span>
+					</div>
+				</label>
+				<label class="flex items-start mb-2">
+					<input class="radio radio-sm mr-2" type="radio" name="url-pref" value="naddr" bind:group={store.stored_url_pref} />
+					<div class="flex flex-col break-all">
+						<span>
+							<span class="font-bold">&lt;naddr&gt;</span>
+							<span class="text-gray-500"> eg. gitworkshop.dev/naddr1qvzqqqrhnypzq3svyhng9ld8sv44950j957j9vchdktj7cxumsep9mvvjthc2pjuqqyxzmt9w358jum5nw4h94</span>
+						</span>
+					</div>
+				</label>
+			</div>
+		</div>
+
+		<div class="divider"></div>
+
 		<div class="mt-2 flex items-center justify-center">
 			<button
 				class="btn btn-error btn-sm mr-3 normal-case"
@@ -51,3 +96,4 @@
 		</div>
 	</div>
 </dialog>
+

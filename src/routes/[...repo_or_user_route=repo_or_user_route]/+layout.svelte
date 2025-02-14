@@ -68,16 +68,6 @@
 	onDestroy(() => {
 		store.route = undefined;
 	});
-	onMount(() => {
-		// TODO turn this into a app setting
-		if (!store.original_url_pref) {
-			if (isRepoRouteData(data)) {
-				store.original_url_pref = data.repo_route.type;
-			} else if (isUserRouteData(data)) {
-				store.original_url_pref = data.user_route.type;
-			}
-		}
-	});
 </script>
 
 {#if isRepoRouteData(data)}
