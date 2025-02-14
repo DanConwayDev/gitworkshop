@@ -96,8 +96,6 @@
 			{:else}
 				Sending
 			{/if}
-		{:else if !store.logged_in_account}
-			Login before Sending
 		{:else}
 			Send
 		{/if}

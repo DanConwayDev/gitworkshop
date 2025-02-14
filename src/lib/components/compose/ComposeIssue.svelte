@@ -16,6 +16,7 @@
 	import { nip19 } from 'nostr-tools';
 	import { repoTableItemDefaults, type RepoRef } from '$lib/types';
 	import { repoToMaintainerRepoRefs } from '$lib/repos';
+	import LoginModal from '../LoginModal.svelte';
 
 	let { a_ref }: { a_ref: RepoRef } = $props();
 
@@ -26,12 +27,17 @@
 
 	let title = $state('');
 
+	let show_login_modal = $state(false);
 	let submit_attempted = $state(false);
 	let submitting = $state(false);
 	let signed = $state(false);
 	let rejected_by_signer = $state(false);
 
 	const submit = async () => {
+		if (!store.logged_in_account) {
+			show_login_modal = true;
+			return;
+		}
 		if (title.length < 10) {
 			submit_attempted = true;
 			return;
@@ -178,6 +184,14 @@
 </div>
 {#if false}
 	<div>sent going to issue!</div>
+{/if}
+
+{#if show_login_modal}
+	<LoginModal
+		done={() => {
+			show_login_modal = false;
+		}}
+	/>
 {/if}
 
 <style>

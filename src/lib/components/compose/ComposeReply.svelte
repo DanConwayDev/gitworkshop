@@ -16,6 +16,7 @@
 	import { getStandardnip10ReplyTags } from '$lib/thread_tree';
 	import type { IssueOrPRTableItem } from '$lib/types';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
+	import LoginModal from '../LoginModal.svelte';
 
 	let {
 		event,
@@ -29,11 +30,17 @@
 		autofocus?: boolean;
 	} = $props();
 
+	let show_login_modal = $state(false);
 	let submitting = $state(false);
 	let signed = $state(false);
 	let rejected_by_signer = $state(false);
 
 	const submit = async () => {
+		if (!store.logged_in_account) {
+			show_login_modal = true;
+			return;
+		}
+
 		$editor.setEditable(false);
 		submitting = true;
 		let table_item = $state.snapshot(issue_or_pr_table_item);
@@ -144,6 +151,14 @@
 		</div>
 	</div>
 </div>
+
+{#if show_login_modal}
+	<LoginModal
+		done={() => {
+			show_login_modal = false;
+		}}
+	/>
+{/if}
 
 <style>
 	:global(.prose .tiptap-editor p:first-child) {
