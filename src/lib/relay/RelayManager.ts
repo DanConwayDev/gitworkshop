@@ -1,6 +1,6 @@
 import { Relay, type NostrEvent } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
-import { action_dvm_kind, issue_kind, patch_kind, repo_kind } from '$lib/kinds';
+import { ActionDvmKind, IssueKind, PatchKind, RepoAnnKind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import {
 	type PubKeyString,
@@ -107,7 +107,7 @@ export class RelayManager {
 	onEvent(event: NostrEvent) {
 		addSeenRelay(event, this.url);
 		this.processor.enqueueEvent(event);
-		if (event.kind == repo_kind) {
+		if (event.kind == RepoAnnKind) {
 			const table = eventKindToTable(event.kind);
 			if (table) {
 				this.processor.enqueueRelayUpdate({
@@ -133,12 +133,12 @@ export class RelayManager {
 			} catch {
 				/* empty */
 			}
-		} else if (event.kind === issue_kind || eventIsPrRoot(event)) {
+		} else if (event.kind === IssueKind || eventIsPrRoot(event)) {
 			this.processor.enqueueRelayUpdate({
 				type: 'found',
 				uuid: event.id,
 				kinds: [event.kind],
-				table: event.kind === issue_kind ? 'issues' : 'prs',
+				table: event.kind === IssueKind ? 'issues' : 'prs',
 				url: this.url
 			});
 		} else {
@@ -164,7 +164,7 @@ export class RelayManager {
 			const sub = this.relay.subscribe(
 				[
 					{
-						kinds: [repo_kind],
+						kinds: [RepoAnnKind],
 						since: !pubkey && checks ? Math.round(checks.timestamp - 60 * 10) : 0
 						// TODO: what if this last check failed to reach the relay?
 						// limit: 100,
@@ -361,11 +361,11 @@ export class RelayManager {
 
 		const onevent = (event: NostrEvent) => {
 			this.onEvent(event);
-			if (event.kind === repo_kind) {
+			if (event.kind === RepoAnnKind) {
 				const a_ref = getEventUID(event) as RepoRef;
 				if (!searched_a_refs.has(a_ref)) unsearched_a_refs.add(a_ref);
 				repo_ann_received.add(a_ref);
-			} else if (event.kind === issue_kind || eventIsPrRoot(event)) {
+			} else if (event.kind === IssueKind || eventIsPrRoot(event)) {
 				getRepoRefs(event).forEach((a_ref) => {
 					if (!searched_a_refs.has(a_ref)) unsearched_a_refs.add(a_ref);
 				});
@@ -381,7 +381,7 @@ export class RelayManager {
 					type: 'checked',
 					uuid: a_ref,
 					table: 'repos',
-					kinds: [patch_kind, issue_kind],
+					kinds: [PatchKind, IssueKind],
 					url: this.url
 				} as RelayUpdateRepoChildren);
 				const filtered_for_a_ref_without_since = filters.some(
@@ -390,14 +390,14 @@ export class RelayManager {
 						f['#d'] &&
 						f['#d'].includes(aRefPToAddressPointer(a_ref).identifier) &&
 						!f.since &&
-						f.kinds?.includes(repo_kind)
+						f.kinds?.includes(RepoAnnKind)
 				);
 
 				if (filtered_for_a_ref_without_since && !repo_ann_received.has(a_ref)) {
 					this.processor.enqueueRelayUpdate({
 						type: 'not-found',
 						uuid: a_ref,
-						kinds: [repo_kind],
+						kinds: [RepoAnnKind],
 						table: 'repos',
 						url: this.url
 					} as RelayUpdateRepoAnn);
@@ -405,7 +405,7 @@ export class RelayManager {
 					this.processor.enqueueRelayUpdate({
 						type: repo_ann_received.has(a_ref) ? 'found' : 'checked',
 						uuid: a_ref,
-						kinds: [repo_kind],
+						kinds: [RepoAnnKind],
 						table: 'repos',
 						url: this.url
 					} as RelayUpdateRepoAnn);
@@ -531,8 +531,8 @@ export class RelayManager {
 						// children kinds but for all repos on relay
 						kinds: [
 							...(createRepoChildrenFilters(new Set([]))[0]?.kinds ?? []),
-							// We dont want to add action_dvm_kind to createRepoChildrenFilters as we dont want load of outdated actions
-							action_dvm_kind
+							// We dont want to add ActionDvmKind to createRepoChildrenFilters as we dont want load of outdated actions
+							ActionDvmKind
 						],
 						since: unixNow()
 					}

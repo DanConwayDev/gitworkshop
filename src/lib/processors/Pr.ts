@@ -7,7 +7,7 @@ import {
 	isRelayUpdatePRFound,
 	IssueOrPrStatus
 } from '$lib/types';
-import { patch_kind, status_kinds, status_kind_open, repo_kind } from '$lib/kinds';
+import { PatchKind, StatusKinds, StatusOpenKind, RepoAnnKind } from '$lib/kinds';
 import type {
 	EventIdString,
 	HuristicsForRelay,
@@ -98,7 +98,7 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 				};
 			}
 			if (!repo.PRs[updated_item.status].includes(updated_item.uuid))
-				status_kinds.forEach((status_kind) => {
+				StatusKinds.forEach((status_kind) => {
 					if (!repo.PRs) return; // to stop typescript complaining
 					const kind = status_kind as IssueOrPrStatus; // to stop typescript complaining
 					if (kind === updated_item.status) {
@@ -116,7 +116,7 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 
 const getPrId = (u: ProcessorPrUpdate): EventIdString | undefined => {
 	if (u.event) {
-		if (u.event && u.event.kind === patch_kind) return u.event.id;
+		if (u.event && u.event.kind === PatchKind) return u.event.id;
 		// TODO get the root
 		else {
 			const uuid = getParentUuid(u.event);
@@ -182,12 +182,12 @@ function processHuristic(
 }
 
 const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
-	if (event.kind !== patch_kind) return undefined;
+	if (event.kind !== PatchKind) return undefined;
 	const title = extractPatchTitle(event) ?? '';
 	const description = extractPatchDescription(event) ?? '';
 
 	const repos = event.tags
-		.filter((t) => t[1] && t[0] === 'a' && t[1].startsWith(repo_kind.toString()))
+		.filter((t) => t[1] && t[0] === 'a' && t[1].startsWith(RepoAnnKind.toString()))
 		.map((t) => t[1]) as RepoRef[];
 
 	const tags = getValueOfEachTagOccurence(event.tags, 't').filter(
@@ -197,7 +197,7 @@ const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
 		type: 'pr',
 		title,
 		description,
-		status: status_kind_open,
+		status: StatusOpenKind,
 		status_history: [],
 		quality_children: [],
 		quality_children_count: 0,

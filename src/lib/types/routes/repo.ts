@@ -1,5 +1,5 @@
 /** repo-route types */
-import { repo_kind } from '$lib/kinds';
+import { RepoAnnKind } from '$lib/kinds';
 import {
 	type PubKeyString,
 	type Npub,
@@ -102,7 +102,7 @@ export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 			s,
 			pubkey,
 			identifier: split[1],
-			a_ref: `${repo_kind}:${pubkey}:${split[1]}`
+			a_ref: `${RepoAnnKind}:${pubkey}:${split[1]}`
 		};
 	}
 	if (isNprofile(s)) {
@@ -112,7 +112,7 @@ export const extractRepoRoute = (s: string): RepoRoute | undefined => {
 			s,
 			pubkey: p.pubkey,
 			identifier: split[1],
-			a_ref: `${repo_kind}:${p.pubkey}:${split[1]}`
+			a_ref: `${RepoAnnKind}:${p.pubkey}:${split[1]}`
 			// relays: TODO
 		};
 	}

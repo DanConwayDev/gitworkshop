@@ -25,7 +25,7 @@ import {
 } from '$lib/types';
 import { unixNow } from 'applesauce-core/helpers';
 import { addEventsToCache, getCacheEventsForFilters } from '$lib/dbs/LocalRelayDb';
-import { action_dvm_kind, repo_kind } from '$lib/kinds';
+import { ActionDvmKind, RepoAnnKind } from '$lib/kinds';
 import { nip05 as nip05NostrTools, type Filter, type NostrEvent } from 'nostr-tools';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import Processor from '$lib/processors/Processor';
@@ -97,7 +97,7 @@ class QueryCentreExternal {
 			})(),
 			(async (): Promise<RepoTableItem[]> => {
 				const a_refs = event.tags
-					.filter((t) => t[1] && t[0] === 'a' && t[1].startsWith(`${repo_kind}`))
+					.filter((t) => t[1] && t[0] === 'a' && t[1].startsWith(`${RepoAnnKind}`))
 					.map((t) => t[1]) as RepoRef[];
 				// Note: here we are just ignoring repos that we don't have a record for so we wont send to their relays
 				return (await db.repos.bulkGet(a_refs)).filter((a_ref) => !!a_ref);
@@ -105,7 +105,7 @@ class QueryCentreExternal {
 		]);
 		const relay_logs = new Map<WebSocketUrl, OutboxRelayLog>();
 		// note as we are providing a table item, this will probably wont be async
-		if (event.kind !== action_dvm_kind)
+		if (event.kind !== ActionDvmKind)
 			await Promise.all([
 				...users.map((u) =>
 					(async (): Promise<void> => {
@@ -138,7 +138,7 @@ class QueryCentreExternal {
 				)
 			]);
 
-		if (event.kind === action_dvm_kind) {
+		if (event.kind === ActionDvmKind) {
 			action_dvm_relays.forEach((r) => {
 				let log = relay_logs.get(r);
 				if (!log) {
@@ -165,7 +165,7 @@ class QueryCentreExternal {
 	}
 
 	async fetchAllRepos() {
-		await this.hydrate_from_cache_db([{ kinds: [repo_kind] }]);
+		await this.hydrate_from_cache_db([{ kinds: [RepoAnnKind] }]);
 		const relays = await chooseRelaysForAllRepos();
 		await Promise.all(relays.map((url) => this.get_relay(url).fetchAllRepos()));
 	}
@@ -222,7 +222,7 @@ class QueryCentreExternal {
 	}
 
 	async fetchPubkeyRepos(pubkey: PubKeyString) {
-		await this.hydrate_from_cache_db([{ kinds: [repo_kind], authors: [pubkey] }]);
+		await this.hydrate_from_cache_db([{ kinds: [RepoAnnKind], authors: [pubkey] }]);
 		const relays = await chooseRelaysForPubkey(pubkey);
 		await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchAllRepos(pubkey)));
 	}

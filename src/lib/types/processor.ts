@@ -14,7 +14,7 @@ import { Metadata, RelayList } from 'nostr-tools/kinds';
 import type { RepoRef } from './git';
 import type { EventIdString, PubKeyString } from './general';
 import type { IssueOrPRTableItem, PubKeyTableItem, RepoTableItem } from './tables';
-import { Issue, Patch, QualityChildKinds, repo_kind, Status } from '$lib/kinds';
+import { IssueKind, PatchKind, QualityChildKinds, RepoAnnKind, StatusKinds } from '$lib/kinds';
 import { eventIsPrRoot } from '$lib/utils';
 
 export type UpdateProcessor = (
@@ -47,7 +47,7 @@ export interface ProcessorRepoUpdate {
 }
 
 export const isProcessorRepoUpdate = (u: ProcessorUpdate): u is ProcessorRepoUpdate =>
-	(u.event && u.event.kind === repo_kind) ||
+	(u.event && u.event.kind === RepoAnnKind) ||
 	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdateRepo(ru)));
 
 export interface ProcessorPubkeyUpdate {
@@ -59,20 +59,20 @@ export const isProcessorPubkeyUpdate = (u: ProcessorUpdate): u is ProcessorPubke
 	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdatePubkey(ru)));
 
 export interface ProcessorIssueUpdate {
-	event: (NostrEvent & { kind: Status | Issue | QualityChildKinds }) | undefined;
+	event: (NostrEvent & { kind: StatusKinds | IssueKind | QualityChildKinds }) | undefined;
 	relay_updates: RelayUpdateIssue[];
 }
 
 export const isProcessorIssueUpdate = (u: ProcessorUpdate): u is ProcessorIssueUpdate =>
-	(u.event && [Issue, ...Status, ...QualityChildKinds].includes(u.event.kind)) ||
+	(u.event && [IssueKind, ...StatusKinds, ...QualityChildKinds].includes(u.event.kind)) ||
 	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdateIssue(ru)));
 
 export interface ProcessorPrUpdate {
-	event: (NostrEvent & { kind: Status | Patch | QualityChildKinds }) | undefined;
+	event: (NostrEvent & { kind: StatusKinds | PatchKind | QualityChildKinds }) | undefined;
 	relay_updates: RelayUpdatePR[];
 }
 
 export const isProcessorPrUpdate = (u: ProcessorUpdate): u is ProcessorPrUpdate =>
-	(u.event && [...Status, ...QualityChildKinds].includes(u.event.kind)) ||
+	(u.event && [...StatusKinds, ...QualityChildKinds].includes(u.event.kind)) ||
 	(u.event && eventIsPrRoot(u.event)) ||
 	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdatePR(ru)));

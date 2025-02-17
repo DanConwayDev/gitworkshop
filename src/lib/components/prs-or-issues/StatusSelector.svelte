@@ -2,10 +2,10 @@
 	import db from '$lib/dbs/LocalDb';
 	import { liveQueryState } from '$lib/helpers.svelte';
 	import {
-		status_kind_applied,
-		status_kind_closed,
-		status_kind_draft,
-		status_kind_open,
+		StatusAppliedKind,
+		StatusClosedKind,
+		StatusDraftKind,
+		StatusOpenKind,
 		statusKindtoText
 	} from '$lib/kinds';
 	import store from '$lib/store.svelte';
@@ -107,47 +107,47 @@
 				tabIndex={0}
 				class="menu dropdown-content z-[1] ml-0 w-52 rounded-box bg-base-300 p-2 shadow"
 			>
-				{#if status !== status_kind_draft && item.type !== 'issue'}
+				{#if status !== StatusDraftKind && item.type !== 'issue'}
 					<li class="my-2 pl-0">
 						<button
 							onclick={() => {
-								changeStatus(status_kind_draft);
+								changeStatus(StatusDraftKind);
 							}}
 							class="btn btn-neutral btn-sm mx-2 align-middle"
-							>{statusKindtoText(status_kind_draft, item.type)}</button
+							>{statusKindtoText(StatusDraftKind, item.type)}</button
 						>
 					</li>
 				{/if}
-				{#if status !== status_kind_open}
+				{#if status !== StatusOpenKind}
 					<li class="my-2 pl-0">
 						<button
 							onclick={() => {
-								changeStatus(status_kind_open);
+								changeStatus(StatusOpenKind);
 							}}
 							class="btn btn-success btn-sm mx-2 align-middle"
-							>{statusKindtoText(status_kind_open, item.type)}</button
+							>{statusKindtoText(StatusOpenKind, item.type)}</button
 						>
 					</li>
 				{/if}
-				{#if status !== status_kind_applied}
+				{#if status !== StatusAppliedKind}
 					<li class="my-2 pl-0">
 						<button
 							onclick={() => {
-								changeStatus(status_kind_applied);
+								changeStatus(StatusAppliedKind);
 							}}
 							class="btn btn-primary btn-sm mx-2 align-middle"
-							>{statusKindtoText(status_kind_applied, item.type)}</button
+							>{statusKindtoText(StatusAppliedKind, item.type)}</button
 						>
 					</li>
 				{/if}
-				{#if status !== status_kind_closed}
+				{#if status !== StatusClosedKind}
 					<li class="my-2 pl-0">
 						<button
 							onclick={() => {
-								changeStatus(status_kind_closed);
+								changeStatus(StatusClosedKind);
 							}}
 							class="btn btn-neutral btn-sm mx-2 align-middle"
-							>{statusKindtoText(status_kind_closed, item.type)}</button
+							>{statusKindtoText(StatusClosedKind, item.type)}</button
 						>
 					</li>
 				{/if}

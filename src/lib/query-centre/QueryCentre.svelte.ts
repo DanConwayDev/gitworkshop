@@ -14,7 +14,7 @@ import { createActionsNowFilter, createFetchActionsFilter } from '$lib/relay/fil
 import type { NostrEvent } from 'nostr-tools';
 import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
 import store from '$lib/store.svelte';
-import { repo_kind } from '$lib/kinds';
+import { RepoAnnKind } from '$lib/kinds';
 import { liveQuery } from 'dexie';
 import type { EventPointer } from 'nostr-tools/nip19';
 
@@ -187,7 +187,7 @@ class QueryCentre {
 					loading: false,
 					a_ref:
 						'identifier' in store.route && pubkey
-							? `${repo_kind}:${pubkey}:${store.route.identifier}`
+							? `${RepoAnnKind}:${pubkey}:${store.route.identifier}`
 							: undefined
 				};
 			}

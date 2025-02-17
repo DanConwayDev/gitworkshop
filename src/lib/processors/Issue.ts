@@ -6,7 +6,7 @@ import {
 	isRelayUpdateIssueFound,
 	IssueOrPrStatus
 } from '$lib/types';
-import { issue_kind, status_kinds, status_kind_open, repo_kind } from '$lib/kinds';
+import { IssueKind, StatusKinds, StatusOpenKind, RepoAnnKind } from '$lib/kinds';
 import type {
 	ChildEventRef,
 	EventIdString,
@@ -100,7 +100,7 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 				};
 			}
 			if (!repo.issues[updated_item.status].includes(updated_item.uuid))
-				status_kinds.forEach((status_kind) => {
+				StatusKinds.forEach((status_kind) => {
 					if (!repo.issues) return; // to stop typescript complaining
 					const kind = status_kind as IssueOrPrStatus; // to stop typescript complaining
 					if (kind === updated_item.status) {
@@ -119,7 +119,7 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 
 const getIssueId = (u: ProcessorIssueUpdate): EventIdString | undefined => {
 	if (u.event) {
-		if (u.event.kind === issue_kind) return u.event.id;
+		if (u.event.kind === IssueKind) return u.event.id;
 		return extractRootIdIfNonReplaceable(u.event);
 	} else if (!u.event && u.relay_updates[0]) {
 		return u.relay_updates[0].uuid;
@@ -181,12 +181,12 @@ function processHuristic(
 }
 
 const eventToIssueBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
-	if (event.kind !== issue_kind) return undefined;
+	if (event.kind !== IssueKind) return undefined;
 	const title = extractIssueTitle(event);
 	const description = extractIssueDescription(event);
 
 	const repos = event.tags
-		.filter((t) => t[1] && t[0] === 'a' && t[1].startsWith(repo_kind.toString()))
+		.filter((t) => t[1] && t[0] === 'a' && t[1].startsWith(RepoAnnKind.toString()))
 		.map((t) => t[1]) as RepoRef[];
 
 	const tags = getValueOfEachTagOccurence(event.tags, 't');
@@ -194,7 +194,7 @@ const eventToIssueBaseFields = (event: NostrEvent): IssueOrPrBase | undefined =>
 		type: 'issue',
 		title,
 		description,
-		status: status_kind_open,
+		status: StatusOpenKind,
 		status_history: [],
 		quality_children: [],
 		quality_children_count: 0,

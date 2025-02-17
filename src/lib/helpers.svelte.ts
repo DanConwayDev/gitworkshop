@@ -18,7 +18,7 @@ import { repoToRepoRef } from './repos';
 import query_centre from './query-centre/QueryCentre.svelte';
 import { onDestroy as onDestroySvelte, untrack } from 'svelte';
 import type { AddressPointer, EventPointer } from 'nostr-tools/nip19';
-import { repo_kind } from './kinds';
+import { RepoAnnKind } from './kinds';
 
 /// this is taken and adapted from https://github.com/dexie/Dexie.js/pull/2116
 /// when merged the version from the library should be used
@@ -116,7 +116,7 @@ export class RepoRouteStringCreator {
 			} else return repoRefToPubkeyLink(this.a_ref);
 		}
 		// unreachable see https://github.com/sveltejs/svelte/issues/11116
-		return `${repo_kind}:<a_ref and pointer will never be undefined>:<svelte-5-sucks>` as RepoRouteString;
+		return `${RepoAnnKind}:<a_ref and pointer will never be undefined>:<svelte-5-sucks>` as RepoRouteString;
 	});
 
 	constructor(a_ref_or_table_item: RepoRef | RepoTableItem, relay?: WebSocketUrl) {

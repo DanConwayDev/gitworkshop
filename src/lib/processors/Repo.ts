@@ -7,7 +7,7 @@ import {
 	IssueOrPrStatus,
 	type RepoAnn
 } from '$lib/types';
-import { repo_kind } from '$lib/kinds';
+import { RepoAnnKind } from '$lib/kinds';
 import type {
 	ARefP,
 	HuristicsForRelay,
@@ -145,7 +145,7 @@ function processHuristic(
 }
 
 const eventToRepoAnnBaseFields = (event: NostrEvent): RepoAnnBaseFields | undefined => {
-	if (event.kind !== repo_kind) return undefined;
+	if (event.kind !== RepoAnnKind) return undefined;
 	const maintainers = [event.pubkey];
 	getTagMultiValue(event.tags, 'maintainers')?.forEach((v, i) => {
 		if (i > 0 && v !== maintainers[0]) {
@@ -193,7 +193,7 @@ export const eventToRepoAnn = (event: NostrEvent): RepoAnn | undefined => {
 	const base = eventToRepoAnnBaseFields(event);
 	if (!base) return undefined;
 	return {
-		uuid: `${repo_kind}:${event.pubkey}:${base.identifier}`,
+		uuid: `${RepoAnnKind}:${event.pubkey}:${base.identifier}`,
 		event_id: event.id,
 		author: event.pubkey,
 		created_at: event.created_at,

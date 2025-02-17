@@ -1,4 +1,4 @@
-import { issue_kind, patch_kind, repo_kind } from '$lib/kinds';
+import { IssueKind, PatchKind, RepoAnnKind } from '$lib/kinds';
 import type {
 	WebSocketUrl,
 	Timestamp,
@@ -88,7 +88,7 @@ export function isRelayUpdateRepoAnn(update: RelayUpdate): update is RelayUpdate
 	return (
 		(update as RelayUpdateRepoAnn).table === 'repos' &&
 		(update as RelayUpdateRepoAnn).kinds.length === 1 &&
-		(update as RelayUpdateRepoAnn).kinds[0] == repo_kind
+		(update as RelayUpdateRepoAnn).kinds[0] == RepoAnnKind
 	);
 }
 
@@ -106,8 +106,8 @@ export function isRelayUpdateRepoChildren(update: RelayUpdate): update is RelayU
 	return (
 		(update as RelayUpdateRepoChildren).table === 'repos' &&
 		(update as RelayUpdateRepoChildren).kinds.length === 2 &&
-		(update as RelayUpdateRepoChildren).kinds.includes(patch_kind) &&
-		(update as RelayUpdateRepoChildren).kinds.includes(issue_kind)
+		(update as RelayUpdateRepoChildren).kinds.includes(PatchKind) &&
+		(update as RelayUpdateRepoChildren).kinds.includes(IssueKind)
 	);
 }
 

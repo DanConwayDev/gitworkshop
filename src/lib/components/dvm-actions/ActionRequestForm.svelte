@@ -1,7 +1,7 @@
 <script lang="ts">
 	import accounts_manager from '$lib/accounts';
 	import { inMemoryRelayEvent, RepoRouteStringCreator } from '$lib/helpers.svelte';
-	import { action_dvm_kind, repo_state_kind } from '$lib/kinds';
+	import { ActionDvmKind, RepoStateKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { type EventIdString, type RepoRef, type RepoRouteString } from '$lib/types';
 	import { aRefToAddressPointer } from '$lib/utils';
@@ -17,7 +17,7 @@
 
 	let repo_state_pointer = $derived({
 		...aRefToAddressPointer(a_ref),
-		kind: repo_state_kind
+		kind: RepoStateKind
 	} as AddressPointer);
 	let repo_state_query = $derived(
 		inMemoryRelayEvent(repo_state_pointer, () => [repo_state_pointer])
@@ -76,7 +76,7 @@
 		};
 		try {
 			let request = await accounts_manager.getActive()?.signEvent({
-				kind: action_dvm_kind,
+				kind: ActionDvmKind,
 				created_at: unixNow(),
 				content: '',
 				tags: [
@@ -89,7 +89,7 @@
 			});
 			if (request) {
 				signed = true;
-				// this commit restricted the broadcast of action_dvm_kind to just the hardcoded relays
+				// this commit restricted the broadcast of ActionDvmKind to just the hardcoded relays
 				// and not the inbox relays of the pubkeys tagged or the repo relays.
 				// TODO: think about which relays should recieve this
 				// TODO: do we really need to wait for the event to be broadly sent?

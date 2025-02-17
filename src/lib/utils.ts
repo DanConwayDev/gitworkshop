@@ -13,7 +13,7 @@ import {
 	type RepoRoute
 } from './types';
 import type { AddressPointer } from 'nostr-tools/nip19';
-import { patch_kind, repo_kind } from './kinds';
+import { PatchKind, RepoAnnKind } from './kinds';
 import { getSeenRelays, isReplaceable } from 'applesauce-core/helpers';
 
 // get value of first occurance of tag
@@ -94,10 +94,10 @@ export const repoRouteToARef = (
 ): RepoRef | undefined => {
 	if (repo_route.type === 'nip05') {
 		return nip05_result && nip05_result.user
-			? (`${repo_kind}:${nip05_result.user.pubkey}:${repo_route.identifier}` as RepoRef)
+			? (`${RepoAnnKind}:${nip05_result.user.pubkey}:${repo_route.identifier}` as RepoRef)
 			: undefined;
 	}
-	return `${repo_kind}:${repo_route.pubkey}:${repo_route.identifier}` as RepoRef;
+	return `${RepoAnnKind}:${repo_route.pubkey}:${repo_route.identifier}` as RepoRef;
 };
 
 export const aRefPToAddressPointer = (
@@ -124,13 +124,13 @@ export const addressPointerToARefP = (address_pointer: AddressPointer): ARefP =>
 };
 
 export const addressPointerToRepoRef = (address_pointer: AddressPointer): RepoRef => {
-	return `${repo_kind}:${address_pointer.pubkey}:${address_pointer.identifier}`;
+	return `${RepoAnnKind}:${address_pointer.pubkey}:${address_pointer.identifier}`;
 };
 
 export const naddrToRepoA = (s: string): RepoRef | undefined => {
 	const pointer = naddrToPointer(s);
-	if (pointer && pointer.kind === repo_kind)
-		return `${repo_kind}:${pointer.pubkey}:${pointer.identifier}`;
+	if (pointer && pointer.kind === RepoAnnKind)
+		return `${RepoAnnKind}:${pointer.pubkey}:${pointer.identifier}`;
 	return undefined;
 };
 
@@ -188,7 +188,7 @@ export const getRepoRefs = (event: NostrEvent): RepoRef[] =>
 export const eventIsPrRoot = (event: NostrEvent): event is NostrEvent & { kind: 1621 } => {
 	const hashtags = getValueOfEachTagOccurence(event.tags, 't');
 	return (
-		event.kind == patch_kind && hashtags.includes('root') && !hashtags.includes('revision-root')
+		event.kind == PatchKind && hashtags.includes('root') && !hashtags.includes('revision-root')
 	);
 	/// TODO root and revisions root
 };

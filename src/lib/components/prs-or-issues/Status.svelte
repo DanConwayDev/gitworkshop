@@ -1,9 +1,9 @@
 <script lang="ts">
 	import {
-		status_kind_applied,
-		status_kind_closed,
-		status_kind_draft,
-		status_kind_open,
+		StatusAppliedKind,
+		StatusClosedKind,
+		StatusDraftKind,
+		StatusOpenKind,
 		statusKindtoText
 	} from '$lib/kinds';
 	import { IssueOrPrStatus } from '$lib/types';
@@ -29,20 +29,20 @@
 	<div
 		tabIndex={0}
 		role="button"
-		class:btn-success={status && status === status_kind_open}
-		class:btn-primary={status && status === status_kind_applied}
-		class:btn-neutral={!status || status === status_kind_draft || status === status_kind_closed}
+		class:btn-success={status && status === StatusOpenKind}
+		class:btn-primary={status && status === StatusAppliedKind}
+		class:btn-neutral={!status || status === StatusDraftKind || status === StatusClosedKind}
 		class:cursor-default={!edit_mode}
 		class:no-animation={!edit_mode}
-		class:hover:bg-success={!edit_mode && status && status === status_kind_open}
-		class:hover:bg-primary={!edit_mode && status && status === status_kind_applied}
-		class:hover:bg-neutral={(!edit_mode && status && status === status_kind_draft) ||
-			status === status_kind_closed}
+		class:hover:bg-success={!edit_mode && status && status === StatusOpenKind}
+		class:hover:bg-primary={!edit_mode && status && status === StatusAppliedKind}
+		class:hover:bg-neutral={(!edit_mode && status && status === StatusDraftKind) ||
+			status === StatusClosedKind}
 		class:btn-xs={xs}
 		class:btn-sm={!xs}
 		class="btn btn-success align-middle"
 	>
-		{#if status === status_kind_open}
+		{#if status === StatusOpenKind}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 18 18"
@@ -60,8 +60,8 @@
 					{/each}
 				{/if}
 			</svg>
-			{statusKindtoText(status_kind_open, type)}
-		{:else if status === status_kind_applied}
+			{statusKindtoText(StatusOpenKind, type)}
+		{:else if status === StatusAppliedKind}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -80,8 +80,8 @@
 					{/each}
 				{/if}
 			</svg>
-			{statusKindtoText(status_kind_applied, type)}
-		{:else if status === status_kind_closed}
+			{statusKindtoText(StatusAppliedKind, type)}
+		{:else if status === StatusClosedKind}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -100,8 +100,8 @@
 					{/each}
 				{/if}
 			</svg>
-			{statusKindtoText(status_kind_closed, type)}
-		{:else if status === status_kind_draft}
+			{statusKindtoText(StatusClosedKind, type)}
+		{:else if status === StatusDraftKind}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -112,7 +112,7 @@
 				class:w-5={!xs}
 				class="flex-none fill-neutral-content"><path d={pr_icon_path.draft} /></svg
 			>
-			{statusKindtoText(status_kind_draft, type)}
+			{statusKindtoText(StatusDraftKind, type)}
 		{:else}
 			{status}
 		{/if}

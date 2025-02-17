@@ -6,11 +6,11 @@ import {
 	type RepoRef,
 	type RepoTableItem
 } from './types';
-import { repo_kind } from './kinds';
+import { RepoAnnKind } from './kinds';
 
 export function repoToNaddr(repo: RepoTableItem): Naddr {
 	return naddrEncode({
-		kind: repo_kind,
+		kind: RepoAnnKind,
 		identifier: repo.identifier,
 		pubkey: repo.author,
 		// TODO: select best relay instead of first one listed in Ann event
@@ -19,14 +19,14 @@ export function repoToNaddr(repo: RepoTableItem): Naddr {
 }
 
 export function repoToRepoRef(repo: RepoTableItem): RepoRef {
-	return `${repo_kind}:${repo.author}:${repo.identifier}`;
+	return `${RepoAnnKind}:${repo.author}:${repo.identifier}`;
 }
 
 export function repoToMaintainerRepoRefs(repo: RepoTableItem): Set<RepoRef> {
 	const s = new Set<RepoRef>();
-	s.add(`${repo_kind}:${repo.author}:${repo.identifier}`);
+	s.add(`${RepoAnnKind}:${repo.author}:${repo.identifier}`);
 	repo.maintainers?.forEach((m) => {
-		s.add(`${repo_kind}:${m}:${repo.identifier}`);
+		s.add(`${RepoAnnKind}:${m}:${repo.identifier}`);
 	});
 	return s;
 }

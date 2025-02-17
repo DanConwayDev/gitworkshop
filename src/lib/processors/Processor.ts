@@ -12,7 +12,7 @@ import {
 } from '$lib/types';
 import type { NostrEvent } from 'nostr-tools';
 import { getEventUID, isReplaceable } from 'applesauce-core/helpers';
-import { issue_kind, patch_kind, QualityChildKinds, repo_kind, status_kinds } from '$lib/kinds';
+import { IssueKind, PatchKind, QualityChildKinds, RepoAnnKind, StatusKinds } from '$lib/kinds';
 import { Metadata, Reaction, RelayList } from 'nostr-tools/kinds';
 import processPubkey, { processNip05 } from './Pubkey';
 import type {
@@ -260,7 +260,7 @@ function identifyExistingItemsToUpdate(updates: ProcessorUpdate[]): DbItemsKeysC
 	updates.forEach((u) => {
 		if (u.event) {
 			switch (u.event.kind) {
-				case repo_kind:
+				case RepoAnnKind:
 					exiting_db_item_keys.repos.add(getEventUID(u.event) as RepoRef);
 					break;
 				case Metadata:
@@ -268,19 +268,19 @@ function identifyExistingItemsToUpdate(updates: ProcessorUpdate[]): DbItemsKeysC
 					exiting_db_item_keys.pubkeys.add(u.event.pubkey);
 					break;
 
-				case issue_kind: {
+				case IssueKind: {
 					exiting_db_item_keys.issues.add(u.event.id);
 					getRepoRefs(u.event).forEach((r) => exiting_db_item_keys.repos.add(r));
 					break;
 				}
-				case patch_kind: {
+				case PatchKind: {
 					// TODO only if root patch
 					exiting_db_item_keys.issues.add(u.event.id);
 					getRepoRefs(u.event).forEach((r) => exiting_db_item_keys.repos.add(r));
 					break;
 				}
 				default:
-					if ([...status_kinds, ...QualityChildKinds].includes(u.event.kind)) {
+					if ([...StatusKinds, ...QualityChildKinds].includes(u.event.kind)) {
 						const root_id = extractRootIdIfNonReplaceable(u.event);
 						if (root_id) {
 							// the event doesnt make clear what type of table so we get both
@@ -308,10 +308,10 @@ function identifyExistingItemsToUpdate(updates: ProcessorUpdate[]): DbItemsKeysC
 }
 
 export function eventKindToTable(kind: number): LocalDbTableNames | undefined {
-	if (kind === repo_kind) return 'repos';
+	if (kind === RepoAnnKind) return 'repos';
 	if ([Metadata, RelayList].includes(kind)) return 'pubkeys';
-	if (kind === issue_kind) return 'issues';
-	if (kind === patch_kind) return 'prs';
+	if (kind === IssueKind) return 'issues';
+	if (kind === PatchKind) return 'prs';
 	return undefined;
 }
 

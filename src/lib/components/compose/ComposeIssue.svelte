@@ -9,7 +9,7 @@
 	import EmbeddedEventEditor from '../content-tree/EmbeddedEventEditor.svelte';
 	import store from '$lib/store.svelte';
 	import accounts_manager from '$lib/accounts';
-	import { issue_kind } from '$lib/kinds';
+	import { IssueKind } from '$lib/kinds';
 	import { unixNow } from 'applesauce-core/helpers';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { goto } from '$app/navigation';
@@ -69,7 +69,7 @@
 		try {
 			let event = await accounts_manager.getActive()?.signEvent(
 				$state.snapshot({
-					kind: issue_kind,
+					kind: IssueKind,
 					created_at: unixNow(),
 					tags: $state.snapshot(tags),
 					content: $state.snapshot(content)

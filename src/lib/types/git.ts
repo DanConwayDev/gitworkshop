@@ -1,6 +1,6 @@
 /** git-specific types */
 
-import { repo_kind } from '$lib/kinds';
+import { RepoAnnKind } from '$lib/kinds';
 import {
 	type PubKeyString,
 	type EventIdString,
@@ -15,13 +15,13 @@ import { nip19 } from 'nostr-tools';
 export type RepoRef = ARefP;
 
 export const isRepoRef = (s?: unknown): s is RepoRef => {
-	return !!s && typeof s === 'string' && isARefP(s) && s.startsWith(repo_kind.toString());
+	return !!s && typeof s === 'string' && isARefP(s) && s.startsWith(RepoAnnKind.toString());
 };
 
 export const isRepoNaddr = (s: unknown): s is Naddr => {
 	try {
 		const t = nip19.decode(s as string);
-		if (t.type === 'naddr' && t.data.kind === repo_kind) {
+		if (t.type === 'naddr' && t.data.kind === RepoAnnKind) {
 			return true;
 		}
 	} catch {

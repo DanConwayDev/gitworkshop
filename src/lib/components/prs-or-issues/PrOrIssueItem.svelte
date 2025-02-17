@@ -1,10 +1,10 @@
 <script lang="ts">
 	import {
 		CommentKinds,
-		status_kind_applied,
-		status_kind_closed,
-		status_kind_draft,
-		status_kind_open
+		StatusAppliedKind,
+		StatusClosedKind,
+		StatusDraftKind,
+		StatusOpenKind
 	} from '$lib/kinds';
 	import { nip19 } from 'nostr-tools';
 	import { pr_icon_path } from '../prs/icons';
@@ -44,7 +44,7 @@
 	<div class="pt-2">
 		{#if !table_item}
 			<div class="skeleton h-5 w-5 flex-none pt-1"></div>
-		{:else if table_item.status === status_kind_open}
+		{:else if table_item.status === StatusOpenKind}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -59,7 +59,7 @@
 					{/each}
 				{/if}
 			</svg>
-		{:else if table_item.status === status_kind_closed}
+		{:else if table_item.status === StatusClosedKind}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -74,7 +74,7 @@
 					{/each}
 				{/if}
 			</svg>
-		{:else if table_item.status === status_kind_draft}
+		{:else if table_item.status === StatusDraftKind}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -83,7 +83,7 @@
 				<title>Draft</title>
 				<path d={pr_icon_path.draft} />
 			</svg>
-		{:else if table_item.status === status_kind_applied}
+		{:else if table_item.status === StatusAppliedKind}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"

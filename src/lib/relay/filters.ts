@@ -1,9 +1,9 @@
 import {
-	issue_kind,
-	patch_kind,
-	status_kinds,
-	repo_kind,
-	repo_state_kind,
+	IssueKind,
+	PatchKind,
+	StatusKinds,
+	RepoAnnKind,
+	RepoStateKind,
 	QualityChildKinds
 } from '$lib/kinds';
 import type {
@@ -86,7 +86,7 @@ export const createRepoIdentifierFilters = (
 	if (items instanceof Set) {
 		return [
 			{
-				kinds: [repo_kind, repo_state_kind],
+				kinds: [RepoAnnKind, RepoStateKind],
 				'#d': [...items]
 			}
 		];
@@ -104,7 +104,7 @@ export const createRepoIdentifierFilters = (
 	const filters: Filter[] = [];
 	identifiers.forEach((since, identifier) => {
 		filters.push({
-			kinds: [repo_kind, repo_state_kind],
+			kinds: [RepoAnnKind, RepoStateKind],
 			'#d': [identifier],
 			since
 		});
@@ -120,7 +120,7 @@ export const createRepoChildrenFilters = (
 	if (items instanceof Set) {
 		return [
 			{
-				kinds: [issue_kind, patch_kind, ...status_kinds],
+				kinds: [IssueKind, PatchKind, ...StatusKinds],
 				'#a': [...items]
 			}
 		];
@@ -135,7 +135,7 @@ export const createRepoChildrenFilters = (
 	});
 	sinces.forEach((a_refs, since) => {
 		const filter: Filter = {
-			kinds: [issue_kind, patch_kind, ...status_kinds],
+			kinds: [IssueKind, PatchKind, ...StatusKinds],
 			'#a': a_refs
 		};
 		if (since > 0) {
@@ -160,7 +160,7 @@ export const createRepoChildrenStatusAndQualityFilters = (
 	if (!repo_timestamps) {
 		return [
 			{
-				kinds: [...status_kinds, ...QualityChildKinds],
+				kinds: [...StatusKinds, ...QualityChildKinds],
 				'#e': [...children]
 			}
 		];
@@ -174,7 +174,7 @@ export const createRepoChildrenStatusAndQualityFilters = (
 
 	return [
 		{
-			kinds: [...status_kinds, ...QualityChildKinds],
+			kinds: [...StatusKinds, ...QualityChildKinds],
 			'#e': [...children],
 			since: earliest_since === 0 ? undefined : earliest_since
 		}
