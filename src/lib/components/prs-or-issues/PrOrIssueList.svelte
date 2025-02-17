@@ -11,7 +11,7 @@
 		show_repo = false,
 		limit = 0,
 		allow_more = true,
-		sort_youngest_first = true
+		sort_youngest_first = false
 	}: {
 		title?: string;
 		type: 'issue' | 'pr';
