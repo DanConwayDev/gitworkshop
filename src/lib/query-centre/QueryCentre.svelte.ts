@@ -118,7 +118,9 @@ class QueryCentre {
 	}
 
 	fetchIssues(a_ref: RepoRef) {
-		return liveQueryState(() => db.issues.where('repos').equals(a_ref).reverse().sortBy('last_activity',));
+		return liveQueryState(() =>
+			db.issues.where('repos').equals(a_ref).reverse().sortBy('last_activity')
+		);
 	}
 
 	fetchIssue(issue_id: EventIdString) {
@@ -132,7 +134,9 @@ class QueryCentre {
 	}
 
 	fetchPrs(a_ref: RepoRef) {
-		return liveQueryState(() => db.prs.where('repos').equals(a_ref).reverse().sortBy('last_activity'));
+		return liveQueryState(() =>
+			db.prs.where('repos').equals(a_ref).reverse().sortBy('last_activity')
+		);
 	}
 
 	fetchPr(pr_id: EventIdString) {
