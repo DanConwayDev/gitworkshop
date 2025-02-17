@@ -27,7 +27,9 @@
 					data.repo_route.type === 'nip05' &&
 					(!store.route ||
 						store.route.type !== 'nip05' ||
-						data.repo_route.nip05 !== store.route.nip05)
+						data.repo_route.nip05 !== store.route.nip05 ||
+						!('identifier' in store.route) ||
+						data.repo_route.identifier !== store.route.identifier)
 				) {
 					// fetchNip05 will update route_nip05_pubkey if response matches data.user_route.nip05
 					query_centre.fetchNip05(data.repo_route.nip05);
@@ -40,7 +42,8 @@
 					data.user_route.type === 'nip05' &&
 					(!store.route ||
 						store.route.type !== 'nip05' ||
-						data.user_route.nip05 !== store.route.nip05)
+						data.user_route.nip05 !== store.route.nip05 ||
+						'identifier' in store.route)
 				) {
 					// fetchNip05 will update route_nip05_pubkey if response matches data.user_route.nip05
 					query_centre.fetchNip05(data.user_route.nip05);
