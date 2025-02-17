@@ -17,7 +17,7 @@
 
 	let { item }: { item: IssueOrPRTableItem } = $props();
 
-	let status = $state(item.status);
+	let status = $derived(item.status);
 
 	let item_maintainers_query = $derived(
 		liveQueryState(async () => {
@@ -76,7 +76,6 @@
 				query_centre.publishEvent(status_event);
 				submitting = false;
 				signed = false;
-				status = new_status_kind;
 			} else {
 				rejectedBySigner();
 			}
