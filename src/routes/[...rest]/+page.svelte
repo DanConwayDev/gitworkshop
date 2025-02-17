@@ -3,7 +3,7 @@
 	import ContainerCenterPage from '$lib/components/ContainerCenterPage.svelte';
 	import NotFound404Page from '$lib/components/NotFound404Page.svelte';
 	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
-	import { Issue } from '$lib/kinds';
+	import { IssueKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import type { Nevent, Nnote, RepoRef } from '$lib/types';
 	import { eventIsPrRoot } from '$lib/utils';
@@ -48,7 +48,9 @@
 		if (issue_query?.current)
 			return routeToEvent(event_ref as Nevent, issue_query?.current.repos[0], 'issue');
 		const isnt_issue_or_pr_root =
-			event_query?.event && !eventIsPrRoot(event_query.event) && event_query.event.kind !== Issue;
+			event_query?.event &&
+			!eventIsPrRoot(event_query.event) &&
+			event_query.event.kind !== IssueKind;
 		if (isnt_issue_or_pr_root) return 'other';
 		return undefined;
 		// if (event_query?.event && (eventIsPrRoot(event_query.event) || event_query.event.kind === Issue)) {

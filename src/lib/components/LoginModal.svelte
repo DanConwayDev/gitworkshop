@@ -1,11 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { AmberClipboardSigner, ExtensionSigner, SimpleSigner } from 'applesauce-signer';
-	import {
-		AmberClipboardAccount,
-		ExtensionAccount,
-		SimpleAccount
-	} from 'applesauce-accounts/accounts';
+	import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts';
+	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+	// @ts-expect-error
 	import QRCode from 'svelte-qrcode';
 	import { icons_misc } from '$lib/icons';
 	import CopyField from './CopyField.svelte';
@@ -208,12 +206,12 @@
 						onclick={async () => {
 							try {
 								amber = true;
-								const signer = new AmberClipboardSigner();
-								const pubkey = await signer.getPublicKey();
-								const account = new AmberClipboardAccount(pubkey, signer);
-								accounts_manager.addAccount(account);
-								accounts_manager.setActive(account);
-								complete();
+								// const signer = new AmberClipboardSigner();
+								// const pubkey = await signer.getPublicKey();
+								// const account = new AmberClipboardAccount(pubkey, signer);
+								// accounts_manager.addAccount(account);
+								// accounts_manager.setActive(account);
+								// complete();
 							} catch {
 								amber = false;
 							}

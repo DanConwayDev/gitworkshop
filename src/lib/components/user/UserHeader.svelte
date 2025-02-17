@@ -18,7 +18,7 @@
 		no_avatar = false,
 		in_group = false
 	}: {
-		user: PubKeyString;
+		user?: PubKeyString;
 		inline?: boolean;
 		size?: 'xs' | 'sm' | 'md' | 'full';
 		avatar_only?: boolean;

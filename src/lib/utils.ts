@@ -136,7 +136,7 @@ export const naddrToRepoA = (s: string): RepoRef | undefined => {
 
 export function aToNaddr(a: string): Naddr | undefined;
 export function aToNaddr(a: AddressPointer): Naddr;
-export function aToNaddr(a) {
+export function aToNaddr(a: string | AddressPointer) {
 	const a_ref = typeof a === 'string' ? aRefToAddressPointer(a) : a;
 	if (!a_ref) return undefined;
 	return nip19.naddrEncode(a_ref);
