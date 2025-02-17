@@ -3,6 +3,14 @@
 	"editor.defaultFormatter": "esbenp.prettier-vscode",
 	"eslint.validate": ["javascript", "typescript", "html", "svelte"],
 	"editor.codeActionsOnSave": {
-		"source.fixAll.eslint": "explicit"
-	}
+		"source.fixAll.eslint": "explicit",
+		"source.fixAll": "explicit"
+	},
+	"typescript.tsserver.experimental.enableProjectDiagnostics": true,
+	"eslint.enable": true,
+	"eslint.run": "onSave",
+	"typescript.validate.enable": true,
+	"prettier.requireConfig": true,
+	"svelte.enable-ts-plugin": true,
+	"explorer.sortOrder": "filesFirst"
 }
