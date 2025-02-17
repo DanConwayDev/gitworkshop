@@ -99,15 +99,18 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 					[IssueOrPrStatus.Draft]: []
 				};
 			}
-			status_kinds.forEach((status_kind) => {
-				if (!repo.issues) return; // to stop typescript complaining
-				const kind = status_kind as IssueOrPrStatus; // to stop typescript complaining
-				if (kind === updated_item.status && !repo.issues[kind].includes(updated_item.uuid)) {
-					repo.issues[kind].push(updated_item.uuid);
-				} else {
-					repo.issues[kind] = repo.issues[kind].filter((uuid) => uuid !== updated_item.uuid);
-				}
-			});
+			if (!repo.issues[updated_item.status].includes(updated_item.uuid))
+				status_kinds.forEach((status_kind) => {
+					if (!repo.issues) return; // to stop typescript complaining
+					const kind = status_kind as IssueOrPrStatus; // to stop typescript complaining
+					if (kind === updated_item.status) {
+						if (!repo.issues[kind].includes(updated_item.uuid)) {
+							repo.issues[kind].push(updated_item.uuid);
+						}
+					} else {
+						repo.issues[kind] = repo.issues[kind].filter((uuid) => uuid !== updated_item.uuid);
+					}
+				});
 			items.repos.set(a_ref, repo);
 		});
 		return false;
