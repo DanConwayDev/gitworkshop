@@ -239,7 +239,7 @@ export const getRankedRelaysForRepo = async (
 export const chooseRelaysForRepo = async (
 	a_ref_or_repo_table_item: RepoRef | RepoTableItem,
 	excluding: WebSocketUrl[] = [],
-	ignore_recently_checked = true
+	ignore_recently_checked = false
 ): Promise<{ url: WebSocketUrl; check_timestamps: RelayCheckTimestamp }[]> => {
 	const record = isRepoRef(a_ref_or_repo_table_item)
 		? await db.repos.get(a_ref_or_repo_table_item)
