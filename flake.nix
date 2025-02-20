@@ -4,24 +4,12 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs =
-    { nixpkgs
-    , flake-utils
-    , ...
-    }:
-    flake-utils.lib.eachDefaultSystem (
-      system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-      in
-      {
-
+  outputs = { nixpkgs, flake-utils, ... }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let pkgs = nixpkgs.legacyPackages.${system};
+      in {
         devShell = pkgs.mkShell {
-          buildInputs = [
-            pkgs.gitlint
-            pkgs.nodejs
-            pkgs.pnpm
-          ];
+          buildInputs = [ pkgs.gitlint pkgs.nodejs pkgs.pnpm ];
 
           shellHook = ''
             # auto-install git hooks
@@ -30,6 +18,5 @@
             for hook in git_hooks/* ; do ln -sf "$(pwd)/$hook" "$dot_git/hooks/" ; done
           '';
         };
-      }
-    );
+      });
 }
