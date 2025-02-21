@@ -43,7 +43,7 @@ export const getParentUuid = (reply: NostrEvent): EventIdString | ARef | undefin
 
 export const getRootUuid = (event: NostrEvent): EventIdString | ARef | undefined => {
 	const t =
-		event.tags.find((tag) => tag.length > 1 && tag[1] === 'E') ||
+		event.tags.find((tag) => tag.length > 1 && tag[0] === 'E') ||
 		event.tags.find((tag) => tag.length === 4 && tag[3] === 'root') ||
 		event.tags.find((tag) => tag.length === 4 && tag[3] === 'reply') ||
 		// include events that don't use nip 10 markers
