@@ -136,8 +136,10 @@
 							class:h-3.5={(inline && size === 'sm') || size === 'xs'}
 							class:w-3.5={(inline && size === 'sm') || size === 'xs'}
 						>
-							<span style={(inline && size === 'sm') || size === 'xs' ? 'font-size: 0.6rem;' : ''}
-								>{display_name.slice(0, 1).toLocaleUpperCase()}</span
+							<span style={(inline && size === 'sm') || size === 'xs' ? 'font-size: 0.6rem;' : ''}>
+								{display_name.startsWith('npub1') || display_name.startsWith('InvalidH')
+									? ''
+									: display_name.slice(0, 1).toLocaleUpperCase()}</span
 							>
 						</div>
 					</div>
