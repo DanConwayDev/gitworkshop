@@ -229,15 +229,21 @@ class QueryCentreExternal {
 
 	async fetchIssueThread(a_ref: RepoRef, id: EventIdString) {
 		const table_item = await db.issues.get(id);
-		const ids: EventIdString[] = [];
+		const ids = new Set<EventIdString>();
 		if (table_item) {
-			// TODO get know child events to also search for
+			table_item.quality_children.forEach((c) => ids.add(c.id));
 		}
-		await this.hydrate_from_cache_db([{ '#e': [id, ...ids] }]);
+		const events_from_cache = await this.hydrate_from_cache_db([
+			{ '#e': [id, ...ids] },
+			{ '#E': [id, ...ids] }
+		]);
+		events_from_cache.forEach((e) => ids.add(e.id));
 		// TODO create chooseRelaysForIssue, that uses the Repo scoring but its own last checked
 		const relays = await chooseRelaysForRepo(a_ref);
 		try {
-			await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchThread(a_ref, id, ids)));
+			await Promise.all(
+				relays.map(({ url }) => this.get_relay(url).fetchThread(a_ref, id, [...ids]))
+			);
 		} catch {
 			/* empty */
 		}
@@ -245,15 +251,21 @@ class QueryCentreExternal {
 
 	async fetchPrThread(a_ref: RepoRef, id: EventIdString) {
 		const table_item = await db.prs.get(id);
-		const ids: EventIdString[] = [];
+		const ids = new Set<EventIdString>();
 		if (table_item) {
-			// TODO get know child events to also search for
+			table_item.quality_children.forEach((c) => ids.add(c.id));
 		}
-		await this.hydrate_from_cache_db([{ '#e': [id, ...ids] }]);
+		const events_from_cache = await this.hydrate_from_cache_db([
+			{ '#e': [id, ...ids] },
+			{ '#E': [id, ...ids] }
+		]);
+		events_from_cache.forEach((e) => ids.add(e.id));
 		// TODO create chooseRelaysForPr, that uses the Repo scoring but its own last checked
 		const relays = await chooseRelaysForRepo(a_ref);
 		try {
-			await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchThread(a_ref, id, ids)));
+			await Promise.all(
+				relays.map(({ url }) => this.get_relay(url).fetchThread(a_ref, id, [...ids]))
+			);
 		} catch {
 			/* empty */
 		}
