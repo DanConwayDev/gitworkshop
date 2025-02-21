@@ -59,12 +59,9 @@ export const getParentId = (reply: NostrEvent): string | undefined => {
 		reply.tags.find((tag) => tag.length === 4 && tag[3] === 'reply') ||
 		reply.tags.find((tag) => tag.length === 4 && tag[3] === 'root') ||
 		// include events that don't use nip 10 markers
-		reply.tags.find((tag) => tag.length < 4 && tag[0] === 'e');
-	if (t) return t[1];
-	// else find nip22 root event
-	const root_t = reply.tags.find((tag) => tag.length > 1 && tag[0] === 'E');
-	if (root_t) return root_t[1];
-	return undefined;
+		reply.tags.find((tag) => tag[0] === 'e') ||
+		reply.tags.find((tag) => tag.length > 1 && tag[0] === 'E');
+	return t ? t[1] : undefined;
 };
 
 export const createThreadTree = (replies: NostrEvent[]): ThreadTreeNode[] => {
