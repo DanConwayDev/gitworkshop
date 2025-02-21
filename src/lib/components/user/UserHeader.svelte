@@ -51,6 +51,7 @@
 	let display_name = $derived(getName(info));
 	let not_found_and_loading = $derived(info.loading && !info.metadata.stamp);
 	let pic_url = $derived(info.metadata.fields.image ?? info.metadata.fields.picture ?? undefined);
+	let failed_pic_url: string | undefined = $state(undefined);
 	let hovered = $state(false);
 	let user_link_creator = $derived(
 		pubkey && hovered ? new UserRouteStringCreator(pubkey) : undefined
@@ -110,10 +111,36 @@
 				class:rounded={!in_group}
 				class:rounded-full={in_group}
 				class:skeleton={not_found_and_loading}
-				class:bg-neutral={!pic_url}
+				class:bg-neutral={!pic_url || pic_url !== failed_pic_url}
+				class:placeholder={!pic_url || pic_url !== failed_pic_url}
 			>
-				{#if pic_url}
-					<img class="my-0" src={pic_url} alt={display_name} />
+				{#if pic_url && pic_url !== failed_pic_url}
+					<img
+						class="my-0"
+						src={pic_url}
+						alt={display_name}
+						onerror={() => (failed_pic_url = $state.snapshot(pic_url))}
+					/>
+				{:else}
+					<div class="">
+						<div
+							class="flex w-full items-center justify-center rounded bg-neutral text-center text-neutral-content"
+							class:h-32={!inline && size === 'full'}
+							class:w-32={!inline && size === 'full'}
+							class:h-8={!inline && size === 'md'}
+							class:w-8={!inline && size === 'md'}
+							class:h-4={!inline && size === 'sm'}
+							class:w-4={!inline && size === 'sm'}
+							class:h-5={inline && size === 'md'}
+							class:w-5={inline && size === 'md'}
+							class:h-3.5={(inline && size === 'sm') || size === 'xs'}
+							class:w-3.5={(inline && size === 'sm') || size === 'xs'}
+						>
+							<span style={(inline && size === 'sm') || size === 'xs' ? 'font-size: 0.6rem;' : ''}
+								>{display_name.slice(0, 1).toLocaleUpperCase()}</span
+							>
+						</div>
+					</div>
 				{/if}
 			</div>
 		</div>
