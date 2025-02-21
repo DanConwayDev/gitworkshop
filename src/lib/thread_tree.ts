@@ -16,13 +16,14 @@ export const getStandardnip22ReplyTags = (
 	event: NostrEvent,
 	issue_or_pr_table_item: IssueOrPRTableItem
 ): string[][] => {
+	const P = getRootEventPubkey(event, issue_or_pr_table_item);
 	return [
-		['E', getRootId(event, issue_or_pr_table_item)],
+		['E', getRootId(event, issue_or_pr_table_item), '', P],
 		['K', getRootKind(event, issue_or_pr_table_item)],
-		['P', getRootEventPubkey(event, issue_or_pr_table_item)],
+		['P', P],
 		['k', `${event.kind}`],
 		['p', event.pubkey],
-		['e', event.id]
+		['e', event.id, '', event.pubkey]
 	];
 };
 
