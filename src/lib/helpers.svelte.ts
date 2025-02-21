@@ -3,6 +3,7 @@ import { nip19, type Filter, type NostrEvent } from 'nostr-tools';
 import { memory_db_query_store } from './dbs/InMemoryRelay';
 import {
 	isRepoRef,
+	type EventIdString,
 	type Nip05Address,
 	type Npub,
 	type PubKeyString,
@@ -66,6 +67,33 @@ export function inMemoryRelayTimeline(
 		dependencies?.();
 		const sub = memory_db_query_store.timeline(filters).subscribe((events) => {
 			result.timeline = [...events];
+		});
+		return () => {
+			sub.unsubscribe();
+		};
+	});
+
+	onDestroySvelte(() => {
+		onDestroy?.();
+	});
+	return result;
+}
+
+export function inMemoryRelayTimelineRecursiveThread(
+	root_event_id: EventIdString,
+	dependencies?: () => unknown[],
+	onDestroy?: () => void
+) {
+	const ids = $state([root_event_id]);
+	const filters: Filter[] = $derived([{ '#e': ids }, { '#E': ids }]);
+	const result = $state<{ timeline: NostrEvent[] }>({ timeline: [] });
+	$effect(() => {
+		dependencies?.();
+		const sub = memory_db_query_store.timeline(filters).subscribe((events) => {
+			result.timeline = [...events];
+			events.forEach((e) => {
+				if (!ids.includes(e.id)) ids.push(e.id);
+			});
 		});
 		return () => {
 			sub.unsubscribe();
@@ -162,7 +190,6 @@ export class UserRouteStringCreator {
 
 	s: Nip05Address | Npub | undefined = $derived.by(() => {
 		return !this.pubkey ? undefined : (this.nip05 ?? nip19.npubEncode(this.pubkey));
-		return undefined;
 	});
 
 	constructor(pubkey: PubKeyString) {

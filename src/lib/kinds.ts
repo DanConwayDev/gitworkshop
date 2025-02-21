@@ -1,7 +1,5 @@
 import { ShortTextNote, Zap } from 'nostr-tools/kinds';
 
-export const reply_kind: number = 1;
-
 export const StatusOpenKind = 1630;
 export type StatusOpenKind = typeof StatusOpenKind;
 export const StatusAppliedKind = 1631;
@@ -43,7 +41,10 @@ export type ActionDvmKind = typeof ActionDvmKind;
 export const LegacyGitReplyKind = 1622;
 export type LegacyGitReplyKind = typeof LegacyGitReplyKind;
 
-export const CommentKinds = [ShortTextNote, LegacyGitReplyKind];
+export const ReplyKind = 1111;
+export type ReplyKind = typeof ReplyKind;
+
+export const CommentKinds = [ShortTextNote, LegacyGitReplyKind, ReplyKind];
 export type CommentKinds = typeof ShortTextNote | typeof LegacyGitReplyKind;
 
 export const QualityChildKinds = [...CommentKinds, Zap];

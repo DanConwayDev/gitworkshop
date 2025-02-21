@@ -1,5 +1,6 @@
 import type { NostrEvent } from 'nostr-tools';
 import type { IssueOrPRTableItem, ThreadTreeNode } from './types';
+import { IssueKind, PatchKind } from './kinds';
 
 export const getStandardnip10ReplyTags = (
 	event: NostrEvent,
@@ -11,13 +12,46 @@ export const getStandardnip10ReplyTags = (
 	];
 };
 
+export const getStandardnip22ReplyTags = (
+	event: NostrEvent,
+	issue_or_pr_table_item: IssueOrPRTableItem
+): string[][] => {
+	return [
+		['E', getRootId(event, issue_or_pr_table_item)],
+		['K', getRootKind(event, issue_or_pr_table_item)],
+		['P', getRootEventPubkey(event, issue_or_pr_table_item)],
+		['k', `${event.kind}`],
+		['p', event.pubkey],
+		['e', event.id]
+	];
+};
+
 /** to get the PR revision id rather than the root PR */
 const getRootId = (event: NostrEvent, issue_or_pr_table_item: IssueOrPRTableItem): string => {
 	// exclude 'a' references to repo events
-	const root_tag = event.tags.find((t) => t[0] === 'e' && t.length === 4 && t[3] === 'root');
+	const root_tag =
+		event.tags.find((t) => t.length > 1 && t[0] === 'E') ||
+		event.tags.find((t) => t.length === 4 && t[0] === 'e' && t[3] === 'root');
 	if (root_tag) return root_tag[1];
 	if (event.tags.some((t) => t[0] === 't' && t[1] === 'root')) return event.id;
 	return issue_or_pr_table_item.uuid;
+};
+
+const getRootKind = (event: NostrEvent, issue_or_pr_table_item: IssueOrPRTableItem): string => {
+	const K = event.tags.find((t) => t.length > 1 && t[0] === 'K');
+	if (K) return K[1];
+	if (event.id === getRootId(event, issue_or_pr_table_item)) return `${event.kind}`;
+	return issue_or_pr_table_item.type === 'issue' ? `${IssueKind}` : `${PatchKind}`;
+};
+
+const getRootEventPubkey = (
+	event: NostrEvent,
+	issue_or_pr_table_item: IssueOrPRTableItem
+): string => {
+	const K = event.tags.find((t) => t.length > 1 && t[0] === 'P');
+	if (K) return K[1];
+	if (event.id === getRootId(event, issue_or_pr_table_item)) return event.pubkey;
+	return issue_or_pr_table_item.author;
 };
 
 export const getParentId = (reply: NostrEvent): string | undefined => {
@@ -26,7 +60,11 @@ export const getParentId = (reply: NostrEvent): string | undefined => {
 		reply.tags.find((tag) => tag.length === 4 && tag[3] === 'root') ||
 		// include events that don't use nip 10 markers
 		reply.tags.find((tag) => tag.length < 4 && tag[0] === 'e');
-	return t ? t[1] : undefined;
+	if (t) return t[1];
+	// else find nip22 root event
+	const root_t = reply.tags.find((tag) => tag.length > 1 && tag[0] === 'E');
+	if (root_t) return root_t[1];
+	return undefined;
 };
 
 export const createThreadTree = (replies: NostrEvent[]): ThreadTreeNode[] => {

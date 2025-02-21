@@ -555,6 +555,7 @@ export class RelayManager {
 			let ids_searched: EventIdString[] = [];
 			let ids_to_find: EventIdString[] = [id, ...known_replies];
 			let sub: Subscription;
+			let searched_root = false;
 			const onevent = (event: NostrEvent) => {
 				this.onEvent(event);
 				const kinds_not_to_request_replys_for = [Reaction];
@@ -570,13 +571,17 @@ export class RelayManager {
 				// TODO get from other relays via db.issues.get(id)
 				if (ids_to_find.length === 0) r(ids_searched);
 				else {
-					sub = this.relay.subscribe([{ '#e': [...ids_to_find] }], {
-						onevent: (event) => onevent(event),
-						oneose: () => {
-							onEose(sub);
+					sub = this.relay.subscribe(
+						[{ '#e': [...ids_to_find] }, ...(searched_root ? [] : [{ '#E': [id] }])],
+						{
+							onevent: (event) => onevent(event),
+							oneose: () => {
+								onEose(sub);
+							}
 						}
-					});
+					);
 					ids_to_find = [];
+					searched_root = true;
 				}
 			};
 			findNext();

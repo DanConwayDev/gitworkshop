@@ -162,6 +162,10 @@ export const createRepoChildrenStatusAndQualityFilters = (
 			{
 				kinds: [...StatusKinds, ...QualityChildKinds],
 				'#e': [...children]
+			},
+			{
+				kinds: [...StatusKinds, ...QualityChildKinds],
+				'#E': [...children]
 			}
 		];
 	}
@@ -176,6 +180,12 @@ export const createRepoChildrenStatusAndQualityFilters = (
 		{
 			kinds: [...StatusKinds, ...QualityChildKinds],
 			'#e': [...children],
+			since: earliest_since === 0 ? undefined : earliest_since
+		},
+		{
+			kinds: [...StatusKinds, ...QualityChildKinds],
+			// needed as comments related to PR revisions will have a different root
+			'#E': [...children],
 			since: earliest_since === 0 ? undefined : earliest_since
 		}
 	];

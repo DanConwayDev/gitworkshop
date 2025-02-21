@@ -9,7 +9,12 @@ import {
 import { isEvent } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
 import db from '$lib/dbs/LocalDb';
-import { inMemoryRelayEvent, inMemoryRelayTimeline, liveQueryState } from '$lib/helpers.svelte';
+import {
+	inMemoryRelayEvent,
+	inMemoryRelayTimeline,
+	inMemoryRelayTimelineRecursiveThread,
+	liveQueryState
+} from '$lib/helpers.svelte';
 import { createActionsNowFilter, createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NostrEvent } from 'nostr-tools';
 import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
@@ -130,7 +135,7 @@ class QueryCentre {
 	fetchIssueThread(a_ref: RepoRef, issue_id: EventIdString) {
 		this.external_worker.postMessage({ method: 'fetchIssueThread', args: [a_ref, issue_id] });
 		// dynamically add in all the new replies and tagged events
-		return inMemoryRelayTimeline([{ '#e': [issue_id] }]);
+		return inMemoryRelayTimelineRecursiveThread(issue_id);
 	}
 
 	fetchPrs(a_ref: RepoRef) {
@@ -146,7 +151,7 @@ class QueryCentre {
 	fetchPrThread(a_ref: RepoRef, pr_id: EventIdString) {
 		this.external_worker.postMessage({ method: 'fetchPrThread', args: [a_ref, pr_id] });
 		// dynamically add in all the new replies and tagged events
-		return inMemoryRelayTimeline([{ '#e': [pr_id] }]);
+		return inMemoryRelayTimelineRecursiveThread(pr_id);
 	}
 
 	fetchEvent(event_ref: NEventAttributes | EventPointer | NAddrAttributes) {

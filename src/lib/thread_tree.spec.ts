@@ -1,14 +1,15 @@
 import { describe, expect, test } from 'vitest';
 import { createThreadTree, getParentId, getThreadTrees } from './thread_tree';
 import type { NostrEvent } from 'nostr-tools';
-import { reply_kind } from './kinds';
+import { ShortTextNote } from 'nostr-tools/kinds';
+import { ReplyKind } from './kinds';
 
 const randomHexID = (): string => {
 	return [...Array(65)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
 };
-const generateEventWithTags = (tags: string[][] = []): NostrEvent => {
+const generateEventWithTags = (tags: string[][] = [], kind: number = ShortTextNote): NostrEvent => {
 	const event: NostrEvent = {
-		kind: reply_kind,
+		kind,
 		content: Math.random().toFixed(10),
 		created_at: 0,
 		tags,
@@ -64,6 +65,11 @@ describe('getParentId', () => {
 			expect(getParentId(generateEventWithTags([['e', '789', '', 'mention']]))).toBeUndefined();
 		});
 	});
+	describe('when only nip22 E tag is present', () => {
+		test('return undefined', () => {
+			expect(getParentId(generateEventWithTags([['E', '789']], ReplyKind))).toEqual('789');
+		});
+	});
 });
 
 describe('createThreadTree', () => {
@@ -98,6 +104,33 @@ describe('createThreadTree', () => {
 				expect(tree[0].child_nodes[0].child_nodes).to.have.length(1);
 				expect(tree[0].child_nodes[0].child_nodes[0].event.id).to.eq(child.id);
 				expect(tree[0].child_nodes[0].child_nodes[0].child_nodes).to.have.length(0);
+			});
+			describe('nip22 reply', () => {
+				test('returns array with only grand parent at top level with parent as its child, and child as parents child', () => {
+					const grand_parent = generateEventWithTags([]);
+					const parent = generateEventWithTags(
+						[
+							['E', grand_parent.id],
+							['e', grand_parent.id]
+						],
+						ReplyKind
+					);
+					const child = generateEventWithTags(
+						[
+							['E', grand_parent.id],
+							['e', parent.id]
+						],
+						ReplyKind
+					);
+					const tree = createThreadTree([grand_parent, child, parent]);
+					expect(tree).to.have.length(1);
+					expect(tree[0].event.id).to.eq(grand_parent.id);
+					expect(tree[0].child_nodes).to.have.length(1);
+					expect(tree[0].child_nodes[0].event.id).to.eq(parent.id);
+					expect(tree[0].child_nodes[0].child_nodes).to.have.length(1);
+					expect(tree[0].child_nodes[0].child_nodes[0].event.id).to.eq(child.id);
+					expect(tree[0].child_nodes[0].child_nodes[0].child_nodes).to.have.length(0);
+				});
 			});
 		});
 		describe('2 roots, 1 child', () => {

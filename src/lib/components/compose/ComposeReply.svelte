@@ -11,12 +11,13 @@
 	import UserHeader from '../user/UserHeader.svelte';
 	import store from '$lib/store.svelte';
 	import accounts_manager from '$lib/accounts';
-	import { reply_kind } from '$lib/kinds';
+	import { LegacyGitReplyKind, ReplyKind } from '$lib/kinds';
 	import { unixNow } from 'applesauce-core/helpers';
-	import { getStandardnip10ReplyTags } from '$lib/thread_tree';
+	import { getStandardnip10ReplyTags, getStandardnip22ReplyTags } from '$lib/thread_tree';
 	import type { IssueOrPRTableItem } from '$lib/types';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import LoginModal from '../LoginModal.svelte';
+	import { ShortTextNote } from 'nostr-tools/kinds';
 
 	let {
 		event,
@@ -45,15 +46,21 @@
 		submitting = true;
 		let table_item = $state.snapshot(issue_or_pr_table_item);
 		let tags: string[][] = [];
+		const kind = [LegacyGitReplyKind, ShortTextNote].includes(event.kind)
+			? ShortTextNote
+			: ReplyKind;
 		[
-			...getStandardnip10ReplyTags(event, table_item),
+			...(kind === ShortTextNote
+				? getStandardnip10ReplyTags(event, table_item)
+				: getStandardnip22ReplyTags(event, table_item)),
 			// TODO add relay hints to p and a tags from local_db
 			...person_tags,
 			['p', event.pubkey],
 			...editor_tags,
 			...table_item.repos.map((a) => ['a', a])
 		].forEach((t) => {
-			if (t.length > 1 && !tags.some((e) => e[0] === t[0] && e[1] === t[1])) tags.push(t);
+			if (t.length > 1 && !tags.some((e) => e[0] === t[0] && e[0] === t[0] && e[1] === t[1]))
+				tags.push(t);
 		});
 		const rejectedBySigner = () => {
 			rejected_by_signer = true;
@@ -66,7 +73,7 @@
 		try {
 			let reply = await accounts_manager.getActive()?.signEvent(
 				$state.snapshot({
-					kind: reply_kind,
+					kind: $state.snapshot(kind),
 					created_at: unixNow(),
 					tags: $state.snapshot(tags),
 					content: $state.snapshot(content)
