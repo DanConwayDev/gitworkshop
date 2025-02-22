@@ -378,8 +378,6 @@ async function nextDeletionEventBatch(events: NostrEvent[]) {
 			)
 			.toArray()
 	]);
-
-	console.log(issue_items);
 	const table_items: DbItemsCollection = {
 		repos: new Map(),
 		pubkeys: new Map(),
