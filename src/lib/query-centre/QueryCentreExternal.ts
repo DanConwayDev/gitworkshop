@@ -75,8 +75,8 @@ class QueryCentreExternal {
 	}
 
 	async publishEvent(event: NostrEvent) {
-		addEventsToCache([event]);
 		this.processor.enqueueEvent(event);
+		addEventsToCache([event]); // forces users events into cache, even if its a kind which isn't normally cached
 		const [item, users, repos] = await Promise.all([
 			(async (): Promise<OutboxItem> => {
 				let item = await db.outbox.get(event.id);
