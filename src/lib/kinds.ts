@@ -1,4 +1,4 @@
-import { ShortTextNote, Zap } from 'nostr-tools/kinds';
+import { EventDeletion, ShortTextNote, Zap } from 'nostr-tools/kinds';
 
 export const StatusOpenKind = 1630;
 export type StatusOpenKind = typeof StatusOpenKind;
@@ -45,7 +45,10 @@ export const ReplyKind = 1111;
 export type ReplyKind = typeof ReplyKind;
 
 export const CommentKinds = [ShortTextNote, LegacyGitReplyKind, ReplyKind];
-export type CommentKinds = typeof ShortTextNote | typeof LegacyGitReplyKind;
+export type CommentKinds = typeof ShortTextNote | typeof LegacyGitReplyKind | typeof ReplyKind;
+
+export const DeletionKind = EventDeletion;
+export type DeletionKind = typeof DeletionKind;
 
 export const QualityChildKinds = [...CommentKinds, Zap];
 export type QualityChildKinds = CommentKinds | typeof Zap;

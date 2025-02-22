@@ -7,7 +7,7 @@ import {
 	isRelayUpdatePRFound,
 	IssueOrPrStatus
 } from '$lib/types';
-import { PatchKind, StatusKinds, StatusOpenKind, RepoAnnKind } from '$lib/kinds';
+import { PatchKind, StatusKinds, StatusOpenKind, RepoAnnKind, DeletionKind } from '$lib/kinds';
 import type {
 	EventIdString,
 	HuristicsForRelay,
@@ -35,10 +35,13 @@ import {
 	extractPatchDescription,
 	extractPatchTitle
 } from '$lib/git-utils';
-import { processNewStatus, processQualityChild } from './Issue';
+import { processDeletionEvent, processNewStatus, processQualityChild } from './Issue';
 
 const processPrUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
+		if (u.event && u.event.kind === DeletionKind) {
+			return processDeletionEvent(items.issues, u.event);
+		}
 		if (!isProcessorPrUpdate(u)) return true;
 		const uuid = getPrId(u);
 		// drop update with no uuid as it will never process correctly
@@ -199,6 +202,7 @@ const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
 		description,
 		status: StatusOpenKind,
 		status_history: [],
+		deleted_children_ids: [],
 		quality_children: [],
 		quality_children_count: 0,
 		repos,

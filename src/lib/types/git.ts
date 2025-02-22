@@ -58,6 +58,7 @@ export const getIssueOrPrStatus = (kind: number): IssueOrPrStatus | undefined =>
 };
 
 export interface StatusHistoryItem {
+	uuid: EventIdString;
 	status: IssueOrPrStatus;
 	pubkey: PubKeyString;
 	created_at: number;
@@ -79,6 +80,7 @@ export interface IssueOrPrBase {
 	description: string;
 	status: IssueOrPrStatus;
 	status_history: StatusHistoryItem[];
+	deleted_children_ids: EventIdString[];
 	quality_children: ChildEventRef[];
 	quality_children_count: number;
 	tags: string[];

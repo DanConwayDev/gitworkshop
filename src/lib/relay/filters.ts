@@ -4,7 +4,8 @@ import {
 	StatusKinds,
 	RepoAnnKind,
 	RepoStateKind,
-	QualityChildKinds
+	QualityChildKinds,
+	DeletionKind
 } from '$lib/kinds';
 import type {
 	EventIdString,
@@ -120,7 +121,7 @@ export const createRepoChildrenFilters = (
 	if (items instanceof Set) {
 		return [
 			{
-				kinds: [IssueKind, PatchKind, ...StatusKinds],
+				kinds: [IssueKind, PatchKind, ...StatusKinds, DeletionKind],
 				'#a': [...items]
 			}
 		];
@@ -135,7 +136,7 @@ export const createRepoChildrenFilters = (
 	});
 	sinces.forEach((a_refs, since) => {
 		const filter: Filter = {
-			kinds: [IssueKind, PatchKind, ...StatusKinds],
+			kinds: [IssueKind, PatchKind, ...StatusKinds, DeletionKind],
 			'#a': a_refs
 		};
 		if (since > 0) {
@@ -160,11 +161,11 @@ export const createRepoChildrenStatusAndQualityFilters = (
 	if (!repo_timestamps) {
 		return [
 			{
-				kinds: [...StatusKinds, ...QualityChildKinds],
+				kinds: [...StatusKinds, ...QualityChildKinds, DeletionKind],
 				'#e': [...children]
 			},
 			{
-				kinds: [...StatusKinds, ...QualityChildKinds],
+				kinds: [...StatusKinds, ...QualityChildKinds, DeletionKind],
 				'#E': [...children]
 			}
 		];
@@ -178,12 +179,12 @@ export const createRepoChildrenStatusAndQualityFilters = (
 
 	return [
 		{
-			kinds: [...StatusKinds, ...QualityChildKinds],
+			kinds: [...StatusKinds, ...QualityChildKinds, DeletionKind],
 			'#e': [...children],
 			since: earliest_since === 0 ? undefined : earliest_since
 		},
 		{
-			kinds: [...StatusKinds, ...QualityChildKinds],
+			kinds: [...StatusKinds, ...QualityChildKinds, DeletionKind],
 			// needed as comments related to PR revisions will have a different root
 			'#E': [...children],
 			since: earliest_since === 0 ? undefined : earliest_since

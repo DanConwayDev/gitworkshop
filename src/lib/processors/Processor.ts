@@ -12,7 +12,14 @@ import {
 } from '$lib/types';
 import type { NostrEvent } from 'nostr-tools';
 import { getEventUID, isReplaceable } from 'applesauce-core/helpers';
-import { IssueKind, PatchKind, QualityChildKinds, RepoAnnKind, StatusKinds } from '$lib/kinds';
+import {
+	DeletionKind,
+	IssueKind,
+	PatchKind,
+	QualityChildKinds,
+	RepoAnnKind,
+	StatusKinds
+} from '$lib/kinds';
 import { Metadata, Reaction, RelayList } from 'nostr-tools/kinds';
 import processPubkey, { processNip05 } from './Pubkey';
 import type {
@@ -27,7 +34,7 @@ import processRepoUpdates from './Repo';
 import processIssueUpdates from './Issue';
 import processPrUpdates from './Pr';
 import { processOutboxUpdates } from './Outbox';
-import { extractRootIdIfNonReplaceable } from '$lib/git-utils';
+import { deletionRelatedToIssueOrPrItem, extractRootIdIfNonReplaceable } from '$lib/git-utils';
 
 class Processor {
 	/// Processes all new data points to update LocalDb or send events to the InMemoryDB
@@ -42,6 +49,7 @@ class Processor {
 	/// reactivity computation on the main thread.
 
 	event_queue: NostrEvent[] = [];
+	deletion_event_queue: NostrEvent[] = [];
 	outbox_update_queue: OutboxRelayProcessorUpdate[] = [];
 	relay_update_queue: RelayUpdate[] = [];
 	running: boolean = false;
@@ -53,6 +61,8 @@ class Processor {
 		setInterval(() => this.nextRelayUpdateBatch(), 1000);
 		// process outbox updates more frequently as ther are less of them
 		setInterval(() => this.nextOutboxUpdates(), 99);
+		// process deletion events les frequently as we need to crawl full db tables to remove all trace
+		setInterval(() => this.nextDeletionEventBatch(), 5000);
 	}
 
 	enqueueOutboxUpdate(update: OutboxRelayProcessorUpdate) {
@@ -86,8 +96,12 @@ class Processor {
 		// TODO - do we only want to save event related to repos the user is interested in?
 		if (!kind_not_to_cache.includes(event.kind)) addEventsToCache([event]);
 		// queue event and process next
-		this.event_queue.push(event);
-		this.nextEventBatch();
+		if (event.kind === DeletionKind) {
+			this.deletion_event_queue.push(event);
+		} else {
+			this.event_queue.push(event);
+			this.nextEventBatch();
+		}
 		return true;
 	}
 
@@ -114,6 +128,23 @@ class Processor {
 			}
 			if (this.running) setTimeout(() => this.nextEventBatch(), 100);
 			this.running = false;
+		}
+	}
+
+	async nextDeletionEventBatch() {
+		if (this.running) return;
+		if (this.deletion_event_queue.length > 0) {
+			const events = this.deletion_event_queue;
+			this.deletion_event_queue = [];
+			this.running = true;
+			try {
+				// note: we cant used the output of nextDeletionEventBatch as we are not detecting whether deletion events were fully processed
+				await nextDeletionEventBatch(events);
+			} catch (error) {
+				console.log(error);
+			}
+			this.running = false;
+			setTimeout(() => this.nextEventBatch(), 100);
 		}
 	}
 
@@ -200,6 +231,13 @@ class SeenOnTracker {
 
 async function processUpdates(updates: ProcessorUpdate[]): Promise<ProcessorUpdate[]> {
 	const items = await getExistingItemsToUpdate(updates);
+	return processItems(items, updates);
+}
+
+async function processItems(
+	items: DbItemsCollection,
+	updates: ProcessorUpdate[]
+): Promise<ProcessorUpdate[]> {
 	let remaining_updates = updates;
 	for (const processor_fn of [
 		processPubkey,
@@ -324,6 +362,40 @@ function groupTableRelayUpdates(relay_updates: [RelayUpdate, ...RelayUpdate[]]):
 		map.set(key, e);
 	});
 	return [...map.values()];
+}
+
+async function nextDeletionEventBatch(events: NostrEvent[]) {
+	if (events.length === 0) return;
+	const [issue_items, pr_items] = await Promise.all([
+		db.issues
+			.filter(
+				(item) => events.flatMap((event) => deletionRelatedToIssueOrPrItem(event, item)).length > 0
+			)
+			.toArray(),
+		db.prs
+			.filter(
+				(item) => events.flatMap((event) => deletionRelatedToIssueOrPrItem(event, item)).length > 0
+			)
+			.toArray()
+	]);
+
+	console.log(issue_items);
+	const table_items: DbItemsCollection = {
+		repos: new Map(),
+		pubkeys: new Map(),
+		issues: new Map(),
+		prs: new Map()
+	};
+	issue_items.forEach((r) => {
+		if (r) table_items.issues.set(r.uuid, r);
+	});
+	pr_items.forEach((r) => {
+		if (r) table_items.prs.set(r.uuid, r);
+	});
+	return processItems(
+		table_items,
+		events.map((event) => ({ event, relay_updates: [] }))
+	);
 }
 
 export default Processor;

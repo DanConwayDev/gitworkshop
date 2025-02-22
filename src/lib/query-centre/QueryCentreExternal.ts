@@ -232,6 +232,7 @@ class QueryCentreExternal {
 		const ids = new Set<EventIdString>();
 		if (table_item) {
 			table_item.quality_children.forEach((c) => ids.add(c.id));
+			table_item.status_history.forEach((h) => ids.add(h.uuid));
 		}
 		const events_from_cache = await this.hydrate_from_cache_db([
 			{ '#e': [id, ...ids] },

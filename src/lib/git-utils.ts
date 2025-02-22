@@ -6,6 +6,8 @@ import {
 	isRepoRef,
 	isWebSocketUrl,
 	type ChildEventRef,
+	type EventIdString,
+	type IssueOrPRTableItem,
 	type RepoRef,
 	type RepoRoute,
 	type StatusHistoryItem,
@@ -100,12 +102,28 @@ export const eventToStatusHistoryItem = (event?: NostrEvent): StatusHistoryItem 
 	if (!event) return undefined;
 	const status = getIssueOrPrStatus(event.kind);
 	if (!status) return undefined;
-	const { pubkey, created_at } = event;
-	return { pubkey, created_at, status };
+	const { id, pubkey, created_at } = event;
+	return { uuid: id, pubkey, created_at, status };
 };
 
 export const eventToQualityChild = (event?: NostrEvent): ChildEventRef | undefined => {
 	if (!event || !QualityChildKinds.includes(event.kind)) return undefined;
 	const { id, kind, pubkey } = event;
 	return { id, kind, pubkey };
+};
+
+export const deletionRelatedToIssueOrPrItem = (
+	deletion: NostrEvent,
+	item: IssueOrPRTableItem
+): EventIdString[] => {
+	return deletion.tags
+		.filter((t) => t.length > 1 && t[0] === 'e')
+		.map((t) => t[1])
+		.filter(
+			(id) =>
+				id === item.uuid ||
+				item.deleted_children_ids.includes(id) ||
+				item.quality_children.some((c) => c.id === id) ||
+				item.status_history.some((h) => h.uuid === id)
+		);
 };

@@ -6,7 +6,7 @@ import {
 	isRelayUpdateIssueFound,
 	IssueOrPrStatus
 } from '$lib/types';
-import { IssueKind, StatusKinds, StatusOpenKind, RepoAnnKind } from '$lib/kinds';
+import { IssueKind, StatusKinds, StatusOpenKind, RepoAnnKind, DeletionKind } from '$lib/kinds';
 import type {
 	ChildEventRef,
 	EventIdString,
@@ -32,6 +32,7 @@ import {
 } from '$lib/types/processor';
 import type { NostrEvent } from 'nostr-tools';
 import {
+	deletionRelatedToIssueOrPrItem,
 	eventToQualityChild,
 	eventToStatusHistoryItem,
 	extractIssueDescription,
@@ -41,6 +42,9 @@ import {
 
 const processIssueUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
+		if (u.event && u.event.kind === DeletionKind) {
+			return processDeletionEvent(items.issues, u.event);
+		}
 		if (!isProcessorIssueUpdate(u)) return true;
 		const uuid = getIssueId(u);
 		// drop update with no uuid as it will never process correctly
@@ -196,6 +200,7 @@ const eventToIssueBaseFields = (event: NostrEvent): IssueOrPrBase | undefined =>
 		description,
 		status: StatusOpenKind,
 		status_history: [],
+		deleted_children_ids: [],
 		quality_children: [],
 		quality_children_count: 0,
 		repos,
@@ -215,28 +220,68 @@ export const eventToIssue = (event: NostrEvent): (Issue & WithEvent) | undefined
 	};
 };
 
+export const processDeletionEvent = (
+	items: Map<EventIdString, IssueOrPRTableItem>,
+	deletion: NostrEvent
+): boolean => {
+	let applied_to_an_item = false;
+	if (deletion.kind === DeletionKind) {
+		items.forEach((item) => {
+			// TODO what if status update was deleted?
+			const events_for_deletion = deletionRelatedToIssueOrPrItem(deletion, item);
+			if (events_for_deletion.length > 0) {
+				// quality children
+				item.quality_children = item.quality_children.filter(
+					(c) => !events_for_deletion.includes(c.id)
+				);
+				item.quality_children_count = item.quality_children.length;
+				// status
+				item.status_history = item.status_history.filter(
+					(h) => !events_for_deletion.includes(h.uuid)
+				);
+				item.status = getCurrentStatusFromStatusHistory(item);
+				// TODO mark issue as deleted
+				if (events_for_deletion.includes(item.uuid)) {
+					// TODO handle deletion of Issue
+				}
+				// record deletion event as processed
+				if (!item.deleted_children_ids.some((id) => id === deletion.id)) {
+					item.deleted_children_ids.push(deletion.id);
+				}
+				applied_to_an_item = true;
+			}
+		});
+	}
+	return applied_to_an_item;
+};
+
 export const processQualityChild = (item: IssueOrPRTableItem, quality_child: ChildEventRef) => {
-	if (!item.quality_children.some((c) => c.id === quality_child.id)) {
+	if (
+		!item.quality_children.some((c) => c.id === quality_child.id) ||
+		!item.deleted_children_ids.includes(quality_child.id)
+	) {
 		item.quality_children.push(quality_child);
 		item.quality_children_count = item.quality_children.length;
 	}
 };
 
 export const processNewStatus = (item: IssueOrPRTableItem, status_item: StatusHistoryItem) => {
-	if (item.status_history.some((h) => statusHistoryMatch(h, status_item))) return;
+	if (
+		item.status_history.some((h) => h.uuid === status_item.uuid) ||
+		item.deleted_children_ids.includes(status_item.uuid)
+	)
+		return;
 	item.status_history.push(status_item);
+	item.status = getCurrentStatusFromStatusHistory(item);
+};
+
+const getCurrentStatusFromStatusHistory = (item: IssueOrPRTableItem) => {
 	const maintainers = item.repos.map((r) => r.split(':')[1]) as PubKeyString[];
 	const authorised = [item.author, ...maintainers];
 	const sorted = item.status_history
 		.filter((h) => authorised.includes(h.pubkey))
 		.sort((a, b) => b.created_at - a.created_at);
-	if (sorted[0]) {
-		item.status = sorted[0].status;
-	} else {
-		item.status = IssueOrPrStatus.Open;
-	}
+	return sorted[0] ? sorted[0].status : IssueOrPrStatus.Open;
 };
-const statusHistoryMatch = (a: StatusHistoryItem, b: StatusHistoryItem): boolean =>
-	a.created_at === b.created_at && a.pubkey === b.pubkey && a.status === b.status;
 
 export default processIssueUpdates;
