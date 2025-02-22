@@ -56,8 +56,7 @@
 			// TODO add relay hints to p and a tags from local_db
 			...person_tags,
 			['p', event.pubkey],
-			...editor_tags,
-			...table_item.repos.map((a) => ['a', a])
+			...editor_tags
 		].forEach((t) => {
 			if (t.length > 1 && !tags.some((e) => e[0] === t[0] && e[0] === t[0] && e[1] === t[1]))
 				tags.push(t);
