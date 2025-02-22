@@ -80,10 +80,10 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 
 		const updated_item = applyHuristicUpdates(
 			{
+				...(base_pr || {}),
 				...(item || {
 					relays_info: {}
 				}),
-				...(base_pr || {}),
 				last_activity: Math.max(item?.last_activity ?? 0, u.event ? u.event.created_at : 0)
 			} as IssueOrPRTableItem,
 			u.relay_updates
