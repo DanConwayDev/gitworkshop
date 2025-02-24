@@ -1,4 +1,4 @@
-import { Relay, type NostrEvent } from 'nostr-tools';
+import { Relay, type Filter, type NostrEvent } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
 import { ActionDvmKind, IssueKind, PatchKind, RepoAnnKind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
@@ -62,9 +62,61 @@ export class RelayManager {
 			clearTimeout(this.inactivity_timer);
 		}
 		this.inactivity_timer = setTimeout(() => {
-			this.relay.close();
-			this.relay = new Relay(this.url);
+			if (this.watch_sub) this.resetInactivityTimer();
+			else {
+				this.relay.close();
+				this.relay = new Relay(this.url);
+			}
 		}, 60000); // 60 seconds of inactivity
+	}
+
+	subscriber_manager = new SubscriberManager();
+	watch_sub: Subscription | undefined = undefined;
+	watch_filters = new Map<string, Filter[]>();
+	watch_refreshing = false;
+	/**
+	 * starts, stops or updates watch subscription based on filters from `this.watch_filters`
+	 * @returns void
+	 */
+	async refreshWatch(
+		since_now_minus = 1 // dont miss out on any event
+	) {
+		if (this.watch_refreshing) return;
+		const since = unixNow() - since_now_minus;
+		this.watch_refreshing = true; // prevent multiple instances of this method
+		const closeIfEmpty = () => {
+			if (this.watch_filters.size === 0) {
+				this.watch_sub?.close();
+				this.watch_sub = undefined;
+				this.watch_refreshing = false;
+				return true;
+			}
+			return false;
+		};
+		if (closeIfEmpty()) return;
+		await this.connect();
+		if (closeIfEmpty()) return;
+
+		let filters: Filter[] = [];
+		this.watch_filters.forEach((filter_set) => {
+			filters = [...filters, ...filter_set.map((f) => ({ ...f, since }))];
+		});
+		this.watch_sub?.close();
+		this.watch_sub = this.relay.subscribe(filters, {
+			onevent: (event) => this.onEvent(event),
+			onclose: (reason: string) => {
+				if (reason.includes('rate')) {
+					// wait a bit if rate limitted
+					setTimeout(() => {
+						this.refreshWatch(6);
+					}, 5000);
+				} else {
+					this.refreshWatch();
+				}
+			},
+			eoseTimeout: 60 * 60 * 1000
+		});
+		this.watch_refreshing = false;
 	}
 
 	async publishEvent(event: NostrEvent) {
@@ -458,8 +510,6 @@ export class RelayManager {
 	}
 
 	watching_a_refs = new Map<RepoRef, { a_tags: (ARefR | ARefP)[]; e_tags: EventIdString[] }>();
-	watch_repos_sub: Subscription | undefined = undefined;
-	subscriber_manager = new SubscriberManager();
 
 	watchRepo(a_ref: RepoRef, events?: { a_tags: (ARefR | ARefP)[]; e_tags: EventIdString[] }) {
 		const query = `watchRepos${a_ref}`;
@@ -481,9 +531,16 @@ export class RelayManager {
 	}
 
 	removeRepoWatcher(a_ref: RepoRef) {
-		this.watching_a_refs.delete(a_ref);
+		if (this.subscriber_manager.remove(`watchRepos${a_ref}`)) {
+			this.watching_a_refs.delete(a_ref);
+			if (this.watching_a_refs.size === 0) {
+				this.watch_filters.delete('repos');
+				this.refreshWatch();
+			}
+		}
+
 		if (this.watching_a_refs.size === 0) {
-			this.watch_repos_sub?.close();
+			this.watch_sub?.close();
 		} else {
 			// no need to refresh the subscrition without the a_ref, its doing no harm
 		}
@@ -519,29 +576,23 @@ export class RelayManager {
 		});
 
 		if (change) {
-			this.watch_repos_sub?.close();
-			this.watch_repos_sub = this.relay.subscribe(
-				[
-					{
-						'#a': query_a_tags.size == 0 ? undefined : [...query_a_tags],
-						'#e': query_e_tags.size == 0 ? undefined : [...query_e_tags],
-						since: unixNow()
-					},
-					{
-						// children kinds but for all repos on relay
-						kinds: [
-							...(createRepoChildrenFilters(new Set([]))[0]?.kinds ?? []),
-							// We dont want to add ActionDvmKind to createRepoChildrenFilters as we dont want load of outdated actions
-							ActionDvmKind
-						],
-						since: unixNow()
-					}
-				],
+			this.watch_filters.set('repos', [
 				{
-					onevent: (event) => this.onEvent(event),
-					eoseTimeout: 60 * 60 * 1000
+					'#a': query_a_tags.size == 0 ? undefined : [...query_a_tags],
+					'#e': query_e_tags.size == 0 ? undefined : [...query_e_tags],
+					since: unixNow()
+				},
+				{
+					// children kinds but for all repos on relay
+					kinds: [
+						...(createRepoChildrenFilters(new Set([]))[0]?.kinds ?? []),
+						// We dont want to add ActionDvmKind to createRepoChildrenFilters as we dont want load of outdated actions
+						ActionDvmKind
+					],
+					since: unixNow()
 				}
-			);
+			]);
+			this.refreshWatch();
 		}
 	}
 
