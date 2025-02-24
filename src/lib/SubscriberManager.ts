@@ -20,6 +20,10 @@ class SubscriberManager {
 		return is_new_query;
 	}
 
+	has(query: string) {
+		return this.subscriber_queries.has(query);
+	}
+
 	/**
 	 * add an unsubriber to a query if it exists, otherwise call it straight away
 	 */

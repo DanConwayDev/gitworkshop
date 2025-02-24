@@ -227,7 +227,10 @@ class QueryCentreExternal {
 		await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchAllRepos(pubkey)));
 	}
 
-	async fetchIssueThread(a_ref: RepoRef, id: EventIdString) {
+	async watchIssueThread(a_ref: RepoRef, id: EventIdString) {
+		const query = `watchIssueThread${a_ref}${id}`;
+		const already_fetching = !this.subscriber_manager.add(query);
+		if (already_fetching) return;
 		const table_item = await db.issues.get(id);
 		const ids = new Set<EventIdString>();
 		if (table_item) {
@@ -243,14 +246,28 @@ class QueryCentreExternal {
 		const relays = await chooseRelaysForRepo(a_ref);
 		try {
 			await Promise.all(
-				relays.map(({ url }) => this.get_relay(url).fetchThread(a_ref, id, [...ids]))
+				relays.map(({ url }) => {
+					(async () => {
+						const unsubsriber = await this.get_relay(url).watchThread(id, [...ids]);
+						this.subscriber_manager.addUnsubsriber(query, () => unsubsriber());
+					})();
+				})
 			);
 		} catch {
 			/* empty */
 		}
+		return;
 	}
 
-	async fetchPrThread(a_ref: RepoRef, id: EventIdString) {
+	watchIssueThreadUnsubscribe(a_ref: ARefP, id: EventIdString) {
+		this.subscriber_manager.remove(`watchIssueThread${a_ref}${id}`);
+	}
+
+	async watchPrThread(a_ref: RepoRef, id: EventIdString) {
+		const query = `watchPrThread${a_ref}${id}`;
+		const already_fetching = !this.subscriber_manager.add(query);
+		if (already_fetching) return;
+
 		const table_item = await db.prs.get(id);
 		const ids = new Set<EventIdString>();
 		if (table_item) {
@@ -265,11 +282,21 @@ class QueryCentreExternal {
 		const relays = await chooseRelaysForRepo(a_ref);
 		try {
 			await Promise.all(
-				relays.map(({ url }) => this.get_relay(url).fetchThread(a_ref, id, [...ids]))
+				relays.map(({ url }) => {
+					(async () => {
+						const unsubsriber = await this.get_relay(url).watchThread(id, [...ids]);
+						this.subscriber_manager.addUnsubsriber(query, unsubsriber);
+					})();
+				})
 			);
 		} catch {
 			/* empty */
 		}
+		return;
+	}
+
+	watchPrThreadUnsubscribe(a_ref: ARefP, id: EventIdString) {
+		this.subscriber_manager.remove(`watchPrThread${a_ref}${id}`);
 	}
 
 	async fetchEvent(event_ref: NEventAttributes | EventPointer) {
@@ -399,13 +426,18 @@ self.onmessage = async (event) => {
 		case 'fetchPubkeyRepos':
 			result = await external.fetchPubkeyRepos(args[0]);
 			break;
-		case 'fetchIssueThread':
-			result = await external.fetchIssueThread(args[0], args[1]);
+		case 'watchIssueThread':
+			result = await external.watchIssueThread(args[0], args[1]);
 			break;
-		case 'fetchPrThread':
-			result = await external.fetchPrThread(args[0], args[1]);
+		case 'watchIssueThreadUnsubscribe':
+			result = await external.watchIssueThreadUnsubscribe(args[0], args[1]);
 			break;
-
+		case 'watchPrThread':
+			result = await external.watchPrThread(args[0], args[1]);
+			break;
+		case 'watchPrThreadUnsubscribe':
+			result = await external.watchPrThreadUnsubscribe(args[0], args[1]);
+			break;
 		case 'fetchEvent':
 			result = await external.fetchEvent(args[0]);
 			break;

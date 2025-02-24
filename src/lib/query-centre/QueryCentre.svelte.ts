@@ -132,10 +132,20 @@ class QueryCentre {
 		return liveQueryState(() => db.issues.get(issue_id));
 	}
 
-	fetchIssueThread(a_ref: RepoRef, issue_id: EventIdString) {
-		this.external_worker.postMessage({ method: 'fetchIssueThread', args: [a_ref, issue_id] });
+	watchIssueThread(a_ref: RepoRef, issue_id: EventIdString) {
+		this.external_worker.postMessage({ method: 'watchIssueThread', args: [a_ref, issue_id] });
 		// dynamically add in all the new replies and tagged events
-		return inMemoryRelayTimelineRecursiveThread(issue_id);
+		return inMemoryRelayTimelineRecursiveThread(
+			issue_id,
+			() => [],
+			() => {
+				if (isRepoRef(a_ref))
+					this.external_worker.postMessage({
+						method: 'watchIssueThreadUnsubscribe',
+						args: [a_ref, issue_id]
+					});
+			}
+		);
 	}
 
 	fetchPrs(a_ref: RepoRef) {
@@ -148,10 +158,20 @@ class QueryCentre {
 		return liveQueryState(() => db.prs.get(pr_id));
 	}
 
-	fetchPrThread(a_ref: RepoRef, pr_id: EventIdString) {
-		this.external_worker.postMessage({ method: 'fetchPrThread', args: [a_ref, pr_id] });
+	watchPrThread(a_ref: RepoRef, pr_id: EventIdString) {
+		this.external_worker.postMessage({ method: 'watchPrThread', args: [a_ref, pr_id] });
 		// dynamically add in all the new replies and tagged events
-		return inMemoryRelayTimelineRecursiveThread(pr_id);
+		return inMemoryRelayTimelineRecursiveThread(
+			pr_id,
+			() => [],
+			() => {
+				if (isRepoRef(a_ref))
+					this.external_worker.postMessage({
+						method: 'watchPrThreadUnsubscribe',
+						args: [a_ref, pr_id]
+					});
+			}
+		);
 	}
 
 	fetchEvent(event_ref: NEventAttributes | EventPointer | NAddrAttributes) {

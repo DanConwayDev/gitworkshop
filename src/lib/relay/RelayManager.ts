@@ -1,4 +1,4 @@
-import { Relay, type Filter, type NostrEvent } from 'nostr-tools';
+import { matchFilters, Relay, type Filter, type NostrEvent } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
 import { ActionDvmKind, IssueKind, PatchKind, RepoAnnKind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
@@ -72,7 +72,7 @@ export class RelayManager {
 
 	subscriber_manager = new SubscriberManager();
 	watch_sub: Subscription | undefined = undefined;
-	watch_filters = new Map<string, Filter[]>();
+	watch_filters = new Map<string, { filters: Filter[]; onMatch: (event: NostrEvent) => void }>();
 	watch_refreshing = false;
 	/**
 	 * starts, stops or updates watch subscription based on filters from `this.watch_filters`
@@ -97,16 +97,21 @@ export class RelayManager {
 		await this.connect();
 		if (closeIfEmpty()) return;
 
-		let filters: Filter[] = [];
-		this.watch_filters.forEach((filter_set) => {
-			filters = [...filters, ...filter_set.map((f) => ({ ...f, since }))];
+		let watch_filters: Filter[] = [];
+		this.watch_filters.forEach(({ filters }) => {
+			watch_filters = [...watch_filters, ...filters.map((f) => ({ ...f, since }))];
 		});
 		this.watch_sub?.close();
-		this.watch_sub = this.relay.subscribe(filters, {
-			onevent: (event) => this.onEvent(event),
+		this.watch_sub = this.relay.subscribe(watch_filters, {
+			onevent: (event) => {
+				this.watch_filters.values().forEach(({ filters, onMatch }) => {
+					if (matchFilters(filters, event)) onMatch(event);
+				});
+				this.onEvent(event);
+			},
 			onclose: (reason: string) => {
 				if (reason.includes('rate')) {
-					// wait a bit if rate limitted
+					// wait a bit if rate limited
 					setTimeout(() => {
 						this.refreshWatch(6);
 					}, 5000);
@@ -576,28 +581,32 @@ export class RelayManager {
 		});
 
 		if (change) {
-			this.watch_filters.set('repos', [
-				{
-					'#a': query_a_tags.size == 0 ? undefined : [...query_a_tags],
-					'#e': query_e_tags.size == 0 ? undefined : [...query_e_tags],
-					since: unixNow()
+			this.watch_filters.set('repos', {
+				onMatch: (event) => {
+					this.updateReposWatch(a_ref, { a_tags: [a_ref], e_tags: [event.id] });
 				},
-				{
-					// children kinds but for all repos on relay
-					kinds: [
-						...(createRepoChildrenFilters(new Set([]))[0]?.kinds ?? []),
-						// We dont want to add ActionDvmKind to createRepoChildrenFilters as we dont want load of outdated actions
-						ActionDvmKind
-					],
-					since: unixNow()
-				}
-			]);
+				filters: [
+					{
+						'#a': query_a_tags.size == 0 ? undefined : [...query_a_tags],
+						'#e': query_e_tags.size == 0 ? undefined : [...query_e_tags],
+						since: unixNow()
+					},
+					{
+						// children kinds but for all repos on relay
+						kinds: [
+							...(createRepoChildrenFilters(new Set([]))[0]?.kinds ?? []),
+							// We dont want to add ActionDvmKind to createRepoChildrenFilters as we dont want load of outdated actions
+							ActionDvmKind
+						],
+						since: unixNow()
+					}
+				]
+			});
 			this.refreshWatch();
 		}
 	}
 
 	async fetchThread(
-		a_ref: RepoRef,
 		id: EventIdString,
 		known_replies: EventIdString[] = []
 	): Promise<EventIdString[]> {
@@ -637,6 +646,38 @@ export class RelayManager {
 			};
 			findNext();
 		});
+	}
+
+	async watchThread(id: EventIdString, known_replies: EventIdString[] = []) {
+		const query = `watchThread${id}`;
+		const is_new = this.subscriber_manager.add(query);
+		if (is_new) {
+			const know_ids = await this.fetchThread(id, known_replies);
+			// if not unsubscribed during fetchThread
+			if (this.subscriber_manager.has(query)) {
+				// update the filter when replies recieved to look for their replies
+				const onMatch = (event: NostrEvent) => {
+					if (!know_ids.includes(event.id)) {
+						know_ids.push(event.id);
+						this.watch_filters.set(query, {
+							onMatch,
+							filters: [{ '#e': [id, ...know_ids] }, { '#E': [id] }]
+						});
+						this.refreshWatch();
+					}
+				};
+				this.watch_filters.set(query, {
+					onMatch,
+					filters: [{ '#e': [id, ...know_ids] }, { '#E': [id] }]
+				});
+				this.refreshWatch();
+				this.subscriber_manager.addUnsubsriber(query, () => {
+					this.watch_filters.delete(query);
+					this.refreshWatch();
+				});
+			}
+		}
+		return () => this.subscriber_manager.remove(query);
 	}
 
 	async fetchEvent(event_ref: NEventAttributes | EventPointer): Promise<NostrEvent | undefined> {
