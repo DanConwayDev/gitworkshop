@@ -28,7 +28,7 @@ import type {
 	DbItemsKeysCollection,
 	ProcessorUpdate
 } from '$lib/types/processor';
-import { getRepoRefs } from '$lib/utils';
+import { aRefPToAddressPointer, getRepoRefs } from '$lib/utils';
 import db from '$lib/dbs/LocalDb';
 import { getRepoRef } from '$lib/type-helpers/repo';
 import processRepoUpdates from './Repo';
@@ -443,19 +443,35 @@ const processDeletionEvent = (table_items: DbItemsCollection, deletion: NostrEve
 const processDeletionEventForTableItem = (item: IssueOrPRTableItem, deletion: NostrEvent) => {
 	const events_for_deletion = deletionRelatedToIssueOrPrItem(deletion, item);
 	if (events_for_deletion.length > 0) {
+		const maintainers = item.repos.map((repo_ref) => {
+			// TODO enable nested maintainers to delete
+			return aRefPToAddressPointer(repo_ref).pubkey;
+		});
+		const authorised = (author_of_event: PubKeyString): boolean =>
+			deletion.pubkey === author_of_event || maintainers.includes(deletion.pubkey);
 		// quality children
-		item.quality_children = item.quality_children.filter(
-			(c) => !events_for_deletion.includes(c.id)
-		);
+		item.quality_children = item.quality_children.filter((c) => {
+			if (events_for_deletion.includes(c.id) && authorised(c.pubkey)) {
+				item.deleted_ids.push(c.id);
+				return false;
+			}
+			return true;
+		});
 		item.quality_children_count = item.quality_children.length;
 		// status
-		item.status_history = item.status_history.filter((h) => !events_for_deletion.includes(h.uuid));
-		item.status = getCurrentStatusFromStatusHistory(item);
-		// record deletion event as processed - also used to detect if item was deleted
-		events_for_deletion.forEach((id) => {
-			if (!item.deleted_ids.includes(id)) item.deleted_ids.push(id);
+		item.status_history = item.status_history.filter((h) => {
+			if (events_for_deletion.includes(h.uuid) && authorised(h.pubkey)) {
+				item.deleted_ids.push(h.uuid);
+				return false;
+			}
+			return true;
 		});
-		return events_for_deletion.includes(item.uuid);
+		item.status = getCurrentStatusFromStatusHistory(item);
+		// item itself
+		if (events_for_deletion.includes(item.uuid) && authorised(item.author)) {
+			item.deleted_ids.push(item.uuid);
+			return true;
+		}
 	}
 	return false;
 };
