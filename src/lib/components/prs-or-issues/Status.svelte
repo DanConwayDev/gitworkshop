@@ -13,11 +13,13 @@
 	let {
 		status = IssueOrPrStatus.Open,
 		type,
+		deleted = false,
 		edit_mode = false,
 		xs = false
 	}: {
 		status: IssueOrPrStatus;
 		type: 'pr' | 'issue';
+		deleted?: boolean;
 		edit_mode?: boolean;
 		xs?: boolean;
 	} = $props();
@@ -29,20 +31,44 @@
 	<div
 		tabIndex={0}
 		role="button"
-		class:btn-success={status && status === StatusOpenKind}
-		class:btn-primary={status && status === StatusAppliedKind}
-		class:btn-neutral={!status || status === StatusDraftKind || status === StatusClosedKind}
+		class:btn-success={!deleted && status && status === StatusOpenKind}
+		class:btn-primary={!deleted && status && status === StatusAppliedKind}
+		class:btn-neutral={deleted ||
+			!status ||
+			status === StatusDraftKind ||
+			status === StatusClosedKind}
 		class:cursor-default={!edit_mode}
 		class:no-animation={!edit_mode}
-		class:hover:bg-success={!edit_mode && status && status === StatusOpenKind}
-		class:hover:bg-primary={!edit_mode && status && status === StatusAppliedKind}
-		class:hover:bg-neutral={(!edit_mode && status && status === StatusDraftKind) ||
+		class:hover:bg-success={!deleted && !edit_mode && status && status === StatusOpenKind}
+		class:hover:bg-primary={!deleted && !edit_mode && status && status === StatusAppliedKind}
+		class:hover:bg-neutral={deleted ||
+			(!edit_mode && status && status === StatusDraftKind) ||
 			status === StatusClosedKind}
 		class:btn-xs={xs}
 		class:btn-sm={!xs}
 		class="btn btn-success align-middle"
 	>
-		{#if status === StatusOpenKind}
+		{#if deleted}
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				viewBox="0 0 16 16"
+				class:pt-1={!xs}
+				class:h-4={xs}
+				class:w-4={xs}
+				class:h-5={!xs}
+				class:w-5={!xs}
+				class="flex-none fill-neutral-content"
+			>
+				{#if type === 'pr'}
+					<path d={pr_icon_path.close} />
+				{:else if type === 'issue'}
+					{#each issue_icon_path.closed as p}
+						<path d={p} />
+					{/each}
+				{/if}
+			</svg>
+			Deleted
+		{:else if status === StatusOpenKind}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 18 18"

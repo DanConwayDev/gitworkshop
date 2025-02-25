@@ -101,7 +101,7 @@
 	</button>
 {:else}
 	<div class="dropdown">
-		<Status type={item.type} {edit_mode} {status} />
+		<Status type={item.type} {edit_mode} {status} deleted={item.deleted_ids.includes(item.uuid)} />
 		{#if edit_mode}
 			<ul
 				tabIndex={0}
