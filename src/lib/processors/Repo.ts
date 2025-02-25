@@ -55,7 +55,7 @@ const processRepoUpdates: UpdateProcessor = async (items, updates) => {
 					// if !item, repo_ann must be RepoAnn
 					...(await getPrsAndIssues(repo_ann as RepoAnn))
 				}),
-				...(repo_ann || {}),
+				...((repo_ann?.created_at ?? 0) > (item?.created_at ?? 0) ? repo_ann : {}),
 				last_activity: Math.max(item?.last_activity ?? 0, u.event ? u.event.created_at : 0)
 			} as RepoTableItem,
 			u.relay_updates
@@ -147,8 +147,8 @@ function processHuristic(
 const eventToRepoAnnBaseFields = (event: NostrEvent): RepoAnnBaseFields | undefined => {
 	if (event.kind !== RepoAnnKind) return undefined;
 	const maintainers = [event.pubkey];
-	getTagMultiValue(event.tags, 'maintainers')?.forEach((v, i) => {
-		if (i > 0 && v !== maintainers[0]) {
+	getTagMultiValue(event.tags, 'maintainers')?.forEach((v) => {
+		if (v !== maintainers[0]) {
 			try {
 				nip19.npubEncode(v); // will throw if invalid hex pubkey
 				maintainers.push(v);
@@ -158,22 +158,16 @@ const eventToRepoAnnBaseFields = (event: NostrEvent): RepoAnnBaseFields | undefi
 		}
 	});
 	const relays: string[] = [];
-	getTagMultiValue(event.tags, 'relays')?.forEach((v, i) => {
-		if (i > 0) {
-			relays.push(v);
-		}
+	getTagMultiValue(event.tags, 'relays')?.forEach((v) => {
+		relays.push(v);
 	});
 	const web: string[] = [];
-	getTagMultiValue(event.tags, 'web')?.forEach((v, i) => {
-		if (i > 0) {
-			web.push(v);
-		}
+	getTagMultiValue(event.tags, 'web')?.forEach((v) => {
+		web.push(v);
 	});
 	const clone: string[] = [];
-	getTagMultiValue(event.tags, 'clone')?.forEach((v, i) => {
-		if (i > 0) {
-			clone.push(v);
-		}
+	getTagMultiValue(event.tags, 'clone')?.forEach((v) => {
+		clone.push(v);
 	});
 	const identifier = getTagValue(event.tags, 'd') || '';
 	return {

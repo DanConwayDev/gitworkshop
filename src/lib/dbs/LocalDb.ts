@@ -53,9 +53,11 @@ db.version(2)
 			tx
 				.table('repos')
 				.toCollection()
-				.modify((repos) => {
+				.modify((repo) => {
 					// clear relays_info to fetch all issues and prs again
-					repos.relays_info = {};
+					repo.relays_info = {};
+					// tigger the processing of the event to address bug where info was first tag value was ignored
+					repo.created_at = 0;
 				})
 		]);
 		await clearLocalRelayDb();
