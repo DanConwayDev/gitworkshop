@@ -20,7 +20,7 @@
 	let deleted = $derived(table_items.filter((t) => t.deleted_ids.includes(t.uuid)));
 
 	let filtered_items = $derived(
-		status === 'deleted'
+		(status as IssueOrPrStatus | 'deleted') === 'deleted'
 			? deleted
 			: table_items.filter((e) => {
 					if (e.deleted_ids.includes(e.uuid)) return false;

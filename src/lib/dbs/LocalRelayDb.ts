@@ -62,6 +62,6 @@ export async function addEventsToCache(events: NostrEvent[]) {
 }
 
 export async function clearLocalRelayDb() {
-	const { cache_relay_db, cache_relay_index } = await getCacheRelayDb();
+	const { cache_relay_db } = await getCacheRelayDb();
 	await clearDB(cache_relay_db);
 }
