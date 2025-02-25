@@ -52,3 +52,10 @@ export type DeletionKind = typeof DeletionKind;
 
 export const QualityChildKinds = [...CommentKinds, Zap];
 export type QualityChildKinds = CommentKinds | typeof Zap;
+
+// no nip but I've seen in the wild
+export const NostrLanguangeClassificationKind = 9978;
+export type NostrLanguangeClassificationKind = typeof NostrLanguangeClassificationKind;
+
+export const IgnoreKinds = [NostrLanguangeClassificationKind];
+export type IgnoreKinds = typeof NostrLanguangeClassificationKind;

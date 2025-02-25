@@ -1,6 +1,6 @@
 import { matchFilters, Relay, type Filter, type NostrEvent } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
-import { ActionDvmKind, IssueKind, PatchKind, RepoAnnKind } from '$lib/kinds';
+import { ActionDvmKind, IgnoreKinds, IssueKind, PatchKind, RepoAnnKind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import {
 	type PubKeyString,
@@ -162,6 +162,7 @@ export class RelayManager {
 	}
 
 	onEvent(event: NostrEvent) {
+		if (IgnoreKinds.includes(event.kind)) return;
 		addSeenRelay(event, this.url);
 		this.processor.enqueueEvent(event);
 		if (event.kind == RepoAnnKind) {
