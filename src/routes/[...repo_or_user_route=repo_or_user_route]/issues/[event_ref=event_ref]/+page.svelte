@@ -23,7 +23,7 @@
 	let issue_query = $derived(id ? query_centre.fetchIssue(id) : undefined);
 	let table_item = $derived(issue_query?.current);
 
-	let thread_query = $derived(a_ref && id ? query_centre.fetchIssueThread(a_ref, id) : undefined);
+	let thread_query = $derived(a_ref && id ? query_centre.watchIssueThread(a_ref, id) : undefined);
 	let thread_events = $derived(thread_query?.timeline ?? []);
 </script>
 
