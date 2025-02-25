@@ -6,7 +6,7 @@ import {
 	isRelayUpdateIssueFound,
 	IssueOrPrStatus
 } from '$lib/types';
-import { IssueKind, StatusKinds, StatusOpenKind, RepoAnnKind, DeletionKind } from '$lib/kinds';
+import { IssueKind, StatusKinds, StatusOpenKind, RepoAnnKind } from '$lib/kinds';
 import type {
 	ChildEventRef,
 	EventIdString,
@@ -27,12 +27,12 @@ import { unixNow } from 'applesauce-core/helpers';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
 import {
 	isProcessorIssueUpdate,
+	type DbItemsCollection,
 	type ProcessorIssueUpdate,
 	type UpdateProcessor
 } from '$lib/types/processor';
 import type { NostrEvent } from 'nostr-tools';
 import {
-	deletionRelatedToIssueOrPrItem,
 	eventToQualityChild,
 	eventToStatusHistoryItem,
 	extractIssueDescription,
@@ -42,9 +42,6 @@ import {
 
 const processIssueUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
-		if (u.event && u.event.kind === DeletionKind) {
-			return processDeletionEvent(items.issues, u.event);
-		}
 		if (!isProcessorIssueUpdate(u)) return true;
 		const uuid = getIssueId(u);
 		// drop update with no uuid as it will never process correctly
@@ -92,31 +89,7 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 			u.relay_updates
 		);
 		items.issues.set(uuid, updated_item);
-		updated_item.repos.forEach((a_ref) => {
-			const repo = items.repos.get(a_ref);
-			if (!repo) return;
-			if (!repo.issues) {
-				repo.issues = {
-					[IssueOrPrStatus.Open]: [],
-					[IssueOrPrStatus.Applied]: [],
-					[IssueOrPrStatus.Closed]: [],
-					[IssueOrPrStatus.Draft]: []
-				};
-			}
-			if (!repo.issues[updated_item.status].includes(updated_item.uuid))
-				StatusKinds.forEach((status_kind) => {
-					if (!repo.issues) return; // to stop typescript complaining
-					const kind = status_kind as IssueOrPrStatus; // to stop typescript complaining
-					if (kind === updated_item.status) {
-						if (!repo.issues[kind].includes(updated_item.uuid)) {
-							repo.issues[kind].push(updated_item.uuid);
-						}
-					} else {
-						repo.issues[kind] = repo.issues[kind].filter((uuid) => uuid !== updated_item.uuid);
-					}
-				});
-			items.repos.set(a_ref, repo);
-		});
+		updateRepoMetrics(items, updated_item, 'issues');
 		return false;
 	});
 };
@@ -165,6 +138,38 @@ function applyHuristicUpdates(
 	return item;
 }
 
+export function updateRepoMetrics(
+	items: DbItemsCollection,
+	item: IssueOrPRTableItem,
+	type: 'issues' | 'PRs'
+) {
+	item.repos.forEach((a_ref) => {
+		const repo = items.repos.get(a_ref);
+		if (!repo) return;
+		if (!repo[type]) {
+			repo[type] = {
+				[IssueOrPrStatus.Open]: [],
+				[IssueOrPrStatus.Applied]: [],
+				[IssueOrPrStatus.Closed]: [],
+				[IssueOrPrStatus.Draft]: []
+			};
+		}
+		if (!repo[type][item.status].includes(item.uuid))
+			StatusKinds.forEach((status_kind) => {
+				if (!repo[type]) return; // to stop typescript complaining
+				const kind = status_kind as IssueOrPrStatus; // to stop typescript complaining
+				if (kind === item.status && !item.deleted_ids.includes(item.uuid)) {
+					if (!repo[type][kind].includes(item.uuid)) {
+						repo[type][kind].push(item.uuid);
+					}
+				} else {
+					repo[type][kind] = repo[type][kind].filter((uuid) => uuid !== item.uuid);
+				}
+			});
+		items.repos.set(a_ref, repo);
+	});
+}
+
 /// mutates relay_info to 1) add relay huristic, 2) update score and 3) remove superfluious huristics
 function processHuristic(
 	relay_info: HuristicsForRelay,
@@ -200,7 +205,7 @@ const eventToIssueBaseFields = (event: NostrEvent): IssueOrPrBase | undefined =>
 		description,
 		status: StatusOpenKind,
 		status_history: [],
-		deleted_children_ids: [],
+		deleted_ids: [],
 		quality_children: [],
 		quality_children_count: 0,
 		repos,
@@ -220,45 +225,10 @@ export const eventToIssue = (event: NostrEvent): (Issue & WithEvent) | undefined
 	};
 };
 
-export const processDeletionEvent = (
-	items: Map<EventIdString, IssueOrPRTableItem>,
-	deletion: NostrEvent
-): boolean => {
-	let applied_to_an_item = false;
-	if (deletion.kind === DeletionKind) {
-		items.forEach((item) => {
-			// TODO what if status update was deleted?
-			const events_for_deletion = deletionRelatedToIssueOrPrItem(deletion, item);
-			if (events_for_deletion.length > 0) {
-				// quality children
-				item.quality_children = item.quality_children.filter(
-					(c) => !events_for_deletion.includes(c.id)
-				);
-				item.quality_children_count = item.quality_children.length;
-				// status
-				item.status_history = item.status_history.filter(
-					(h) => !events_for_deletion.includes(h.uuid)
-				);
-				item.status = getCurrentStatusFromStatusHistory(item);
-				// TODO mark issue as deleted
-				if (events_for_deletion.includes(item.uuid)) {
-					// TODO handle deletion of Issue
-				}
-				// record deletion event as processed
-				if (!item.deleted_children_ids.some((id) => id === deletion.id)) {
-					item.deleted_children_ids.push(deletion.id);
-				}
-				applied_to_an_item = true;
-			}
-		});
-	}
-	return applied_to_an_item;
-};
-
 export const processQualityChild = (item: IssueOrPRTableItem, quality_child: ChildEventRef) => {
 	if (
 		!item.quality_children.some((c) => c.id === quality_child.id) ||
-		!item.deleted_children_ids.includes(quality_child.id)
+		!item.deleted_ids.includes(quality_child.id)
 	) {
 		item.quality_children.push(quality_child);
 		item.quality_children_count = item.quality_children.length;
@@ -268,14 +238,14 @@ export const processQualityChild = (item: IssueOrPRTableItem, quality_child: Chi
 export const processNewStatus = (item: IssueOrPRTableItem, status_item: StatusHistoryItem) => {
 	if (
 		item.status_history.some((h) => h.uuid === status_item.uuid) ||
-		item.deleted_children_ids.includes(status_item.uuid)
+		item.deleted_ids.includes(status_item.uuid)
 	)
 		return;
 	item.status_history.push(status_item);
 	item.status = getCurrentStatusFromStatusHistory(item);
 };
 
-const getCurrentStatusFromStatusHistory = (item: IssueOrPRTableItem) => {
+export const getCurrentStatusFromStatusHistory = (item: IssueOrPRTableItem) => {
 	const maintainers = item.repos.map((r) => r.split(':')[1]) as PubKeyString[];
 	const authorised = [item.author, ...maintainers];
 	const sorted = item.status_history

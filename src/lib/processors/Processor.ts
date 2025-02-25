@@ -3,6 +3,7 @@ import {
 	isRelayUpdatePubkey,
 	type ARef,
 	type EventIdString,
+	type IssueOrPRTableItem,
 	type LocalDbTableNames,
 	type Nip05AddressStandardized,
 	type OutboxRelayProcessorUpdate,
@@ -31,7 +32,7 @@ import { getRepoRefs } from '$lib/utils';
 import db from '$lib/dbs/LocalDb';
 import { getRepoRef } from '$lib/type-helpers/repo';
 import processRepoUpdates from './Repo';
-import processIssueUpdates from './Issue';
+import processIssueUpdates, { getCurrentStatusFromStatusHistory, updateRepoMetrics } from './Issue';
 import processPrUpdates from './Pr';
 import { processOutboxUpdates } from './Outbox';
 import { deletionRelatedToIssueOrPrItem, extractRootIdIfNonReplaceable } from '$lib/git-utils';
@@ -231,7 +232,9 @@ class SeenOnTracker {
 
 async function processUpdates(updates: ProcessorUpdate[]): Promise<ProcessorUpdate[]> {
 	const items = await getExistingItemsToUpdate(updates);
-	return processItems(items, updates);
+	const remaining_items = await processItems(items, updates);
+	await putUpdatedItems(items);
+	return remaining_items;
 }
 
 async function processItems(
@@ -247,8 +250,11 @@ async function processItems(
 	]) {
 		remaining_updates = await Promise.resolve(processor_fn(items, remaining_updates));
 	}
+	return remaining_updates;
+}
 
-	await Promise.all([
+async function putUpdatedItems(items: DbItemsCollection) {
+	return Promise.all([
 		items.repos.size === 0 ? Promise.resolve([]) : db.repos.bulkPut([...items.repos.values()]),
 		items.pubkeys.size === 0
 			? Promise.resolve([])
@@ -256,7 +262,6 @@ async function processItems(
 		items.issues.size === 0 ? Promise.resolve([]) : db.issues.bulkPut([...items.issues.values()]),
 		items.prs.size === 0 ? Promise.resolve([]) : db.prs.bulkPut([...items.prs.values()])
 	]);
-	return remaining_updates;
 }
 
 async function getExistingItemsToUpdate(updates: ProcessorUpdate[]): Promise<DbItemsCollection> {
@@ -384,16 +389,75 @@ async function nextDeletionEventBatch(events: NostrEvent[]) {
 		issues: new Map(),
 		prs: new Map()
 	};
+	const repo_refs = new Set<RepoRef>();
 	issue_items.forEach((r) => {
-		if (r) table_items.issues.set(r.uuid, r);
+		if (r) {
+			table_items.issues.set(r.uuid, r);
+			r.repos.forEach((repo) => repo_refs.add(repo));
+		}
 	});
 	pr_items.forEach((r) => {
-		if (r) table_items.prs.set(r.uuid, r);
+		if (r) {
+			table_items.prs.set(r.uuid, r);
+			r.repos.forEach((repo) => repo_refs.add(repo));
+		}
 	});
-	return processItems(
-		table_items,
-		events.map((event) => ({ event, relay_updates: [] }))
-	);
+	// needed to update status counts when issue / pr is deleted
+	const repo_items = await db.repos.bulkGet([...repo_refs]);
+	repo_items.forEach((r) => {
+		if (r) table_items.repos.set(r?.uuid, r);
+	});
+
+	events.forEach((e) => {
+		processDeletionEvent(table_items, e);
+	});
+
+	await putUpdatedItems(table_items);
 }
+
+/**
+ *
+ * @param items
+ * @param deletion
+ * @returns items that were updated by deletion event
+ */
+const processDeletionEvent = (table_items: DbItemsCollection, deletion: NostrEvent) => {
+	[...table_items.issues.values()].forEach((item) => {
+		const item_was_deleted = processDeletionEventForTableItem(item, deletion);
+		// update repo table with corrected counts
+		if (item_was_deleted) updateRepoMetrics(table_items, item, 'issues');
+	});
+	[...table_items.prs.values()].forEach((item) => {
+		const item_was_deleted = processDeletionEventForTableItem(item, deletion);
+		// update repo table with corrected counts
+		if (item_was_deleted) updateRepoMetrics(table_items, item, 'PRs');
+	});
+};
+
+/**
+ *
+ * @param item
+ * @param deletion
+ * @returns true if the item itself is deleted
+ */
+const processDeletionEventForTableItem = (item: IssueOrPRTableItem, deletion: NostrEvent) => {
+	const events_for_deletion = deletionRelatedToIssueOrPrItem(deletion, item);
+	if (events_for_deletion.length > 0) {
+		// quality children
+		item.quality_children = item.quality_children.filter(
+			(c) => !events_for_deletion.includes(c.id)
+		);
+		item.quality_children_count = item.quality_children.length;
+		// status
+		item.status_history = item.status_history.filter((h) => !events_for_deletion.includes(h.uuid));
+		item.status = getCurrentStatusFromStatusHistory(item);
+		// record deletion event as processed - also used to detect if item was deleted
+		events_for_deletion.forEach((id) => {
+			if (!item.deleted_ids.includes(id)) item.deleted_ids.push(id);
+		});
+		return events_for_deletion.includes(item.uuid);
+	}
+	return false;
+};
 
 export default Processor;

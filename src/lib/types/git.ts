@@ -80,7 +80,7 @@ export interface IssueOrPrBase {
 	description: string;
 	status: IssueOrPrStatus;
 	status_history: StatusHistoryItem[];
-	deleted_children_ids: EventIdString[];
+	deleted_ids: EventIdString[];
 	quality_children: ChildEventRef[];
 	quality_children_count: number;
 	tags: string[];

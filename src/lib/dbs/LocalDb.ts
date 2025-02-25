@@ -35,7 +35,7 @@ db.version(2)
 					issue.status_history = [];
 					issue.quality_children = [];
 					issue.quality_children_count = 0;
-					issue.deleted_children_ids = [];
+					issue.deleted_ids = [];
 					issue.status = IssueOrPrStatus.Open;
 				}),
 			tx
@@ -47,7 +47,7 @@ db.version(2)
 					pr.status_history = [];
 					pr.quality_children = [];
 					pr.quality_children_count = 0;
-					pr.deleted_children_ids = [];
+					pr.deleted_ids = [];
 					pr.status = IssueOrPrStatus.Open;
 				}),
 			tx

@@ -122,7 +122,7 @@ export const deletionRelatedToIssueOrPrItem = (
 		.filter(
 			(id) =>
 				id === item.uuid ||
-				item.deleted_children_ids.includes(id) ||
+				item.deleted_ids.includes(id) ||
 				item.quality_children.some((c) => c.id === id) ||
 				item.status_history.some((h) => h.uuid === id)
 		);

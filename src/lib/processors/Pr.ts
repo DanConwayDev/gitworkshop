@@ -4,10 +4,9 @@ import {
 	isRelayCheck,
 	isRelayCheckFound,
 	isRelayUpdatePR,
-	isRelayUpdatePRFound,
-	IssueOrPrStatus
+	isRelayUpdatePRFound
 } from '$lib/types';
-import { PatchKind, StatusKinds, StatusOpenKind, RepoAnnKind, DeletionKind } from '$lib/kinds';
+import { PatchKind, StatusOpenKind, RepoAnnKind } from '$lib/kinds';
 import type {
 	EventIdString,
 	HuristicsForRelay,
@@ -35,13 +34,10 @@ import {
 	extractPatchDescription,
 	extractPatchTitle
 } from '$lib/git-utils';
-import { processDeletionEvent, processNewStatus, processQualityChild } from './Issue';
+import { processNewStatus, processQualityChild, updateRepoMetrics } from './Issue';
 
 const processPrUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
-		if (u.event && u.event.kind === DeletionKind) {
-			return processDeletionEvent(items.issues, u.event);
-		}
 		if (!isProcessorPrUpdate(u)) return true;
 		const uuid = getPrId(u);
 		// drop update with no uuid as it will never process correctly
@@ -89,30 +85,7 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 			u.relay_updates
 		);
 		items.prs.set(uuid, updated_item);
-		updated_item.repos.forEach((a_ref) => {
-			const repo = items.repos.get(a_ref);
-			if (!repo) return;
-			if (!repo.PRs) {
-				repo.PRs = {
-					[IssueOrPrStatus.Open]: [],
-					[IssueOrPrStatus.Applied]: [],
-					[IssueOrPrStatus.Closed]: [],
-					[IssueOrPrStatus.Draft]: []
-				};
-			}
-			if (!repo.PRs[updated_item.status].includes(updated_item.uuid))
-				StatusKinds.forEach((status_kind) => {
-					if (!repo.PRs) return; // to stop typescript complaining
-					const kind = status_kind as IssueOrPrStatus; // to stop typescript complaining
-					if (kind === updated_item.status) {
-						if (!repo.PRs[kind].includes(updated_item.uuid)) {
-							repo.PRs[kind].push(updated_item.uuid);
-						}
-					} else {
-						repo.PRs[kind] = repo.PRs[kind].filter((uuid) => uuid !== updated_item.uuid);
-					}
-				});
-		});
+		updateRepoMetrics(items, updated_item, 'PRs');
 		return false;
 	});
 };
@@ -202,7 +175,7 @@ const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
 		description,
 		status: StatusOpenKind,
 		status_history: [],
-		deleted_children_ids: [],
+		deleted_ids: [],
 		quality_children: [],
 		quality_children_count: 0,
 		repos,
