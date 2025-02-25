@@ -15,14 +15,19 @@
 		loading?: boolean;
 	} = $props();
 
-	let status = $state(IssueOrPrStatus.Open);
+	let status: IssueOrPrStatus | 'deleted' = $state(IssueOrPrStatus.Open);
+
+	let deleted = $derived(table_items.filter((t) => t.deleted_ids.includes(t.uuid)));
 
 	let filtered_items = $derived(
-		table_items.filter((e) => {
-			if (status === IssueOrPrStatus.Open)
-				return [IssueOrPrStatus.Open, IssueOrPrStatus.Draft].includes(e.status);
-			return e.status === status;
-		})
+		status === 'deleted'
+			? deleted
+			: table_items.filter((e) => {
+					if (e.deleted_ids.includes(e.uuid)) return false;
+					if (status === IssueOrPrStatus.Open)
+						return [IssueOrPrStatus.Open, IssueOrPrStatus.Draft].includes(e.status);
+					return e.status === status;
+				})
 	);
 </script>
 
@@ -66,6 +71,18 @@
 				>
 					{table_items.filter((t) => t.status === IssueOrPrStatus.Closed).length} Closed
 				</button>
+
+				{#if deleted.length > 0}<button
+						role="tab"
+						class="tab"
+						class:opacity-50={status !== 'deleted'}
+						class:font-bold={status == 'deleted'}
+						onclick={() => {
+							status = 'deleted';
+						}}
+					>
+						{deleted.length} Marked as Deleted
+					</button>{/if}
 			</div>
 		</div>
 		<div class="flex-auto"></div>
@@ -79,7 +96,8 @@
 	</div>
 	{#if !loading && filtered_items.length === 0}
 		<div class="py-10 text-center lowercase">
-			can't find any {statusKindtoText(status, 'issue')} issues
+			can't find any {status === 'deleted' ? 'deleted' : statusKindtoText(status, 'issue')}
+			{type === 'issue' ? 'issues' : 'PRs'}
 		</div>
 	{:else}
 		<PrOrIssueList {type} table_items={filtered_items} {repo_route} {loading} />

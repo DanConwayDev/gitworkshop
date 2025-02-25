@@ -4,10 +4,11 @@
 	import { nostrEventToDocTree } from '$lib/doc_tree';
 	import ContentTree from '../content-tree/ContentTree.svelte';
 	import type { IssueOrPRTableItem } from '$lib/types';
-	import { PatchKind, StatusKinds } from '$lib/kinds';
+	import { DeletionKind, PatchKind, StatusKinds } from '$lib/kinds';
 	import StatusCard from './StatusCard.svelte';
 	import Patch from './Patch.svelte';
 	import { onDestroy, onMount } from 'svelte';
+	import EventWrapperLite from './EventWrapperLite.svelte';
 	let {
 		event,
 		issue_or_pr_table_item,
@@ -64,6 +65,8 @@
 			<EventWrapper {event} {issue_or_pr_table_item} {embedded}>
 				<Patch {event} />
 			</EventWrapper>
+		{:else if DeletionKind === event.kind}
+			<EventWrapperLite {event}>deletion request from</EventWrapperLite>
 		{:else}
 			<EventWrapper {event} {issue_or_pr_table_item} {embedded}>
 				<ContentTree {node} />
