@@ -66,7 +66,7 @@ describe('getParentId', () => {
 		});
 	});
 	describe('when only nip22 E tag is present', () => {
-		test('return undefined', () => {
+		test('return that', () => {
 			expect(getParentId(generateEventWithTags([['E', '789']], ReplyKind))).toEqual('789');
 		});
 	});
@@ -130,6 +130,24 @@ describe('createThreadTree', () => {
 					expect(tree[0].child_nodes[0].child_nodes).to.have.length(1);
 					expect(tree[0].child_nodes[0].child_nodes[0].event.id).to.eq(child.id);
 					expect(tree[0].child_nodes[0].child_nodes[0].child_nodes).to.have.length(0);
+				});
+				describe('when parent event not found', () => {
+					test('child uses root event as parent and has mark missing_parent', () => {
+						const grand_parent = generateEventWithTags([]);
+						const parent = generateEventWithTags([]);
+						const child = generateEventWithTags(
+							[
+								['E', grand_parent.id],
+								['e', parent.id]
+							],
+							ReplyKind
+						);
+						const tree = createThreadTree([grand_parent, child]);
+						expect(tree).to.have.length(1);
+						expect(tree[0].event.id).to.eq(grand_parent.id);
+						expect(tree[0].child_nodes[0].event.id).to.eq(child.id);
+						expect(tree[0].child_nodes[0].missing_parent);
+					});
 				});
 			});
 		});

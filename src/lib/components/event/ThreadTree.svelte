@@ -24,16 +24,25 @@
 </script>
 
 {#snippet renderThread(node: ThreadTreeNode)}
+	{#if node.missing_parent}
+		<ThreadWrapper num_replies={countReplies(node) + 1} missing_parent>
+			{@render renderThreadInside(node)}
+		</ThreadWrapper>
+	{:else}
+		{@render renderThreadInside(node)}
+	{/if}
+{/snippet}
+
+{#snippet renderThreadInside(node: ThreadTreeNode)}
+	<EventCard {issue_or_pr_table_item} event={node.event} />
 	<ThreadWrapper num_replies={countReplies(node)}>
 		{#each node.child_nodes as childNode}
-			<EventCard {issue_or_pr_table_item} event={childNode.event} />
 			{@render renderThread(childNode)}
 		{/each}
 	</ThreadWrapper>
 {/snippet}
 
 {#if tree}
-	<EventCard {issue_or_pr_table_item} event={tree.event} />
 	{@render renderThread(tree)}
 	{#if show_compose && !just_replied}
 		<ComposeReply
