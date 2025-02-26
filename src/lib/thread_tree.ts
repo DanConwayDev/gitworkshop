@@ -28,10 +28,10 @@ export const getStandardnip22ReplyTags = (
 };
 
 /** will get the PR revision id rather than the root PR */
-function getRootId(event: NostrEvent, issue_or_pr_table_item: IssueOrPRTableItem): string;
-function getRootId(event: NostrEvent): undefined;
+export function getRootId(event: NostrEvent, issue_or_pr_table_item: IssueOrPRTableItem): string;
+export function getRootId(event: NostrEvent): undefined;
 
-function getRootId(
+export function getRootId(
 	event: NostrEvent,
 	issue_or_pr_table_item?: IssueOrPRTableItem
 ): string | undefined {
@@ -70,6 +70,14 @@ export const getParentId = (reply: NostrEvent): EventIdString | undefined => {
 	return t ? t[1] : undefined;
 };
 
+const getMentions = (reply: NostrEvent): EventIdString[] => {
+	return reply.tags
+		.filter(
+			(tag) => (tag.length === 4 && tag[3] === 'mention') || (tag.length > 1 && tag[0] === 'q')
+		)
+		.map((t) => t[1]);
+};
+
 export const createThreadTree = (replies: NostrEvent[]): ThreadTreeNode[] => {
 	const hashTable: { [key: EventIdString]: ThreadTreeNode } = Object.create(null);
 	replies.forEach((reply) => (hashTable[reply.id] = { event: reply, child_nodes: [] }));
@@ -86,11 +94,19 @@ export const createThreadTree = (replies: NostrEvent[]): ThreadTreeNode[] => {
 			addToParent(reply_parent_id);
 		} else {
 			const reply_root_id = getRootId(reply);
-			if (reply_parent_id) {
+			const mentioned_in_thread = new Set(getMentions(reply).filter((id) => !!hashTable[id]));
+			if (reply_parent_id && mentioned_in_thread.size === 0) {
+				// we must be missing the parent event. could be deleted or not found
 				hashTable[reply.id].missing_parent = true;
 			}
 			if (reply_root_id && hashTable[reply_root_id]) {
 				addToParent(reply_root_id);
+			} else if (mentioned_in_thread.size > 0) {
+				// looping seems dangerous as the event may appear multiple times. lets make sure its a lite wrapper.
+				hashTable[reply.id].mention = true;
+				mentioned_in_thread.forEach((parent) => {
+					addToParent(parent);
+				});
 			} else {
 				thread_tree.push(hashTable[reply.id]);
 			}
@@ -129,9 +145,9 @@ export const getThreadTrees = (
 		const all_trees = createThreadTree(replies ? [event, ...replies] : [event]);
 		const event_tree = all_trees.find((t) => t.event.id === event.id);
 		delete event_tree?.missing_parent; // the top of the tree isn't missing a parent
+
 		if (event_tree) {
 			// return all_trees;
-			// TODO: add 'mentions' and secondary references with a 'metioned event wrapper'
 			if (type === 'pr') return splitIntoRevisionThreadTrees(event_tree);
 			return [event_tree];
 		}

@@ -2,6 +2,7 @@
 	import type { IssueOrPRTableItem, ThreadTreeNode } from '$lib/types';
 	import ComposeReply from '../compose/ComposeReply.svelte';
 	import EventCard from './EventCard.svelte';
+	import EventMentionCard from './EventMentionCard.svelte';
 	import ThreadWrapper from './ThreadWrapper.svelte';
 
 	let {
@@ -28,6 +29,8 @@
 		<ThreadWrapper num_replies={countReplies(node) + 1} missing_parent>
 			{@render renderThreadInside(node)}
 		</ThreadWrapper>
+	{:else if node.mention}
+		<EventMentionCard event={node.event} />
 	{:else}
 		{@render renderThreadInside(node)}
 	{/if}

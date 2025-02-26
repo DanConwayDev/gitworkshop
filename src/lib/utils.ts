@@ -10,9 +10,11 @@ import {
 	type PubKeyString,
 	type RepoRef,
 	type RepoRoute,
-	isWebSocketUrl
+	isWebSocketUrl,
+	isEventIdString,
+	type EventTag
 } from './types';
-import type { AddressPointer, NEvent } from 'nostr-tools/nip19';
+import type { AddressPointer, EventPointer, NEvent } from 'nostr-tools/nip19';
 import { PatchKind, RepoAnnKind } from './kinds';
 import { getSeenRelays } from 'applesauce-core/helpers';
 import { isReplaceableKind } from 'nostr-tools/kinds';
@@ -42,13 +44,24 @@ export const getParentUuid = (reply: NostrEvent): EventIdString | ARef | undefin
 	return t ? t[1] : undefined;
 };
 
-export const getRootUuid = (event: NostrEvent): EventIdString | ARef | undefined => {
-	const t =
-		event.tags.find((tag) => tag.length > 1 && tag[0] === 'E') ||
+export const getRootTag = (event: NostrEvent): EventTag | undefined => {
+	return (event.tags.find((tag) => tag.length > 1 && tag[0] === 'E') ||
 		event.tags.find((tag) => tag.length === 4 && tag[3] === 'root') ||
 		event.tags.find((tag) => tag.length === 4 && tag[3] === 'reply') ||
-		// include events that don't use nip 10 markers
-		event.tags.find((tag) => tag.length < 4 && ['e', 'a'].includes(tag[0]));
+		undefined) as EventTag | undefined;
+};
+
+export const getRootPointer = (event: NostrEvent): EventPointer | AddressPointer | undefined => {
+	const tag = getRootTag(event);
+	if (tag) {
+		const pointer = eventTagToPointer(tag);
+		if (pointer) return pointer;
+	}
+	return undefined;
+};
+
+export const getRootUuid = (event: NostrEvent): EventIdString | ARef | undefined => {
+	const t = getRootTag(event);
 	return t ? t[1] : undefined;
 };
 
@@ -78,6 +91,40 @@ export const eventToNip19 = (event: NostrEvent): NEvent | Naddr => {
 		author: event.pubkey,
 		...(relay_hint ? { relays: [relay_hint] } : {})
 	});
+};
+
+export const eventTagToNip19 = (tag: EventTag): NEvent | Naddr | undefined => {
+	const pointer = eventTagToPointer(tag);
+	if (pointer) {
+		if (pointer.kind) return nip19.naddrEncode(pointer as AddressPointer);
+		else return nip19.neventEncode(pointer as EventPointer);
+	}
+	return undefined;
+};
+
+export const eventTagToPointer = (tag: EventTag): EventPointer | AddressPointer | undefined => {
+	if (tag.length < 2) return undefined;
+	let relays: WebSocketUrl[] = [];
+	if (tag.length > 2) {
+		if (isWebSocketUrl(tag[2])) relays = [tag[2]];
+	}
+	// TODO add support for non paramaetised
+	if (tag[1].includes(':')) {
+		return aRefToAddressPointer(tag[1], relays);
+	}
+	if (isEventIdString(tag[1])) {
+		return {
+			id: tag[1],
+			relays
+		} as EventPointer;
+	}
+	return undefined;
+};
+
+export const getRootNip19 = (event: NostrEvent): Naddr | NEvent | undefined => {
+	const t = getRootTag(event);
+	if (t) return eventTagToNip19(t);
+	return undefined;
 };
 
 function isAddressPointer(a: ARef | AddressPointer): a is AddressPointer {
@@ -138,6 +185,7 @@ export const aRefPToAddressPointer = (
 	return { kind: Number(k), pubkey, identifier, relays };
 };
 
+// TODO add support for non paramaetised
 export function aRefToAddressPointer(a: string, relays?: string[]): AddressPointer | undefined;
 export function aRefToAddressPointer(a: ARefP, relays?: string[]): AddressPointer;
 export function aRefToAddressPointer(

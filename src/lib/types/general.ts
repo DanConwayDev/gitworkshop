@@ -139,3 +139,5 @@ export interface ReplaceableEventAttribution extends EventAttribution {
 export interface NonReplaceableEventAttribution extends EventAttribution {
 	uuid: EventIdString;
 }
+
+export type EventTag = ['E' | 'e' | 'a' | 'q', ...string[]];

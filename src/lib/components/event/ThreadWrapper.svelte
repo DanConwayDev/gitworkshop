@@ -5,9 +5,15 @@
 	let {
 		num_replies,
 		missing_parent = false,
+		hide_by_default = false,
 		children
-	}: { num_replies: number; missing_parent?: boolean; children: Snippet } = $props();
-	let show_replies = $state(true);
+	}: {
+		num_replies: number;
+		missing_parent?: boolean;
+		hide_by_default?: boolean;
+		children: Snippet;
+	} = $props();
+	let show_replies = $state(!hide_by_default);
 
 	const toggle_replies = () => {
 		show_replies = !show_replies;
