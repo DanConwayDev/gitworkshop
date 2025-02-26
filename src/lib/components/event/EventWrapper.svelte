@@ -2,7 +2,7 @@
 	import { type NostrEvent } from 'nostr-tools';
 	import FromNow from '../FromNow.svelte';
 	import UserHeader from '../user/UserHeader.svelte';
-	import { nostEventToNeventOrNaddr } from '$lib/utils';
+	import { eventToNip19 } from '$lib/utils';
 	import CopyField from '../CopyField.svelte';
 	import { onMount, type Snippet } from 'svelte';
 	import store from '$lib/store.svelte';
@@ -107,17 +107,17 @@
 							<div class="prose"><h3>Share</h3></div>
 							<CopyField
 								label="gitworkshop.dev"
-								content={`https://gitworkshop.dev/${nostEventToNeventOrNaddr(event)}`}
+								content={`https://gitworkshop.dev/${eventToNip19(event)}`}
 								border_color="secondary"
 							/>
 							<CopyField
 								label="nostr address"
-								content={`nostr:${nostEventToNeventOrNaddr(event)}`}
+								content={`nostr:${eventToNip19(event)}`}
 								border_color="secondary"
 							/>
 							<CopyField
 								label="njump"
-								content={`https://njump.me/${nostEventToNeventOrNaddr(event)}`}
+								content={`https://njump.me/${eventToNip19(event)}`}
 								border_color="secondary"
 							/>
 							<CopyField label="raw event id" content={event.id} border_color="neutral-content" />

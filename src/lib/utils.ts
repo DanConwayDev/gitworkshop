@@ -1,20 +1,21 @@
 import { nip19, type NostrEvent } from 'nostr-tools';
 import {
 	isRepoRef,
+	type WebSocketUrl,
 	type ARef,
 	type ARefP,
 	type EventIdString,
 	type Naddr,
-	type Nevent,
-	type Nnote,
 	type Npub,
 	type PubKeyString,
 	type RepoRef,
-	type RepoRoute
+	type RepoRoute,
+	isWebSocketUrl
 } from './types';
-import type { AddressPointer } from 'nostr-tools/nip19';
+import type { AddressPointer, NEvent } from 'nostr-tools/nip19';
 import { PatchKind, RepoAnnKind } from './kinds';
-import { getSeenRelays, isReplaceable } from 'applesauce-core/helpers';
+import { getSeenRelays } from 'applesauce-core/helpers';
+import { isReplaceableKind } from 'nostr-tools/kinds';
 
 // get value of first occurance of tag
 export function getTagValue(tags: string[][], name: string): string | undefined {
@@ -49,6 +50,34 @@ export const getRootUuid = (event: NostrEvent): EventIdString | ARef | undefined
 		// include events that don't use nip 10 markers
 		event.tags.find((tag) => tag.length < 4 && ['e', 'a'].includes(tag[0]));
 	return t ? t[1] : undefined;
+};
+
+export const eventToSeenOnRelay = (event: NostrEvent): WebSocketUrl | undefined => {
+	const relays = getSeenRelays(event);
+	if (relays)
+		for (const url of relays.values()) {
+			if (isWebSocketUrl(url)) return url;
+		}
+	return undefined;
+};
+
+export const eventToNip19 = (event: NostrEvent): NEvent | Naddr => {
+	const relay_hint = eventToSeenOnRelay(event);
+	if (isReplaceableKind(event.kind)) {
+		const d = getTagValue(event.tags, 'd');
+		return nip19.naddrEncode({
+			kind: event.kind,
+			pubkey: event.pubkey,
+			...(d ? { identifier: d } : {}),
+			...(relay_hint ? { relays: [relay_hint] } : {})
+		} as AddressPointer);
+	}
+	return nip19.neventEncode({
+		id: event.id,
+		kind: event.kind,
+		author: event.pubkey,
+		...(relay_hint ? { relays: [relay_hint] } : {})
+	});
 };
 
 function isAddressPointer(a: ARef | AddressPointer): a is AddressPointer {
@@ -157,28 +186,6 @@ export const neventOrNoteToHexId = (s: string): EventIdString | undefined => {
 		/* empty */
 	}
 	return undefined;
-};
-
-export const nostEventToNeventOrNaddr = (event: NostrEvent): Naddr | Nevent | Nnote | undefined => {
-	const relays: string[] = [...(getSeenRelays(event) ?? [])].slice(0, 1);
-
-	if (isReplaceable(event.kind)) {
-		return nip19.naddrEncode({
-			kind: event.kind,
-			pubkey: event.pubkey,
-			identifier: getTagValue(event.tags, 'd') ?? '',
-			relays
-		});
-	} else if (relays.length > 0) {
-		return nip19.neventEncode({
-			kind: event.kind,
-			id: event.id,
-			relays,
-			author: event.pubkey
-		});
-	} else {
-		return nip19.noteEncode(event.id);
-	}
 };
 
 export const getRepoRefs = (event: NostrEvent): RepoRef[] =>
