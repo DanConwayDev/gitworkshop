@@ -1,64 +1,13 @@
 import type { NostrEvent } from 'nostr-tools';
-import type { EventIdString, IssueOrPRTableItem, ThreadTreeNode } from './types';
-import { IssueKind, PatchKind } from './kinds';
+import type { EventIdString, ThreadTreeNode } from './types';
 
-export const getStandardnip10ReplyTags = (
-	event: NostrEvent,
-	issue_or_pr_table_item: IssueOrPRTableItem
-): string[][] => {
-	return [
-		['e', getRootId(event, issue_or_pr_table_item), '', 'root'],
-		['e', event.id, '', 'reply']
-	];
-};
-
-export const getStandardnip22ReplyTags = (
-	event: NostrEvent,
-	issue_or_pr_table_item: IssueOrPRTableItem
-): string[][] => {
-	const P = getRootEventPubkey(event, issue_or_pr_table_item);
-	return [
-		['E', getRootId(event, issue_or_pr_table_item), '', P],
-		['K', getRootKind(event, issue_or_pr_table_item)],
-		['P', P],
-		['k', `${event.kind}`],
-		['p', event.pubkey],
-		['e', event.id, '', event.pubkey]
-	];
-};
-
-/** will get the PR revision id rather than the root PR */
-export function getRootId(event: NostrEvent, issue_or_pr_table_item: IssueOrPRTableItem): string;
-export function getRootId(event: NostrEvent): undefined;
-
-export function getRootId(
-	event: NostrEvent,
-	issue_or_pr_table_item?: IssueOrPRTableItem
-): string | undefined {
-	// Exclude 'a' references to repo events
+function getRootId(event: NostrEvent): string | undefined {
 	const root_tag =
 		event.tags.find((t) => t.length > 1 && t[0] === 'E') ||
 		event.tags.find((t) => t.length === 4 && t[0] === 'e' && t[3] === 'root');
 	if (root_tag) return root_tag[1];
-	if (event.tags.some((t) => t[0] === 't' && t[1] === 'root')) return event.id;
-	return issue_or_pr_table_item ? issue_or_pr_table_item.uuid : undefined;
+	return undefined;
 }
-const getRootKind = (event: NostrEvent, issue_or_pr_table_item: IssueOrPRTableItem): string => {
-	const K = event.tags.find((t) => t.length > 1 && t[0] === 'K');
-	if (K) return K[1];
-	if (event.id === getRootId(event, issue_or_pr_table_item)) return `${event.kind}`;
-	return issue_or_pr_table_item.type === 'issue' ? `${IssueKind}` : `${PatchKind}`;
-};
-
-const getRootEventPubkey = (
-	event: NostrEvent,
-	issue_or_pr_table_item: IssueOrPRTableItem
-): string => {
-	const K = event.tags.find((t) => t.length > 1 && t[0] === 'P');
-	if (K) return K[1];
-	if (event.id === getRootId(event, issue_or_pr_table_item)) return event.pubkey;
-	return issue_or_pr_table_item.author;
-};
 
 export const getParentId = (reply: NostrEvent): EventIdString | undefined => {
 	const t =

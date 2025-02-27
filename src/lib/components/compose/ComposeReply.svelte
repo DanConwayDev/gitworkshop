@@ -13,11 +13,11 @@
 	import accounts_manager from '$lib/accounts';
 	import { LegacyGitReplyKind, ReplyKind } from '$lib/kinds';
 	import { unixNow } from 'applesauce-core/helpers';
-	import { getStandardnip10ReplyTags, getStandardnip22ReplyTags } from '$lib/thread_tree';
 	import type { IssueOrPRTableItem } from '$lib/types';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import LoginModal from '../LoginModal.svelte';
 	import { ShortTextNote } from 'nostr-tools/kinds';
+	import { getStandardnip10ReplyTags, getStandardnip22ReplyTags } from '$lib/utils';
 
 	let {
 		event,
