@@ -27,13 +27,13 @@
 <EventWrapperLite {event} name_first>
 	{#if root_nip19}
 		mentioned this in <a href={`/${event_nip19}`} class="link link-primary">reply</a> to
-		<a href={`/${root_nip19}`} class="link link-primary">
-			{#if root_event_query.event}
-				a {kindLabel(root_event_query.event.kind)}
-			{:else}
-				this event
-			{/if}
-		</a>
+		{#if root_event_query.event}
+			a <a href={`/${root_nip19}`} class="link link-primary">
+				{kindLabel(root_event_query.event.kind)}
+			</a>
+		{:else}
+			<a href={`/${root_nip19}`} class="link link-primary"> this event </a>
+		{/if}
 	{:else}
 		mentioned this in a <a href={`/${event_nip19}`} class="link link-primary"
 			>{kindLabel(event.kind)}</a
