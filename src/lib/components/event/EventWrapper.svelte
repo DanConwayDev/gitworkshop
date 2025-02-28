@@ -7,18 +7,20 @@
 	import { onMount, type Snippet } from 'svelte';
 	import store from '$lib/store.svelte';
 	import ComposeReply from '../compose/ComposeReply.svelte';
-	import type { IssueOrPRTableItem } from '$lib/types';
+	import type { IssueOrPRTableItem, PubKeyString } from '$lib/types';
 
 	let {
 		event,
 		issue_or_pr_table_item,
 		embedded = false,
-		children
+		children,
+		reactions = []
 	}: {
 		event: NostrEvent;
 		issue_or_pr_table_item?: IssueOrPRTableItem;
 		embedded?: boolean;
 		children: Snippet;
+		reactions?: NostrEvent[];
 	} = $props();
 
 	let show_compose = $state(false);
@@ -46,6 +48,15 @@
 				closeModals();
 		});
 	});
+
+	let grouped_reactions = $derived(
+		reactions.reduce((acc: { [reaction: string]: Set<PubKeyString> }, reaction) => {
+			if (!acc[reaction.content]) acc[reaction.content] = new Set();
+			acc[reaction.content].add(reaction.pubkey);
+			return acc;
+		}, {})
+	);
+	let show_reactions = $state(false);
 </script>
 
 <div class="max-w-4xl border-b border-base-300 p-3 pl-3">
@@ -163,6 +174,37 @@
 				<div>
 					<ComposeReply {event} {issue_or_pr_table_item} sentFunction={() => replySent()} />
 				</div>
+			</div>
+		{/if}
+		{#if reactions.length > 0}
+			<div class="pt-2">
+				{#if !show_reactions}
+					{#each Object.keys(grouped_reactions) as reaction}
+						<button
+							class="btn btn-neutral btn-xs"
+							onclick={() => {
+								show_reactions = !show_reactions;
+							}}
+						>
+							{reaction}
+							{grouped_reactions[reaction].size}
+						</button>
+					{/each}
+				{:else}
+					{#each reactions as reaction}
+						<button
+							class="btn btn-neutral btn-sm"
+							onclick={() => {
+								show_reactions = !show_reactions;
+							}}
+						>
+							{reaction.content}
+							<div class="badge">
+								<UserHeader user={reaction.pubkey} link_to_profile={false} inline size="xs" />
+							</div>
+						</button>
+					{/each}
+				{/if}
 			</div>
 		{/if}
 	</div>

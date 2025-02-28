@@ -12,11 +12,13 @@
 	let {
 		event,
 		issue_or_pr_table_item,
-		embedded = false
+		embedded = false,
+		reactions = []
 	}: {
 		event: NostrEvent;
 		issue_or_pr_table_item?: IssueOrPRTableItem;
 		embedded?: boolean;
+		reactions?: NostrEvent[];
 	} = $props();
 
 	let node = $derived(nostrEventToDocTree(event));
@@ -62,13 +64,13 @@
 		{#if StatusKinds.includes(event.kind)}
 			<StatusCard {event} {issue_or_pr_table_item} />
 		{:else if PatchKind === event.kind}
-			<EventWrapper {event} {issue_or_pr_table_item} {embedded}>
+			<EventWrapper {event} {issue_or_pr_table_item} {embedded} {reactions}>
 				<Patch {event} />
 			</EventWrapper>
 		{:else if DeletionKind === event.kind}
 			<EventWrapperLite {event}>deletion request from</EventWrapperLite>
 		{:else}
-			<EventWrapper {event} {issue_or_pr_table_item} {embedded}>
+			<EventWrapper {event} {issue_or_pr_table_item} {embedded} {reactions}>
 				<ContentTree {node} />
 			</EventWrapper>
 		{/if}

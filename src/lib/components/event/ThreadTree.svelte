@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { IssueOrPRTableItem, ThreadTreeNode } from '$lib/types';
+	import { Reaction } from 'nostr-tools/kinds';
 	import ComposeReply from '../compose/ComposeReply.svelte';
 	import EventCard from './EventCard.svelte';
 	import EventMentionCard from './EventMentionCard.svelte';
@@ -37,9 +38,13 @@
 {/snippet}
 
 {#snippet renderThreadInside(node: ThreadTreeNode)}
-	<EventCard {issue_or_pr_table_item} event={node.event} />
+	<EventCard
+		{issue_or_pr_table_item}
+		event={node.event}
+		reactions={node.child_nodes.filter((n) => n.event.kind === Reaction).map((n) => n.event)}
+	/>
 	<ThreadWrapper num_replies={countReplies(node)}>
-		{#each node.child_nodes as childNode}
+		{#each node.child_nodes.filter((n) => n.event.kind !== Reaction) as childNode}
 			{@render renderThread(childNode)}
 		{/each}
 	</ThreadWrapper>
