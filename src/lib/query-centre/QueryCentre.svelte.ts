@@ -15,13 +15,17 @@ import {
 	inMemoryRelayTimelineRecursiveThread,
 	liveQueryState
 } from '$lib/helpers.svelte';
-import { createActionsNowFilter, createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NostrEvent } from 'nostr-tools';
 import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
 import store from '$lib/store.svelte';
 import { RepoAnnKind } from '$lib/kinds';
 import { liveQuery } from 'dexie';
 import type { EventPointer } from 'nostr-tools/nip19';
+import {
+	createActionsRequestFilter,
+	createRecentActionsRequestFilter,
+	createRecentActionsResultFilter
+} from '$lib/relay/filters/actions';
 
 class QueryCentre {
 	external_worker: Worker;
@@ -240,23 +244,39 @@ class QueryCentre {
 		);
 	}
 
-	/**
-	 * listen for new events tagged with a_ref on hardcoded DVM relays until dropped
-	 */
-	listenForActions(a_ref: RepoRef) {
-		this.external_worker.postMessage({ method: 'listenForActions', args: [a_ref] });
+	watchActionRequest(request_id: EventIdString, repo_ref: RepoRef) {
+		this.external_worker.postMessage({ method: 'watchActions', args: [repo_ref] });
 		return inMemoryRelayTimeline(
-			createActionsNowFilter(a_ref),
-			() => [],
+			createActionsRequestFilter(request_id),
+			() => [request_id],
 			() => {
-				this.external_worker.postMessage({ method: 'stopListeningForActions', args: [a_ref] });
+				this.external_worker.postMessage({ method: 'watchActionsUnsubscribe', args: [repo_ref] });
 			}
 		);
 	}
 
-	fetchActions(a_ref: RepoRef) {
-		this.external_worker.postMessage({ method: 'fetchActions', args: [a_ref] });
-		return inMemoryRelayTimeline(createFetchActionsFilter(a_ref), () => [a_ref]);
+	watchRecentActions(a_ref: RepoRef) {
+		this.external_worker.postMessage({ method: 'fetchRecentActions', args: [a_ref] });
+		this.external_worker.postMessage({ method: 'watchActions', args: [a_ref] });
+		return inMemoryRelayTimeline(
+			createRecentActionsResultFilter(a_ref),
+			() => [a_ref],
+			() => {
+				this.external_worker.postMessage({ method: 'watchActionsUnsubscribe', args: [a_ref] });
+			}
+		);
+	}
+
+	watchRecentActionRequests(a_ref: RepoRef) {
+		this.external_worker.postMessage({ method: 'fetchRecentActions', args: [a_ref] });
+		this.external_worker.postMessage({ method: 'watchActions', args: [a_ref] });
+		return inMemoryRelayTimeline(
+			createRecentActionsRequestFilter(a_ref),
+			() => [a_ref],
+			() => {
+				this.external_worker.postMessage({ method: 'watchActionsUnsubscribe', args: [a_ref] });
+			}
+		);
 	}
 }
 

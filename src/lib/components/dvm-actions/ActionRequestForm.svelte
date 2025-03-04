@@ -1,7 +1,7 @@
 <script lang="ts">
 	import accounts_manager from '$lib/accounts';
 	import { inMemoryRelayEvent, RepoRouteStringCreator } from '$lib/helpers.svelte';
-	import { ActionDvmKind, RepoStateKind } from '$lib/kinds';
+	import { ActionDvmRequestQuoteKind, RepoStateKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { type EventIdString, type RepoRef, type RepoRouteString } from '$lib/types';
 	import { aRefToAddressPointer } from '$lib/utils';
@@ -76,7 +76,7 @@
 		};
 		try {
 			let request = await accounts_manager.getActive()?.signEvent({
-				kind: ActionDvmKind,
+				kind: ActionDvmRequestQuoteKind,
 				created_at: unixNow(),
 				content: '',
 				tags: [

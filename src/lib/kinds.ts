@@ -35,8 +35,17 @@ export type PatchKind = typeof PatchKind;
 export const IssueKind = 1621;
 export type IssueKind = typeof IssueKind;
 
-export const ActionDvmKind = 6900;
-export type ActionDvmKind = typeof ActionDvmKind;
+export const ActionDvmRequestQuoteKind = 5900;
+export type ActionDvmRequestQuoteKind = typeof ActionDvmRequestQuoteKind;
+
+export const ActionDvmRequestKind = 5901;
+export type ActionDvmRequestKind = typeof ActionDvmRequestKind;
+
+export const ActionDvmQuoteResponseKind = 6900;
+export type ActionDvmQuoteResponseKind = typeof ActionDvmQuoteResponseKind;
+
+export const ActionDvmResponseKind = 6901;
+export type ActionDvmResponseKind = typeof ActionDvmResponseKind;
 
 export const LegacyGitReplyKind = 1622;
 export type LegacyGitReplyKind = typeof LegacyGitReplyKind;

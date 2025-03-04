@@ -7,7 +7,9 @@
 
 	let submitted_job_id: EventIdString | undefined = $state();
 
-	let new_repo_dvm_events_query = query_centre.listenForActions(a_ref);
+	let new_repo_dvm_events_query = $derived(
+		submitted_job_id ? query_centre.watchActionRequest(submitted_job_id, a_ref) : { timeline: [] }
+	);
 	let new_repo_dvm_events = $derived(new_repo_dvm_events_query.timeline);
 
 	let offer_events = $derived(

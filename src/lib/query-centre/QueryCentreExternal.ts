@@ -25,13 +25,12 @@ import {
 } from '$lib/types';
 import { unixNow } from 'applesauce-core/helpers';
 import { addEventsToCache, getCacheEventsForFilters } from '$lib/dbs/LocalRelayDb';
-import { ActionDvmKind, RepoAnnKind } from '$lib/kinds';
+import { ActionDvmRequestQuoteKind, RepoAnnKind } from '$lib/kinds';
 import { nip05 as nip05NostrTools, type Filter, type NostrEvent } from 'nostr-tools';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import Processor from '$lib/processors/Processor';
 import db from '$lib/dbs/LocalDb';
 import { aRefPToAddressPointer } from '$lib/utils';
-import { createFetchActionsFilter } from '$lib/relay/filters/actions';
 import type { NEventAttributes } from 'nostr-editor';
 import SubscriberManager from '$lib/SubscriberManager';
 import {
@@ -41,6 +40,7 @@ import {
 } from '$lib/relay/filters';
 import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
 import type { EventPointer } from 'nostr-tools/nip19';
+import { createRecentActionsResultFilter } from '$lib/relay/filters/actions';
 
 class QueryCentreExternal {
 	// processor = new Processor(self.postMessage);
@@ -105,7 +105,7 @@ class QueryCentreExternal {
 		]);
 		const relay_logs = new Map<WebSocketUrl, OutboxRelayLog>();
 		// note as we are providing a table item, this will probably wont be async
-		if (event.kind !== ActionDvmKind)
+		if (event.kind !== ActionDvmRequestQuoteKind)
 			await Promise.all([
 				...users.map((u) =>
 					(async (): Promise<void> => {
@@ -138,7 +138,7 @@ class QueryCentreExternal {
 				)
 			]);
 
-		if (event.kind === ActionDvmKind) {
+		if (event.kind === ActionDvmRequestQuoteKind) {
 			action_dvm_relays.forEach((r) => {
 				let log = relay_logs.get(r);
 				if (!log) {
@@ -381,24 +381,25 @@ class QueryCentreExternal {
 		return pointer?.pubkey ?? undefined;
 	}
 
-	listenForActions(a_ref: RepoRef) {
-		const query = `listenForActions${a_ref}`;
+	watchActions(a_ref: RepoRef) {
+		const query = `watchActions${a_ref}`;
 		if (this.subscriber_manager.add(query)) {
 			action_dvm_relays.forEach((url) => {
-				this.subscriber_manager.addUnsubsriber(query, this.get_relay(url).listenForActions(a_ref));
+				this.subscriber_manager.addUnsubsriber(query, this.get_relay(url).watchActions(a_ref));
 			});
 		}
 	}
 
-	stopListeningForActions(a_ref: RepoRef) {
-		this.subscriber_manager.remove(`listenForActions${a_ref}`);
+	watchActionsUnsubscribe(a_ref: RepoRef) {
+		this.subscriber_manager.remove(`watchActions${a_ref}`);
 	}
 
-	async fetchActions(a_ref: RepoRef) {
-		await this.hydrate_from_cache_db(createFetchActionsFilter(a_ref));
-		const relays = await chooseRelaysForRepo(a_ref);
+	async fetchRecentActions(a_ref: RepoRef) {
+		await this.hydrate_from_cache_db(createRecentActionsResultFilter(a_ref));
 		try {
-			await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchActions(a_ref)));
+			await Promise.all(
+				action_dvm_relays.map((url) => this.get_relay(url).fetchRecentActions(a_ref))
+			);
 		} catch {
 			/* empty */
 		}
@@ -448,14 +449,14 @@ self.onmessage = async (event) => {
 		case 'fetchNip05':
 			result = await external.fetchNip05(args[0]);
 			break;
-		case 'fetchActions':
-			result = await external.fetchActions(args[0]);
+		case 'fetchRecentActions':
+			result = await external.fetchRecentActions(args[0]);
 			break;
-		case 'listenForActions':
-			result = await external.listenForActions(args[0]);
+		case 'watchActions':
+			result = await external.watchActions(args[0]);
 			break;
-		case 'stopListeningForActions':
-			result = await external.stopListeningForActions(args[0]);
+		case 'watchActionsUnsubscribe':
+			result = await external.watchActionsUnsubscribe(args[0]);
 			break;
 		default:
 			console.error('Unknown method:', method);

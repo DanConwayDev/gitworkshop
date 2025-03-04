@@ -1,6 +1,6 @@
 import { matchFilters, Relay, type Filter, type NostrEvent } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
-import { ActionDvmKind, IgnoreKinds, IssueKind, PatchKind, RepoAnnKind } from '$lib/kinds';
+import { IgnoreKinds, IssueKind, PatchKind, RepoAnnKind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import {
 	type PubKeyString,
@@ -27,7 +27,7 @@ import {
 	createRepoChildrenStatusAndQualityFilters,
 	createRepoIdentifierFilters
 } from './filters';
-import { createFetchActionsFilter } from './filters/actions';
+import { createRecentActionsResultFilter, createWatchActionsFilter } from './filters/actions';
 import type { NEventAttributes } from 'nostr-editor';
 import SubscriberManager from '$lib/SubscriberManager';
 import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
@@ -594,11 +594,7 @@ export class RelayManager {
 					},
 					{
 						// children kinds but for all repos on relay
-						kinds: [
-							...(createRepoChildrenFilters(new Set([]))[0]?.kinds ?? []),
-							// We dont want to add ActionDvmKind to createRepoChildrenFilters as we dont want load of outdated actions
-							ActionDvmKind
-						],
+						kinds: [...(createRepoChildrenFilters(new Set([]))[0]?.kinds ?? [])],
 						since: unixNow()
 					}
 				]
@@ -698,20 +694,36 @@ export class RelayManager {
 		});
 	}
 
-	listenForActions(a_ref: RepoRef): () => void {
-		return this.watchRepo(a_ref);
-	}
-	async fetchActions(a_ref: RepoRef): Promise<void> {
+	async fetchRecentActions(a_ref: RepoRef): Promise<void> {
 		await this.connect();
 		await new Promise<void>((r) => {
-			const sub = this.relay.subscribe(createFetchActionsFilter(a_ref), {
-				onevent: (event) => this.onEvent(event),
+			const sub = this.relay.subscribe(createRecentActionsResultFilter(a_ref), {
+				onevent: async (event) => {
+					this.onEvent(event);
+				},
 				oneose: () => {
 					sub.close();
-					r();
+					r(undefined);
 				}
 			});
 		});
+	}
+
+	watchActions(a_ref: RepoRef): () => void {
+		const query = `watchActions${a_ref}`;
+		const is_new = this.subscriber_manager.add(query);
+		if (is_new) {
+			this.watch_filters.set(query, {
+				onMatch: () => {},
+				filters: createWatchActionsFilter(a_ref)
+			});
+			this.refreshWatch();
+			this.subscriber_manager.addUnsubsriber(query, () => {
+				this.watch_filters.delete(query);
+				this.refreshWatch();
+			});
+		}
+		return () => this.subscriber_manager.remove(query);
 	}
 }
 

@@ -12,7 +12,7 @@ export const load = ({
 	const repo_route = extractRepoRoute(params.repo_or_user_route);
 	if (repo_route) {
 		// pages with repo sidebar
-		const with_repo_sidebar = ['', '/about', '/issues', '/prs', '/actions'].some((page) =>
+		const with_repo_sidebar = ['', '/about', '/issues', '/prs'].some((page) =>
 			url_string.endsWith(`${repo_route?.s}${page}`)
 		);
 		const show_sidebar_on_mobile = ['', '/about'].some((page) =>
