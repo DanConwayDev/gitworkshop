@@ -102,7 +102,7 @@
 						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 						<ul
 							tabindex="0"
-							class="menu dropdown-content z-[1] -mr-4 rounded-box bg-base-400 p-2 shadow"
+							class="menu dropdown-content z-[1] -mr-4 min-w-max rounded-box bg-base-400 p-2 shadow"
 						>
 							{#each store.accounts as account}
 								<li>
