@@ -3,6 +3,7 @@
 	import accounts_manager from '$lib/accounts';
 	import store, { search } from '$lib/store.svelte';
 	import Container from './Container.svelte';
+	import FeedbackModal from './FeedbackModal.svelte';
 	import LoginModal from './LoginModal.svelte';
 	import ManageAccountsModal from './ManageAccountsModal.svelte';
 	import SettingsModal from './SettingsModal.svelte';
@@ -12,6 +13,7 @@
 	let show_login_modal = $state(false);
 	let show_manage_accounts_modal = $state(false);
 	let show_settings_modal = $state(false);
+	let show_feedback_modal = $state(false);
 	let search_input = $state(search.text);
 	function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
@@ -131,6 +133,13 @@
 							<li>
 								<button
 									onclick={() => {
+										show_feedback_modal = true;
+									}}>Feedback</button
+								>
+							</li>
+							<li>
+								<button
+									onclick={() => {
 										show_settings_modal = true;
 									}}>Settings</button
 								>
@@ -161,6 +170,14 @@
 	<ManageAccountsModal
 		done={() => {
 			show_manage_accounts_modal = false;
+		}}
+	/>
+{/if}
+
+{#if show_feedback_modal}
+	<FeedbackModal
+		done={() => {
+			show_feedback_modal = false;
 		}}
 	/>
 {/if}
