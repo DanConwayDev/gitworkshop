@@ -25,7 +25,7 @@ import {
 } from '$lib/types';
 import { unixNow } from 'applesauce-core/helpers';
 import { addEventsToCache, getCacheEventsForFilters } from '$lib/dbs/LocalRelayDb';
-import { ActionDvmRequestKind, RepoAnnKind } from '$lib/kinds';
+import { ActionDvmRequestKind, FeedbackKind, RepoAnnKind } from '$lib/kinds';
 import { nip05 as nip05NostrTools, type Filter, type NostrEvent } from 'nostr-tools';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import Processor from '$lib/processors/Processor';
@@ -108,7 +108,28 @@ class QueryCentreExternal {
 		]);
 		const relay_logs = new Map<WebSocketUrl, OutboxRelayLog>();
 		// note as we are providing a table item, this will probably wont be async
-		if (event.kind !== ActionDvmRequestKind)
+		if (event.kind === ActionDvmRequestKind) {
+			action_dvm_relays.forEach((r) => {
+				let log = relay_logs.get(r);
+				if (!log) {
+					log = { url: r, success: false, groups: [], attempts: [] };
+					relay_logs.set(r, log);
+				}
+				log.groups.push('Action DVM');
+			});
+		} else if (event.kind === FeedbackKind) {
+			const gitworkshop_relays = await getRepoInboxRelays(
+				'30617:a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d:gitworkshop'
+			);
+			gitworkshop_relays.forEach((r) => {
+				let log = relay_logs.get(r);
+				if (!log) {
+					log = { url: r, success: false, groups: [], attempts: [] };
+					relay_logs.set(r, log);
+				}
+				log.groups.push('Gitworkshop.dev Repository');
+			});
+		} else {
 			await Promise.all([
 				...users.map((u) =>
 					(async (): Promise<void> => {
@@ -140,17 +161,8 @@ class QueryCentreExternal {
 					})()
 				)
 			]);
-
-		if (event.kind === ActionDvmRequestKind) {
-			action_dvm_relays.forEach((r) => {
-				let log = relay_logs.get(r);
-				if (!log) {
-					log = { url: r, success: false, groups: [], attempts: [] };
-					relay_logs.set(r, log);
-				}
-				log.groups.push('Action DVM');
-			});
 		}
+
 		await db.outbox.put({ ...item, relay_logs: [...relay_logs.values()] });
 
 		relay_logs.forEach(async (log) => {

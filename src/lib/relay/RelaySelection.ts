@@ -184,7 +184,7 @@ export const getPubkeyOutboxRelays = async (
 };
 
 export const getRepoInboxRelays = async (
-	a_ref_or_repo_table_item: RepoTableItem
+	a_ref_or_repo_table_item: RepoTableItem | RepoRef
 ): Promise<WebSocketUrl[]> => {
 	const record = isRepoRef(a_ref_or_repo_table_item)
 		? await db.repos.get(a_ref_or_repo_table_item)
