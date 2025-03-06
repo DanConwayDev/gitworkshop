@@ -75,7 +75,7 @@
 			);
 			if (event) {
 				signed = true;
-				await query_centre.publishEvent(event);
+				query_centre.publishEvent(event);
 				sent = true;
 				setTimeout(() => done(), 1000);
 			} else {

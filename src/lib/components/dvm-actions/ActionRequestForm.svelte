@@ -96,7 +96,7 @@
 				// TODO: think about which relays should recieve this
 				// TODO: do we really need to wait for the event to be broadly sent?
 				//       we just need to be be received by one of the dvm relays before continuing
-				await query_centre.publishEvent(request);
+				query_centre.publishEvent(request);
 				submitted = true;
 				onsubmitted(request.id);
 			} else {
