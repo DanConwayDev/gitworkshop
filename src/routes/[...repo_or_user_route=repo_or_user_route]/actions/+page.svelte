@@ -1,11 +1,11 @@
 <script lang="ts">
 	import Container from '$lib/components/Container.svelte';
 	import ContainerCenterPage from '$lib/components/ContainerCenterPage.svelte';
-	import ActionLauncher from '$lib/components/dvm-actions/ActionLauncher.svelte';
+	import ActionRequestForm from '$lib/components/dvm-actions/ActionRequestForm.svelte';
 	import RecentRunItem from '$lib/components/dvm-actions/RecentRunItem.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store from '$lib/store.svelte';
-	import { routeToRepoRef, type RepoRef } from '$lib/types';
+	import { routeToRepoRef, type EventIdString, type RepoRef } from '$lib/types';
 
 	let a_ref: RepoRef | undefined = $derived(routeToRepoRef(store.route));
 	let recent_runs = $derived(
@@ -13,7 +13,8 @@
 	);
 	let recent_runs_events = $derived(recent_runs.timeline);
 
-	let show_launcher = $state(false);
+	let show_launcher = $state(true);
+	let submitted_job_id: EventIdString | undefined = $state(undefined);
 </script>
 
 {#snippet noneFound()}
@@ -29,13 +30,27 @@
 {/snippet}
 
 {#if a_ref}
-	{#if show_launcher}
-		<div class="bg-base-200 pb-4">
-			<Container>
-				<ActionLauncher {a_ref} />
-			</Container>
-		</div>
-	{/if}
+	<div class="bg-base-200 pb-4">
+		<Container>
+			{#if show_launcher}
+				<ActionRequestForm
+					{a_ref}
+					onsubmitted={(id) => {
+						submitted_job_id = id;
+						show_launcher = false;
+					}}
+				/>
+			{:else}
+				launched {submitted_job_id}
+				<button
+					class="btn btn-success mt-6"
+					onclick={() => {
+						show_launcher = true;
+					}}>Launch Another</button
+				>
+			{/if}
+		</Container>
+	</div>
 	{#if recent_runs_events.length === 0 && !show_launcher}
 		<ContainerCenterPage repo_header_on_page>
 			{@render noneFound()}
@@ -50,7 +65,7 @@
 				</div>
 			{:else}
 				{#each recent_runs_events as run_event}
-					<RecentRunItem request_id={run_event.id} />
+					<RecentRunItem request_event={run_event} />
 				{/each}
 			{/if}
 		</Container>

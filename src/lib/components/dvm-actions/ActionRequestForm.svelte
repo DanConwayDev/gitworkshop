@@ -1,13 +1,20 @@
 <script lang="ts">
 	import accounts_manager from '$lib/accounts';
-	import { inMemoryRelayEvent, RepoRouteStringCreator } from '$lib/helpers.svelte';
-	import { ActionDvmRequestQuoteKind, RepoStateKind } from '$lib/kinds';
+	import {
+		inMemoryRelayEvent,
+		inMemoryRelayTimeline,
+		RepoRouteStringCreator
+	} from '$lib/helpers.svelte';
+	import { ActionDvmRequestKind, RepoStateKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
+	import { createActionDVMProvidersFilter } from '$lib/relay/filters/actions';
 	import { type EventIdString, type RepoRef, type RepoRouteString } from '$lib/types';
+	import { eventToActionsDVMProvider } from '$lib/types/dvm';
 	import { aRefToAddressPointer } from '$lib/utils';
 	import { unixNow } from 'applesauce-core/helpers';
 	import type { AddressPointer } from 'nostr-tools/nip19';
 	import { onMount } from 'svelte';
+	import FromNow from '../FromNow.svelte';
 
 	let { a_ref, onsubmitted }: { a_ref: RepoRef; onsubmitted: (id: EventIdString) => void } =
 		$props();
@@ -49,14 +56,8 @@
 	});
 
 	let branch_or_tag = $state();
-	let pipeline_filepath = $state('.github/workflows/ci.yaml');
-	let runner_timeout = $state(20);
-
-	let show_detailed = $state(false);
-	let bid = $state(50);
-	let min_vcpu = $state(1);
-	let min_ram = $state(4000);
-	let min_storage = $state(10000);
+	let workflow_filepath = $state('.github/workflows/ci.yaml');
+	let runner_timeout_mins = $state(20);
 
 	let form_complete = $derived(!!branch_or_tag);
 	let submitting = $state(false);
@@ -76,14 +77,15 @@
 		};
 		try {
 			let request = await accounts_manager.getActive()?.signEvent({
-				kind: ActionDvmRequestQuoteKind,
+				kind: ActionDvmRequestKind,
 				created_at: unixNow(),
 				content: '',
 				tags: [
 					['a', $state.snapshot(a_ref)],
 					['param', 'git_address', $state.snapshot(repo_link)],
 					['param', 'git_ref', $state.snapshot(branch_or_tag)],
-					['param', 'pipeline_filepath', $state.snapshot(pipeline_filepath)]
+					['param', 'workflow_filepath', $state.snapshot(workflow_filepath)],
+					['param', 'workflow_timeout', $state.snapshot(runner_timeout_mins * 60).toString()]
 					// TODO: ['p', <dvm pubkey and publishEvent will send to 10002 inbox relays>]
 				]
 			});
@@ -104,173 +106,120 @@
 			rejectedBySigner();
 		}
 	};
+
+	let dvm_providers_query = $derived(inMemoryRelayTimeline(createActionDVMProvidersFilter()));
+	let dvm_providers_anns = $derived(dvm_providers_query.timeline);
 </script>
 
-<div class="max-w-xs space-y-2">
-	<label class="form-control w-full max-w-xs">
-		<div class="label">
-			<span class="label-text">Branch / Tag <span class="required">*</span></span>
-		</div>
-		{#if state_not_found}
-			<input
-				disabled={submitting}
-				type="text"
-				placeholder="eg. refs/head/master"
-				class="input input-sm input-bordered w-full max-w-xs"
-				bind:value={branch_or_tag}
-			/>
-		{:else if !repo_state_query.event}
-			<select class="select select-bordered select-sm">
-				<option disabled selected>loading</option>
-			</select>
-		{:else}
-			<select
-				disabled={submitting}
-				class="select select-bordered select-sm"
-				bind:value={branch_or_tag}
-			>
-				<option disabled selected
-					>{#if default_branch_or_tag}{default_branch_or_tag}{:else}choose branch or tag{/if}</option
+<div class="grid grid-cols-4">
+	<div class="max-w-xs space-y-2">
+		<label class="form-control w-full max-w-xs">
+			<div class="label">
+				<span class="label-text">Branch / Tag <span class="required">*</span></span>
+			</div>
+			{#if state_not_found}
+				<input
+					disabled={submitting}
+					type="text"
+					placeholder="eg. refs/head/master"
+					class="input input-sm input-bordered w-full max-w-xs"
+					bind:value={branch_or_tag}
+				/>
+			{:else if !repo_state_query.event}
+				<select class="select select-bordered select-sm">
+					<option disabled selected>loading</option>
+				</select>
+			{:else}
+				<select
+					disabled={submitting}
+					class="select select-bordered select-sm"
+					bind:value={branch_or_tag}
 				>
-				{#each refs as tag}
-					<option>{tag[0]}</option>
-				{/each}
-			</select>
-		{/if}
-	</label>
-	<label class="form-control w-full max-w-xs">
-		<div class="label">
-			<span class="label-text">Yaml Path</span>
-		</div>
-		<input
-			type="text"
-			disabled={submitting}
-			placeholder="eg .github/workflows/ci.yaml"
-			class="input input-sm input-bordered w-full max-w-xs"
-			bind:value={pipeline_filepath}
-		/>
-	</label>
-
-	<label class="form-control w-full max-w-xs">
-		<div class="label">
-			<span class="label-text">Runner Timeout</span>
-		</div>
-		<label class="input input-sm input-bordered flex items-center gap-2">
-			<input
-				type="number"
-				disabled={submitting}
-				placeholder="Enter maximum sats"
-				class="grow"
-				bind:value={runner_timeout}
-				min="1"
-				max="120"
-			/>
-			<span class="text-sm">minutes</span>
+					<option disabled selected
+						>{#if default_branch_or_tag}{default_branch_or_tag}{:else}choose branch or tag{/if}</option
+					>
+					{#each refs as tag}
+						<option>{tag[0]}</option>
+					{/each}
+				</select>
+			{/if}
 		</label>
-	</label>
-	{#if show_detailed}
-		<div class="max-w-xs">
-			<label class="form-control w-full max-w-xs">
-				<div class="label">
-					<span class="label-text text-xs">Maximum Sats per Minute</span>
-				</div>
+		<label class="form-control w-full max-w-xs">
+			<div class="label">
+				<span class="label-text">Yaml Path</span>
+			</div>
+			<input
+				type="text"
+				disabled={submitting}
+				placeholder="eg .github/workflows/ci.yaml"
+				class="input input-sm input-bordered w-full max-w-xs"
+				bind:value={workflow_filepath}
+			/>
+		</label>
+
+		<label class="form-control w-full max-w-xs">
+			<div class="label">
+				<span class="label-text">Runner Timeout</span>
+			</div>
+			<label class="input input-sm input-bordered flex items-center gap-2">
 				<input
 					type="number"
 					disabled={submitting}
 					placeholder="Enter maximum sats"
-					class="input input-xs input-bordered w-full max-w-xs"
-					bind:value={bid}
-					min="0"
-					max="10000"
-				/>
-			</label>
-
-			<label class="form-control w-full max-w-xs">
-				<div class="label">
-					<span class="label-text text-xs">Minimum vCPUs</span>
-				</div>
-				<input
-					type="number"
-					disabled={submitting}
-					placeholder="Enter minimum vCPUs"
-					class="input input-xs input-bordered w-full max-w-xs"
-					bind:value={min_vcpu}
+					class="grow"
+					bind:value={runner_timeout_mins}
 					min="1"
-					max="64"
+					max="120"
 				/>
+				<span class="text-sm">minutes</span>
 			</label>
+		</label>
+	</div>
 
-			<label class="form-control w-full max-w-xs">
-				<div class="label">
-					<span class="label-text text-xs">Minimum RAM (MB)</span>
+	<div>
+		{#each dvm_providers_anns.map(eventToActionsDVMProvider).filter((p) => !!p) as provider_ann}
+			<div class="m-2 mt-4 rounded-lg bg-base-300 p-4">
+				<!-- {getTagValue()} -->
+				<div class="flex items-center">
+					<div class="flex">
+						<div class="prose flex-grow">
+							<h3 class="">
+								{provider_ann.name}
+							</h3>
+						</div>
+						<button
+							type="button"
+							class="btn btn-primary btn-sm"
+							class:disabled:bg-success={submitted}
+							class:disabled:text-success-content={submitted}
+							class:disabled:bg-error={rejected_by_signer}
+							class:disabled:text-error-content={rejected_by_signer}
+							disabled={submitting || !form_complete || rejected_by_signer}
+							onclick={() => {
+								submit();
+							}}
+						>
+							{#if submitting}
+								{#if submitted}
+									Request Sent
+								{:else if signed}
+									Submitting Request
+								{:else}
+									Signing Request
+								{/if}
+							{:else if rejected_by_signer}
+								Rejected by Signer
+							{:else}
+								Start for {Number(provider_ann.price_per_second) * 60 * runner_timeout_mins}
+								{provider_ann.unit}
+							{/if}
+						</button>
+					</div>
 				</div>
-				<input
-					type="number"
-					disabled={submitting}
-					placeholder="Enter minimum RAM in MB"
-					class="input input-xs input-bordered w-full max-w-xs"
-					bind:value={min_ram}
-					min="512"
-					max="1024"
-				/>
-			</label>
-
-			<label class="form-control w-full max-w-xs">
-				<div class="label">
-					<span class="label-text text-xs">Minimum Storage (GB)</span>
-				</div>
-				<input
-					type="number"
-					disabled={submitting}
-					placeholder="Enter minimum storage in GB"
-					class="input input-xs input-bordered w-full max-w-xs"
-					bind:value={min_storage}
-					min="1"
-					max="2000"
-				/>
-			</label>
-		</div>
-	{/if}
-	<div class="mt-4 flex items-center">
-		<div class="-ml-2">
-			<button
-				type="button"
-				class="btn btn-ghost btn-xs"
-				onclick={() => (show_detailed = !show_detailed)}
-			>
-				{#if !show_detailed}
-					More Options
-				{:else}
-					Less Options
-				{/if}
-			</button>
-		</div>
-		<div class="flex-grow"></div>
-		<button
-			type="button"
-			class="btn btn-primary btn-sm"
-			class:disabled:bg-success={submitted}
-			class:disabled:text-success-content={submitted}
-			class:disabled:bg-error={rejected_by_signer}
-			class:disabled:text-error-content={rejected_by_signer}
-			disabled={submitting || !form_complete || rejected_by_signer}
-			onclick={() => {
-				submit();
-			}}
-		>
-			{#if submitting}
-				{#if submitted}
-					Request Sent
-				{:else if signed}
-					Submitting Request
-				{:else}
-					Signing Request
-				{/if}
-			{:else if rejected_by_signer}
-				Rejected by Signer
-			{:else}
-				Request Runner
-			{/if}
-		</button>
+				<div class="">{provider_ann.about}</div>
+				<div class="">{provider_ann.mints.join(', ')}</div>
+				<div class="">last active <FromNow unix_seconds={provider_ann.last_pong} /></div>
+			</div>
+		{/each}
 	</div>
 </div>

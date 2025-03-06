@@ -259,7 +259,7 @@ class QueryCentre {
 		this.external_worker.postMessage({ method: 'fetchRecentActions', args: [a_ref] });
 		this.external_worker.postMessage({ method: 'watchActions', args: [a_ref] });
 		return inMemoryRelayTimeline(
-			createRecentActionsResultFilter(a_ref),
+			[...createRecentActionsRequestFilter(a_ref), ...createRecentActionsResultFilter(a_ref)],
 			() => [a_ref],
 			() => {
 				this.external_worker.postMessage({ method: 'watchActionsUnsubscribe', args: [a_ref] });

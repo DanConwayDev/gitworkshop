@@ -25,7 +25,7 @@ import {
 } from '$lib/types';
 import { unixNow } from 'applesauce-core/helpers';
 import { addEventsToCache, getCacheEventsForFilters } from '$lib/dbs/LocalRelayDb';
-import { ActionDvmRequestQuoteKind, RepoAnnKind } from '$lib/kinds';
+import { ActionDvmRequestKind, RepoAnnKind } from '$lib/kinds';
 import { nip05 as nip05NostrTools, type Filter, type NostrEvent } from 'nostr-tools';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 import Processor from '$lib/processors/Processor';
@@ -40,7 +40,10 @@ import {
 } from '$lib/relay/filters';
 import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
 import type { EventPointer } from 'nostr-tools/nip19';
-import { createRecentActionsResultFilter } from '$lib/relay/filters/actions';
+import {
+	createRecentActionsRequestFilter,
+	createRecentActionsResultFilter
+} from '$lib/relay/filters/actions';
 
 class QueryCentreExternal {
 	// processor = new Processor(self.postMessage);
@@ -105,7 +108,7 @@ class QueryCentreExternal {
 		]);
 		const relay_logs = new Map<WebSocketUrl, OutboxRelayLog>();
 		// note as we are providing a table item, this will probably wont be async
-		if (event.kind !== ActionDvmRequestQuoteKind)
+		if (event.kind !== ActionDvmRequestKind)
 			await Promise.all([
 				...users.map((u) =>
 					(async (): Promise<void> => {
@@ -138,7 +141,7 @@ class QueryCentreExternal {
 				)
 			]);
 
-		if (event.kind === ActionDvmRequestQuoteKind) {
+		if (event.kind === ActionDvmRequestKind) {
 			action_dvm_relays.forEach((r) => {
 				let log = relay_logs.get(r);
 				if (!log) {
@@ -395,7 +398,10 @@ class QueryCentreExternal {
 	}
 
 	async fetchRecentActions(a_ref: RepoRef) {
-		await this.hydrate_from_cache_db(createRecentActionsResultFilter(a_ref));
+		await this.hydrate_from_cache_db([
+			...createRecentActionsRequestFilter(a_ref),
+			...createRecentActionsResultFilter(a_ref)
+		]);
 		try {
 			await Promise.all(
 				action_dvm_relays.map((url) => this.get_relay(url).fetchRecentActions(a_ref))

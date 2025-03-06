@@ -38,16 +38,10 @@ export type IssueKind = typeof IssueKind;
 export const FeedbackKind = 1314;
 export type FeedbackKind = typeof FeedbackKind;
 
-export const ActionDvmRequestQuoteKind = 5900;
-export type ActionDvmRequestQuoteKind = typeof ActionDvmRequestQuoteKind;
-
-export const ActionDvmRequestKind = 5901;
+export const ActionDvmRequestKind = 5600;
 export type ActionDvmRequestKind = typeof ActionDvmRequestKind;
 
-export const ActionDvmQuoteResponseKind = 6900;
-export type ActionDvmQuoteResponseKind = typeof ActionDvmQuoteResponseKind;
-
-export const ActionDvmResponseKind = 6901;
+export const ActionDvmResponseKind = 6600;
 export type ActionDvmResponseKind = typeof ActionDvmResponseKind;
 
 export const LegacyGitReplyKind = 1622;

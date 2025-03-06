@@ -27,7 +27,12 @@ import {
 	createRepoChildrenStatusAndQualityFilters,
 	createRepoIdentifierFilters
 } from './filters';
-import { createRecentActionsResultFilter, createWatchActionsFilter } from './filters/actions';
+import {
+	createActionDVMProvidersFilter,
+	createRecentActionsRequestFilter,
+	createRecentActionsResultFilter,
+	createWatchActionsFilter
+} from './filters/actions';
 import type { NEventAttributes } from 'nostr-editor';
 import SubscriberManager from '$lib/SubscriberManager';
 import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
@@ -697,15 +702,22 @@ export class RelayManager {
 	async fetchRecentActions(a_ref: RepoRef): Promise<void> {
 		await this.connect();
 		await new Promise<void>((r) => {
-			const sub = this.relay.subscribe(createRecentActionsResultFilter(a_ref), {
-				onevent: async (event) => {
-					this.onEvent(event);
-				},
-				oneose: () => {
-					sub.close();
-					r(undefined);
+			const sub = this.relay.subscribe(
+				[
+					...createRecentActionsRequestFilter(a_ref),
+					...createRecentActionsResultFilter(a_ref),
+					...createActionDVMProvidersFilter()
+				],
+				{
+					onevent: async (event) => {
+						this.onEvent(event);
+					},
+					oneose: () => {
+						sub.close();
+						r(undefined);
+					}
 				}
-			});
+			);
 		});
 	}
 
@@ -715,7 +727,7 @@ export class RelayManager {
 		if (is_new) {
 			this.watch_filters.set(query, {
 				onMatch: () => {},
-				filters: createWatchActionsFilter(a_ref)
+				filters: [...createWatchActionsFilter(a_ref), ...createActionDVMProvidersFilter()]
 			});
 			this.refreshWatch();
 			this.subscriber_manager.addUnsubsriber(query, () => {
