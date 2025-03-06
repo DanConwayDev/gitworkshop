@@ -130,13 +130,15 @@
 									}}>Manage Accounts</button
 								>
 							</li>
-							<li>
-								<button
-									onclick={() => {
-										show_feedback_modal = true;
-									}}>Feedback</button
-								>
-							</li>
+							{#if store.experimental}
+								<li>
+									<button
+										onclick={() => {
+											show_feedback_modal = true;
+										}}>Feedback</button
+									>
+								</li>
+							{/if}
 							<li>
 								<button
 									onclick={() => {

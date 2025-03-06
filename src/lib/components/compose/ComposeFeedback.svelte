@@ -17,6 +17,8 @@
 
 	let { done }: { done: () => void } = $props();
 
+	let anon_force = $state(false);
+
 	let submit_attempted = $state(false);
 	let submitting = $state(false);
 	let signed = $state(false);
@@ -35,13 +37,15 @@
 		let tags: string[][] = [];
 		(
 			[
-				['alt', `app feedback`],
+				['alt', `gitworkshop.dev app feedback`],
 				[
 					'a',
 					'30617:a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d:gitworkshop',
 					'wss://nos.lol'
 				],
 				['p', 'a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d', 'wss://nos.lol'],
+				['n', 'gitworkshop.dev'],
+				['expiration', (unixNow() + 60 * 60 * 24 * 30).toString()],
 				['r', $page.url],
 				// TODO add relay hints to tags from local_db
 				...editor_tags
@@ -58,13 +62,15 @@
 			}, 2000);
 		};
 		try {
-			let signer = accounts_manager.getActive() ?? new SimpleSigner();
+			let signer = anon_force
+				? new SimpleSigner()
+				: (accounts_manager.getActive() ?? new SimpleSigner());
 			let event = await signer.signEvent(
 				$state.snapshot({
 					kind: FeedbackKind,
 					created_at: unixNow(),
 					tags: $state.snapshot(tags),
-					content: $state.snapshot(content)
+					content: `${$state.snapshot(content)}\n\n---\nsent from: ${$page.url}`
 				})
 			);
 			if (event) {
@@ -132,7 +138,19 @@
 			</label>
 
 			<div class="mt-2 flex items-center">
-				<div class="flex-auto"></div>
+				{#if !!store.logged_in_account}
+					<div class="mr-3 flex items-center align-bottom text-xs">
+						<input
+							type="checkbox"
+							id="feedback-checkbox"
+							class="checkbox checkbox-xs"
+							bind:checked={anon_force}
+						/>
+						<label for="feedback-checkbox" class="ml-2">Anonymous</label>
+					</div>
+				{/if}
+
+				<div class="flex-grow"></div>
 				{#if submit_attempted && content.length < 10}
 					<div class="pr-3 align-middle text-sm text-warning">
 						feedback must be at least 10 characters

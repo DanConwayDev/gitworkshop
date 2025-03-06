@@ -35,7 +35,7 @@ export type PatchKind = typeof PatchKind;
 export const IssueKind = 1621;
 export type IssueKind = typeof IssueKind;
 
-export const FeedbackKind = 1623;
+export const FeedbackKind = 1314;
 export type FeedbackKind = typeof FeedbackKind;
 
 export const ActionDvmRequestQuoteKind = 5900;
