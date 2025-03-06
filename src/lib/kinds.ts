@@ -1,4 +1,5 @@
 import { EventDeletion, ShortTextNote, Zap } from 'nostr-tools/kinds';
+import { kindLabel } from './kind_labels';
 
 export const StatusOpenKind = 1630;
 export type StatusOpenKind = typeof StatusOpenKind;
@@ -21,6 +22,11 @@ export function statusKindtoText(kind: number, type: 'pr' | 'issue'): string {
 	if (type === 'issue' && kind === StatusAppliedKind) return 'Resolved';
 	if (kind === StatusClosedKind) return 'Closed';
 	return 'Draft';
+}
+
+export function kindtoTextLabel(kind: number): string {
+	if (kind === FeedbackKind) return 'Feedback';
+	return kindLabel(kind) ?? 'Unknown';
 }
 
 export const RepoAnnKind = 30617;

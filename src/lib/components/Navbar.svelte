@@ -6,6 +6,7 @@
 	import FeedbackModal from './FeedbackModal.svelte';
 	import LoginModal from './LoginModal.svelte';
 	import ManageAccountsModal from './ManageAccountsModal.svelte';
+	import NavBarInsertOutbox from './NavBarInsertOutbox.svelte';
 	import SettingsModal from './SettingsModal.svelte';
 	import UserHeader from './user/UserHeader.svelte';
 
@@ -88,6 +89,7 @@
 						/>
 					</label>
 				</form>
+				{#if store.experimental}<NavBarInsertOutbox />{/if}
 				{#if store.logged_in_account || store.accounts.length > 0}
 					<div class="dropdown dropdown-end">
 						<div tabindex="0" role="button" class="m-1">
