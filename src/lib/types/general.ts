@@ -1,10 +1,16 @@
-import { isHexKey, safeRelayUrl } from 'applesauce-core/helpers';
+import { isHexKey, isSafeRelayURL } from 'applesauce-core/helpers';
 import { nip19 } from 'nostr-tools';
 
 /** general nostr / helper */
 export type WebSocketUrl = `wss://${string}` | `ws://${string}`;
 export function isWebSocketUrl(url: string): url is WebSocketUrl {
-	return !!safeRelayUrl(url);
+	return isSafeRelayURL(url);
+}
+
+export type HttpUrl = `https://${string}` | `http://${string}`;
+
+export function isHttpUrl(url?: string): url is HttpUrl {
+	return !!url && (url.startsWith('https://') || url.startsWith('http://'));
 }
 
 export type AtLeastOneArray<T> = [T, ...T[]];
