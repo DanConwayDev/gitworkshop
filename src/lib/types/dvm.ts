@@ -52,6 +52,7 @@ export const eventToActionsDVMProvider = (event: NostrEvent): DVMProvider | unde
 export interface DVMActionRequest extends NonReplaceableEventAttribution {
 	git_address: string;
 	git_ref: string;
+	workflow_filepath: string;
 	workflow_timeout: string;
 }
 
@@ -62,7 +63,8 @@ export const eventToDVMActionRequest = (event: NostrEvent): DVMActionRequest => 
 		created_at: event.created_at,
 		git_address: getParamTagValue(event.tags, 'git_address') || '',
 		git_ref: getParamTagValue(event.tags, 'git_ref') || '',
-		workflow_timeout: getParamTagValue(event.tags, 'workflow_timeout') || ''
+		workflow_timeout: getParamTagValue(event.tags, 'workflow_timeout') || '',
+		workflow_filepath: getParamTagValue(event.tags, 'workflow_filepath') || ''
 	};
 };
 
@@ -125,7 +127,7 @@ export const eventsToDVMActionSummary = (
 				}
 			: {
 					status: 'no_response',
-					status_commentary: 'No Response'
+					status_commentary: "DVM didn't respond"
 				});
 
 	return {
