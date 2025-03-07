@@ -8,6 +8,10 @@
 	import FromNow from '$lib/components/FromNow.svelte';
 	import NotFound404Page from '$lib/components/NotFound404Page.svelte';
 	import { eventsToDVMActionSummary } from '$lib/types/dvm';
+	import { getTagValue } from 'applesauce-core/helpers';
+	import { stringToDocTree } from '$lib/doc_tree';
+	import ContentTree from '$lib/components/content-tree/ContentTree.svelte';
+	import AlertError from '$lib/components/AlertError.svelte';
 
 	let {
 		data
@@ -17,7 +21,6 @@
 
 	let { event_ref } = data;
 
-	// TODO - handle naddr
 	let id = neventOrNoteToHexId(event_ref);
 
 	let request_query = $derived.by(() => {
@@ -44,6 +47,8 @@
 	let short_status_text = $derived(
 		status_text.length > 70 ? `${status_text.slice(0, 65)}...` : status_text
 	);
+
+	let success_event = $derived(responses.find((e) => getTagValue(e, 's') === 'success'));
 </script>
 
 {#if request_event}
@@ -53,6 +58,29 @@
 			<div>requested <FromNow unix_seconds={request_event.created_at} /></div>
 		</Container>
 	</div>
+	{#if success_event}
+		<Container>
+			<div
+				class="h-[90vh] overflow-x-auto rounded-lg border border-green-600 bg-black p-4 text-green-400 shadow-lg"
+			>
+				<h2 class="mb-2 text-lg font-bold">Job Output</h2>
+				<pre class="code">
+					<ContentTree node={stringToDocTree(success_event.content)} />
+				</pre>
+			</div>
+		</Container>
+	{:else if status === 'pending_response'}
+		<div class="flex items-center justify-center">
+			<div class="mr-2">waiting for DVM</div>
+			<div class="loading loading-spinner loading-lg"></div>
+		</div>
+	{:else if status === 'payment_issue'}
+		<AlertError>Payment Issue: {short_status_text}</AlertError>
+	{:else if status === 'no_response'}
+		<AlertError>DVM never responsed</AlertError>
+	{:else if status === 'error'}
+		<AlertError>{short_status_text}</AlertError>
+	{/if}
 {:else}
 	<NotFound404Page repo_header_on_page msg={`cannot find action request`} />
 {/if}
