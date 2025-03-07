@@ -1,6 +1,17 @@
 import type { NostrEvent } from 'nostr-tools';
-import { isHttpUrl, type PubKeyString, type Timestamp } from './general';
-import { getTagValue, getValueOfEachTagOccurence } from '$lib/utils';
+import {
+	isHttpUrl,
+	type NonReplaceableEventAttribution,
+	type PubKeyString,
+	type Timestamp
+} from './general';
+import {
+	getParamTagValue,
+	getTagMultiValue,
+	getTagValue,
+	getValueOfEachTagOccurence
+} from '$lib/utils';
+import { unixNow } from 'applesauce-core/helpers';
 
 export interface DVMProvider {
 	last_pong: Timestamp;
@@ -36,4 +47,89 @@ export const eventToActionsDVMProvider = (event: NostrEvent): DVMProvider | unde
 	} catch {
 		return undefined;
 	}
+};
+
+export interface DVMActionRequest extends NonReplaceableEventAttribution {
+	git_address: string;
+	git_ref: string;
+	workflow_timeout: string;
+}
+
+export const eventToDVMActionRequest = (event: NostrEvent): DVMActionRequest => {
+	return {
+		uuid: event.id,
+		author: event.pubkey,
+		created_at: event.created_at,
+		git_address: getParamTagValue(event.tags, 'git_address') || '',
+		git_ref: getParamTagValue(event.tags, 'git_ref') || '',
+		workflow_timeout: getParamTagValue(event.tags, 'workflow_timeout') || ''
+	};
+};
+
+export type ActionRunStatus =
+	| 'pending_response'
+	| 'payment_issue'
+	| 'processing'
+	| 'success'
+	| 'error'
+	| 'no_response';
+
+function isActionRunStatus(status: string): status is ActionRunStatus {
+	return (
+		status === 'pending_response' ||
+		status === 'payment_issue' ||
+		status === 'processing' ||
+		status === 'success' ||
+		status === 'error' ||
+		status === 'no_response'
+	);
+}
+
+export function getThirdTagValue(
+	tags: string[][],
+	first: string,
+	second: string
+): string | undefined {
+	return tags.find((t) => t.length > 2 && t[0] === first && t[1] === second)?.[2];
+}
+
+export interface DVMActionSummary extends DVMActionRequest {
+	status: ActionRunStatus;
+	status_commentary: string;
+}
+
+export const eventsToDVMActionSummary = (
+	request: NostrEvent,
+	responses: NostrEvent[]
+): DVMActionSummary => {
+	const statuses: { status: ActionRunStatus; status_commentary: string }[] = responses
+		.map((r) => getTagMultiValue(r.tags, 's'))
+		.filter(
+			(a): a is [ActionRunStatus, string] =>
+				!!a && isActionRunStatus(a[0].replace('payment-required', 'payment_issue'))
+		)
+		.map((a) => ({
+			status: a[0].replace('payment-required', 'payment_issue'),
+			status_commentary: a[1] ?? ''
+		}));
+
+	const status_o =
+		statuses.find((s) => s.status === 'success') ||
+		statuses.find((s) => s.status === 'error') ||
+		statuses.find((s) => s.status === 'processing') ||
+		statuses.find((s) => s.status === 'payment_issue') ||
+		(request.created_at > unixNow() - 60 * 60
+			? {
+					status: 'pending_response',
+					status_commentary: 'Pending Response...'
+				}
+			: {
+					status: 'no_response',
+					status_commentary: 'No Response'
+				});
+
+	return {
+		...eventToDVMActionRequest(request),
+		...status_o
+	};
 };

@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { inMemoryRelayTimeline } from '$lib/helpers.svelte';
 	import { createActionsRequestFilter } from '$lib/relay/filters/actions';
-	import { getTagMultiValue } from '$lib/utils';
+	import { eventToNip19 } from '$lib/utils';
 	import type { NostrEvent } from 'nostr-tools/core';
 	import { issue_icon_path } from '../issues/icons';
-	import { unixNow } from 'applesauce-core/helpers';
+	import store from '$lib/store.svelte';
+	import { isRepoRoute } from '$lib/types';
+	import { eventsToDVMActionSummary } from '$lib/types/dvm';
 
 	let { request_event }: { request_event: NostrEvent } = $props();
 
@@ -15,45 +17,17 @@
 			: { timeline: [] }
 	);
 	let responses = $derived(responses_query.timeline);
-	let status:
-		| 'pending_response'
-		| 'payment_issue'
-		| 'processing'
-		| 'success'
-		| 'error'
-		| 'no_response' = $derived.by(() => {
-		if (
-			responses.some((e) => e.tags.some((t) => t.length > 1 && t[0] === 's' && t[1] === 'success'))
-		)
-			return 'success';
-		if (responses.some((e) => e.tags.some((t) => t.length > 1 && t[0] === 's' && t[1] === 'error')))
-			return 'error';
-		if (
-			responses.some((e) =>
-				e.tags.some((t) => t.length > 1 && t[0] === 's' && t[1] === 'payment-required')
-			)
-		)
-			return 'payment_issue';
-		if (
-			responses.some((e) =>
-				e.tags.some((t) => t.length > 1 && t[0] === 's' && t[1] === 'processing')
-			)
-		)
-			return 'processing';
-		if (!request_event || request_event.created_at > unixNow() - 60 * 60) return 'pending_response';
-		return 'no_response';
-	});
-	let status_text = $derived(
-		responses.length == 0
-			? status === 'no_response'
-				? 'No Response'
-				: 'Pending Response...'
-			: (getTagMultiValue(responses[0].tags, 's')?.[1] ?? 'Unknown')
-	);
+	let summary = $derived(eventsToDVMActionSummary(request_event, responses));
+	let status = $derived(summary.status);
+	let status_text = $derived(summary.status_commentary);
 
 	let short_status_text = $derived(
 		status_text.length > 70 ? `${status_text.slice(0, 65)}...` : status_text
 	);
+
+	let repo_route = $derived(isRepoRoute(store.route) ? store.route : undefined);
+
+	let nevent = $derived(eventToNip19(request_event));
 </script>
 
 <li
@@ -90,7 +64,10 @@
 			</svg>
 		{/if}
 	</div>
-	<a href="/TDDO" class="ml-3 flex grow overflow-hidden text-xs text-neutral-content">
+	<a
+		href={`/${repo_route ? repo_route.s : 'TODO'}/actions/${nevent}`}
+		class="ml-3 flex grow overflow-hidden text-xs text-neutral-content"
+	>
 		<div class="flex flex-grow pt-2">
 			<div class="flex-grow">
 				<div class="text-sm text-base-content">

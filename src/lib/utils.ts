@@ -25,6 +25,10 @@ export function getTagValue(tags: string[][], name: string): string | undefined 
 	return tags.find((t) => t[0] === name)?.[1];
 }
 
+export function getParamTagValue(tags: string[][], name: string): string | undefined {
+	return tags.find((t) => t.length > 2 && t[0] === 'param' && t[1] === name)?.[2];
+}
+
 // get value of each occurance of tag
 export function getValueOfEachTagOccurence(tags: string[][], name: string): string[] {
 	return tags.filter((t) => t[0] === name).map((t) => t[1]);
