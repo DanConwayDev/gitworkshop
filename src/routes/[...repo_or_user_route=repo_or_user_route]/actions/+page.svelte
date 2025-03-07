@@ -64,9 +64,11 @@
 					</p>
 				</div>
 			{:else}
-				{#each recent_runs_events as run_event}
-					<RecentRunItem request_event={run_event} />
-				{/each}
+				<ul class="divide-y divide-base-400 border border-base-400">
+					{#each recent_runs_events as run_event}
+						<RecentRunItem request_event={run_event} />
+					{/each}
+				</ul>
 			{/if}
 		</Container>
 	{/if}

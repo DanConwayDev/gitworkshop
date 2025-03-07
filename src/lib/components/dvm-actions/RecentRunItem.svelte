@@ -7,6 +7,8 @@
 	import store from '$lib/store.svelte';
 	import { isRepoRoute } from '$lib/types';
 	import { eventsToDVMActionSummary } from '$lib/types/dvm';
+	import FromNow from '../FromNow.svelte';
+	import UserHeader from '../user/UserHeader.svelte';
 
 	let { request_event }: { request_event: NostrEvent } = $props();
 
@@ -34,13 +36,14 @@
 	class="flex p-2 @container {status !== 'pending_response' && status !== 'no_response'
 		? 'cursor-pointer hover:bg-base-200'
 		: ''}"
+	class:opacity-50={status === 'no_response' || status === 'payment_issue'}
 >
 	<!-- <figure class="p-4 pl-0 text-color-primary"> -->
 	<!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
 	<div class="pt-2">
 		{#if status === 'pending_response'}
 			<div class="skeleton h-5 w-5 flex-none pt-1"></div>
-		{:else if status === 'success'}
+		{:else if status === 'success' && status_text === 'PipelineSuccess'}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -51,7 +54,18 @@
 					<path d={p} />
 				{/each}
 			</svg>
-		{:else if status === 'payment_issue'}
+		{:else if status === 'payment_issue' || status === 'error' || status === 'no_response'}
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				viewBox="0 0 16 16"
+				class="h-5 w-5 flex-none fill-neutral pt-1"
+			>
+				<title>Payment Issue</title>
+				{#each issue_icon_path.closed as p}
+					<path d={p} />
+				{/each}
+			</svg>
+		{:else if status_text === 'PipelineError'}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -71,6 +85,8 @@
 		<div class="flex flex-grow pt-2">
 			<div class="flex-grow">
 				<div class="text-sm text-base-content">
+					<div class="badge badge-secondary">{summary.git_ref}</div>
+					-
 					{short_status_text}
 					<!-- {#each table_item.tags as tag}
 						<div class="badge badge-secondary mx-1">{tag}</div>
@@ -81,12 +97,15 @@
 						<li class="mr-3 inline text-error">payment issue</li>
 					{/if}
 
-					<!-- <li class="mr-3 inline">
-						active <FromNow unix_seconds={table_item.last_activity} />
+					<li class="mr-3 inline">
+						<FromNow unix_seconds={summary.created_at} />
 					</li>
 					<li class="inline">
-						<UserHeader user={table_item.author} inline={true} size="xs" />
-					</li> -->
+						requested by <UserHeader user={summary.author} inline={true} size="xs" />
+					</li>
+					<li class="inline">
+						action: {summary.workflow_filepath}
+					</li>
 				</ul>
 			</div>
 		</div>

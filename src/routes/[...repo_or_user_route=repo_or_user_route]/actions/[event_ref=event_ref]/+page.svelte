@@ -61,7 +61,11 @@
 	{#if success_event}
 		<Container>
 			<div
-				class="h-[90vh] overflow-x-auto rounded-lg border border-green-600 bg-black p-4 text-green-400 shadow-lg"
+				class="h-[90vh] overflow-x-auto rounded-lg border bg-black p-4 shadow-lg"
+				class:text-green-400={status_text === 'PipelineSuccess'}
+				class:border-green-600={status_text === 'PipelineSuccess'}
+				class:text-red-400={status_text === 'PipelineError'}
+				class:border-red-600={status_text === 'PipelineError'}
 			>
 				<h2 class="mb-2 text-lg font-bold">Job Output</h2>
 				<pre class="code">
