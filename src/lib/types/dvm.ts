@@ -111,7 +111,7 @@ export const eventsToDVMActionSummary = (
 				!!a && isActionRunStatus(a[0].replace('payment-required', 'payment_issue'))
 		)
 		.map((a) => ({
-			status: a[0].replace('payment-required', 'payment_issue'),
+			status: a[0].replace('payment-required', 'payment_issue') as ActionRunStatus,
 			status_commentary: a[1] ?? ''
 		}));
 
@@ -120,7 +120,7 @@ export const eventsToDVMActionSummary = (
 		statuses.find((s) => s.status === 'error') ||
 		statuses.find((s) => s.status === 'processing') ||
 		statuses.find((s) => s.status === 'payment_issue') ||
-		(request.created_at > unixNow() - 60 * 60
+		(request.created_at > unixNow() - 30
 			? {
 					status: 'pending_response',
 					status_commentary: 'Pending Response...'
