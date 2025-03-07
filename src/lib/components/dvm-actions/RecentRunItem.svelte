@@ -85,12 +85,11 @@
 		<div class="flex flex-grow pt-2">
 			<div class="flex-grow">
 				<div class="text-sm text-base-content">
-					<div class="badge badge-secondary">{summary.git_ref}</div>
-					-
-					{short_status_text}
-					<!-- {#each table_item.tags as tag}
-						<div class="badge badge-secondary mx-1">{tag}</div>
-					{/each} -->
+					branch: {summary.git_ref}
+					{#if status === 'error' || status === 'payment_issue' || status === 'pending_response' || status === 'processing'}
+						-
+						{short_status_text}
+					{/if}
 				</div>
 				<ul class="pt-2">
 					{#if status === 'payment_issue'}
