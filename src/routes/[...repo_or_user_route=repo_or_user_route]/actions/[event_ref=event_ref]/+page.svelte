@@ -12,6 +12,7 @@
 	import { stringToDocTree } from '$lib/doc_tree';
 	import ContentTree from '$lib/components/content-tree/ContentTree.svelte';
 	import AlertError from '$lib/components/AlertError.svelte';
+	import Duration from '$lib/components/Duration.svelte';
 
 	let {
 		data
@@ -49,13 +50,29 @@
 	);
 
 	let success_event = $derived(responses.find((e) => getTagValue(e, 's') === 'success'));
+	let job_last_response = $derived(
+		responses.reduce((max, event) => {
+			return event.created_at > max ? event.created_at : max;
+		}, summary?.created_at ?? 0)
+	);
 </script>
 
 {#if request_event}
 	<div class="bg-base-200 py-3">
 		<Container>
-			<div>Status: {status} ({short_status_text})</div>
-			<div>requested <FromNow unix_seconds={request_event.created_at} /></div>
+			<div class="flex flex-col space-x-16 md:flex-row">
+				<div><span class="text-sm text-gray-500">branch:</span> {summary?.git_ref}</div>
+				<div><span class="text-sm text-gray-500">action:</span> {summary?.workflow_filepath}</div>
+				<div>
+					<span class="text-sm text-gray-500">duration:</span>
+					<Duration to_s={job_last_response} from_s={summary?.created_at ?? 0} />
+				</div>
+				<div><span class="text-sm text-gray-500">status:</span> {status} ({short_status_text})</div>
+				<div>
+					<span class="text-sm text-gray-500">requested:</span>
+					<FromNow unix_seconds={request_event.created_at} />
+				</div>
+			</div>
 		</Container>
 	</div>
 	{#if success_event}
