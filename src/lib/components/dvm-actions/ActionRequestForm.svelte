@@ -1,14 +1,10 @@
 <script lang="ts">
 	import accounts_manager from '$lib/accounts';
-	import {
-		inMemoryRelayEvent,
-		inMemoryRelayTimeline,
-		RepoRouteStringCreator
-	} from '$lib/helpers.svelte';
+	import { inMemoryRelayEvent, inMemoryRelayTimeline } from '$lib/helpers.svelte';
 	import { ActionDvmRequestKind, RepoStateKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { createActionDVMProvidersFilter } from '$lib/relay/filters/actions';
-	import { type EventIdString, type Naddr, type RepoRef, type RepoRouteString } from '$lib/types';
+	import { type EventIdString, type RepoRef } from '$lib/types';
 	import { eventToActionsDVMProvider } from '$lib/types/dvm';
 	import { aRefToAddressPointer } from '$lib/utils';
 	import { unixNow } from 'applesauce-core/helpers';
@@ -19,9 +15,6 @@
 
 	let { a_ref, onsubmitted }: { a_ref: RepoRef; onsubmitted: (id: EventIdString) => void } =
 		$props();
-
-	let link_creator = $derived(new RepoRouteStringCreator(a_ref));
-	let repo_link: RepoRouteString = $derived(link_creator.s);
 
 	let repo_state_pointer = $derived({
 		...aRefToAddressPointer(a_ref),
@@ -56,9 +49,11 @@
 		return undefined;
 	});
 
-	let branch_or_tag = $state();
+	let branch_or_tag = $state(undefined);
 	let workflow_filepath = $state('.github/workflows/ci.yaml');
 	let runner_timeout_mins = $state(20);
+
+	let git_ref = $derived((branch_or_tag ?? '').replace('refs/heads/', ''));
 
 	let form_complete = $derived(!!branch_or_tag);
 	let submitting = $state(false);
@@ -90,8 +85,7 @@
 					],
 					// ['param', 'git_address', $state.snapshot(repo_link)],
 
-					['param', 'git_ref', 'add-payments'],
-					// ['param', 'git_ref', $state.snapshot(branch_or_tag)],
+					['param', 'git_ref', $state.snapshot(git_ref)],
 					['param', 'workflow_filepath', $state.snapshot(workflow_filepath)],
 					['param', 'workflow_timeout', $state.snapshot(runner_timeout_mins * 60).toString()],
 					['payment', 'TODO']
