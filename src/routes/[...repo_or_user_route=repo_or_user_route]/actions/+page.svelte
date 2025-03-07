@@ -43,7 +43,7 @@
 			{:else}
 				launched {submitted_job_id}
 				<button
-					class="btn btn-success mt-6"
+					class="btn btn-success btn-sm mt-6"
 					onclick={() => {
 						show_launcher = true;
 					}}>Launch Another</button

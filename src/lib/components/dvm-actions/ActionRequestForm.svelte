@@ -8,13 +8,14 @@
 	import { ActionDvmRequestKind, RepoStateKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { createActionDVMProvidersFilter } from '$lib/relay/filters/actions';
-	import { type EventIdString, type RepoRef, type RepoRouteString } from '$lib/types';
+	import { type EventIdString, type Naddr, type RepoRef, type RepoRouteString } from '$lib/types';
 	import { eventToActionsDVMProvider } from '$lib/types/dvm';
 	import { aRefToAddressPointer } from '$lib/utils';
 	import { unixNow } from 'applesauce-core/helpers';
 	import type { AddressPointer } from 'nostr-tools/nip19';
 	import { onMount } from 'svelte';
 	import FromNow from '../FromNow.svelte';
+	import { nip19 } from 'nostr-tools';
 
 	let { a_ref, onsubmitted }: { a_ref: RepoRef; onsubmitted: (id: EventIdString) => void } =
 		$props();
@@ -82,10 +83,18 @@
 				content: '',
 				tags: [
 					['a', $state.snapshot(a_ref)],
-					['param', 'git_address', $state.snapshot(repo_link)],
-					['param', 'git_ref', $state.snapshot(branch_or_tag)],
+					[
+						'param',
+						'git_address',
+						$state.snapshot(nip19.naddrEncode(aRefToAddressPointer(a_ref) as AddressPointer))
+					],
+					// ['param', 'git_address', $state.snapshot(repo_link)],
+
+					['param', 'git_ref', 'add-payments'],
+					// ['param', 'git_ref', $state.snapshot(branch_or_tag)],
 					['param', 'workflow_filepath', $state.snapshot(workflow_filepath)],
-					['param', 'workflow_timeout', $state.snapshot(runner_timeout_mins * 60).toString()]
+					['param', 'workflow_timeout', $state.snapshot(runner_timeout_mins * 60).toString()],
+					['payment', 'TODO']
 					// TODO: ['p', <dvm pubkey and publishEvent will send to 10002 inbox relays>]
 				]
 			});
