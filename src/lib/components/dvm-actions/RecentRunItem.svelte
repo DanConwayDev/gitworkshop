@@ -43,6 +43,8 @@
 	<div class="pt-2">
 		{#if status === 'pending_response'}
 			<div class="skeleton h-5 w-5 flex-none pt-1"></div>
+		{:else if status === 'processing'}
+			<span class="loading loading-spinner loading-sm text-warning"></span>
 		{:else if status === 'success' && status_text === 'PipelineSuccess'}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
@@ -60,7 +62,15 @@
 				viewBox="0 0 16 16"
 				class="h-5 w-5 flex-none fill-neutral pt-1"
 			>
-				<title>Payment Issue</title>
+				<title>
+					{#if status === 'payment_issue'}
+						Payment Issue
+					{:else if status === 'error'}
+						Error
+					{:else if status === 'no_response'}
+						No Response
+					{/if}
+				</title>
 				{#each issue_icon_path.closed as p}
 					<path d={p} />
 				{/each}
@@ -99,11 +109,11 @@
 					<li class="mr-3 inline">
 						<FromNow unix_seconds={summary.created_at} />
 					</li>
-					<li class="inline">
+					<li class="mr-3 inline">
 						requested by <UserHeader user={summary.author} inline={true} size="xs" />
 					</li>
 					<li class="inline">
-						action: {summary.workflow_filepath}
+						{summary.workflow_filepath}
 					</li>
 				</ul>
 			</div>
