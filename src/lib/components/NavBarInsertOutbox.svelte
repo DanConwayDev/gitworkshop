@@ -107,7 +107,7 @@
 								return acc;
 							}, new Set<string>()) as group, i}
 								<div class="collapse collapse-arrow bg-base-300">
-									<input type="radio" name="my-accordion-2" checked={i ? 'checked' : undefined} />
+									<input type="radio" name="my-accordion-2" checked={i ? true : undefined} />
 									<div class="collapse-title">
 										{group} ({o.relay_logs.filter((l) => l.groups.includes(group) && l.success)
 											.length} /
