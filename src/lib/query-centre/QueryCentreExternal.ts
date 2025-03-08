@@ -52,6 +52,23 @@ class QueryCentreExternal {
 	});
 	base_relays: WebSocketUrl[] = base_relays;
 	relays: Map<WebSocketUrl, RelayManager> = new Map();
+	constructor() {
+		const sendOutboxEvents = async () => {
+			const outbox = await db.outbox.filter((o) => o.relay_logs.some((l) => !l.success)).toArray();
+			outbox.forEach((o) => {
+				o.relay_logs.forEach((l) => {
+					if (!l.success) this.get_relay(l.url).publishEvent(o.event);
+				});
+			});
+		};
+		setTimeout(
+			() => {
+				sendOutboxEvents();
+			},
+			// wait 10 seconds so we don't do too much on initial load
+			10 * 1000
+		);
+	}
 
 	get_relay(url: WebSocketUrl) {
 		const relay = this.relays.get(url);
