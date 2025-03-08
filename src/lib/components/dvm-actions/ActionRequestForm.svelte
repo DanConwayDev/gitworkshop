@@ -4,7 +4,7 @@
 	import { ActionDvmRequestKind, RepoStateKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { createActionDVMProvidersFilter } from '$lib/relay/filters/actions';
-	import { type EventIdString, type RepoRef } from '$lib/types';
+	import { type EventIdString, type PubKeyString, type RepoRef } from '$lib/types';
 	import { eventToActionsDVMProvider } from '$lib/types/dvm';
 	import { aRefToAddressPointer } from '$lib/utils';
 	import { unixNow } from 'applesauce-core/helpers';
@@ -64,7 +64,7 @@
 	let rejected_by_signer = $state(false);
 	let submitted = $state(false);
 
-	const submit = async () => {
+	const submit = async (pubkey: PubKeyString) => {
 		submitting = true;
 
 		const rejectedBySigner = () => {
@@ -75,25 +75,28 @@
 			}, 2000);
 		};
 		try {
+			let content =
+				(await accounts_manager
+					.getActive()
+					?.nip04?.encrypt(pubkey, JSON.stringify([['payment', '<insert-cashu-token>']]))) || '';
 			let request = await accounts_manager.getActive()?.signEvent({
 				kind: ActionDvmRequestKind,
 				created_at: unixNow(),
-				content: '',
+				content,
 				tags: [
 					['a', $state.snapshot(a_ref)],
 					[
 						'param',
 						'git_address',
+						// TODO add relays to naddr
 						$state.snapshot(nip19.naddrEncode(aRefToAddressPointer(a_ref) as AddressPointer))
 					],
-					// ['param', 'git_address', $state.snapshot(repo_link)],
-
 					['param', 'git_ref', $state.snapshot(git_ref)],
 					['param', 'workflow_filepath', $state.snapshot(workflow_filepath)],
 					['param', 'workflow_timeout', $state.snapshot(runner_timeout_mins * 60).toString()],
 					...(selected_commit ? [['commit', $state.snapshot(selected_commit)]] : []),
-					['payment', 'TODO']
-					// TODO: ['p', <dvm pubkey and publishEvent will send to 10002 inbox relays>]
+					['p', pubkey],
+					['encrypted']
 				]
 			});
 			if (request) {
@@ -203,7 +206,7 @@
 							class:disabled:text-error-content={rejected_by_signer}
 							disabled={submitting || !form_complete || rejected_by_signer}
 							onclick={() => {
-								submit();
+								submit(provider_ann.pubkey);
 							}}
 						>
 							{#if submitting}
