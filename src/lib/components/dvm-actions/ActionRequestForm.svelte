@@ -188,8 +188,14 @@
 
 	<div>
 		{#each dvm_providers_anns.map(eventToActionsDVMProvider).filter((p) => !!p) as provider_ann}
-			<div class="m-2 mt-4 rounded-lg bg-base-300 p-4">
-				<!-- {getTagValue()} -->
+			<div class="relative m-2 mt-4 rounded-lg bg-base-300 p-4">
+				{#if unixNow() - provider_ann.last_pong > 300}
+					<div class="absolute inset-0 flex items-end justify-end rounded-lg bg-red-600 opacity-25">
+						<span class="mb-4 mr-4 rounded bg-red-900 p-2 text-xl font-bold text-white"
+							>Offline</span
+						>
+					</div>
+				{/if}
 				<div class="flex items-center">
 					<div class="flex">
 						<div class="prose flex-grow">
