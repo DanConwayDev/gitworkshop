@@ -60,7 +60,11 @@
 {#if request_event}
 	<div class="bg-base-200 py-3">
 		<Container>
-			<div class="flex flex-col space-x-16 md:flex-row">
+			<div class="flex flex-col flex-wrap md:flex-row md:space-x-16">
+				{#if summary?.commit_id}<div>
+						<span class="text-sm text-gray-500">commit:</span>
+						{summary.commit_id.substring(0, 7)}
+					</div>{/if}
 				<div><span class="text-sm text-gray-500">branch:</span> {summary?.git_ref}</div>
 				<div><span class="text-sm text-gray-500">action:</span> {summary?.workflow_filepath}</div>
 				<div>

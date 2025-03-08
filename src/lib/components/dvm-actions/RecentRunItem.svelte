@@ -96,6 +96,8 @@
 			<div class="flex-grow">
 				<div class="text-sm text-base-content">
 					branch: {summary.git_ref}
+					{#if summary.commit_id}
+						({summary.commit_id.substring(0, 7)}){/if}
 					{#if status === 'error' || status === 'payment_issue' || status === 'pending_response' || status === 'processing'}
 						-
 						{short_status_text}

@@ -50,6 +50,9 @@
 	});
 
 	let branch_or_tag = $state(undefined);
+	let selected_commit = $derived(
+		refs.find((r) => r.length > 1 && branch_or_tag && r[0] === branch_or_tag)?.[1]
+	);
 	let workflow_filepath = $state('.github/workflows/ci.yaml');
 	let runner_timeout_mins = $state(20);
 
@@ -88,6 +91,7 @@
 					['param', 'git_ref', $state.snapshot(git_ref)],
 					['param', 'workflow_filepath', $state.snapshot(workflow_filepath)],
 					['param', 'workflow_timeout', $state.snapshot(runner_timeout_mins * 60).toString()],
+					...(selected_commit ? [['commit', $state.snapshot(selected_commit)]] : []),
 					['payment', 'TODO']
 					// TODO: ['p', <dvm pubkey and publishEvent will send to 10002 inbox relays>]
 				]
