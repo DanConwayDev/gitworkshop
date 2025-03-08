@@ -12,7 +12,7 @@ import {
 	type RepoRef
 } from '$lib/types';
 import type { NostrEvent } from 'nostr-tools';
-import { getEventUID, isReplaceable } from 'applesauce-core/helpers';
+import { getEventUID, isReplaceable, unixNow } from 'applesauce-core/helpers';
 import {
 	DeletionKind,
 	IssueKind,
@@ -62,6 +62,23 @@ class Processor {
 		setInterval(() => this.nextRelayUpdateBatch(), 1000);
 		// process outbox updates more frequently as ther are less of them
 		setInterval(() => this.nextOutboxUpdates(), 99);
+		// clear sent items from outbox that are more than 1 day old
+		setTimeout(() => {
+			const run = async () => {
+				if (this.running) setTimeout(run, 1);
+				else {
+					// TODO: should we clear broadly sent?
+					await db.outbox
+						.filter(
+							(o) =>
+								o.event.created_at < unixNow() - 60 * 60 * 24 &&
+								o.relay_logs.every((l) => l.success)
+						)
+						.delete();
+				}
+			};
+			run();
+		}, 700);
 		// process deletion events les frequently as we need to crawl full db tables to remove all trace
 		setInterval(() => this.nextDeletionEventBatch(), 5000);
 	}
