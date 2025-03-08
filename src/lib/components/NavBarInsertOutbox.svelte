@@ -83,7 +83,7 @@
 						class:btn-primary={filter === 'not broadcast'}
 						onclick={() => {
 							filter = 'not broadcast';
-						}}>Not broadcast</button
+						}}>Not Broadcast</button
 					>
 				</div>
 
