@@ -12,6 +12,16 @@
 		[...(outbox_query.current ?? [])].sort((a, b) => b.event.created_at - a.event.created_at) ?? []
 	);
 	let not_broadly_sent = $derived(outbox.filter((o) => !o.broadly_sent));
+
+	let filter: 'all' | 'broadcast issues' | 'not broadcast' = $state('not broadcast');
+	let filtered = $derived(
+		outbox.filter((o) => {
+			if (filter === 'all') return true;
+			if (filter === 'broadcast issues') return !o.broadly_sent;
+			return o.relay_logs.every((l) => !l.success);
+		})
+	);
+
 	let is_open = $state(false);
 	let selected: EventIdString | undefined = $state(undefined);
 </script>
@@ -53,7 +63,31 @@
 			<div
 				class="absolute right-0 top-full z-20 mt-2 h-80 w-96 overflow-y-auto rounded-lg bg-base-400 p-4 shadow-lg"
 			>
-				{#each outbox as o}
+				<div class="flex space-x-2">
+					<button
+						class="btn btn-xs"
+						class:btn-primary={filter === 'all'}
+						onclick={() => {
+							filter = 'all';
+						}}>All</button
+					>
+					<button
+						class="btn btn-xs"
+						class:btn-primary={filter === 'broadcast issues'}
+						onclick={() => {
+							filter = 'broadcast issues';
+						}}>Broacast Issues</button
+					>
+					<button
+						class="btn btn-xs"
+						class:btn-primary={filter === 'not broadcast'}
+						onclick={() => {
+							filter = 'not broadcast';
+						}}>Not broadcast</button
+					>
+				</div>
+
+				{#each filtered as o}
 					<button
 						class="w-full p-2 hover:bg-base-200"
 						class:bg-base-300={selected === o.id}
