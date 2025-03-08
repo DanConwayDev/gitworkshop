@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { nip19 } from 'nostr-tools';
-	import { type PrOrIssueRouteData } from '$lib/types';
 	import { neventOrNoteToHexId } from '$lib/utils';
 	import { createActionsRequestFilter } from '$lib/relay/filters/actions';
 	import { inMemoryRelayEvent, inMemoryRelayTimeline } from '$lib/helpers.svelte';
@@ -13,6 +12,8 @@
 	import ContentTree from '$lib/components/content-tree/ContentTree.svelte';
 	import AlertError from '$lib/components/AlertError.svelte';
 	import Duration from '$lib/components/Duration.svelte';
+	import type { EventPointer } from 'nostr-tools/nip19';
+	import type { PrOrIssueRouteData } from '$lib/types';
 
 	let {
 		data
@@ -27,7 +28,7 @@
 	let request_query = $derived.by(() => {
 		try {
 			const d = nip19.decode(event_ref);
-			if (d.type === 'nevent') return inMemoryRelayEvent(d.data);
+			if (d.type === 'nevent') return inMemoryRelayEvent(d.data as EventPointer);
 		} catch {
 			return undefined;
 		}
