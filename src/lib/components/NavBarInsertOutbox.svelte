@@ -4,6 +4,7 @@
 	import { kindtoTextLabel } from '$lib/kinds';
 	import type { EventIdString } from '$lib/types';
 	import FromNow from './FromNow.svelte';
+	import UserHeader from './user/UserHeader.svelte';
 
 	let outbox_query = liveQueryState(() => {
 		return db.outbox.toArray();
@@ -109,8 +110,10 @@
 								<div class="collapse collapse-arrow bg-base-300">
 									<input type="radio" name="my-accordion-2" checked={i ? true : undefined} />
 									<div class="collapse-title">
-										{group} ({o.relay_logs.filter((l) => l.groups.includes(group) && l.success)
-											.length} /
+										{#if group.length === 64}<UserHeader user={group} inline />'s inbox relays
+										{:else}{group}{/if} ({o.relay_logs.filter(
+											(l) => l.groups.includes(group) && l.success
+										).length} /
 										{o.relay_logs.filter((l) => l.groups.includes(group)).length})
 									</div>
 									<div class="collapse-content">
