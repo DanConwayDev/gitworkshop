@@ -66,7 +66,7 @@ export function inMemoryRelayTimeline(
 	$effect(() => {
 		dependencies?.();
 		const sub = memory_db_query_store.timeline(filters).subscribe((events) => {
-			result.timeline = [...events];
+			result.timeline = [...(events ?? [])];
 		});
 		return () => {
 			sub.unsubscribe();
@@ -90,8 +90,8 @@ export function inMemoryRelayTimelineRecursiveThread(
 	$effect(() => {
 		dependencies?.();
 		const sub = memory_db_query_store.timeline(filters).subscribe((events) => {
-			result.timeline = [...events];
-			events.forEach((e) => {
+			result.timeline = [...(events ?? [])];
+			(events ?? []).forEach((e) => {
 				if (!ids.includes(e.id)) ids.push(e.id);
 			});
 		});
