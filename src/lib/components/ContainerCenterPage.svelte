@@ -1,5 +1,10 @@
 <script lang="ts">
-	let { repo_header_on_page = false }: { repo_header_on_page?: boolean } = $props();
+	import type { Snippet } from 'svelte';
+
+	let {
+		children,
+		repo_header_on_page = false
+	}: { children: Snippet; repo_header_on_page?: boolean } = $props();
 
 	// appears in the centre of the screen adapting for hardcoded Navbar and Footer heights
 	// negative margin 24 matches the margin of the footer
@@ -10,7 +15,7 @@
 	class="center-of-gw-screen -mb-24 flex h-screen items-center justify-center"
 	style="height: {height}"
 >
-	<slot />
+	{@render children?.()}
 </div>
 
 <style>
