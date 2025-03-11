@@ -10,7 +10,7 @@
 
 	onMount(() => {
 		const interval = setInterval(() => {
-			dayjs(unix_seconds * 1000).fromNow();
+			s = dayjs(unix_seconds * 1000).fromNow();
 		}, 1000);
 		return () => {
 			clearInterval(interval);
