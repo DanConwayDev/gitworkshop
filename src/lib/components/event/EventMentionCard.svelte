@@ -2,9 +2,9 @@
 	import { type NostrEvent } from 'nostr-tools';
 	import EventWrapperLite from './EventWrapperLite.svelte';
 	import { eventToNip19, getRootNip19, getRootPointer } from '$lib/utils';
-	import { kindLabel } from '$lib/kind_labels';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { isEventPointer } from 'applesauce-core/helpers';
+	import { kindtoTextLabel } from '$lib/kinds';
 
 	let {
 		event
@@ -29,14 +29,14 @@
 		mentioned this in <a href={`/${event_nip19}`} class="link link-primary">reply</a> to
 		{#if root_event_query.event}
 			a <a href={`/${root_nip19}`} class="link link-primary">
-				{kindLabel(root_event_query.event.kind)}
+				{kindtoTextLabel(root_event_query.event.kind)}
 			</a>
 		{:else}
 			<a href={`/${root_nip19}`} class="link link-primary"> this event </a>
 		{/if}
 	{:else}
 		mentioned this in a <a href={`/${event_nip19}`} class="link link-primary"
-			>{kindLabel(event.kind)}</a
+			>{kindtoTextLabel(event.kind)}</a
 		>
 	{/if}
 </EventWrapperLite>
