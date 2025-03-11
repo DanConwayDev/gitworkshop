@@ -1,12 +1,26 @@
 <script lang="ts">
+	import { unixNow } from 'applesauce-core/helpers';
 	import dayjs from 'dayjs';
 	import duration from 'dayjs/plugin/duration';
+	import { onMount } from 'svelte';
 
-	let { from_s, to_s }: { from_s: number; to_s: number } = $props();
+	let { from_s, to_s }: { from_s: number; to_s?: number | undefined } = $props();
 	dayjs.extend(duration);
 
+	let now = $state(unixNow());
+
+	onMount(() => {
+		let interval = setInterval(() => {
+			now = unixNow();
+		}, 1000);
+		return () => {
+			clearInterval(interval);
+		};
+	});
+
+	let to = $derived(to_s ?? now);
 	const duration_string = $derived.by(() => {
-		const durationInSeconds = to_s - from_s;
+		const durationInSeconds = to - from_s;
 		const durationObj = dayjs.duration(durationInSeconds, 'seconds');
 
 		const hours = Math.floor(durationObj.asHours());

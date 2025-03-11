@@ -52,9 +52,11 @@
 
 	let success_event = $derived(responses.find((e) => getTagValue(e, 's') === 'success'));
 	let job_last_response = $derived(
-		responses.reduce((max, event) => {
-			return event.created_at > max ? event.created_at : max;
-		}, summary?.created_at ?? 0)
+		status === 'success' || status === 'error'
+			? responses.reduce((max, event) => {
+					return event.created_at > max ? event.created_at : max;
+				}, summary?.created_at ?? 0)
+			: undefined
 	);
 </script>
 
