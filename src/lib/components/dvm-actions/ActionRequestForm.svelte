@@ -55,8 +55,7 @@
 	);
 	let workflow_filepath = $state('.github/workflows/ci.yaml');
 	let runner_timeout_mins = $state(20);
-
-	let git_ref = $derived((branch_or_tag ?? '').replace('refs/heads/', ''));
+	let cashu = $state('');
 
 	let form_complete = $derived(!!branch_or_tag);
 	let submitting = $state(false);
@@ -78,7 +77,7 @@
 			let content =
 				(await accounts_manager
 					.getActive()
-					?.nip44?.encrypt(pubkey, JSON.stringify([['payment', '<insert-cashu-token>']]))) || '';
+					?.nip44?.encrypt(pubkey, JSON.stringify([['payment', $state.snapshot(cashu)]]))) || '';
 			let request = await accounts_manager.getActive()?.signEvent({
 				kind: ActionDvmRequestKind,
 				created_at: unixNow(),
@@ -183,6 +182,21 @@
 					max="120"
 				/>
 				<span class="text-sm">minutes</span>
+			</label>
+		</label>
+
+		<label class="form-control w-full max-w-xs">
+			<div class="label">
+				<span class="label-text">Cashu</span>
+			</div>
+			<label class="input input-sm input-bordered flex items-center gap-2">
+				<input
+					type="text"
+					disabled={submitting}
+					placeholder="Enter cashu encoded sats"
+					class="grow"
+					bind:value={cashu}
+				/>
 			</label>
 		</label>
 	</div>
