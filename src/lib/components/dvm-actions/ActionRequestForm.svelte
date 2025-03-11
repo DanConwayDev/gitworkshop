@@ -78,7 +78,7 @@
 			let content =
 				(await accounts_manager
 					.getActive()
-					?.nip04?.encrypt(pubkey, JSON.stringify([['payment', '<insert-cashu-token>']]))) || '';
+					?.nip44?.encrypt(pubkey, JSON.stringify([['payment', '<insert-cashu-token>']]))) || '';
 			let request = await accounts_manager.getActive()?.signEvent({
 				kind: ActionDvmRequestKind,
 				created_at: unixNow(),
