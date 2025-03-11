@@ -20,6 +20,7 @@ import query_centre from './query-centre/QueryCentre.svelte';
 import { onDestroy as onDestroySvelte, untrack } from 'svelte';
 import type { AddressPointer, EventPointer } from 'nostr-tools/nip19';
 import { RepoAnnKind } from './kinds';
+import type { QueryConstructor } from 'applesauce-core';
 
 /// this is taken and adapted from https://github.com/dexie/Dexie.js/pull/2116
 /// when merged the version from the library should be used
@@ -121,6 +122,25 @@ export function inMemoryRelayEvent(
 		).subscribe((event) => {
 			result.event = event;
 		});
+		return () => {
+			sub.unsubscribe();
+		};
+	});
+	return result;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function inMemoryCreateQuery<T, Args extends Array<any>>(
+	queryConstructor: QueryConstructor<T, Args>,
+	...args: Args
+) {
+	const result = $state<{ result: T | undefined }>({ result: undefined });
+	$effect(() => {
+		const sub = memory_db_query_store
+			.createQuery(queryConstructor, ...args)
+			.subscribe((res: T | undefined) => {
+				result.result = res;
+			});
 		return () => {
 			sub.unsubscribe();
 		};
