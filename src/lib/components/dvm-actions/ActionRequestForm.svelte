@@ -91,10 +91,11 @@
 						// TODO add relays to naddr
 						$state.snapshot(nip19.naddrEncode(aRefToAddressPointer(a_ref) as AddressPointer))
 					],
-					['param', 'git_ref', $state.snapshot(git_ref)],
+					...(selected_commit ? [['param', 'git_ref', $state.snapshot(selected_commit)]] : []),
+					// ['param', 'git_ref', $state.snapshot(git_ref)],
 					['param', 'workflow_filepath', $state.snapshot(workflow_filepath)],
 					['param', 'workflow_timeout', $state.snapshot(runner_timeout_mins * 60).toString()],
-					...(selected_commit ? [['commit', $state.snapshot(selected_commit)]] : []),
+					...(branch_or_tag ? [['ref', $state.snapshot(branch_or_tag)]] : []),
 					['p', pubkey],
 					['encrypted']
 				]
