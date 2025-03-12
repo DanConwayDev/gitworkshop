@@ -10,7 +10,7 @@
 	import accounts_manager from '$lib/accounts';
 	import { FeedbackKind } from '$lib/kinds';
 	import { unixNow } from 'applesauce-core/helpers';
-	import { SimpleSigner } from 'applesauce-signer';
+	import { SimpleSigner } from 'applesauce-signers';
 	import { icons_misc } from '$lib/icons';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { page } from '$app/stores';

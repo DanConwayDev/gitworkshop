@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { AmberClipboardSigner, ExtensionSigner, SimpleSigner } from 'applesauce-signer';
+	import { AmberClipboardSigner, ExtensionSigner, SimpleSigner } from 'applesauce-signers';
 	import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts';
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-expect-error

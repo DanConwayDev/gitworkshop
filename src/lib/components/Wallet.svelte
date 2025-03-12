@@ -120,10 +120,6 @@
 
 	const unlock = () => {
 		let active_account = accounts_manager.getActive();
-		console.log('event', wallet?.event);
-		console.log('reflect', Reflect.ownKeys(wallet?.event ?? {}));
-		console.log('snapshot', $state.snapshot(wallet?.event));
-		console.log('equal direct', $state.snapshot(wallet?.event) === wallet?.event);
 		if (!active_account || !wallet) {
 			return;
 		}
