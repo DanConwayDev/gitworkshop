@@ -128,24 +128,26 @@ export function inMemoryRelayEvent(
 	});
 	return result;
 }
-
+/**
+ * The class design pattern is used here for turning the Observable into
+ * a state object so that raw Query response can be retunred instead of
+ * a proxy object
+ * */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function inMemoryCreateQuery<T, Args extends Array<any>>(
-	queryConstructor: QueryConstructor<T, Args>,
-	...args: Args
-) {
-	const result = $state<{ result: T | undefined }>({ result: undefined });
-	$effect(() => {
-		const sub = memory_db_query_store
-			.createQuery(queryConstructor, ...args)
-			.subscribe((res: T | undefined) => {
-				result.result = res;
-			});
-		return () => {
-			sub.unsubscribe();
-		};
-	});
-	return result;
+export class InMemoryQuery<T, Args extends Array<any>> {
+	result = $state.raw<T | undefined>(undefined);
+	constructor(queryConstructor: QueryConstructor<T, Args>, args: () => Args) {
+		$effect(() => {
+			const sub = memory_db_query_store
+				.createQuery(queryConstructor, ...args())
+				.subscribe((res: T | undefined) => {
+					this.result = res;
+				});
+			return () => {
+				sub.unsubscribe();
+			};
+		});
+	}
 }
 
 export class RepoRouteStringCreator {

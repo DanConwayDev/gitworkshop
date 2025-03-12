@@ -278,6 +278,13 @@ class QueryCentre {
 			}
 		);
 	}
+
+	watchWallet(pubkey: PubKeyString) {
+		this.external_worker.postMessage({ method: 'watchWallet', args: [pubkey] });
+		return () => {
+			this.external_worker.postMessage({ method: 'watchWalletUnsubscribe', args: [pubkey] });
+		};
+	}
 }
 
 const query_centre = new QueryCentre();

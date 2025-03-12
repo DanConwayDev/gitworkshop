@@ -90,6 +90,29 @@
 					</label>
 				</form>
 				{#if store.experimental}<NavBarInsertOutbox />{/if}
+				<a href="/wallet" class="btn btn-ghost btn-sm mx-0">
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 512 512">
+						<title>wallet</title>
+						<rect
+							width="416"
+							height="288"
+							x="48"
+							y="144"
+							fill="none"
+							stroke="currentColor"
+							stroke-linejoin="round"
+							stroke-width="32"
+							rx="48"
+							ry="48"
+						/><path
+							fill="none"
+							stroke="currentColor"
+							stroke-linejoin="round"
+							stroke-width="32"
+							d="M411.36 144v-30A50 50 0 0 0 352 64.9L88.64 109.85A50 50 0 0 0 48 159v49"
+						/><path fill="currentColor" d="M368 320a32 32 0 1 1 32-32a32 32 0 0 1-32 32" /></svg
+					>
+				</a>
 				{#if store.logged_in_account || store.accounts.length > 0}
 					<div class="dropdown dropdown-end">
 						<div tabindex="0" role="button" class="m-1">

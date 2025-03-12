@@ -37,6 +37,7 @@ import type { NEventAttributes } from 'nostr-editor';
 import SubscriberManager from '$lib/SubscriberManager';
 import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
 import type { EventPointer } from 'nostr-tools/nip19';
+import { createWalletFilter, createWalletHistoryFilter } from './filters/wallet';
 
 export class RelayManager {
 	url: WebSocketUrl;
@@ -735,6 +736,43 @@ export class RelayManager {
 				this.refreshWatch();
 			});
 		}
+		return () => this.subscriber_manager.remove(query);
+	}
+
+	async fetchWallet(pubkey: PubKeyString): Promise<void> {
+		await this.connect();
+		await new Promise<void>((r) => {
+			const sub = this.relay.subscribe(
+				[...createWalletFilter(pubkey), ...createWalletHistoryFilter(pubkey)],
+				{
+					onevent: async (event) => {
+						this.onEvent(event);
+					},
+					oneose: () => {
+						sub.close();
+						r(undefined);
+					}
+				}
+			);
+		});
+	}
+
+	watchWallet(pubkey: PubKeyString): () => void {
+		const query = `watchWallet${pubkey}`;
+		const is_new = this.subscriber_manager.add(query);
+		this.fetchWallet(pubkey).then(() => {
+			if (is_new) {
+				this.watch_filters.set(query, {
+					onMatch: () => {},
+					filters: [...createWalletFilter(pubkey), ...createWalletHistoryFilter(pubkey)]
+				});
+				this.refreshWatch();
+				this.subscriber_manager.addUnsubsriber(query, () => {
+					this.watch_filters.delete(query);
+					this.refreshWatch();
+				});
+			}
+		});
 		return () => this.subscriber_manager.remove(query);
 	}
 }

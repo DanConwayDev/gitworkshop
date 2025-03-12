@@ -26,6 +26,10 @@ export function statusKindtoText(kind: number, type: 'pr' | 'issue'): string {
 
 export function kindtoTextLabel(kind: number): string {
 	if (kind === FeedbackKind) return 'Feedback';
+	if (kind === NostrWalletKind) return 'Nostr Wallet';
+	if (kind === NostrWalletBackupKind) return 'Nostr Wallet Backup';
+	if (kind === NostrWalletTokenKind) return 'Nostr Wallet Token';
+	if (kind === NostrWalletSpendHistorynKind) return 'Nostr Wallet Spend History';
 	return kindLabel(kind) ?? 'Unknown';
 }
 
@@ -43,6 +47,18 @@ export type IssueKind = typeof IssueKind;
 
 export const FeedbackKind = 1314;
 export type FeedbackKind = typeof FeedbackKind;
+
+export const NostrWalletKind = 17375;
+export type NostrWalletKind = typeof NostrWalletKind;
+
+export const NostrWalletBackupKind = 375;
+export type NostrWalletTBackupKind = typeof NostrWalletBackupKind;
+
+export const NostrWalletTokenKind = 7375;
+export type NostrWalletTokenKind = typeof NostrWalletTokenKind;
+
+export const NostrWalletSpendHistorynKind = 7376;
+export type NostrWalletSpendHistorynKind = typeof NostrWalletSpendHistorynKind;
 
 export const ActionDvmRequestKind = 5600;
 export type ActionDvmRequestKind = typeof ActionDvmRequestKind;

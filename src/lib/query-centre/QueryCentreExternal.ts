@@ -439,6 +439,20 @@ class QueryCentreExternal {
 			/* empty */
 		}
 	}
+
+	async watchWallet(pubkey: PubKeyString) {
+		const relays = await getPubkeyOutboxRelays(pubkey);
+		const query = `watchWallet${pubkey}`;
+		if (this.subscriber_manager.add(query)) {
+			relays.forEach((url) => {
+				this.subscriber_manager.addUnsubsriber(query, this.get_relay(url).watchWallet(pubkey));
+			});
+		}
+	}
+
+	watchWalletUnsubscribe(pubkey: PubKeyString) {
+		this.subscriber_manager.remove(`watchWallet${pubkey}`);
+	}
 }
 
 const external = new QueryCentreExternal();
@@ -492,6 +506,12 @@ self.onmessage = async (event) => {
 			break;
 		case 'watchActionsUnsubscribe':
 			result = await external.watchActionsUnsubscribe(args[0]);
+			break;
+		case 'watchWallet':
+			result = await external.watchWallet(args[0]);
+			break;
+		case 'watchWalletUnsubscribe':
+			result = await external.watchWalletUnsubscribe(args[0]);
 			break;
 		default:
 			console.error('Unknown method:', method);
