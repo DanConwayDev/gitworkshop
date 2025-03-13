@@ -50,9 +50,16 @@
 		status_text.length > 70 ? `${status_text.slice(0, 65)}...` : status_text
 	);
 
+	let patial_events = $derived(
+		responses
+			.filter((e) => getTagValue(e, 's') === 'partial')
+			.sort((a, b) => a.created_at - b.created_at)
+	);
+	let log = $derived(patial_events.map((e) => e.content).join('\n'));
+
 	let success_event = $derived(responses.find((e) => getTagValue(e, 's') === 'success'));
 	let job_last_response = $derived(
-		status === 'success' || status === 'error'
+		responses.length > 0
 			? responses.reduce((max, event) => {
 					return event.created_at > max ? event.created_at : max;
 				}, summary?.created_at ?? 0)
@@ -82,7 +89,7 @@
 			</div>
 		</Container>
 	</div>
-	{#if success_event}
+	{#if log.length > 0}
 		<Container>
 			<div
 				class="h-[90vh] overflow-x-auto rounded-lg border bg-black p-4 shadow-lg"
@@ -93,7 +100,7 @@
 			>
 				<h2 class="mb-2 text-lg font-bold">Job Output</h2>
 				<pre class="code">
-					<ContentTree node={stringToDocTree(success_event.content)} />
+					<ContentTree node={stringToDocTree(log)} />
 				</pre>
 			</div>
 		</Container>
