@@ -2,7 +2,7 @@
 	import { InMemoryQuery, inMemoryRelayTimeline } from '$lib/helpers.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store from '$lib/store.svelte';
-	import { type PubKeyString } from '$lib/types';
+	import { isHttpUrl, type HttpUrl, type PubKeyString } from '$lib/types';
 	import { Queries } from 'applesauce-wallet';
 	import { ActionHub } from 'applesauce-actions';
 	import { EventFactory } from 'applesauce-factory';
@@ -14,12 +14,18 @@
 	import { CreateWallet } from 'applesauce-wallet/actions';
 	import { ReceiveToken } from 'applesauce-wallet/actions/tokens';
 	import { unlockWallet } from 'applesauce-wallet/helpers';
-	import { unlockTokenContent, isTokenContentLocked } from 'applesauce-wallet/helpers/tokens';
+	import {
+		unlockTokenContent,
+		isTokenContentLocked,
+		getTokenContent
+	} from 'applesauce-wallet/helpers/tokens';
 	import { getDecodedToken, type Token } from '@cashu/cashu-ts';
 	import { NostrWalletTokenKind } from '$lib/kinds';
 	import type { Query } from 'applesauce-core';
 	import { createWalletFilter } from '$lib/relay/filters/wallet';
 	import { filter } from 'rxjs';
+	import Container from './Container.svelte';
+	import { CashuWalletEvent } from '$lib/kind_labels';
 
 	let { pubkey }: { pubkey: PubKeyString } = $props();
 
@@ -51,18 +57,28 @@
 	// 			})
 	// 		: undefined
 	// );
-	let mint_balances = new InMemoryQuery(Queries.WalletBalanceQuery, () => [pubkey] as const);
+	let mint_balances_query = new InMemoryQuery(Queries.WalletBalanceQuery, () => [pubkey] as const);
+	let mint_balances = $derived(mint_balances_query.result);
+	let balance = $derived.by(() => {
+		try {
+			return tokens_query.result
+				?.flatMap((e) => getTokenContent(e)?.proofs)
+				.reduce((a, p) => (p ? p.amount : 0) + a, 0);
+		} catch {
+			return undefined;
+		}
+	});
 	// TODO add mints without tokens in
-	// let mints = $derived.by(() => {
-	// 	let mints = new Set<HttpUrl>();
-	// 	if (!mint_balances || !wallet || wallet.locked) {
-	// 		return mints;
-	// 	}
-	// 	wallet.mints.forEach((m) => {
-	// 		if (isHttpUrl(m)) mints.add(m);
-	// 	});
-	// 	return mints;
-	// });
+	let mints = $derived.by(() => {
+		let mints = new Set<HttpUrl>();
+		if (!mint_balances || !wallet || wallet.locked) {
+			return mints;
+		}
+		wallet.mints.forEach((m) => {
+			if (isHttpUrl(m)) mints.add(m);
+		});
+		return mints;
+	});
 
 	// const createWallet = () => {
 	// 	factory;
@@ -72,6 +88,8 @@
 	// };
 	let auto_unlock = $state(false);
 	let waited_1s = $state(false);
+
+	let masked = $state(false);
 
 	function lockedTokenStream(pubkey: PubKeyString): Query<NostrEvent> {
 		return {
@@ -178,6 +196,7 @@
 		let token: Token | undefined = undefined;
 		try {
 			token = getDecodedToken(receive_token);
+			cashu;
 		} catch {
 			/* empty */
 		}
@@ -250,12 +269,19 @@
 		{/if}
 	</button>
 {:else}
-	wallet unlocked
-	{JSON.stringify(wallet.mints)}
-	{JSON.stringify(mint_balances.result)}
-	{JSON.stringify(tokens_query.result)}
-	{JSON.stringify(tokens_query.result?.map((e) => isTokenContentLocked(e)))}
-	<!-- {JSON.stringify(tok_q)} -->
+	<Container>
+		<div class="text-xl">
+			{#if masked}***{:else}{balance}{/if} sats
+		</div>
+	</Container>
+	<Container>
+		{#each mints as mint_url}
+			{mint_url}
+			{#if mint_balances?.[mint_url]}{#if masked}***{:else}{mint_balances[mint_url]}{/if}
+			{:else}0{/if}
+			sats
+		{/each}
+	</Container>
 
 	<input
 		disabled={receive_signing}
