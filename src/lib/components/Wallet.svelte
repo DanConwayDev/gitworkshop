@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { InMemoryQuery } from '$lib/helpers.svelte';
+	import { InMemoryQuery, inMemoryRelayTimeline } from '$lib/helpers.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store from '$lib/store.svelte';
 	import { type PubKeyString } from '$lib/types';
@@ -10,9 +10,16 @@
 	import accounts_manager from '$lib/accounts';
 	import memory_db, { memory_db_query_store } from '$lib/dbs/InMemoryRelay';
 	import { generateSecretKey } from 'nostr-tools/pure';
+	import type { NostrEvent } from 'nostr-tools';
 	import { CreateWallet } from 'applesauce-wallet/actions';
+	import { ReceiveToken } from 'applesauce-wallet/actions/tokens';
 	import { unlockWallet } from 'applesauce-wallet/helpers';
-	import { unlockTokenContent } from 'applesauce-wallet/helpers/tokens';
+	import { unlockTokenContent, isTokenContentLocked } from 'applesauce-wallet/helpers/tokens';
+	import { getDecodedToken, type Token } from '@cashu/cashu-ts';
+	import { NostrWalletTokenKind } from '$lib/kinds';
+	import type { Query } from 'applesauce-core';
+	import { createWalletFilter } from '$lib/relay/filters/wallet';
+	import { filter } from 'rxjs';
 
 	let { pubkey }: { pubkey: PubKeyString } = $props();
 
@@ -31,6 +38,7 @@
 	let wallet_query = new InMemoryQuery(Queries.WalletQuery, () => [pubkey] as const);
 	let wallet = $derived(wallet_query.result);
 
+	let tok_q = inMemoryRelayTimeline([{ kinds: [NostrWalletTokenKind], authors: [pubkey] }]);
 	let tokens_query = new InMemoryQuery(Queries.WalletTokensQuery, () => [pubkey] as const);
 	// let tokens_detail_query = $derived(
 	// 	tokens_query
@@ -43,7 +51,7 @@
 	// 			})
 	// 		: undefined
 	// );
-	// let mint_balances = inMemoryCreateQuery(Queries.WalletBalanceQuery, pubkey);
+	let mint_balances = new InMemoryQuery(Queries.WalletBalanceQuery, () => [pubkey] as const);
 	// TODO add mints without tokens in
 	// let mints = $derived.by(() => {
 	// 	let mints = new Set<HttpUrl>();
@@ -64,22 +72,34 @@
 	// };
 	let auto_unlock = $state(false);
 	let waited_1s = $state(false);
+
+	function lockedTokenStream(pubkey: PubKeyString): Query<NostrEvent> {
+		return {
+			key: pubkey,
+			run: (events) => {
+				return events
+					.filters(createWalletFilter(pubkey))
+					.pipe(filter((e) => isTokenContentLocked(e)));
+			}
+		};
+	}
+
 	onMount(() => {
 		setTimeout(() => {
 			waited_1s = true;
 		}, 1000);
 		const unsubWatchWallet = query_centre.watchWallet(pubkey);
+		// if auto_unlock start unlocking newly arrived tokens
 		const subLockedTokens = memory_db_query_store
-			.createQuery(Queries.WalletTokensQuery, pubkey)
-			.subscribe((res) => {
+			.createQuery(lockedTokenStream, pubkey)
+			.subscribe((e) => {
 				let active_account = accounts_manager.getActive();
-				if (res && auto_unlock && active_account) {
-					res.forEach((e) => unlockTokenContent(e, active_account));
-				}
+				if (!auto_unlock || !e || !active_account || active_account.pubkey !== e.pubkey) return;
+				unlockTokenContent(e, active_account);
 			});
 		return () => {
 			unsubWatchWallet();
-			subLockedTokens.unsubscribe();
+			subLockedTokens?.unsubscribe?.();
 		};
 	});
 
@@ -127,10 +147,13 @@
 		try {
 			Promise.all([
 				unlockWallet(wallet.event, active_account),
-				...(tokens_query.result
-					? tokens_query.result.map((t_event) => unlockTokenContent(t_event, active_account))
-					: [])
+				(async () => {
+					for (const t_event of tokens_query?.result ?? []) {
+						await unlockTokenContent(t_event, active_account);
+					}
+				})()
 			]);
+			auto_unlock = true;
 		} catch {
 			wallet_unlock_rejected_by_signer = true;
 			setTimeout(() => {
@@ -139,6 +162,53 @@
 				wallet_unlock_decrypted = false;
 			}, 2000);
 		}
+	};
+
+	let receive_token = $state('');
+	let receive_invalid = $state(false);
+	let receive_signing = $state(false);
+	let receive_signed = $state(false);
+	let receive_rejected_by_signer = $state(false);
+
+	const received = async () => {
+		let active_account = accounts_manager.getActive();
+		if (!active_account || !wallet) {
+			return;
+		}
+		let token: Token | undefined = undefined;
+		try {
+			token = getDecodedToken(receive_token);
+		} catch {
+			/* empty */
+		}
+		if (!token) {
+			receive_invalid = true;
+			return setTimeout(() => {
+				receive_invalid = false;
+			}, 2000);
+		}
+		receive_signing = true;
+		try {
+			let hub = new ActionHub(
+				memory_db,
+				new EventFactory({ signer: active_account }),
+				async (label, event) => {
+					receive_signed = true;
+					query_centre.publishEvent(event);
+				}
+			);
+			receive_signed = true;
+			await hub.run(ReceiveToken, token);
+		} catch {
+			receive_rejected_by_signer = true;
+		}
+		setTimeout(() => {
+			if (!receive_rejected_by_signer) receive_token = '';
+			receive_rejected_by_signer = false;
+			receive_signed = false;
+			receive_signing = false;
+			receive_token = '';
+		}, 2000);
 	};
 </script>
 
@@ -182,4 +252,36 @@
 {:else}
 	wallet unlocked
 	{JSON.stringify(wallet.mints)}
+	{JSON.stringify(mint_balances.result)}
+	{JSON.stringify(tokens_query.result)}
+	{JSON.stringify(tokens_query.result?.map((e) => isTokenContentLocked(e)))}
+	<!-- {JSON.stringify(tok_q)} -->
+
+	<input
+		disabled={receive_signing}
+		type="text"
+		placeholder="cashu token"
+		class="input input-sm input-bordered w-full max-w-xs"
+		bind:value={receive_token}
+	/>
+	<button
+		onclick={received}
+		disabled={receive_token.length < 10 || receive_signing}
+		class="btn btn-success"
+		class:btn-error={receive_rejected_by_signer || receive_invalid}
+	>
+		{#if receive_invalid}
+			Invalid Token
+		{:else if receive_signing}
+			{#if receive_rejected_by_signer}
+				Rejected by Signer
+			{:else if !receive_signed}
+				Signing Receive
+			{:else}
+				Received...
+			{/if}
+		{:else}
+			Receive Cashu
+		{/if}
+	</button>
 {/if}
