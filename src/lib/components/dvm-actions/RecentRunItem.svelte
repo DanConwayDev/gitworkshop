@@ -45,7 +45,7 @@
 			<div class="skeleton h-5 w-5 flex-none pt-1"></div>
 		{:else if status === 'processing'}
 			<span class="loading loading-spinner loading-sm text-warning"></span>
-		{:else if status === 'success' && status_text === 'PipelineSuccess'}
+		{:else if status === 'success' && status_text === 'WorkflowSuccess'}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
@@ -75,7 +75,7 @@
 					<path d={p} />
 				{/each}
 			</svg>
-		{:else if status_text === 'PipelineError'}
+		{:else if status_text === 'WorkflowError'}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
