@@ -94,7 +94,13 @@
 					// ['param', 'git_ref', $state.snapshot(git_ref)],
 					['param', 'workflow_filepath', $state.snapshot(workflow_filepath)],
 					['param', 'workflow_timeout', $state.snapshot(runner_timeout_mins * 60).toString()],
-					...(branch_or_tag ? [['ref', $state.snapshot(branch_or_tag)]] : []),
+					...(branch_or_tag && (branch_or_tag as string).startsWith('refs/heads/')
+						? [['branch', $state.snapshot((branch_or_tag as string).replace('refs/heads/', ''))]]
+						: []),
+					...(branch_or_tag && (branch_or_tag as string).startsWith('refs/tags/')
+						? [['tag', $state.snapshot((branch_or_tag as string).replace('refs/tags/', ''))]]
+						: []),
+					...(selected_commit ? [['commit-id', $state.snapshot(selected_commit)]] : []),
 					['p', pubkey],
 					['encrypted']
 				]

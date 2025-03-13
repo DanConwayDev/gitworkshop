@@ -95,7 +95,8 @@
 		<div class="flex flex-grow pt-2">
 			<div class="flex-grow">
 				<div class="text-sm text-base-content">
-					branch: {summary.git_ref}
+					{#if summary.branch}branch: {summary.branch}{/if}
+					{#if summary.tag}tag: {summary.tag}{/if}
 					{#if summary.commit_id}
 						({summary.commit_id.substring(0, 7)}){/if}
 					{#if status === 'error' || status === 'payment_issue' || status === 'pending_response' || status === 'processing'}

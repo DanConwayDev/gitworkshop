@@ -55,6 +55,8 @@ export interface DVMActionRequest extends NonReplaceableEventAttribution {
 	workflow_filepath: string;
 	workflow_timeout: string;
 	commit_id?: string;
+	branch?: string;
+	tag?: string;
 }
 
 export const eventToDVMActionRequest = (event: NostrEvent): DVMActionRequest => {
@@ -66,7 +68,9 @@ export const eventToDVMActionRequest = (event: NostrEvent): DVMActionRequest => 
 		git_ref: getParamTagValue(event.tags, 'git_ref') || '',
 		workflow_timeout: getParamTagValue(event.tags, 'workflow_timeout') || '',
 		workflow_filepath: getParamTagValue(event.tags, 'workflow_filepath') || '',
-		commit_id: getTagValue(event.tags, 'commit')
+		commit_id: getTagValue(event.tags, 'commit-id'),
+		branch: getTagValue(event.tags, 'branch'),
+		tag: getTagValue(event.tags, 'tag')
 	};
 };
 

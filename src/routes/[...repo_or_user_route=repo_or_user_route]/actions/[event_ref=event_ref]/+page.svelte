@@ -71,11 +71,23 @@
 	<div class="bg-base-200 py-3">
 		<Container>
 			<div class="flex flex-col flex-wrap md:flex-row md:space-x-16">
-				{#if summary?.commit_id}<div>
-						<span class="text-sm text-gray-500">commit:</span>
-						{summary.commit_id.substring(0, 7)}
-					</div>{/if}
-				<div><span class="text-sm text-gray-500">branch:</span> {summary?.git_ref}</div>
+				{#if summary}
+					{#if summary.branch}
+						<div>
+							<span class="text-sm text-gray-500">branch:</span>
+							{summary.branch}
+							{#if summary?.commit_id}({summary.commit_id.substring(0, 7)}){/if}
+						</div>
+					{:else if summary.tag}
+						<div>
+							<span class="text-sm text-gray-500">git ref:</span>
+							{summary.tag}
+							{#if summary?.commit_id}({summary.commit_id.substring(0, 7)}){/if}
+						</div>
+					{:else}
+						<div><span class="text-sm text-gray-500">git ref:</span> {summary.git_ref}</div>
+					{/if}
+				{/if}
 				<div><span class="text-sm text-gray-500">action:</span> {summary?.workflow_filepath}</div>
 				<div>
 					<span class="text-sm text-gray-500">duration:</span>
@@ -91,6 +103,11 @@
 	</div>
 	{#if log.length > 0}
 		<Container>
+			{#if status === 'error'}
+				<div class="mb-6">
+					<AlertError>DVM error - {short_status_text}</AlertError>
+				</div>
+			{/if}
 			<div
 				class="h-[90vh] overflow-x-auto rounded-lg border bg-black p-4 shadow-lg"
 				class:text-green-400={status_text === 'WorkflowSuccess'}
