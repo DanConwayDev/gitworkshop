@@ -23,9 +23,9 @@ export const processOutboxUpdates = async (updates: OutboxRelayProcessorUpdate[]
 			});
 		});
 		const groups = new Set(item.relay_logs.flatMap((l) => l.groups));
-		item.broadly_sent = ![...groups].some((group) => {
+		item.broadly_sent = [...groups].every((group) => {
 			const logs = item.relay_logs.filter((l) => l.groups.includes(group));
-			return !(logs.some((l) => l.success) && logs.length > 2);
+			return logs.length < 2 || logs.some((l) => l.success);
 		});
 		const waiting = item.relay_logs.some((l) => {
 			if (l.success) return false;
