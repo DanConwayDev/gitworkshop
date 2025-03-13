@@ -22,10 +22,15 @@
 	import { getDecodedToken, getEncodedToken, type Token } from '@cashu/cashu-ts';
 	import { NostrWalletTokenKind } from '$lib/kinds';
 	import type { Query } from 'applesauce-core';
-	import { createWalletFilter } from '$lib/relay/filters/wallet';
+	import { createWalletFilter, createWalletHistoryFilter } from '$lib/relay/filters/wallet';
 	import { filter } from 'rxjs';
 	import Container from './Container.svelte';
 	import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
+	import {
+		getHistoryContent,
+		isHistoryContentLocked,
+		unlockHistoryContent
+	} from 'applesauce-wallet/helpers/history';
 
 	let { pubkey }: { pubkey: PubKeyString } = $props();
 
@@ -46,6 +51,9 @@
 
 	let tok_q = inMemoryRelayTimeline([{ kinds: [NostrWalletTokenKind], authors: [pubkey] }]);
 	let tokens_query = new InMemoryQuery(Queries.WalletTokensQuery, () => [pubkey] as const);
+	let history_query = new InMemoryQuery(Queries.WalletHistoryQuery, () => [pubkey] as const);
+	let history = $derived(history_query.result);
+
 	// let tokens_detail_query = $derived(
 	// 	tokens_query
 	// 		? tokens_query.map((e) => {
@@ -101,6 +109,17 @@
 		};
 	}
 
+	function lockedHistoryStream(pubkey: PubKeyString): Query<NostrEvent> {
+		return {
+			key: pubkey,
+			run: (events) => {
+				return events
+					.filters(createWalletHistoryFilter(pubkey))
+					.pipe(filter((e) => isHistoryContentLocked(e)));
+			}
+		};
+	}
+
 	onMount(() => {
 		setTimeout(() => {
 			waited_1s = true;
@@ -114,9 +133,17 @@
 				if (!auto_unlock || !e || !active_account || active_account.pubkey !== e.pubkey) return;
 				unlockTokenContent(e, active_account);
 			});
+		const subLockedHistory = memory_db_query_store
+			.createQuery(lockedHistoryStream, pubkey)
+			.subscribe((e) => {
+				let active_account = accounts_manager.getActive();
+				if (!auto_unlock || !e || !active_account || active_account.pubkey !== e.pubkey) return;
+				unlockHistoryContent(e, active_account);
+			});
 		return () => {
 			unsubWatchWallet();
 			subLockedTokens?.unsubscribe?.();
+			subLockedHistory?.unsubscribe?.();
 		};
 	});
 
@@ -167,6 +194,9 @@
 				(async () => {
 					for (const t_event of tokens_query?.result ?? []) {
 						await unlockTokenContent(t_event, active_account);
+					}
+					for (const t_event of history_query?.result ?? []) {
+						await unlockHistoryContent(t_event, active_account);
 					}
 				})()
 			]);
@@ -348,4 +378,10 @@
 			Receive Cashu
 		{/if}
 	</button>
+	<div>
+		<div>history</div>
+		{#each (history ?? []).map(getHistoryContent).filter((h) => !!h) as h}
+			{JSON.stringify(h)}
+		{/each}
+	</div>
 {/if}
