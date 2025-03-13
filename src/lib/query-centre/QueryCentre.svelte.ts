@@ -245,9 +245,10 @@ class QueryCentre {
 	}
 
 	watchActionRequest(request_id: EventIdString, repo_ref: RepoRef) {
+		this.external_worker.postMessage({ method: 'fetchRecentActions', args: [repo_ref] });
 		this.external_worker.postMessage({ method: 'watchActions', args: [repo_ref] });
-		return inMemoryRelayTimeline(
-			createActionsRequestFilter(request_id),
+		return inMemoryRelayEvent(
+			request_id,
 			() => [request_id],
 			() => {
 				this.external_worker.postMessage({ method: 'watchActionsUnsubscribe', args: [repo_ref] });

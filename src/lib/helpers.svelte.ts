@@ -108,17 +108,18 @@ export function inMemoryRelayTimelineRecursiveThread(
 }
 
 export function inMemoryRelayEvent(
-	event_ref: EventPointer | AddressPointer | undefined,
-	dependencies?: () => unknown[]
+	event_ref: EventPointer | AddressPointer | EventIdString | undefined,
+	dependencies?: () => unknown[],
+	onDestroy?: () => void
 ) {
 	const result = $state<{ event: NostrEvent | undefined }>({ event: undefined });
 	$effect(() => {
 		dependencies?.();
 		if (!event_ref) return;
 		const sub = (
-			'identifier' in event_ref
-				? memory_db_query_store.replaceable(event_ref.kind, event_ref.pubkey, event_ref.identifier)
-				: memory_db_query_store.event(event_ref.id)
+			typeof event_ref === 'string' || !('identifier' in event_ref)
+				? memory_db_query_store.event(typeof event_ref === 'string' ? event_ref : event_ref.id)
+				: memory_db_query_store.replaceable(event_ref.kind, event_ref.pubkey, event_ref.identifier)
 		).subscribe((event) => {
 			result.event = event;
 		});
@@ -126,6 +127,10 @@ export function inMemoryRelayEvent(
 			sub.unsubscribe();
 		};
 	});
+	onDestroySvelte(() => {
+		onDestroy?.();
+	});
+
 	return result;
 }
 /**

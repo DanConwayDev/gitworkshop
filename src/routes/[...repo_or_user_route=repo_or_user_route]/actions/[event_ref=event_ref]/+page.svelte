@@ -1,8 +1,7 @@
 <script lang="ts">
-	import { nip19 } from 'nostr-tools';
 	import { neventOrNoteToHexId } from '$lib/utils';
 	import { createActionsRequestFilter } from '$lib/relay/filters/actions';
-	import { inMemoryRelayEvent, inMemoryRelayTimeline } from '$lib/helpers.svelte';
+	import { inMemoryRelayTimeline } from '$lib/helpers.svelte';
 	import Container from '$lib/components/Container.svelte';
 	import FromNow from '$lib/components/FromNow.svelte';
 	import NotFound404Page from '$lib/components/NotFound404Page.svelte';
@@ -12,8 +11,9 @@
 	import ContentTree from '$lib/components/content-tree/ContentTree.svelte';
 	import AlertError from '$lib/components/AlertError.svelte';
 	import Duration from '$lib/components/Duration.svelte';
-	import type { EventPointer } from 'nostr-tools/nip19';
-	import type { PrOrIssueRouteData } from '$lib/types';
+	import { routeToRepoRef, type PrOrIssueRouteData, type RepoRef } from '$lib/types';
+	import query_centre from '$lib/query-centre/QueryCentre.svelte';
+	import store from '$lib/store.svelte';
 
 	let {
 		data
@@ -25,14 +25,12 @@
 
 	let id = neventOrNoteToHexId(event_ref);
 
-	let request_query = $derived.by(() => {
-		try {
-			const d = nip19.decode(event_ref);
-			if (d.type === 'nevent') return inMemoryRelayEvent(d.data as EventPointer);
-		} catch {
-			return undefined;
-		}
-	});
+	let a_ref: RepoRef | undefined = $derived(store ? routeToRepoRef(store.route) : undefined);
+
+	let request_query = $derived(
+		!!id && !!a_ref ? query_centre.watchActionRequest(id, a_ref) : { event: undefined }
+	);
+
 	let request_event = $derived(request_query?.event);
 
 	let responses_query = $derived(
@@ -57,7 +55,7 @@
 	);
 	let log = $derived(patial_events.map((e) => e.content).join('\n'));
 
-	let success_event = $derived(responses.find((e) => getTagValue(e, 's') === 'success'));
+	// let success_event = $derived(responses.find((e) => getTagValue(e, 's') === 'success'));
 	let job_last_response = $derived(
 		responses.length > 0
 			? responses.reduce((max, event) => {
@@ -121,6 +119,11 @@
 				</pre>
 			</div>
 		</Container>
+	{:else if status === 'processing'}
+		<div class="flex items-center justify-center">
+			<div class="mr-2">job accepted by DVM, awaiting logs...</div>
+			<div class="loading loading-spinner loading-lg"></div>
+		</div>
 	{:else if status === 'pending_response'}
 		<div class="flex items-center justify-center">
 			<div class="mr-2">waiting for DVM</div>

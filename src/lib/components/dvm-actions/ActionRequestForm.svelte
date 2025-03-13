@@ -4,18 +4,21 @@
 	import { ActionDvmRequestKind, RepoStateKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { createActionDVMProvidersFilter } from '$lib/relay/filters/actions';
-	import { type EventIdString, type PubKeyString, type RepoRef } from '$lib/types';
+	import { isRepoRoute, type EventIdString, type PubKeyString, type RepoRef } from '$lib/types';
 	import { eventToActionsDVMProvider } from '$lib/types/dvm';
-	import { aRefToAddressPointer } from '$lib/utils';
+	import { aRefToAddressPointer, eventToNip19 } from '$lib/utils';
 	import { unixNow } from 'applesauce-core/helpers';
 	import type { AddressPointer } from 'nostr-tools/nip19';
 	import { onMount } from 'svelte';
 	import FromNow from '../FromNow.svelte';
 	import { nip19 } from 'nostr-tools';
+	import { goto } from '$app/navigation';
+	import store from '$lib/store.svelte';
 
 	let { a_ref, onsubmitted }: { a_ref: RepoRef; onsubmitted: (id: EventIdString) => void } =
 		$props();
 
+	let repo_route = $derived(isRepoRoute(store.route) ? store.route : undefined);
 	let repo_state_pointer = $derived({
 		...aRefToAddressPointer(a_ref),
 		kind: RepoStateKind
@@ -114,6 +117,7 @@
 				//       we just need to be be received by one of the dvm relays before continuing
 				query_centre.publishEvent(request);
 				submitted = true;
+				if (repo_route) goto(`/${repo_route.s}/actions/${eventToNip19(request)}`);
 				onsubmitted(request.id);
 			} else {
 				rejectedBySigner();

@@ -38,8 +38,10 @@ export const createRecentActionsResultFilter = (a_ref: RepoRef): Filter[] => {
 		{
 			kinds: [ActionDvmResponseKind],
 			'#a': [a_ref],
-			'#s': ['error', 'payment-required', 'success'],
-			limit: 100,
+			// TODO use the action request filter for on the action page
+			// '#s': ['error', 'payment-required', 'success'],
+			// limit: 100,
+			limit: 500,
 			// within 6 months
 			since: unixNow() - 60 * 60 * 24 * 30 * 6
 		}
