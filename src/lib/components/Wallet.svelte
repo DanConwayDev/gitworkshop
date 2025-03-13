@@ -19,13 +19,13 @@
 		isTokenContentLocked,
 		getTokenContent
 	} from 'applesauce-wallet/helpers/tokens';
-	import { getDecodedToken, type Token } from '@cashu/cashu-ts';
+	import { getDecodedToken, getEncodedToken, type Token } from '@cashu/cashu-ts';
 	import { NostrWalletTokenKind } from '$lib/kinds';
 	import type { Query } from 'applesauce-core';
 	import { createWalletFilter } from '$lib/relay/filters/wallet';
 	import { filter } from 'rxjs';
 	import Container from './Container.svelte';
-	import { CashuWalletEvent } from '$lib/kind_labels';
+	import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
 
 	let { pubkey }: { pubkey: PubKeyString } = $props();
 
@@ -79,7 +79,6 @@
 		});
 		return mints;
 	});
-
 	// const createWallet = () => {
 	// 	factory;
 	// 	memory_db;
@@ -184,6 +183,8 @@
 
 	let receive_token = $state('');
 	let receive_invalid = $state(false);
+	let receive_invalid_spent = $state(false);
+	let receive_minting = $state(false);
 	let receive_signing = $state(false);
 	let receive_signed = $state(false);
 	let receive_rejected_by_signer = $state(false);
@@ -193,21 +194,50 @@
 		if (!active_account || !wallet) {
 			return;
 		}
-		let token: Token | undefined = undefined;
+		let old_token: Token | undefined = undefined;
 		try {
-			token = getDecodedToken(receive_token);
-			cashu;
+			old_token = getDecodedToken(receive_token);
 		} catch {
 			/* empty */
 		}
-		if (!token) {
+		if (!old_token) {
 			receive_invalid = true;
 			return setTimeout(() => {
 				receive_invalid = false;
 			}, 2000);
 		}
+		receive_minting = true;
+		// TODO persistantly store the old token just in case
+		let c_mint = new CashuMint(old_token.mint);
+		let c_wallet = new CashuWallet(c_mint);
+		let token: Token | undefined = undefined;
+		// TODO persistantly store the new token just in case
+		try {
+			let proofs = await c_wallet.receive(old_token);
+			token = { mint: old_token.mint, proofs };
+		} catch (e) {
+			if (`${e}`.includes('already spent')) receive_invalid_spent = true;
+			else console.log(e);
+			receive_invalid = true;
+		}
+		if (!token)
+			return setTimeout(() => {
+				receive_invalid = false;
+				receive_invalid_spent = false;
+				// TODO: print error message?
+			}, 2000);
+
+		receive_minting = false;
+
 		receive_signing = true;
 		try {
+			let funds_at_risk = false;
+			let timeout_id = setTimeout(() => {
+				if (receive_signing) {
+					// TODO show an error now
+				}
+			}, 2000);
+
 			let hub = new ActionHub(
 				memory_db,
 				new EventFactory({ signer: active_account }),
@@ -216,10 +246,14 @@
 					query_centre.publishEvent(event);
 				}
 			);
-			receive_signed = true;
 			await hub.run(ReceiveToken, token);
 		} catch {
+			receive_token = getEncodedToken(token);
+			// TODO funds at risks - save token
+			console.log(`FUNDS AT RISK- SAVE THIS TOKEN: ${getEncodedToken(token)}`);
 			receive_rejected_by_signer = true;
+			const error =
+				'funds at risk! the token has been swapped and you failed to sign the new token';
 		}
 		setTimeout(() => {
 			if (!receive_rejected_by_signer) receive_token = '';
@@ -292,19 +326,23 @@
 	/>
 	<button
 		onclick={received}
-		disabled={receive_token.length < 10 || receive_signing}
+		disabled={receive_token.length < 10 || (receive_signing && !receive_rejected_by_signer)}
 		class="btn btn-success"
 		class:btn-error={receive_rejected_by_signer || receive_invalid}
 	>
 		{#if receive_invalid}
-			Invalid Token
+			{#if receive_invalid_spent}
+				Token Already Spent
+			{:else}
+				Invalid Token
+			{/if}
 		{:else if receive_signing}
 			{#if receive_rejected_by_signer}
-				Rejected by Signer
+				Funds At Risk - Rejected by Signer
 			{:else if !receive_signed}
 				Signing Receive
 			{:else}
-				Received...
+				Signing Swapped Token
 			{/if}
 		{:else}
 			Receive Cashu
