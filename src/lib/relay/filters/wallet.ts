@@ -20,12 +20,12 @@ export const createWalletFilter = (pubkey: PubKeyString): Filter[] => {
 		}
 	];
 };
-export const createWalletHistoryFilter = (pubkey: PubKeyString, since?: number): Filter[] => {
+export const createWalletHistoryFilter = (pubkey: PubKeyString, limit: number = 100): Filter[] => {
 	return [
 		{
 			kinds: [NostrWalletSpendHistorynKind],
 			authors: [pubkey],
-			since: since
+			limit
 		}
 	];
 };

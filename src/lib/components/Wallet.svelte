@@ -24,35 +24,37 @@
 	import type { Query } from 'applesauce-core';
 	import { createWalletFilter, createWalletHistoryFilter } from '$lib/relay/filters/wallet';
 	import { filter } from 'rxjs';
-	import Container from './Container.svelte';
 	import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
 	import {
 		getHistoryContent,
 		isHistoryContentLocked,
-		unlockHistoryContent
+		unlockHistoryContent,
+		type HistoryContent
 	} from 'applesauce-wallet/helpers/history';
+	import Container from './Container.svelte';
+	import FromNow from './FromNow.svelte';
 
 	let { pubkey }: { pubkey: PubKeyString } = $props();
 
-	// let wallet = inMemoryCreateQuery(Queries.WalletQuery, pubkey);
-	// let wallet = $state.raw<any | undefined>(undefined);
-	// $effect(() => {
-	// 	const sub = memory_db_query_store
-	// 		.createQuery(Queries.WalletQuery, pubkey)
-	// 		.subscribe((res: any | undefined) => {
-	// 			wallet = res;
-	// 		});
-	// 	return () => {
-	// 		sub.unsubscribe();
-	// 	};
-	// });
 	let wallet_query = new InMemoryQuery(Queries.WalletQuery, () => [pubkey] as const);
 	let wallet = $derived(wallet_query.result);
 
 	let tok_q = inMemoryRelayTimeline([{ kinds: [NostrWalletTokenKind], authors: [pubkey] }]);
 	let tokens_query = new InMemoryQuery(Queries.WalletTokensQuery, () => [pubkey] as const);
 	let history_query = new InMemoryQuery(Queries.WalletHistoryQuery, () => [pubkey] as const);
-	let history = $derived(history_query.result);
+	let history_events = $derived(history_query.result);
+	let history: (HistoryContent & { created_at: number })[] = $derived(
+		(history_events ?? [])
+			.map((e) => {
+				let c = getHistoryContent(e);
+				if (!c) return undefined;
+				return {
+					created_at: e.created_at,
+					...c
+				};
+			})
+			.filter((h) => !!h)
+	);
 
 	// let tokens_detail_query = $derived(
 	// 	tokens_query
@@ -276,7 +278,11 @@
 					query_centre.publishEvent(event);
 				}
 			);
-			await hub.run(ReceiveToken, token);
+			let fee =
+				old_token.proofs.reduce((a, c) => a + c.amount, 0) -
+				token.proofs.reduce((a, c) => a + c.amount, 0);
+
+			await hub.run(ReceiveToken, token, [], fee);
 		} catch {
 			receive_token = getEncodedToken(token);
 			// TODO funds at risks - save token
@@ -334,54 +340,91 @@
 	</button>
 {:else}
 	<Container>
-		<div class="text-xl">
-			{#if masked}***{:else}{balance}{/if} sats
+		<div class="flex justify-center">
+			<div class="mb-4 max-w-3xl rounded-lg bg-base-200 p-4">
+				<div class="mb-4 rounded-lg bg-base-200 p-4">
+					<div class="mb-2 text-center text-xl font-bold">
+						<span class="text-primary"
+							>{#if masked}***{:else}{balance}{/if} sats</span
+						>
+					</div>
+				</div>
+
+				<div class="mb-4 rounded-lg bg-base-200 p-4">
+					<div class="flex flex-col gap-2">
+						{#each mints as mint_url}
+							<div class="flex items-center justify-between rounded-md bg-base-100 p-2">
+								<div class="max-w-[200px] truncate text-sm">{mint_url}</div>
+								<div class="badge badge-primary">
+									{#if mint_balances?.[mint_url]}{#if masked}***{:else}{mint_balances[
+												mint_url
+											]}{/if}
+									{:else}0{/if}
+									sats
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+
+				<div class="mb-6 flex flex-col gap-4">
+					<div class="flex gap-2">
+						<input
+							disabled={receive_signing}
+							type="text"
+							placeholder="Paste cashu token here"
+							class="input input-bordered w-full"
+							bind:value={receive_token}
+						/>
+						<button
+							onclick={received}
+							disabled={receive_token.length < 10 ||
+								(receive_signing && !receive_rejected_by_signer)}
+							class="btn btn-success"
+							class:btn-error={receive_rejected_by_signer || receive_invalid}
+						>
+							{#if receive_invalid}
+								{#if receive_invalid_spent}
+									Token Already Spent
+								{:else}
+									Invalid Token
+								{/if}
+							{:else if receive_signing}
+								{#if receive_rejected_by_signer}
+									Funds At Risk - Rejected by Signer
+								{:else if !receive_signed}
+									Signing Receive
+								{:else}
+									Signing Swapped Token
+								{/if}
+							{:else}
+								Receive Cashu
+							{/if}
+						</button>
+					</div>
+				</div>
+
+				<div class="rounded-lg bg-base-200 p-4">
+					<h3 class="mb-3 text-lg">Transaction History</h3>
+					<div class="divide-y divide-base-300">
+						{#each history as h}
+							<div class="py-3">
+								<div class="mb-2 flex items-center justify-between">
+									<div class={h.direction === 'in' ? 'text-success' : 'text-warning'}>
+										<span class="font-medium">{h.amount} sats</span>
+									</div>
+									{#if h.fee}<span class="text-neutral-content opacity-70">{h.fee} sat fee</span
+										>{/if}
+								</div>
+								<div class="flex justify-between text-sm opacity-70">
+									<div><FromNow unix_seconds={h.created_at} /></div>
+									<div class="max-w-[200px] truncate">{h.mint}</div>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			</div>
 		</div>
 	</Container>
-	<Container>
-		{#each mints as mint_url}
-			{mint_url}
-			{#if mint_balances?.[mint_url]}{#if masked}***{:else}{mint_balances[mint_url]}{/if}
-			{:else}0{/if}
-			sats
-		{/each}
-	</Container>
-
-	<input
-		disabled={receive_signing}
-		type="text"
-		placeholder="cashu token"
-		class="input input-sm input-bordered w-full max-w-xs"
-		bind:value={receive_token}
-	/>
-	<button
-		onclick={received}
-		disabled={receive_token.length < 10 || (receive_signing && !receive_rejected_by_signer)}
-		class="btn btn-success"
-		class:btn-error={receive_rejected_by_signer || receive_invalid}
-	>
-		{#if receive_invalid}
-			{#if receive_invalid_spent}
-				Token Already Spent
-			{:else}
-				Invalid Token
-			{/if}
-		{:else if receive_signing}
-			{#if receive_rejected_by_signer}
-				Funds At Risk - Rejected by Signer
-			{:else if !receive_signed}
-				Signing Receive
-			{:else}
-				Signing Swapped Token
-			{/if}
-		{:else}
-			Receive Cashu
-		{/if}
-	</button>
-	<div>
-		<div>history</div>
-		{#each (history ?? []).map(getHistoryContent).filter((h) => !!h) as h}
-			{JSON.stringify(h)}
-		{/each}
-	</div>
 {/if}
