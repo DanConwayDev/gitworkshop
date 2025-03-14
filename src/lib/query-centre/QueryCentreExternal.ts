@@ -69,8 +69,8 @@ class QueryCentreExternal {
 			() => {
 				sendOutboxEvents();
 			},
-			// wait 10 seconds so we don't do too much on initial load
-			10 * 1000
+			// wait 1 seconds so we don't do too much on initial load
+			1 * 1000
 		);
 	}
 
