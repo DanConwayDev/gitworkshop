@@ -133,7 +133,8 @@
 								<div class="collapse collapse-arrow bg-base-300">
 									<input type="radio" name="my-accordion-2" checked={i ? true : undefined} />
 									<div class="collapse-title">
-										{#if group.length === 64}<UserHeader user={group} inline />'s inbox relays
+										{#if group.length === 64}<UserHeader user={group} inline />'s {#if group === o.event.pubkey}outbox{:else}inbox{/if}
+											relays
 										{:else}{group}{/if} ({o.relay_logs.filter(
 											(l) => l.groups.includes(group) && l.success
 										).length} /
