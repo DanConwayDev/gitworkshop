@@ -5,6 +5,7 @@
 	import type { EventIdString } from '$lib/types';
 	import FromNow from './FromNow.svelte';
 	import UserHeader from './user/UserHeader.svelte';
+	import { GitRepositoryAnnouncement } from '$lib/kind_labels';
 
 	let outbox_query = liveQueryState(() => {
 		return db.outbox.toArray();
@@ -135,6 +136,8 @@
 									<div class="collapse-title">
 										{#if group.length === 64}<UserHeader user={group} inline />'s {#if group === o.event.pubkey}outbox{:else}inbox{/if}
 											relays
+										{:else if group.length > 64 && group.startsWith(`${GitRepositoryAnnouncement}:`)}
+											git repo: {group.split(':')[2]}'s relays
 										{:else}{group}{/if} ({o.relay_logs.filter(
 											(l) => l.groups.includes(group) && l.success
 										).length} /
