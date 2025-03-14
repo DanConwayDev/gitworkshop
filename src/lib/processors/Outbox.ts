@@ -34,12 +34,6 @@ export const processOutboxUpdates = async (updates: OutboxRelayProcessorUpdate[]
 			if (last.msg.indexOf('rate') > 0 || last.msg.indexOf('timeout') > 0) return true;
 			return false;
 		});
-
-		if (item.broadly_sent && !waiting) {
-			setTimeout(() => {
-				db.outbox.delete(item.id);
-			}, 5000);
-		}
 	});
 	await db.outbox.bulkPut([...map.values()]);
 };

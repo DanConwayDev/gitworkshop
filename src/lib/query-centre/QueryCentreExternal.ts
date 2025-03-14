@@ -54,6 +54,10 @@ class QueryCentreExternal {
 	relays: Map<WebSocketUrl, RelayManager> = new Map();
 	constructor() {
 		const sendOutboxEvents = async () => {
+			// delete broadly sent outbox events older than 48 hours
+			await db.outbox
+				.filter((o) => o.broadly_sent && o.event.created_at < unixNow() - 60 * 60 * 24 * 2)
+				.delete();
 			const outbox = await db.outbox.filter((o) => o.relay_logs.some((l) => !l.success)).toArray();
 			outbox.forEach((o) => {
 				o.relay_logs.forEach((l) => {
