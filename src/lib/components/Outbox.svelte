@@ -74,6 +74,10 @@
 		{#each filtered as o}
 			<div
 				class="group flex w-full items-center justify-between rounded hover:rounded-none hover:bg-base-200"
+				class:bg-yellow-900={!o.broadly_sent && o.relay_logs.some((l) => l.success)}
+				class:hover:bg-yellow-800={!o.broadly_sent && o.relay_logs.some((l) => l.success)}
+				class:bg-red-900={!o.relay_logs.some((l) => l.success)}
+				class:hover:bg-red-800={!o.relay_logs.some((l) => l.success)}
 				class:bg-base-200={selected === o.id}
 			>
 				<button
