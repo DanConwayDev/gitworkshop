@@ -14,10 +14,12 @@
 	let outbox = $derived(
 		[...(outbox_query.current ?? [])].sort((a, b) => b.event.created_at - a.event.created_at) ?? []
 	);
-	let filter: 'all' | 'broadcast issues' | 'not broadcast' = $state('not broadcast');
+	let filter: 'recent' | 'broadcast issues' | 'not broadcast' = $state('not broadcast');
+	let broadcast_issues = $derived(outbox.filter((o) => !o.broadly_sent));
+	let not_broadcast = $derived(outbox.filter((o) => o.relay_logs.every((l) => !l.success)));
 	let filtered = $derived(
 		outbox.filter((o) => {
-			if (filter === 'all') return true;
+			if (filter === 'recent') return true;
 			if (filter === 'broadcast issues') return !o.broadly_sent;
 			return o.relay_logs.every((l) => !l.success);
 		})
@@ -34,25 +36,37 @@
 			<div class="flex space-x-2">
 				<button
 					class="btn btn-xs"
-					class:btn-primary={filter === 'all'}
+					class:btn-primary={filter === 'recent'}
 					onclick={() => {
-						filter = 'all';
-					}}>All</button
+						filter = 'recent';
+					}}>Recent</button
 				>
-				<button
-					class="btn btn-xs"
-					class:btn-primary={filter === 'broadcast issues'}
-					onclick={() => {
-						filter = 'broadcast issues';
-					}}>Broacast Issues</button
-				>
-				<button
-					class="btn btn-xs"
-					class:btn-primary={filter === 'not broadcast'}
-					onclick={() => {
-						filter = 'not broadcast';
-					}}>Not Broadcast</button
-				>
+				<div class="indicator">
+					{#if broadcast_issues.length > 0}<span
+							class="text-xsm badge indicator-item badge-secondary badge-sm indicator-top"
+							>{broadcast_issues.length}</span
+						>{/if}
+					<button
+						class="btn btn-xs"
+						class:btn-primary={filter === 'broadcast issues'}
+						onclick={() => {
+							filter = 'broadcast issues';
+						}}>Broacast Issues</button
+					>
+				</div>
+				<div class="indicator">
+					{#if not_broadcast.length > 0}<span
+							class="text-xsm badge indicator-item badge-secondary badge-sm indicator-top"
+							>{not_broadcast.length}</span
+						>{/if}
+					<button
+						class="btn btn-xs"
+						class:btn-primary={filter === 'not broadcast'}
+						onclick={() => {
+							filter = 'not broadcast';
+						}}>Not Broadcast</button
+					>
+				</div>
 			</div>
 		</div>
 	</Container>
