@@ -46,7 +46,8 @@
 			></div>
 
 			<div
-				class="absolute right-0 top-full z-20 mt-2 h-80 w-96 overflow-y-auto rounded-lg bg-base-400 p-4 shadow-lg"
+				class="min-w-xl absolute right-0 top-full z-20 mt-2 max-w-2xl overflow-y-auto rounded-lg bg-base-400 p-4 shadow-lg"
+				style="height: calc(100vh - 80px); width: calc(70vw - 300px)"
 			>
 				<Outbox />
 			</div>
