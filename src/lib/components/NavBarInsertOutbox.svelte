@@ -2,9 +2,8 @@
 	import db from '$lib/dbs/LocalDb';
 	import { liveQueryState } from '$lib/helpers.svelte';
 	import store from '$lib/store.svelte';
-	import { onMount } from 'svelte';
 	import Outbox from './Outbox.svelte';
-	import { slide } from 'svelte/transition';
+	import Sidebar from './Sidebar.svelte';
 
 	let outbox_query = liveQueryState(() => {
 		return db.outbox.toArray();
@@ -12,21 +11,10 @@
 	let outbox = $derived([...(outbox_query.current ?? [])]);
 	let not_broadly_sent = $derived(outbox.filter((o) => !o.broadly_sent));
 	let is_open = $state(false);
-	let navbar_already_fixed = $state(false);
 	const toggle = () => {
 		is_open = !is_open;
-		if (is_open) {
-			navbar_already_fixed = store.navbar_fixed;
-			store.navbar_fixed = true;
-		} else if (!navbar_already_fixed) {
-			store.navbar_fixed = false;
-		}
+		store.navbar_fixed = is_open;
 	};
-	onMount(() => {
-		window.addEventListener('keydown', (event) => {
-			if (is_open && event.key === 'Escape') toggle();
-		});
-	});
 </script>
 
 {#if outbox.length === 0}
@@ -53,21 +41,8 @@
 				>
 			</div>
 		</button>
-		{#if is_open}
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div class="pointer-events-auto fixed inset-0 z-10 h-16" onclick={toggle}></div>
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div class="fixed inset-0 z-10 mt-16 bg-base-200 opacity-50" onclick={toggle}></div>
-
-			<div
-				class="fixed right-0 z-20 mt-3 w-[600px] overflow-y-auto bg-base-400 p-4 drop-shadow-2xl"
-				style="height: calc(100vh); max-width: calc(100vw - 40px);"
-				transition:slide={{ axis: 'x', duration: 100 }}
-			>
-				<Outbox />
-			</div>
-		{/if}
+		<Sidebar bind:is_open>
+			<Outbox />
+		</Sidebar>
 	</div>
 {/if}
