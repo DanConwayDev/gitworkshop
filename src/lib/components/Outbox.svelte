@@ -29,7 +29,7 @@
 
 <div class="h-full bg-base-400">
 	<Container>
-		<div class="flex items-center pb-2">
+		<div class="flex items-center border-b border-primary pb-2">
 			<div class="prose flex-grow">
 				<h3>Outbox</h3>
 			</div>

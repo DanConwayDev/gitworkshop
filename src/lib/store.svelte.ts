@@ -48,6 +48,8 @@ class Store {
 	accounts: AccountSummary[] = $state([]);
 
 	readme: { [key in RepoRef]: RepoReadme } = $state({});
+
+	navbar_fixed = $state(false);
 }
 
 const store = new Store();

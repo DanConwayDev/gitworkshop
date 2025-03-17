@@ -23,7 +23,11 @@
 	}
 </script>
 
-<div class="bg-base-400">
+{#if store.navbar_fixed}
+	<div class="h-16"></div>
+{/if}
+
+<div class="bg-base-400 {store.navbar_fixed ? 'fixed left-0 top-0 z-10 w-full' : ''}">
 	<Container>
 		<div class="navbar">
 			<div class="navbar-start sm:hidden">
