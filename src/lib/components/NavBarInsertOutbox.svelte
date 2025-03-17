@@ -56,6 +56,9 @@
 		{#if is_open}
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="pointer-events-auto fixed inset-0 z-10 h-16" onclick={toggle}></div>
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="fixed inset-0 z-10 mt-16 bg-base-200 opacity-50" onclick={toggle}></div>
 
 			<div
@@ -63,7 +66,6 @@
 				style="height: calc(100vh); max-width: calc(100vw - 40px);"
 				transition:slide={{ axis: 'x', duration: 100 }}
 			>
-				<!-- sm:right-1/2 sm:max-w-[95vw] sm:translate-x-1/2 md:right-1/2 md:max-w-xl md:translate-x-1/2 lg:right-0 lg:max-w-2xl -->
 				<Outbox />
 			</div>
 		{/if}
