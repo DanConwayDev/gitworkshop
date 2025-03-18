@@ -4,13 +4,11 @@
 	import Container from './Container.svelte';
 	import LoginModal from './LoginModal.svelte';
 	import NavBarInsertOutbox from './NavBarInsertOutbox.svelte';
+	import NavBarLeftMenu from './NavBarLeftMenu.svelte';
 	import NavBarUserMenu from './NavBarUserMenu.svelte';
 
 	// this was be an import from users store
 	let show_login_modal = $state(false);
-	let show_manage_accounts_modal = $state(false);
-	let show_settings_modal = $state(false);
-	let show_feedback_modal = $state(false);
 	let search_input = $state(search.text);
 	function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
@@ -26,41 +24,7 @@
 <div class="bg-base-400 {store.navbar_fixed ? 'fixed left-0 top-0 z-10 w-full' : ''}">
 	<Container>
 		<div class="navbar">
-			<div class="navbar-start sm:hidden">
-				<div class="dropdown">
-					<div tabindex="0" role="button" class="btn btn-ghost">
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							class="h-5 w-5"
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke="currentColor"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M4 6h16M4 12h8m-8 6h16"
-							/>
-						</svg>
-					</div>
-					<ul
-						class="menu dropdown-content menu-sm z-[1] mt-3 w-52 rounded-box bg-base-400 p-2 shadow"
-					>
-						<li><a href="/" class="">Home</a></li>
-						<li><a href="/search" class="">Search</a></li>
-						<li><a href="/quick-start" class="">Quick Start</a></li>
-					</ul>
-				</div>
-			</div>
-			<div class="navbar-start hidden sm:flex">
-				<a class="h-8 overflow-hidden align-middle" href="/">
-					<img src="/icons/icon.svg" alt="gitworkshop.dev logo" class="h-full max-w-full" />
-				</a>
-				<div class="p-2"></div>
-				<a href="/" class="btn btn-ghost btn-sm hidden normal-case sm:flex">Home</a>
-				<a href="/quick-start" class="btn btn-ghost btn-sm normal-case">Quick Start</a>
-			</div>
+			<NavBarLeftMenu />
 			<div class="navbar-cente">
 				<a class="h-8 overflow-hidden align-middle sm:hidden" href="/">
 					<img src="/icons/icon.svg" alt="gitworkshop.dev logo" class="h-full max-w-full" />
