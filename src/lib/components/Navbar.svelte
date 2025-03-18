@@ -1,14 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import accounts_manager from '$lib/accounts';
 	import store, { search } from '$lib/store.svelte';
 	import Container from './Container.svelte';
-	import FeedbackModal from './FeedbackModal.svelte';
 	import LoginModal from './LoginModal.svelte';
-	import ManageAccountsModal from './ManageAccountsModal.svelte';
 	import NavBarInsertOutbox from './NavBarInsertOutbox.svelte';
-	import SettingsModal from './SettingsModal.svelte';
-	import UserHeader from './user/UserHeader.svelte';
+	import NavBarUserMenu from './NavBarUserMenu.svelte';
 
 	// this was be an import from users store
 	let show_login_modal = $state(false);
@@ -93,7 +89,6 @@
 						/>
 					</label>
 				</form>
-				{#if store.experimental}<NavBarInsertOutbox />{/if}
 				<a href="/wallet" class="btn btn-ghost btn-sm mx-0">
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 512 512">
 						<title>wallet</title>
@@ -117,109 +112,15 @@
 						/><path fill="currentColor" d="M368 320a32 32 0 1 1 32-32a32 32 0 0 1-32 32" /></svg
 					>
 				</a>
+				{#if store.experimental}<NavBarInsertOutbox />{/if}
+
 				{#if store.logged_in_account || store.accounts.length > 0}
-					<div class="dropdown dropdown-end">
-						<div tabindex="0" role="button" class="m-1">
-							{#if store.logged_in_account}
-								<UserHeader
-									user={store.logged_in_account.pubkey}
-									link_to_profile={false}
-									avatar_only={true}
-								/>
-							{:else}
-								<button class="btn btn-ghost btn-sm normal-case">Login</button>
-							{/if}
-						</div>
-						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-						<ul
-							tabindex="0"
-							class="menu dropdown-content z-[1] -mr-4 min-w-max rounded-box bg-base-400 p-2 shadow"
-						>
-							{#each store.accounts as account}
-								<li>
-									<button
-										class:bg-base-300={store.logged_in_account &&
-											store.logged_in_account.id === account.id}
-										onclick={() => {
-											accounts_manager.setActive(account.id);
-										}}
-									>
-										<UserHeader
-											user={account.pubkey}
-											link_to_profile={store.logged_in_account &&
-												store.logged_in_account.id === account.id}
-										/>
-									</button>
-								</li>
-							{/each}
-							<li>
-								<button
-									onclick={() => {
-										show_manage_accounts_modal = true;
-									}}>Manage Accounts</button
-								>
-							</li>
-							{#if store.experimental}
-								<li>
-									<button
-										onclick={() => {
-											show_feedback_modal = true;
-										}}>Feedback</button
-									>
-								</li>
-							{/if}
-							<li>
-								<button
-									onclick={() => {
-										show_settings_modal = true;
-									}}>Settings</button
-								>
-							</li>
-							<li>
-								<button
-									onclick={() => {
-										accounts_manager.clearActive();
-									}}>Logout</button
-								>
-							</li>
-						</ul>
-					</div>
-				{:else}
-					<button
-						onclick={() => {
-							show_login_modal = true;
-						}}
-						class="btn btn-ghost btn-sm normal-case">Login</button
-					>
+					<NavBarUserMenu />
 				{/if}
 			</div>
 		</div>
 	</Container>
 </div>
-
-{#if show_manage_accounts_modal}
-	<ManageAccountsModal
-		done={() => {
-			show_manage_accounts_modal = false;
-		}}
-	/>
-{/if}
-
-{#if show_feedback_modal}
-	<FeedbackModal
-		done={() => {
-			show_feedback_modal = false;
-		}}
-	/>
-{/if}
-
-{#if show_settings_modal}
-	<SettingsModal
-		done={() => {
-			show_settings_modal = false;
-		}}
-	/>
-{/if}
 
 {#if show_login_modal}
 	<LoginModal

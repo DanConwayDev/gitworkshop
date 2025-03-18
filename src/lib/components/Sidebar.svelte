@@ -29,7 +29,7 @@
 	<div class="fixed inset-0 z-10 mt-16 bg-base-200 opacity-50" onclick={toggle}></div>
 
 	<div
-		class="fixed {side}-0 z-20 mt-3 {classes} overflow-y-auto bg-base-400 p-4 drop-shadow-2xl"
+		class="fixed top-16 {side}-0 z-20 {classes} overflow-y-auto bg-base-400 px-2 drop-shadow-2xl"
 		style="height: calc(100vh); max-width: calc(100vw - 40px);"
 		transition:slide={{ axis: 'x', duration: 100 }}
 	>
