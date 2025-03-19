@@ -220,12 +220,13 @@
 	let receive_signing = $state(false);
 	let receive_signed = $state(false);
 	let receive_rejected_by_signer = $state(false);
-
+	let recieve_status = $state('');
 	const received = async () => {
 		let active_account = accounts_manager.getActive();
 		if (!active_account || !wallet) {
 			return;
 		}
+		recieve_status = '';
 		let old_token: Token | undefined = undefined;
 		try {
 			old_token = getDecodedToken(receive_token);
@@ -234,11 +235,14 @@
 		}
 		if (!old_token) {
 			receive_invalid = true;
+			if (receive_token.startsWith('cashu')) recieve_status = 'invalid cashu token string';
+			else recieve_status = "doesn't look like a cashu token";
 			return setTimeout(() => {
 				receive_invalid = false;
 			}, 2000);
 		}
 		receive_minting = true;
+		recieve_status = `swapping token with mint`;
 		// TODO persistantly store the old token just in case
 		let c_mint = new CashuMint(old_token.mint);
 		let c_wallet = new CashuWallet(c_mint);
@@ -248,8 +252,13 @@
 			let proofs = await c_wallet.receive(old_token);
 			token = { mint: old_token.mint, proofs };
 		} catch (e) {
-			if (`${e}`.includes('already spent')) receive_invalid_spent = true;
-			else console.log(e);
+			if (`${e}`.includes('already spent')) {
+				receive_invalid_spent = true;
+				recieve_status = 'token already spent';
+			} else {
+				recieve_status = `error redeeming token: ${e}`;
+				console.log(e);
+			}
 			receive_invalid = true;
 		}
 		if (!token)
@@ -260,12 +269,14 @@
 			}, 2000);
 
 		receive_minting = false;
+		recieve_status = `signing new token event`;
 
 		receive_signing = true;
 		try {
 			let funds_at_risk = false;
 			let timeout_id = setTimeout(() => {
 				if (receive_signing) {
+					recieve_status = `funds at risk. sign event or recover this token:  ${getEncodedToken(token)}`;
 					// TODO show an error now
 				}
 			}, 2000);
@@ -283,13 +294,17 @@
 				token.proofs.reduce((a, c) => a + c.amount, 0);
 
 			await hub.run(ReceiveToken, token, [], fee);
-		} catch {
+			if (timeout_id) clearTimeout(timeout_id);
+			recieve_status = `added to wallet`;
+			receive_token = '';
+			setTimeout(() => {
+				recieve_status = '';
+			}, 2000);
+		} catch (e) {
 			receive_token = getEncodedToken(token);
-			// TODO funds at risks - save token
+			recieve_status = `error: ${e}\nfunds at risk. signing rejected. save this token:  ${getEncodedToken(token)}`;
 			console.log(`FUNDS AT RISK- SAVE THIS TOKEN: ${getEncodedToken(token)}`);
 			receive_rejected_by_signer = true;
-			const error =
-				'funds at risk! the token has been swapped and you failed to sign the new token';
 		}
 		setTimeout(() => {
 			if (!receive_rejected_by_signer) receive_token = '';
@@ -375,34 +390,12 @@
 							placeholder="Paste cashu token here"
 							class="input input-bordered w-full"
 							bind:value={receive_token}
+							onpaste={received}
 						/>
-						<button
-							onclick={received}
-							disabled={receive_token.length < 10 ||
-								(receive_signing && !receive_rejected_by_signer)}
-							class="btn btn-success"
-							class:btn-error={receive_rejected_by_signer || receive_invalid}
-						>
-							{#if receive_invalid}
-								{#if receive_invalid_spent}
-									Token Already Spent
-								{:else}
-									Invalid Token
-								{/if}
-							{:else if receive_signing}
-								{#if receive_rejected_by_signer}
-									Funds At Risk - Rejected by Signer
-								{:else if !receive_signed}
-									Signing Receive
-								{:else}
-									Signing Swapped Token
-								{/if}
-							{:else}
-								Receive Cashu
-							{/if}
-						</button>
 					</div>
 				</div>
+				<div>{recieve_status}</div>
+				<div></div>
 
 				<div class="rounded-lg bg-base-200 p-4">
 					<h3 class="mb-3 text-lg">Transaction History</h3>
