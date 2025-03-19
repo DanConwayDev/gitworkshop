@@ -31,11 +31,12 @@
 		unlockHistoryContent,
 		type HistoryContent
 	} from 'applesauce-wallet/helpers/history';
-	import Container from './Container.svelte';
 	import FromNow from './FromNow.svelte';
+	import ContainerCenterPage from './ContainerCenterPage.svelte';
 
 	let { pubkey }: { pubkey: PubKeyString } = $props();
 
+	let t = $derived(query_centre.watchWallet(pubkey));
 	let wallet_query = new InMemoryQuery(Queries.WalletQuery, () => [pubkey] as const);
 	let wallet = $derived(wallet_query.result);
 
@@ -317,107 +318,104 @@
 </script>
 
 {#if !wallet}
-	{#if !store.logged_in_account}
-		<div>time to login</div>
-	{:else if !waited_1s}
-		loading
-	{:else}
-		<div>
-			couldnt find wallet.
-			<button onclick={createWallet} disabled={create_wallet_submitting} class="btn btn-success">
-				{#if create_wallet_submitting}
-					{#if create_wallet_rejected_by_signer}
-						Rejected by Signer
-					{:else if !create_wallet_signed}
-						Signing
-					{:else}
-						Sending
-					{/if}
-				{:else}
-					Create Wallet
-				{/if}
-			</button>
-		</div>
-	{/if}
-{:else if wallet.locked}
-	<button onclick={unlock} disabled={wallet_unlock_decypting} class="btn btn-success">
-		{#if wallet_unlock_decypting}
-			{#if wallet_unlock_rejected_by_signer}
-				Rejected by Signer
-			{:else if !wallet_unlock_decrypted}
-				Decrypting Wallet
-			{:else}
-				Unlocked...
-			{/if}
+	<ContainerCenterPage>
+		{#if !store.logged_in_account}
+			<div>time to login</div>
+		{:else if !waited_1s}
+			loading
 		{:else}
-			Unlock Wallet
+			<div>
+				<div class="p-4">Cannot find Wallet</div>
+				<button onclick={createWallet} disabled={create_wallet_submitting} class="btn btn-success">
+					{#if create_wallet_submitting}
+						{#if create_wallet_rejected_by_signer}
+							Rejected by Signer
+						{:else if !create_wallet_signed}
+							Signing
+						{:else}
+							Sending
+						{/if}
+					{:else}
+						Create Wallet
+					{/if}
+				</button>
+			</div>
 		{/if}
-	</button>
+	</ContainerCenterPage>
+{:else if wallet.locked}
+	<ContainerCenterPage>
+		<button onclick={unlock} disabled={wallet_unlock_decypting} class="btn btn-success">
+			{#if wallet_unlock_decypting}
+				{#if wallet_unlock_rejected_by_signer}
+					Rejected by Signer
+				{:else if !wallet_unlock_decrypted}
+					Decrypting Wallet
+				{:else}
+					Unlocked...
+				{/if}
+			{:else}
+				Unlock Wallet
+			{/if}
+		</button>
+	</ContainerCenterPage>
 {:else}
-	<Container>
-		<div class="flex justify-center">
-			<div class="mb-4 max-w-3xl rounded-lg bg-base-200 p-4">
-				<div class="mb-4 rounded-lg bg-base-200 p-4">
-					<div class="mb-2 text-center text-xl font-bold">
-						<span class="text-primary"
-							>{#if masked}***{:else}{balance}{/if} sats</span
-						>
-					</div>
-				</div>
-
-				<div class="mb-4 rounded-lg bg-base-200 p-4">
-					<div class="flex flex-col gap-2">
-						{#each mints as mint_url}
-							<div class="flex items-center justify-between rounded-md bg-base-100 p-2">
-								<div class="max-w-[200px] truncate text-sm">{mint_url}</div>
-								<div class="badge badge-primary">
-									{#if mint_balances?.[mint_url]}{#if masked}***{:else}{mint_balances[
-												mint_url
-											]}{/if}
-									{:else}0{/if}
-									sats
-								</div>
-							</div>
-						{/each}
-					</div>
-				</div>
-
-				<div class="mb-6 flex flex-col gap-4">
-					<div class="flex gap-2">
-						<input
-							disabled={receive_signing}
-							type="text"
-							placeholder="Paste cashu token here"
-							class="input input-bordered w-full"
-							bind:value={receive_token}
-							onpaste={received}
-						/>
-					</div>
-				</div>
-				<div>{recieve_status}</div>
-				<div></div>
-
-				<div class="rounded-lg bg-base-200 p-4">
-					<h3 class="mb-3 text-lg">Transaction History</h3>
-					<div class="divide-y divide-base-300">
-						{#each history as h}
-							<div class="py-3">
-								<div class="mb-2 flex items-center justify-between">
-									<div class={h.direction === 'in' ? 'text-success' : 'text-warning'}>
-										<span class="font-medium">{h.amount} sats</span>
-									</div>
-									{#if h.fee}<span class="text-neutral-content opacity-70">{h.fee} sat fee</span
-										>{/if}
-								</div>
-								<div class="flex justify-between text-sm opacity-70">
-									<div><FromNow unix_seconds={h.created_at} /></div>
-									<div class="max-w-[200px] truncate">{h.mint}</div>
-								</div>
-							</div>
-						{/each}
-					</div>
-				</div>
+	<div class="mb-4 max-w-3xl rounded-lg p-4">
+		<div class="mb-4 rounded-lg p-4">
+			<div class="mb-2 text-center text-xl font-bold">
+				<span class="text-primary"
+					>{#if masked}***{:else}{balance}{/if} sats</span
+				>
 			</div>
 		</div>
-	</Container>
+
+		<div class="mb-4 rounded-lg p-4">
+			<div class="flex flex-col gap-2">
+				{#each mints as mint_url}
+					<div class="flex items-center justify-between rounded-md bg-base-100 p-2">
+						<div class="max-w-[200px] truncate text-sm">{mint_url}</div>
+						<div class="badge badge-primary">
+							{#if mint_balances?.[mint_url]}{#if masked}***{:else}{mint_balances[mint_url]}{/if}
+							{:else}0{/if}
+							sats
+						</div>
+					</div>
+				{/each}
+			</div>
+		</div>
+
+		<div class="mb-6 flex flex-col gap-4">
+			<div class="flex gap-2">
+				<input
+					disabled={receive_signing}
+					type="text"
+					placeholder="Paste cashu token here"
+					class="input input-bordered w-full"
+					bind:value={receive_token}
+					onpaste={received}
+				/>
+			</div>
+		</div>
+		<div>{recieve_status}</div>
+		<div></div>
+
+		<div class="rounded-lg p-4">
+			<h3 class="mb-3 text-lg">Transaction History</h3>
+			<div class="divide-y divide-base-300">
+				{#each history as h}
+					<div class="py-3">
+						<div class="mb-2 flex items-center justify-between">
+							<div class={h.direction === 'in' ? 'text-success' : 'text-warning'}>
+								<span class="font-medium">{h.amount} sats</span>
+							</div>
+							{#if h.fee}<span class="text-neutral-content opacity-70">{h.fee} sat fee</span>{/if}
+						</div>
+						<div class="flex justify-between text-sm opacity-70">
+							<div><FromNow unix_seconds={h.created_at} /></div>
+							<div class="max-w-[200px] truncate">{h.mint}</div>
+						</div>
+					</div>
+				{/each}
+			</div>
+		</div>
+	</div>
 {/if}
