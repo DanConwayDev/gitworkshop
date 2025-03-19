@@ -31,7 +31,7 @@
 					<img src="/icons/icon.svg" alt="gitworkshop.dev logo" class="h-full max-w-full" />
 				</a>
 			</div>
-			<div class="navbar-end">
+			<div class="navbar-end md:gap-2">
 				<form onsubmit={handleSearch} class="mx-2 hidden sm:flex">
 					<label class="input input-sm input-bordered flex items-center gap-2">
 						<svg
