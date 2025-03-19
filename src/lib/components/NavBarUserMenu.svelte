@@ -17,7 +17,7 @@
 	let show_settings_modal = $state(false);
 </script>
 
-<div class="relative">
+<div class="relative ml-2">
 	{#if store.logged_in_account}
 		<div class="flex h-8 items-center">
 			<button onclick={toggle} class="mt-1">

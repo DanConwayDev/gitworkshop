@@ -17,10 +17,10 @@
 	};
 </script>
 
-{#if outbox.length === 0}
+{#if outbox.length > 0}
 	<div class="relative">
 		<button
-			class="btn btn-sm"
+			class="btn btn-sm mt-1 h-6 px-2 pb-1 pt-1"
 			class:btn-primary={is_open}
 			class:btn-ghost={!is_open}
 			onclick={toggle}
@@ -28,7 +28,7 @@
 			<div class="indicator">
 				{#if not_broadly_sent.length > 0}
 					<span class="text-xsm badge indicator-item badge-secondary badge-sm indicator-bottom"
-						>{not_broadly_sent.length}</span
+						>{not_broadly_sent.length}0</span
 					>
 				{/if}
 				<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 48 48"
