@@ -72,13 +72,14 @@ export const getRootUuid = (event: NostrEvent): EventIdString | ARef | undefined
 
 export const getStandardnip10ReplyTags = (
 	event: NostrEvent,
-	issue_or_pr_table_item: IssueOrPRTableItem
+	issue_or_pr_table_item?: IssueOrPRTableItem
 ): string[][] => {
 	let root_id: string | undefined;
 	if (event.kind === PatchKind && event.tags.some((t) => t[0] === 't' && t[1] === 'root'))
 		root_id = event.id;
 	if (!root_id) root_id = getRootUuid(event);
-	if (!root_id) root_id = issue_or_pr_table_item.uuid;
+	if (!root_id && issue_or_pr_table_item) root_id = issue_or_pr_table_item.uuid;
+	else root_id = event.id;
 	return [
 		['e', root_id, '', 'root'],
 		['e', event.id, eventToSeenOnRelay(event) || '', 'reply']
@@ -87,14 +88,15 @@ export const getStandardnip10ReplyTags = (
 
 export const getStandardnip22ReplyTags = (
 	event: NostrEvent,
-	issue_or_pr_table_item: IssueOrPRTableItem
+	issue_or_pr_table_item?: IssueOrPRTableItem
 ): string[][] => {
 	const P = getRootEventPubkey(event, issue_or_pr_table_item);
 	let root_id: string | undefined;
 	if (event.kind === PatchKind && event.tags.some((t) => t[0] === 't' && t[1] === 'root'))
 		root_id = event.id;
 	if (!root_id) root_id = getRootUuid(event);
-	if (!root_id) root_id = issue_or_pr_table_item.uuid;
+	if (!root_id && issue_or_pr_table_item) root_id = issue_or_pr_table_item.uuid;
+	else root_id = event.id;
 
 	return [
 		['E', root_id, '', P],
@@ -106,21 +108,23 @@ export const getStandardnip22ReplyTags = (
 	];
 };
 
-const getRootKind = (event: NostrEvent, issue_or_pr_table_item: IssueOrPRTableItem): string => {
+const getRootKind = (event: NostrEvent, issue_or_pr_table_item?: IssueOrPRTableItem): string => {
 	const K = event.tags.find((t) => t.length > 1 && t[0] === 'K');
 	if (K) return K[1];
-	if (event.id === (getRootUuid(event) || issue_or_pr_table_item.uuid)) return `${event.kind}`;
+	if (event.id === (getRootUuid(event) || issue_or_pr_table_item?.uuid) || !issue_or_pr_table_item)
+		return `${event.kind}`;
 	return issue_or_pr_table_item.type === 'issue' ? `${IssueKind}` : `${PatchKind}`;
 };
 
 const getRootEventPubkey = (
 	event: NostrEvent,
-	issue_or_pr_table_item: IssueOrPRTableItem
+	issue_or_pr_table_item?: IssueOrPRTableItem
 ): string => {
 	const K = event.tags.find((t) => t.length > 1 && t[0] === 'P');
 	if (K) return K[1];
-	if (event.id === (getRootUuid(event) || issue_or_pr_table_item.uuid)) return event.pubkey;
-	return issue_or_pr_table_item.author;
+	if (event.id === (getRootUuid(event) || issue_or_pr_table_item?.uuid)) return event.pubkey;
+	if (issue_or_pr_table_item) return issue_or_pr_table_item.author;
+	return event.pubkey;
 };
 
 export const eventToSeenOnRelay = (event: NostrEvent): WebSocketUrl | undefined => {
