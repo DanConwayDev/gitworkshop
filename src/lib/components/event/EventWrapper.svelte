@@ -2,12 +2,17 @@
 	import { type NostrEvent } from 'nostr-tools';
 	import FromNow from '../FromNow.svelte';
 	import UserHeader from '../user/UserHeader.svelte';
-	import { eventToNip19 } from '$lib/utils';
+	import { eventToNip19, getStandardnip10ReplyTags, getStandardnip22ReplyTags } from '$lib/utils';
 	import CopyField from '../CopyField.svelte';
 	import { onMount, type Snippet } from 'svelte';
 	import store from '$lib/store.svelte';
 	import ComposeReply from '../compose/ComposeReply.svelte';
 	import type { IssueOrPRTableItem, PubKeyString } from '$lib/types';
+	import accounts_manager from '$lib/accounts';
+	import { unixNow } from 'applesauce-core/helpers';
+	import query_centre from '$lib/query-centre/QueryCentre.svelte';
+	import { Reaction } from 'nostr-tools/kinds';
+	import { ShortTextNote } from '$lib/kind_labels';
 
 	let {
 		event,
@@ -57,7 +62,80 @@
 		}, {})
 	);
 	let show_reactions = $state(false);
+	let sending_reaction = $state(false);
+	const sendReaction = async (reaction: string) => {
+		let signer = accounts_manager.getActive();
+		if (sending_reaction || !signer) return;
+		sending_reaction = true;
+
+		let tags: string[][] = [
+			...(event.kind === ShortTextNote
+				? getStandardnip10ReplyTags(event, issue_or_pr_table_item)
+				: getStandardnip22ReplyTags(event, issue_or_pr_table_item))
+		];
+		([] as string[][]).forEach((t) => {
+			if (t.length > 1 && !tags.some((e) => e[0] === t[0] && e[1] === t[1])) tags.push(t);
+		});
+		try {
+			let event = await signer.signEvent({
+				kind: Reaction,
+				created_at: unixNow(),
+				tags,
+				content: reaction
+			});
+			if (event) {
+				query_centre.publishEvent(event);
+			}
+		} catch {}
+		setTimeout(() => {
+			sending_reaction = false;
+			show_reactions = false;
+		}, 500);
+	};
 </script>
+
+{#snippet addReactionButton(reaction: string, in_group = false)}
+	<button
+		class="btn btn-neutral btn-xs h-full {in_group ? 'join-item py-2' : ''}"
+		disabled={sending_reaction}
+		onclick={() => {
+			sendReaction(reaction);
+		}}
+	>
+		{reaction}
+	</button>
+{/snippet}
+
+{#snippet reactionGroup(reaction: string)}
+	<div
+		class="join mr-2 shadow-lg {grouped_reactions[reaction].has(
+			store.logged_in_account?.pubkey ?? ''
+		)
+			? 'border border-primary'
+			: ''}"
+	>
+		{#if store.logged_in_account && !grouped_reactions[reaction].has(store.logged_in_account.pubkey)}
+			{@render addReactionButton(reaction, true)}
+		{:else}
+			<span class="join-item flex items-center bg-base-400 p-2 pl-3 pr-1 text-xs">
+				{reaction}
+			</span>
+		{/if}
+		<div class="join-item inline-flex items-center rounded-lg bg-base-400 py-1">
+			{#each grouped_reactions[reaction] as pubkey}
+				<div class="mx-2 flex items-center">
+					<div
+						class="badge flex items-center"
+						class:bg-base-300={store.logged_in_account?.pubkey === pubkey}
+						class:bg-base-100={!(store.logged_in_account?.pubkey === pubkey)}
+					>
+						<UserHeader user={pubkey} inline size="xs" />
+					</div>
+				</div>
+			{/each}
+		</div>
+	</div>
+{/snippet}
 
 <div class="max-w-4xl border-b border-base-300 p-3 pl-3">
 	<div class="flex">
@@ -160,6 +238,100 @@
 	</div>
 	<div class:md:ml-11={!embedded}>
 		{@render children?.()}
+		<div class="pt-3">
+			{#if !show_reactions}
+				{#each Object.keys(grouped_reactions) as reaction}
+					<div class="group relative mr-2 inline-block">
+						<div class="absolute bottom-full left-0 hidden min-w-max group-hover:block">
+							{@render reactionGroup(reaction)}
+							<div
+								class="ml-3 h-0 w-0 border-x-[8px] border-t-[10px] border-x-transparent border-t-base-400 shadow-lg"
+							></div>
+						</div>
+						<button
+							class="l btn btn-xs {grouped_reactions[reaction].has(
+								store.logged_in_account?.pubkey ?? ''
+							)
+								? 'btn-primary'
+								: 'btn-neutra'}"
+							onclick={() => {
+								show_reactions = !show_reactions;
+							}}
+						>
+							{reaction}
+							{grouped_reactions[reaction].size}
+						</button>
+					</div>
+				{/each}
+				{#if store.logged_in_account}
+					<div class="inline-block align-middle">
+						<button
+							class="btn btn-ghost btn-xs p-1 opacity-40 hover:opacity-100"
+							class:-ml-1={reactions.length === 0}
+							aria-label="close reactions"
+							onclick={() => {
+								show_reactions = !show_reactions;
+							}}
+						>
+							<svg
+								viewBox="0 0 24 24"
+								focusable="false"
+								class="text-neutral-content"
+								aria-hidden="true"
+								width="14"
+								height="14"
+								><path
+									fill="currentColor"
+									d="M19.0001 13.9999V16.9999H22.0001V18.9999H18.9991L19.0001 21.9999H17.0001L16.9991 18.9999H14.0001V16.9999H17.0001V13.9999H19.0001ZM20.2426 4.75736C22.505 7.0244 22.5829 10.636 20.4795 12.992L19.06 11.574C20.3901 10.0499 20.3201 7.65987 18.827 6.1701C17.3244 4.67092 14.9076 4.60701 13.337 6.01688L12.0019 7.21524L10.6661 6.01781C9.09098 4.60597 6.67506 4.66808 5.17157 6.17157C3.68183 7.66131 3.60704 10.0473 4.97993 11.6232L13.412 20.069L11.9999 21.485L3.52138 12.993C1.41705 10.637 1.49571 7.01901 3.75736 4.75736C6.02157 2.49315 9.64519 2.41687 12.001 4.52853C14.35 2.42 17.98 2.49 20.2426 4.75736Z"
+								></path></svg
+							>
+						</button>
+					</div>
+				{/if}
+			{:else}
+				{#each Object.keys(grouped_reactions) as reaction}
+					<div class="mb-2">
+						{@render reactionGroup(reaction)}
+					</div>
+				{/each}
+				<div class="mb-2">
+					<div class="mr-2 inline-block">
+						{#if store.logged_in_account}
+							{#each ['+', '🚀', '🤙', '🙏', '❤️', '👀', '😂'].filter((r) => !Object.keys(grouped_reactions).includes(r)) as reaction}
+								<span class="mr-2">
+									{@render addReactionButton(reaction)}
+								</span>
+							{/each}
+						{/if}
+						<button
+							class="btn btn-ghost btn-xs -ml-1 p-0"
+							aria-label="close reactions"
+							onclick={() => {
+								show_reactions = !show_reactions;
+							}}
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="10"
+								height="10"
+								fill="currentColor"
+								class="w-6 text-neutral-content opacity-40"
+								viewBox="0 0 16 16"
+							>
+								<path
+									fill-rule="evenodd"
+									d="M1.5 1.5a.5.5 0 0 1 .707 0L8 7.293l5.793-5.793a.5.5 0 0 1 .707.707L8.707 8l5.793 5.793a.5.5 0 0 1-.707.707L8 8.707l-5.793 5.793a.5.5 0 0 1-.707-.707L7.293 8 1.5 2.207a.5.5 0 0 1 0-.707z"
+									stroke="currentColor"
+									stroke-width="1.5"
+									fill="none"
+								/>
+							</svg>
+						</button>
+					</div>
+				</div>
+			{/if}
+		</div>
+
 		{#if show_compose && issue_or_pr_table_item}
 			<div class="">
 				<div class="flex">
@@ -174,37 +346,6 @@
 				<div>
 					<ComposeReply {event} {issue_or_pr_table_item} sentFunction={() => replySent()} />
 				</div>
-			</div>
-		{/if}
-		{#if reactions.length > 0}
-			<div class="pt-2">
-				{#if !show_reactions}
-					{#each Object.keys(grouped_reactions) as reaction}
-						<button
-							class="btn btn-neutral btn-xs"
-							onclick={() => {
-								show_reactions = !show_reactions;
-							}}
-						>
-							{reaction}
-							{grouped_reactions[reaction].size}
-						</button>
-					{/each}
-				{:else}
-					{#each reactions as reaction}
-						<button
-							class="btn btn-neutral btn-sm"
-							onclick={() => {
-								show_reactions = !show_reactions;
-							}}
-						>
-							{reaction.content}
-							<div class="badge">
-								<UserHeader user={reaction.pubkey} link_to_profile={false} inline size="xs" />
-							</div>
-						</button>
-					{/each}
-				{/if}
 			</div>
 		{/if}
 	</div>
