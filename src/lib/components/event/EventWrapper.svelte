@@ -297,7 +297,7 @@
 				<div class="mb-2">
 					<div class="mr-2 inline-block">
 						{#if store.logged_in_account}
-							{#each ['+', '🚀', '🤙', '🙏', '❤️', '👀', '😂'].filter((r) => !Object.keys(grouped_reactions).includes(r)) as reaction}
+							{#each ['+', '🚀', '🤙', '🙏', '❤️', '🫂', '👀', '😂'].filter((r) => !Object.keys(grouped_reactions).includes(r)) as reaction}
 								<span class="mr-2">
 									{@render addReactionButton(reaction)}
 								</span>
