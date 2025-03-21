@@ -14,7 +14,7 @@
 	let outbox = $derived(
 		[...(outbox_query.current ?? [])].sort((a, b) => b.event.created_at - a.event.created_at) ?? []
 	);
-	let filter: 'recent' | 'broadcast issues' | 'not broadcast' = $state('not broadcast');
+	let filter: 'recent' | 'broadcast issues' | 'not broadcast' = $state('recent');
 	let broadcast_issues = $derived(outbox.filter((o) => !o.broadly_sent));
 	let not_broadcast = $derived(outbox.filter((o) => o.relay_logs.every((l) => !l.success)));
 	let filtered = $derived(
