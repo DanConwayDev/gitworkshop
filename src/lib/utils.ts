@@ -53,6 +53,7 @@ export const getRootTag = (event: NostrEvent): EventTag | undefined => {
 	return (event.tags.find((tag) => tag.length > 1 && tag[0] === 'E') ||
 		event.tags.find((tag) => tag.length === 4 && tag[3] === 'root') ||
 		event.tags.find((tag) => tag.length === 4 && tag[3] === 'reply') ||
+		event.tags.find((tag) => tag.length < 4 && ['e', 'a'].includes(tag[0])) ||
 		undefined) as EventTag | undefined;
 };
 
