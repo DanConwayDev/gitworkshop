@@ -13,6 +13,8 @@
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { Reaction } from 'nostr-tools/kinds';
 	import { ShortTextNote } from '$lib/kind_labels';
+	import { DeletionKind, kindtoTextLabel } from '$lib/kinds';
+	import { isReplaceable, getEventUID } from 'applesauce-core/helpers/event';
 
 	let {
 		event,
@@ -29,15 +31,19 @@
 	} = $props();
 
 	let show_compose = $state(false);
+	let show_more = $state(false);
+	let show_delete_sure_modal = $state(false);
 	let show_raw_json_modal = $state(false);
 	let show_share_modal = $state(false);
-	let modal_open = $derived(show_raw_json_modal || show_share_modal);
+	let modal_open = $derived(show_raw_json_modal || show_share_modal || show_delete_sure_modal);
 	const replySent = () => {
 		show_compose = false;
 	};
 	const closeModals = () => {
+		show_delete_sure_modal = false;
 		show_raw_json_modal = false;
 		show_share_modal = false;
+		show_delete_sure_modal = false;
 	};
 	onMount(() => {
 		window.addEventListener('keydown', (event) => {
@@ -86,11 +92,55 @@
 			if (event) {
 				query_centre.publishEvent(event);
 			}
-		} catch {}
+		} catch {
+			/* empty */
+		}
 		setTimeout(() => {
 			sending_reaction = false;
 			show_reactions = false;
 		}, 500);
+	};
+	let sending_deletion = $state(false);
+	let rejected_deletion = $state(false);
+	let deletion_rationale = $state('');
+	const sendDeletion = async () => {
+		let signer = accounts_manager.getActive();
+		if (sending_deletion || !signer) return;
+		sending_deletion = true;
+		let tags: string[][] = [
+			isReplaceable(event.kind) ? ['a', getEventUID(event)] : ['e', event.id],
+			['k', event.kind.toString()]
+		];
+		([] as string[][]).forEach((t) => {
+			if (t.length > 1 && !tags.some((e) => e[0] === t[0] && e[1] === t[1])) tags.push(t);
+		});
+		try {
+			let d_event = await signer.signEvent({
+				kind: DeletionKind,
+				created_at: unixNow(),
+				tags,
+				content: $state.snapshot(deletion_rationale)
+			});
+			if (d_event) {
+				query_centre.publishEvent(d_event);
+				// TODO - enhance publishEvent to send to relays related to deleted event
+			}
+		} catch {
+			rejected_deletion = true;
+			sending_deletion = false;
+			/* empty */
+		}
+		setTimeout(
+			() => {
+				if (!rejected_deletion) {
+					show_delete_sure_modal = false;
+					deletion_rationale = '';
+				}
+				rejected_deletion = false;
+				sending_deletion = false;
+			},
+			rejected_deletion ? 1500 : 500
+		);
 	};
 </script>
 
@@ -144,36 +194,114 @@
 		</div>
 		<span class="m-auto text-xs"><FromNow unix_seconds={event.created_at} /></span>
 		<div class="m-auto ml-2">
-			{#if event}
-				<div class="tooltip align-middle" data-tip="event json">
+			{#if show_more || !(store.logged_in_account?.pubkey === event?.pubkey)}
+				{#if event}
+					{#if store.logged_in_account?.pubkey === event?.pubkey}
+						<div class="tooltip align-middle" data-tip="delete">
+							<button
+								onclick={() => {
+									show_delete_sure_modal = true;
+								}}
+								class="btn btn-xs text-neutral-content"
+								aria-label="delete"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+									><path
+										fill="currentColor"
+										d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3zm0 5h2v9H9zm4 0h2v9h-2z"
+									/></svg
+								>
+							</button>
+						</div>
+						{#if show_delete_sure_modal}
+							<dialog class="modal" class:modal-open={show_delete_sure_modal}>
+								<div class="modal-box relative max-w-lg text-wrap p-6">
+									<div class="modal-body mb-5 text-center">
+										<h3 class="text-md mb-3 font-bold">
+											Send <span class="badge badge-secondary badge-lg"
+												>{kindtoTextLabel(event.kind)}</span
+											> Deletion Request?
+										</h3>
+										<p class="mt-6 text-sm text-warning">
+											warning: not all nostr relays / clients honour deletion requests
+										</p>
+										<input
+											type="text"
+											disabled={sending_deletion}
+											bind:value={deletion_rationale}
+											class="input-neutral input input-sm input-bordered mt-6 w-full"
+											placeholder="optional deletion rationale"
+										/>
+									</div>
+									<div class="modal-footer flex justify-between gap-4">
+										<button
+											class="btn btn-error flex-1"
+											onclick={sendDeletion}
+											disabled={sending_deletion}
+										>
+											{#if rejected_deletion}
+												Rejected by Signer
+											{:else if sending_deletion}
+												Signing
+											{:else}
+												Send Deletion Request
+											{/if}
+										</button>
+										<button class="btn flex-1" onclick={closeModals}> Cancel </button>
+									</div>
+								</div>
+							</dialog>
+						{/if}
+					{/if}
+					<div class="tooltip align-middle" data-tip="event json">
+						<button
+							onclick={() => {
+								show_raw_json_modal = true;
+							}}
+							class="btn btn-xs text-neutral-content"
+						>
+							<!-- https://icon-sets.iconify.design/ph/brackets-curly-bold -->
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256"
+								><path
+									fill="currentColor"
+									d="M54.8 119.49a35.06 35.06 0 0 1-5.75 8.51a35.06 35.06 0 0 1 5.75 8.51C60 147.24 60 159.83 60 172c0 25.94 1.84 32 20 32a12 12 0 0 1 0 24c-19.14 0-32.2-6.9-38.8-20.51C36 196.76 36 184.17 36 172c0-25.94-1.84-32-20-32a12 12 0 0 1 0-24c18.16 0 20-6.06 20-32c0-12.17 0-24.76 5.2-35.49C47.8 34.9 60.86 28 80 28a12 12 0 0 1 0 24c-18.16 0-20 6.06-20 32c0 12.17 0 24.76-5.2 35.49M240 116c-18.16 0-20-6.06-20-32c0-12.17 0-24.76-5.2-35.49C208.2 34.9 195.14 28 176 28a12 12 0 0 0 0 24c18.16 0 20 6.06 20 32c0 12.17 0 24.76 5.2 35.49A35.06 35.06 0 0 0 207 128a35.06 35.06 0 0 0-5.75 8.51C196 147.24 196 159.83 196 172c0 25.94-1.84 32-20 32a12 12 0 0 0 0 24c19.14 0 32.2-6.9 38.8-20.51c5.2-10.73 5.2-23.32 5.2-35.49c0-25.94 1.84-32 20-32a12 12 0 0 0 0-24"
+								/></svg
+							></button
+						>
+					</div>
+					{#if show_raw_json_modal}
+						<dialog class="modal" class:modal-open={show_raw_json_modal}>
+							<div class="modal-box relative max-w-full text-wrap text-xs">
+								<div class="h-full overflow-y-auto overflow-x-hidden">
+									<pre class="whitespace-pre-wrap">{JSON.stringify(event, null, 2)}</pre>
+								</div>
+								<button class="btn btn-sm absolute bottom-4 right-4 z-10" onclick={closeModals}
+									>Close</button
+								>
+								<!-- Floating button -->
+							</div>
+						</dialog>
+					{/if}
+				{/if}
+			{:else}
+				<div class="tooltip align-middle" data-tip="more options">
 					<button
 						onclick={() => {
-							show_raw_json_modal = true;
+							show_more = !show_more;
 						}}
 						class="btn btn-xs text-neutral-content"
+						aria-label="more options"
 					>
-						<!-- https://icon-sets.iconify.design/ph/brackets-curly-bold -->
 						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256"
 							><path
 								fill="currentColor"
-								d="M54.8 119.49a35.06 35.06 0 0 1-5.75 8.51a35.06 35.06 0 0 1 5.75 8.51C60 147.24 60 159.83 60 172c0 25.94 1.84 32 20 32a12 12 0 0 1 0 24c-19.14 0-32.2-6.9-38.8-20.51C36 196.76 36 184.17 36 172c0-25.94-1.84-32-20-32a12 12 0 0 1 0-24c18.16 0 20-6.06 20-32c0-12.17 0-24.76 5.2-35.49C47.8 34.9 60.86 28 80 28a12 12 0 0 1 0 24c-18.16 0-20 6.06-20 32c0 12.17 0 24.76-5.2 35.49M240 116c-18.16 0-20-6.06-20-32c0-12.17 0-24.76-5.2-35.49C208.2 34.9 195.14 28 176 28a12 12 0 0 0 0 24c18.16 0 20 6.06 20 32c0 12.17 0 24.76 5.2 35.49A35.06 35.06 0 0 0 207 128a35.06 35.06 0 0 0-5.75 8.51C196 147.24 196 159.83 196 172c0 25.94-1.84 32-20 32a12 12 0 0 0 0 24c19.14 0 32.2-6.9 38.8-20.51c5.2-10.73 5.2-23.32 5.2-35.49c0-25.94 1.84-32 20-32a12 12 0 0 0 0-24"
+								d="M68 172a16 16 0 1 1-16 16a16 16 0 0 1 16-16zm60 0a16 16 0 1 1-16 16a16 16 0 0 1 16-16zm60 0a16 16 0 1 1-16 16a16 16 0 0 1 16-16z"
 							/></svg
-						></button
-					>
+						>
+					</button>
 				</div>
-				{#if show_raw_json_modal}
-					<dialog class="modal" class:modal-open={show_raw_json_modal}>
-						<div class="modal-box relative max-w-full text-wrap text-xs">
-							<div class="h-full overflow-y-auto overflow-x-hidden">
-								<pre class="whitespace-pre-wrap">{JSON.stringify(event, null, 2)}</pre>
-							</div>
-							<button class="btn btn-sm absolute bottom-4 right-4 z-10" onclick={closeModals}
-								>Close</button
-							>
-							<!-- Floating button -->
-						</div>
-					</dialog>
-				{/if}
+			{/if}
+			{#if event}
 				<div class="tooltip align-middle" data-tip="share">
 					<button
 						onclick={() => {
