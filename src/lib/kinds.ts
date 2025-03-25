@@ -1,5 +1,5 @@
 import { EventDeletion, ShortTextNote, Zap } from 'nostr-tools/kinds';
-import { kindLabel } from './kind_labels';
+import { DraftEvent, kindLabel } from './kind_labels';
 
 export const StatusOpenKind = 1630;
 export type StatusOpenKind = typeof StatusOpenKind;
@@ -85,5 +85,5 @@ export type QualityChildKinds = CommentKinds | typeof Zap;
 export const NostrLanguangeClassificationKind = 9978;
 export type NostrLanguangeClassificationKind = typeof NostrLanguangeClassificationKind;
 
-export const IgnoreKinds = [NostrLanguangeClassificationKind];
+export const IgnoreKinds = [NostrLanguangeClassificationKind, DraftEvent];
 export type IgnoreKinds = typeof NostrLanguangeClassificationKind;
