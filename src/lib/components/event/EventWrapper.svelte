@@ -44,6 +44,7 @@
 		show_raw_json_modal = false;
 		show_share_modal = false;
 		show_delete_sure_modal = false;
+		event_to_delete_override = undefined;
 	};
 	onMount(() => {
 		window.addEventListener('keydown', (event) => {
@@ -101,6 +102,8 @@
 		}, 500);
 	};
 	let sending_deletion = $state(false);
+	let event_to_delete_override: NostrEvent | undefined = $state(undefined);
+	let event_to_delete = $derived(event_to_delete_override ?? event);
 	let rejected_deletion = $state(false);
 	let deletion_rationale = $state('');
 	const sendDeletion = async () => {
@@ -108,8 +111,8 @@
 		if (sending_deletion || !signer) return;
 		sending_deletion = true;
 		let tags: string[][] = [
-			isReplaceable(event.kind) ? ['a', getEventUID(event)] : ['e', event.id],
-			['k', event.kind.toString()]
+			isReplaceable(event.kind) ? ['a', getEventUID(event_to_delete)] : ['e', event_to_delete.id],
+			['k', event_to_delete.kind.toString()]
 		];
 		([] as string[][]).forEach((t) => {
 			if (t.length > 1 && !tags.some((e) => e[0] === t[0] && e[1] === t[1])) tags.push(t);
@@ -135,6 +138,7 @@
 				if (!rejected_deletion) {
 					show_delete_sure_modal = false;
 					deletion_rationale = '';
+					event_to_delete_override = undefined;
 				}
 				rejected_deletion = false;
 				sending_deletion = false;
@@ -145,15 +149,34 @@
 </script>
 
 {#snippet addReactionButton(reaction: string, in_group = false)}
-	<button
-		class="btn btn-neutral btn-xs h-full {in_group ? 'join-item py-2' : ''}"
-		disabled={sending_reaction}
-		onclick={() => {
-			sendReaction(reaction);
-		}}
-	>
-		{reaction}
-	</button>
+	{#if reactions.some((r) => r.pubkey === store.logged_in_account?.pubkey && r.content === reaction)}
+		<button
+			class="btn btn-primary btn-xs h-full {in_group ? 'join-item py-2' : ''}"
+			disabled={sending_reaction}
+			aria-label="delete reaction"
+			onclick={() => {
+				const r = reactions.find(
+					(r) => r.pubkey === store.logged_in_account?.pubkey && r.content === reaction
+				);
+				if (r) {
+					event_to_delete_override = r;
+					show_delete_sure_modal = true;
+				}
+			}}
+		>
+			{reaction}
+		</button>
+	{:else}
+		<button
+			class="btn btn-neutral btn-xs h-full {in_group ? 'join-item py-2' : ''}"
+			disabled={sending_reaction}
+			onclick={() => {
+				sendReaction(reaction);
+			}}
+		>
+			{reaction}
+		</button>
+	{/if}
 {/snippet}
 
 {#snippet reactionGroup(reaction: string)}
@@ -213,45 +236,6 @@
 								>
 							</button>
 						</div>
-						{#if show_delete_sure_modal}
-							<dialog class="modal" class:modal-open={show_delete_sure_modal}>
-								<div class="modal-box relative max-w-lg text-wrap p-6">
-									<div class="modal-body mb-5 text-center">
-										<h3 class="text-md mb-3 font-bold">
-											Send <span class="badge badge-secondary badge-lg"
-												>{kindtoTextLabel(event.kind)}</span
-											> Deletion Request?
-										</h3>
-										<p class="mt-6 text-sm text-warning">
-											warning: not all nostr relays / clients honour deletion requests
-										</p>
-										<input
-											type="text"
-											disabled={sending_deletion}
-											bind:value={deletion_rationale}
-											class="input-neutral input input-sm input-bordered mt-6 w-full"
-											placeholder="optional deletion rationale"
-										/>
-									</div>
-									<div class="modal-footer flex justify-between gap-4">
-										<button
-											class="btn btn-error flex-1"
-											onclick={sendDeletion}
-											disabled={sending_deletion}
-										>
-											{#if rejected_deletion}
-												Rejected by Signer
-											{:else if sending_deletion}
-												Signing
-											{:else}
-												Send Deletion Request
-											{/if}
-										</button>
-										<button class="btn flex-1" onclick={closeModals}> Cancel </button>
-									</div>
-								</div>
-							</dialog>
-						{/if}
 					{/if}
 					<div class="tooltip align-middle" data-tip="event json">
 						<button
@@ -478,3 +462,43 @@
 		{/if}
 	</div>
 </div>
+
+{#if show_delete_sure_modal}
+	<dialog class="modal" class:modal-open={show_delete_sure_modal}>
+		<div class="modal-box relative max-w-lg text-wrap p-6">
+			<div class="modal-body mb-5 text-center">
+				<h3 class="text-md mb-3 font-bold">
+					Send <span class="badge badge-secondary badge-lg"
+						>{kindtoTextLabel(event_to_delete.kind)}</span
+					> Deletion Request?
+				</h3>
+				<p class="mt-6 text-sm text-warning">
+					warning: not all nostr relays / clients honour deletion requests
+				</p>
+				<input
+					type="text"
+					disabled={sending_deletion}
+					bind:value={deletion_rationale}
+					class="input-neutral input input-sm input-bordered mt-6 w-full"
+					placeholder="optional deletion rationale"
+				/>
+			</div>
+			<div class="modal-footer flex justify-between gap-4">
+				<button
+					class="btn btn-error flex-1"
+					onclick={() => sendDeletion()}
+					disabled={sending_deletion}
+				>
+					{#if rejected_deletion}
+						Rejected by Signer
+					{:else if sending_deletion}
+						Signing
+					{:else}
+						Send Deletion Request
+					{/if}
+				</button>
+				<button class="btn flex-1" onclick={closeModals}> Cancel </button>
+			</div>
+		</div>
+	</dialog>
+{/if}
