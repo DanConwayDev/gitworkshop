@@ -187,13 +187,8 @@
 			? 'border border-primary'
 			: ''}"
 	>
-		{#if store.logged_in_account && !grouped_reactions[reaction].has(store.logged_in_account.pubkey)}
-			{@render addReactionButton(reaction, true)}
-		{:else}
-			<span class="join-item flex items-center bg-base-400 p-2 pl-3 pr-1 text-xs">
-				{reaction}
-			</span>
-		{/if}
+		{@render addReactionButton(reaction, true)}
+
 		<div class="join-item inline-flex items-center rounded-lg bg-base-400 py-1">
 			{#each grouped_reactions[reaction] as pubkey}
 				<div class="mx-2 flex items-center">
