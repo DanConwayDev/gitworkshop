@@ -61,9 +61,7 @@
 				{#if store.experimental}<NavBarInsertWallet />{/if}
 				{#if store.experimental}<NavBarInsertOutbox />{/if}
 
-				{#if store.logged_in_account || store.accounts.length > 0}
-					<NavBarUserMenu />
-				{/if}
+				<NavBarUserMenu />
 			</div>
 		</div>
 	</Container>
