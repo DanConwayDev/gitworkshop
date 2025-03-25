@@ -33,7 +33,10 @@
 			class="btn btn-sm normal-case"
 			class:btn-ghost={!is_open}
 			class:btn-primary={is_open}
-			onclick={toggle}
+			onclick={() => {
+				if (store.accounts.length > 0) toggle();
+				else show_login_modal = true;
+			}}
 		>
 			Login
 		</button>
