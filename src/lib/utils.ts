@@ -79,8 +79,10 @@ export const getStandardnip10ReplyTags = (
 	if (event.kind === PatchKind && event.tags.some((t) => t[0] === 't' && t[1] === 'root'))
 		root_id = event.id;
 	if (!root_id) root_id = getRootUuid(event);
-	if (!root_id && issue_or_pr_table_item) root_id = issue_or_pr_table_item.uuid;
-	else root_id = event.id;
+	if (!root_id) {
+		if (issue_or_pr_table_item) root_id = issue_or_pr_table_item.uuid;
+		else root_id = event.id;
+	}
 	return [
 		['e', root_id, '', 'root'],
 		['e', event.id, eventToSeenOnRelay(event) || '', 'reply']
