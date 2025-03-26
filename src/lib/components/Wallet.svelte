@@ -242,7 +242,7 @@
 		if (!old_token) {
 			receive_invalid = true;
 			if (receive_token.startsWith('cashu')) recieve_status = 'invalid cashu token string';
-			else recieve_status = "doesn't look like a cashu token";
+			else recieve_status = `${receive_token} doesn't look like a cashu token`;
 			return setTimeout(() => {
 				receive_invalid = false;
 			}, 2000);
@@ -398,7 +398,7 @@
 					placeholder="Paste cashu token here"
 					class="input input-bordered w-full"
 					bind:value={receive_token}
-					onpaste={received}
+					onpaste={() => setTimeout(received, 1)}
 				/>
 			</div>
 		</div>
