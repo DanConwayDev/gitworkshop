@@ -4,6 +4,7 @@
 	import store from '$lib/store.svelte';
 	import { isHttpUrl, type HttpUrl, type PubKeyString } from '$lib/types';
 	import { Queries } from 'applesauce-wallet';
+	import { decodeTokenFromEmojiString, encodeTokenToEmoji } from 'applesauce-wallet/helpers/tokens';
 	import { ActionHub } from 'applesauce-actions';
 	import { EventFactory } from 'applesauce-factory';
 	import { onMount } from 'svelte';
@@ -232,7 +233,11 @@
 		try {
 			old_token = getDecodedToken(receive_token);
 		} catch {
-			/* empty */
+			try {
+				old_token = decodeTokenFromEmojiString(receive_token);
+			} catch {
+				/* empty */
+			}
 		}
 		if (!old_token) {
 			receive_invalid = true;
@@ -277,7 +282,7 @@
 			let funds_at_risk = false;
 			let timeout_id = setTimeout(() => {
 				if (receive_signing) {
-					recieve_status = `funds at risk. sign event or recover this token:  ${getEncodedToken(token)}`;
+					recieve_status = `${token.proofs.reduce((a, c) => a + c.amount, 0)} ${token.unit ?? 'sats'} at risk. sign event or recover this token:  ${encodeTokenToEmoji(token)}`;
 					// TODO show an error now
 				}
 			}, 2000);
@@ -303,8 +308,10 @@
 			}, 2000);
 		} catch (e) {
 			receive_token = getEncodedToken(token);
-			recieve_status = `error: ${e}\nfunds at risk. signing rejected. save this token:  ${getEncodedToken(token)}`;
-			console.log(`FUNDS AT RISK- SAVE THIS TOKEN: ${getEncodedToken(token)}`);
+			recieve_status = `error: ${e}\n${token.proofs.reduce((a, c) => a + c.amount, 0)} ${token.unit ?? 'sats'} at risk. signing rejected. save this token:  ${encodeTokenToEmoji(token)}`;
+			console.log(
+				`${token.proofs.reduce((a, c) => a + c.amount, 0)} ${token.unit ?? 'sats'} AT RISK- SAVE THIS TOKEN: ${encodeTokenToEmoji(token)}`
+			);
 			receive_rejected_by_signer = true;
 		}
 		setTimeout(() => {
