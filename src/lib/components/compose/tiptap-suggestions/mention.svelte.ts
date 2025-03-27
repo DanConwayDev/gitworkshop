@@ -2,20 +2,17 @@ import MentionList from './MentionList.svelte';
 import { mount, unmount, type ComponentProps } from 'svelte';
 import { type SuggestionOptions } from '@tiptap/suggestion';
 import db from '$lib/dbs/LocalDb';
+import type { NProfileNode } from 'nostr-editor';
+import { nip19 } from 'nostr-tools';
+import type { PubKeyString } from '$lib/types';
 
 export const suggestion: () => Omit<
-	SuggestionOptions<
-		string, // <-- Item type
-		{
-			// <-- Callback args / Command props
-			id: string | null;
-		}
-	>,
+	SuggestionOptions<{ pubkey: PubKeyString; query: string }, { id: PubKeyString | null }>,
 	'editor'
 > = () => ({
 	// ...
 	items: async ({ query }) => {
-		return await db.pubkeys
+		cont pubkeys = await db.pubkeys
 			.filter(
 				(o) =>
 					o?.metadata?.fields?.name?.startsWith(query) ||
@@ -28,7 +25,7 @@ export const suggestion: () => Omit<
 	render: () => {
 		let wrapper: HTMLDivElement;
 		let componentProps: ComponentProps<typeof MentionList> = $state(null!);
-		let component: MentionList;
+		let component: typeof MentionList;
 
 		return {
 			onStart: (props) => {
@@ -39,7 +36,33 @@ export const suggestion: () => Omit<
 				componentProps = {
 					items: props.items,
 					callback: (item) => {
-						props.command({ id: item });
+						if (item) {
+							const pubkey = $state.snapshot(item);
+							console.log(props.query.length);
+							console.log(props.text);
+
+							props.editor
+								.chain()
+								.focus()
+								.deleteRange({
+									from: props.range.from - props.query.length,
+									to: props.range.to
+								})
+								.insertContent({
+									type: 'nprofile',
+									attrs: {
+										type: 'nprofile',
+										pubkey,
+										bech32: nip19.nprofileEncode({
+											pubkey,
+											relays: []
+										}),
+										relays: []
+									}
+								} as NProfileNode)
+								.run();
+						}
+						return true;
 					}
 				};
 
