@@ -23,9 +23,15 @@ importers:
       '@tiptap/core':
         specifier: ^2.11.5
         version: 2.11.5(@tiptap/pm@2.11.5)
+      '@tiptap/extension-mention':
+        specifier: ^2.11.5
+        version: 2.11.5(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5)(@tiptap/suggestion@2.11.5(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5))
       '@tiptap/starter-kit':
         specifier: ^2.11.5
         version: 2.11.5
+      '@tiptap/suggestion':
+        specifier: ^2.11.5
+        version: 2.11.5(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5)
       applesauce-accounts:
         specifier: ^0.12.0
         version: 0.12.0(typescript@5.8.2)
@@ -53,6 +59,9 @@ importers:
       dexie:
         specifier: ^4.0.11
         version: 4.0.11
+      extension-mention#:
+        specifier: link:@tiptap/extension-mention#
+        version: link:@tiptap/extension-mention#
       highlight.js:
         specifier: ^11.11.1
         version: 11.11.1
@@ -77,6 +86,9 @@ importers:
       svelte-tiptap:
         specifier: ^2.1.0
         version: 2.1.0(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/extension-bubble-menu@2.11.2(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5))(@tiptap/extension-floating-menu@2.11.2(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5)(svelte@5.23.0)
+      tippy.js:
+        specifier: ^6.3.7
+        version: 6.3.7
       tiptap-markdown:
         specifier: ^0.8.10
         version: 0.8.10(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))
@@ -1567,6 +1579,13 @@ packages:
     peerDependencies:
       '@tiptap/core': ^2.7.0
 
+  '@tiptap/extension-mention@2.11.5':
+    resolution: {integrity: sha512-xj0/P4WSQWiDHzQLSIqdPUEu8LlC+ptSYA+y9IDChG51j1jVqcmolnS4sxpyrfr/t0ug0smNmJ4PDjQtXaG63A==}
+    peerDependencies:
+      '@tiptap/core': ^2.7.0
+      '@tiptap/pm': ^2.7.0
+      '@tiptap/suggestion': ^2.7.0
+
   '@tiptap/extension-ordered-list@2.11.5':
     resolution: {integrity: sha512-Cu8KwruBNWAaEfshRQR0yOSaUKAeEwxW7UgbvF9cN/zZuKgK5uZosPCPTehIFCcRe+TBpRtZQh+06f/gNYpYYg==}
     peerDependencies:
@@ -1597,6 +1616,12 @@ packages:
 
   '@tiptap/starter-kit@2.11.5':
     resolution: {integrity: sha512-SLI7Aj2ruU1t//6Mk8f+fqW+18uTqpdfLUJYgwu0CkqBckrkRZYZh6GVLk/02k3H2ki7QkFxiFbZrdbZdng0JA==}
+
+  '@tiptap/suggestion@2.11.5':
+    resolution: {integrity: sha512-uafwGgB5YuKX/xLRjnt2H5eA21I8HcNXpdbH4Du2gg3KM71RpUbkyjaV7KEMA/5qwCEo+sddlpuErj4wBycZ5Q==}
+    peerDependencies:
+      '@tiptap/core': ^2.7.0
+      '@tiptap/pm': ^2.7.0
 
   '@types/cookie@0.6.0':
     resolution: {integrity: sha512-4Kh9a6B2bQciAhf7FSuMRRkUWecJgJu9nPnx3yzpsfXX/c50REIqpHY4C82bXP90qrLtXtkDxTZosYO3UpOwlA==}
@@ -5314,6 +5339,12 @@ snapshots:
     dependencies:
       '@tiptap/core': 2.11.5(@tiptap/pm@2.11.5)
 
+  '@tiptap/extension-mention@2.11.5(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5)(@tiptap/suggestion@2.11.5(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5))':
+    dependencies:
+      '@tiptap/core': 2.11.5(@tiptap/pm@2.11.5)
+      '@tiptap/pm': 2.11.5
+      '@tiptap/suggestion': 2.11.5(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5)
+
   '@tiptap/extension-ordered-list@2.11.5(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))':
     dependencies:
       '@tiptap/core': 2.11.5(@tiptap/pm@2.11.5)
@@ -5377,6 +5408,11 @@ snapshots:
       '@tiptap/extension-strike': 2.11.5(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))
       '@tiptap/extension-text': 2.11.5(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))
       '@tiptap/extension-text-style': 2.11.5(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))
+      '@tiptap/pm': 2.11.5
+
+  '@tiptap/suggestion@2.11.5(@tiptap/core@2.11.5(@tiptap/pm@2.11.5))(@tiptap/pm@2.11.5)':
+    dependencies:
+      '@tiptap/core': 2.11.5(@tiptap/pm@2.11.5)
       '@tiptap/pm': 2.11.5
 
   '@types/cookie@0.6.0': {}

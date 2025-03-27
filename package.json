@@ -43,6 +43,7 @@
 		"@tailwindcss/container-queries": "^0.1.1",
 		"@tailwindcss/typography": "^0.5.16",
 		"@tiptap/core": "^2.11.5",
+		"@tiptap/extension-mention": "^2.11.5",
 		"@tiptap/starter-kit": "^2.11.5",
 		"applesauce-accounts": "^0.12.0",
 		"applesauce-actions": "^0.12.0",
@@ -51,6 +52,7 @@
 		"applesauce-signers": "^0.12.0",
 		"applesauce-wallet": "^0.12.0",
 		"daisyui": "^4.12.24",
+		"@tiptap/suggestion": "^2.11.5",
 		"dayjs": "^1.11.13",
 		"dexie": "^4.0.11",
 		"highlight.js": "^11.11.1",
@@ -61,6 +63,7 @@
 		"rxjs": "^7.8.2",
 		"svelte-qrcode": "^1.0.1",
 		"svelte-tiptap": "^2.1.0",
+		"tippy.js": "^6.3.7",
 		"tiptap-markdown": "^0.8.10"
 	}
 }

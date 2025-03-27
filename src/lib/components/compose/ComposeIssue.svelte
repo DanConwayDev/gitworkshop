@@ -6,6 +6,7 @@
 	import { NostrExtension, type NostrStorage } from 'nostr-editor';
 	import MentionEditor from '$lib/components/content-tree/MentionEditor.svelte';
 	import { Markdown } from 'tiptap-markdown';
+	import Mention from '@tiptap/extension-mention';
 	import EmbeddedEventEditor from '../content-tree/EmbeddedEventEditor.svelte';
 	import store from '$lib/store.svelte';
 	import accounts_manager from '$lib/accounts';
@@ -17,6 +18,8 @@
 	import { repoTableItemDefaults, type RepoRef } from '$lib/types';
 	import { repoToMaintainerRepoRefs } from '$lib/repos';
 	import LoginModal from '../LoginModal.svelte';
+
+	import mention from './tiptap-suggestions/mention.svelte';
 
 	let { a_ref }: { a_ref: RepoRef } = $props();
 
@@ -77,7 +80,7 @@
 			);
 			if (event) {
 				signed = true;
-				query_centre.publishEvent(event);
+				// query_centre.publishEvent(event);
 				const nevent = nip19.neventEncode({
 					id: event.id
 				});
@@ -111,6 +114,9 @@
 						naddr: { addNodeView: () => SvelteNodeViewRenderer(EmbeddedEventEditor) }
 					},
 					link: { autolink: true } // needed for markdown links
+				}),
+				Mention.configure({
+					suggestion: mention()
 				})
 			]
 		});
@@ -152,7 +158,6 @@
 				</div>
 			</div>
 		</label>
-
 		<div class="mt-2 flex items-center">
 			<div class="flex-auto"></div>
 			{#if submit_attempted && title.length < 10}
