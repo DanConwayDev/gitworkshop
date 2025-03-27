@@ -23,12 +23,11 @@
 	);
 </script>
 
-<!-- {#if e.event}<EventCard type="issue" event={e.event} />{/if} -->
 <div
 	class="rounded-lg border border-base-300 bg-base-200"
 	class:border-neutral-content={edit_mode?.selected}
 >
-	{#if edit_mode || !e.event}
+	{#if edit_mode || !e.event || [IssueKind, PatchKind, RepoAnnKind].includes(e.event?.kind)}
 		<EventWrapperLite {n_attr} event={e.event} disable_links={!!edit_mode}>
 			{#if e.event?.kind === IssueKind}
 				<Issue event={e.event} />
