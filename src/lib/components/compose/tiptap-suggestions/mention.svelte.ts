@@ -12,7 +12,7 @@ export const suggestion: () => Omit<
 > = () => ({
 	// ...
 	items: async ({ query }) => {
-		cont pubkeys = await db.pubkeys
+		const pubkeys = await db.pubkeys
 			.filter(
 				(o) =>
 					o?.metadata?.fields?.name?.startsWith(query) ||
@@ -21,6 +21,7 @@ export const suggestion: () => Omit<
 			)
 			.limit(5)
 			.keys();
+		return pubkeys.map((pubkey) => ({ pubkey: pubkey as PubKeyString, query }));
 	},
 	render: () => {
 		let wrapper: HTMLDivElement;
@@ -37,16 +38,13 @@ export const suggestion: () => Omit<
 					items: props.items,
 					callback: (item) => {
 						if (item) {
-							const pubkey = $state.snapshot(item);
-							console.log(props.query.length);
-							console.log(props.text);
-
+							const pubkey = $state.snapshot(item.pubkey);
 							props.editor
 								.chain()
 								.focus()
 								.deleteRange({
-									from: props.range.from - props.query.length,
-									to: props.range.to
+									from: props.range.from,
+									to: props.range.to + item.query.length
 								})
 								.insertContent({
 									type: 'nprofile',
@@ -75,6 +73,9 @@ export const suggestion: () => Omit<
 			},
 			onKeyDown: (props) => {
 				if (props.event.key === 'Escape') {
+					unmount(component);
+					wrapper.remove();
+
 					return true;
 				}
 				return component.onKeyDown(props.event);
@@ -84,9 +85,7 @@ export const suggestion: () => Omit<
 			},
 			// ...
 			onExit: (props) => {
-				// ...
-
-				unmount(component); // <-- unmount after use
+				unmount(component);
 				wrapper.remove();
 			}
 		};

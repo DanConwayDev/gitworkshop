@@ -2,8 +2,13 @@
 	import UserHeader from '$lib/components/user/UserHeader.svelte';
 	import type { PubKeyString } from '$lib/types';
 
-	let { items, callback }: { items: PubKeyString[]; callback: (s: PubKeyString) => void } =
-		$props();
+	let {
+		items,
+		callback
+	}: {
+		items: { pubkey: PubKeyString; query: string }[];
+		callback: (o: { pubkey: PubKeyString; query: string }) => void;
+	} = $props();
 
 	let activeIdx = $state(0);
 
@@ -34,7 +39,7 @@
 			class:bg-base-400={i === activeIdx}
 			onclick={() => callback(items[activeIdx])}
 		>
-			<UserHeader inline user={item} link_to_profile={false} />
+			<UserHeader inline user={item.pubkey} link_to_profile={false} />
 		</button>
 	{/each}
 </div>
