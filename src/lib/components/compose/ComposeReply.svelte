@@ -116,7 +116,7 @@
 					link: { autolink: true } // needed for markdown links
 				}),
 				Mention.configure({
-					suggestion: mention()
+					suggestion: mention([event.pubkey, ...person_tags.map((t) => t[1])])
 				})
 			],
 			autofocus
