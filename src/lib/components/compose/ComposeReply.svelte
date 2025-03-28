@@ -6,6 +6,8 @@
 	import { NostrExtension, type NostrStorage } from 'nostr-editor';
 	import MentionEditor from '$lib/components/content-tree/MentionEditor.svelte';
 	import { Markdown } from 'tiptap-markdown';
+	import Mention from '@tiptap/extension-mention';
+	import mention from './tiptap-suggestions/mention.svelte';
 	import EmbeddedEventEditor from '../content-tree/EmbeddedEventEditor.svelte';
 	import type { NostrEvent } from 'nostr-tools';
 	import UserHeader from '../user/UserHeader.svelte';
@@ -112,6 +114,9 @@
 						naddr: { addNodeView: () => SvelteNodeViewRenderer(EmbeddedEventEditor) }
 					},
 					link: { autolink: true } // needed for markdown links
+				}),
+				Mention.configure({
+					suggestion: mention()
 				})
 			],
 			autofocus

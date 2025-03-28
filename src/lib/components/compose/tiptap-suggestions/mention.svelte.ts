@@ -10,7 +10,7 @@ export const suggestion: () => Omit<
 	SuggestionOptions<{ pubkey: PubKeyString; query: string }, { id: PubKeyString | null }>,
 	'editor'
 > = () => ({
-	// ...
+	char: '@',
 	items: async ({ query }) => {
 		const pubkeys = await db.pubkeys
 			.filter(
@@ -84,7 +84,7 @@ export const suggestion: () => Omit<
 				componentProps.items = props.items;
 			},
 			// ...
-			onExit: (props) => {
+			onExit: () => {
 				unmount(component);
 				wrapper.remove();
 			}

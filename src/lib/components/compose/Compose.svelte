@@ -6,6 +6,8 @@
 	import { NostrExtension, type ContentSchema } from 'nostr-editor';
 	import MentionEditor from '$lib/components/content-tree/MentionEditor.svelte';
 	import { Markdown } from 'tiptap-markdown';
+	import Mention from '@tiptap/extension-mention';
+	import mention from './tiptap-suggestions/mention.svelte';
 	import ContentTree from '../content-tree/ContentTree.svelte';
 	import EmbeddedEventEditor from '../content-tree/EmbeddedEventEditor.svelte';
 
@@ -32,6 +34,9 @@
 						naddr: { addNodeView: () => SvelteNodeViewRenderer(EmbeddedEventEditor) }
 					},
 					link: { autolink: true } // needed for markdown links
+				}),
+				Mention.configure({
+					suggestion: mention()
 				})
 			],
 			content

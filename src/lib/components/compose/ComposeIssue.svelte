@@ -7,6 +7,7 @@
 	import MentionEditor from '$lib/components/content-tree/MentionEditor.svelte';
 	import { Markdown } from 'tiptap-markdown';
 	import Mention from '@tiptap/extension-mention';
+	import mention from './tiptap-suggestions/mention.svelte';
 	import EmbeddedEventEditor from '../content-tree/EmbeddedEventEditor.svelte';
 	import store from '$lib/store.svelte';
 	import accounts_manager from '$lib/accounts';
@@ -18,8 +19,6 @@
 	import { repoTableItemDefaults, type RepoRef } from '$lib/types';
 	import { repoToMaintainerRepoRefs } from '$lib/repos';
 	import LoginModal from '../LoginModal.svelte';
-
-	import mention from './tiptap-suggestions/mention.svelte';
 
 	let { a_ref }: { a_ref: RepoRef } = $props();
 
