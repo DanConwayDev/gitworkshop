@@ -88,7 +88,7 @@ export const extractRepoRefsFromPrOrIssue = (
 ): { a_ref: RepoRef; relays: WebSocketUrl[] }[] =>
 	event.tags.flatMap((t) =>
 		t[1] && t[0] === 'a' && isRepoRef(t[1])
-			? [{ a_ref: t[1], relays: isWebSocketUrl(t[2]) ? [t[2]] : [] }]
+			? [{ a_ref: t[1], relays: t[2] && isWebSocketUrl(t[2]) ? [t[2]] : [] }]
 			: []
 	);
 
