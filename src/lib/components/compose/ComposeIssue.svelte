@@ -25,7 +25,7 @@
 	let repo_query = $derived(query_centre.fetchRepo(a_ref));
 	let repo = $derived(repo_query.current ?? (a_ref ? repoTableItemDefaults(a_ref) : undefined));
 
-	let repo_refs = $derived(repo ? repoToMaintainerRepoRefs(repo) : new Set());
+	let repo_refs = $derived(repo ? repoToMaintainerRepoRefs(repo) : new Set<RepoRef>());
 
 	let title = $state('');
 
@@ -54,6 +54,7 @@
 				['subject', title],
 				['alt', `git repository issue: ${title}`],
 				...[...repo_refs].map((a_ref) => ['a', a_ref]),
+				...[...repo_refs].map((a_ref) => ['p', a_ref.split(':')[1]]),
 				// TODO add relay hints to tags from local_db
 				...editor_tags
 			] as string[][]
