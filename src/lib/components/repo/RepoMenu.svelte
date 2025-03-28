@@ -107,7 +107,7 @@
 						<path d={p} />
 					{/each}
 				</svg>
-				Actions (experimental)
+				Actions
 			</a>
 		{/if}
 	</div>
