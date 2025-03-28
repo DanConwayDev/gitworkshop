@@ -99,8 +99,7 @@ export const suggestion: (
 				componentProps.items = props.items;
 			},
 			// ...
-			onExit: () => {
-				unmount(component);
+			onExit: (props) => {
 				wrapper.remove();
 			}
 		};
