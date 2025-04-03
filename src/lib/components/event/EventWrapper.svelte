@@ -324,7 +324,7 @@
 					</dialog>
 				{/if}
 			{/if}
-			{#if !embedded && !show_compose && store.logged_in_account}
+			{#if !embedded && !show_compose}
 				<div class="tooltip align-middle" data-tip="reply">
 					<!-- svelte-ignore a11y_consider_explicit_label -->
 					<button

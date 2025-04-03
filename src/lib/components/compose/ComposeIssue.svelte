@@ -19,6 +19,7 @@
 	import { repoTableItemDefaults, type RepoRef } from '$lib/types';
 	import { repoToMaintainerRepoRefs } from '$lib/repos';
 	import LoginModal from '../LoginModal.svelte';
+	import { SimpleSigner } from 'applesauce-signers';
 
 	let { a_ref }: { a_ref: RepoRef } = $props();
 
@@ -30,6 +31,7 @@
 
 	let title = $state('');
 
+	let anon_force = $state(false);
 	let show_login_modal = $state(false);
 	let submit_attempted = $state(false);
 	let submitting = $state(false);
@@ -37,10 +39,14 @@
 	let rejected_by_signer = $state(false);
 
 	const submit = async () => {
-		if (!store.logged_in_account) {
+		if (!anon_force && !store.logged_in_account) {
 			show_login_modal = true;
 			return;
 		}
+		const signer = anon_force
+			? new SimpleSigner()
+			: (accounts_manager.getActive() ?? new SimpleSigner());
+
 		if (title.length < 10) {
 			submit_attempted = true;
 			return;
@@ -71,7 +77,7 @@
 			}, 2000);
 		};
 		try {
-			let event = await accounts_manager.getActive()?.signEvent(
+			let event = await signer.signEvent(
 				$state.snapshot({
 					kind: IssueKind,
 					created_at: unixNow(),
@@ -160,6 +166,17 @@
 			</div>
 		</label>
 		<div class="mt-2 flex items-center">
+			{#if !store.logged_in_account}
+				<div class="mr-3 flex items-center align-bottom text-xs">
+					<input
+						type="checkbox"
+						id="feedback-checkbox"
+						class="checkbox checkbox-xs p-2"
+						bind:checked={anon_force}
+					/>
+					<label for="feedback-checkbox" class="p-2">Anonymous</label>
+				</div>
+			{/if}
 			<div class="flex-auto"></div>
 			{#if submit_attempted && title.length < 10}
 				<div class="pr-3 align-middle text-sm text-warning">
@@ -179,7 +196,7 @@
 					{:else}
 						Sending
 					{/if}
-				{:else if !store.logged_in_account}
+				{:else if !anon_force && !store.logged_in_account}
 					Login before Sending
 				{:else}
 					Send

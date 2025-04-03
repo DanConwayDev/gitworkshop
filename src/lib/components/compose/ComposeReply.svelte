@@ -20,6 +20,7 @@
 	import LoginModal from '../LoginModal.svelte';
 	import { ShortTextNote } from 'nostr-tools/kinds';
 	import { getStandardnip10ReplyTags, getStandardnip22ReplyTags } from '$lib/utils';
+	import { SimpleSigner } from 'applesauce-signers';
 
 	let {
 		event,
@@ -33,16 +34,20 @@
 		autofocus?: boolean;
 	} = $props();
 
+	let anon_force = $state(false);
 	let show_login_modal = $state(false);
 	let submitting = $state(false);
 	let signed = $state(false);
 	let rejected_by_signer = $state(false);
 
 	const submit = async () => {
-		if (!store.logged_in_account) {
+		if (!anon_force && !store.logged_in_account) {
 			show_login_modal = true;
 			return;
 		}
+		const signer = anon_force
+			? new SimpleSigner()
+			: (accounts_manager.getActive() ?? new SimpleSigner());
 
 		$editor.setEditable(false);
 		submitting = true;
@@ -72,7 +77,7 @@
 			}, 2000);
 		};
 		try {
-			let reply = await accounts_manager.getActive()?.signEvent(
+			let reply = await signer.signEvent(
 				$state.snapshot({
 					kind: $state.snapshot(kind),
 					created_at: unixNow(),
@@ -139,6 +144,17 @@
 			{#if editor}<EditorContent editor={$editor} class="tiptap-editor p-2" />{/if}
 		</div>
 		<div class="flex">
+			{#if !store.logged_in_account}
+				<div class="mr-3 flex items-center align-bottom text-xs">
+					<input
+						type="checkbox"
+						id="feedback-checkbox"
+						class="checkbox checkbox-xs p-2"
+						bind:checked={anon_force}
+					/>
+					<label for="feedback-checkbox" class="p-2">Anonymous</label>
+				</div>
+			{/if}
 			<div class="flex-auto"></div>
 			<button
 				onclick={submit}
@@ -153,7 +169,7 @@
 					{:else}
 						Sending
 					{/if}
-				{:else if !store.logged_in_account}
+				{:else if !anon_force && !store.logged_in_account}
 					Login before Sending
 				{:else}
 					Send
