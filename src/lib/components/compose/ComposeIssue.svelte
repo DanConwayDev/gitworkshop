@@ -95,7 +95,7 @@
 	};
 
 	let editor = $state() as Readable<Editor>;
-	let content = $derived($editor ? $editor.getText() : '');
+	let content = $derived($editor ? $editor.storage.markdown.getMarkdown() : '');
 	let editor_tags = $derived(editor ? ($editor.storage.nostr as NostrStorage).getEditorTags() : []);
 
 	// TODO querycentre.ensureRecentPubkeyRelays() for each tagged user so sends to correct relays

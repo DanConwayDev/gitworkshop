@@ -93,7 +93,7 @@
 	};
 
 	let editor = $state() as Readable<Editor>;
-	let content = $derived($editor ? $editor.getText() : '');
+	let content = $derived($editor ? $editor.storage.markdown.getMarkdown() : '');
 	let person_tags = $state(event.tags.filter((t) => t[0] && t[0] === 'p'));
 	let editor_tags = $derived(editor ? ($editor.storage.nostr as NostrStorage).getEditorTags() : []);
 
