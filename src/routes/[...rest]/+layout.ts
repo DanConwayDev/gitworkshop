@@ -14,5 +14,8 @@ export const load = ({ params }: { params: { rest: string } }): { rest: string }
 	if (params.rest.startsWith('repos')) {
 		redirect(301, `/search`);
 	}
+	if (params.rest === 'install' || params.rest === 'install/') {
+		redirect(301, `/ngit`);
+	}
 	return { rest: params.rest };
 };
