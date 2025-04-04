@@ -31,7 +31,7 @@
 	);
 </script>
 
-<div class="mt-2 rounded-tr-lg border border-base-400">
+<div class="rounded-tr-lg border border-base-400">
 	<div class="scrollbar-hide flex overflow-x-auto rounded-r-lg bg-slate-900">
 		<div class="flex-none">
 			<div class="tabs tabs-lifted tabs-xs p-2">

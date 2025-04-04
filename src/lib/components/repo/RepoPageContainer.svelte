@@ -69,9 +69,9 @@
 {/snippet}
 
 {#if with_sidebar}
-	<Container>
-		<div class="mt-2 md:flex">
-			<div class="md:mr-2 md:w-2/3">
+	<Container no_wrap_on_md>
+		<div class="md:flex lg:mt-2">
+			<div class="md:mr-2 md:mt-2 md:w-2/3">
 				{@render contents()}
 			</div>
 			<div

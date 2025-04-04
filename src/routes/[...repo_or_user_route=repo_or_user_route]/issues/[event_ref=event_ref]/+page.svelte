@@ -28,7 +28,8 @@
 </script>
 
 <PrOrIssueHeader {table_item} />
-<Container>
+
+<Container no_wrap_on_md>
 	{#if table_item}
 		<div class="mx-auto max-w-6xl lg:flex">
 			<div class="md:mr-2 lg:w-2/3">
