@@ -93,7 +93,10 @@ export const getStandardnip22ReplyTags = (
 ): string[][] => {
 	const P = getRootEventPubkey(event, issue_or_pr_table_item);
 	let root_id: string | undefined;
-	if (event.kind === PatchKind && event.tags.some((t) => t[0] === 't' && t[1] === 'root'))
+	if (
+		event.kind === IssueKind ||
+		(event.kind === PatchKind && event.tags.some((t) => t[0] === 't' && t[1] === 'root'))
+	)
 		root_id = event.id;
 	if (!root_id) root_id = getRootUuid(event);
 	if (!root_id && issue_or_pr_table_item) root_id = issue_or_pr_table_item.uuid;
