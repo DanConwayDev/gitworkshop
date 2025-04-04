@@ -307,6 +307,19 @@ async function getExistingItemsToUpdate(updates: ProcessorUpdate[]): Promise<DbI
 	pr_items.forEach((r) => {
 		if (r) table_items.prs.set(r.uuid, r);
 	});
+
+	// get repos related to issues and prs that have child updates
+	const additional_repos = new Set<RepoRef>();
+	issue_items.forEach((e) =>
+		e?.repos.filter((r) => !keys.repos.has(r)).forEach((r) => additional_repos.add(r))
+	);
+	if (additional_repos.size > 0) {
+		const more_repos = await db.repos.bulkGet([...additional_repos]);
+		more_repos.forEach((r) => {
+			if (r) table_items.repos.set(getRepoRef(r), r);
+		});
+	}
+
 	return table_items;
 }
 
