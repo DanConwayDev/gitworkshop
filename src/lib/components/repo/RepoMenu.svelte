@@ -35,8 +35,8 @@
 	let enable_actions = $derived(store.experimental);
 </script>
 
-<div class="flex border-b border-base-400">
-	<div role="tablist" class="tabs tabs-bordered flex-none">
+<div class="scrollbar-hide flex overflow-x-auto border-b border-base-400">
+	<div role="tablist" class="tabs tabs-bordered min-w-max flex-nowrap">
 		{#if readme_available}
 			<a
 				href={`/${repo_route.s}`}
