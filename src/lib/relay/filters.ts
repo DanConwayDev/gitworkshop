@@ -121,7 +121,7 @@ export const createRepoChildrenFilters = (
 	if (items instanceof Set) {
 		return [
 			{
-				kinds: [IssueKind, PatchKind, ...StatusKinds, DeletionKind],
+				kinds: [IssueKind, PatchKind, DeletionKind],
 				'#a': [...items]
 			}
 		];
@@ -136,7 +136,7 @@ export const createRepoChildrenFilters = (
 	});
 	sinces.forEach((a_refs, since) => {
 		const filter: Filter = {
-			kinds: [IssueKind, PatchKind, ...StatusKinds, DeletionKind],
+			kinds: [IssueKind, PatchKind, DeletionKind],
 			'#a': a_refs
 		};
 		if (since > 0) {
@@ -153,7 +153,7 @@ export const createRepoChildrenFilters = (
  * @param children
  * @returns
  */
-export const createRepoChildrenStatusAndQualityFilters = (
+export const createRepoChildrenStatusAndDeletionFilters = (
 	children: Set<EventIdString>,
 	repo_timestamps?: Map<RepoRef, RelayCheckTimestamp>
 ) => {
@@ -161,11 +161,11 @@ export const createRepoChildrenStatusAndQualityFilters = (
 	if (!repo_timestamps) {
 		return [
 			{
-				kinds: [...StatusKinds, ...QualityChildKinds, DeletionKind],
+				kinds: [...StatusKinds, DeletionKind],
 				'#e': [...children]
 			},
 			{
-				kinds: [...StatusKinds, ...QualityChildKinds, DeletionKind],
+				kinds: [...StatusKinds, DeletionKind],
 				'#E': [...children]
 			}
 		];
@@ -179,12 +179,57 @@ export const createRepoChildrenStatusAndQualityFilters = (
 
 	return [
 		{
-			kinds: [...StatusKinds, ...QualityChildKinds, DeletionKind],
+			kinds: [...StatusKinds, DeletionKind],
 			'#e': [...children],
 			since: earliest_since === 0 ? undefined : earliest_since
 		},
 		{
-			kinds: [...StatusKinds, ...QualityChildKinds, DeletionKind],
+			kinds: [...StatusKinds, DeletionKind],
+			// needed as comments related to PR revisions will have a different root
+			'#E': [...children],
+			since: earliest_since === 0 ? undefined : earliest_since
+		}
+	];
+};
+
+/**
+ *
+ * @param repo_items just used to create the since timestamps
+ * @param children
+ * @returns
+ */
+export const createRepoChildrenQualityFilters = (
+	children: Set<EventIdString>,
+	repo_timestamps?: Map<RepoRef, RelayCheckTimestamp>
+) => {
+	if (children.size === 0) return [];
+	if (!repo_timestamps) {
+		return [
+			{
+				kinds: [...QualityChildKinds],
+				'#e': [...children]
+			},
+			{
+				kinds: [...QualityChildKinds],
+				'#E': [...children]
+			}
+		];
+	}
+	let earliest_since = 0;
+
+	repo_timestamps.forEach((t) => {
+		const since = t.last_child_check ? t.last_child_check - replication_delay : 0;
+		if (since > earliest_since) earliest_since = since;
+	});
+
+	return [
+		{
+			kinds: [...QualityChildKinds],
+			'#e': [...children],
+			since: earliest_since === 0 ? undefined : earliest_since
+		},
+		{
+			kinds: [...QualityChildKinds],
 			// needed as comments related to PR revisions will have a different root
 			'#E': [...children],
 			since: earliest_since === 0 ? undefined : earliest_since

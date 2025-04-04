@@ -24,7 +24,8 @@ import { repoTableItemToRelayCheckTimestamp } from './RelaySelection';
 import {
 	createPubkeyFiltersGroupedBySince,
 	createRepoChildrenFilters,
-	createRepoChildrenStatusAndQualityFilters,
+	createRepoChildrenQualityFilters,
+	createRepoChildrenStatusAndDeletionFilters,
 	createRepoIdentifierFilters
 } from './filters';
 import {
@@ -413,17 +414,32 @@ export class RelayManager {
 			addUnsearchedIssuesAndPrsFromRepoItem(record);
 		});
 
-		const filters = [
+		let filters = [
 			...createRepoIdentifierFilters(original_a_refs_with_timestamps),
 			...createRepoChildrenFilters(original_a_refs_with_timestamps),
-			...createRepoChildrenStatusAndQualityFilters(
+			...createRepoChildrenStatusAndDeletionFilters(
+				unsearched_issues_and_pr_roots,
+				original_a_refs_with_timestamps
+			),
+			...createRepoChildrenQualityFilters(
 				unsearched_issues_and_pr_roots,
 				original_a_refs_with_timestamps
 			)
 		];
 		markAsSearched();
 
+		let count = 0;
+		let last_filters = '';
+		const nextPageNeeded = () => count > 90 && last_filters !== JSON.stringify(filters);
+
 		const onevent = (event: NostrEvent) => {
+			// paging
+			count++;
+			filters.forEach((f: Filter) => {
+				if (matchFilters([f], event) && event.created_at < (f.until ?? unixNow()))
+					f.until = event.created_at + 1;
+			});
+
 			this.onEvent(event);
 			if (event.kind === RepoAnnKind) {
 				const a_ref = getEventUID(event) as RepoRef;
@@ -488,37 +504,59 @@ export class RelayManager {
 					});
 				}
 				await new Promise<void>((r) => {
-					const filters = [
+					filters = [
 						...createRepoIdentifierFilters(unsearched_a_refs),
 						...createRepoChildrenFilters(unsearched_a_refs),
-						...createRepoChildrenStatusAndQualityFilters(unsearched_issues_and_pr_roots)
+						...createRepoChildrenStatusAndDeletionFilters(unsearched_issues_and_pr_roots),
+						...createRepoChildrenQualityFilters(unsearched_issues_and_pr_roots)
 					];
 					markAsSearched();
-					const sub = this.relay.subscribe(filters, {
-						onevent: (event) => onevent(event),
-						oneose: () => {
-							onEoseRecursivelyGetDisoveredARefResults(sub);
-							r();
-						}
-					});
+					const runWithPaging = () => {
+						last_filters = JSON.stringify(filters);
+						count = 0;
+						const sub = this.relay.subscribe(filters, {
+							onevent: (event) => onevent(event),
+							oneose: () => {
+								if (nextPageNeeded()) {
+									sub.close();
+									runWithPaging();
+									return;
+								}
+								onEoseRecursivelyGetDisoveredARefResults(sub);
+								r();
+							}
+						});
+					};
+					runWithPaging();
 				});
 			}
 		};
 
-		const sub = this.relay.subscribe(filters, {
-			onevent: (event) => onevent(event),
-			oneose: async () => {
-				await onEoseRecursivelyGetDisoveredARefResults(sub);
-				this.fetching_repo_queue = false;
-				searched_a_refs.forEach((a_ref) => {
-					const unsubsriber = this.watchRepo(a_ref, {
-						a_tags: [...searched_a_refs],
-						e_tags: [...searched_issues_and_pr_roots]
+		const runWithPaging = () => {
+			last_filters = JSON.stringify(filters);
+			count = 0;
+			const sub = this.relay.subscribe(filters, {
+				onevent: (event) => onevent(event),
+				oneose: async () => {
+					if (nextPageNeeded()) {
+						// paging
+						sub.close();
+						runWithPaging();
+						return;
+					}
+					await onEoseRecursivelyGetDisoveredARefResults(sub);
+					this.fetching_repo_queue = false;
+					searched_a_refs.forEach((a_ref) => {
+						const unsubsriber = this.watchRepo(a_ref, {
+							a_tags: [...searched_a_refs],
+							e_tags: [...searched_issues_and_pr_roots]
+						});
+						this.fetch_repo_promises.resolvePromises(a_ref, unsubsriber);
 					});
-					this.fetch_repo_promises.resolvePromises(a_ref, unsubsriber);
-				});
-			}
-		});
+				}
+			});
+		};
+		runWithPaging();
 	}
 
 	watching_a_refs = new Map<RepoRef, { a_tags: (ARefR | ARefP)[]; e_tags: EventIdString[] }>();

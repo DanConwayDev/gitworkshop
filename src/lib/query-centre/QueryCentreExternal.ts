@@ -36,7 +36,8 @@ import SubscriberManager from '$lib/SubscriberManager';
 import {
 	createRepoChildrenFilters,
 	createRepoIdentifierFilters,
-	createRepoChildrenStatusAndQualityFilters
+	createRepoChildrenStatusAndDeletionFilters,
+	createRepoChildrenQualityFilters
 } from '$lib/relay/filters';
 import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
 import type { EventPointer } from 'nostr-tools/nip19';
@@ -219,8 +220,9 @@ class QueryCentreExternal {
 			...createRepoIdentifierFilters(new Set([a_ref])),
 			...createRepoChildrenFilters(new Set([a_ref])),
 			...(record
-				? createRepoChildrenStatusAndQualityFilters(getIssuesAndPrsIdsFromRepoItem(record))
-				: [])
+				? createRepoChildrenStatusAndDeletionFilters(getIssuesAndPrsIdsFromRepoItem(record))
+				: []),
+			...(record ? createRepoChildrenQualityFilters(getIssuesAndPrsIdsFromRepoItem(record)) : [])
 		]);
 		const relays_tried: WebSocketUrl[] = [];
 		let new_repo_relays_found = false;
