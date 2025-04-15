@@ -98,7 +98,7 @@
 						<div class="flex flex-wrap gap-2">
 							{#each ['latest', '24.04', '22.04', '20.04'] as osversion}
 								<a
-									href="https://github.com/DanConwayDev/ngit-cli/releases/download/{version}/ngit-{version}-ubunutu-{osversion}.tar.gz"
+									href="https://github.com/DanConwayDev/ngit-cli/releases/download/{version}/ngit-{version}-ubuntu-{osversion}.tar.gz"
 									class="btn btn-neutral btn-sm"
 									class:btn-xs={size === 'sm'}
 								>
@@ -113,7 +113,7 @@
 						<div class="flex flex-wrap gap-2">
 							{#each ['24.04', '22.04'] as osversion}
 								<a
-									href="https://github.com/DanConwayDev/ngit-cli/releases/download/{version}/ngit-{version}-ubunutu-{osversion}-arm.tar.gz"
+									href="https://github.com/DanConwayDev/ngit-cli/releases/download/{version}/ngit-{version}-ubuntu-{osversion}-arm.tar.gz"
 									class="btn btn-neutral btn-sm"
 									class:btn-xs={size === 'sm'}
 								>
