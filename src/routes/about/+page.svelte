@@ -80,11 +80,10 @@
 			git is a decentralized version control system, yet most freedom tech projects use centralized
 			walled gardens on top of git as a social and collaboration layer for code changes
 		</p>
-
 		<p>
-			by far the most popular, Microsoft's GitHub, has a history of banning accounts and
-			repositories without warning and this creates a real risk of disruption for important projects
-			like bitcoin-core
+			the most popular is Microsoft's GitHub, and like most big tech companies, it has a history of
+			banning accounts (and repositories) without warning. this creates a real risk of disruption
+			for important projects like bitcoin-core
 		</p>
 
 		<h3>The Opportunity</h3>
@@ -136,7 +135,7 @@
 			server over nostr, or use specialized relays
 		</p>
 
-		<h3>The Protocol</h3>
+		<h3>The Solution</h3>
 
 		<p>
 			<strong>nip34</strong> is a nostr protocol for sending git patches over nostr, similar to how patches
