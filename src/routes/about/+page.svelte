@@ -118,12 +118,7 @@
 
 		<h3>The Philosophy</h3>
 
-		<p>
-			there is innovation happening with git and nostr in a few places and gitworkshop.dev aims to
-			work with different approaches
-		</p>
-
-		<p>ngit is more opinionated, and its philosophy can be summed up as:</p>
+		<p>ngit and gitworkshop.dev's philosophy can be summed up as:</p>
 		<ul>
 			<li><strong>let git be git</strong> - don't try and reinvent git</li>
 			<li>
