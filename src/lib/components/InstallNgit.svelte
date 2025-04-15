@@ -143,7 +143,7 @@
 						<div class="flex flex-wrap gap-2">
 							{#each ['latest', '2022', '2019'] as osversion}
 								<a
-									href="https://github.com/DanConwayDev/ngit-cli/releases/download/{version}/ngit-{version}-windows-{osversion}.tar.gz"
+									href="https://github.com/DanConwayDev/ngit-cli/releases/download/{version}/ngit-{version}-windows-{osversion}.zip"
 									class="btn btn-neutral btn-sm"
 									class:btn-xs={size === 'sm'}
 								>
