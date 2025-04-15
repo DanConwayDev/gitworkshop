@@ -150,40 +150,29 @@
 				patches to be managed as branches, similar to GitHub PRs
 				<ul>
 					<li>
-						amendments to a proposal can be made by pushing a commit using <span
+						Open and Draft PRs become branches with the prefix <span
+							class="rounded bg-neutral p-2 font-mono"><span class="py-5">pr/</span></span
+						>
+					</li>
+					<li>
+						the PR author and maintainers can add new commits can using <span
 							class="rounded bg-neutral p-2 font-mono"><span class="py-5">git&nbsp;push</span></span
 						>
-						or
-						<span class="rounded bg-neutral p-2 font-mono"
-							><span class="py-5">ngit&nbsp;push</span></span
-						>
-						rather than issuing a complete revision, which modifies the original commits (still possible
-						with
-						<span class="rounded bg-neutral p-2 font-mono"
-							><span class="py-5">git&nbsp;push --force</span></span
-						>
-						or
-						<span class="rounded bg-neutral p-2 font-mono"
-							><span class="py-5">ngit&nbsp;push&nbsp;--force</span></span
+					</li>
+					<li>
+						commits can be rebased, updated or replaced using <span
+							class="rounded bg-neutral p-2 font-mono"
+							><span class="py-5">git&nbsp;push&nbsp;--force</span></span
 						>
 						or
 						<span class="rounded bg-neutral p-2 font-mono"
 							><span class="py-5">ngit&nbsp;send&nbsp;--in-reply-to&nbsp;nevent123...</span></span
-						>)
+						>
 					</li>
 					<li>
-						a proposal can be checked out as a branch which reflects the repo state when the
-						proposal was generated with pgp signatures intact
-						<ul>
-							<li>
-								there is less friction for reviewers with this model as they don't have to deal with
-								resolving conflicts as patches are applied to the tip of the main branch. whereas
-								maintainers, who might be considering accepting the proposal right away, may find it
-								preferable to resolves conflicts as part of their review
-							</li>
-						</ul>
+						with ngit - author pgp signatures and therefore the original commit&nbsp;ids can be
+						retained
 					</li>
-					<li>author pgp signatures and original commit_ids can be retained</li>
 					<li>
 						features can be 'merged' using a 'merge commit' so that a series of feature commits can
 						remain distinct rather than each applied to the main branch directly
@@ -195,28 +184,7 @@
 				maintainership when a maintainer moves on
 			</li>
 			<li>
-				ensure that users who have already cloned the repository dont get scammed by someone else
-				issuing a repository event, pretending to be the maintainer, and directing users to a
-				malicious git server
-				<ul>
-					<li>
-						<span class="rounded bg-neutral p-2 font-mono"><span class="py-5">ngit init</span></span
-						>
-						creates an optional
-						<span class="bg-base-200 p-2 font-mono">maintainers.yaml</span> file in the root of your
-						repo that lists the authorized maintainers and desired relays
-						<ul>
-							<li>
-								a fallback is used to prevent contributors from needing to know the event id if a
-								maintainer is not ready to add a nostr specific file to the repository. ngit tags
-								the earliest unique commit id in the repo event. ngit defaults to using the most
-								recent repo event it finds with this tag. it also tags all proposals with this id
-								and when listing patches, and also includes patches sent to other repo events with
-								this id as it is clearly intended for the same repo
-							</li>
-						</ul>
-					</li>
-				</ul>
+				the repository state is stored in nostr events, reducing the required trust for git servers
 			</li>
 		</ul>
 
@@ -239,20 +207,7 @@
 
 		<h3>Enhancements</h3>
 
-		<p>
-			got ideas? please share them and lets explore as a community. here's three to get you started:
-		</p>
-		<ul>
-			<li>DVM to run CI pipelines? <i>yes please</i></li>
-			<li>
-				services to enable merge directly from nostr events. <i>hello!</i>
-			</li>
-			<li>
-				repo event showing authoritive tip of main branch and referencing multiple git_server
-				mirrors? <i>Hell yeah!</i>
-			</li>
-		</ul>
-
+		<p>got ideas? please share them and lets explore as a community</p>
 		<div role="alert" class="alert my-3">
 			<!-- licence MIT https://icon-sets.iconify.design/ph/hands-praying-fill/ -->
 			<svg
