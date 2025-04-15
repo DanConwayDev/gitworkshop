@@ -20,13 +20,22 @@
 	<div class="prose m-auto mt-8">
 		<h2 class="">About</h2>
 		<p>
-			gitworkshop.dev, <a href="/ngit">ngit</a> and git-remote-nostr are tools to enable code
-			collaboration over nostr created and maintained by
+			There is an ecosystem of tools to enable git code collaboration over nostr using <a
+				class="link"
+				href="https://nips.nostr.com/34">nip34</a
+			>. gitworkshop.dev, <a href="/ngit">ngit</a> and git-remote-nostr are tightly-coupled examples
+			maintained by
 			<a
 				class="link-primary"
-				href="https://njump.me/nprofile1qy88wumn8ghj7mn0wvhxcmmv9uq3vamnwvaz7tmsw4e8qmr9wfjkccte9e3k7mf0qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vng80y96x"
+				href="/nprofile1qy88wumn8ghj7mn0wvhxcmmv9uq3vamnwvaz7tmsw4e8qmr9wfjkccte9e3k7mf0qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vng80y96x"
 				>DanConwayDev</a
-			> compatible with nip34
+			>
+			and there are others such as
+			<a
+				class="link link-primary"
+				href="/npub1useke4f9maul5nf67dj0m9sq6jcsmnjzzk4ycvldwl4qss35fvgqjdk5ks/gitplaza">gitplaza</a
+			>, <a class="link link-primary" href="/fiatjaf.com/gitstr">gitstr</a> and
+			<a class="link link-primary" href="/fiatjaf.com/song">song</a>.
 		</p>
 		<div role="alert" class="alert my-3">
 			<!-- licence MIT https://icon-sets.iconify.design/ph/hands-praying-fill/ -->
@@ -57,7 +66,7 @@
 					or directly to
 					<a
 						class="link-primary"
-						href="/p/nprofile1qy88wumn8ghj7mn0wvhxcmmv9uq3vamnwvaz7tmsw4e8qmr9wfjkccte9e3k7mf0qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vng80y96x"
+						href="/nprofile1qy88wumn8ghj7mn0wvhxcmmv9uq3vamnwvaz7tmsw4e8qmr9wfjkccte9e3k7mf0qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vng80y96x"
 						>DanConwayDev</a
 					> on nostr
 				</p>
