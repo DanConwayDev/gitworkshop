@@ -25,6 +25,7 @@
 	let nip07 = $state(false);
 	let private_key = $state(false);
 	let private_key_invalid = $state(false);
+	let amber_feature_toggle = $state(false);
 	let amber = $state(false);
 	let nostr_connect = $state(false);
 	let signup_feature_toggle = $state(false);
@@ -256,7 +257,7 @@
 			</div>
 		{:else}
 			<div class="prose mb-3"><h4 class="text-center">Sign in</h4></div>
-			{#if AmberClipboardSigner.SUPPORTED}
+			{#if amber_feature_toggle && AmberClipboardSigner.SUPPORTED}
 				<div class="join join-horizontal flex w-full">
 					<button
 						class="btn btn-primary join-item flex-grow"
