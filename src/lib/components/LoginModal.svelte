@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { AmberClipboardSigner, ExtensionSigner, SimpleSigner } from 'applesauce-signers';
+	import {
+		NostrConnectSigner,
+		AmberClipboardSigner,
+		ExtensionSigner,
+		SimpleSigner
+	} from 'applesauce-signers';
 	import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts';
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-expect-error
@@ -8,9 +13,11 @@
 	import { icons_misc } from '$lib/icons';
 	import CopyField from './CopyField.svelte';
 	import { nip19 } from 'nostr-tools';
-	import { isWebSocketUrl } from '$lib/types';
-	import accounts_manager from '$lib/accounts';
+	import { isWebSocketUrl, type WebSocketUrl } from '$lib/types';
+	import accounts_manager, { nostr_connect_pools } from '$lib/accounts';
 	import { isHexKey } from 'applesauce-core/helpers';
+	import { NostrConnectAccount } from 'applesauce-accounts/accounts/nostr-connect-account';
+	import { SimplePool } from 'nostr-tools/pool';
 	let { done }: { done: () => void } = $props();
 
 	let nip07_plugin: boolean | undefined = $state('nostr' in window);
@@ -20,11 +27,62 @@
 	let private_key_invalid = $state(false);
 	let amber = $state(false);
 	let nostr_connect = $state(false);
-	let nostr_connect_feature_toggle = $state(false);
-	let bunker_url_invalid = $state(false);
-	let connection_relay_invalid = $state(false);
 	let signup_feature_toggle = $state(false);
 	let success = $state(false);
+
+	let nostr_connect_relay_urls = $state('');
+	const getRelayUrls = (): WebSocketUrl[] => {
+		let relays: WebSocketUrl[] = [];
+		nostr_connect_relay_urls.split(' ').forEach((r) => {
+			if (isWebSocketUrl(r)) relays.push(r);
+		});
+		return relays;
+	};
+	let nostr_connect_relay_invalid = $derived(
+		nostr_connect_relay_urls.length > 0 && getRelayUrls().length === 0
+	);
+	let nostr_connect_simple_signer = new SimpleSigner();
+	let nostr_connect_url = $state('');
+	let bunker_url_invalid = $state(false);
+
+	let nostr_connect_signer: NostrConnectSigner | undefined = undefined;
+
+	async function listenForNostrConnect() {
+		let relays = getRelayUrls();
+		if (relays.length === 0 && nostr_connect_relay_urls.length === 0) {
+			relays.push('wss://relay.nsec.app');
+		}
+		try {
+			nostr_connect_signer?.close();
+			// pool?.close(Array.from(pool.listConnectionStatus().keys()));
+			nostr_connect_signer = new NostrConnectSigner({
+				async onSubOpen(filters, relays, onEvent) {
+					nostr_connect_pools?.subscribeMany(relays, filters, {
+						onevent: (event) => {
+							onEvent(event);
+						}
+					});
+				},
+				async onSubClose() {},
+				async onPublishEvent(event, relays) {
+					nostr_connect_pools?.publish(relays, event);
+				},
+				relays
+			});
+			nostr_connect_url = nostr_connect_signer.getNostrConnectURI({
+				name: 'gitworkshop.dev'
+				// image: 'https://gitworkshop.dev/icons/icon.svg'
+			});
+
+			await nostr_connect_signer.waitForSigner();
+			let pubkey = await nostr_connect_signer.getPublicKey();
+			const account = new NostrConnectAccount(pubkey, nostr_connect_signer);
+			accounts_manager.addAccount(account);
+			accounts_manager.setActive(account);
+			complete();
+		} catch {}
+	}
+
 	const complete = () => {
 		success = true;
 		setTimeout(done, 1000);
@@ -137,8 +195,10 @@
 			</div>
 		{:else if nostr_connect}
 			<div class="prose"><h4 class="text-center">Nostr Connect</h4></div>
-			<div class="mt-3 w-full"><QRCode value="nostrconnect://[inster]" size={512} /></div>
-			<CopyField content={'nostrconnect://bla'} no_border={true} />
+			<div class="mt-3 w-full"><QRCode value={nostr_connect_url} size={512} /></div>
+			<div class="w-50">
+				<CopyField content={nostr_connect_url} no_border={true} truncate={[100, 105]} />
+			</div>
 			<label class="form-control w-full">
 				<div class="label">
 					<span class="label-text">Connection Relay</span>
@@ -147,27 +207,24 @@
 					type="text"
 					placeholder="wss://relay.nsec.app"
 					class="input input-sm input-bordered w-full"
-					class:border-error={connection_relay_invalid}
-					class:focus:border-error={connection_relay_invalid}
-					onpaste={(event) => {
-						connection_relay_invalid = false;
-						const s = event.clipboardData?.getData('text');
-						try {
-							if (!s || !isWebSocketUrl(s)) {
-								throw 'not a valid websocket url';
-							}
-							// TODO: udpate QRcode
-							// TODO: start listening to relay
-						} catch {
-							connection_relay_invalid = true;
-						}
+					class:border-error={nostr_connect_relay_invalid}
+					class:focus:border-error={nostr_connect_relay_invalid}
+					bind:value={nostr_connect_relay_urls}
+					onpaste={() => {
+						listenForNostrConnect();
 					}}
 					onfocusout={() => {
-						// el.currentTarget.
+						listenForNostrConnect();
 					}}
 				/>
+				{#if nostr_connect_relay_invalid}
+					<div class="label">
+						<span class="label-text-alt text-error">invalid relay url</span>
+						<span class="label-text-alt text-error">using wss://relay.nsec.app</span>
+					</div>
+				{/if}
 			</label>
-			<div class="divider">OR</div>
+			<!-- <div class="divider">OR</div>
 			<input
 				type="text"
 				placeholder="bunker://"
@@ -187,7 +244,7 @@
 					}
 					// TODO is valid
 				}}
-			/>
+			/> -->
 
 			<div class="modal-action">
 				<button
@@ -254,15 +311,14 @@
 					>
 					<div class="divider divider-horizontal"></div>
 				{/if}
-				{#if nostr_connect_feature_toggle}
-					<button
-						class="btn flex-grow"
-						onclick={() => {
-							nostr_connect = true;
-						}}>Nostr Connect</button
-					>
-					<div class="divider divider-horizontal"></div>
-				{/if}
+				<button
+					class="btn flex-grow"
+					onclick={() => {
+						nostr_connect = true;
+						listenForNostrConnect();
+					}}>Nostr Connect</button
+				>
+				<div class="divider divider-horizontal"></div>
 				<button
 					class="btn flex-grow"
 					onclick={() => {

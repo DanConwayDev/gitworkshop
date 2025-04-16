@@ -64,7 +64,7 @@
 					<path {d} />
 				{/each}
 			</svg>{/if}
-		<div class="truncate text-sm" class:flex-auto={!no_border} class:flex-none={no_border}>
+		<div class="truncate text-sm" class:flex-auto={!no_border} class:flex-shrink={no_border}>
 			{truncatedContent()}
 		</div>
 		{#if label.length === 0 && copied}<div class="mx-1 text-sm">
