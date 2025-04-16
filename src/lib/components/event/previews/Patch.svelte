@@ -2,6 +2,7 @@
 	import {
 		extractIssueTitle,
 		extractPatchMessage,
+		extractPatchTitle,
 		extractRepoRefsFromPrOrIssue
 	} from '$lib/git-utils';
 	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
@@ -14,7 +15,7 @@
 	} from '$lib/types';
 	import { eventIsPrRoot, getRootUuid } from '$lib/utils';
 	import { getTagValue } from 'applesauce-core/helpers';
-	import { nip19, type NostrEvent } from 'nostr-tools';
+	import { nip19, type Event, type NostrEvent } from 'nostr-tools';
 
 	let { event, relay_hint }: { event: NostrEvent; relay_hint?: WebSocketUrl } = $props();
 	let route_a_ref = $derived(routeToRepoRef(store.route));
@@ -59,7 +60,7 @@
 	{#if repo_link}
 		Git {patch_or_pr} for <a class="opacity-50" href={`/${repo_link}`}>{repo_identifier}</a>:
 		<a href={`/${repo_link}/prs/${pr_nevent ? `${pr_nevent}#` : ''}${nevent}`}
-			>{extractIssueTitle(event)}</a
+			>{extractPatchTitle(event)}</a
 		> by
 	{:else}
 		Git {patch_or_pr} not linked to a repository (badly formatted):
