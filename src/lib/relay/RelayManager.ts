@@ -145,6 +145,16 @@ export class RelayManager {
 					});
 					return { success: true, msg };
 				} catch (error) {
+					const msg = `${error}`;
+					if (msg.includes('duplicate')) {
+						this.processor.enqueueOutboxUpdate({
+							id: event.id,
+							relay: this.url,
+							success: true,
+							msg
+						});
+						return { success: true, msg };
+					}
 					this.processor.enqueueOutboxUpdate({
 						id: event.id,
 						relay: this.url,
