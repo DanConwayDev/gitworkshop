@@ -87,7 +87,7 @@
 			);
 			if (event) {
 				signed = true;
-				// query_centre.publishEvent(event);
+				query_centre.publishEvent(event);
 				const nevent = nip19.neventEncode({
 					id: event.id
 				});
