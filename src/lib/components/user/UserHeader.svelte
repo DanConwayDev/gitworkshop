@@ -16,7 +16,8 @@
 		link_to_profile = true,
 		avatar_on_right = false,
 		no_avatar = false,
-		in_group = false
+		in_group = false,
+		on_link_press = () => {}
 	}: {
 		user?: PubKeyString;
 		inline?: boolean;
@@ -27,6 +28,7 @@
 		avatar_on_right?: boolean;
 		no_avatar?: boolean;
 		in_group?: boolean;
+		on_link_press?: () => void;
 	} = $props();
 
 	let pubkey = $derived(user);
@@ -65,6 +67,7 @@
 			onmouseenter={() => {
 				hovered = true;
 			}}
+			onclick={on_link_press}
 			class:inline-block={inline}
 			class="text-inherit no-underline"
 			href="/{user_link}"
@@ -95,56 +98,19 @@
 			class:order-1={avatar_on_right}
 			class:hidden={no_avatar}
 		>
-			<div
-				class:avatar={!in_group}
-				class:inline-block={inline}
-				class:h-32={!inline && size === 'full'}
-				class:w-32={!inline && size === 'full'}
-				class:h-8={!inline && size === 'md'}
-				class:w-8={!inline && size === 'md'}
-				class:h-4={!inline && size === 'sm'}
-				class:w-4={!inline && size === 'sm'}
-				class:h-5={inline && size === 'md'}
-				class:w-5={inline && size === 'md'}
-				class:h-3.5={(inline && size === 'sm') || size === 'xs'}
-				class:w-3.5={(inline && size === 'sm') || size === 'xs'}
-				class:rounded={!in_group}
-				class:rounded-full={in_group}
-				class:skeleton={not_found_and_loading}
-				class:bg-neutral={!pic_url || pic_url !== failed_pic_url}
-				class:placeholder={!pic_url || pic_url !== failed_pic_url}
-			>
-				{#if pic_url && pic_url !== failed_pic_url}
-					<img
-						class="my-0"
-						src={pic_url}
-						alt={display_name}
-						onerror={() => (failed_pic_url = $state.snapshot(pic_url))}
-					/>
-				{:else}
-					<div class="">
-						<div
-							class="flex w-full items-center justify-center rounded bg-neutral text-center text-neutral-content"
-							class:h-32={!inline && size === 'full'}
-							class:w-32={!inline && size === 'full'}
-							class:h-8={!inline && size === 'md'}
-							class:w-8={!inline && size === 'md'}
-							class:h-4={!inline && size === 'sm'}
-							class:w-4={!inline && size === 'sm'}
-							class:h-5={inline && size === 'md'}
-							class:w-5={inline && size === 'md'}
-							class:h-3.5={(inline && size === 'sm') || size === 'xs'}
-							class:w-3.5={(inline && size === 'sm') || size === 'xs'}
-						>
-							<span style={(inline && size === 'sm') || size === 'xs' ? 'font-size: 0.6rem;' : ''}>
-								{display_name.startsWith('npub1') || display_name.startsWith('InvalidH')
-									? ''
-									: display_name.slice(0, 1).toLocaleUpperCase()}</span
-							>
-						</div>
-					</div>
-				{/if}
-			</div>
+			{#if link_to_profile && size === 'full'}
+				<a
+					onmouseenter={() => {
+						hovered = true;
+					}}
+					onclick={on_link_press}
+					href="/{user_link}"
+				>
+					{@render profileImage()}</a
+				>
+			{:else}
+				{@render profileImage()}
+			{/if}
 		</div>
 		<div
 			class:text-xl={size === 'full'}
@@ -170,7 +136,21 @@
 					class:h-2.5={size === 'xs'}
 				></div>
 			{:else}
-				<span class:font-bold={in_event_header || size === 'full'}>{display_name}</span>
+				<span class:font-bold={in_event_header || size === 'full'}>
+					{#if link_to_profile && size === 'full'}
+						<a
+							onmouseenter={() => {
+								hovered = true;
+							}}
+							onclick={on_link_press}
+							href="/{user_link}"
+						>
+							{display_name}
+						</a>
+					{:else}
+						{display_name}
+					{/if}
+				</span>
 			{/if}
 			{#if size === 'full'}
 				<CopyField icon={icons_misc.key} content={info.npub} no_border truncate={[10, 10]} />
@@ -221,5 +201,58 @@
 				{/if}
 			{/if}
 		</div>
+	</div>
+{/snippet}
+
+{#snippet profileImage()}
+	<div
+		class:avatar={!in_group}
+		class:inline-block={inline}
+		class:h-32={!inline && size === 'full'}
+		class:w-32={!inline && size === 'full'}
+		class:h-8={!inline && size === 'md'}
+		class:w-8={!inline && size === 'md'}
+		class:h-4={!inline && size === 'sm'}
+		class:w-4={!inline && size === 'sm'}
+		class:h-5={inline && size === 'md'}
+		class:w-5={inline && size === 'md'}
+		class:h-3.5={(inline && size === 'sm') || size === 'xs'}
+		class:w-3.5={(inline && size === 'sm') || size === 'xs'}
+		class:rounded={!in_group}
+		class:rounded-full={in_group}
+		class:skeleton={not_found_and_loading}
+		class:bg-neutral={!pic_url || pic_url !== failed_pic_url}
+		class:placeholder={!pic_url || pic_url !== failed_pic_url}
+	>
+		{#if pic_url && pic_url !== failed_pic_url}
+			<img
+				class="my-0"
+				src={pic_url}
+				alt={display_name}
+				onerror={() => (failed_pic_url = $state.snapshot(pic_url))}
+			/>
+		{:else}
+			<div class="">
+				<div
+					class="flex w-full items-center justify-center rounded bg-neutral text-center text-neutral-content"
+					class:h-32={!inline && size === 'full'}
+					class:w-32={!inline && size === 'full'}
+					class:h-8={!inline && size === 'md'}
+					class:w-8={!inline && size === 'md'}
+					class:h-4={!inline && size === 'sm'}
+					class:w-4={!inline && size === 'sm'}
+					class:h-5={inline && size === 'md'}
+					class:w-5={inline && size === 'md'}
+					class:h-3.5={(inline && size === 'sm') || size === 'xs'}
+					class:w-3.5={(inline && size === 'sm') || size === 'xs'}
+				>
+					<span style={(inline && size === 'sm') || size === 'xs' ? 'font-size: 0.6rem;' : ''}>
+						{display_name.startsWith('npub1') || display_name.startsWith('InvalidH')
+							? ''
+							: display_name.slice(0, 1).toLocaleUpperCase()}</span
+					>
+				</div>
+			</div>
+		{/if}
 	</div>
 {/snippet}

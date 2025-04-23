@@ -46,7 +46,14 @@
 		<div class="w-full text-wrap">
 			{#if store.logged_in_account}
 				<div class="-mb-2">
-					<UserHeader user={store.logged_in_account.pubkey} size="full" link_to_profile={false} />
+					<UserHeader
+						user={store.logged_in_account.pubkey}
+						size="full"
+						link_to_profile={true}
+						on_link_press={() => {
+							is_open = false;
+						}}
+					/>
 				</div>
 			{/if}
 			<div class="prose mb-2"><h4>Accounts</h4></div>
@@ -63,7 +70,13 @@
 								}}
 							>
 								<div>
-									<UserHeader user={account.pubkey} link_to_profile={false} />
+									<UserHeader
+										user={account.pubkey}
+										link_to_profile={true}
+										on_link_press={() => {
+											is_open = false;
+										}}
+									/>
 								</div>
 							</button>
 							{#if store.logged_in_account?.id === account.id}
