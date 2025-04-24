@@ -20,7 +20,7 @@
 					<li>
 						clone
 						<a
-							href="https://codeberg.org/danconwaydev/ngit-cli"
+							href="https://github.com/DanConwayDev/ngit-cli"
 							target="_blank"
 							class="link-primary">this git url</a
 						>
