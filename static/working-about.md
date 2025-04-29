@@ -1,3 +1,5 @@
+a vision for #GitViaNostr
+
 # intro
 
 [the need - git is great but become centralised]
@@ -5,17 +7,66 @@
 [github created the centralising PR model which took over the market]
 [we can make git decentralised again using nostr!]
 
-# solving the key problem
+# The Key Challanage is Social
+
+[the key challenge to make git decentralised is the social discussion around PRs and Issues.]
+[I believe that with nostr and nip34 we have the right protocol to bring make the dream a reality]
+[over the last 2 year, we have built the tools around this social challenge and they are ready to use today]
+[but we must be realist that there is some significant friction to onboard new repositories and there is lots of work to do to remove this.]
+[this is where we are on the adoption curve: [insert adoption curve diagram showing that we are at innovator stage]]
+
+[in this article I explore a renewed vision for #GitViaNostr and how we move it forward]
+
+# Pholosophy
+
+lets start with the underlying principles that I that I first published a few years ago:
+
+- let git be git
+- let nostr be nostr
+- learn from success of others
+
+but I'd like to add an extra one:
+
+- lean into anarchy and resist monolthic development
+
+## Micro clients FTW
+
+Nostr is a cerebration of simplicity. lets not move away for that. monolthic developements trend towards complexity.
+Ambitious projects like gitworkshop.dev, which seek to cover broad aspects of the code collaboration experience, shouldn't stiffle great ideas and innovation.
+The primatives in nip34 are simple and we need to make sure its possible to vibecode a #GitViaNostr microapp in an afternoon.
+Micro clients should lead the way and explore new workflows, experiences, models of thinking.
+The landscape of tools surounding code collaboration is much boarder and there is lots of opporunities to innovate.
+
+[insert diaggram
+
+- code
+- proposed changes
+- Issues
+- Discussion
+- CI / CD
+- project management
+- bounties and freelancing
+- code snippets
+- project discovery
+  ]
+
+may 1000 flowers bloom and 1000 more after them.
+
+# PR and Pactches
+
+[TODO: this section feels like it doesnt fit here?]
 
 [nostr shares charactstics with email so with nip34 we used the same primatives as patches-over-email. heres why [link]. TLDR; really simple, contributors don't have to host anything.]
 [but fork-branch-PR-merge is the only workflow most developers have ever known]
 [and its really hard to change peoples workflow]
 [so ngit presents it to users with a workflow similar to what they know: branch-PR-merge. [more about why branch-PR-merge.]]
-
-[PRs, issues and discussions are the most important aspect of decentralising git using nostr and the tools for this are ready to be used today with ngit and gitworkshop.dev]
-[but this is where we are on the adoption curve: [insert adoption curve diagram showing that we are at innovator stage]]
+[I beleive this provides the right balance between familiarity, good UX and alignment with the protocol.]
+[but the market will decide, and maybe a different model using the same nip34 primatives, or different, will emerge]
+[we must be open to innovation]
 
 # friction and challenges
+
+[lets look at some of some key friction points]
 
 [there are some key friction points and challenges that make it hard to adopt]
 [the rest of this article will discussion some of these and outline a vision for how they are solved under the following headings.]
@@ -23,12 +74,6 @@
 [2. CI / CD]
 [3. browsing, discovery, social and notifications]
 [4. migration]
-
-[pholosophy throughout:]
-[let git be git]
-[let nostr be nostr]
-[learn from success of others]
-[hopefully you should see how this has been applied to the above problem]
 
 ## the git server
 
@@ -101,7 +146,7 @@ We need a library that lowers the barrier of entry to create these experiences t
 
 It needs to be so easy that someone could vibe code a git experience in an afternoon.
 
-## note on song
+## song
 
 nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6 created [song](https://gitworkshop.dev/fiatjaf.com/song) with a complementary vision. A self-hosted, nostr-permissioned git server with a relay baked in.
 
@@ -148,7 +193,7 @@ Part of building a reputation as a CI / CD provider could be running reliable ho
 This provides a sustainable reveneue model for hosting providers and creates the incentives for many free at the point of use hosting providers.
 This in turn would allow one-click nostr repository creation workflows, instantly hosted by many different providers.
 
-### Progress To Date
+## Progress To Date
 
 nostr:npub1hw6amg8p24ne08c9gdq8hhpqx0t0pwanpae9z25crn7m9uy7yarse465gr and nostr:npub16ux4qzg4qjue95vr3q327fzata4n594c9kgh4jmeyn80v8k54nhqg6lra7 have been working on a runner that uses github actions yaml syntax (using act) [dvm-cicd-runner](https://gitworkshop.dev/arjen@swissdash.site/dvm-cicd-runner) and takes cashu payment. You can see [example runs on gitworkshop](https://gitworkshop.dev/arjen@swissdash.site/dvm-cicd-runner/actions). It current takes testnuts, doesn't give any change and the schema will likely change.
 
@@ -158,7 +203,7 @@ Its a WIP and expect the format and schema to evolve.
 
 ...
 
-## Easy Web App Deployment
+# Easy Web App Deployment
 
 For those disapointed not to find a 'Nostr' button to import a git repository to Vercel menu: take heart, they made it easy.
 [vercel.com_import_options.png](./vercel.com_import_options.png)
@@ -170,33 +215,31 @@ there is a vercel cli that can be easily [called in CI / CD jobs to kick of depl
 
 Finally, some patches are too big to fit in a nostr events. blossom is perfect for this. These should be included in a blossom file and referenced in a new patch kind.
 
-# micro clients
+# Concluding Thoughts
+
+## Contributions
 
 Fiatjaf ([gitstr](https://gitworkshop.dev/naddr1qqrxw6t5wd68yq3q80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsxpqqqpmejqg4waehxw309ankjapwve5kzar2v9nzucm0d50cj6us), [song](https://gitworkshop.dev/naddr1qvzqqqrhnypzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqy2hwumn8ghj7emfwshxv6tpw34xze3wvdhk6qqywdhkuecg7qylu), [patch34](https://patch34.pages.dev)), dluvian ([gitplaza](https://gitworkshop.dev/npub1useke4f9maul5nf67dj0m9sq6jcsmnjzzk4ycvldwl4qss35fvgqjdk5ks/gitplaza/prs))
 contributions, integrations and experiments.
 
-Lez, , , Five, Biz, Randy, and others.
+Freelance
+Lez (ngit contributions, [git-remote-blossom](https://gitworkshop.dev/naddr1qvzqqqrhnypzpn7hma38nx3zuwz2f26a4rzqymy8tvge6r68cfckkgxd4jwvrudxqy28wumn8ghj7un9d3shjtnwdaehgu3wdp6sqyn8d96z6un9d4hhgefdvfkx7umndaks2fzhtl)), , , Five ([SatShoot](https://satshoot.com), [Flotilla-Budabit](https://budabit.org)), Biz (Flotilla-Budabit, [Nostr Git Extension](https://github.com/chebizarro/nostr-git-extension)), Randy McMillan ([gnostr](https://github.com/gnostr-org) and experiments), and others.
 
-#GitViaNostr shouldn't trend towards monolithic clients.
+Guga ([git-remote-nostr](https://github.com/gugabfigueiredo/git-remote-nostr))
 
-The best way to make progress is to create a small client which provides a provides a specific task.
+Project Management
+Vivek npub1ltx67888tz7lqnxlrg06x234vjnq349tcfyp52r0lstclp548mcqnuz40t ([kanbanstr](https://kanbanstr.com))
+Code Snippets
+Chris npub1ygzj9skr9val9yqxkf67yf9jshtyhvvl0x76jp5er09nsc0p3j6qr260k2 ([nodebin.io](https://nodebin.io))
+Karnage ([snipsnip.dev](https://snipsnip.dev))
 
-git plaza is promising,
+Auggie
 
-song
-ngit / gitworkshop should not become monolithic.
+Silbrerengel npub1l5sga6xg72phsz5422ykujprejwud075ggrr3z2hwyrfgr7eylqstegx9z for lots of testing, bug reporting and encournagmeent.
 
-There is a space for a client like gitworkshop that #GitViaNostr together but it should link out to specialist clients.
+There are also other projects that havn't posted any code or inactive.
 
-monolithic clients are not the future.
-
-micro clients
-
-whilst tools like ngit (the git plugin) and something like gitworkshop.dev tie together the git experience.
-
-micro-clients
-
-vibe-coded micro clients for specific tasks like PR review., CI / CD management
+Let me know if I've missed any active projects.
 
 ---
 
@@ -206,3 +249,4 @@ vibe-coded micro clients for specific tasks like PR review., CI / CD management
 
 dont include this: [you can also use it with the patches-over-email workflow this using gitstr or with ngit's send / list commands, although the tooling eg (managing read / unread) isn't built out]
 [you can use it today]
+vibe-coded micro clients for specific tasks like PR review., CI / CD management
