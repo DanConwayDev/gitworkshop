@@ -1,6 +1,6 @@
-# A Vision for #GitViaNostr
+now published as naddr1qvzqqqr4gupzpgqgmmc409hm4xsdd74sf68a2uyf9pwel4g9mfdg8l5244t6x4jdqq2kcjm2wfm5c6nt95u4x33jf9uxcunyv4jkzwthjvt
 
-## Intro
+# A Vision for #GitViaNostr
 
 Git has long been the standard for version control in software development, but over time, we has lost its distributed nature. Originally, Git used open, permissionless email for collaboration, which worked well at scale. However, the rise of GitHub and its centralized pull request (PR) model has shifted the landscape.
 
@@ -113,13 +113,7 @@ The potential role of CI / CD via nostr DVMs could create the incentives for a m
 
 This could make onboarding #GitViaNostr repositories as easy as entering a name and selecting from a multi-select list of Git server providers that announce via NIP89.
 
-[insert meme - https://i.imgflip.com/4/4rm35u.jpg with the following text]
-
-1. nostr permissioned git server
-2. no-kyc, zero-step signup
-3. combined git / relay / blossom server
-4. discovery via nip89 announcements
-5. free at the point-of-use (subsided by CI/CD jobs)
+https://image.nostr.build/badedc822995eb18b6d3c4bff0743b12b2e5ac018845ba498ce4aab0727caf6c.jpg
 
 ## Git Client in the Browser
 
@@ -213,11 +207,11 @@ I welcome your honest feedback on this vision and any suggestions you might have
 
 ## Contributions
 
-To conclude, I want to acknowledge the individuals who have made code contributions related to #GitViaNostr this year:
+To conclude, I want to acknowledge some the individuals who have made recent code contributions related to #GitViaNostr:
 
-Fiatjaf ([gitstr](https://gitworkshop.dev/naddr1qqrxw6t5wd68yq3q80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsxpqqqpmejqg4waehxw309ankjapwve5kzar2v9nzucm0d50cj6us), [song](https://gitworkshop.dev/naddr1qvzqqqrhnypzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqy2hwumn8ghj7emfwshxv6tpw34xze3wvdhk6qqywdhkuecg7qylu), [patch34](https://patch34.pages.dev)), dluvian ([gitplaza](https://gitworkshop.dev/npub1useke4f9maul5nf67dj0m9sq6jcsmnjzzk4ycvldwl4qss35fvgqjdk5ks/gitplaza/prs))
+nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6 ([gitstr](https://gitworkshop.dev/naddr1qqrxw6t5wd68yq3q80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsxpqqqpmejqg4waehxw309ankjapwve5kzar2v9nzucm0d50cj6us), [song](https://gitworkshop.dev/naddr1qvzqqqrhnypzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqy2hwumn8ghj7emfwshxv6tpw34xze3wvdhk6qqywdhkuecg7qylu), [patch34](https://patch34.pages.dev)), nostr:npub1useke4f9maul5nf67dj0m9sq6jcsmnjzzk4ycvldwl4qss35fvgqjdk5ks ([gitplaza](https://gitworkshop.dev/npub1useke4f9maul5nf67dj0m9sq6jcsmnjzzk4ycvldwl4qss35fvgqjdk5ks/gitplaza/prs))
 
-nostr:npub1elta7cneng3w8p9y4dw633qzdjr4kyvaparuyuttyrx6e8xp7xnq32cume (ngit contributions, [git-remote-blossom](https://gitworkshop.dev/naddr1qvzqqqrhnypzpn7hma38nx3zuwz2f26a4rzqymy8tvge6r68cfckkgxd4jwvrudxqy28wumn8ghj7un9d3shjtnwdaehgu3wdp6sqyn8d96z6un9d4hhgefdvfkx7umndaks2fzhtl)),nostr:npub16p8v7varqwjes5hak6q7mz6pygqm4pwc6gve4mrned3xs8tz42gq7kfhdw ([SatShoot](https://satshoot.com), [Flotilla-Budabit](https://budabit.org)), nostr:npub1ehhfg09mr8z34wz85ek46a6rww4f7c7jsujxhdvmpqnl5hnrwsqq2szjqv (Flotilla-Budabit, [Nostr Git Extension](https://github.com/chebizarro/nostr-git-extension)), Randy McMillan ([gnostr](https://github.com/gnostr-org) and experiments), and others.
+nostr:npub1elta7cneng3w8p9y4dw633qzdjr4kyvaparuyuttyrx6e8xp7xnq32cume (ngit contributions, [git-remote-blossom](https://gitworkshop.dev/naddr1qvzqqqrhnypzpn7hma38nx3zuwz2f26a4rzqymy8tvge6r68cfckkgxd4jwvrudxqy28wumn8ghj7un9d3shjtnwdaehgu3wdp6sqyn8d96z6un9d4hhgefdvfkx7umndaks2fzhtl)),nostr:npub16p8v7varqwjes5hak6q7mz6pygqm4pwc6gve4mrned3xs8tz42gq7kfhdw ([SatShoot](https://satshoot.com), [Flotilla-Budabit](https://budabit.org)), nostr:npub1ehhfg09mr8z34wz85ek46a6rww4f7c7jsujxhdvmpqnl5hnrwsqq2szjqv ([Flotilla-Budabit](https://budabit.org), [Nostr Git Extension](https://github.com/chebizarro/nostr-git-extension)), nostr:npub1ahaz04ya9tehace3uy39hdhdryfvdkve9qdndkqp3tvehs6h8s5slq45hy ([gnostr](https://github.com/gnostr-org) and experiments), and others.
 
 nostr:npub1uplxcy63up7gx7cladkrvfqh834n7ylyp46l3e8t660l7peec8rsd2sfek ([git-remote-nostr](https://github.com/gugabfigueiredo/git-remote-nostr))
 
@@ -232,4 +226,4 @@ nostr:npub16ux4qzg4qjue95vr3q327fzata4n594c9kgh4jmeyn80v8k54nhqg6lra7, nostr:npu
 
 and for their nostr:npub1c03rad0r6q833vh57kyd3ndu2jry30nkr0wepqfpsm05vq7he25slryrnw, nostr:npub1qqqqqq2stely3ynsgm5mh2nj3v0nk5gjyl3zqrzh34hxhvx806usxmln03 and nostr:npub1l5sga6xg72phsz5422ykujprejwud075ggrr3z2hwyrfgr7eylqstegx9z for their testing, feedback, ideas and encouragement.
 
-Thank you for your support and collaboration! Let me know if I've missed you or anyone else.
+Thank you for your support and collaboration! Let me know if I've missed you.
