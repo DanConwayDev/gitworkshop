@@ -1,116 +1,99 @@
-a vision for #GitViaNostr
+# A Vision for #GitViaNostr
 
-# Intro
+## Intro
 
-Git is a distributed version control system that has become the defacto standard for software development but overtime it has lost its distributed nature. Originally, Git utilized open, permissionless email for collaboration, which proved effective at scale. However, GitHub introduced a centralized pull request (PR) model that has since dominated the market.
+Git has long been the standard for version control in software development, but over time, we has lost its distributed nature. Originally, Git used open, permissionless email for collaboration, which worked well at scale. However, the rise of GitHub and its centralized pull request (PR) model has shifted the landscape.
 
-Now, we have the opportunity to restore Git's permissionless and distributed nature through Nostr!
+Now, we have the opportunity to revive Git's permissionless and distributed nature through Nostr!
 
-We have built tools to support Git collaboration via Nostr, but significant friction still exists that prevents widespread adoption. This article outlines a vision for how we can remove that friction and advance along the adoption curve.
+We’ve developed tools to facilitate Git collaboration via Nostr, but there are still significant friction that prevents widespread adoption. This article outlines a vision for how we can reduce those barriers and encourage more repositories to embrace this approach.
 
-First we will cover how far we have already come. Then we will proposed a pholosophy that should guide our next steps. Then we will talk about a vision to address specific challanges, mainly related to the role of the git server and CI / CD.
+First, we’ll review our progress so far. Then, we’ll propose a guiding philosophy for our next steps. Finally, we’ll discuss a vision to tackle specific challenges, mainly relating to the role of the Git server and CI/CD.
 
-I am the lead mantainer of [ngit](https://gitworkshop.dev/dan@gitworkshop.dev/ngit) and [gitworkshop.dev](https://gitworkshop.dev/dan@gitworkshop.dev/gitworkshop) and I've been fortunate enough to be able to work full-time on this for the last 2 years via an OpenSats grant.
+I am the lead maintainer of [ngit](https://gitworkshop.dev/dan@gitworkshop.dev/ngit) and [gitworkshop.dev](https://gitworkshop.dev/dan@gitworkshop.dev/gitworkshop), and I’ve been fortunate to work full-time on this initiative for the past two years, thanks to an OpenSats grant.
 
-## How Far We Have Come
+## How Far We’ve Come
 
-The purpose of #GitViaNostr is to liberate social discussions around code collaboration from permissioned walled gardens. At the beating heart of this collaboration is the process of how changes are proposed and applied. So, that's what we focused on first.
+The aim of #GitViaNostr is to liberate discussions around code collaboration from permissioned walled gardens. At the core of this collaboration is the process of proposing and applying changes. That's what we focused on first.
 
-As nostr shares characteristics with email, and with NIP34, we have adopted similar primitives to those used in the patches-over-email workflow. In short, due to their simplicity and the fact that they do not rely on contributors hosting anything. This approach makes participation more accessible and reliable.
+Since Nostr shares characteristics with email, and with NIP34, we’ve adopted similar primitives to those used in the patches-over-email workflow. This is because of their simplicity and that they don’t require contributors to host anything, which adds reliability and makes participation more accessible.
 
-However, the fork-branch-PR-merge workflow is the only model most developers have ever known, and changing established workflows can be challenging. To address this, and based on feedback, we developed a new workflow that strikes a balance between familiarity, user experience, and alignment with the Nostr protocol: the [branch-PR-merge](https://gitworkshop.dev/quick-start) model.
+However, the fork-branch-PR-merge workflow is the only model many developers have known, and changing established workflows can be challenging. To address this, we developed a new workflow that balances familiarity, user experience, and alignment with the Nostr protocol: the [branch-PR-merge](https://gitworkshop.dev/quick-start) model.
 
-This model is implemented by [ngit](https://gitworkshop.dev/ngit), which includes a Git plugin that allows users to engage without learning new commands. Additionally, [gitworkshop.dev](https://gitworkshop.dev) offers a GitHub-like interface for interacting with PRs and issues. We encourage you to try them out using the [quick start guide](https://gitworkshop.dev/quick-start) and share your feedback. You can also explore PRs and issues with [gitplaza](https://gitworkshop.dev/npub1useke4f9maul5nf67dj0m9sq6jcsmnjzzk4ycvldwl4qss35fvgqjdk5ks/gitplaza).
+This model is implemented in [ngit](https://gitworkshop.dev/ngit), which includes a Git plugin that allows users to engage without needing to learn new commands. Additionally, [gitworkshop.dev](https://gitworkshop.dev) offers a GitHub-like interface for interacting with PRs and issues. We encourage you to try them out using the [quick start guide](https://gitworkshop.dev/quick-start) and share your feedback. You can also explore PRs and issues with [gitplaza](https://gitworkshop.dev/npub1useke4f9maul5nf67dj0m9sq6jcsmnjzzk4ycvldwl4qss35fvgqjdk5ks/gitplaza).
 
-For those who appreciate the patches-over-email workflow, you can use that approach with Nostr through [gitstr](https://gitworkshop.dev/naddr1qqrxw6t5wd68yq3q80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsxpqqqpmejqg4waehxw309ankjapwve5kzar2v9nzucm0d50cj6us) or the `ngit send` and `ngit list` commands and explore patches with and [patch34](https://patch34.pages.dev).
+For those who prefer the patches-over-email workflow, you can still use that approach with Nostr through [gitstr](https://gitworkshop.dev/naddr1qqrxw6t5wd68yq3q80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsxpqqqpmejqg4waehxw309ankjapwve5kzar2v9nzucm0d50cj6us) or the `ngit send` and `ngit list` commands, and explore patches with [patch34](https://patch34.pages.dev).
 
-[TODO: add segway:]
-The tools to support the core collaboraiton challenge are now out there. still significant friction that prevents adoption.
-[insert adoption curve diagram - at the innovators stage]
+The tools are now available to support the core collaboration challenge, but we are still at the beginning of the adoption curve.
 
-before we jump into that lets briefly talk pholopshy.
+Before we dive into the challenges—such as why the Git server setup can be jarring and the possibilities surrounding CI/CD—let’s take a moment to reflect on how we should approach the challenges ahead of us.
 
-# Pholosophy
+## Philosophy
 
-Before we dive into specific friction points lets discuss how we should approach things.
+Here are some foundational principles I shared a few years ago:
 
-first, some underlying principles that I that I first published a few years ago:
+- Let Git be Git
+- Let Nostr be Nostr
+- Learn from the successes of others
 
-- let git be git
-- let nostr be nostr
-- learn from success of others
+I’d like to add one more:
 
-but I'd like to add an extra one:
+- Embrace anarchy and resist monolithic development.
 
-- lean into anarchy and resist monolthic development
+## Micro Clients FTW
 
-## Micro clients FTW
+Nostr celebrates simplicity, and we should strive to maintain that. Monolithic developments often lead to unnecessary complexity. Projects like gitworkshop.dev, which aim to cover various aspects of the code collaboration experience, should not stifle innovation.
 
-Nostr is a cerebration of simplicity. lets not move away for that. monolthic developements trend towards complexity.
-Ambitious projects like gitworkshop.dev, which seeks to cover broad aspects of the code collaboration experience, shouldn't stiffle great ideas and innovation.
-We have seen just yesterday with the launch of following.space that vibe-coded micro clients can move the needle. They can be useful in their own right, shape the ecosystem and get features implemented in big and widely used clients.
+Just yesterday, the launch of following.space demonstrated how vibe-coded micro clients can make a significant impact. They can be valuable on their own, shape the ecosystem, and help push large and widely used clients to implement features and ideas.
 
-The primatives in nip34 are simple and if there are any barriers to prevent the ability to vibe-code a #GitViaNostr app in an afternoon, we should get rid of them.
+The primitives in NIP34 are straightforward, and if there are any barriers preventing the vibe-coding of a #GitViaNostr app in an afternoon, we should work to eliminate them.
 
-Micro clients should lead the way and explore new workflows, experiences, models of thinking.
+Micro clients should lead the way and explore new workflows, experiences, and models of thinking.
 
-An example of a new client pushing the needle related to code collaboration is kanbanstr.com. Its way more than a vibe-coded app and provides excellent project management features that work with great with software projects and support nip34 primatives like Issues.
+Take kanbanstr.com. It provides excellent project management and organization features that work seamlessly with NIP34 primitives.
 
-The landscape of tools surounding code collaboration is board and there is lots of opporunities to innovate. Here are just a few:
+From kanban to code snippets, from CI/CD runners to SatShoot—may a thousand flowers bloom, and a thousand more after them.
 
-- code
-- proposed changes
-- PR Reviews
-- Issues
-- Discussion
-- CI / CD
-- project management
-- bounties and freelancing
-- code snippets
-- project discovery
-
-may 1000 flowers bloom and 1000 more after them.
-
-# friction and challenges
+# Friction and Challenges
 
 ## The Git Server
 
-In #GitViaNostr, maintainers' branches (e.g., `master`) are hosted on a Git server. Here’s why:
+In #GitViaNostr, maintainers' branches (e.g., `master`) are hosted on a Git server. Here’s why this approach is beneficial:
 
-- **Follows the original Git vision** and the "let git be git" philosophy.
+- **Follows the original Git vision** and the "let Git be Git" philosophy.
 - **Super efficient**, battle-tested, and compatible with all the ways people use Git (e.g., LFS, shallow cloning).
 - **Maintains compatibility** with related systems without the need for plugins (e.g., for build and deployment).
 - **Only repository maintainers need write access.**
 
-In the original Git model, all users would need to add the Git server as a 'git remote.' However, with ngit, the Git server is hidden behind a Nostr remote. This enables:
+In the original Git model, all users would need to add the Git server as a 'git remote.' However, with ngit, the Git server is hidden behind a Nostr remote, which enables:
 
 - **Hiding complexity** from contributors and users, so that only maintainers need to know about the Git server component to start using #GitViaNostr.
-- **Maintainers can swap Git servers easily** by updating their announcement event, and contributors/users using ngit will automatically switch to the new one.
+- **Maintainers can easily swap Git servers** by updating their announcement event, allowing contributors/users using ngit to automatically switch to the new one.
 
-### Git Server Challenges
+### Challenges with the Git Server
 
-The need for a Git server presents several challenges:
+While the Git server model has its advantages, it also presents several challenges:
 
-- **Initial Setup**: When creating a new repository, the maintainer must select a Git server, which can be a jarring experience. Nearly all options, whether hosted or self-hosted, come bloated with social collaboration features tied to a centralized PR model, which are often difficult or impossible to turn off.
-- **Manual Configuration**: New repositories require manual configuration, including adding new maintainers through a browser UI. This process can be cumbersome and time-consuming.
+1. **Initial Setup**: When creating a new repository, maintainers must select a Git server, which can be a jarring experience. Most options come with bloated social collaboration features tied to a centralized PR model, often difficult or impossible to disable.
+2. **Manual Configuration**: New repositories require manual configuration, including adding new maintainers through a browser UI, which can be cumbersome and time-consuming.
 
-- **User Onboarding**: Many Git servers require email sign-up or KYC (Know Your Customer) processes, which can be a significant turn-off for new users exploring a decentralized and permissionless alternative to GitHub.
+3. **User Onboarding**: Many Git servers require email sign-up or KYC (Know Your Customer) processes, which can be a significant turn-off for new users exploring a decentralized and permissionless alternative to GitHub.
 
-Once the initial setup is complete, the system works well if a reliable Git server is chosen. Unfortunately, that's a big "if," as we have become accustomed to the excellent uptime and reliability of GitHub. Even professionally run alternatives like Codeberg experience hours of downtime, which can be frustrating when CI/CD and deployment processes come to a halt. This problem is exacerbated when self-hosting.
+Once the initial setup is complete, the system works well if a reliable Git server is chosen. However, this is a significant "if," as we have become accustomed to the excellent uptime and reliability of GitHub. Even professionally run alternatives like Codeberg can experience downtime, which is frustrating when CI/CD and deployment processes are affected. This problem is exacerbated when self-hosting.
 
-Currently, nearly all repositories on Nostr use GitHub as the Git server. While maintainers can change servers at any point without disrupting their contributors, this reliance on a centralized service is not exactly the decentralized dream we aspire to achieve.
+Currently, most repositories on Nostr rely on GitHub as the Git server. While maintainers can change servers without disrupting their contributors, this reliance on a centralized service is not the decentralized dream we aspire to achieve.
 
-### Git Server Vision
+### Vision for the Git Server
 
 The goal is to transform the Git server from a single point of truth and failure into a component similar to a Nostr relay.
 
-#### Existing ngit Functionality
+#### Functionality Already in ngit to Support This
 
-1. **State on Nostr**: Store the state of branches and tags in a Nostr event, removing reliance on a single server. This validates that the data received has been signed by the maintainer, ensuring the correct update has been sent and significantly reducing the trust requirement.
+1. **State on Nostr**: Store the state of branches and tags in a Nostr event, removing reliance on a single server. This validates that the data received has been signed by the maintainer, significantly reducing the trust requirement.
 
-2. **Proxy to Multiple Git Servers**: Proxy requests to all servers listed in the announcement event. This adds redundancy and eliminates the need for any one server to match GitHub's reliability and uptime.
+2. **Proxy to Multiple Git Servers**: Proxy requests to all servers listed in the announcement event, adding redundancy and eliminating the need for any one server to match GitHub's reliability.
 
-#### Nostr Git Server Implementation Requirements
+#### Implementation Requirements
 
 To achieve this vision, the Nostr Git server implementation should:
 
@@ -140,15 +123,14 @@ This could make onboarding #GitViaNostr repositories as easy as entering a name 
 
 ## Git Client in the Browser
 
-There are a range of tasks that are currently performed on a Git server web UI:
+Currently, many tasks are performed on a Git server web UI, such as:
 
-- Browse code, commits, branches, tags, etc.
-- Create and display permalinks to specific lines in commits.
-- Merge PRs.
-- Make small commits and PRs on-the-fly.
+- Browsing code, commits, branches, tags, etc.
+- Creating and displaying permalinks to specific lines in commits.
+- Merging PRs.
+- Making small commits and PRs on-the-fly.
 
 Just as nobody goes to the web UI of a relay (e.g., [nos.lol](https://nos.lol)) to interact with notes, nobody should need to go to a Git server to interact with repositories. We use the Nostr protocol to interact with Nostr relays, and we should use the Git protocol to interact with Git servers. This situation has evolved due to the centralization of Git servers. Instead of being restricted to the view and experience designed by the server operator, users should be able to choose the user experience that works best for them from a range of clients.
-
 To facilitate this, we need a library that lowers the barrier to entry for creating these experiences. This library should not require a full clone of every repository and should not depend on proprietary APIs. As a starting point, I propose wrapping the [WASM-compiled gitlib2](https://github.com/petersalomonsen/wasm-git) library for the web and creating useful functions, such as showing a file, which utilizes clever flags to minimize bandwidth usage (e.g., shallow clone, noblob, etc.).
 
 This approach would not only enhance clients like gitworkshop.dev but also bring forth a vision where Git servers simply run the Git protocol, making vibe coding Git experiences even better.
@@ -215,21 +197,23 @@ there is a vercel cli that can be easily [called in CI / CD jobs to kick of depl
 
 I would be remiss not to mention the large patch problem. Some patches are too big to fit into Nostr events. Blossom is perfect for this, as it allows these larger patches to be included in a blossom file and referenced in a new patch kind.
 
-Beyond this, there are many more opportunities to enhance #GitViaNostr. For instance, we can improve browsing, discovery, social and notifications. Receiving notifications on daily driver Nostr apps is one of the killer features of Nostr. However, we need to ensure that we can review Git-related notifications to avoid missing anything important.
+## Enhancing the #GitViaNostr Experience
 
-We need tools that serve our curiosity. Tools that allow us to discover and follow projects, see discussions that might interest us, and stay updated on developments related to our work.
+Beyond the large patch issue, there are numerous opportunities to enhance the #GitViaNostr ecosystem. We can focus on improving browsing, discovery, social and notifications. Receiving notifications on daily driver Nostr apps is one of the killer features of Nostr. However, we must ensure that Git-related notifications are easily reviewable, so we don’t miss any critical updates.
 
-And we haven't even touched on the importance of search capabilities or discussed tools to assist with migrations.
+We need to develop tools that cater to our curiosity—tools that enable us to discover and follow projects, engage in discussions that pique our interest, and stay informed about developments relevant to our work.
 
-The design space is huge. Its a lot of fun, so please join in!
+Additionally, we should not overlook the importance of robust search capabilities and tools that facilitate migrations.
 
 # Concluding Thoughts
 
-I would love your honest feedback on this vision and any ideas you might have. Your insights are invaluable as we work together to shape the future of #GitViaNostr.
+The design space is vast. Its an exciting time to be working on freedom tech. I encourage everyone to contribute their ideas and creativity and get vibe-coding!
+
+I welcome your honest feedback on this vision and any suggestions you might have. Your insights are invaluable as we collaborate to shape the future of #GitViaNostr. Onward.
 
 ## Contributions
 
-I'll close with a list of people who have made code contributions related to #GitViaNostr this year:
+To conclude, I want to acknowledge the individuals who have made code contributions related to #GitViaNostr this year:
 
 Fiatjaf ([gitstr](https://gitworkshop.dev/naddr1qqrxw6t5wd68yq3q80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsxpqqqpmejqg4waehxw309ankjapwve5kzar2v9nzucm0d50cj6us), [song](https://gitworkshop.dev/naddr1qvzqqqrhnypzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqy2hwumn8ghj7emfwshxv6tpw34xze3wvdhk6qqywdhkuecg7qylu), [patch34](https://patch34.pages.dev)), dluvian ([gitplaza](https://gitworkshop.dev/npub1useke4f9maul5nf67dj0m9sq6jcsmnjzzk4ycvldwl4qss35fvgqjdk5ks/gitplaza/prs))
 
@@ -248,4 +232,4 @@ nostr:npub16ux4qzg4qjue95vr3q327fzata4n594c9kgh4jmeyn80v8k54nhqg6lra7, nostr:npu
 
 and for their nostr:npub1c03rad0r6q833vh57kyd3ndu2jry30nkr0wepqfpsm05vq7he25slryrnw, nostr:npub1qqqqqq2stely3ynsgm5mh2nj3v0nk5gjyl3zqrzh34hxhvx806usxmln03 and nostr:npub1l5sga6xg72phsz5422ykujprejwud075ggrr3z2hwyrfgr7eylqstegx9z for their testing, feedback, ideas and encouragement.
 
-Thank you for your support and collaboration! Let me know if I've missed anyone.
+Thank you for your support and collaboration! Let me know if I've missed you or anyone else.
