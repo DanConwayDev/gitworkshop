@@ -2,16 +2,15 @@ a vision for #GitViaNostr
 
 # intro
 
-[the need - git is great but become centralised]
-[git used open, permissionless email for collaboraiton and it worked at scale]
-[github created the centralising PR model which took over the market]
-[we can make git decentralised again using nostr!]
+Git is a fanastic distributed version control system but has become centralised. Originally git used open, permissionless email for collaboraiton and it worked at scale. Github created the centralising PR model which took over the market. We can make git permissionless and distributed again with nostr!
+
+We have built tools support git collaboration via nostr but there is significant friction preventing adoption. This article outlines a vision for how we remove that friction and move along the adoption curve.
 
 # The Key Challanage is Social
 
-[the key challenge to make git decentralised is the social discussion around PRs and Issues.]
+[the key challenge to make git decentralised is the how to propose and discuss changes - PRs, Issues and the surounding discussion]
 [I believe that with nostr and nip34 we have the right protocol to bring make the dream a reality]
-[over the last 2 year, we have built the tools around this social challenge and they are ready to use today]
+[over the last 2 year, we have built the tools around this challenge and they are ready to use today]
 [but we must be realist that there is some significant friction to onboard new repositories and there is lots of work to do to remove this.]
 [this is where we are on the adoption curve: [insert adoption curve diagram showing that we are at innovator stage]]
 
@@ -32,10 +31,10 @@ but I'd like to add an extra one:
 ## Micro clients FTW
 
 Nostr is a cerebration of simplicity. lets not move away for that. monolthic developements trend towards complexity.
-Ambitious projects like gitworkshop.dev, which seek to cover broad aspects of the code collaboration experience, shouldn't stiffle great ideas and innovation.
-The primatives in nip34 are simple and we need to make sure its possible to vibecode a #GitViaNostr microapp in an afternoon.
+Ambitious projects like gitworkshop.dev, which seeks to cover broad aspects of the code collaboration experience, shouldn't stiffle great ideas and innovation.
+The primatives in nip34 are simple and we need to make it easy to vibe-code a #GitViaNostr app in an afternoon.
 Micro clients should lead the way and explore new workflows, experiences, models of thinking.
-The landscape of tools surounding code collaboration is much boarder and there is lots of opporunities to innovate.
+The landscape of tools surounding code collaboration is board and there is lots of opporunities to innovate.
 
 [insert diaggram
 
@@ -43,6 +42,7 @@ The landscape of tools surounding code collaboration is much boarder and there i
 - proposed changes
 - Issues
 - Discussion
+- Review
 - CI / CD
 - project management
 - bounties and freelancing
@@ -54,15 +54,15 @@ may 1000 flowers bloom and 1000 more after them.
 
 # PR and Pactches
 
-[TODO: this section feels like it doesnt fit here?]
-
-[nostr shares charactstics with email so with nip34 we used the same primatives as patches-over-email. heres why [link]. TLDR; really simple, contributors don't have to host anything.]
+[the central purpose of #GitViaNostr is to librate social discussion around code collaboration from permissioned big tech walled gardens]
+[to date most of the effort has been focused on this challenge]
+[nostr shares charactstics with email so with nip34 we used the same primatives as patches-over-email. TLDR; really simple, contributors don't have to host anything.]
+[if you know and love the patches-over-email workflow then you can use that workflow with nostr using [gitstr](https://gitworkshop.dev/naddr1qqrxw6t5wd68yq3q80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsxpqqqpmejqg4waehxw309ankjapwve5kzar2v9nzucm0d50cj6us) or `ngit send` / `ngit list`] commands.
 [but fork-branch-PR-merge is the only workflow most developers have ever known]
 [and its really hard to change peoples workflow]
-[so ngit presents it to users with a workflow similar to what they know: branch-PR-merge. [more about why branch-PR-merge.]]
-[I beleive this provides the right balance between familiarity, good UX and alignment with the protocol.]
-[but the market will decide, and maybe a different model using the same nip34 primatives, or different, will emerge]
-[we must be open to innovation]
+[so ngit and gitworkshop.dev presents it to users with a workflow similar to what they know: [branch-PR-merge](https://gitworkshop.dev/quick-start)]
+[I beleive this strikes the right balance between familiarity, good UX and alignment with the protocol. [try it out](https://gitworkshop.dev/quick-start) and see what you think.]
+[With ngit and gitworkshop.dev we now have good tooling for this and, whilst we should be open to innovation in this area, I believe the barrier to adoption now lies elsewhere]
 
 # friction and challenges
 
@@ -150,9 +150,7 @@ It needs to be so easy that someone could vibe code a git experience in an after
 
 nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6 created [song](https://gitworkshop.dev/fiatjaf.com/song) with a complementary vision. A self-hosted, nostr-permissioned git server with a relay baked in.
 
-We collaborated on the nostr-permissioning approach now reflected in nip34 so in principle it should be compatible with ngit.
-
-Its a WIP and as of April 2025, cloning doesnt work with ngit, possibly because it doesn't implement [git smart http protocol](https://git-scm.com/docs/http-protocol), which is potentially needed by git plugins like ngit. Also, the relay doesn't accept patches, issues, discussion, etc.
+We collaborated on the nostr-permissioning approach now reflected in nip34 so in principle it should be compatible with ngit. Its currently a WIP.
 
 # CI/CD problem
 
@@ -211,6 +209,13 @@ there is a vercel cli that can be easily [called in CI / CD jobs to kick of depl
 
 # browsing, discovery, social and notifications
 
+recieving notifications on daily driver nostr apps is one of the killer features of nostr.
+but review git related notifications to make sure we havn't missed anything important - we need that.
+
+we need tools to serve our curiosity. Discover and follow projects, see discussions that we might interested in, see updates that might relate to what we are working on.
+
+And we haven't even got to Search
+
 # large patches via blossom
 
 Finally, some patches are too big to fit in a nostr events. blossom is perfect for this. These should be included in a blossom file and referenced in a new patch kind.
@@ -250,3 +255,5 @@ Let me know if I've missed any active projects.
 dont include this: [you can also use it with the patches-over-email workflow this using gitstr or with ngit's send / list commands, although the tooling eg (managing read / unread) isn't built out]
 [you can use it today]
 vibe-coded micro clients for specific tasks like PR review., CI / CD management
+
+song - Its a WIP and as of April 2025, cloning doesnt work with ngit, possibly because it doesn't implement [git smart http protocol](https://git-scm.com/docs/http-protocol), which is potentially needed by git plugins like ngit. Also, the relay doesn't accept patches, issues, discussion, etc.
