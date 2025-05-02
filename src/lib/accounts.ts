@@ -2,8 +2,13 @@ import { AccountManager, type SerializedAccount } from 'applesauce-accounts';
 import store from './store.svelte';
 import type { AccountSummary } from './types';
 import { NostrConnectAccount, registerCommonAccountTypes } from 'applesauce-accounts/accounts';
-import { NostrConnectSigner, type NostrConnectConnectionMethods } from 'applesauce-signers';
+import {
+	NostrConnectSigner,
+	type NostrPublishMethod,
+	type NostrSubscriptionMethod
+} from 'applesauce-signers';
 import { SimplePool } from 'nostr-tools';
+import { Observable, Subject } from 'rxjs';
 
 const manager = new AccountManager();
 
@@ -22,21 +27,22 @@ const accountJSONtoAccountSummary = (a: SerializedAccount<unknown, unknown>): Ac
 
 export const nostr_connect_pools = new SimplePool();
 
-const nostr_connect_methods: NostrConnectConnectionMethods = {
-	async onSubOpen(filters, relays, onEvent) {
-		nostr_connect_pools.subscribeMany(relays, filters, {
+export const subscriptionMethod: NostrSubscriptionMethod = (relays, filters) => {
+	return new Observable((obs) => {
+		const subcloser = nostr_connect_pools.subscribeMany(relays, filters, {
 			onevent: (event) => {
-				onEvent(event);
+				obs.next(event);
 			}
 		});
-	},
-	async onSubClose() {},
-	async onPublishEvent(event, relays) {
-		nostr_connect_pools.publish(relays, event);
-	}
+		return () => subcloser.close();
+	});
 };
 
-NostrConnectAccount.createConnectionMethods = () => nostr_connect_methods;
+NostrConnectSigner.subscriptionMethod = subscriptionMethod;
+
+NostrConnectSigner.publishMethod = (relays, event) => {
+	nostr_connect_pools.publish(relays, event);
+};
 
 // load accounts from storage
 manager.fromJSON(JSON.parse(localStorage.getItem('accounts') || '[]'));

@@ -14,10 +14,9 @@
 	import CopyField from './CopyField.svelte';
 	import { nip19 } from 'nostr-tools';
 	import { isWebSocketUrl, type WebSocketUrl } from '$lib/types';
-	import accounts_manager, { nostr_connect_pools } from '$lib/accounts';
+	import accounts_manager from '$lib/accounts';
 	import { isHexKey } from 'applesauce-core/helpers';
 	import { NostrConnectAccount } from 'applesauce-accounts/accounts/nostr-connect-account';
-	import { SimplePool } from 'nostr-tools/pool';
 	let { done }: { done: () => void } = $props();
 
 	let nip07_plugin: boolean | undefined = $state('nostr' in window);
@@ -42,9 +41,7 @@
 	let nostr_connect_relay_invalid = $derived(
 		nostr_connect_relay_urls.length > 0 && getRelayUrls().length === 0
 	);
-	let nostr_connect_simple_signer = new SimpleSigner();
 	let nostr_connect_url = $state('');
-	let bunker_url_invalid = $state(false);
 
 	let nostr_connect_signer: NostrConnectSigner | undefined = undefined;
 
@@ -55,21 +52,7 @@
 		}
 		try {
 			nostr_connect_signer?.close();
-			// pool?.close(Array.from(pool.listConnectionStatus().keys()));
-			nostr_connect_signer = new NostrConnectSigner({
-				async onSubOpen(filters, relays, onEvent) {
-					nostr_connect_pools?.subscribeMany(relays, filters, {
-						onevent: (event) => {
-							onEvent(event);
-						}
-					});
-				},
-				async onSubClose() {},
-				async onPublishEvent(event, relays) {
-					nostr_connect_pools?.publish(relays, event);
-				},
-				relays
-			});
+			nostr_connect_signer = new NostrConnectSigner({ relays });
 			nostr_connect_url = nostr_connect_signer.getNostrConnectURI({
 				name: 'gitworkshop.dev'
 				// image: 'https://gitworkshop.dev/icons/icon.svg'

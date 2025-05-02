@@ -103,24 +103,18 @@
 	let masked = $state(false);
 
 	function lockedTokenStream(pubkey: PubKeyString): Query<NostrEvent> {
-		return {
-			key: pubkey,
-			run: (events) => {
-				return events
-					.filters(createWalletFilter(pubkey))
-					.pipe(filter((e) => isTokenContentLocked(e)));
-			}
+		return (events) => {
+			return events
+				.filters(createWalletFilter(pubkey))
+				.pipe(filter((e) => isTokenContentLocked(e)));
 		};
 	}
 
 	function lockedHistoryStream(pubkey: PubKeyString): Query<NostrEvent> {
-		return {
-			key: pubkey,
-			run: (events) => {
-				return events
-					.filters(createWalletHistoryFilter(pubkey))
-					.pipe(filter((e) => isHistoryContentLocked(e)));
-			}
+		return (events) => {
+			return events
+				.filters(createWalletHistoryFilter(pubkey))
+				.pipe(filter((e) => isHistoryContentLocked(e)));
 		};
 	}
 
@@ -160,15 +154,11 @@
 		if (!active_account) {
 			return;
 		}
-		let hub = new ActionHub(
-			memory_db,
-			new EventFactory({ signer: active_account }),
-			async (label, event) => {
-				create_wallet_signed = true;
-				query_centre.publishEvent(event);
-				create_wallet_signed = true;
-			}
-		);
+		let hub = new ActionHub(memory_db, new EventFactory({ signer: active_account }), (event) => {
+			create_wallet_signed = true;
+			query_centre.publishEvent(event);
+			create_wallet_signed = true;
+		});
 		try {
 			create_wallet_submitting = true;
 			await hub.run(CreateWallet, ['https://testnut.cashu.space'], generateSecretKey());
@@ -287,14 +277,10 @@
 				}
 			}, 2000);
 
-			let hub = new ActionHub(
-				memory_db,
-				new EventFactory({ signer: active_account }),
-				async (label, event) => {
-					receive_signed = true;
-					query_centre.publishEvent(event);
-				}
-			);
+			let hub = new ActionHub(memory_db, new EventFactory({ signer: active_account }), (event) => {
+				receive_signed = true;
+				query_centre.publishEvent(event);
+			});
 			let fee =
 				old_token.proofs.reduce((a, c) => a + c.amount, 0) -
 				token.proofs.reduce((a, c) => a + c.amount, 0);
