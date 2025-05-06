@@ -1,6 +1,6 @@
 <script lang="ts">
 	export let size: 'sm' | 'md' = 'md';
-	const version = 'v1.6.1';
+	const version = 'v1.6.2';
 </script>
 
 <div class="prose max-w-none" class:text-sm={size === 'sm'}>
@@ -19,10 +19,8 @@
 					</li>
 					<li>
 						clone
-						<a
-							href="https://github.com/DanConwayDev/ngit-cli"
-							target="_blank"
-							class="link-primary">this git url</a
+						<a href="https://github.com/DanConwayDev/ngit-cli" target="_blank" class="link-primary"
+							>this git url</a
 						>
 					</li>
 					<li>checkout the latest release tag ({version})</li>
