@@ -94,7 +94,7 @@
 					<div>
 						<h5 class="mb-2 mt-0">Ubuntu x64</h5>
 						<div class="flex flex-wrap gap-2">
-							{#each ['latest', '24.04', '22.04', '20.04'] as osversion}
+							{#each ['latest', '24.04', '22.04'] as osversion}
 								<a
 									href="https://github.com/DanConwayDev/ngit-cli/releases/download/{version}/ngit-{version}-ubuntu-{osversion}.tar.gz"
 									class="btn btn-neutral btn-sm"
