@@ -1,6 +1,6 @@
 <script lang="ts">
 	export let size: 'sm' | 'md' = 'md';
-	const version = 'v1.6.2';
+	const version = 'v1.6.3';
 </script>
 
 <div class="prose max-w-none" class:text-sm={size === 'sm'}>
