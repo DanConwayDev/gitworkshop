@@ -231,19 +231,23 @@ class SeenOnTracker {
 	 * returns true if its not been seen and isn't an old version of a replaceable that has been seen, otherwise false
 	 */
 	seen(event: NostrEvent): boolean {
-		if (isReplaceable(event.kind)) {
-			const id = getEventUID(event);
-			const created_at = this.seen_replaceable_events.get(id);
-			if (created_at && created_at > event.created_at) {
+		try {
+			if (isReplaceable(event.kind)) {
+				const id = getEventUID(event);
+				const created_at = this.seen_replaceable_events.get(id);
+				if (created_at && created_at > event.created_at) {
+					return true;
+				}
+				this.seen_replaceable_events.set(id, event.created_at);
+			} else if (this.seen_events.has(event.id)) {
 				return true;
+			} else {
+				this.seen_events.add(event.id);
 			}
-			this.seen_replaceable_events.set(id, event.created_at);
-		} else if (this.seen_events.has(event.id)) {
-			return true;
-		} else {
-			this.seen_events.add(event.id);
+			return false;
+		} catch {
+			return true; // event may be incorrectly formatted which may cause issues elsewhere
 		}
-		return false;
 	}
 }
 
