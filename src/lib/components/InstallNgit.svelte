@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { NGIT_VERSION } from '$lib/constants';
+
 	export let size: 'sm' | 'md' = 'md';
-	const version = 'v1.6.3';
+	let version = NGIT_VERSION;
 </script>
 
 <div class="prose max-w-none" class:text-sm={size === 'sm'}>
