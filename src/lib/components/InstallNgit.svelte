@@ -23,35 +23,35 @@
 		const allPlatforms = [
 			{
 				name: 'macOS (universal)',
-				compatibility: '10.13 High Sierra and newer. Intel + Apple Silicon.',
+				compatibility: 'macOS 10.13 High Sierra (2017) or newer. Intel + Apple Silicon.',
 				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-universal-apple-darwin.tar.gz`,
 				osIdentifiers: [/Mac OS X/, /Macintosh/, /Darwin/]
 			},
 			{
-				name: 'Linux (x86-64)',
+				name: 'Linux (x86-64, glibc)',
 				compatibility:
-					'Ubuntu 14.04+, Debian 8+, RHEL/CentOS 7+, Fedora 21+, etc. Works with distro where glibc is ≥ 2.17. Not Alpine.',
+					'Ubuntu 14.04+, Debian 8+, RHEL/CentOS 7+, Fedora 21+, openSUSE, Arch, etc. Any x86-64 distro with glibc ≥ 2.17. (Not Alpine)',
 				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-x86_64-unknown-linux-gnu.2.17.tar.gz`,
 				osIdentifiers: [/Linux(?!.*aarch64)/i, /X11(?!.*aarch64)/i]
 			},
 			{
-				name: 'Linux (aarch64)',
+				name: 'Linux (aarch64, glibc)',
 				compatibility:
-					'Ubuntu 20.04+ aarch64, AWS Graviton, Raspberry Pi OS 64-bit, etc. Works with distro where glibc is ≥ 2.17.',
+					'Ubuntu 20.04+, Debian 11+, Amazon Linux 2, AWS Graviton, Raspberry Pi OS 64-bit, etc. Any aarch64/arm64 distro with glibc ≥ 2.17.',
 				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-aarch64-unknown-linux-gnu.2.17.tar.gz`,
 				osIdentifiers: [/Linux.*aarch64/i, /Linux.*arm64/i]
 			},
 			{
-				name: 'Linux (musl)',
+				name: 'Linux (musl, static)',
 				compatibility:
-					'Alpine, Distroless, scratch containers, and very old glibc systems. Fully static bundled dependencies.',
+					'Alpine 3.12+, Distroless and scratch containers, and very old glibc systems. Fully static; no external libraries. Still needs a CA-certificate bundle (apk add ca-certificates on Alpine).',
 				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-x86_64-unknown-linux-musl.tar.gz`,
 				osIdentifiers: [/Alpine/i]
 			},
 			{
 				name: 'Windows (x64)',
 				compatibility:
-					'Supports Windows 7 SP1, Windows Server 2008 R2 and up (including 2012/2016/2019/2022 and Windows 11). Does not run on 32-bit Windows, XP or Vista.',
+					'Windows 7 SP1 / Server 2008 R2 and newer, including Windows 11. Requires the “Universal C Runtime” which is already present on Windows 10+ or via the VC++ 2015-2022 redistributable on older systems. No other DLLs needed.',
 				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-x86_64-pc-windows-msvc.zip`,
 				osIdentifiers: [/Windows NT/i, /Win64/i]
 			}
