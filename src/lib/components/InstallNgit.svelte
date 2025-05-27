@@ -2,56 +2,85 @@
 	import { onMount } from 'svelte';
 	import { NGIT_VERSION } from '$lib/constants';
 
-	let {
-		size = 'md',
-		download = null
-	}: { size?: 'sm' | 'md'; download?: { label: string; href: string } | null } = $props();
+	let { size = 'md' }: { size?: 'sm' | 'md' } = $props();
 
 	let show_more = $state(false);
-	let show_linux_compatibility_notes = $state(false);
+	interface Platform {
+		name: string;
+		compatibility: string;
+		url: string;
+		primary?: boolean;
+	}
+	let platforms = $state<Array<Platform>>([]);
+	let download = $state<Platform | null>(null);
+
+	let detectedPlatform = $state<string | null>(null);
 
 	const version = NGIT_VERSION;
 
 	onMount(() => {
-		const ua = navigator.userAgent;
-
-		// Map UA → release asset
-		const rules: Array<{
-			test: RegExp;
-			label: string;
-			build: (v: string) => string;
-		}> = [
+		// Define all available platforms
+		const allPlatforms = [
 			{
-				test: /Windows/i,
-				label: 'Windows (64-bit)',
-				build: (v) =>
-					`https://github.com/DanConwayDev/ngit-cli/releases/download/${v}/ngit-${v}-windows-latest.zip`
+				name: 'macOS (universal)',
+				compatibility: '10.13 High Sierra and newer. Intel + Apple Silicon.',
+				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-universal-apple-darwin.tar.gz`,
+				osIdentifiers: [/Mac OS X/, /Macintosh/, /Darwin/]
 			},
 			{
-				test: /(Macintosh|Mac OS X|Mac OS)/i,
-				label: 'macOS',
-				build: (v) =>
-					`https://github.com/DanConwayDev/ngit-cli/releases/download/${v}/ngit-${v}-macos-latest.tar.gz`
+				name: 'Linux (x86-64)',
+				compatibility:
+					'Ubuntu 14.04+, Debian 8+, RHEL/CentOS 7+, Fedora 21+, etc. Works with distro where glibc is ≥ 2.17. Not Alpine.',
+				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-x86_64-unknown-linux-gnu.2.17.tar.gz`,
+				osIdentifiers: [/Linux(?!.*aarch64)/i, /X11(?!.*aarch64)/i]
 			},
 			{
-				test: /Linux.*(aarch64|arm64)/i,
-				label: 'Linux (ARM64)',
-				build: (v) =>
-					`https://github.com/DanConwayDev/ngit-cli/releases/download/${v}/ngit-${v}-ubuntu-24.04-arm.tar.gz`
+				name: 'Linux (aarch64)',
+				compatibility:
+					'Ubuntu 20.04+ aarch64, AWS Graviton, Raspberry Pi OS 64-bit, etc. Works with distro where glibc is ≥ 2.17.',
+				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-aarch64-unknown-linux-gnu.2.17.tar.gz`,
+				osIdentifiers: [/Linux.*aarch64/i, /Linux.*arm64/i]
 			},
 			{
-				test: /Linux/i,
-				label: 'Linux (x86_64)',
-				build: (v) =>
-					`https://github.com/DanConwayDev/ngit-cli/releases/download/${v}/ngit-${v}-ubuntu-latest.tar.gz`
+				name: 'Linux (musl)',
+				compatibility:
+					'Alpine, Distroless, scratch containers, and very old glibc systems. Fully static bundled dependencies.',
+				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-x86_64-unknown-linux-musl.tar.gz`,
+				osIdentifiers: [/Alpine/i]
+			},
+			{
+				name: 'Windows (x64)',
+				compatibility:
+					'Supports Windows 7 SP1, Windows Server 2008 R2 and up (including 2012/2016/2019/2022 and Windows 11). Does not run on 32-bit Windows, XP or Vista.',
+				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-x86_64-pc-windows-msvc.zip`,
+				osIdentifiers: [/Windows NT/i, /Win64/i]
 			}
 		];
 
-		for (const rule of rules) {
-			if (rule.test.test(ua)) {
-				download = { label: rule.label, href: rule.build(version) };
-				break;
+		const ua = navigator.userAgent;
+
+		// Convert to our final array format
+		platforms = allPlatforms.map((platform) => ({
+			name: platform.name,
+			compatibility: platform.compatibility,
+			url: platform.url
+		}));
+
+		// Detect user's platform
+		for (const platform of allPlatforms) {
+			for (const pattern of platform.osIdentifiers) {
+				if (pattern.test(ua)) {
+					detectedPlatform = platform.name;
+
+					// Set the smart download
+					download = platform;
+
+					platforms = platforms.map((p) => ({ ...p, primary: p.name == platform.name }));
+
+					break;
+				}
 			}
+			if (detectedPlatform) break;
 		}
 	});
 </script>
@@ -59,56 +88,39 @@
 <div class="prose max-w-none" class:text-sm={size === 'sm'}>
 	{#if download}
 		<p>Download, extract binaries and add them to PATH</p>
-		<!-- Primary “smart” download -->
-		<div class="mb-6 flex flex-wrap items-center gap-4">
-			<a href={download.href} class="btn btn-primary" class:btn-sm={size === 'sm'}>
-				Download for {download.label}
+		<div class="mb-6 flex flex-wrap items-center gap-4 sm:flex-nowrap">
+			<a href={download.url} class="btn btn-primary" class:btn-sm={size === 'sm'}>
+				Download for {download.name}
 			</a>
 			<small class="opacity-70">{version}</small>
-			<button
-				class="link"
-				onclick={() => {
-					show_more = !show_more;
-				}}
-				>{#if show_more}less{:else}more{/if} options</button
-			>
-			{#if download.label.includes('Linux')}
-				<button
-					class="link"
-					onclick={() => {
-						show_linux_compatibility_notes = !show_linux_compatibility_notes;
-					}}>compatibility notes</button
-				>{/if}
-		</div>
-		{#if show_linux_compatibility_notes}<div class="card card-body my-0 bg-base-300">
-				<h3 class="mt-0">Linux compatibility notes</h3>
-				<ul class="mb-0">
-					<li>Requires glibc ≥ 2.31 (Ubuntu 20.04+, Debian 11, Fedora 33+, Arch, etc.)</li>
-					<li>
-						OpenSSL ≥ 1.1 is dynamically linked. On Alpine or very old distributions install <code
-							>openssl1.1-compat</code
-						> or use the musl build.
-					</li>
-					<li>
-						Red Hat/CentOS 7 (glibc 2.17) and Debian 10 will fail — use the <em>static-musl</em> build
-						or build from source.
-					</li>
-				</ul>
-				<div class="flex flex-wrap items-center gap-4">
-					<!-- <a href={download.href} class="disable btn btn-primary" class:btn-sm={size === 'sm'}>
-						Download for Linux (static-musl)
-					</a> -->
-					<button class="btn btn-disabled btn-primary" class:btn-sm={size === 'sm'}>
-						Download for Linux (static-musl)
-					</button>
-					<small class="opacity-70">{version} with bundled dependancies (coming soon)</small>
-				</div>
+			<div class="opacity-70">
+				<small>{download.compatibility}</small>
 			</div>
-		{/if}
-
-		<p></p>
+		</div>
+		<button
+			class="link"
+			onclick={() => {
+				show_more = !show_more;
+			}}
+			>{#if show_more}less{:else}more{/if} install options</button
+		>
 	{/if}
-
+	{#if show_more || !download}
+		<div class="my-6">
+			{#each platforms as platform}
+				<div class="mb-6 flex items-center gap-4">
+					<a
+						href={platform.url}
+						class="btn {platform.primary ? 'btn-primary' : 'btn-neutral'} w-44 justify-center"
+						class:btn-sm={size === 'sm'}
+					>
+						{platform.name}
+					</a>
+					<small class="opacity-70">{platform.compatibility}</small>
+				</div>
+			{/each}
+		</div>
+	{/if}
 	{#if show_more || !download}
 		<h3 class="mb-4 font-semibold">Additional Installation Options</h3>
 
@@ -202,81 +214,6 @@
 							</div>
 						</li>
 					</ul>
-				</div>
-			</div>
-
-			<!-- 4. Pre-built binaries --------------------------------------------------->
-			<div class="collapse collapse-arrow rounded-box border border-base-300 bg-base-200">
-				<input type="radio" name="installation-accordion" />
-				<div class="collapse-title font-medium">4. Download Compiled Binaries</div>
-				<div class="collapse-content">
-					<p>Download the pre-built binaries for your platform and add them to your PATH:</p>
-
-					<div class="mt-4 space-y-4">
-						<!-- Ubuntu x64 -->
-						<div>
-							<h5 class="mb-2 mt-0">Ubuntu x64</h5>
-							<div class="flex flex-wrap gap-2">
-								{#each ['latest', '24.04', '22.04'] as osversion}
-									<a
-										class="btn btn-neutral btn-sm"
-										class:btn-xs={size === 'sm'}
-										href={`https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-ubuntu-${osversion}.tar.gz`}
-									>
-										{osversion}
-									</a>
-								{/each}
-							</div>
-						</div>
-
-						<!-- Ubuntu arm -->
-						<div>
-							<h5 class="mb-2 mt-0">Ubuntu arm</h5>
-							<div class="flex flex-wrap gap-2">
-								{#each ['24.04', '22.04'] as osversion}
-									<a
-										class="btn btn-neutral btn-sm"
-										class:btn-xs={size === 'sm'}
-										href={`https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-ubuntu-${osversion}-arm.tar.gz`}
-									>
-										{osversion}
-									</a>
-								{/each}
-							</div>
-						</div>
-
-						<!-- macOS -->
-						<div>
-							<h5 class="mb-2 mt-0">macOS</h5>
-							<div class="flex flex-wrap gap-2">
-								{#each ['latest', '15', '14', '13'] as osversion}
-									<a
-										class="btn btn-neutral btn-sm"
-										class:btn-xs={size === 'sm'}
-										href={`https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-macos-${osversion}.tar.gz`}
-									>
-										{osversion}
-									</a>
-								{/each}
-							</div>
-						</div>
-
-						<!-- Windows -->
-						<div>
-							<h5 class="mb-2 mt-0">Windows</h5>
-							<div class="flex flex-wrap gap-2">
-								{#each ['latest', '2022', '2019'] as osversion}
-									<a
-										class="btn btn-neutral btn-sm"
-										class:btn-xs={size === 'sm'}
-										href={`https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-windows-${osversion}.zip`}
-									>
-										{osversion}
-									</a>
-								{/each}
-							</div>
-						</div>
-					</div>
 				</div>
 			</div>
 		</div>
