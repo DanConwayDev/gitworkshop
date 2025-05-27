@@ -2,17 +2,22 @@ import { NGIT_VERSION } from '$lib/constants';
 import { redirect } from '@sveltejs/kit';
 
 export const load = ({ params }: { params: { file: string } }): { file: string } => {
-	let version = NGIT_VERSION;
+	const version = NGIT_VERSION;
+	const osList = ['ubuntu', 'macos', 'windows'];
+	let found = false;
 
-	['ubuntu', 'macos', 'windows'].forEach((os) => {
+	for (const os of osList) {
 		const s = params.file.split(`ngit-latest-${os}-`);
 		if (s[1] && s[1].length > 0) {
-			redirect(
+			found = true;
+			throw redirect(
 				301,
 				`https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-${os}-${s[1]}`
 			);
 		}
-	});
+	}
 
-	redirect(301, `/not-found`);
+	if (!found) {
+		throw redirect(301, `/not-found`);
+	}
 };

@@ -10,7 +10,7 @@
 <Container>
 	<div class="prose m-auto mt-8">
 		<h2>Quick Start</h2>
-		<h4 id="prereq">pre-requesite: install ngit and git-remote-nostr</h4>
+		<h4 id="prereq">pre-requesite: install ngit</h4>
 		<InstallNgit />
 	</div>
 </Container>
