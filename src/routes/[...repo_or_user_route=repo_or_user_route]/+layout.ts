@@ -1,10 +1,15 @@
-import { extractRepoRoute, extractUserRoute, type RouteData } from '$lib/types';
+import {
+	extractRepoRoute,
+	extractUserRoute,
+	type RepoRouteString,
+	type RouteData
+} from '$lib/types';
 
 export const load = ({
 	params,
 	url
 }: {
-	params: { repo_or_user_route: string };
+	params: { repo_or_user_route: RepoRouteString };
 	url: string;
 }): RouteData | undefined => {
 	const url_string = url.toString();
