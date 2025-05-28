@@ -169,7 +169,7 @@
 						<p>
 							pre-requesite: <a href="#prereq">install</a> ngit and git-remote-nostr
 						</p>
-						<h4>1. create a git repo and push to a git server</h4>
+						<h4>1. create a local git repo</h4>
 						<div>
 							<ul>
 								<li>
@@ -191,14 +191,6 @@
 													</span></code
 												>
 											</div>
-											<div>
-												<code
-													><span class="text-yellow-600">git</span> remote add origin https://dm.co/usr/my-repo.git</code
-												>
-											</div>
-											<div>
-												<code><span class="text-yellow-600">git</span> push -u origin master</code>
-											</div>
 										</div>
 									</div>
 								</li>
@@ -216,24 +208,6 @@
 											</div>
 										</div>
 									</div>
-								</li>
-								<li>
-									<div>
-										<div>use the nostr remote to push state to nostr and git server(s):</div>
-										<div class="not-prose text-sm">
-											<div>
-												<code
-													><span class="text-yellow-600">git</span> remote set-url origin nostr://<span
-														class="text-purple-600">npub123</span
-													>/<span class="text-primary">my-repo</span></code
-												>
-											</div>
-										</div>
-									</div>
-								</li>
-								<li>
-									ensure all maintainers push to the nostr remote and not git server directly so
-									that state on nostr remains in sync
 								</li>
 							</ul>
 						</div>
@@ -303,7 +277,10 @@
 						<h4>5. consider turning off PRs and issues elsewhere</h4>
 						<div>
 							<ul>
-								<li>ie. on git server(s) so they are managed solely on nostr.</li>
+								<li>
+									If you are pushing your project to github, codeberg, bitbucket, etc., consider
+									turing off PRs and issues so they can be managed solely on nostr.
+								</li>
 								<li>
 									Note: for github use <code>Repo Settings &gt; Features</code> for issues but turning
 									off PRs isn't yet possible.

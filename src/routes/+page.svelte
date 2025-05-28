@@ -198,6 +198,9 @@
 								>
 							</div>
 							<div>
+								<code>mkdir my-repo && cd my-repo</code>
+							</div>
+							<div>
 								<code><span class="text-yellow-600">git</span> init</code>
 							</div>
 							<div>
@@ -205,37 +208,14 @@
 							</div>
 							<div>
 								<code
-									><span class="text-yellow-600">git</span> remote add origin https://dm.co/usr/my-repo</code
+									><span class="text-green-600">// announce and set origin to nostr url</span></code
 								>
 							</div>
 							<div>
-								<code><span class="text-yellow-600">git</span> push -u origin master</code>
-							</div>
-							<div>
-								<code><span class="text-green-600">// announce on nostr</span></code>
-							</div>
-							<div>
 								<div>
-									<code
-										><span class="text-purple-600">ngit</span> init --identifier
-										<span class="text-primary">my-repo</span></code
-									>
+									<code><span class="text-purple-600">ngit</span> init </code>
 								</div>
 								<div>
-									<code
-										><span class="text-green-600"
-											>// push to nostr and git server(s) via remote helper</span
-										></code
-									>
-								</div>
-								<div>
-									<div>
-										<code
-											><span class="text-yellow-600">git</span> remote set-url origin nostr://<span
-												class="text-purple-600">npub123</span
-											>/<span class="text-primary">my-repo</span></code
-										>
-									</div>
 									<div>
 										<code
 											><span class="text-green-600"
