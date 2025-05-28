@@ -106,22 +106,6 @@
 		>
 	{/if}
 	{#if show_more || !download}
-		<div class="my-6">
-			{#each platforms as platform}
-				<div class="mb-6 flex items-center gap-4">
-					<a
-						href={platform.url}
-						class="btn {platform.primary ? 'btn-primary' : 'btn-neutral'} w-44 justify-center"
-						class:btn-sm={size === 'sm'}
-					>
-						{platform.name}
-					</a>
-					<small class="opacity-70">{platform.compatibility}</small>
-				</div>
-			{/each}
-		</div>
-	{/if}
-	{#if show_more || !download}
 		<h3 class="mb-4 font-semibold">Additional Installation Options</h3>
 
 		<!-- Accordion ---------------------------------------------------------------->
@@ -214,6 +198,30 @@
 							</div>
 						</li>
 					</ul>
+				</div>
+			</div>
+			<!-- 4. Download Binaries For Other Platforms -------------------------------->
+			<div class="collapse collapse-arrow rounded-box border border-base-300 bg-base-200">
+				<input type="radio" name="installation-accordion" />
+				<div class="collapse-title font-medium">
+					4. Download for Linux (various), macOS and Windows
+				</div>
+				<div class="collapse-content">
+					<p>Download, extract binaries and add them to PATH</p>
+					<div class="my-6">
+						{#each platforms as platform}
+							<div class="mb-6 flex items-center gap-4">
+								<a
+									href={platform.url}
+									class="btn {platform.primary ? 'btn-primary' : 'btn-neutral'} w-44 justify-center"
+									class:btn-sm={size === 'sm'}
+								>
+									{platform.name}
+								</a>
+								<small class="opacity-70">{platform.compatibility}</small>
+							</div>
+						{/each}
+					</div>
 				</div>
 			</div>
 		</div>
