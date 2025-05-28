@@ -1,10 +1,12 @@
 import {
+	isRelayCheck,
 	isRepoRef,
 	standardizeNip05,
 	type EventIdString,
 	type Nip05Address,
 	type PubKeyString,
-	type RepoRef
+	type RepoRef,
+	type WebSocketUrl
 } from '$lib/types';
 import { isEvent } from 'applesauce-core/helpers';
 import memory_db from '$lib/dbs/InMemoryRelay';
@@ -61,10 +63,13 @@ class QueryCentre {
 		});
 	}
 
-	fetchAllRepos() {
+	fetchAllRepos(from_relays?: WebSocketUrl[]) {
 		const current = $state({ loading: true });
 
-		this.awaitExternalWorker({ method: 'fetchAllRepos', args: [] }).then(() => {
+		this.awaitExternalWorker({
+			method: 'fetchAllRepos',
+			args: from_relays ? [from_relays] : []
+		}).then(() => {
 			current.loading = false;
 		});
 		return current;
@@ -118,10 +123,21 @@ class QueryCentre {
 		);
 	}
 
-	searchRepoAnns(query: string) {
-		return liveQueryState(() =>
-			db.repos.where('searchWords').startsWithAnyOfIgnoreCase(query).distinct().toArray()
-		);
+	searchRepoAnns(query: string, from_relays?: WebSocketUrl[]) {
+		return liveQueryState(async () => {
+			let res = await db.repos
+				.where('searchWords')
+				.startsWithAnyOfIgnoreCase(query)
+				.distinct()
+				.toArray();
+			if (from_relays)
+				return res.filter((repo) =>
+					from_relays.some((fr) =>
+						repo.relays_info[fr]?.huristics.some((h) => isRelayCheck(h) && h.type == 'found')
+					)
+				);
+			return res;
+		});
 	}
 
 	fetchPubkeyRepos(pubkey: PubKeyString) {

@@ -202,9 +202,9 @@ class QueryCentreExternal {
 		// TODO when we do a browser refresh, how are pending sends processed?
 	}
 
-	async fetchAllRepos() {
+	async fetchAllRepos(from_relays?: WebSocketUrl[]) {
 		await this.hydrate_from_cache_db([{ kinds: [RepoAnnKind] }]);
-		const relays = await chooseRelaysForAllRepos();
+		const relays = from_relays ? from_relays : await chooseRelaysForAllRepos();
 		await Promise.all(relays.map((url) => this.get_relay(url).fetchAllRepos()));
 	}
 
@@ -488,7 +488,8 @@ self.onmessage = async (event) => {
 			result = await external.publishEvent(args[0]);
 			break;
 		case 'fetchAllRepos':
-			result = await external.fetchAllRepos();
+			if (args.length === 0) result = await external.fetchAllRepos();
+			else result = await external.fetchAllRepos(args[0]);
 			break;
 		case 'fetchRepo':
 			result = await external.fetchRepo(args[0], args[1]);
