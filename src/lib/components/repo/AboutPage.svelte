@@ -5,8 +5,8 @@
 	import Readme from './Readme.svelte';
 
 	let a_ref = $derived(routeToRepoRef(store.route));
-
-	let record_query = $derived(query_centre.fetchRepo(a_ref));
+	let hint_relays = $derived(store.route?.relays);
+	let record_query = $derived(query_centre.fetchRepo(a_ref, hint_relays));
 	let repo = $derived(record_query.current ?? (a_ref ? repoTableItemDefaults(a_ref) : undefined));
 </script>
 

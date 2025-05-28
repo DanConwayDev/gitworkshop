@@ -91,12 +91,15 @@ class QueryCentre {
 		});
 	}
 
-	fetchRepo(a_ref: RepoRef | string | undefined) {
+	fetchRepo(a_ref: RepoRef | string | undefined, hint_relays: undefined | string[]) {
+		const relays = $state.snapshot(hint_relays);
 		let loading = $state(isRepoRef(a_ref));
 		if (isRepoRef(a_ref)) {
-			this.awaitExternalWorker<() => void>({ method: 'fetchRepo', args: [a_ref] }).then(() => {
-				loading = false;
-			});
+			this.awaitExternalWorker<() => void>({ method: 'fetchRepo', args: [a_ref, relays] }).then(
+				() => {
+					loading = false;
+				}
+			);
 		}
 		// if a_ref its not RepoRef it we will just return the undefined
 		return liveQueryState(

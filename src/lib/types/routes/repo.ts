@@ -11,7 +11,8 @@ import {
 	type EventBech32,
 	type RepoRef,
 	isRepoNaddr,
-	isNprofile
+	isNprofile,
+	isWebSocketUrl
 } from '$lib/types';
 import { addressPointerToRepoRef } from '$lib/utils';
 import { nip19 } from 'nostr-tools';
@@ -35,7 +36,9 @@ export const isRepoRouteString = (s: string | undefined): s is RepoRouteString =
 	if (isRepoNaddr(s)) return true;
 	if (isNpubRelayHintIdentifierRepoRoute(s)) return true;
 	const split = s.split('/');
-	return isNip05(split[0]) || isNpub(split[0]) || isNprofile(split[0]);
+	if (split[1] && split[1].length > 0)
+		return isNip05(split[0]) || isNpub(split[0]) || isNprofile(split[0]);
+	return false;
 };
 
 export type RepoRouteType = 'npub' | 'naddr' | 'nip05';
@@ -94,10 +97,7 @@ export const extractRepoRoute = (s: RepoRouteString): RepoRoute | undefined => {
 			// TODO relays
 		};
 	}
-	const with_relay_hint = parseNpubRelayHintIdentifierRepoRoute(s);
-	if (with_relay_hint) return with_relay_hint;
 	const split = s.split('/');
-	if (split.length !== 2 || split[1].length === 0) return undefined;
 	if (isNip05(split[0])) {
 		return {
 			type: 'nip05',
@@ -108,6 +108,8 @@ export const extractRepoRoute = (s: RepoRouteString): RepoRoute | undefined => {
 		};
 	}
 	if (isNpub(split[0])) {
+		let with_hint = parseNpubRelayHintIdentifierRepoRoute(s);
+		if (with_hint) return with_hint;
 		const pubkey = nip19.decode(split[0]).data as PubKeyString;
 		return {
 			type: 'npub',
@@ -175,12 +177,13 @@ const parseNpubRelayHintIdentifierRepoRoute = (s: string): RepoRoute | undefined
 	const relay_hint = split.slice(1, split.length - 1).join('/');
 	let decoded = decodeURIComponent(relay_hint); // should already be decoded but just for good measure
 	if (!decoded.includes('://')) decoded = 'wss://' + decoded;
-	return {
-		type: 'npub',
-		s: s as RepoRouteNpubRelayHintString,
-		pubkey,
-		identifier,
-		a_ref: `${RepoAnnKind}:${pubkey}:${identifier}`,
-		relays: [decoded]
-	};
+	if (isWebSocketUrl(decoded))
+		return {
+			type: 'npub',
+			s: s as RepoRouteNpubRelayHintString,
+			pubkey,
+			identifier,
+			a_ref: `${RepoAnnKind}:${pubkey}:${identifier}`,
+			relays: isWebSocketUrl(decoded) ? [decoded] : undefined
+		};
 };

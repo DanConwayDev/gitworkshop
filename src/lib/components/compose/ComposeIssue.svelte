@@ -21,9 +21,9 @@
 	import LoginModal from '../LoginModal.svelte';
 	import { SimpleSigner } from 'applesauce-signers';
 
-	let { a_ref }: { a_ref: RepoRef } = $props();
+	let { a_ref, hint_relays }: { a_ref: RepoRef; hint_relays: undefined | string[] } = $props();
 
-	let repo_query = $derived(query_centre.fetchRepo(a_ref));
+	let repo_query = $derived(query_centre.fetchRepo(a_ref, hint_relays));
 	let repo = $derived(repo_query.current ?? (a_ref ? repoTableItemDefaults(a_ref) : undefined));
 
 	let repo_refs = $derived(repo ? repoToMaintainerRepoRefs(repo) : new Set<RepoRef>());

@@ -19,6 +19,7 @@ import {
 	type OutboxRelayLog,
 	type PubKeyString,
 	type PubKeyTableItem,
+	type RelayCheckTimestamp,
 	type RepoRef,
 	type RepoTableItem,
 	type WebSocketUrl
@@ -209,7 +210,7 @@ class QueryCentreExternal {
 
 	subscriber_manager = new SubscriberManager();
 
-	async fetchRepo(a_ref: ARefP) {
+	async fetchRepo(a_ref: ARefP, hint_relays: undefined | string[]) {
 		const pointer = aRefPToAddressPointer(a_ref);
 		if (!pointer) return;
 		const query = `fetchRepo${a_ref}`;
@@ -224,13 +225,29 @@ class QueryCentreExternal {
 				: []),
 			...(record ? createRepoChildrenQualityFilters(getIssuesAndPrsIdsFromRepoItem(record)) : [])
 		]);
-		const relays_tried: WebSocketUrl[] = [];
+		const hint_relays_to_try: { url: WebSocketUrl; check_timestamps: RelayCheckTimestamp }[] =
+			hint_relays
+				? hint_relays
+						.filter((r) => isWebSocketUrl(r))
+						.map((r) => ({
+							url: r,
+							check_timestamps: {
+								last_check: undefined,
+								last_update: undefined,
+								last_child_check: undefined
+							}
+						}))
+				: [];
+		const relays_tried: WebSocketUrl[] = [...hint_relays_to_try.map((e) => e.url)];
 		let new_repo_relays_found = false;
 		// only loop if repo announcement not found
 		let count = 0;
 		while (count === 0 || !record || !record.created_at || new_repo_relays_found) {
 			count++;
-			const relays = await chooseRelaysForRepo(record ? record : a_ref, relays_tried);
+			const relays = [
+				...(count == 1 ? hint_relays_to_try : []),
+				...(await chooseRelaysForRepo(record ? record : a_ref, relays_tried))
+			];
 			if (relays.length === 0) {
 				// TODO lookup all other relays known by LocalDb and try those
 				break;
@@ -474,7 +491,7 @@ self.onmessage = async (event) => {
 			result = await external.fetchAllRepos();
 			break;
 		case 'fetchRepo':
-			result = await external.fetchRepo(args[0]);
+			result = await external.fetchRepo(args[0], args[1]);
 			break;
 		case 'fetchRepoUnsubscribe':
 			result = await external.fetchRepoUnsubscribe(args[0]);

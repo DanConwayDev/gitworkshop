@@ -22,7 +22,7 @@
 		repo_route: RepoRoute;
 	} = $props();
 
-	let record_query = $derived(a_ref ? query_centre.fetchRepo(a_ref) : undefined);
+	let record_query = $derived(a_ref ? query_centre.fetchRepo(a_ref, repo_route.relays) : undefined);
 	let item = $derived(
 		repo ?? record_query?.current ?? (a_ref ? repoTableItemDefaults(a_ref) : undefined)
 	);
