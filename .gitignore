@@ -24,3 +24,6 @@ vite.config.ts.timestamp-*
 
 # nix
 .direnv
+
+# tmp
+tmp
