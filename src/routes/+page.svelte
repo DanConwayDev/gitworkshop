@@ -16,7 +16,7 @@
 						class="text-neutral">.dev</span
 					>
 				</h1>
-				<p class="mb-8 mt-3">a decentralized git workflow on nostr for freedom lovers</p>
+				<p class="mb-8 mt-3">collaborate on code over nostr</p>
 			</div>
 		</div>
 	</div>
