@@ -31,14 +31,14 @@
 				name: 'Linux (x86-64, glibc)',
 				compatibility:
 					'Ubuntu 14.04+, Debian 8+, RHEL/CentOS 7+, Fedora 21+, openSUSE, Arch, etc. Any x86-64 distro with glibc ≥ 2.17. (Not Alpine)',
-				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-x86_64-unknown-linux-gnu.2.17.tar.gz`,
+				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-x86_64-unknown-linux-gnu.tar.gz`,
 				osIdentifiers: [/Linux(?!.*aarch64)/i, /X11(?!.*aarch64)/i]
 			},
 			{
 				name: 'Linux (aarch64, glibc)',
 				compatibility:
 					'Ubuntu 20.04+, Debian 11+, Amazon Linux 2, AWS Graviton, Raspberry Pi OS 64-bit, etc. Any aarch64/arm64 distro with glibc ≥ 2.17.',
-				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-aarch64-unknown-linux-gnu.2.17.tar.gz`,
+				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-aarch64-unknown-linux-gnu.tar.gz`,
 				osIdentifiers: [/Linux.*aarch64/i, /Linux.*arm64/i]
 			},
 			{
