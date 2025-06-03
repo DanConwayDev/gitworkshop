@@ -44,7 +44,7 @@
 			{
 				name: 'Linux (musl, static)',
 				compatibility:
-					'Alpine 3.12+, Distroless and scratch containers, and very old glibc systems. Fully static; no external libraries. Still needs a CA-certificate bundle (apk add ca-certificates on Alpine).',
+					'Alpine 3.12+, Distroless and scratch containers, and very old glibc systems. Fully static; no external libraries.',
 				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-x86_64-unknown-linux-musl.tar.gz`,
 				osIdentifiers: [/Alpine/i]
 			},
