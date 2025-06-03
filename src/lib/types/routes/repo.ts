@@ -98,7 +98,7 @@ export const extractRepoRoute = (s: RepoRouteString): RepoRoute | undefined => {
 		};
 	}
 	const split = s.split('/');
-	if (isNip05(split[0])) {
+	if (isNip05(split[0]) && split[1]) {
 		return {
 			type: 'nip05',
 			s,
@@ -107,7 +107,7 @@ export const extractRepoRoute = (s: RepoRouteString): RepoRoute | undefined => {
 			loading: false
 		};
 	}
-	if (isNpub(split[0])) {
+	if (isNpub(split[0]) && split[1]) {
 		let with_hint = parseNpubRelayHintIdentifierRepoRoute(s);
 		if (with_hint) return with_hint;
 		const pubkey = nip19.decode(split[0]).data as PubKeyString;
@@ -119,7 +119,7 @@ export const extractRepoRoute = (s: RepoRouteString): RepoRoute | undefined => {
 			a_ref: `${RepoAnnKind}:${pubkey}:${split[1]}`
 		};
 	}
-	if (isNprofile(s)) {
+	if (isNprofile(s) && split[1]) {
 		const p = nip19.decode(s).data as ProfilePointer;
 		return {
 			type: 'npub',
