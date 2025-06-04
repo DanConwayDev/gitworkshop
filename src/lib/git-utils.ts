@@ -76,7 +76,11 @@ const extractIssueDescriptionFromContent = (s: string): string => {
 };
 
 export const repoRouteToNostrUrl = (repo_route: RepoRoute): string => {
-	if (repo_route.type === 'nip05') return `nostr://${repo_route.nip05}/${repo_route.identifier}`;
+	if (repo_route.type === 'nip05') {
+		if (repo_route.nip05.includes('@'))
+			return `nostr://${repo_route.nip05}/${repo_route.identifier}`;
+		else return `nostr://_@${repo_route.nip05}/${repo_route.identifier}`;
+	}
 	const relay_hint = repo_route?.relays?.[0]
 		? `/${encodeURIComponent(repo_route.relays[0].replace('wss://', ''))}`
 		: '';
