@@ -30,7 +30,7 @@
 			{
 				name: 'Linux (x86-64, glibc)',
 				compatibility:
-					'Ubuntu 14.04+, Debian 8+, RHEL/CentOS 7+, Fedora 21+, openSUSE, Arch, etc. Any x86-64 distro with glibc ≥ 2.17. (Not Alpine)',
+					'Ubuntu 14.04+, Debian 8+, RHEL/CentOS 7+, Fedora 21+, openSUSE, Arch, etc. Any x86-64 distro with glibc ≥ 2.17. (For Alpine see more options)',
 				url: `https://github.com/DanConwayDev/ngit-cli/releases/download/${version}/ngit-${version}-x86_64-unknown-linux-gnu.tar.gz`,
 				osIdentifiers: [/Linux(?!.*aarch64)/i, /X11(?!.*aarch64)/i]
 			},
