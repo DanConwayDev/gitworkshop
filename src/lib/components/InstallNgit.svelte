@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { NGIT_VERSION } from '$lib/constants';
+	import CopyField from './CopyField.svelte';
 
 	let { size = 'md' }: { size?: 'sm' | 'md' } = $props();
 
@@ -86,28 +87,30 @@
 </script>
 
 <div class="prose max-w-none" class:text-sm={size === 'sm'}>
-	{#if download}
-		<p>Download, extract binaries and add them to PATH</p>
-		<div class="mb-6 flex flex-wrap items-center gap-4 sm:flex-nowrap">
-			<a href={download.url} class="btn btn-primary" class:btn-sm={size === 'sm'}>
-				Download for {download.name}
-			</a>
-			<small class="opacity-70">{version}</small>
-			<div class="opacity-70">
-				<small>{download.compatibility}</small>
-			</div>
+	<p>Installation Command:</p>
+	<div class="rounded-md bg-base-400 pb-3 font-mono text-sm text-white">
+		<CopyField content={`curl -Ls https://ngit.dev/install.sh | bash`} border_color="none" />
+	</div>
+	{#if download && download.name === 'Windows (x64)'}
+		<p>or one-liner for windows:</p>
+		<div class="rounded-md bg-base-400 pb-3 font-mono text-sm text-white">
+			<CopyField
+				content={`iwr -useb https://yourdomain.com/install.ps1 | iex`}
+				border_color="none"
+			/>
 		</div>
+	{/if}
+
+	<p>
 		<button
 			class="link"
 			onclick={() => {
 				show_more = !show_more;
 			}}
-			>{#if show_more}less{:else}more{/if} install options</button
+			>{#if show_more}hide{:else}show{/if} other install options</button
 		>
-	{/if}
-	{#if show_more || !download}
-		<h3 class="mb-4 font-semibold">Additional Installation Options</h3>
-
+	</p>
+	{#if show_more}
 		<!-- Accordion ---------------------------------------------------------------->
 		<div class="space-y-2">
 			<!-- 1. Build from source --------------------------------------------------->
@@ -225,12 +228,12 @@
 				</div>
 			</div>
 		</div>
+		<p class="mt-6">
+			Verify install - check both binaries are in your PATH and set as executable by running:
+		</p>
+		<div class="rounded-md bg-base-400 p-2 font-mono text-sm">
+			ngit --version<br />
+			git-remote-nostr --version
+		</div>
 	{/if}
-	<p class="mt-6">
-		Verify install - check both binaries are in your PATH and set as executable by running:
-	</p>
-	<div class="rounded-md bg-base-400 p-2 font-mono text-sm">
-		ngit --version<br />
-		git-remote-nostr --version
-	</div>
 </div>
