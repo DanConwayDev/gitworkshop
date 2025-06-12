@@ -160,10 +160,10 @@ const isNpubRelayHintIdentifierRepoRoute = (s: string): boolean => {
 	const split = s.split('/');
 	return (
 		isNpub(split[0]) &&
-		// all relay hints include a dot or encoded ://
-		['.', '%3A%2F%2F'].some((s) => split[1].includes(s)) &&
 		// there are always 3 items: npub, hint, identifier
 		split.length == 3 &&
+		// all relay hints include a dot or encoded ://
+		['.', '%3A%2F%2F'].some((s) => split[1].includes(s)) &&
 		// potential identifier cannot be a gitworkshop repo page
 		!['about', 'actions', 'issues', 'prs'].some((s) => s == split[2])
 	);
