@@ -11,6 +11,11 @@
 	import { repoRouteToNostrUrl } from '$lib/git-utils';
 	import UserHeader from '$lib/components/user/UserHeader.svelte';
 	import AlertWarning from '$lib/components/AlertWarning.svelte';
+	import { DeletionKind, kindtoTextLabel } from '$lib/kinds';
+	import { GitRepositoryAnnouncement } from '$lib/kind_labels';
+	import type { NostrEvent } from 'nostr-tools';
+	import { unixNow } from 'applesauce-core/helpers';
+	import accounts_manager from '$lib/accounts';
 
 	let {
 		repo,
@@ -38,6 +43,67 @@
 
 	let loading = $derived(!item || (!item.created_at && item?.loading));
 	let repo_not_found = $derived(!loading && item && !item.created_at);
+
+	// deletion
+	let allow_delete = $derived.by(() => {
+		let num_issues = Object.values(item?.issues ?? {}).reduce(
+			(sum, issueArray) => sum + (issueArray?.length || 0),
+			0
+		);
+		let num_PRs = Object.values(item?.PRs ?? {}).reduce(
+			(sum, PRArray) => sum + (PRArray?.length || 0),
+			0
+		);
+		return num_PRs + num_issues < 5;
+	});
+	let show_delete_sure_modal = $state(false);
+	let sending_deletion = $state(false);
+	let event_to_delete_override: NostrEvent | undefined = $state(undefined);
+	let rejected_deletion = $state(false);
+	let deletion_rationale = $state('');
+	const sendDeletion = async () => {
+		let signer = accounts_manager.getActive();
+		if (sending_deletion || !signer) return;
+		sending_deletion = true;
+		let tags: string[][] = [
+			['a', item?.uuid ?? a_ref ?? ''],
+			['k', GitRepositoryAnnouncement.toString()]
+		];
+		([] as string[][]).forEach((t) => {
+			if (t.length > 1 && !tags.some((e) => e[0] === t[0] && e[1] === t[1])) tags.push(t);
+		});
+		try {
+			console.log('get signer');
+			let d_event = await signer.signEvent({
+				kind: DeletionKind,
+				created_at: unixNow(),
+				tags,
+				content: $state.snapshot(deletion_rationale)
+			});
+			if (d_event) {
+				query_centre.publishEvent(d_event);
+			}
+		} catch {
+			rejected_deletion = true;
+			sending_deletion = false;
+		}
+		setTimeout(
+			() => {
+				if (!rejected_deletion) {
+					show_delete_sure_modal = false;
+					deletion_rationale = '';
+					event_to_delete_override = undefined;
+				}
+				rejected_deletion = false;
+				sending_deletion = false;
+			},
+			rejected_deletion ? 1500 : 500
+		);
+	};
+	const closeModals = () => {
+		show_delete_sure_modal = false;
+		event_to_delete_override = undefined;
+	};
 </script>
 
 <div class="prose w-full max-w-md">
@@ -276,7 +342,27 @@
 			<p class="my-2 break-words text-xs">{item.unique_commit}</p>
 		{/if}
 	</div>
-
+	{#if allow_delete}
+		<div class="align-right mt-5">
+			<div class="tooltip align-middle" data-tip="Delete Repo Announcement">
+				<button
+					onclick={() => {
+						show_delete_sure_modal = true;
+					}}
+					class="btn btn-xs text-neutral-content hover:bg-error"
+					aria-label="delete"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+						><path
+							fill="currentColor"
+							d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3zm0 5h2v9H9zm4 0h2v9h-2z"
+						/></svg
+					>
+					Delete Repo Announcement
+				</button>
+			</div>
+		</div>
+	{/if}
 	{#if repo_not_found}
 		<div class="text-xs">
 			<AlertWarning>
@@ -286,3 +372,43 @@
 		</div>
 	{/if}
 </div>
+
+{#if show_delete_sure_modal}
+	<dialog class="modal" class:modal-open={show_delete_sure_modal}>
+		<div class="modal-box relative max-w-lg text-wrap p-6">
+			<div class="modal-body mb-5 text-center">
+				<h3 class="text-md mb-3 font-bold">
+					Send <span class="badge badge-secondary badge-lg"
+						>{kindtoTextLabel(GitRepositoryAnnouncement)}</span
+					> Deletion Request?
+				</h3>
+				<p class="mt-6 text-sm text-warning">
+					warning: not all nostr relays / clients honour deletion requests
+				</p>
+				<input
+					type="text"
+					disabled={sending_deletion}
+					bind:value={deletion_rationale}
+					class="input-neutral input input-sm input-bordered mt-6 w-full"
+					placeholder="optional deletion rationale"
+				/>
+			</div>
+			<div class="modal-footer flex justify-between gap-4">
+				<button
+					class="btn btn-error flex-1"
+					onclick={() => sendDeletion()}
+					disabled={sending_deletion}
+				>
+					{#if rejected_deletion}
+						Rejected by Signer
+					{:else if sending_deletion}
+						Signing
+					{:else}
+						Send Deletion Request
+					{/if}
+				</button>
+				<button class="btn flex-1" onclick={closeModals}> Cancel </button>
+			</div>
+		</div>
+	</dialog>
+{/if}
