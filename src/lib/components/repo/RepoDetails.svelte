@@ -42,19 +42,19 @@
 
 <div class="prose w-full max-w-md">
 	{#if !item || loading || repo_not_found}
-		<h4 class="mt-0 pt-1">identifier</h4>
+		<h4 class="mt-0 pt-1 text-xs opacity-50">identifier</h4>
 		<p class="my-2 break-words text-sm">{repo_route.identifier}</p>
 	{:else if item.name == item.identifier}
-		<h4 class="mt-0 pt-1">name / identifier</h4>
+		<h4 class="mt-0 pt-1 text-xs opacity-50">name / identifier</h4>
 		<p class="my-2 break-words text-sm">{item.name}</p>
 	{:else}
-		<h4>name</h4>
+		<h4 class="text-xs opacity-50">name</h4>
 		{#if !item.name || item.name.length == 0}
 			<div>none</div>
 		{:else}
 			<p class="my-2 break-words text-sm">{item.name}</p>
 		{/if}
-		<h4>identifier</h4>
+		<h4 class="text-xs opacity-50">identifier</h4>
 		{#if !item.identifier || item.identifier.length == 0}
 			<div>none</div>
 		{:else}
@@ -68,7 +68,7 @@
 			<div class="skeleton my-3 h-5 w-20"></div>
 			<div class="badge skeleton my-2 block w-60"></div>
 		{:else}
-			<h4>
+			<h4 class="text-xs opacity-50">
 				nostr clone url {#if git_url_copied}<span class="text-sm text-success opacity-50">
 						(copied to clipboard)</span
 					>{/if}
@@ -126,10 +126,10 @@
 			<div class="skeleton my-2 h-4"></div>
 			<div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
 		{:else if !short_descrption || short_descrption.length == 0}
-			<h4>description</h4>
+			<h6>description</h6>
 			<div>none</div>
 		{:else}
-			<h4>description</h4>
+			<h4 class="text-xs opacity-50">description</h4>
 			<p class="my-2 break-words text-sm">{short_descrption}</p>
 		{/if}
 	</div>
@@ -152,7 +152,7 @@
 			<div class="skeleton my-3 h-5 w-20"></div>
 			<div class="badge skeleton my-2 block w-60"></div>
 		{:else}
-			<h4>
+			<h4 class="text-xs opacity-50">
 				git servers {#if git_url_copied}<span class="text-sm text-success opacity-50">
 						(copied to clipboard)</span
 					>{/if}
@@ -207,10 +207,10 @@
 			<div class="badge skeleton my-2 block w-60"></div>
 			<div class="badge skeleton my-2 block w-40"></div>
 		{:else if !item.web || item.web.length == 0}
-			<h4>websites</h4>
+			<h4 class="text-xs opacity-50">websites</h4>
 			<div>none</div>
 		{:else}
-			<h4>websites</h4>
+			<h4 class="text-xs opacity-50">websites</h4>
 			{#each item.web as site}
 				<a href={site} target="_blank" class="link link-primary my-2 break-words text-sm">
 					{site}
@@ -225,7 +225,7 @@
 			<div class="badge skeleton my-2 block w-60"></div>
 			<div class="badge skeleton my-2 block w-40"></div>
 		{:else}
-			<h4>
+			<h4 class="text-xs opacity-50">
 				{#if repo_not_found}author{:else}maintainers{/if}
 				{#if maintainer_copied}<span class="text-sm text-success opacity-50">
 						(copied to clipboard)</span
@@ -252,10 +252,10 @@
 			<div class="badge skeleton my-2 block w-60"></div>
 			<div class="badge skeleton my-2 block w-40"></div>
 		{:else if !item.relays || item.relays.length == 0}
-			<h4>relays</h4>
+			<h4 class="text-xs opacity-50">relays</h4>
 			<div>none</div>
 		{:else}
-			<h4>relays</h4>
+			<h4 class="text-xs opacity-50">relays</h4>
 			{#each item.relays as relay}
 				<div class="badge badge-secondary badge-sm my-2 block">{relay}</div>
 			{/each}
@@ -269,10 +269,10 @@
 			<div class="skeleton my-2 h-4"></div>
 			<div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
 		{:else if !item.unique_commit || item.unique_commit.length == 0}
-			<h4>earliest unique commit</h4>
+			<h4 class="text-xs opacity-50">earliest unique commit</h4>
 			<p class="my-2 break-words text-xs">not specified</p>
 		{:else}
-			<h4>earliest unique commit</h4>
+			<h4 class="text-xs opacity-50">earliest unique commit</h4>
 			<p class="my-2 break-words text-xs">{item.unique_commit}</p>
 		{/if}
 	</div>
