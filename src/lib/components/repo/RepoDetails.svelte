@@ -69,7 +69,7 @@
 			<div class="badge skeleton my-2 block w-60"></div>
 		{:else}
 			<h4 class="text-xs opacity-50">
-				nostr clone url {#if git_url_copied}<span class="text-sm text-success opacity-50">
+				nostr clone url {#if nostr_url_copied}<span class="text-sm text-success opacity-50">
 						(copied to clipboard)</span
 					>{/if}
 			</h4>
