@@ -131,12 +131,12 @@ class QueryCentre {
 				.distinct()
 				.toArray();
 			if (from_relays)
-				return res.filter((repo) =>
+				res = res.filter((repo) =>
 					from_relays.some((fr) =>
 						repo.relays_info[fr]?.huristics.some((h) => isRelayCheck(h) && h.type == 'found')
 					)
 				);
-			return res;
+			return res.filter((r) => !r.deleted);
 		});
 	}
 
