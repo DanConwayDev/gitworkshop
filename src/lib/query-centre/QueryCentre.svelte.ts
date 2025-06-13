@@ -129,20 +129,27 @@ class QueryCentre {
 				.where('searchWords')
 				.startsWithAnyOfIgnoreCase(query)
 				.distinct()
+				.filter((r) => !r.deleted)
 				.toArray();
 			if (from_relays)
-				res = res.filter((repo) =>
+				return res.filter((repo) =>
 					from_relays.some((fr) =>
 						repo.relays_info[fr]?.huristics.some((h) => isRelayCheck(h) && h.type == 'found')
 					)
 				);
-			return res.filter((r) => !r.deleted);
+			return res;
 		});
 	}
 
 	fetchPubkeyRepos(pubkey: PubKeyString) {
 		this.external_worker.postMessage({ method: 'fetchPubkeyRepos', args: [pubkey] });
-		return liveQueryState(() => db.repos.where('author').equals(pubkey).toArray());
+		return liveQueryState(() =>
+			db.repos
+				.where('author')
+				.equals(pubkey)
+				.filter((r) => !r.deleted)
+				.toArray()
+		);
 	}
 
 	fetchIssues(a_ref: RepoRef) {
