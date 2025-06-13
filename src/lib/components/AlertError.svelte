@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 
-	let { children, mt = 6 }: { children: Snippet; mt: number } = $props();
+	let { children, mt = 6 }: { children: Snippet; mt?: number } = $props();
 </script>
 
 <div role="alert" class="m-auto max-w-xl">
