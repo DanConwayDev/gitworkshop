@@ -41,6 +41,8 @@ export interface RepoTableItem extends LastActivity, WithRelaysInfo, Partial<Rep
 	issues: IssuesOrPrsByStatus | undefined;
 	/// undefined if no check has been carried out
 	PRs: IssuesOrPrsByStatus | undefined;
+	deletion_events?: NostrEvent[];
+	deleted?: boolean;
 	/// auto updated using dexie hooks
 	searchWords: string[];
 }

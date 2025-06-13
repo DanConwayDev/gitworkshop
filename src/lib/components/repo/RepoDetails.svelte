@@ -16,6 +16,8 @@
 	import type { NostrEvent } from 'nostr-tools';
 	import { unixNow } from 'applesauce-core/helpers';
 	import accounts_manager from '$lib/accounts';
+	import AlertError from '../AlertError.svelte';
+	import store from '$lib/store.svelte';
 
 	let {
 		repo,
@@ -46,6 +48,11 @@
 
 	// deletion
 	let allow_delete = $derived.by(() => {
+		// logged in user must be repo author
+		if (!store.logged_in_account || store.logged_in_account.pubkey !== item?.author) return false;
+		// cant already be deleted
+		if (item && item.deleted) return false;
+		// maximum number of issues and PRs
 		let num_issues = Object.values(item?.issues ?? {}).reduce(
 			(sum, issueArray) => sum + (issueArray?.length || 0),
 			0
@@ -107,6 +114,13 @@
 </script>
 
 <div class="prose w-full max-w-md">
+	{#if item && item.deleted}
+		<div class="mb-3">
+			<AlertError mt={0}
+				>Repository deleted by <UserHeader user={item.author} inline={true} /></AlertError
+			>
+		</div>
+	{/if}
 	{#if !item || loading || repo_not_found}
 		<h4 class="mt-0 pt-1 text-xs opacity-50">identifier</h4>
 		<p class="my-2 break-words text-sm">{repo_route.identifier}</p>

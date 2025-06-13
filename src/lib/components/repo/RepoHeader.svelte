@@ -17,11 +17,19 @@
 	);
 </script>
 
-<div class="border-b border-accent-content bg-base-300">
+<div class="border-b border-accent-content bg-base-300" class:bg-error={repo?.deleted}>
 	<Container no_wrap={true}>
 		<a href={`/${repo_route.s}`} class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
 			>{short_name}</a
 		>
+		{#if repo && repo.deleted}
+			<span class="text-xs">
+				repository deleted by
+				<div class="badge bg-base-400 text-warning">
+					<UserHeader user={repo.author} inline size="xs" />
+				</div></span
+			>
+		{/if}
 		{#if repo && !repo.created_at && struggling}
 			<span class="text-xs text-warning">
 				struggling to find referenced repository event by <div

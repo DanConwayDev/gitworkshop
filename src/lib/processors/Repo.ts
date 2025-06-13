@@ -60,6 +60,15 @@ const processRepoUpdates: UpdateProcessor = async (items, updates) => {
 			} as RepoTableItem,
 			u.relay_updates
 		);
+		// undelete if repo announcement newer than deletion events
+		if (
+			updated_item.deletion_events &&
+			!updated_item.deletion_events.some(
+				(e) => !updated_item.created_at || e.created_at > updated_item.created_at
+			)
+		) {
+			updated_item.deleted = false;
+		}
 		items.repos.set(uuid, updated_item);
 	}
 	return retained_updates;

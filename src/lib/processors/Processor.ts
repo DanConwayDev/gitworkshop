@@ -1,6 +1,7 @@
 import { addEventsToCache, isInCache } from '$lib/dbs/LocalRelayDb';
 import {
 	isRelayUpdatePubkey,
+	isRepoRef,
 	type ARef,
 	type EventIdString,
 	type IssueOrPRTableItem,
@@ -36,6 +37,7 @@ import processIssueUpdates, { getCurrentStatusFromStatusHistory, updateRepoMetri
 import processPrUpdates from './Pr';
 import { processOutboxUpdates } from './Outbox';
 import { deletionRelatedToIssueOrPrItem, extractRootIdIfNonReplaceable } from '$lib/git-utils';
+import { GitRepositoryAnnouncement } from '$lib/kind_labels';
 
 class Processor {
 	/// Processes all new data points to update LocalDb or send events to the InMemoryDB
@@ -405,6 +407,8 @@ function groupTableRelayUpdates(relay_updates: [RelayUpdate, ...RelayUpdate[]]):
 
 async function nextDeletionEventBatch(events: NostrEvent[]) {
 	if (events.length === 0) return;
+	// TODO support Repository Announcement Deletions
+
 	const [issue_items, pr_items] = await Promise.all([
 		db.issues
 			.filter(
@@ -436,6 +440,12 @@ async function nextDeletionEventBatch(events: NostrEvent[]) {
 			r.repos.forEach((repo) => repo_refs.add(repo));
 		}
 	});
+	// add deleted repo announcements
+	events.forEach((e) => {
+		e.tags.forEach((t) => {
+			if (t.length > 1 && t[0] === 'a' && isRepoRef(t[1])) repo_refs.add(t[1]);
+		});
+	});
 	// needed to update status counts when issue / pr is deleted
 	const repo_items = await db.repos.bulkGet([...repo_refs]);
 	repo_items.forEach((r) => {
@@ -465,6 +475,24 @@ const processDeletionEvent = (table_items: DbItemsCollection, deletion: NostrEve
 		const item_was_deleted = processDeletionEventForTableItem(item, deletion);
 		// update repo table with corrected counts
 		if (item_was_deleted) updateRepoMetrics(table_items, item, 'PRs');
+	});
+	[...table_items.repos.entries()].forEach(([a_ref, repo]) => {
+		if (
+			// if tags this repo
+			deletion.tags.some((t) => t.length > 1 && t[0] === 'a' && isRepoRef(t[1]) && t[1] == a_ref) &&
+			// if we havn't processed deletion event
+			(!repo.deletion_events || !repo.deletion_events.some((e) => e.id === deletion.id))
+		) {
+			// create array
+			if (!repo.deletion_events) repo.deletion_events = [];
+			// add deletion event
+			repo.deletion_events.push(deletion);
+			// set mark as deleted unless more recent annocuncment received
+			if (!repo.created_at || deletion.created_at >= repo.created_at) {
+				repo.deleted = true;
+			}
+			table_items.repos.set(a_ref, repo);
+		}
 	});
 };
 
