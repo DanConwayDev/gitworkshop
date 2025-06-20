@@ -92,7 +92,7 @@ export class GitManager {
 
 			// Get repository metadata
 			const branches = await this.getBranches(dir);
-			const defaultBranch = await this.getDefaultBranch(dir);
+			const defaultBranch = await this.getDefaultBranch(dir, branches);
 
 			const repository: Repository = {
 				a_ref,
@@ -241,7 +241,7 @@ export class GitManager {
 		return branches;
 	}
 
-	async getDefaultBranch(dir: string): Promise<string> {
+	async getDefaultBranch(dir: string, all_branches?: string[]): Promise<string> {
 		try {
 			// Try to get the default branch from HEAD
 			const head = await git.resolveRef({
@@ -257,7 +257,7 @@ export class GitManager {
 		} catch {
 			/* empty */
 		}
-		let branches = await this.getBranches(dir);
+		let branches = all_branches || (await this.getBranches(dir));
 		if (branches.includes('master')) return 'master';
 		if (branches.includes('main')) return 'main';
 		if (branches[0]) return branches[0];

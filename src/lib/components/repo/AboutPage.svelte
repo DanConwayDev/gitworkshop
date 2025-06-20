@@ -2,7 +2,7 @@
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store from '$lib/store.svelte';
 	import { repoTableItemDefaults, routeToRepoRef } from '$lib/types';
-	import Readme from './Readme.svelte';
+	import Explorer from '../explorer/Explorer.svelte';
 
 	let a_ref = $derived(routeToRepoRef(store.route));
 	let hint_relays = $derived(store.route?.relays);
@@ -11,5 +11,5 @@
 </script>
 
 {#if a_ref && repo && repo.clone}
-	<Readme {a_ref} clone_urls={repo.clone} />
+	<Explorer {a_ref} clone_urls={repo.clone} />
 {/if}
