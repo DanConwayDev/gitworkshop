@@ -1,1 +1,1 @@
-export const NGIT_VERSION = 'v1.7.2';
+export const NGIT_VERSION = 'v1.7.3';
