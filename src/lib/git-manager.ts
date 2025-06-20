@@ -234,16 +234,11 @@ export class GitManager {
 	}
 
 	async getBranches(dir: string): Promise<string[]> {
-		try {
-			const branches = await git.listBranches({
-				fs: this.fs,
-				dir
-			});
-			return branches;
-		} catch (error) {
-			console.error('Failed to get branches:', error);
-			return ['master'];
-		}
+		const branches = await git.listBranches({
+			fs: this.fs,
+			dir
+		});
+		return branches;
 	}
 
 	async getDefaultBranch(dir: string): Promise<string> {
@@ -259,11 +254,14 @@ export class GitManager {
 			if (head.startsWith('refs/heads/')) {
 				return head.replace('refs/heads/', '');
 			}
-
-			return 'master';
-		} catch (error) {
-			return 'master';
+		} catch {
+			/* empty */
 		}
+		let branches = await this.getBranches(dir);
+		if (branches.includes('master')) return 'master';
+		if (branches.includes('main')) return 'main';
+		if (branches[0]) return branches[0];
+		throw Error('no branches available');
 	}
 
 	async getFileTree(
