@@ -539,7 +539,7 @@ export class GitManager {
 
 	// Cache Management
 	clearCache(): void {
-		this.cache.clear();
+		indexedDB.deleteDatabase('git-cache');
 	}
 
 	getCacheSize(): number {

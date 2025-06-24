@@ -91,6 +91,12 @@
 		outer: for (const proxy of [false, true]) {
 			for (const clone_url of clone_urls.map(cloneUrltoHttps)) {
 				try {
+					git.clearCache();
+					git = new GitManager();
+				} catch {
+					/*empty*/
+				}
+				try {
 					repo = undefined;
 					loading_repo_error = undefined;
 					loading_repo_msg = `loading from ${clone_url}`;
