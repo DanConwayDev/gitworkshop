@@ -101,7 +101,6 @@
 					loading_repo_error = undefined;
 					loading_repo_msg = `loading from ${clone_url}`;
 					repo = await git.cloneRepository(clone_url, a_ref, {
-						depth: 1,
 						singleBranch: true,
 						proxy
 					});
