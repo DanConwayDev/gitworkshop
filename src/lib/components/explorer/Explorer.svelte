@@ -88,21 +88,24 @@
 		} catch {
 			/* empty */
 		}
-		for (const clone_url of clone_urls.map(cloneUrltoHttps)) {
-			try {
-				repo = undefined;
-				loading_repo_error = undefined;
-				loading_repo_msg = `loading from ${clone_url}`;
-				repo = await git.cloneRepository(clone_url, a_ref, {
-					depth: 1,
-					singleBranch: true
-				});
-				loading_repo_error = undefined;
-				loading_repo_msg = undefined;
-				selected_branch = repo.defaultBranch;
-				break;
-			} catch {
-				/*empty*/
+		outer: for (const proxy of [false, true]) {
+			for (const clone_url of clone_urls.map(cloneUrltoHttps)) {
+				try {
+					repo = undefined;
+					loading_repo_error = undefined;
+					loading_repo_msg = `loading from ${clone_url}`;
+					repo = await git.cloneRepository(clone_url, a_ref, {
+						depth: 1,
+						singleBranch: true,
+						proxy
+					});
+					loading_repo_error = undefined;
+					loading_repo_msg = undefined;
+					selected_branch = repo.defaultBranch;
+					break outer;
+				} catch {
+					/*empty*/
+				}
 			}
 		}
 		if (!repo) {

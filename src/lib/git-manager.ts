@@ -34,10 +34,10 @@ export class GitManager {
 	async cloneRepository(
 		url: string,
 		a_ref: string,
-		options: { depth?: number; singleBranch?: boolean; ref?: string } = {}
+		options: { depth?: number; singleBranch?: boolean; ref?: string; proxy?: boolean } = {}
 	): Promise<Repository> {
 		const dir = `/${a_ref}`;
-		const { depth = 1, singleBranch = true, ref } = options;
+		const { depth = 1, singleBranch = true, ref, proxy = false } = options;
 
 		try {
 			// Check if repository already exists in cache
@@ -80,7 +80,7 @@ export class GitManager {
 				url,
 				depth,
 				singleBranch,
-				corsProxy: 'https://cors.isomorphic-git.org'
+				corsProxy: proxy ? 'https://cors.isomorphic-git.org' : undefined
 			};
 
 			// Add ref if specified (branch to clone)
@@ -161,7 +161,11 @@ export class GitManager {
 		}
 	}
 
-	async pullRepository(a_ref: string, branch: string = 'master'): Promise<void> {
+	async pullRepository(
+		a_ref: string,
+		branch: string = 'master',
+		proxy: boolean = false
+	): Promise<void> {
 		const dir = `/${a_ref}`;
 
 		try {
@@ -196,7 +200,7 @@ export class GitManager {
 					}
 				},
 				dir,
-				corsProxy: 'https://cors.isomorphic-git.org',
+				corsProxy: proxy ? 'https://cors.isomorphic-git.org' : undefined,
 				ref: branch,
 				singleBranch: true
 			});
