@@ -48,7 +48,13 @@
 					if (b === selected_branch && f === selected_file_path) {
 						loading_file = false;
 						file_content = undefined;
-						loading_file_error = `error loading file: ${reason}`;
+						if (
+							`${reason}`.includes(
+								'Error: Git readFile failed: Could not find file or directory found at "'
+							)
+						)
+							loading_file_error = `"${selected_file_path}" doesnt exist on branch "${selected_branch}"`;
+						else loading_file_error = `error loading file: ${reason}`;
 					}
 				});
 		}
