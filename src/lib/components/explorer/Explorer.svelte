@@ -4,9 +4,49 @@
 	import { type RepoRef } from '$lib/types';
 	import { onMount } from 'svelte';
 	import FileViewer from './FileViewer.svelte';
-	import type { Repository } from '$lib/types/git-manager';
+	import type { FileEntry, Repository } from '$lib/types/git-manager';
+	import { inMemoryRelayEvent } from '$lib/helpers.svelte';
+	import { aRefToAddressPointer } from '$lib/utils';
+	import type { AddressPointer } from 'nostr-tools/nip19';
+	import { RepoStateKind } from '$lib/kinds';
+	import FileExplorer from './FileExplorer.svelte';
 
 	let { a_ref, clone_urls }: { a_ref: RepoRef; clone_urls: string[] } = $props();
+
+	let repo_state_query = $derived(
+		inMemoryRelayEvent({
+			...aRefToAddressPointer(a_ref),
+			kind: RepoStateKind
+		} as AddressPointer)
+	);
+	let state_not_found = $state(false);
+	onMount(() => {
+		setTimeout(() => {
+			if (!repo_state_query.event) {
+				state_not_found = true;
+			}
+		}, 5000);
+	});
+
+	let refs = $derived(
+		repo_state_query && repo_state_query.event
+			? repo_state_query.event.tags
+					.filter((t) => t[0] && t[0].startsWith('refs/') && t[0].indexOf('^{}') === -1)
+					.sort((a, b) => a[0].localeCompare(b[0]))
+			: []
+	);
+
+	let default_branch_or_tag = $derived.by(() => {
+		if (repo_state_query && repo_state_query.event) {
+			if (refs.map((t) => t[0]).includes('refs/heads/main')) return 'refs/heads/main';
+			if (refs.map((t) => t[0]).includes('refs/heads/master')) return 'refs/heads/master';
+			return refs.map((t) => t[0]).find((t) => t.includes('refs/heads/'));
+		}
+		return undefined;
+	});
+	$effect(() => {
+		refs;
+	});
 
 	let git = new GitManager();
 
@@ -16,6 +56,11 @@
 	let loading_repo_error: undefined | string = $state();
 	// refs
 	let selected_branch: undefined | string = $state();
+	// directory
+	let directory_path: string = $state('');
+	let directory_structure: FileEntry[] | undefined = $state();
+	let loading_directory: boolean = $state(true);
+	let loading_directory_error: undefined | string = $state();
 
 	// file
 	let selected_file_path: string = $state('README.md');
@@ -24,17 +69,27 @@
 	let loading_file_error: undefined | string = $state();
 	$effect(() => {
 		if (!repo) return;
+		loading_directory = true;
+		directory_structure = undefined;
 		loading_file = true;
 		file_content = undefined;
 		let b = $state.snapshot(selected_branch);
 		let f = $state.snapshot(selected_file_path);
 		if (!selected_branch) {
 			loading_file_error = undefined;
-			if (!repo.defaultBranch) loading_file = true;
-			else loading_file_error = 'no branch selected';
+			loading_directory_error = undefined;
+			if (!repo.defaultBranch) {
+				loading_file = true;
+				loading_directory = true;
+			} else {
+				loading_file_error = 'no branch selected';
+				loading_directory_error = 'no branch selected';
+			}
 		} else {
 			loading_file_error = undefined;
 			loading_file = true;
+			loading_directory_error = undefined;
+			loading_directory = true;
 			git
 				.getFileContent(a_ref, selected_branch, selected_file_path)
 				.then((c) => {
@@ -55,6 +110,20 @@
 						)
 							loading_file_error = `"${selected_file_path}" doesnt exist on branch "${selected_branch}"`;
 						else loading_file_error = `error loading file: ${reason}`;
+					}
+				});
+			git
+				.getFileTree(a_ref, selected_branch, directory_path)
+				.then((a) => {
+					directory_structure = [...a];
+					loading_directory = false;
+					loading_directory_error = undefined;
+				})
+				.catch((reason) => {
+					if (b === selected_branch && f === selected_file_path) {
+						loading_directory = false;
+						directory_structure = undefined;
+						loading_directory_error = `error loading directory: ${reason}`;
 					}
 				});
 		}
@@ -126,6 +195,14 @@
 	};
 </script>
 
+<div>{default_branch_or_tag}</div>
+
+<FileExplorer
+	path={directory_path}
+	file_details={directory_structure}
+	error={loading_directory_error}
+	base_url={`/${store.route?.s}/blob/${selected_branch}`}
+/>
 {#if !loading_file && (loading_repo_error || loading_file_error)}
 	<div class="my-3 rounded-lg border border-base-400">
 		<div class="border-b border-base-400 bg-base-300 px-6 py-3">

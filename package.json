@@ -39,6 +39,7 @@
 	},
 	"dependencies": {
 		"@cashu/cashu-ts": "^2.2.2",
+		"@iconify/svelte": "^5.0.0",
 		"@isomorphic-git/lightning-fs": "^4.6.2",
 		"@sveltejs/adapter-netlify": "^4.4.2",
 		"@tailwindcss/container-queries": "^0.1.1",
