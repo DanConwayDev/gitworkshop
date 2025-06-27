@@ -1,7 +1,6 @@
 <script lang="ts">
 	import store from '$lib/store.svelte';
 	import type { FileEntry } from '$lib/types/git-manager';
-	import FileIcon from '../FileIcon.svelte';
 
 	let {
 		path,
@@ -46,7 +45,25 @@
 					<tbody>
 						{#each file_details as f}
 							<tr class="hover:bg-base-200">
-								<th class="w-1"><FileIcon isDirectory={f.type == 'directory'} path={f.path} /></th>
+								<th class="w-1">
+									{#if f.type === 'directory'}
+										<svg class="h-5 w-5 text-secondary" fill="currentColor" viewBox="0 0 24 24">
+											<path
+												d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"
+											/>
+										</svg>
+									{:else}
+										<svg
+											class="h-5 w-5 text-base-content opacity-70"
+											fill="currentColor"
+											viewBox="0 0 24 24"
+										>
+											<path
+												d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"
+											/>
+										</svg>
+									{/if}
+								</th>
 								<td> <a class="link-hover link" href={`${base_url}/${f.path}`}>{f.name}</a></td>
 							</tr>
 						{/each}
