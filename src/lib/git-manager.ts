@@ -212,7 +212,7 @@ export class GitManager {
 				dir,
 				ours: branch,
 				theirs: `origin/${branch}`,
-				fastForwardOnly: true
+				fastForwardOnly: false
 			});
 
 			console.log(`Successfully pulled updates for ${a_ref} on branch ${branch}`);
