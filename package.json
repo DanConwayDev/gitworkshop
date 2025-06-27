@@ -64,6 +64,7 @@
 		"nostr-tools": "^2.12.0",
 		"parse-diff": "^0.11.1",
 		"rxjs": "^7.8.2",
+		"svelte-highlight": "^7.8.3",
 		"svelte-qrcode": "^1.0.1",
 		"svelte-tiptap": "^2.1.0",
 		"tailwind-scrollbar-hide": "^2.0.0",

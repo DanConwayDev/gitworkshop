@@ -86,6 +86,9 @@ importers:
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
+      svelte-highlight:
+        specifier: ^7.8.3
+        version: 7.8.3
       svelte-qrcode:
         specifier: ^1.0.1
         version: 1.0.1
@@ -3645,6 +3648,9 @@ packages:
     peerDependenciesMeta:
       svelte:
         optional: true
+
+  svelte-highlight@7.8.3:
+    resolution: {integrity: sha512-i4CE/6yda1fCh0ovUVATk1S1feu1y3+CV+l1brgtMPPRO9VTGq+hPpUjVEJWQkE7hPAgwgVpHccoa5M2gpKxYQ==}
 
   svelte-qrcode@1.0.1:
     resolution: {integrity: sha512-l1RcxDWkQqtBWUkolYee/IHGVKSgm1I2PdF8yVoIRqzKCc3kXpCXSVsMfrMSavWW2/BXvKu5Orv+JGbrO5onsw==}
@@ -7864,6 +7870,10 @@ snapshots:
       postcss-scss: 4.0.9(postcss@8.5.3)
     optionalDependencies:
       svelte: 5.23.0
+
+  svelte-highlight@7.8.3:
+    dependencies:
+      highlight.js: 11.11.1
 
   svelte-qrcode@1.0.1:
     dependencies:
