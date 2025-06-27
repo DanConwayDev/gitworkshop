@@ -14,8 +14,14 @@
 	let {
 		a_ref,
 		clone_urls,
-		ref_and_path
-	}: { a_ref: RepoRef; clone_urls: string[]; ref_and_path?: string } = $props();
+		ref_and_path,
+		scroll_to_file = true
+	}: {
+		a_ref: RepoRef;
+		clone_urls: string[];
+		ref_and_path?: string;
+		scroll_to_file?: boolean;
+	} = $props();
 
 	let repo_state_query = $derived(
 		inMemoryRelayEvent({
@@ -132,6 +138,7 @@
 						loading_file = false;
 						loading_file_error = undefined;
 						path_is_dir = false;
+						scrollToAnchor();
 						// path is file, get parent directory info
 						git.getFileTree(a_ref, selected_branch, getParentDir(path)).then((a) => {
 							if (b === selected_branch && f === path) {
@@ -163,6 +170,7 @@
 											.then((c) => {
 												loading_file = false;
 												if (b === selected_branch && f === path) {
+													scrollToAnchor();
 													file_content = c;
 													loading_file = false;
 													loading_file_error = undefined;
@@ -250,6 +258,12 @@
 			loading_repo_error = `failed to load repo files from ${clone_urls.map(cloneUrltoHttps).join(' ')}`;
 		}
 	};
+	function scrollToAnchor() {
+		const anchor = document.getElementById('file-viewer');
+		if (anchor && scroll_to_file) {
+			anchor.scrollIntoView({ behavior: 'smooth' });
+		}
+	}
 </script>
 
 <!-- <div>TODO HEADER: {selected_branch}</div> -->
@@ -261,6 +275,8 @@
 	error={loading_directory_error}
 	base_url={`/${store.route?.s}/tree/${selected_branch}`}
 />
-{#if loading_file || file_content || path_is_dir === false}
-	<FileViewer path={file_path} content={file_content} />
-{/if}
+<div id="file-viewer">
+	{#if loading_file || file_content || path_is_dir === false}
+		<FileViewer path={file_path} content={file_content} />
+	{/if}
+</div>

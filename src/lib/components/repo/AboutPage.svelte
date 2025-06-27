@@ -11,5 +11,5 @@
 </script>
 
 {#if a_ref && repo && repo.clone}
-	<Explorer {a_ref} clone_urls={repo.clone} />
+	<Explorer {a_ref} clone_urls={repo.clone} scroll_to_file={false} />
 {/if}
