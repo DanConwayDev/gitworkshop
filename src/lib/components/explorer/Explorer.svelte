@@ -11,7 +11,11 @@
 	import { RepoStateKind } from '$lib/kinds';
 	import FileExplorer from './FileExplorer.svelte';
 
-	let { a_ref, clone_urls }: { a_ref: RepoRef; clone_urls: string[] } = $props();
+	let {
+		a_ref,
+		clone_urls,
+		ref_and_path
+	}: { a_ref: RepoRef; clone_urls: string[]; ref_and_path?: string } = $props();
 
 	let repo_state_query = $derived(
 		inMemoryRelayEvent({
@@ -54,28 +58,57 @@
 	let repo: Repository | undefined = $state();
 	let loading_repo_msg: undefined | string = $state();
 	let loading_repo_error: undefined | string = $state();
-	// refs
-	let selected_branch: undefined | string = $state();
+
+	// selected
+	let branch_in_path = $derived(
+		!ref_and_path
+			? undefined
+			: repo?.branches
+					.filter((branch) => ref_and_path.startsWith(branch))
+					.reduce((longest, current) => {
+						return current.length > longest.length ? current : longest;
+					}, '')
+	);
+	let path = $derived(
+		(ref_and_path ?? '')
+			.replace(branch_in_path ?? '', '')
+			.replace(/^\/+/, '') // Remove leading slashes
+			.replace(/\/+$/, '')
+	); // Remove trailing slashes
+	let selected_branch = $derived(branch_in_path ?? repo?.defaultBranch);
+
+	let path_is_dir: boolean | undefined = $state();
+
+	const getParentDir = (path: string) => {
+		// Split the path by '/' and remove the last segment
+		const segments = path.split('/');
+		segments.pop();
+		return segments.join('/');
+	};
+
 	// directory
-	let directory_path: string = $state('');
 	let directory_structure: FileEntry[] | undefined = $state();
 	let loading_directory: boolean = $state(true);
 	let loading_directory_error: undefined | string = $state();
 
 	// file
-	let selected_file_path: string = $state('README.md');
+	let file_path = $derived(path_is_dir ? `${path}/README.md`.replace(/^\/+/, '') : path);
 	let file_content: string | undefined = $state();
 	let loading_file: boolean = $state(true);
 	let loading_file_error: undefined | string = $state();
 	$effect(() => {
 		if (!repo) return;
+		path_is_dir = undefined;
+		let b = $state.snapshot(selected_branch);
+		let f = $state.snapshot(path);
+
+		// reset loading
 		loading_directory = true;
-		directory_structure = undefined;
+		// directory_structure = undefined; - dont do this as it makes the UI flash
 		loading_file = true;
 		file_content = undefined;
-		let b = $state.snapshot(selected_branch);
-		let f = $state.snapshot(selected_file_path);
 		if (!selected_branch) {
+			// stop loading and show error
 			loading_file_error = undefined;
 			loading_directory_error = undefined;
 			if (!repo.defaultBranch) {
@@ -86,44 +119,69 @@
 				loading_directory_error = 'no branch selected';
 			}
 		} else {
+			// try path as file
 			loading_file_error = undefined;
 			loading_file = true;
 			loading_directory_error = undefined;
 			loading_directory = true;
 			git
-				.getFileContent(a_ref, selected_branch, selected_file_path)
+				.getFileContent(a_ref, selected_branch, path)
 				.then((c) => {
-					if (b === selected_branch && f === selected_file_path) {
+					if (b === selected_branch && f === path) {
 						file_content = c;
 						loading_file = false;
 						loading_file_error = undefined;
+						path_is_dir = false;
+						// path is file, get parent directory info
+						git.getFileTree(a_ref, selected_branch, getParentDir(path)).then((a) => {
+							if (b === selected_branch && f === path) {
+								directory_structure = [...a];
+								loading_directory = false;
+								loading_directory_error = undefined;
+							}
+						});
 					}
 				})
 				.catch((reason) => {
-					if (b === selected_branch && f === selected_file_path) {
-						loading_file = false;
-						file_content = undefined;
-						if (
-							`${reason}`.includes(
-								'Error: Git readFile failed: Could not find file or directory found at "'
+					if (b === selected_branch && f === path) {
+						if (`${reason}`.includes('was anticipated to be a blob but it is a tree.')) {
+							// path is directory, get parent directory info
+							path_is_dir = true;
+							git.getFileTree(a_ref, selected_branch, path).then((a) => {
+								if (b === selected_branch && f === path) {
+									directory_structure = [...a];
+									loading_directory = false;
+									loading_directory_error = undefined;
+									if (a.some((e) => e.name === 'README.md')) {
+										// try and get README.md
+										git
+											.getFileContent(
+												a_ref,
+												selected_branch,
+												`${path}/README.md`.replace(/^\/+/, '') // remove leading slash
+											)
+											.then((c) => {
+												loading_file = false;
+												if (b === selected_branch && f === path) {
+													file_content = c;
+													loading_file = false;
+													loading_file_error = undefined;
+												}
+											});
+									} else loading_file = false;
+								}
+							});
+						} else {
+							loading_file = false;
+							file_content = undefined;
+							if (
+								`${reason}`.includes(
+									'Error: Git readFile failed: Could not find file or directory found at "'
+								)
 							)
-						)
-							loading_file_error = `"${selected_file_path}" doesnt exist on branch "${selected_branch}"`;
-						else loading_file_error = `error loading file: ${reason}`;
-					}
-				});
-			git
-				.getFileTree(a_ref, selected_branch, directory_path)
-				.then((a) => {
-					directory_structure = [...a];
-					loading_directory = false;
-					loading_directory_error = undefined;
-				})
-				.catch((reason) => {
-					if (b === selected_branch && f === selected_file_path) {
-						loading_directory = false;
-						directory_structure = undefined;
-						loading_directory_error = `error loading directory: ${reason}`;
+								loading_file_error = `"${path}" doesnt exist on branch "${selected_branch}"`;
+							else loading_file_error = `error loading file: ${reason}`;
+						}
 					}
 				});
 		}
@@ -157,7 +215,6 @@
 				loading_repo_msg = 'pulling repository data';
 				await git.pullRepository(a_ref, repo.defaultBranch);
 				loading_repo_msg = undefined;
-				selected_branch = repo.defaultBranch;
 				return;
 			}
 		} catch {
@@ -172,6 +229,7 @@
 					/*empty*/
 				}
 				try {
+					path_is_dir = undefined;
 					repo = undefined;
 					loading_repo_error = undefined;
 					loading_repo_msg = `loading from ${clone_url}`;
@@ -181,7 +239,6 @@
 					});
 					loading_repo_error = undefined;
 					loading_repo_msg = undefined;
-					selected_branch = repo.defaultBranch;
 					break outer;
 				} catch {
 					/*empty*/
@@ -195,23 +252,15 @@
 	};
 </script>
 
-<div>{default_branch_or_tag}</div>
+<!-- <div>TODO HEADER: {selected_branch}</div> -->
 
 <FileExplorer
-	path={directory_path}
+	path={path_is_dir ? path : getParentDir(path)}
 	file_details={directory_structure}
+	selected_file={file_path}
 	error={loading_directory_error}
-	base_url={`/${store.route?.s}/blob/${selected_branch}`}
+	base_url={`/${store.route?.s}/tree/${selected_branch}`}
 />
-{#if !loading_file && (loading_repo_error || loading_file_error)}
-	<div class="my-3 rounded-lg border border-base-400">
-		<div class="border-b border-base-400 bg-base-300 px-6 py-3">
-			<h4 class="">README.md</h4>
-		</div>
-		<div class="p-6">
-			<div>{loading_repo_error || loading_file_error}</div>
-		</div>
-	</div>
-{:else}
-	<FileViewer path="README.md" content={file_content} />
+{#if loading_file || file_content || path_is_dir === false}
+	<FileViewer path={file_path} content={file_content} />
 {/if}

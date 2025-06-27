@@ -4,12 +4,37 @@
 
 	let {
 		path,
+		selected_file,
 		file_details,
 		base_url,
 		error
-	}: { path: string; file_details?: FileEntry[]; error?: string; base_url: string } = $props();
+	}: {
+		path: string;
+		selected_file?: string;
+		file_details?: FileEntry[];
+		error?: string;
+		base_url: string;
+	} = $props();
 
+	const getParentDir = (path: string) => {
+		// Split the path by '/' and remove the last segment
+		const segments = path.split('/');
+		segments.pop();
+		return segments.join('/');
+	};
 	let path_structure = $derived(path.split('/'));
+	let file_details_wrapper = $derived(
+		!file_details || path === ''
+			? file_details
+			: [
+					{
+						name: '..',
+						path: getParentDir(path),
+						type: 'directory'
+					},
+					...file_details
+				]
+	);
 </script>
 
 <div class="my-3 rounded-lg border border-base-400">
@@ -25,7 +50,7 @@
 	<div class="">
 		{#if error}
 			{error}
-		{:else if !file_details}
+		{:else if !file_details_wrapper}
 			<div class="skeleton my-3 h-5 w-20"></div>
 			<div class="skeleton my-2 h-4"></div>
 			<div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
@@ -43,8 +68,8 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each file_details as f}
-							<tr class="hover:bg-base-200">
+						{#each file_details_wrapper as f}
+							<tr class="hover:bg-base-200" class:bg-base-200={f.path === selected_file}>
 								<th class="w-1">
 									{#if f.type === 'directory'}
 										<svg class="h-5 w-5 text-secondary" fill="currentColor" viewBox="0 0 24 24">
