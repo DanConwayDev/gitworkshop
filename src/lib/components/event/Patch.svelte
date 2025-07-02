@@ -97,7 +97,7 @@
 						expand_full_files[index] = false;
 					}}
 				>
-					{expand_files[index] ? 'colapse' : 'expand'}
+					{expand_files[index] ? 'collapse' : 'expand'}
 				</button>
 				<button
 					class="flex-none p-3 text-right text-xs opacity-40"
