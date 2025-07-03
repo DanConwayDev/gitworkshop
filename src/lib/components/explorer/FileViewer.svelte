@@ -13,8 +13,8 @@
 		<div class="px-6 py-3 flex-grow"><h4 class="">{path}</h4></div>
 		{#if path.toLowerCase().endsWith('.md')}
 			<div class="tabs tabs-lifted tabs-lg">
-				<button class="tab text-sm" class:tab-active={!use_markdown} onclick={()=> {use_markdown = false}}>Raw</button>
-				<button class="tab text-sm" class:tab-active={use_markdown} onclick={()=> {use_markdown = true}}>Markdown</button>
+				<button class="tab text-xs" class:tab-active={!use_markdown} onclick={()=> {use_markdown = false}}>Raw</button>
+				<button class="tab text-xs" class:tab-active={use_markdown} onclick={()=> {use_markdown = true}}>Markdown</button>
 			</div>
 		{/if}
 	</div>
