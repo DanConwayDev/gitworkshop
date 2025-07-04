@@ -103,6 +103,20 @@ export class GitManager {
 				lastUpdated: new Date()
 			};
 
+			// set git config to supress some errors during `pull` command
+			await git.setConfig({
+				fs: this.fs,
+				dir,
+				path: 'user.name',
+				value: 'Alice Doe'
+			});
+			await git.setConfig({
+				fs: this.fs,
+				dir,
+				path: 'user.email',
+				value: 'alice@example.com'
+			});
+
 			// Cache the repository
 			this.cache.set(cacheKey, repository);
 
@@ -135,7 +149,6 @@ export class GitManager {
 		if (!isCloned) {
 			return null;
 		}
-
 		const dir = `/${a_ref}`;
 		try {
 			// Get repository metadata from the filesystem
@@ -171,7 +184,7 @@ export class GitManager {
 
 		try {
 			// Fetch latest changes from remote
-			await git.fetch({
+			await git.pull({
 				fs: this.fs,
 				http: {
 					request: async (args: any) => {
@@ -204,15 +217,6 @@ export class GitManager {
 				corsProxy: proxy ? 'https://cors.isomorphic-git.org' : undefined,
 				ref: branch,
 				singleBranch: true
-			});
-
-			// Merge/fast-forward the changes
-			await git.merge({
-				fs: this.fs,
-				dir,
-				ours: branch,
-				theirs: `origin/${branch}`,
-				fastForwardOnly: false
 			});
 
 			console.log(`Successfully pulled updates for ${a_ref} on branch ${branch}`);
