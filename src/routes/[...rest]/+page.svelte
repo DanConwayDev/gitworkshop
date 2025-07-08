@@ -57,15 +57,12 @@
 	);
 	let root_event_pointer = $derived(
 		// using isEventPointer stops us falling back to an 'a' tagged as root
-		root_pointer && isEventPointer(root_pointer) ? root_pointer : undefined
+		root_pointer && isEventPointer(root_pointer)
+			? { ...root_pointer, relays: hint_relays ?? root_pointer.relays }
+			: undefined
 	);
 	let root_event_query = $derived(
-		root_event_pointer
-			? query_centre.fetchEvent({
-					...root_event_pointer,
-					relays: hint_relays ?? root_event_pointer.relays
-				})
-			: undefined
+		root_event_pointer ? query_centre.fetchEvent(root_event_pointer) : undefined
 	);
 	let root_pr_query = $derived(
 		root_event_pointer ? query_centre.fetchPr(root_event_pointer.id) : undefined
@@ -73,7 +70,7 @@
 	let root_issue_query = $derived(
 		root_event_pointer ? query_centre.fetchIssue(root_event_pointer.id) : undefined
 	);
-	let going = $state(false);
+	let routing = $state(false);
 
 	const routeToEvent = (
 		bech32: Nevent | Nnote,
@@ -81,11 +78,13 @@
 		type: 'pr' | 'issue',
 		child_event_id?: EventIdString
 	): 'pr' | 'issue' => {
-		going = true;
-		let fagment = child_event_id ? `#${child_event_id.substring(0, 15)}` : '';
-		goto(
-			`/${new RepoRouteStringCreator(a_ref, hint_relays ? hint_relays[0] : undefined).s}/${type}s/${bech32}${fagment}`
-		);
+		if (!routing) {
+			let fagment = child_event_id ? `#${child_event_id.substring(0, 15)}` : '';
+			goto(
+				`/${new RepoRouteStringCreator(a_ref, hint_relays ? hint_relays[0] : undefined).s}/${type}s/${bech32}${fagment}`
+			);
+			routing = true;
+		}
 		return type;
 	};
 	let event_type: 'issue' | 'pr' | 'in_thread' | 'other' | undefined = $derived.by(() => {

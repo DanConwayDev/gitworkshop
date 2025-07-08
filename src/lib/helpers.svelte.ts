@@ -2,7 +2,9 @@ import { liveQuery } from 'dexie';
 import { nip19, type Filter, type NostrEvent } from 'nostr-tools';
 import { memory_db_query_store } from './dbs/InMemoryRelay';
 import {
+	isNpub,
 	isRepoRef,
+	isWebSocketUrl,
 	type EventIdString,
 	type Nip05Address,
 	type Npub,
@@ -166,9 +168,9 @@ export class RepoRouteStringCreator {
 	s: RepoRouteString = $derived.by(() => {
 		if (this.pointer && this.a_ref) {
 			if (store.url_pref === 'naddr') return aToNaddr(this.pointer);
-			else if (store.url_pref === 'nip05' && this.nip_creator?.s) {
+			else if (store.url_pref === 'nip05' && this.nip_creator?.s && !isNpub(this.nip_creator?.s)) {
 				return `${this.nip_creator.s}/${this.pointer.identifier}` as RepoRouteNip05String;
-			} else return repoRefToPubkeyLink(this.a_ref);
+			} else return repoRefToPubkeyLink(this.a_ref, this.pointer.relays?.filter(isWebSocketUrl));
 		}
 		// unreachable see https://github.com/sveltejs/svelte/issues/11116
 		return `${RepoAnnKind}:<a_ref and pointer will never be undefined>:<svelte-5-sucks>` as RepoRouteString;

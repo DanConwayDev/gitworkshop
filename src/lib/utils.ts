@@ -285,9 +285,14 @@ export function aToNaddr(a: string | AddressPointer) {
 	return nip19.naddrEncode(a_ref);
 }
 
-export const repoRefToPubkeyLink = (a_ref: RepoRef): `${Npub}/${string}` => {
+export const repoRefToPubkeyLink = (
+	a_ref: RepoRef,
+	relay?: WebSocketUrl[]
+): `${Npub}/${string}` => {
 	const pointer = aRefPToAddressPointer(a_ref);
-	return `${nip19.npubEncode(pointer.pubkey)}/${pointer.identifier}`;
+	const hint =
+		relay && relay.length > 0 ? `/${encodeURIComponent(relay[0].replace('wss://', ''))}` : '';
+	return `${nip19.npubEncode(pointer.pubkey)}${hint}/${pointer.identifier}`;
 };
 
 export const neventOrNoteToHexId = (s: string): EventIdString | undefined => {
