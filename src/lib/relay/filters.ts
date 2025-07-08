@@ -5,7 +5,8 @@ import {
 	RepoAnnKind,
 	RepoStateKind,
 	QualityChildKinds,
-	DeletionKind
+	DeletionKind,
+	ReplyKind
 } from '$lib/kinds';
 import type {
 	EventIdString,
@@ -78,6 +79,20 @@ export const createPubkeyFiltersGroupedBySince = (
 		});
 	}
 	return filters;
+};
+
+export const createPubkeyNoficiationsFilters = (pubkey: PubKeyString) => {
+	return [
+		{
+			'#P': [pubkey],
+			'#K': [PatchKind.toString(), IssueKind.toString()],
+			kinds: [ReplyKind]
+		},
+		{
+			'#p': [pubkey],
+			kinds: [PatchKind, IssueKind]
+		}
+	];
 };
 
 export const createRepoIdentifierFilters = (

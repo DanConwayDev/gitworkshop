@@ -23,6 +23,7 @@ import type { Subscription } from 'nostr-tools/abstract-relay';
 import { repoTableItemToRelayCheckTimestamp } from './RelaySelection';
 import {
 	createPubkeyFiltersGroupedBySince,
+	createPubkeyNoficiationsFilters,
 	createRepoChildrenFilters,
 	createRepoChildrenQualityFilters,
 	createRepoChildrenStatusAndDeletionFilters,
@@ -345,6 +346,16 @@ export class RelayManager {
 				this.fetching_pubkey_queue = false;
 			}
 		});
+	}
+
+	async fetchPubkeyNotifications(pubkey: PubKeyString) {
+		await this.connect();
+		let sub = this.relay.subscribe([...createPubkeyNoficiationsFilters(pubkey)], {
+			onevent: (event) => this.onEvent(event)
+		});
+		return async () => {
+			return sub.close();
+		};
 	}
 
 	repo_queue: Map<RepoRef, RelayCheckTimestamp> = new Map();

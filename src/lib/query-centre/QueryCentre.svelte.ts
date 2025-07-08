@@ -28,6 +28,7 @@ import {
 	createRecentActionsRequestFilter,
 	createRecentActionsResultFilter
 } from '$lib/relay/filters/actions';
+import { createPubkeyNoficiationsFilters } from '$lib/relay/filters';
 
 class QueryCentre {
 	external_worker: Worker;
@@ -149,6 +150,20 @@ class QueryCentre {
 				.equals(pubkey)
 				.filter((r) => !r.deleted)
 				.toArray()
+		);
+	}
+
+	watchPubkeyNotifications(pubkey: PubKeyString) {
+		this.external_worker.postMessage({ method: 'watchPubkeyNotifications', args: [pubkey] });
+		return inMemoryRelayTimeline(
+			[...createPubkeyNoficiationsFilters(pubkey)],
+			() => [pubkey],
+			() => {
+				this.external_worker.postMessage({
+					method: 'watchPubkeyNotificationsUnsubscribe',
+					args: [pubkey]
+				});
+			}
 		);
 	}
 

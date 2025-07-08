@@ -38,7 +38,8 @@ import {
 	createRepoChildrenFilters,
 	createRepoIdentifierFilters,
 	createRepoChildrenStatusAndDeletionFilters,
-	createRepoChildrenQualityFilters
+	createRepoChildrenQualityFilters,
+	createPubkeyNoficiationsFilters
 } from '$lib/relay/filters';
 import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
 import type { EventPointer } from 'nostr-tools/nip19';
@@ -282,6 +283,30 @@ class QueryCentreExternal {
 		await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchAllRepos(pubkey)));
 	}
 
+	async watchPubkeyNotifications(pubkey: PubKeyString) {
+		const query = `watchPubkeyNotifications${pubkey}`;
+		const already_fetching = !this.subscriber_manager.add(query);
+		if (already_fetching) return;
+		await this.hydrate_from_cache_db([...createPubkeyNoficiationsFilters(pubkey)]);
+		const relays = await chooseRelaysForPubkey(pubkey);
+		try {
+			await Promise.all(
+				relays.map(({ url, check_timestamps }) =>
+					(async () => {
+						const unsubsriber = await this.get_relay(url).fetchPubkeyNotifications(pubkey);
+						this.subscriber_manager.addUnsubsriber(query, unsubsriber);
+					})()
+				)
+			);
+		} catch {
+			/* empty */
+		}
+	}
+
+	watchPubkeyNotificationsUnsubscribe(pubkey: PubKeyString) {
+		this.subscriber_manager.remove(`watchPubkeyNotifications${pubkey}`);
+	}
+
 	async watchIssueThread(a_ref: RepoRef, id: EventIdString) {
 		const query = `watchIssueThread${a_ref}${id}`;
 		const already_fetching = !this.subscriber_manager.add(query);
@@ -522,6 +547,13 @@ self.onmessage = async (event) => {
 		case 'fetchNip05':
 			result = await external.fetchNip05(args[0]);
 			break;
+		case 'watchPubkeyNotifications':
+			result = await external.watchPubkeyNotifications(args[0]);
+			break;
+		case 'watchPubkeyNotificationsUnsubscribe':
+			result = await external.watchPubkeyNotificationsUnsubscribe(args[0]);
+			break;
+
 		case 'fetchRecentActions':
 			result = await external.fetchRecentActions(args[0]);
 			break;
