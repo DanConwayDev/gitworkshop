@@ -223,3 +223,32 @@ export class UserRouteStringCreator {
 		this.pubkey = pubkey;
 	}
 }
+
+/**
+ * Svelte action that, when its parameter is truthy,
+ * waits one tick and then scrolls the node into view.
+ */
+export function scrollWhen(node: HTMLElement, shouldScroll: boolean) {
+	let timeout: ReturnType<typeof setTimeout>;
+
+	function doScroll(flag: boolean) {
+		if (flag) {
+			// next microtask / tick
+			timeout = setTimeout(() => {
+				node.scrollIntoView({ behavior: 'smooth' });
+			}, 0);
+		}
+	}
+
+	// do it on init
+	doScroll(shouldScroll);
+
+	return {
+		update(newShouldScroll: boolean) {
+			doScroll(newShouldScroll);
+		},
+		destroy() {
+			clearTimeout(timeout);
+		}
+	};
+}

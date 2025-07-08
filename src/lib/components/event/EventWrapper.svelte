@@ -15,6 +15,8 @@
 	import { ShortTextNote } from '$lib/kind_labels';
 	import { DeletionKind, kindtoTextLabel } from '$lib/kinds';
 	import { isReplaceable, getEventUID } from 'applesauce-core/helpers/event';
+	import { page } from '$app/state';
+	import { scrollWhen } from '$lib/helpers.svelte';
 
 	let {
 		event,
@@ -29,6 +31,10 @@
 		children: Snippet;
 		reactions?: NostrEvent[];
 	} = $props();
+
+	let refed_in_url_fagment = $derived(
+		page.url.hash.length > 1 && event && event.id.startsWith(page.url.hash.substring(1))
+	);
 
 	let show_compose = $state(false);
 	let show_more = $state(false);
@@ -205,7 +211,13 @@
 	</div>
 {/snippet}
 
-<div class="max-w-4xl border-b border-base-300 p-3 pl-3">
+<div
+	class="max-w-4xl border-b border-base-300 p-3 pl-3"
+	class:border-2={refed_in_url_fagment}
+	class:border-l-8={refed_in_url_fagment}
+	class:border-primary={refed_in_url_fagment}
+	use:scrollWhen={refed_in_url_fagment}
+>
 	<div class="flex">
 		<div class="flex-auto">
 			<UserHeader user={event.pubkey} in_event_header={true} />
