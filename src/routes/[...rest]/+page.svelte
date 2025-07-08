@@ -5,7 +5,14 @@
 	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
 	import { IssueKind, PatchKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
-	import type { EventIdString, Nevent, Nnote, RepoRef } from '$lib/types';
+	import {
+		isWebSocketUrl,
+		type EventIdString,
+		type Nevent,
+		type Nnote,
+		type RepoRef,
+		type WebSocketUrl
+	} from '$lib/types';
 	import { eventIsPrRoot, getRootPointer } from '$lib/utils';
 	import { isEventPointer } from 'applesauce-core/helpers';
 	import { nip19 } from 'nostr-tools';
@@ -31,6 +38,11 @@
 				: undefined
 	);
 
+	let hint_relays = $derived.by(() => {
+		let relays: WebSocketUrl[] = pointer?.relays?.filter((r) => isWebSocketUrl(r)) ?? [];
+		return relays.length > 0 ? relays : undefined;
+	});
+
 	let pr_query = $derived(pointer ? query_centre.fetchPr(pointer.id) : undefined);
 	let issue_query = $derived(pointer ? query_centre.fetchIssue(pointer.id) : undefined);
 	let event_query = $derived(pointer ? query_centre.fetchEvent(pointer) : undefined);
@@ -48,7 +60,12 @@
 		root_pointer && isEventPointer(root_pointer) ? root_pointer : undefined
 	);
 	let root_event_query = $derived(
-		root_event_pointer ? query_centre.fetchEvent(root_event_pointer) : undefined
+		root_event_pointer
+			? query_centre.fetchEvent({
+					...root_event_pointer,
+					relays: hint_relays ?? root_event_pointer.relays
+				})
+			: undefined
 	);
 	let root_pr_query = $derived(
 		root_event_pointer ? query_centre.fetchPr(root_event_pointer.id) : undefined
@@ -66,7 +83,9 @@
 	): 'pr' | 'issue' => {
 		going = true;
 		let fagment = child_event_id ? `#${child_event_id.substring(0, 15)}` : '';
-		goto(`/${new RepoRouteStringCreator(a_ref).s}/${type}s/${bech32}${fagment}`);
+		goto(
+			`/${new RepoRouteStringCreator(a_ref, hint_relays ? hint_relays[0] : undefined).s}/${type}s/${bech32}${fagment}`
+		);
 		return type;
 	};
 	let event_type: 'issue' | 'pr' | 'in_thread' | 'other' | undefined = $derived.by(() => {
