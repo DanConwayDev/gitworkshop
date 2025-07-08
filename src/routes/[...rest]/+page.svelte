@@ -36,7 +36,10 @@
 	let event_query = $derived(pointer ? query_centre.fetchEvent(pointer) : undefined);
 
 	let root_pointer = $derived(
-		event_query && event_query.event && ![PatchKind, IssueKind].includes(event_query.event.kind)
+		event_query &&
+			event_query.event &&
+			event_query.event.kind !== IssueKind &&
+			(event_query.event.kind !== PatchKind || !eventIsPrRoot(event_query.event))
 			? getRootPointer(event_query.event)
 			: undefined
 	);
@@ -53,6 +56,7 @@
 	let root_issue_query = $derived(
 		root_event_pointer ? query_centre.fetchIssue(root_event_pointer.id) : undefined
 	);
+	let going = $state(false);
 
 	const routeToEvent = (
 		bech32: Nevent | Nnote,
@@ -60,40 +64,23 @@
 		type: 'pr' | 'issue',
 		child_event_id?: EventIdString
 	): 'pr' | 'issue' => {
+		going = true;
 		let fagment = child_event_id ? `#${child_event_id.substring(0, 15)}` : '';
 		goto(`/${new RepoRouteStringCreator(a_ref).s}/${type}s/${bech32}${fagment}`);
 		return type;
 	};
 	let event_type: 'issue' | 'pr' | 'in_thread' | 'other' | undefined = $derived.by(() => {
-		if (pr_query?.current)
-			return routeToEvent(event_ref as Nevent, pr_query?.current.repos[0], 'pr');
-		if (issue_query?.current)
-			return routeToEvent(event_ref as Nevent, issue_query?.current.repos[0], 'issue');
-		const isnt_issue_or_pr_root =
-			event_query?.event &&
-			!eventIsPrRoot(event_query.event) &&
-			event_query.event.kind !== IssueKind;
+		if (pr_query?.current) return 'pr';
+		if (issue_query?.current) return 'issue';
 		if (root_event_pointer) return 'in_thread';
-		if (isnt_issue_or_pr_root) return 'other';
+		if (event_query?.event) return 'other';
 		return undefined;
 	});
 
 	let root_event_type: 'issue' | 'pr' | 'other' | undefined = $derived.by(() => {
 		if (event_query && event_query?.event && root_event_pointer) {
-			if (root_pr_query?.current)
-				return routeToEvent(
-					nip19.neventEncode(root_event_pointer),
-					root_pr_query?.current.repos[0],
-					'pr',
-					event_query.event.id
-				);
-			if (root_issue_query?.current)
-				return routeToEvent(
-					nip19.neventEncode(root_event_pointer),
-					root_issue_query?.current.repos[0],
-					'issue',
-					event_query.event.id
-				);
+			if (root_pr_query?.current) return 'pr';
+			if (root_issue_query?.current) return 'issue';
 		}
 		const isnt_issue_or_pr_root =
 			root_event_query?.event &&
@@ -101,6 +88,29 @@
 			root_event_query.event.kind !== IssueKind;
 		if (isnt_issue_or_pr_root) return 'other';
 		return undefined;
+	});
+
+	$effect(() => {
+		if (event_type === 'pr' && pr_query?.current)
+			routeToEvent(event_ref as Nevent, pr_query?.current.repos[0], event_type);
+		if (event_type === 'issue' && issue_query?.current)
+			routeToEvent(event_ref as Nevent, issue_query?.current.repos[0], event_type);
+		if (root_event_type && event_query && event_query?.event && root_event_pointer) {
+			if (root_event_type === 'pr' && root_pr_query?.current)
+				routeToEvent(
+					nip19.neventEncode(root_event_pointer),
+					root_pr_query?.current.repos[0],
+					root_event_type,
+					event_query.event.id
+				);
+			if (root_event_type === 'issue' && root_issue_query?.current)
+				routeToEvent(
+					nip19.neventEncode(root_event_pointer),
+					root_issue_query?.current.repos[0],
+					root_event_type,
+					event_query.event.id
+				);
+		}
 	});
 
 	// TODO redirect repo state announcements
