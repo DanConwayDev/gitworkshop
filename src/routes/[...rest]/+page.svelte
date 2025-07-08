@@ -3,10 +3,11 @@
 	import ContainerCenterPage from '$lib/components/ContainerCenterPage.svelte';
 	import NotFound404Page from '$lib/components/NotFound404Page.svelte';
 	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
-	import { IssueKind } from '$lib/kinds';
+	import { IssueKind, PatchKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
-	import type { Nevent, Nnote, RepoRef } from '$lib/types';
-	import { eventIsPrRoot } from '$lib/utils';
+	import type { EventIdString, Nevent, Nnote, RepoRef } from '$lib/types';
+	import { eventIsPrRoot, getRootPointer } from '$lib/utils';
+	import { isEventPointer } from 'applesauce-core/helpers';
 	import { nip19 } from 'nostr-tools';
 
 	let { data }: { data: { rest: string } } = $props();
@@ -34,15 +35,36 @@
 	let issue_query = $derived(pointer ? query_centre.fetchIssue(pointer.id) : undefined);
 	let event_query = $derived(pointer ? query_centre.fetchEvent(pointer) : undefined);
 
+	let root_pointer = $derived(
+		event_query && event_query.event && ![PatchKind, IssueKind].includes(event_query.event.kind)
+			? getRootPointer(event_query.event)
+			: undefined
+	);
+	let root_event_pointer = $derived(
+		// using isEventPointer stops us falling back to an 'a' tagged as root
+		root_pointer && isEventPointer(root_pointer) ? root_pointer : undefined
+	);
+	let root_event_query = $derived(
+		root_event_pointer ? query_centre.fetchEvent(root_event_pointer) : undefined
+	);
+	let root_pr_query = $derived(
+		root_event_pointer ? query_centre.fetchPr(root_event_pointer.id) : undefined
+	);
+	let root_issue_query = $derived(
+		root_event_pointer ? query_centre.fetchIssue(root_event_pointer.id) : undefined
+	);
+
 	const routeToEvent = (
 		bech32: Nevent | Nnote,
 		a_ref: RepoRef,
-		type: 'pr' | 'issue'
+		type: 'pr' | 'issue',
+		child_event_id?: EventIdString
 	): 'pr' | 'issue' => {
-		goto(`/${new RepoRouteStringCreator(a_ref).s}/${type}s/${bech32}`);
+		let fagment = child_event_id ? `#${child_event_id.substring(0, 15)}` : '';
+		goto(`/${new RepoRouteStringCreator(a_ref).s}/${type}s/${bech32}${fagment}`);
 		return type;
 	};
-	let event_type: 'issue' | 'pr' | 'other' | undefined = $derived.by(() => {
+	let event_type: 'issue' | 'pr' | 'in_thread' | 'other' | undefined = $derived.by(() => {
 		if (pr_query?.current)
 			return routeToEvent(event_ref as Nevent, pr_query?.current.repos[0], 'pr');
 		if (issue_query?.current)
@@ -51,18 +73,34 @@
 			event_query?.event &&
 			!eventIsPrRoot(event_query.event) &&
 			event_query.event.kind !== IssueKind;
+		if (root_event_pointer) return 'in_thread';
 		if (isnt_issue_or_pr_root) return 'other';
 		return undefined;
-		// if (event_query?.event && (eventIsPrRoot(event_query.event) || event_query.event.kind === Issue)) {
-		// 	const type = event_query.event.kind === Issue ? 'issue' : 'pr';
-		// 	let repo_refs = extractRepoRefsFromPrOrIssue(event_query.event);
-		// 	if (repo_refs.length > 0) {
-		// 		goto(`/${new RepoRouteStringCreator(repo_refs[0].a_ref).s}/${type}s/${event_ref}`);
-		// 		return type
-		// 	} else {
-		// 		// TODO display error - poorly formattted pr / issue
-		// 	}
-		// }
+	});
+
+	let root_event_type: 'issue' | 'pr' | 'other' | undefined = $derived.by(() => {
+		if (event_query && event_query?.event && root_event_pointer) {
+			if (root_pr_query?.current)
+				return routeToEvent(
+					nip19.neventEncode(root_event_pointer),
+					root_pr_query?.current.repos[0],
+					'pr',
+					event_query.event.id
+				);
+			if (root_issue_query?.current)
+				return routeToEvent(
+					nip19.neventEncode(root_event_pointer),
+					root_issue_query?.current.repos[0],
+					'issue',
+					event_query.event.id
+				);
+		}
+		const isnt_issue_or_pr_root =
+			root_event_query?.event &&
+			!eventIsPrRoot(root_event_query.event) &&
+			root_event_query.event.kind !== IssueKind;
+		if (isnt_issue_or_pr_root) return 'other';
+		return undefined;
 	});
 
 	// TODO redirect repo state announcements
@@ -91,13 +129,22 @@
 	{#if event_type === 'other'}
 		<!-- {@render loadingContainer(`found event - fetching context`)} -->
 		<NotFound404Page
-			msg="TODO: You have probably followed a link to a comment on a PR or Issue. Give us a nudge to build the routing for this!"
+			msg="Cannot open event as it doesnt appear to relate to a Git Nostr entity ${event_ref}"
 		/>
 		<!-- TODO build routing  -->
+	{:else if event_type === 'in_thread'}
+		{#if !root_event_type}
+			{@render loadingContainer(`searching relays for event thread related to ${event_ref}`)}
+		{:else if root_event_type === 'other'}
+			<NotFound404Page
+				msg="Cannot open event as it, or it's root event, doesnt appear to relate to a Git Nostr entity ${event_ref}"
+			/>
+		{:else}
+			{@render loadingContainer(`routing to ${root_event_type} page`)}
+		{/if}
 	{:else}
 		{@render loadingContainer(`routing to ${event_type} page`)}
 	{/if}
-	<!-- TODO not related to a git event - show event  -->
 {:else}
 	{@render loadingContainer(`searching relays for event ${event_ref}`)}
 {/if}
