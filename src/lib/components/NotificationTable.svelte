@@ -53,6 +53,7 @@
 	let listElement: HTMLUListElement;
 
 	$effect(() => {
+		currentPage;
 		if (listElement) {
 			listElement.scrollIntoView({ behavior: 'smooth' });
 		}
@@ -113,7 +114,6 @@
 			class="btn join-item btn-sm"
 			onclick={() => {
 				currentPage = Math.min(totalPages, currentPage + 1);
-				listElement.scrollIntoView({ behavior: 'smooth' });
 			}}>»</button
 		>
 	</div>
