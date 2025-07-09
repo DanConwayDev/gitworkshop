@@ -71,6 +71,7 @@
 		root_event_pointer ? query_centre.fetchIssue(root_event_pointer.id) : undefined
 	);
 	let routing = $state(false);
+	let maformed = $state(false);
 
 	const routeToEvent = (
 		bech32: Nevent | Nnote,
@@ -78,6 +79,10 @@
 		type: 'pr' | 'issue',
 		child_event_id?: EventIdString
 	): 'pr' | 'issue' => {
+		if (!a_ref) {
+			maformed = true;
+			return type;
+		}
 		if (!routing) {
 			let fagment = child_event_id ? `#${child_event_id.substring(0, 15)}` : '';
 			goto(
@@ -153,6 +158,20 @@
 	<NotFound404Page
 		msg="gitworkshop.dev doesnt no how to redirect naddr urls that arn't Git Repository Announcement event"
 	/>
+{:else if maformed}
+	<ContainerCenterPage>
+		<div class="prose py-9 text-center">
+			<h1 class="mb-2 text-3xl font-bold">malformed event</h1>
+			<div class="text-neutral-content">
+				{root_event_type ?? event_type} doesn't tag a repository
+			</div>
+			<a
+				href="https://njump.me/{root_event_pointer
+					? nip19.neventEncode(root_event_pointer)
+					: event_ref}">njump link</a
+			>
+		</div>
+	</ContainerCenterPage>
 {:else if event_type}
 	{#if event_type === 'other'}
 		<!-- {@render loadingContainer(`found event - fetching context`)} -->
