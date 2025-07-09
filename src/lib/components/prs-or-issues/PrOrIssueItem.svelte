@@ -9,10 +9,11 @@
 	import { nip19 } from 'nostr-tools';
 	import { pr_icon_path } from '../prs/icons';
 	import { issue_icon_path } from '../issues/icons';
-	import type { IssueOrPRTableItem, RepoRoute } from '$lib/types';
+	import type { IssueOrPRTableItem, RepoRef, RepoRoute } from '$lib/types';
 	import FromNow from '../FromNow.svelte';
 	import UserHeader from '../user/UserHeader.svelte';
 	import UserAvatarGroup from '../user/UserAvatarGroup.svelte';
+	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
 
 	let {
 		type,
@@ -35,6 +36,13 @@
 	);
 	let commenters = $derived(
 		new Set([...comments_refs.map((r) => r.pubkey).filter((p) => p !== table_item?.author)])
+	);
+
+	let repo_route_c = $derived(
+		repo_route ??
+			(table_item && table_item.repos[0]
+				? new RepoRouteStringCreator(table_item.repos[0] as RepoRef)
+				: undefined)
 	);
 </script>
 
@@ -103,8 +111,9 @@
 		{/if}
 	</div>
 	<a
-		href="/{repo_route ? repo_route.s : 'TODO'}/{type}s/{nip19.noteEncode(table_item?.uuid ?? '') ||
-			''}"
+		href="{repo_route_c ? `/${repo_route_c.s}/${type}s` : ''}/{nip19.noteEncode(
+			table_item?.uuid ?? ''
+		) || ''}"
 		class="ml-3 flex grow overflow-hidden text-xs text-neutral-content"
 		class:pointer-events-none={!table_item}
 	>
@@ -142,11 +151,12 @@
 							</li>
 						{/if}
 
-						{#if show_repo && repo_route}
+						{#if show_repo && repo_route_c}
 							<li class="ml-3 inline">
-								<!-- <a class="link-primary z-10" href="/{repo_route.identifier}">
-									{repo_route.identifier}
-								</a> -->
+								<!-- svelte-ignore node_invalid_placement_ssr -->
+								<a class="link-primary z-10" href="/{repo_route_c.s}">
+									{repo_route_c.identifier}
+								</a>
 							</li>
 						{/if}
 					</ul>

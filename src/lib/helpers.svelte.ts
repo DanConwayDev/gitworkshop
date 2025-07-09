@@ -176,6 +176,10 @@ export class RepoRouteStringCreator {
 		return `${RepoAnnKind}:<a_ref and pointer will never be undefined>:<svelte-5-sucks>` as RepoRouteString;
 	});
 
+	type = $derived(this.s.startsWith('npub1') ? 'npub' : store.url_pref);
+	identifier: string;
+	pubkey: PubKeyString;
+
 	constructor(a_ref_or_table_item: RepoRef | RepoTableItem, relay?: WebSocketUrl) {
 		this.a_ref = isRepoRef(a_ref_or_table_item)
 			? a_ref_or_table_item
@@ -185,6 +189,8 @@ export class RepoRouteStringCreator {
 			: isRepoRef(a_ref_or_table_item)
 				? []
 				: firstRelay(a_ref_or_table_item?.relays);
+		this.identifier = this.a_ref.split(':').slice(-1)[0];
+		this.pubkey = this.a_ref.split(':')[0];
 		this.pointer = aRefPToAddressPointer(this.a_ref, relays);
 	}
 }
