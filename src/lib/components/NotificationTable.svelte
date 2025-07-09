@@ -14,6 +14,7 @@
 	import { eventIsPrRoot, getRootPointer } from '$lib/utils';
 	import { isEventPointer } from 'applesauce-core/helpers';
 	import PrOrIssueItem from './prs-or-issues/PrOrIssueItem.svelte';
+	import ContainerCenterPage from './ContainerCenterPage.svelte';
 
 	let notifications_query = $derived(
 		store.logged_in_account
@@ -22,7 +23,9 @@
 	);
 
 	let events = $derived(
-		[...(notifications_query.timeline ?? [])].sort((a, b) => b.created_at - a.created_at) ?? []
+		[...(notifications_query.timeline ?? [])]
+			.filter((e) => store.logged_in_account && e.pubkey !== store.logged_in_account.pubkey)
+			.sort((a, b) => b.created_at - a.created_at) ?? []
 	);
 
 	let referenced_issues_prs_ids: EventIdString[] = $derived([
@@ -78,43 +81,47 @@
 	);
 </script>
 
-<div class="h-full">
-	<Container>
-		<div class="flex items-center border-b border-primary pb-2">
-			<div class="prose flex-grow">
-				<h3>Notifications</h3>
+{#if store.logged_in_account}
+	<div class="h-full">
+		<Container>
+			<div class="flex items-center border-b border-primary pb-2">
+				<div class="prose flex-grow">
+					<h3>Notifications</h3>
+				</div>
 			</div>
-		</div>
-	</Container>
-	<ul bind:this={listElement} class="divide-y divide-base-400">
-		{#each issues_prs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage) as table_item}
-			<PrOrIssueItem type={table_item?.type ?? 'issue'} {table_item} show_repo />
-		{/each}
-	</ul>
+		</Container>
+		<ul bind:this={listElement} class="divide-y divide-base-400">
+			{#each issues_prs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage) as table_item}
+				<PrOrIssueItem type={table_item?.type ?? 'issue'} {table_item} show_repo />
+			{/each}
+		</ul>
 
-	<div class="join mt-4 flex justify-center">
-		<button
-			class:invisible={currentPage === 1}
-			class="btn join-item btn-sm"
-			onclick={() => (currentPage = Math.max(1, currentPage - 1))}>«</button
-		>
-		{#each Array(endPage - startPage + 1) as _, i}
+		<div class="join mt-4 flex justify-center">
 			<button
+				class:invisible={currentPage === 1}
 				class="btn join-item btn-sm"
-				class:btn-active={startPage + i === currentPage}
-				onclick={() => {
-					currentPage = startPage + i;
-				}}
+				onclick={() => (currentPage = Math.max(1, currentPage - 1))}>«</button
 			>
-				{startPage + i}
-			</button>
-		{/each}
-		<button
-			class:invisible={currentPage === totalPages}
-			class="btn join-item btn-sm"
-			onclick={() => {
-				currentPage = Math.min(totalPages, currentPage + 1);
-			}}>»</button
-		>
+			{#each Array(endPage - startPage + 1) as _, i}
+				<button
+					class="btn join-item btn-sm"
+					class:btn-active={startPage + i === currentPage}
+					onclick={() => {
+						currentPage = startPage + i;
+					}}
+				>
+					{startPage + i}
+				</button>
+			{/each}
+			<button
+				class:invisible={currentPage === totalPages}
+				class="btn join-item btn-sm"
+				onclick={() => {
+					currentPage = Math.min(totalPages, currentPage + 1);
+				}}>»</button
+			>
+		</div>
 	</div>
-</div>
+{:else}
+	<ContainerCenterPage><div>sign in to see notifications</div></ContainerCenterPage>
+{/if}
