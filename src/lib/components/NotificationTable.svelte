@@ -48,6 +48,33 @@
 				undefined
 		) ?? []
 	);
+	let itemsPerPage = 10;
+	let currentPage = $state(1);
+	let listElement: HTMLUListElement;
+
+	$effect(() => {
+		if (listElement) {
+			listElement.scrollIntoView({ behavior: 'smooth' });
+		}
+	});
+
+	let totalPages = $derived(Math.ceil(issues_prs.length / itemsPerPage));
+
+	let startPage = $derived(
+		currentPage === 1
+			? 1
+			: currentPage === totalPages
+				? Math.max(1, totalPages - 2)
+				: currentPage - 1
+	);
+
+	let endPage = $derived(
+		currentPage === 1
+			? Math.min(totalPages, 3)
+			: currentPage === totalPages
+				? totalPages
+				: currentPage + 1
+	);
 </script>
 
 <div class="h-full">
@@ -58,9 +85,36 @@
 			</div>
 		</div>
 	</Container>
-	<ul class=" divide-y divide-base-400">
-		{#each issues_prs.slice(0, 10) as table_item}
+	<ul bind:this={listElement} class="divide-y divide-base-400">
+		{#each issues_prs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage) as table_item}
 			<PrOrIssueItem type={table_item?.type ?? 'issue'} {table_item} show_repo />
 		{/each}
 	</ul>
+
+	<div class="join mt-4 flex justify-center">
+		<button
+			class:invisible={currentPage === 1}
+			class="btn join-item btn-sm"
+			onclick={() => (currentPage = Math.max(1, currentPage - 1))}>«</button
+		>
+		{#each Array(endPage - startPage + 1) as _, i}
+			<button
+				class="btn join-item btn-sm"
+				class:btn-active={startPage + i === currentPage}
+				onclick={() => {
+					currentPage = startPage + i;
+				}}
+			>
+				{startPage + i}
+			</button>
+		{/each}
+		<button
+			class:invisible={currentPage === totalPages}
+			class="btn join-item btn-sm"
+			onclick={() => {
+				currentPage = Math.min(totalPages, currentPage + 1);
+				listElement.scrollIntoView({ behavior: 'smooth' });
+			}}>»</button
+		>
+	</div>
 </div>
