@@ -167,10 +167,12 @@ class QueryCentre {
 		);
 	}
 
-	fetchIssues(a_ref: RepoRef) {
-		return liveQueryState(() =>
-			db.issues.where('repos').equals(a_ref).reverse().sortBy('last_activity')
-		);
+	fetchIssues(a_ref_or_issue_ids: RepoRef | EventIdString[]) {
+		if (typeof a_ref_or_issue_ids === 'string')
+			return liveQueryState(() =>
+				db.issues.where('repos').equals(a_ref_or_issue_ids).reverse().sortBy('last_activity')
+			);
+		return liveQueryState(() => db.issues.bulkGet(a_ref_or_issue_ids));
 	}
 
 	fetchIssue(issue_id: EventIdString) {
@@ -193,10 +195,12 @@ class QueryCentre {
 		);
 	}
 
-	fetchPrs(a_ref: RepoRef) {
-		return liveQueryState(() =>
-			db.prs.where('repos').equals(a_ref).reverse().sortBy('last_activity')
-		);
+	fetchPrs(a_refor_pr_ids: RepoRef | EventIdString[]) {
+		if (typeof a_refor_pr_ids === 'string')
+			return liveQueryState(() =>
+				db.prs.where('repos').equals(a_refor_pr_ids).reverse().sortBy('last_activity')
+			);
+		return liveQueryState(() => db.prs.bulkGet(a_refor_pr_ids));
 	}
 
 	fetchPr(pr_id: EventIdString) {
