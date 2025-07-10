@@ -170,7 +170,7 @@
 
 {#if store.logged_in_account}
 	<div class="h-full">
-		<Container>
+		<Container no_wrap_on_md>
 			<div class="flex items-center pb-2">
 				<div class="prose flex-grow">
 					<h3>Notifications</h3>
@@ -178,7 +178,7 @@
 			</div>
 			<ul
 				bind:this={listElement}
-				class="divide-y divide-base-400 rounded-t-lg border border-base-400 bg-base-200"
+				class="divide-y divide-base-400 rounded-t-lg border border-base-400 bg-base-300"
 			>
 				<li class="h-4"></li>
 				{#each issues_prs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage) as table_item}
