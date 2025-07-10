@@ -6,6 +6,7 @@
 	import NavBarInsertOutbox from './NavBarInsertOutbox.svelte';
 	import NavBarInsertWallet from './NavBarInsertWallet.svelte';
 	import NavBarLeftMenu from './NavBarLeftMenu.svelte';
+	import NavBarNotifications from './NavBarNotifications.svelte';
 	import NavBarUserMenu from './NavBarUserMenu.svelte';
 
 	// this was be an import from users store
@@ -80,6 +81,7 @@
 				</div>
 				{#if store.experimental}<NavBarInsertWallet />{/if}
 				{#if store.experimental}<NavBarInsertOutbox />{/if}
+				{#if store.logged_in_account}<NavBarNotifications />{/if}
 
 				<NavBarUserMenu />
 			</div>
