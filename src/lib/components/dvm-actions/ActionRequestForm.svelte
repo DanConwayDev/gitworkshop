@@ -133,26 +133,26 @@
 
 <div class="grid grid-cols-4">
 	<div class="max-w-xs space-y-2">
-		<label class="form-control w-full max-w-xs">
-			<div class="label">
-				<span class="label-text">Branch / Tag <span class="required">*</span></span>
-			</div>
+		<fieldset class="fieldset w-full max-w-xs">
+			<legend class="fieldset-legend">Branch / Tag <span class="required">*</span></legend>
 			{#if state_not_found}
 				<input
+					id="branch-or-tag-input"
 					disabled={submitting}
 					type="text"
 					placeholder="eg. refs/head/master"
-					class="input input-sm input-bordered w-full max-w-xs"
+					class="input input-sm w-full max-w-xs"
 					bind:value={branch_or_tag}
 				/>
 			{:else if !repo_state_query.event}
-				<select class="select select-bordered select-sm">
+				<select id="branch-or-tag-select" class="select select-sm">
 					<option disabled selected>loading</option>
 				</select>
 			{:else}
 				<select
+					id="branch-or-tag-select"
 					disabled={submitting}
-					class="select select-bordered select-sm"
+					class="select select-sm"
 					bind:value={branch_or_tag}
 				>
 					<option disabled selected
@@ -163,25 +163,24 @@
 					{/each}
 				</select>
 			{/if}
-		</label>
-		<label class="form-control w-full max-w-xs">
-			<div class="label">
-				<span class="label-text">Yaml Path</span>
-			</div>
+		</fieldset>
+		<fieldset class="fieldset w-full max-w-xs">
+			<legend class="fieldset-legend">Yaml Path</legend>
 			<input
+				id="yaml-path-input"
 				type="text"
 				disabled={submitting}
 				placeholder="eg .github/workflows/ci.yaml"
-				class="input input-sm input-bordered w-full max-w-xs"
+				class="input input-sm w-full max-w-xs"
 				bind:value={workflow_filepath}
 			/>
-		</label>
+		</fieldset>
 
 		<label class="form-control w-full max-w-xs">
 			<div class="label">
-				<span class="label-text">Runner Timeout</span>
+				<span>Runner Timeout</span>
 			</div>
-			<label class="input input-sm input-bordered flex items-center gap-2">
+			<label class="input input-sm flex items-center gap-2">
 				<input
 					type="number"
 					disabled={submitting}
@@ -197,9 +196,9 @@
 
 		<label class="form-control w-full max-w-xs">
 			<div class="label">
-				<span class="label-text">Cashu</span>
+				<span>Cashu</span>
 			</div>
-			<label class="input input-sm input-bordered flex items-center gap-2">
+			<label class="input input-sm flex items-center gap-2">
 				<input
 					type="text"
 					disabled={submitting}
@@ -213,17 +212,17 @@
 
 	<div>
 		{#each dvm_providers_anns.map(eventToActionsDVMProvider).filter((p) => !!p) as provider_ann}
-			<div class="relative m-2 mt-4 rounded-lg bg-base-300 p-4">
+			<div class="bg-base-300 relative m-2 mt-4 rounded-lg p-4">
 				{#if unixNow() - provider_ann.last_pong > 300}
 					<div class="absolute inset-0 flex items-end justify-end rounded-lg bg-red-600 opacity-25">
-						<span class="mb-4 mr-4 rounded bg-red-900 p-2 text-xl font-bold text-white"
+						<span class="mr-4 mb-4 rounded bg-red-900 p-2 text-xl font-bold text-white"
 							>Offline</span
 						>
 					</div>
 				{/if}
 				<div class="flex items-center">
 					<div class="flex">
-						<div class="prose flex-grow">
+						<div class="prose grow">
 							<h3 class="">
 								{provider_ann.name}
 							</h3>

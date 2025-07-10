@@ -24,7 +24,7 @@
 
 <Container>
 	<div class="m-8 mx-auto max-w-lg">
-		<label class="input input-bordered flex items-center gap-2">
+		<label class="input flex items-center gap-2">
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"

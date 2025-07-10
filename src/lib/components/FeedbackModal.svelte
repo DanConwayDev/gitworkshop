@@ -18,7 +18,7 @@
 <dialog class="modal modal-open">
 	<div class="modal-box max-w-lg overflow-hidden text-wrap">
 		<div class="flex">
-			<div class="flex-grow">
+			<div class="grow">
 				<div class="prose mb-5"><h3>Feedback</h3></div>
 			</div>
 			<button class="btn btn-sm" onclick={done}>Close</button>

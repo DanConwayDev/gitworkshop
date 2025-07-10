@@ -131,20 +131,20 @@
 </script>
 
 <div class="flex">
-	<div class="flex-grow">
+	<div class="grow">
 		<label class="form-control w-full">
 			<div class="label">
-				<span class="label-text text-sm">Title</span>
+				<span class="text-sm">Title</span>
 			</div>
 			<input
 				type="text"
 				bind:value={title}
-				class="input-neutral input input-sm input-bordered mb-3 w-full"
+				class="input-neutral input input-sm mb-3 w-full"
 				class:border-warning={submit_attempted && title.length < 10}
 				placeholder="title"
 			/>
 			{#if submit_attempted && title.length < 10}
-				<div class="pr-3 align-middle text-sm text-warning">
+				<div class="text-warning pr-3 align-middle text-sm">
 					title must be at least 10 characters
 				</div>
 			{/if}
@@ -153,9 +153,9 @@
 			<div class="label">
 				<span class="label-textarea text-sm">Description</span>
 			</div>
-			<div class="prose flex-grow pt-2">
+			<div class="prose grow pt-2">
 				<div
-					class=" w-full rounded-md border border-neutral"
+					class=" border-neutral w-full rounded-md border"
 					class:focus-within:ring-2={!submitting}
 					class:focus-within:ring-neutral={!submitting}
 					class:focus-within:focus:outline-none={!submitting}
@@ -179,7 +179,7 @@
 			{/if}
 			<div class="flex-auto"></div>
 			{#if submit_attempted && title.length < 10}
-				<div class="pr-3 align-middle text-sm text-warning">
+				<div class="text-warning pr-3 align-middle text-sm">
 					title must be at least 10 characters
 				</div>
 			{/if}

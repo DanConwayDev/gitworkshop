@@ -133,7 +133,7 @@
 	<div class="mt-0 flex-none px-3">
 		<UserHeader avatar_only={true} user={store.logged_in_account?.pubkey} />
 	</div>
-	<div class="prose flex-grow pt-2">
+	<div class="prose grow pt-2">
 		<div
 			class=" w-full rounded-md border border-primary"
 			class:focus-within:ring-2={!submitting}

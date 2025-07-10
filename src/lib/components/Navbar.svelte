@@ -23,7 +23,7 @@
 	<div class="h-16"></div>
 {/if}
 
-<div class="bg-base-400 {store.navbar_fixed ? 'fixed left-0 top-0 z-10 w-full' : ''}">
+<div class="bg-base-400 {store.navbar_fixed ? 'fixed top-0 left-0 z-10 w-full' : ''}">
 	<Container>
 		<div class="navbar">
 			<NavBarLeftMenu />
@@ -35,7 +35,7 @@
 			<div class="navbar-end md:gap-2">
 				<form onsubmit={handleSearch} class="mx-2 hidden sm:flex">
 					<div class="join">
-						<label class="input input-sm join-item input-bordered flex items-center gap-2">
+						<label class="input input-sm join-item flex items-center gap-2">
 							<input
 								type="text"
 								class="grow"
@@ -43,7 +43,7 @@
 								bind:value={search_input}
 							/>
 						</label>
-						<button type="submit" aria-label="search" class="btn join-item input-bordered btn-sm">
+						<button type="submit" aria-label="search" class="btn join-item btn-sm">
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								viewBox="0 0 16 16"
@@ -63,7 +63,7 @@
 					<a
 						href="/search"
 						aria-label="search"
-						class="btn btn-ghost btn-sm mt-1 h-6 px-2 pb-1 pt-1"
+						class="btn btn-ghost btn-sm mt-1 h-6 px-2 pt-1 pb-1"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"

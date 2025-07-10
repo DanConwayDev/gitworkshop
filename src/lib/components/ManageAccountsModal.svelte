@@ -32,7 +32,7 @@
 				class:bg-base-300={store.logged_in_account?.id === account.id}
 			>
 				{#if store.logged_in_account?.id === account.id}
-					<div class="flex flex-grow">
+					<div class="flex grow">
 						<button
 							onclick={() => {
 								accounts_manager.setActive(account.id);
@@ -43,7 +43,7 @@
 							</div>
 						</button>
 						{#if store.logged_in_account?.id === account.id}
-							<div class="flex h-full flex-grow items-center justify-center">
+							<div class="flex h-full grow items-center justify-center">
 								<button
 									class="btn btn-ghost btn-sm mt-2 normal-case"
 									onclick={() => {
@@ -56,7 +56,7 @@
 					<div class="px-3 text-sm text-neutral-content">{account.type}</div>
 				{:else}
 					<button
-						class="flex flex-grow items-center"
+						class="flex grow items-center"
 						onclick={() => {
 							accounts_manager.setActive(account.id);
 						}}
@@ -64,7 +64,7 @@
 						<div>
 							<UserHeader user={account.pubkey} link_to_profile={false} />
 						</div>
-						<div class="flex-grow"></div>
+						<div class="grow"></div>
 						<div class="px-3 text-sm text-neutral-content">{account.type}</div>
 					</button>
 				{/if}
@@ -87,7 +87,7 @@
 				}}>Add Account</button
 			>
 
-			<div class="flex-grow"></div>
+			<div class="grow"></div>
 		</div>
 
 		<div class="modal-action">

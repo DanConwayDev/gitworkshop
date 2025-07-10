@@ -8,13 +8,25 @@
 	let use_markdown = $state(true);
 </script>
 
-<div class="my-3 rounded-lg border border-base-400">
-	<div class="border-b border-base-400 bg-base-300 flex">
-		<div class="px-6 py-3 flex-grow"><h4 class="">{path}</h4></div>
+<div class="border-base-400 my-3 rounded-lg border">
+	<div class="border-base-400 bg-base-300 flex border-b">
+		<div class="grow px-6 py-3"><h4 class="">{path}</h4></div>
 		{#if path.toLowerCase().endsWith('.md')}
-			<div class="tabs tabs-lifted tabs-lg">
-				<button class="tab text-xs" class:tab-active={!use_markdown} onclick={()=> {use_markdown = false}}>Raw</button>
-				<button class="tab text-xs" class:tab-active={use_markdown} onclick={()=> {use_markdown = true}}>Markdown</button>
+			<div class="tabs tabs-lift tabs-lg">
+				<button
+					class="tab text-xs"
+					class:tab-active={!use_markdown}
+					onclick={() => {
+						use_markdown = false;
+					}}>Raw</button
+				>
+				<button
+					class="tab text-xs"
+					class:tab-active={use_markdown}
+					onclick={() => {
+						use_markdown = true;
+					}}>Markdown</button
+				>
 			</div>
 		{/if}
 	</div>

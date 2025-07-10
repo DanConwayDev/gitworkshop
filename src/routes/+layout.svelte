@@ -16,7 +16,7 @@
 
 	<footer class="mt-24 bg-base-200">
 		<div class="my-3 flex">
-			<div class="flex-grow"></div>
+			<div class="grow"></div>
 			<div class="flex items-center">
 				<div class="flex h-10 items-center text-center text-xs text-neutral-content">
 					<a class="inline" href="/">
@@ -25,7 +25,7 @@
 					<span class="ml-2 mt-0.5">GitWorkshop.dev</span>
 				</div>
 			</div>
-			<div class="flex-grow"></div>
+			<div class="grow"></div>
 		</div>
 	</footer>
 </div>

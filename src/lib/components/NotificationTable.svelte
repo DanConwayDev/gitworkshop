@@ -178,7 +178,7 @@
 	<div class="h-full">
 		<Container no_wrap_on_md>
 			<div class="flex items-center pb-2">
-				<div class="prose flex-grow">
+				<div class="prose grow">
 					<h3>Notifications</h3>
 				</div>
 			</div>
@@ -187,7 +187,7 @@
 				class="divide-y divide-base-400 rounded-t-lg border border-base-400 bg-base-300"
 			>
 				<li class="flex p-2">
-					<div class="flex-grow"></div>
+					<div class="grow"></div>
 					<button class="btn btn-neutral btn-xs" onclick={markAllAsRead}>mark all as read</button>
 				</li>
 				{#each issues_prs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage) as table_item}

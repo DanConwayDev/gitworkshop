@@ -190,12 +190,12 @@
 		class="join mr-2 shadow-lg {grouped_reactions[reaction].has(
 			store.logged_in_account?.pubkey ?? ''
 		)
-			? 'border border-primary'
+			? 'border-primary border'
 			: ''}"
 	>
 		{@render addReactionButton(reaction, true)}
 
-		<div class="join-item inline-flex items-center rounded-lg bg-base-400 py-1">
+		<div class="join-item bg-base-400 inline-flex items-center rounded-lg py-1">
 			{#each grouped_reactions[reaction] as pubkey}
 				<div class="mx-2 flex items-center">
 					<div
@@ -212,7 +212,7 @@
 {/snippet}
 
 <div
-	class="max-w-4xl border-b border-base-300 p-3 pl-3"
+	class="border-base-300 max-w-4xl border-b p-3 pl-3"
 	class:border-2={refed_in_url_fagment}
 	class:border-l-8={refed_in_url_fagment}
 	class:border-primary={refed_in_url_fagment}
@@ -262,11 +262,11 @@
 					</div>
 					{#if show_raw_json_modal}
 						<dialog class="modal" class:modal-open={show_raw_json_modal}>
-							<div class="modal-box relative max-w-full text-wrap text-xs">
-								<div class="h-full overflow-y-auto overflow-x-hidden">
+							<div class="modal-box relative max-w-full text-xs text-wrap">
+								<div class="h-full overflow-x-hidden overflow-y-auto">
 									<pre class="whitespace-pre-wrap">{JSON.stringify(event, null, 2)}</pre>
 								</div>
-								<button class="btn btn-sm absolute bottom-4 right-4 z-10" onclick={closeModals}
+								<button class="btn btn-sm absolute right-4 bottom-4 z-10" onclick={closeModals}
 									>Close</button
 								>
 								<!-- Floating button -->
@@ -364,7 +364,7 @@
 						<div class="absolute bottom-full left-0 hidden min-w-max group-hover:block">
 							{@render reactionGroup(reaction)}
 							<div
-								class="ml-3 h-0 w-0 border-x-[8px] border-t-[10px] border-x-transparent border-t-base-400 shadow-lg"
+								class="border-t-base-400 ml-3 h-0 w-0 border-x-8 border-t-10 border-x-transparent shadow-lg"
 							></div>
 						</div>
 						<button
@@ -434,7 +434,7 @@
 								width="10"
 								height="10"
 								fill="currentColor"
-								class="w-6 text-neutral-content opacity-40"
+								class="text-neutral-content w-6 opacity-40"
 								viewBox="0 0 16 16"
 							>
 								<path
@@ -459,7 +459,7 @@
 						onclick={() => {
 							show_compose = false;
 						}}
-						class="btn btn-circle btn-ghost btn-sm right-2 top-2">✕</button
+						class="btn btn-circle btn-ghost btn-sm top-2 right-2">✕</button
 					>
 				</div>
 				<div>
@@ -472,21 +472,21 @@
 
 {#if show_delete_sure_modal}
 	<dialog class="modal" class:modal-open={show_delete_sure_modal}>
-		<div class="modal-box relative max-w-lg text-wrap p-6">
+		<div class="modal-box relative max-w-lg p-6 text-wrap">
 			<div class="modal-body mb-5 text-center">
 				<h3 class="text-md mb-3 font-bold">
 					Send <span class="badge badge-secondary badge-lg"
 						>{kindtoTextLabel(event_to_delete.kind)}</span
 					> Deletion Request?
 				</h3>
-				<p class="mt-6 text-sm text-warning">
+				<p class="text-warning mt-6 text-sm">
 					warning: not all nostr relays / clients honour deletion requests
 				</p>
 				<input
 					type="text"
 					disabled={sending_deletion}
 					bind:value={deletion_rationale}
-					class="input-neutral input input-sm input-bordered mt-6 w-full"
+					class="input-neutral input input-sm mt-6 w-full"
 					placeholder="optional deletion rationale"
 				/>
 			</div>

@@ -92,8 +92,8 @@
 		href={`/${repo_route ? repo_route.s : 'TODO'}/actions/${nevent}`}
 		class="ml-3 flex grow overflow-hidden text-xs text-neutral-content"
 	>
-		<div class="flex flex-grow pt-2">
-			<div class="flex-grow">
+		<div class="flex grow pt-2">
+			<div class="grow">
 				<div class="text-sm text-base-content">
 					{#if summary.branch}branch: {summary.branch}{/if}
 					{#if summary.tag}tag: {summary.tag}{/if}

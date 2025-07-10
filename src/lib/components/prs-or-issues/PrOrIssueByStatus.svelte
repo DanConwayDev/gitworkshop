@@ -31,10 +31,10 @@
 	);
 </script>
 
-<div class="rounded-tr-lg border border-base-400">
+<div class="border-base-400 rounded-tr-lg border">
 	<div class="scrollbar-hide flex overflow-x-auto rounded-r-lg bg-slate-900">
 		<div class="flex-none">
-			<div class="tabs tabs-lifted tabs-xs p-2">
+			<div class="tabs tabs-lift tabs-xs p-2">
 				<button
 					role="tab"
 					class="tab"
@@ -88,7 +88,7 @@
 		<div class="flex-auto"></div>
 		<div class="flex-none">
 			{#if type === 'issue'}
-				<a class="btn btn-success btn-sm h-full text-base-400" href={`/${repo_route.s}/issues/new`}>
+				<a class="btn btn-success btn-sm text-base-400 h-full" href={`/${repo_route.s}/issues/new`}>
 					create issue
 				</a>
 			{/if}

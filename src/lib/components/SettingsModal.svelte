@@ -128,7 +128,7 @@
 					Clear Database and Cache
 				{/if}
 			</button>
-			<div class="flex-grow">useful if gitworkshop is misbehaving</div>
+			<div class="grow">useful if gitworkshop is misbehaving</div>
 		</div>
 
 		<div class="modal-action">

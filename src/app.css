@@ -1,3 +1,11 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
+@import 'tailwindcss';
+@import 'tailwind-scrollbar-hide/v4';
+@plugin "daisyui";
+@plugin "@tailwindcss/typography";
+@theme {
+	--color-base-400: oklch(21% 0.0135 270);
+}
+@plugin "daisyui/theme" {
+	name: 'dracula';
+	default: true;
+}

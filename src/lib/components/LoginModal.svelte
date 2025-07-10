@@ -118,7 +118,7 @@
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 16 16"
-					class="mx-auto mb-3 h-16 w-16 fill-success"
+					class="fill-success mx-auto mb-3 h-16 w-16"
 				>
 					{#each icons_misc.complete as d}
 						<path {d} />
@@ -165,7 +165,7 @@
 						/* empty */
 					}
 				}}
-				class="input input-sm input-bordered mt-5 w-full"
+				class="input input-sm mt-5 w-full"
 				class:border-error={private_key_invalid}
 				class:focus:border-error={private_key_invalid}
 			/>
@@ -183,14 +183,13 @@
 			<div class="w-50">
 				<CopyField content={nostr_connect_url} no_border={true} truncate={[100, 105]} />
 			</div>
-			<label class="form-control w-full">
-				<div class="label">
-					<span class="label-text">Connection Relay</span>
-				</div>
+			<fieldset class="fieldset w-full">
+				<label class="label" for="nostr-connect-relay">Connection Relay</label>
 				<input
+					id="nostr-connect-relay"
 					type="text"
 					placeholder="wss://relay.nsec.app"
-					class="input input-sm input-bordered w-full"
+					class="input input-sm w-full"
 					class:border-error={nostr_connect_relay_invalid}
 					class:focus:border-error={nostr_connect_relay_invalid}
 					bind:value={nostr_connect_relay_urls}
@@ -202,17 +201,17 @@
 					}}
 				/>
 				{#if nostr_connect_relay_invalid}
-					<div class="label">
-						<span class="label-text-alt text-error">invalid relay url</span>
-						<span class="label-text-alt text-error">using wss://relay.nsec.app</span>
+					<div class="label flex justify-between">
+						<span class="text-error">invalid relay url</span>
+						<span class="text-error">using wss://relay.nsec.app</span>
 					</div>
 				{/if}
-			</label>
+			</fieldset>
 			<!-- <div class="divider">OR</div>
 			<input
 				type="text"
 				placeholder="bunker://"
-				class="input input-sm input-bordered w-full"
+				class="input input-sm w-full"
 				class:border-error={bunker_url_invalid}
 				class:focus:border-error={bunker_url_invalid}
 				onpaste={(event) => {
@@ -243,7 +242,7 @@
 			{#if amber_feature_toggle && AmberClipboardSigner.SUPPORTED}
 				<div class="join join-horizontal flex w-full">
 					<button
-						class="btn btn-primary join-item flex-grow"
+						class="btn btn-primary join-item grow"
 						onclick={async () => {
 							try {
 								amber = true;
@@ -280,7 +279,7 @@
 			<div class="my-3 flex space-x-1">
 				{#if nip07_plugin}
 					<button
-						class="btn flex-grow"
+						class="btn grow"
 						onclick={async () => {
 							nip07 = true;
 							let pubkey = await (
@@ -296,7 +295,7 @@
 					<div class="divider divider-horizontal"></div>
 				{/if}
 				<button
-					class="btn flex-grow"
+					class="btn grow"
 					onclick={() => {
 						nostr_connect = true;
 						listenForNostrConnect();
@@ -304,7 +303,7 @@
 				>
 				<div class="divider divider-horizontal"></div>
 				<button
-					class="btn flex-grow"
+					class="btn grow"
 					onclick={() => {
 						private_key = true;
 					}}>Private Key</button

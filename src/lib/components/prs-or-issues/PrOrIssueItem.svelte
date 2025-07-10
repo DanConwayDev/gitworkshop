@@ -131,8 +131,8 @@
 		class:pointer-events-none={!table_item}
 		{onclick}
 	>
-		<div class="flex flex-grow pt-2">
-			<div class="flex-grow">
+		<div class="flex grow pt-2">
+			<div class="grow">
 				{#if !table_item}
 					<div class="skeleton h-5 w-60 flex-none pt-1"></div>
 					<div class="skeleton mb-1 mt-3 h-3 w-40 flex-none"></div>

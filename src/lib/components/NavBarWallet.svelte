@@ -91,7 +91,7 @@
 				{#each filtered as o}
 					<div class="group flex w-full items-center justify-between p-2 hover:bg-base-200">
 						<button
-							class="flex-grow cursor-pointer"
+							class="grow cursor-pointer"
 							class:bg-base-300={selected === o.id}
 							onclick={() => {
 								if (selected === o.id) selected = undefined;

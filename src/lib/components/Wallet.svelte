@@ -364,7 +364,7 @@
 		<div class="mb-4 rounded-lg p-4">
 			<div class="flex flex-col gap-2">
 				{#each mints as mint_url}
-					<div class="flex items-center justify-between rounded-md bg-base-100 p-2">
+					<div class="bg-base-100 flex items-center justify-between rounded-md p-2">
 						<div class="max-w-[200px] truncate text-sm">{mint_url}</div>
 						<div class="badge badge-primary">
 							{#if mint_balances?.[mint_url]}{#if masked}***{:else}{mint_balances[mint_url]}{/if}
@@ -382,7 +382,7 @@
 					disabled={receive_signing}
 					type="text"
 					placeholder="Paste cashu token here"
-					class="input input-bordered w-full"
+					class="input w-full"
 					bind:value={receive_token}
 					onpaste={() => setTimeout(received, 1)}
 				/>
@@ -393,7 +393,7 @@
 
 		<div class="rounded-lg p-4">
 			<h3 class="mb-3 text-lg">Transaction History</h3>
-			<div class="divide-y divide-base-300">
+			<div class="divide-base-300 divide-y">
 				{#each history as h}
 					<div class="py-3">
 						<div class="mb-2 flex items-center justify-between">

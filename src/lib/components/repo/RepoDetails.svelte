@@ -123,22 +123,22 @@
 	{/if}
 	{#if !item || loading || repo_not_found}
 		<h4 class="mt-0 pt-1 text-xs opacity-50">identifier</h4>
-		<p class="my-2 break-words text-sm">{repo_route.identifier}</p>
+		<p class="my-2 text-sm break-words">{repo_route.identifier}</p>
 	{:else if item.name == item.identifier}
 		<h4 class="mt-0 pt-1 text-xs opacity-50">name / identifier</h4>
-		<p class="my-2 break-words text-sm">{item.name}</p>
+		<p class="my-2 text-sm break-words">{item.name}</p>
 	{:else}
 		<h4 class="text-xs opacity-50">name</h4>
 		{#if !item.name || item.name.length == 0}
 			<div>none</div>
 		{:else}
-			<p class="my-2 break-words text-sm">{item.name}</p>
+			<p class="my-2 text-sm break-words">{item.name}</p>
 		{/if}
 		<h4 class="text-xs opacity-50">identifier</h4>
 		{#if !item.identifier || item.identifier.length == 0}
 			<div>none</div>
 		{:else}
-			<p class="my-2 break-words text-sm">{item.identifier}</p>
+			<p class="my-2 text-sm break-words">{item.identifier}</p>
 		{/if}
 	{/if}
 
@@ -149,7 +149,7 @@
 			<div class="badge skeleton my-2 block w-60"></div>
 		{:else}
 			<h4 class="text-xs opacity-50">
-				nostr clone url {#if nostr_url_copied}<span class="text-sm text-success opacity-50">
+				nostr clone url {#if nostr_url_copied}<span class="text-success text-sm opacity-50">
 						(copied to clipboard)</span
 					>{/if}
 			</h4>
@@ -168,7 +168,7 @@
 						/* empty */
 					}
 				}}
-				class="group my-2 mt-3 cursor-pointer break-words text-sm"
+				class="group my-2 mt-3 cursor-pointer text-sm break-words"
 				class:text-success={nostr_url_copied}
 				class:opacity-50={nostr_url_copied}
 			>
@@ -176,7 +176,7 @@
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 16 16"
-					class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50"
+					class="fill-base-content ml-1 inline h-4 w-4 flex-none opacity-50"
 					class:group-hover:opacity-100={!nostr_url_copied}
 					class:fill-base-content={!nostr_url_copied}
 					class:fill-success={nostr_url_copied}
@@ -188,11 +188,11 @@
 				</svg>
 			</div>
 
-			<div class="inline-block bg-base-300 p-2">
+			<div class="bg-base-300 inline-block p-2">
 				<span class="opacity-60">
 					just <a href="/ngit" class="link-primary">install ngit</a> and run</span
 				>
-				<div class="inline-block rounded-md bg-base-400 p-2 font-mono text-sm">
+				<div class="bg-base-400 inline-block rounded-md p-2 font-mono text-sm">
 					git clone nostr://...
 				</div>
 			</div>
@@ -210,7 +210,7 @@
 			<div>none</div>
 		{:else}
 			<h4 class="text-xs opacity-50">description</h4>
-			<p class="my-2 break-words text-sm">{short_descrption}</p>
+			<p class="my-2 text-sm break-words">{short_descrption}</p>
 		{/if}
 	</div>
 
@@ -233,7 +233,7 @@
 			<div class="badge skeleton my-2 block w-60"></div>
 		{:else}
 			<h4 class="text-xs opacity-50">
-				git servers {#if git_url_copied}<span class="text-sm text-success opacity-50">
+				git servers {#if git_url_copied}<span class="text-success text-sm opacity-50">
 						(copied to clipboard)</span
 					>{/if}
 			</h4>
@@ -256,7 +256,7 @@
 								/* empty */
 							}
 						}}
-						class="group my-2 mt-3 cursor-pointer break-words text-xs"
+						class="group my-2 mt-3 cursor-pointer text-xs break-words"
 						class:text-success={git_url_copied === git_url}
 						class:opacity-50={git_url_copied === git_url}
 					>
@@ -264,7 +264,7 @@
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							viewBox="0 0 16 16"
-							class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50"
+							class="fill-base-content ml-1 inline h-4 w-4 flex-none opacity-50"
 							class:group-hover:opacity-100={git_url_copied !== git_url}
 							class:fill-base-content={git_url_copied !== git_url}
 							class:fill-success={git_url_copied === git_url}
@@ -292,7 +292,7 @@
 		{:else}
 			<h4 class="text-xs opacity-50">websites</h4>
 			{#each item.web as site}
-				<a href={site} target="_blank" class="link link-primary my-2 break-words text-sm">
+				<a href={site} target="_blank" class="link link-primary my-2 text-sm break-words">
 					{site}
 				</a>
 			{/each}
@@ -307,17 +307,17 @@
 		{:else}
 			<h4 class="text-xs opacity-50">
 				{#if repo_not_found}author{:else}maintainers{/if}
-				{#if maintainer_copied}<span class="text-sm text-success opacity-50">
+				{#if maintainer_copied}<span class="text-success text-sm opacity-50">
 						(copied to clipboard)</span
 					>{/if}
 			</h4>
 			{#if !item.maintainers || item.maintainers.length == 0}
-				<div class="my-2 mt-3 break-words text-xs">
+				<div class="my-2 mt-3 text-xs break-words">
 					<UserHeader user={item.author} />
 				</div>
 			{:else}
 				{#each item.maintainers as maintainer}
-					<div class="my-2 mt-3 break-words text-xs">
+					<div class="my-2 mt-3 text-xs break-words">
 						<UserHeader user={maintainer} />
 					</div>
 				{/each}
@@ -350,10 +350,10 @@
 			<div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
 		{:else if !item.unique_commit || item.unique_commit.length == 0}
 			<h4 class="text-xs opacity-50">earliest unique commit</h4>
-			<p class="my-2 break-words text-xs">not specified</p>
+			<p class="my-2 text-xs break-words">not specified</p>
 		{:else}
 			<h4 class="text-xs opacity-50">earliest unique commit</h4>
-			<p class="my-2 break-words text-xs">{item.unique_commit}</p>
+			<p class="my-2 text-xs break-words">{item.unique_commit}</p>
 		{/if}
 	</div>
 	{#if allow_delete}
@@ -389,21 +389,21 @@
 
 {#if show_delete_sure_modal}
 	<dialog class="modal" class:modal-open={show_delete_sure_modal}>
-		<div class="modal-box relative max-w-lg text-wrap p-6">
+		<div class="modal-box relative max-w-lg p-6 text-wrap">
 			<div class="modal-body mb-5 text-center">
 				<h3 class="text-md mb-3 font-bold">
 					Send <span class="badge badge-secondary badge-lg"
 						>{kindtoTextLabel(GitRepositoryAnnouncement)}</span
 					> Deletion Request?
 				</h3>
-				<p class="mt-6 text-sm text-warning">
+				<p class="text-warning mt-6 text-sm">
 					warning: not all nostr relays / clients honour deletion requests
 				</p>
 				<input
 					type="text"
 					disabled={sending_deletion}
 					bind:value={deletion_rationale}
-					class="input-neutral input input-sm input-bordered mt-6 w-full"
+					class="input-neutral input input-sm mt-6 w-full"
 					placeholder="optional deletion rationale"
 				/>
 			</div>

@@ -30,7 +30,7 @@
 <div class="h-full bg-base-400">
 	<Container>
 		<div class="flex items-center border-b border-primary pb-2">
-			<div class="prose flex-grow">
+			<div class="prose grow">
 				<h3>Outbox</h3>
 			</div>
 			<div class="flex space-x-2">
@@ -81,7 +81,7 @@
 				class:bg-base-200={selected === o.id}
 			>
 				<button
-					class="flex-grow cursor-pointer"
+					class="grow cursor-pointer"
 					onclick={() => {
 						if (selected === o.id) selected = undefined;
 						else selected = o.id;

@@ -48,13 +48,13 @@
 
 <div class="">
 	<div class="flex rounded-t bg-base-300 p-1">
-		<article class="prose ml-2 max-w-4xl flex-grow break-words font-mono prose-p:text-sm">
+		<article class="prose ml-2 max-w-4xl grow break-words font-mono prose-p:text-sm">
 			<ContentTree node={commit_message_node} />
 		</article>
 	</div>
 
 	<div class="flex p-3">
-		<div class="flex-grow text-xs">Changes:</div>
+		<div class="grow text-xs">Changes:</div>
 		<div class="flex-none text-right font-mono text-xs">
 			{commit_id_shorthand}
 		</div>
@@ -68,7 +68,7 @@
 		>
 			<div class="flex w-full bg-base-200">
 				<button
-					class="flex shrink flex-grow p-3 text-sm"
+					class="flex shrink grow p-3 text-sm"
 					onclick={() => {
 						if (expand_full_files[index]) {
 							expand_full_files[index] = false;
@@ -88,7 +88,7 @@
 								>{/if}&nbsp;{#if !file.new}<span class="text-error">-{file.deletions}</span>{/if}
 						</span>
 					</div>
-					<div class="flex-grow"></div>
+					<div class="grow"></div>
 				</button>
 				<button
 					class="flex-none p-3 text-right text-xs opacity-40"
@@ -110,7 +110,7 @@
 				</button>
 			</div>
 			{#if expand_files[index]}
-				<div class="border-t-1 flex border-base-300 font-mono text-xs">
+				<div class="border-t flex border-base-300 font-mono text-xs">
 					<div class="flex-full select-none text-right">
 						{#each file.chunks as chunk, index}
 							{#if index !== 0}
@@ -146,7 +146,7 @@
 								{#each chunk.changes as change, i}
 									<div class="flex w-full bg-base-100">
 										<div
-											class="w-full flex-grow whitespace-pre {change.type == 'add'
+											class="w-full grow whitespace-pre {change.type == 'add'
 												? 'bg-success/20'
 												: change.type == 'del'
 													? 'bg-error/20'

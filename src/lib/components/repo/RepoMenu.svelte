@@ -35,8 +35,8 @@
 	let enable_actions = $derived(store.experimental);
 </script>
 
-<div class="scrollbar-hide flex overflow-x-auto border-b border-base-400">
-	<div role="tablist" class="tabs tabs-bordered min-w-max flex-nowrap">
+<div class="scrollbar-hide border-base-400 flex overflow-x-auto border-b">
+	<div role="tablist" class="tabs tabs-border min-w-max flex-nowrap">
 		{#if readme_available}
 			<a
 				href={`/${repo_route.s}`}
@@ -54,7 +54,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="mb-1 mr-1 h-4 w-4 flex-none fill-base-content pt-1 opacity-50"
+				class="fill-base-content mr-1 mb-1 h-4 w-4 flex-none pt-1 opacity-50"
 			>
 				<path d={pr_icon_path.open_pull} />
 			</svg>
@@ -65,7 +65,7 @@
 				</span>
 			{/if}
 			{#if loading}
-				<span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
+				<span class="loading loading-spinner loading-xs text-neutral ml-2"></span>
 			{/if}
 		</a>
 		<a
@@ -76,7 +76,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="mb-1 mr-1 h-4 w-4 flex-none fill-base-content pt-1 opacity-50"
+				class="fill-base-content mr-1 mb-1 h-4 w-4 flex-none pt-1 opacity-50"
 			>
 				{#each issue_icon_path.open as p}
 					<path d={p} />
@@ -89,7 +89,7 @@
 				</span>
 			{/if}
 			{#if loading}
-				<span class="loading loading-spinner loading-xs ml-2 text-neutral"></span>
+				<span class="loading loading-spinner loading-xs text-neutral ml-2"></span>
 			{/if}
 		</a>
 		{#if enable_actions}
@@ -101,7 +101,7 @@
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 24 24"
-					class="mb-1 mr-1 h-4 w-4 flex-none fill-base-content pt-1 opacity-50"
+					class="fill-base-content mr-1 mb-1 h-4 w-4 flex-none pt-1 opacity-50"
 				>
 					{#each icons_misc.actions as p}
 						<path d={p} />
@@ -111,5 +111,5 @@
 			</a>
 		{/if}
 	</div>
-	<div class="flex-grow"></div>
+	<div class="grow"></div>
 </div>

@@ -122,9 +122,9 @@
 	</div>
 {:else}
 	<div class="flex">
-		<div class="flex-grow">
+		<div class="grow">
 			<label class="form-control w-full">
-				<div class="prose flex-grow pt-2">
+				<div class="prose grow pt-2">
 					<div
 						class=" w-full rounded-md border border-neutral"
 						class:focus-within:ring-2={!submitting}
@@ -150,7 +150,7 @@
 					</div>
 				{/if}
 
-				<div class="flex-grow"></div>
+				<div class="grow"></div>
 				{#if submit_attempted && content.length < 10}
 					<div class="pr-3 align-middle text-sm text-warning">
 						feedback must be at least 10 characters
