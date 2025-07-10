@@ -136,6 +136,12 @@
 		}
 	};
 
+	const markAllAsRead = () => {
+		const three_days_ago = unixNow() - 60 * 60 * 24 * 3;
+		all_read_before = three_days_ago;
+		ids_read_after_date = events.filter((e) => e.created_at >= three_days_ago).map((e) => e.id);
+	};
+
 	// pagination
 	let itemsPerPage = 10;
 	let currentPage = $state(1);
@@ -180,7 +186,10 @@
 				bind:this={listElement}
 				class="divide-y divide-base-400 rounded-t-lg border border-base-400 bg-base-300"
 			>
-				<li class="h-4"></li>
+				<li class="flex p-2">
+					<div class="flex-grow"></div>
+					<button class="btn btn-neutral btn-xs" onclick={markAllAsRead}>mark all as read</button>
+				</li>
 				{#each issues_prs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage) as table_item}
 					<PrOrIssueItem
 						type={table_item?.type ?? 'issue'}
