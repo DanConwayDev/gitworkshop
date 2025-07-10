@@ -19,12 +19,16 @@
 		type,
 		table_item,
 		repo_route,
-		show_repo = false
+		show_repo = false,
+		unread = false,
+		onclick = () => {}
 	}: {
 		type: 'issue' | 'pr';
 		table_item?: IssueOrPRTableItem;
 		repo_route?: RepoRoute;
 		show_repo?: boolean;
+		unread?: boolean;
+		onclick?: () => void;
 	} = $props();
 
 	let short_title = $derived.by(() => {
@@ -46,7 +50,16 @@
 	);
 </script>
 
-<li class="flex p-2 @container {table_item ? 'cursor-pointer hover:bg-base-200' : ''}">
+<li
+	class="flex p-2 @container {table_item ? 'cursor-pointer hover:bg-base-200' : ''}"
+	class:bg-base-100={unread}
+	class:border-secondary={unread}
+	class:border-l-1={unread}
+	class:border-r-4={unread}
+>
+	<div class="w-4 pr-1 pt-3 text-xs text-secondary">
+		{#if unread}●{/if}
+	</div>
 	<!-- <figure class="p-4 pl-0 text-color-primary"> -->
 	<!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
 	<div class="pt-2">
@@ -116,6 +129,7 @@
 		) || ''}"
 		class="ml-3 flex grow overflow-hidden text-xs text-neutral-content"
 		class:pointer-events-none={!table_item}
+		{onclick}
 	>
 		<div class="flex flex-grow pt-2">
 			<div class="flex-grow">
