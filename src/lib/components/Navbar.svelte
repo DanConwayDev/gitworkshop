@@ -35,7 +35,7 @@
 			<div class="navbar-end md:gap-2">
 				<form onsubmit={handleSearch} class="mx-2 hidden sm:flex">
 					<div class="join">
-						<label class="input input-sm join-item flex items-center gap-2">
+						<label class="input input-sm input-neutral join-item flex items-center gap-2">
 							<input
 								type="text"
 								class="grow"

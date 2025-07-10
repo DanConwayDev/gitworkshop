@@ -46,7 +46,7 @@
 		</AlertError>
 	{:else}
 		<div class="m-8 mx-auto max-w-lg">
-			<label class="input flex items-center gap-2">
+			<label class="input input-neutral flex w-full gap-2">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 16 16"
@@ -62,7 +62,7 @@
 				<input
 					id="search-field"
 					type="text"
-					class="grow"
+					class=" grow"
 					placeholder="Find Repo by Name"
 					bind:value={search.text}
 				/>

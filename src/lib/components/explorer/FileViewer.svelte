@@ -12,20 +12,20 @@
 	<div class="border-base-400 bg-base-300 flex border-b">
 		<div class="grow px-6 py-3"><h4 class="">{path}</h4></div>
 		{#if path.toLowerCase().endsWith('.md')}
-			<div class="tabs tabs-lift tabs-lg">
+			<div class="tabs tabs-box tabs-md">
 				<button
-					class="tab text-xs"
+					class="tab"
 					class:tab-active={!use_markdown}
 					onclick={() => {
 						use_markdown = false;
-					}}>Raw</button
+					}}><span class="text-xs">Raw</span></button
 				>
 				<button
-					class="tab text-xs"
+					class="tab"
 					class:tab-active={use_markdown}
 					onclick={() => {
 						use_markdown = true;
-					}}>Markdown</button
+					}}><span class="text-xs">Markdown</span></button
 				>
 			</div>
 		{/if}

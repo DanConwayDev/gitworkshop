@@ -124,7 +124,7 @@
 			class:pl-0={inline}
 			class:flex-auto={!inline}
 			class:m-auto={!inline}
-			class:inline-block={inline}
+			class:inline-block={inline && !avatar_only}
 			class:hidden={avatar_only}
 			class:opacity-40={in_event_header}
 		>
@@ -166,7 +166,7 @@
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							viewBox="0 0 16 16"
-							class="mr-1 inline h-4 w-4 flex-none fill-base-content opacity-50"
+							class="fill-base-content mr-1 inline h-4 w-4 flex-none opacity-50"
 						>
 							{#each icons_misc.link as d}
 								<path {d} />
@@ -182,7 +182,7 @@
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							viewBox="0 0 16 16"
-							class="mr-1 mt-1 inline h-4 w-4 flex-none fill-base-content opacity-50"
+							class="fill-base-content mt-1 mr-1 inline h-4 w-4 flex-none opacity-50"
 						>
 							{#each icons_misc.info as d}
 								<path {d} />
@@ -226,7 +226,7 @@
 	>
 		{#if pic_url && pic_url !== failed_pic_url}
 			<img
-				class="my-0"
+				class="not-prose my-0"
 				src={pic_url}
 				alt={display_name}
 				onerror={() => (failed_pic_url = $state.snapshot(pic_url))}
@@ -234,7 +234,7 @@
 		{:else}
 			<div class="">
 				<div
-					class="flex w-full items-center justify-center rounded bg-neutral text-center text-neutral-content"
+					class="bg-neutral text-neutral-content flex w-full items-center justify-center rounded text-center"
 					class:h-32={!inline && size === 'full'}
 					class:w-32={!inline && size === 'full'}
 					class:h-8={!inline && size === 'md'}

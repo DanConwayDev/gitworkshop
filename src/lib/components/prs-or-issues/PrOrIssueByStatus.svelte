@@ -34,11 +34,11 @@
 <div class="border-base-400 rounded-tr-lg border">
 	<div class="scrollbar-hide flex overflow-x-auto rounded-r-lg bg-slate-900">
 		<div class="flex-none">
-			<div class="tabs tabs-lift tabs-xs p-2">
+			<div class="tabs tabs-xs p-2">
 				<button
 					role="tab"
 					class="tab"
-					class:opacity-50={status !== IssueOrPrStatus.Open}
+					class:tab-active={status == IssueOrPrStatus.Open}
 					class:font-bold={status == IssueOrPrStatus.Open}
 					onclick={() => {
 						status = IssueOrPrStatus.Open;
@@ -51,7 +51,7 @@
 				<button
 					role="tab"
 					class="tab"
-					class:opacity-50={status !== IssueOrPrStatus.Applied}
+					class:tab-active={status == IssueOrPrStatus.Applied}
 					class:font-bold={status == IssueOrPrStatus.Applied}
 					onclick={() => {
 						status = IssueOrPrStatus.Applied;
@@ -63,7 +63,7 @@
 				<button
 					role="tab"
 					class="tab"
-					class:opacity-50={status !== IssueOrPrStatus.Closed}
+					class:tab-active={status == IssueOrPrStatus.Closed}
 					class:font-bold={status == IssueOrPrStatus.Closed}
 					onclick={() => {
 						status = IssueOrPrStatus.Closed;
@@ -75,7 +75,7 @@
 				{#if deleted.length > 0}<button
 						role="tab"
 						class="tab"
-						class:opacity-50={status !== 'deleted'}
+						class:opacity-50={status == 'deleted'}
 						class:font-bold={status == 'deleted'}
 						onclick={() => {
 							status = 'deleted';

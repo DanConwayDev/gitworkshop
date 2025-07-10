@@ -6,7 +6,7 @@
 	<div class="indicator">
 		<span class="indicator-item"></span>
 		<button
-			class="btn btn-ghost btn-sm mt-1 h-6 px-2 pb-1 pt-1"
+			class="btn btn-ghost btn-sm hover:bg-neutral mx-0 mt-2 px-2"
 			onclick={() => {
 				goto('/notifications');
 			}}
