@@ -283,7 +283,7 @@ class QueryCentreExternal {
 		await Promise.all(relays.map(({ url }) => this.get_relay(url).fetchAllRepos(pubkey)));
 	}
 
-	async watchPubkeyNotifications(pubkey: PubKeyString) {
+	async watchPubkeyNotifications(pubkey: PubKeyString, since: number) {
 		const query = `watchPubkeyNotifications${pubkey}`;
 		const already_fetching = !this.subscriber_manager.add(query);
 		if (already_fetching) return;
@@ -293,7 +293,7 @@ class QueryCentreExternal {
 			await Promise.all(
 				relays.map(({ url, check_timestamps }) =>
 					(async () => {
-						const unsubsriber = await this.get_relay(url).fetchPubkeyNotifications(pubkey);
+						const unsubsriber = await this.get_relay(url).fetchPubkeyNotifications(pubkey, since);
 						this.subscriber_manager.addUnsubsriber(query, unsubsriber);
 					})()
 				)
@@ -548,7 +548,7 @@ self.onmessage = async (event) => {
 			result = await external.fetchNip05(args[0]);
 			break;
 		case 'watchPubkeyNotifications':
-			result = await external.watchPubkeyNotifications(args[0]);
+			result = await external.watchPubkeyNotifications(args[0], args[1]);
 			break;
 		case 'watchPubkeyNotificationsUnsubscribe':
 			result = await external.watchPubkeyNotificationsUnsubscribe(args[0]);

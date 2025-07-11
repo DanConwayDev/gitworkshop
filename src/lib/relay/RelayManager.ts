@@ -348,9 +348,9 @@ export class RelayManager {
 		});
 	}
 
-	async fetchPubkeyNotifications(pubkey: PubKeyString) {
+	async fetchPubkeyNotifications(pubkey: PubKeyString, since: number) {
 		await this.connect();
-		let sub = this.relay.subscribe([...createPubkeyNoficiationsFilters(pubkey)], {
+		let sub = this.relay.subscribe([...createPubkeyNoficiationsFilters(pubkey, since)], {
 			onevent: (event) => this.onEvent(event)
 		});
 		return async () => {

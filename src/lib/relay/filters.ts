@@ -81,16 +81,18 @@ export const createPubkeyFiltersGroupedBySince = (
 	return filters;
 };
 
-export const createPubkeyNoficiationsFilters = (pubkey: PubKeyString) => {
+export const createPubkeyNoficiationsFilters = (pubkey: PubKeyString, since?: number) => {
 	return [
 		{
 			'#P': [pubkey],
 			'#K': [PatchKind.toString(), IssueKind.toString()],
-			kinds: [ReplyKind]
+			kinds: [ReplyKind],
+			since
 		},
 		{
 			'#p': [pubkey],
-			kinds: [PatchKind, IssueKind]
+			kinds: [PatchKind, IssueKind],
+			since
 		}
 	];
 };

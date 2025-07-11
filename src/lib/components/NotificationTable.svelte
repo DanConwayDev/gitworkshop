@@ -11,42 +11,7 @@
 	import PrOrIssueItem from './prs-or-issues/PrOrIssueItem.svelte';
 	import ContainerCenterPage from './ContainerCenterPage.svelte';
 
-	let notifications_query = $derived(
-		store.logged_in_account
-			? query_centre.watchPubkeyNotifications(store.logged_in_account.pubkey)
-			: { timeline: [] }
-	);
-
-	let events = $derived(
-		[...(notifications_query.timeline ?? [])]
-			.filter((e) => store.logged_in_account && e.pubkey !== store.logged_in_account.pubkey)
-			.sort((a, b) => b.created_at - a.created_at) ?? []
-	);
-
-	// reduce to issues and prs with notifications
-	const getRelatedIssueOrPr = (e: NostrEvent): EventIdString | undefined => {
-		if (e.kind === IssueKind) return e.id;
-		if (e.kind === PatchKind && eventIsPrRoot(e)) return e.id;
-		let pointer = getRootPointer(e);
-		if (pointer && isEventPointer(pointer)) return pointer.id;
-	};
-
-	let referenced_issues_prs_ids: EventIdString[] = $derived([
-		...new Set(events.map(getRelatedIssueOrPr).filter((id) => id !== undefined))
-	]);
-
-	let issues_query = $derived(query_centre.fetchIssues(referenced_issues_prs_ids));
-	let prs_query = $derived(query_centre.fetchPrs(referenced_issues_prs_ids));
-	let issues_prs = $derived(
-		referenced_issues_prs_ids.map(
-			(id) =>
-				issues_query.current?.find((i) => i && i.event.id === id) ??
-				prs_query.current?.find((i) => i && i.event.id === id) ??
-				undefined
-		) ?? []
-	);
-
-	// read / unread status
+	// helpers to get and set read / unread status data from localStorage
 	const loadAllReadBefore = () =>
 		store.logged_in_account && browser
 			? Number(
@@ -88,6 +53,44 @@
 				all_read_before.toString()
 			);
 	});
+
+	// fetch notification events
+	let notifications_query = $derived(
+		store.logged_in_account
+			? query_centre.watchPubkeyNotifications(store.logged_in_account.pubkey, all_read_before)
+			: { timeline: [] }
+	);
+
+	let events = $derived(
+		[...(notifications_query.timeline ?? [])]
+			.filter((e) => store.logged_in_account && e.pubkey !== store.logged_in_account.pubkey)
+			.sort((a, b) => b.created_at - a.created_at) ?? []
+	);
+
+	// reduce to issues and prs with notifications
+	const getRelatedIssueOrPr = (e: NostrEvent): EventIdString | undefined => {
+		if (e.kind === IssueKind) return e.id;
+		if (e.kind === PatchKind && eventIsPrRoot(e)) return e.id;
+		let pointer = getRootPointer(e);
+		if (pointer && isEventPointer(pointer)) return pointer.id;
+	};
+
+	let referenced_issues_prs_ids: EventIdString[] = $derived([
+		...new Set(events.map(getRelatedIssueOrPr).filter((id) => id !== undefined))
+	]);
+
+	let issues_query = $derived(query_centre.fetchIssues(referenced_issues_prs_ids));
+	let prs_query = $derived(query_centre.fetchPrs(referenced_issues_prs_ids));
+	let issues_prs = $derived(
+		referenced_issues_prs_ids.map(
+			(id) =>
+				issues_query.current?.find((i) => i && i.event.id === id) ??
+				prs_query.current?.find((i) => i && i.event.id === id) ??
+				undefined
+		) ?? []
+	);
+
+	// read / unread status
 
 	let unread_referenced_issues_prs_ids: EventIdString[] = $derived([
 		...new Set(
@@ -184,7 +187,7 @@
 			</div>
 			<ul
 				bind:this={listElement}
-				class="divide-y divide-base-400 rounded-t-lg border border-base-400 bg-base-300"
+				class="divide-base-400 border-base-400 bg-base-300 divide-y rounded-t-lg border"
 			>
 				<li class="flex p-2">
 					<div class="grow"></div>
@@ -202,7 +205,7 @@
 					/>
 				{/each}
 				{#if issues_prs.length === 0}
-					<li class="p-2 text-center text-neutral-content">none found</li>
+					<li class="text-neutral-content p-2 py-8 text-center">no notifications found</li>
 				{/if}
 			</ul>
 

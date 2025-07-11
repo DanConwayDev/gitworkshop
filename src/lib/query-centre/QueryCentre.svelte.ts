@@ -153,8 +153,8 @@ class QueryCentre {
 		);
 	}
 
-	watchPubkeyNotifications(pubkey: PubKeyString) {
-		this.external_worker.postMessage({ method: 'watchPubkeyNotifications', args: [pubkey] });
+	watchPubkeyNotifications(pubkey: PubKeyString, since?: number) {
+		this.external_worker.postMessage({ method: 'watchPubkeyNotifications', args: [pubkey, since] });
 		return inMemoryRelayTimeline(
 			[...createPubkeyNoficiationsFilters(pubkey)],
 			() => [pubkey],
