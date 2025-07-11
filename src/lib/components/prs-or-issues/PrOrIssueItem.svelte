@@ -20,15 +20,17 @@
 		table_item,
 		repo_route,
 		show_repo = false,
+		is_notification = false,
 		unread = undefined,
-		onclick = () => {}
+		mark_as_read = () => {}
 	}: {
 		type: 'issue' | 'pr';
 		table_item?: IssueOrPRTableItem;
 		repo_route?: RepoRoute;
 		show_repo?: boolean;
+		is_notification?: boolean;
 		unread?: boolean;
-		onclick?: () => void;
+		mark_as_read?: () => void;
 	} = $props();
 
 	let short_title = $derived.by(() => {
@@ -52,7 +54,7 @@
 
 <li
 	class:hover:bg-base-200={table_item}
-	class="hover:bg-neutral/25 @container flex p-2 {unread
+	class="group hover:bg-neutral/25 @container flex p-2 {unread
 		? 'border-x-secondary/30 bg-neutral/25 hover:bg-neutral/50'
 		: ''}"
 	class:cursor-pointer={table_item}
@@ -132,7 +134,7 @@
 		) || ''}"
 		class="text-neutral-content ml-3 flex grow overflow-hidden text-xs"
 		class:pointer-events-none={!table_item}
-		{onclick}
+		onclick={mark_as_read}
 	>
 		<div class="flex grow pt-2">
 			<div class="grow">
@@ -180,7 +182,7 @@
 				{/if}
 			</div>
 		</div>
-		<div class="hidden @lg:flex">
+		<div class="hidden @lg:flex {is_notification ? '@lg:group-hover:hidden' : ''}">
 			<div class="flex items-center p-4 opacity-50">
 				<UserAvatarGroup users={[...commenters]} />
 			</div>
@@ -202,4 +204,10 @@
 			</div>
 		</div>
 	</a>
+	{#if is_notification && unread}
+		<button
+			class="btn btn-neutral btn-xs hidden self-center group-hover:block"
+			onclick={mark_as_read}>mark as read</button
+		>
+	{/if}
 </li>

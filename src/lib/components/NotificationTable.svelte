@@ -171,9 +171,10 @@
 						{table_item}
 						show_repo
 						unread={unread_referenced_issues_prs_ids.includes(table_item?.uuid ?? '')}
-						onclick={() => {
+						mark_as_read={() => {
 							if (table_item) markAsRead(table_item.uuid);
 						}}
+						is_notification
 					/>
 				{/each}
 				{#if issues_prs.length === 0}
