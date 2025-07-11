@@ -20,7 +20,7 @@
 		table_item,
 		repo_route,
 		show_repo = false,
-		unread = false,
+		unread = undefined,
 		onclick = () => {}
 	}: {
 		type: 'issue' | 'pr';
@@ -59,9 +59,10 @@
 	class:border-l-1={unread}
 	class:border-r-1={unread}
 >
-	<div class="text-secondary w-4 pt-3 pr-1 text-xs">
-		{#if unread}●{/if}
-	</div>
+	{#if unread !== undefined}<div class="text-secondary w-4 pt-3 pr-1 text-xs">
+			{#if unread}●{/if}
+		</div>
+	{/if}
 	<!-- <figure class="p-4 pl-0 text-color-primary"> -->
 	<!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
 	<div class="pt-2">
