@@ -47,8 +47,21 @@
 		) ?? []
 	);
 
-	// read / unread status
+	// pagination
+	let pages_items_per_page = 10;
+	let pages_current_page = $state(1);
+	let pages_total_pages = $derived(Math.ceil(issues_prs.length / pages_items_per_page));
+	let pages_start_page_index = $derived((pages_current_page - 1) * pages_items_per_page);
+	// svelte-ignore non_reactive_update
+	let listElement: HTMLUListElement;
+	$effect(() => {
+		pages_current_page;
+		if (listElement) {
+			listElement.scrollIntoView({ behavior: 'smooth' });
+		}
+	});
 
+	// read / unread status
 	let unread_referenced_issues_prs_ids: EventIdString[] = $derived([
 		...new Set(
 			events
@@ -133,37 +146,6 @@
 			.map((e) => e.id);
 		store.notifications_all_read_before = three_days_ago;
 	};
-
-	// pagination
-	let itemsPerPage = 10;
-	let currentPage = $state(1);
-	// svelte-ignore non_reactive_update
-	let listElement: HTMLUListElement;
-
-	let totalPages = $derived(Math.ceil(issues_prs.length / itemsPerPage));
-
-	let startPage = $derived(
-		currentPage === 1
-			? 1
-			: currentPage === totalPages
-				? Math.max(1, totalPages - 2)
-				: currentPage - 1
-	);
-
-	let endPage = $derived(
-		currentPage === 1
-			? Math.min(totalPages, 3)
-			: currentPage === totalPages
-				? totalPages
-				: currentPage + 1
-	);
-
-	$effect(() => {
-		currentPage;
-		if (listElement) {
-			listElement.scrollIntoView({ behavior: 'smooth' });
-		}
-	});
 </script>
 
 {#if store.logged_in_account}
@@ -182,7 +164,7 @@
 					<div class="grow"></div>
 					<button class="btn btn-neutral btn-xs" onclick={markAllAsRead}>mark all as read</button>
 				</li>
-				{#each issues_prs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage) as table_item}
+				{#each issues_prs.slice(pages_start_page_index, pages_start_page_index + pages_items_per_page) as table_item}
 					<PrOrIssueItem
 						type={table_item?.type ?? 'issue'}
 						{table_item}
@@ -205,27 +187,39 @@
 			{#if issues_prs.length > 0}
 				<div class="join mt-4 flex justify-center">
 					<button
-						class:invisible={currentPage === 1}
-						class="btn join-item btn-sm"
-						onclick={() => (currentPage = Math.max(1, currentPage - 1))}>«</button
+						class:invisible={pages_current_page === 1}
+						class="btn join-item btn-xs"
+						onclick={() => (pages_current_page = 1)}>««</button
 					>
-					{#each Array(endPage - startPage + 1) as _, i}
-						<button
-							class="btn join-item btn-sm"
-							class:btn-active={startPage + i === currentPage}
-							onclick={() => {
-								currentPage = startPage + i;
-							}}
-						>
-							{startPage + i}
-						</button>
-					{/each}
 					<button
-						class:invisible={currentPage === totalPages}
-						class="btn join-item btn-sm"
-						onclick={() => {
-							currentPage = Math.min(totalPages, currentPage + 1);
-						}}>»</button
+						class:invisible={pages_current_page === 1}
+						class="btn join-item btn-xs"
+						onclick={() => (pages_current_page = Math.max(1, pages_current_page - 1))}>«</button
+					>
+
+					{#each Array(pages_total_pages) as _, i}
+						{@const page_number = i + 1}
+						{#if page_number === pages_current_page || (page_number >= Math.max(1, pages_current_page - 2) && page_number <= Math.min(pages_total_pages, pages_current_page + 2))}
+							<button
+								class="btn join-item btn-xs"
+								class:btn-active={page_number === pages_current_page}
+								onclick={() => (pages_current_page = page_number)}
+							>
+								{page_number}
+							</button>
+						{/if}
+					{/each}
+
+					<button
+						class:invisible={pages_current_page === pages_total_pages}
+						class="btn join-item btn-xs"
+						onclick={() =>
+							(pages_current_page = Math.min(pages_total_pages, pages_current_page + 1))}>»</button
+					>
+					<button
+						class:invisible={pages_current_page === pages_total_pages}
+						class="btn join-item btn-xs"
+						onclick={() => (pages_current_page = pages_total_pages)}>»»</button
 					>
 				</div>
 			{/if}
