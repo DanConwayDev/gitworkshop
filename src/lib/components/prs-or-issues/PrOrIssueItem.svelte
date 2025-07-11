@@ -61,82 +61,82 @@
 	class:border-l-1={unread}
 	class:border-r-1={unread}
 >
-	{#if unread !== undefined}<div class="text-secondary w-4 pt-3 pr-1 text-xs">
-			{#if unread}●{/if}
-		</div>
-	{/if}
-	<!-- <figure class="p-4 pl-0 text-color-primary"> -->
-	<!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
-	<div class="pt-2">
-		{#if !table_item}
-			<div class="skeleton h-5 w-5 flex-none pt-1"></div>
-		{:else if table_item.status === StatusOpenKind}
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				viewBox="0 0 16 16"
-				class="fill-success h-5 w-5 flex-none pt-1"
-			>
-				<title>Open</title>
-				{#if type === 'pr'}
-					<path d={pr_icon_path.open_patch} />
-				{:else if type === 'issue'}
-					{#each issue_icon_path.open as p}
-						<path d={p} />
-					{/each}
-				{/if}
-			</svg>
-		{:else if table_item.status === StatusClosedKind}
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				viewBox="0 0 16 16"
-				class="fill-neutral-content h-5 w-5 flex-none pt-1"
-			>
-				<title>Closed</title>
-				{#if type === 'pr'}
-					<path d={pr_icon_path.close} />
-				{:else if type === 'issue'}
-					{#each issue_icon_path.closed as p}
-						<path d={p} />
-					{/each}
-				{/if}
-			</svg>
-		{:else if table_item.status === StatusDraftKind}
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				viewBox="0 0 16 16"
-				class="fill-neutral-content h-5 w-5 flex-none pt-1"
-			>
-				<title>Draft</title>
-				<path d={pr_icon_path.draft} />
-			</svg>
-		{:else if table_item.status === StatusAppliedKind}
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				viewBox="0 0 16 16"
-				class="fill-primary h-5 w-5 flex-none pt-1"
-			>
-				<title
-					>{#if type === 'pr'}Applied{:else if type === 'issue'}Resolved{/if}</title
-				>
-				{#if type === 'pr'}
-					<path d={pr_icon_path.applied} />
-				{:else if type === 'issue'}
-					{#each issue_icon_path.resolved as p}
-						<path d={p} />
-					{/each}
-				{/if}
-			</svg>
-		{/if}
-	</div>
 	<a
 		href="{repo_route_c ? `/${repo_route_c.s}/${type}s` : ''}/{nip19.noteEncode(
 			table_item?.uuid ?? ''
 		) || ''}"
-		class="text-neutral-content ml-3 flex grow overflow-hidden text-xs"
+		class="text-neutral-content flex grow overflow-hidden text-xs"
 		class:pointer-events-none={!table_item}
 		onclick={mark_as_read}
 	>
-		<div class="flex grow pt-2">
+		{#if unread !== undefined}<div class="text-secondary w-4 pt-3 pr-1 text-xs">
+				{#if unread}●{/if}
+			</div>
+		{/if}
+		<!-- <figure class="p-4 pl-0 text-color-primary"> -->
+		<!-- http://icon-sets.iconify.design/octicon/git-pull-request-16/ -->
+		<div class="pt-2">
+			{#if !table_item}
+				<div class="skeleton h-5 w-5 flex-none pt-1"></div>
+			{:else if table_item.status === StatusOpenKind}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 16 16"
+					class="fill-success h-5 w-5 flex-none pt-1"
+				>
+					<title>Open</title>
+					{#if type === 'pr'}
+						<path d={pr_icon_path.open_patch} />
+					{:else if type === 'issue'}
+						{#each issue_icon_path.open as p}
+							<path d={p} />
+						{/each}
+					{/if}
+				</svg>
+			{:else if table_item.status === StatusClosedKind}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 16 16"
+					class="fill-neutral-content h-5 w-5 flex-none pt-1"
+				>
+					<title>Closed</title>
+					{#if type === 'pr'}
+						<path d={pr_icon_path.close} />
+					{:else if type === 'issue'}
+						{#each issue_icon_path.closed as p}
+							<path d={p} />
+						{/each}
+					{/if}
+				</svg>
+			{:else if table_item.status === StatusDraftKind}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 16 16"
+					class="fill-neutral-content h-5 w-5 flex-none pt-1"
+				>
+					<title>Draft</title>
+					<path d={pr_icon_path.draft} />
+				</svg>
+			{:else if table_item.status === StatusAppliedKind}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 16 16"
+					class="fill-primary h-5 w-5 flex-none pt-1"
+				>
+					<title
+						>{#if type === 'pr'}Applied{:else if type === 'issue'}Resolved{/if}</title
+					>
+					{#if type === 'pr'}
+						<path d={pr_icon_path.applied} />
+					{:else if type === 'issue'}
+						{#each issue_icon_path.resolved as p}
+							<path d={p} />
+						{/each}
+					{/if}
+				</svg>
+			{/if}
+		</div>
+		<div class="ml-3 flex grow pt-2">
 			<div class="grow">
 				{#if !table_item}
 					<div class="skeleton h-5 w-60 flex-none pt-1"></div>
