@@ -187,9 +187,9 @@
 			</div>
 			<ul
 				bind:this={listElement}
-				class="divide-base-400 border-base-400 bg-base-300 divide-y rounded-t-lg border"
+				class="divide-base-400 border-base-400 bg-base-100 divide-y rounded-t-lg border"
 			>
-				<li class="flex p-2">
+				<li class="bg-base-200 flex p-2">
 					<div class="grow"></div>
 					<button class="btn btn-neutral btn-xs" onclick={markAllAsRead}>mark all as read</button>
 				</li>

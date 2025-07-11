@@ -51,10 +51,11 @@
 </script>
 
 <li
-	class="@container flex p-2 {unread ? 'border-x-secondary/30' : ''}"
 	class:hover:bg-base-200={table_item}
+	class="hover:bg-neutral/25 @container flex p-2 {unread
+		? 'border-x-secondary/30 bg-neutral/25 hover:bg-neutral/50'
+		: ''}"
 	class:cursor-pointer={table_item}
-	class:bg-base-100={unread}
 	class:border-l-1={unread}
 	class:border-r-1={unread}
 >
