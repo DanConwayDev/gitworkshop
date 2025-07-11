@@ -1,5 +1,8 @@
+import { browser } from '$app/environment';
+import { unixNow } from 'applesauce-core/helpers';
 import {
 	type AccountSummary,
+	type EventIdString,
 	type RepoReadme,
 	type RepoRef,
 	type RepoRoute,
@@ -50,7 +53,27 @@ class Store {
 	readme: { [key in RepoRef]: RepoReadme } = $state({});
 
 	navbar_fixed = $state(false);
+
+	// these are dynamtically fetched and set from local storage in NavBarNotifications
+	notifications_all_read_before: number = $state(0);
+	notifications_ids_read_after_date: EventIdString[] = $state([]);
 }
+
+export const loadAllReadBefore = () =>
+	store.logged_in_account && browser
+		? Number(
+				localStorage.getItem(`notifications_all_read_before:${store.logged_in_account.pubkey}`) ??
+					'0'
+			)
+		: 0;
+export const loadReadAfterDate = () =>
+	store.logged_in_account && browser
+		? JSON.parse(
+				localStorage.getItem(
+					`notifications_ids_read_after_date:${store.logged_in_account.pubkey}`
+				) ?? '[]'
+			)
+		: [];
 
 const store = new Store();
 

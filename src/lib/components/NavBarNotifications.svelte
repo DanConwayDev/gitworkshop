@@ -1,16 +1,60 @@
 <script>
 	import { goto } from '$app/navigation';
+	import query_centre from '$lib/query-centre/QueryCentre.svelte';
+	import store, { loadAllReadBefore, loadReadAfterDate } from '$lib/store.svelte';
+
+	let notifications_query = $derived(
+		store.logged_in_account
+			? query_centre.watchPubkeyNotifications(
+					store.logged_in_account.pubkey,
+					store.notifications_all_read_before
+				)
+			: { timeline: [] }
+	);
+
+	let unread = $derived(
+		[...(notifications_query.timeline ?? [])].some(
+			(e) =>
+				store.logged_in_account &&
+				e.pubkey !== store.logged_in_account.pubkey &&
+				e.created_at > store.notifications_all_read_before &&
+				!store.notifications_ids_read_after_date.includes(e.id)
+		)
+	);
+
+	$effect(() => {
+		store.logged_in_account?.pubkey;
+		store.notifications_all_read_before = loadAllReadBefore();
+		store.notifications_ids_read_after_date = loadReadAfterDate();
+	});
+
+	// store.notifications.* get updated in NotificationTable and are written to localStorage here
+	$effect(() => {
+		if (store.logged_in_account && store.notifications_ids_read_after_date.length > 0)
+			localStorage.setItem(
+				`notifications_ids_read_after_date:${store.logged_in_account.pubkey}`,
+				JSON.stringify(store.notifications_ids_read_after_date)
+			);
+	});
+
+	$effect(() => {
+		if (store.logged_in_account && store.notifications_all_read_before > 0)
+			localStorage.setItem(
+				`notifications_all_read_before:${store.logged_in_account.pubkey}`,
+				store.notifications_all_read_before.toString()
+			);
+	});
 </script>
 
 <div class="relative">
-	<div class="indicator">
-		<span class="indicator-item"></span>
-		<button
-			class="btn btn-ghost btn-sm hover:bg-neutral mx-0 mt-2 px-2"
-			onclick={() => {
-				goto('/notifications');
-			}}
-		>
+	<button
+		class="btn btn-ghost btn-sm hover:bg-neutral mx-0 mt-2 px-2"
+		onclick={() => {
+			goto('/notifications');
+		}}
+	>
+		<div class="indicator">
+			{#if unread}<span class="indicator-item status status-primary"></span>{/if}
 			<svg
 				width="24"
 				height="24"
@@ -27,6 +71,6 @@
 					stroke-linejoin="round"
 				/>
 			</svg>
-		</button>
-	</div>
+		</div>
+	</button>
 </div>
