@@ -182,19 +182,59 @@
 	};
 
 	const markAsUnread = (pr_issue_id: EventIdString) => {
-		let newly_unread_ids = events
-			.filter(
-				(e) =>
-					store.notifications_ids_read_after_date.includes(e.id) &&
-					getRelatedIssueOrPr(e) === pr_issue_id
-			)
-			.map((e) => e.id);
+		const old_notifications_all_read_before = store.notifications_all_read_before;
 
-		if (newly_unread_ids.length > 0) {
-			store.notifications_ids_read_after_date = store.notifications_ids_read_after_date.filter(
-				(id) => !newly_unread_ids.includes(id)
-			);
+		// 1. Identify all events that are part of the pr_issue_id
+		let events_for_current_pr_issue = events.filter((e) => getRelatedIssueOrPr(e) === pr_issue_id);
+		let ids_of_events_for_pr_issue = events_for_current_pr_issue.map((e) => e.id);
+
+		// 2. Remove these specific event IDs from notifications_ids_read_after_date
+		store.notifications_ids_read_after_date = store.notifications_ids_read_after_date.filter(
+			(id) => !ids_of_events_for_pr_issue.includes(id)
+		);
+
+		// 3. Determine the earliest created_at that would now be unread for this pr_issue_id
+		let min_created_at_for_pr_issue = Number.MAX_SAFE_INTEGER;
+		for (const e of events_for_current_pr_issue) {
+			if (e.created_at < min_created_at_for_pr_issue) {
+				min_created_at_for_pr_issue = e.created_at;
+			}
 		}
+
+		// Calculate proposed new notifications_all_read_before
+		let proposed_notifications_all_read_before = old_notifications_all_read_before;
+		if (
+			min_created_at_for_pr_issue !== Number.MAX_SAFE_INTEGER &&
+			min_created_at_for_pr_issue < old_notifications_all_read_before
+		) {
+			proposed_notifications_all_read_before = min_created_at_for_pr_issue - 1;
+		}
+
+		// 4. If notifications_all_read_before is effectively moving backwards,
+		// identify events that were "read by age" from the old threshold
+		// and add them to notifications_ids_read_after_date if they are not
+		// part of the current pr_issue_id being marked unread.
+		if (proposed_notifications_all_read_before < old_notifications_all_read_before) {
+			let events_to_re_mark_as_read = events
+				.filter(
+					(e) =>
+						e.created_at >= proposed_notifications_all_read_before && // Events that are now "above" the new threshold
+						e.created_at < old_notifications_all_read_before && // Events that were "below" the old threshold
+						!ids_of_events_for_pr_issue.includes(e.id) && // Not part of the current PR/Issue being unread
+						!store.notifications_ids_read_after_date.includes(e.id) // Not already explicitly read
+				)
+				.map((e) => e.id);
+
+			store.notifications_ids_read_after_date = [
+				...store.notifications_ids_read_after_date,
+				...events_to_re_mark_as_read
+			];
+		}
+
+		// Overwrite notifications_all_read_before with the calculated proposed value
+		store.notifications_all_read_before = proposed_notifications_all_read_before;
+
+		// 5. Call updateAllReadBefore to finalize state (it will re-filter based on new notifications_all_read_before)
 		updateAllReadBefore();
 	};
 
