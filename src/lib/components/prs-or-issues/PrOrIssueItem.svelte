@@ -51,13 +51,14 @@
 </script>
 
 <li
-	class="flex p-2 @container {table_item ? 'cursor-pointer hover:bg-base-200' : ''}"
+	class="@container flex p-2 {unread ? 'border-x-secondary/30' : ''}"
+	class:hover:bg-base-200={table_item}
+	class:cursor-pointer={table_item}
 	class:bg-base-100={unread}
-	class:border-secondary={unread}
 	class:border-l-1={unread}
-	class:border-r-4={unread}
+	class:border-r-1={unread}
 >
-	<div class="w-4 pr-1 pt-3 text-xs text-secondary">
+	<div class="text-secondary w-4 pt-3 pr-1 text-xs">
 		{#if unread}●{/if}
 	</div>
 	<!-- <figure class="p-4 pl-0 text-color-primary"> -->
@@ -69,7 +70,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="h-5 w-5 flex-none fill-success pt-1"
+				class="fill-success h-5 w-5 flex-none pt-1"
 			>
 				<title>Open</title>
 				{#if type === 'pr'}
@@ -84,7 +85,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="h-5 w-5 flex-none fill-neutral-content pt-1"
+				class="fill-neutral-content h-5 w-5 flex-none pt-1"
 			>
 				<title>Closed</title>
 				{#if type === 'pr'}
@@ -99,7 +100,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="h-5 w-5 flex-none fill-neutral-content pt-1"
+				class="fill-neutral-content h-5 w-5 flex-none pt-1"
 			>
 				<title>Draft</title>
 				<path d={pr_icon_path.draft} />
@@ -108,7 +109,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="h-5 w-5 flex-none fill-primary pt-1"
+				class="fill-primary h-5 w-5 flex-none pt-1"
 			>
 				<title
 					>{#if type === 'pr'}Applied{:else if type === 'issue'}Resolved{/if}</title
@@ -127,7 +128,7 @@
 		href="{repo_route_c ? `/${repo_route_c.s}/${type}s` : ''}/{nip19.noteEncode(
 			table_item?.uuid ?? ''
 		) || ''}"
-		class="ml-3 flex grow overflow-hidden text-xs text-neutral-content"
+		class="text-neutral-content ml-3 flex grow overflow-hidden text-xs"
 		class:pointer-events-none={!table_item}
 		{onclick}
 	>
@@ -135,9 +136,9 @@
 			<div class="grow">
 				{#if !table_item}
 					<div class="skeleton h-5 w-60 flex-none pt-1"></div>
-					<div class="skeleton mb-1 mt-3 h-3 w-40 flex-none"></div>
+					<div class="skeleton mt-3 mb-1 h-3 w-40 flex-none"></div>
 				{:else}
-					<div class="text-sm text-base-content">
+					<div class="text-base-content text-sm">
 						{short_title}
 						{#each table_item.tags as tag}
 							<div class="badge badge-secondary mx-1">{tag}</div>
@@ -155,7 +156,7 @@
 								<!-- http://icon-sets.iconify.design/octicon/comment-16/ -->
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
-									class="inline-block h-3 w-3 flex-none fill-base-content pt-0"
+									class="fill-base-content inline-block h-3 w-3 flex-none pt-0"
 									viewBox="0 0 16 16"
 									><path
 										d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"
@@ -187,7 +188,7 @@
 						<!-- http://icon-sets.iconify.design/octicon/comment-16/ -->
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
-							class="mr-1 inline-block h-4 w-4 flex-none fill-base-content"
+							class="fill-base-content mr-1 inline-block h-4 w-4 flex-none"
 							viewBox="0 0 16 16"
 							><path
 								d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"
