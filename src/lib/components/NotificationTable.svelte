@@ -109,6 +109,23 @@
 		}
 	};
 
+	const markAsUnread = (pr_issue_id: EventIdString) => {
+		let newly_unread_ids = events
+			.filter(
+				(e) =>
+					store.notifications_ids_read_after_date.includes(e.id) &&
+					getRelatedIssueOrPr(e) === pr_issue_id
+			)
+			.map((e) => e.id);
+
+		if (newly_unread_ids.length > 0) {
+			store.notifications_ids_read_after_date = store.notifications_ids_read_after_date.filter(
+				(id) => !newly_unread_ids.includes(id)
+			);
+		}
+		updateAllReadBefore();
+	};
+
 	const markAllAsRead = () => {
 		const three_days_ago = unixNow() - 60 * 60 * 24 * 10;
 		store.notifications_ids_read_after_date = events
@@ -173,6 +190,9 @@
 						unread={unread_referenced_issues_prs_ids.includes(table_item?.uuid ?? '')}
 						mark_as_read={() => {
 							if (table_item) markAsRead(table_item.uuid);
+						}}
+						mark_as_unread={() => {
+							if (table_item) markAsUnread(table_item.uuid);
 						}}
 						is_notification
 					/>

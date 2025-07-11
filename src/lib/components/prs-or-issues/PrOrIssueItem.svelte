@@ -22,7 +22,8 @@
 		show_repo = false,
 		is_notification = false,
 		unread = undefined,
-		mark_as_read = () => {}
+		mark_as_read = () => {},
+		mark_as_unread = () => {}
 	}: {
 		type: 'issue' | 'pr';
 		table_item?: IssueOrPRTableItem;
@@ -31,6 +32,7 @@
 		is_notification?: boolean;
 		unread?: boolean;
 		mark_as_read?: () => void;
+		mark_as_unread?: () => void;
 	} = $props();
 
 	let short_title = $derived.by(() => {
@@ -204,10 +206,13 @@
 			</div>
 		</div>
 	</a>
-	{#if is_notification && unread}
-		<button
-			class="btn btn-neutral btn-xs hidden self-center group-hover:block"
-			onclick={mark_as_read}>mark as read</button
-		>
+	{#if is_notification}
+		<div class="hidden self-center @lg:group-hover:block">
+			{#if unread}
+				<button class="btn btn-neutral btn-xs" onclick={mark_as_read}>mark as read</button>
+			{:else}
+				<button class="btn btn-neutral btn-xs" onclick={mark_as_unread}>mark as unread</button>
+			{/if}
+		</div>
 	{/if}
 </li>
