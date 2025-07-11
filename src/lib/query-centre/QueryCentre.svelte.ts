@@ -153,16 +153,21 @@ class QueryCentre {
 		);
 	}
 
-	watchPubkeyNotifications(pubkey: PubKeyString, since?: number) {
-		this.external_worker.postMessage({ method: 'watchPubkeyNotifications', args: [pubkey, since] });
+	watchPubkeyNotifications(pubkey: PubKeyString, since?: number, internal_only = false) {
+		if (!internal_only)
+			this.external_worker.postMessage({
+				method: 'watchPubkeyNotifications',
+				args: [pubkey, since]
+			});
 		return inMemoryRelayTimeline(
 			[...createPubkeyNoficiationsFilters(pubkey)],
 			() => [pubkey],
 			() => {
-				this.external_worker.postMessage({
-					method: 'watchPubkeyNotificationsUnsubscribe',
-					args: [pubkey]
-				});
+				if (!internal_only)
+					this.external_worker.postMessage({
+						method: 'watchPubkeyNotificationsUnsubscribe',
+						args: [pubkey]
+					});
 			}
 		);
 	}

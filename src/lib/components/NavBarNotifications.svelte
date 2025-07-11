@@ -3,11 +3,16 @@
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store, { loadAllReadBefore, loadReadAfterDate } from '$lib/store.svelte';
 
+	let earliest_all_read_before = $state($state.snapshot(store.notifications_all_read_before));
+	$effect(() => {
+		if (store.notifications_all_read_before > earliest_all_read_before)
+			earliest_all_read_before = store.notifications_all_read_before;
+	});
 	let notifications_query = $derived(
 		store.logged_in_account
 			? query_centre.watchPubkeyNotifications(
 					store.logged_in_account.pubkey,
-					store.notifications_all_read_before
+					earliest_all_read_before // only change filters if since would be
 				)
 			: { timeline: [] }
 	);

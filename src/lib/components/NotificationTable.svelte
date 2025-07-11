@@ -14,10 +14,7 @@
 	// fetch notification events
 	let notifications_query = $derived(
 		store.logged_in_account
-			? query_centre.watchPubkeyNotifications(
-					store.logged_in_account.pubkey,
-					store.notifications_all_read_before
-				)
+			? query_centre.watchPubkeyNotifications(store.logged_in_account.pubkey, 0, true)
 			: { timeline: [] }
 	);
 
