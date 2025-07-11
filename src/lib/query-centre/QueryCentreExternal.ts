@@ -384,7 +384,7 @@ class QueryCentreExternal {
 			{ ids: [event_ref.id] },
 			...(and_children ? ([{ '#E': [event_ref.id] }, { '#e': [event_ref.id] }] as Filter[]) : [])
 		]);
-		if (cached.length > 0) return;
+		if (cached.find((e) => e.id === event_ref.id)) return;
 		let tried: WebSocketUrl[] = [];
 		const relays = (event_ref.relays ?? []).filter((r) => isWebSocketUrl(r));
 		if (relays.length > 0) {
