@@ -37,22 +37,19 @@
 		...new Set(events.map(getRelatedIssueOrPr).filter((id) => id !== undefined))
 	]);
 
-	let issues_query = $derived(query_centre.fetchIssues(referenced_issues_prs_ids));
-	let prs_query = $derived(query_centre.fetchPrs(referenced_issues_prs_ids));
-	let issues_prs = $derived(
-		referenced_issues_prs_ids.map(
-			(id) =>
-				issues_query.current?.find((i) => i && i.event.id === id) ??
-				prs_query.current?.find((i) => i && i.event.id === id) ??
-				undefined
-		) ?? []
-	);
-
 	// pagination
 	let pages_items_per_page = 10;
 	let pages_current_page = $state(1);
-	let pages_total_pages = $derived(Math.ceil(issues_prs.length / pages_items_per_page));
+	let pages_total_pages = $derived(
+		Math.ceil(referenced_issues_prs_ids.length / pages_items_per_page)
+	);
 	let pages_start_page_index = $derived((pages_current_page - 1) * pages_items_per_page);
+	let page_slice_of_referenced_issues_prs_ids = $derived(
+		referenced_issues_prs_ids.slice(
+			pages_start_page_index,
+			pages_start_page_index + pages_items_per_page
+		)
+	);
 	// svelte-ignore non_reactive_update
 	let listElement: HTMLUListElement;
 	$effect(() => {
@@ -61,6 +58,18 @@
 			listElement.scrollIntoView({ behavior: 'smooth' });
 		}
 	});
+
+	// fetch PR / Issue
+	let page_issues_query = $derived(query_centre.fetchIssues(referenced_issues_prs_ids));
+	let page_prs_query = $derived(query_centre.fetchPrs(referenced_issues_prs_ids));
+	let page_issues_prs = $derived(
+		page_slice_of_referenced_issues_prs_ids.map(
+			(id) =>
+				page_issues_query.current?.find((i) => i && i.event.id === id) ??
+				page_prs_query.current?.find((i) => i && i.event.id === id) ??
+				undefined
+		) ?? []
+	);
 
 	// fetch missing data
 	let fetched_threads: EventIdString[] = $state([]);
@@ -72,11 +81,8 @@
 		}, 2000);
 	});
 	let missing_issue_prs_on_page = $derived(
-		referenced_issues_prs_ids.filter(
-			(_, index) =>
-				issues_prs[index] === undefined &&
-				index >= pages_start_page_index &&
-				index < pages_start_page_index + pages_items_per_page
+		page_slice_of_referenced_issues_prs_ids.filter(
+			(_, index) => page_issues_prs[index] === undefined
 		)
 	);
 	$effect(() => {
@@ -90,21 +96,13 @@
 	});
 
 	// fetch threads
-	let issue_prs_on_page = $derived(
-		issues_prs
-			.filter(
-				(e, index) =>
-					e &&
-					e.repos[0] &&
-					index >= pages_start_page_index &&
-					index < pages_start_page_index + pages_items_per_page
-			)
-			.filter((i) => i !== undefined) // for typings
+	let page_issue_prs_loaded = $derived(
+		page_issues_prs.filter((e, index) => e && e.repos[0]).filter((i) => i !== undefined) // for typings
 	);
 
 	$effect(() => {
 		if (had_chance_to_load_from_cache)
-			issue_prs_on_page.forEach((table_item) => {
+			page_issue_prs_loaded.forEach((table_item) => {
 				if (!fetched_threads.includes(table_item.uuid)) {
 					fetched_threads = [...fetched_threads, table_item.uuid];
 					query_centre.fetchEvent(
@@ -225,7 +223,7 @@
 					<div class="grow"></div>
 					<button class="btn btn-neutral btn-xs" onclick={markAllAsRead}>mark all as read</button>
 				</li>
-				{#each issues_prs.slice(pages_start_page_index, pages_start_page_index + pages_items_per_page) as table_item}
+				{#each page_issues_prs as table_item}
 					<PrOrIssueItem
 						type={table_item?.type ?? 'issue'}
 						{table_item}
@@ -240,12 +238,12 @@
 						is_notification
 					/>
 				{/each}
-				{#if issues_prs.length === 0}
+				{#if page_issues_prs.length === 0}
 					<li class="text-neutral-content p-2 py-8 text-center">no notifications found</li>
 				{/if}
 			</ul>
 
-			{#if issues_prs.length > 0}
+			{#if page_issues_prs.length > 0}
 				<div class="join mt-4 flex justify-center">
 					<button
 						class:invisible={pages_current_page === 1}
