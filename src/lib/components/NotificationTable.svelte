@@ -82,8 +82,10 @@
 	$effect(() => {
 		if (had_chance_to_load_from_cache)
 			missing_issue_prs_on_page.forEach((id) => {
-				query_centre.fetchEvent({ id: id }, true);
-				fetched_threads = [...fetched_threads, id];
+				if (!fetched_threads.includes(id)) {
+					fetched_threads = [...fetched_threads, id];
+					query_centre.fetchEvent({ id: id }, true);
+				}
 			});
 	});
 
@@ -103,7 +105,8 @@
 	$effect(() => {
 		if (had_chance_to_load_from_cache)
 			issue_prs_on_page.forEach((table_item) => {
-				if (!fetched_threads.includes(table_item.uuid))
+				if (!fetched_threads.includes(table_item.uuid)) {
+					fetched_threads = [...fetched_threads, table_item.uuid];
 					query_centre.fetchEvent(
 						{
 							id: table_item.uuid,
@@ -115,6 +118,7 @@
 						},
 						true
 					);
+				}
 			});
 	});
 
