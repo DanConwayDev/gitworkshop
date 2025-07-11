@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { IssueKind, PatchKind } from '$lib/kinds';
 	import type { EventIdString } from '$lib/types';
@@ -59,6 +60,28 @@
 		if (listElement) {
 			listElement.scrollIntoView({ behavior: 'smooth' });
 		}
+	});
+
+	// fetch missing PRs and Issue
+	let had_chance_to_load_from_cache = $state(false);
+	onMount(() => {
+		setTimeout(() => {
+			had_chance_to_load_from_cache = true;
+		}, 2000);
+	});
+	let missing_issue_prs_on_page = $derived(
+		referenced_issues_prs_ids.filter(
+			(_, index) =>
+				issues_prs[index] === undefined &&
+				index >= pages_start_page_index &&
+				index < pages_start_page_index + pages_items_per_page
+		)
+	);
+	$effect(() => {
+		if (had_chance_to_load_from_cache)
+			missing_issue_prs_on_page.forEach((id) => {
+				query_centre.fetchEvent({ id: id });
+			});
 	});
 
 	// read / unread status

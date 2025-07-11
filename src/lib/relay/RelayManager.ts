@@ -742,20 +742,31 @@ export class RelayManager {
 		return () => this.subscriber_manager.remove(query);
 	}
 
-	async fetchEvent(event_ref: NEventAttributes | EventPointer): Promise<NostrEvent | undefined> {
+	async fetchEvent(
+		event_ref: NEventAttributes | EventPointer,
+		and_children: boolean = false
+	): Promise<NostrEvent | undefined> {
 		await this.connect();
 		return await new Promise<NostrEvent | undefined>((r) => {
-			const sub = this.relay.subscribe([{ ids: [event_ref.id] }], {
-				onevent: async (event) => {
-					if (event.id !== event_ref.id) return;
-					this.onEvent(event);
-					r(event);
-				},
-				oneose: () => {
-					sub.close();
-					r(undefined);
+			const sub = this.relay.subscribe(
+				[
+					{ ids: [event_ref.id] },
+					...(and_children
+						? ([{ '#E': [event_ref.id] }, { '#e': [event_ref.id] }] as Filter[])
+						: [])
+				],
+				{
+					onevent: async (event) => {
+						this.onEvent(event);
+						if (event.id !== event_ref.id) return;
+						r(event);
+					},
+					oneose: () => {
+						sub.close();
+						r(undefined);
+					}
 				}
-			});
+			);
 		});
 	}
 
