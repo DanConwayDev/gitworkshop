@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { IssueKind, PatchKind } from '$lib/kinds';
-	import type { EventIdString } from '$lib/types';
+	import { isRelayCheckFound, type EventIdString } from '$lib/types';
 	import Container from './Container.svelte';
 	import store from '$lib/store.svelte';
 	import { type NostrEvent } from 'nostr-tools';
@@ -62,6 +62,8 @@
 		}
 	});
 
+	// fetch missing data
+	let fetched_threads: EventIdString[] = $state([]);
 	// fetch missing PRs and Issue
 	let had_chance_to_load_from_cache = $state(false);
 	onMount(() => {
@@ -80,7 +82,39 @@
 	$effect(() => {
 		if (had_chance_to_load_from_cache)
 			missing_issue_prs_on_page.forEach((id) => {
-				query_centre.fetchEvent({ id: id });
+				query_centre.fetchEvent({ id: id }, true);
+				fetched_threads = [...fetched_threads, id];
+			});
+	});
+
+	// fetch threads
+	let issue_prs_on_page = $derived(
+		issues_prs
+			.filter(
+				(e, index) =>
+					e &&
+					e.repos[0] &&
+					index >= pages_start_page_index &&
+					index < pages_start_page_index + pages_items_per_page
+			)
+			.filter((i) => i !== undefined) // for typings
+	);
+
+	$effect(() => {
+		if (had_chance_to_load_from_cache)
+			issue_prs_on_page.forEach((table_item) => {
+				if (!fetched_threads.includes(table_item.uuid))
+					query_centre.fetchEvent(
+						{
+							id: table_item.uuid,
+							relays: Object.entries(table_item.relays_info)
+								.filter(([url, huristicsForRelay]) =>
+									huristicsForRelay.huristics.some(isRelayCheckFound)
+								)
+								.map(([url]) => url)
+						},
+						true
+					);
 			});
 	});
 
