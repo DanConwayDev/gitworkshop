@@ -29,7 +29,7 @@
 			<NavBarLeftMenu />
 			<div class="navbar-cente">
 				<a class="h-8 overflow-hidden align-middle sm:hidden" href="/">
-					<img src="/icons/icon.svg" alt="gitworkshop.dev logo" class="h-full max-w-full" />
+					<img src="/icons/icon.svg" alt="gitworkshop.dev logo" class="h-8 max-w-full" />
 				</a>
 			</div>
 			<div class="navbar-end md:gap-2">
