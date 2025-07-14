@@ -1,7 +1,12 @@
 <script>
 	import { goto } from '$app/navigation';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
-	import store, { loadAllReadBefore, loadReadAfterDate } from '$lib/store.svelte';
+	import store, {
+		loadAllArchivedBefore,
+		loadAllReadBefore,
+		loadArchivedAfterDate,
+		loadReadAfterDate
+	} from '$lib/store.svelte';
 
 	let earliest_all_read_before = $state($state.snapshot(store.notifications_all_read_before));
 	$effect(() => {
@@ -31,6 +36,8 @@
 		store.logged_in_account?.pubkey;
 		store.notifications_all_read_before = loadAllReadBefore();
 		store.notifications_ids_read_after_date = loadReadAfterDate();
+		store.notifications_all_archived_before = loadAllArchivedBefore();
+		store.notifications_ids_archived_after_date = loadArchivedAfterDate();
 	});
 
 	// store.notifications.* get updated in NotificationTable and are written to localStorage here
@@ -46,6 +53,22 @@
 		if (store.logged_in_account && store.notifications_all_read_before > 0)
 			localStorage.setItem(
 				`notifications_all_read_before:${store.logged_in_account.pubkey}`,
+				store.notifications_all_read_before.toString()
+			);
+	});
+
+	$effect(() => {
+		if (store.logged_in_account && store.notifications_ids_read_after_date.length > 0)
+			localStorage.setItem(
+				`notifications_ids_archived_after_date:${store.logged_in_account.pubkey}`,
+				JSON.stringify(store.notifications_ids_read_after_date)
+			);
+	});
+
+	$effect(() => {
+		if (store.logged_in_account && store.notifications_all_read_before > 0)
+			localStorage.setItem(
+				`notifications_all_archived_before:${store.logged_in_account.pubkey}`,
 				store.notifications_all_read_before.toString()
 			);
 	});

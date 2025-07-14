@@ -57,6 +57,8 @@ class Store {
 	// these are dynamtically fetched and set from local storage in NavBarNotifications
 	notifications_all_read_before: number = $state(0);
 	notifications_ids_read_after_date: EventIdString[] = $state([]);
+	notifications_all_archived_before: number = $state(0);
+	notifications_ids_archived_after_date: EventIdString[] = $state([]);
 }
 
 export const loadAllReadBefore = () =>
@@ -71,6 +73,23 @@ export const loadReadAfterDate = () =>
 		? JSON.parse(
 				localStorage.getItem(
 					`notifications_ids_read_after_date:${store.logged_in_account.pubkey}`
+				) ?? '[]'
+			)
+		: [];
+
+export const loadAllArchivedBefore = () =>
+	store.logged_in_account && browser
+		? Number(
+				localStorage.getItem(
+					`notifications_all_archived_before:${store.logged_in_account.pubkey}`
+				) ?? '0'
+			)
+		: 0;
+export const loadArchivedAfterDate = () =>
+	store.logged_in_account && browser
+		? JSON.parse(
+				localStorage.getItem(
+					`notifications_ids_archived_after_date:${store.logged_in_account.pubkey}`
 				) ?? '[]'
 			)
 		: [];

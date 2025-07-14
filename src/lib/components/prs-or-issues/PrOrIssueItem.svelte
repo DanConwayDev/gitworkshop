@@ -20,19 +20,25 @@
 		table_item,
 		repo_route,
 		show_repo = false,
-		is_notification = false,
+		notification_view = undefined,
 		unread = undefined,
+		is_archived = false,
 		mark_as_read = () => {},
-		mark_as_unread = () => {}
+		mark_as_unread = () => {},
+		mark_as_archived = () => {},
+		mark_as_unarchived = () => {}
 	}: {
 		type: 'issue' | 'pr';
 		table_item?: IssueOrPRTableItem;
 		repo_route?: RepoRoute;
 		show_repo?: boolean;
-		is_notification?: boolean;
+		notification_view?: 'inbox' | 'archived' | 'all';
 		unread?: boolean;
+		is_archived?: boolean;
 		mark_as_read?: () => void;
 		mark_as_unread?: () => void;
+		mark_as_archived?: () => void;
+		mark_as_unarchived?: () => void;
 	} = $props();
 
 	let short_title = $derived.by(() => {
@@ -184,7 +190,7 @@
 				{/if}
 			</div>
 		</div>
-		<div class="hidden @lg:flex {is_notification ? '@lg:group-hover:hidden' : ''}">
+		<div class="hidden @lg:flex {notification_view ? '@lg:group-hover:hidden' : ''}">
 			<div class="flex items-center p-4 opacity-50">
 				<UserAvatarGroup users={[...commenters]} />
 			</div>
@@ -206,12 +212,22 @@
 			</div>
 		</div>
 	</a>
-	{#if is_notification}
+	{#if notification_view}
 		<div class="hidden self-center @lg:group-hover:block">
 			{#if unread}
 				<button class="btn btn-neutral btn-xs" onclick={mark_as_read}>mark as read</button>
-			{:else}
-				<button class="btn btn-neutral btn-xs" onclick={mark_as_unread}>mark as unread</button>
+			{/if}
+			{#if notification_view === 'inbox'}
+				{#if !unread}
+					<button class="btn btn-neutral btn-xs" onclick={mark_as_unread}>mark as unread</button>
+				{/if}
+				<div class="w-1"></div>
+				{#if !is_archived}
+					<button class="btn btn-neutral btn-xs" onclick={mark_as_archived}>archive</button>
+				{/if}
+			{/if}
+			{#if notification_view === 'archived'}
+				<button class="btn btn-neutral btn-xs" onclick={mark_as_unarchived}>move to inbox</button>
 			{/if}
 		</div>
 	{/if}
