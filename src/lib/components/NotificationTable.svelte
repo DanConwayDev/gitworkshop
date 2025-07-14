@@ -24,17 +24,24 @@
 			.sort((a, b) => b.created_at - a.created_at) ?? []
 	);
 
+	let current_view: 'inbox' | 'archived' | 'all' = $state('inbox');
+
 	const notificationInView = (e: NostrEvent, view: 'inbox' | 'archived' | 'all'): boolean => {
 		const archived =
 			e.created_at > store.notifications_all_archived_before &&
 			!store.notifications_ids_archived_after_date.includes(e.id);
-		if (current_view == 'inbox') return archived;
-		if (current_view == 'archived') return !archived;
+		if (view == 'inbox') return archived;
+		if (view == 'archived') return !archived;
 		return true;
 	};
 
+	let events_in_inbox = $derived(
+		[...(notifications_query.timeline ?? [])].filter((e) => notificationInView(e, 'inbox'))
+	);
 	let events_in_view = $derived(
-		[...(notifications_query.timeline ?? [])].filter((e) => notificationInView(e, current_view))
+		current_view === 'inbox'
+			? events_in_inbox
+			: [...(notifications_query.timeline ?? [])].filter((e) => notificationInView(e, current_view))
 	);
 
 	// reduce to issues and prs with notifications
@@ -48,6 +55,21 @@
 	let referenced_issues_prs_ids: EventIdString[] = $derived([
 		...new Set(events_in_view.map(getRelatedIssueOrPr).filter((id) => id !== undefined))
 	]);
+
+	const notificationIsUnread = (e: NostrEvent): boolean =>
+		e.created_at > store.notifications_all_read_before &&
+		!store.notifications_ids_read_after_date.includes(e.id);
+
+	const unread_inbox_count = $derived(
+		[
+			...new Set(
+				events_in_inbox
+					.filter(notificationIsUnread)
+					.map(getRelatedIssueOrPr)
+					.filter((id) => id !== undefined)
+			)
+		].length
+	);
 
 	// pagination
 	let pages_items_per_page = 10;
@@ -136,27 +158,17 @@
 	let unread_referenced_issues_prs_ids: EventIdString[] = $derived([
 		...new Set(
 			events_in_view
-				.filter(
-					(e) =>
-						e.created_at > store.notifications_all_read_before &&
-						!store.notifications_ids_read_after_date.includes(e.id)
-				)
+				.filter(notificationIsUnread)
 				.map(getRelatedIssueOrPr)
 				.filter((id) => id !== undefined)
 		)
 	]);
 
-	let current_view: 'inbox' | 'archived' | 'all' = $state('inbox');
-
 	const updateAllReadBefore = () => {
 		// update all_ready_before date to oldest unread minus 1s, or 3 days ago, whichever is older
 		// determine oldest unread event
 		let oldest_unread_event = events
-			.filter(
-				(e) =>
-					e.created_at > store.notifications_all_read_before &&
-					!store.notifications_ids_read_after_date.includes(e.id)
-			)
+			.filter(notificationIsUnread)
 			.sort((a, b) => a.created_at - b.created_at)[0];
 
 		const three_days_ago = unixNow() - 60 * 60 * 24 * 3;
@@ -214,12 +226,7 @@
 
 	const markAsRead = (pr_issue_id: EventIdString) => {
 		let newly_read_ids = events
-			.filter(
-				(e) =>
-					e.created_at > store.notifications_all_read_before &&
-					!store.notifications_ids_read_after_date.includes(e.id) &&
-					getRelatedIssueOrPr(e) === pr_issue_id
-			)
+			.filter((e) => notificationIsUnread(e) && getRelatedIssueOrPr(e) === pr_issue_id)
 			.map((e) => e.id);
 		if (newly_read_ids.length > 0) {
 			store.notifications_ids_read_after_date = [
@@ -387,8 +394,11 @@
 						onclick={() => {
 							pages_current_page = 1;
 							current_view = 'inbox';
-						}}>Inbox</button
-					>
+						}}
+						>Inbox
+						<span class="badge badge-xs badge-neutral ml-2">{unread_inbox_count}</span>
+					</button>
+
 					<button
 						class="tab"
 						class:tab-active={current_view === 'archived'}
