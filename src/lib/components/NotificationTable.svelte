@@ -453,7 +453,7 @@
 					<li class="text-neutral-content p-2 py-8 text-center">no notifications found</li>
 				{/if}
 			</ul>
-			{#if page_issues_prs.length > 0}
+			{#if pages_total_pages > 1}
 				<div class="join mt-4 flex justify-center">
 					<button
 						class:invisible={pages_current_page === 1}
