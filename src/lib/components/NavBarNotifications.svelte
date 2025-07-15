@@ -40,6 +40,8 @@
 		store.notifications_ids_archived_after_date = loadArchivedAfterDate();
 	});
 
+	// DO we have an issue here when gitworkshop is refreshed?
+
 	// store.notifications.* get updated in NotificationTable and are written to localStorage here
 	$effect(() => {
 		if (store.logged_in_account && store.notifications_ids_read_after_date.length > 0)
@@ -58,18 +60,18 @@
 	});
 
 	$effect(() => {
-		if (store.logged_in_account && store.notifications_ids_read_after_date.length > 0)
+		if (store.logged_in_account && store.notifications_ids_archived_after_date.length > 0)
 			localStorage.setItem(
 				`notifications_ids_archived_after_date:${store.logged_in_account.pubkey}`,
-				JSON.stringify(store.notifications_ids_read_after_date)
+				JSON.stringify(store.notifications_ids_archived_after_date)
 			);
 	});
 
 	$effect(() => {
-		if (store.logged_in_account && store.notifications_all_read_before > 0)
+		if (store.logged_in_account && store.notifications_all_archived_before > 0)
 			localStorage.setItem(
 				`notifications_all_archived_before:${store.logged_in_account.pubkey}`,
-				store.notifications_all_read_before.toString()
+				store.notifications_all_archived_before.toString()
 			);
 	});
 </script>
