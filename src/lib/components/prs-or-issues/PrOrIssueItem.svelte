@@ -213,7 +213,7 @@
 		</div>
 	</a>
 	{#if notification_view}
-		<div class="hidden self-center @lg:group-hover:block">
+		<div class="flex hidden gap-1 self-center @lg:group-hover:block">
 			{#if unread}
 				<button class="btn btn-neutral btn-xs" onclick={mark_as_read}>mark as read</button>
 			{/if}
@@ -221,7 +221,6 @@
 				{#if !unread}
 					<button class="btn btn-neutral btn-xs" onclick={mark_as_unread}>mark as unread</button>
 				{/if}
-				<div class="w-1"></div>
 				{#if !is_archived}
 					<button class="btn btn-neutral btn-xs" onclick={mark_as_archived}>archive</button>
 				{/if}
