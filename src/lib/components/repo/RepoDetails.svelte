@@ -76,6 +76,10 @@
 			['a', item?.uuid ?? a_ref ?? ''],
 			['k', GitRepositoryAnnouncement.toString()]
 		];
+		// Add e tag with the event ID to be deleted for relays that don't support a-tag deletion
+		if (item?.event_id) {
+			tags.push(['e', item.event_id]);
+		}
 		([] as string[][]).forEach((t) => {
 			if (t.length > 1 && !tags.some((e) => e[0] === t[0] && e[1] === t[1])) tags.push(t);
 		});
