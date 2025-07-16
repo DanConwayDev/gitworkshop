@@ -42,7 +42,7 @@
 			</div>
 		</button>
 		<Sidebar bind:is_open>
-			<Outbox />
+			<Outbox on_view_event={() => toggle()} />
 		</Sidebar>
 	</div>
 {/if}

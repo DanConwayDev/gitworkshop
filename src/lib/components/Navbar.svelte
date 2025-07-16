@@ -80,7 +80,7 @@
 					</a>
 				</div>
 				{#if store.experimental}<NavBarInsertWallet />{/if}
-				{#if store.experimental}<NavBarInsertOutbox />{/if}
+				{#if store.logged_in_account}<NavBarInsertOutbox />{/if}
 				{#if store.logged_in_account}<NavBarNotifications />{/if}
 
 				<NavBarUserMenu />

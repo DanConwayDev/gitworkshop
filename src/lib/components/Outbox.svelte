@@ -7,7 +7,10 @@
 	import UserHeader from './user/UserHeader.svelte';
 	import { GitRepositoryAnnouncement } from '$lib/kind_labels';
 	import Container from './Container.svelte';
+	import EmbeddedEvent from './content-tree/EmbeddedEvent.svelte';
+	import { eventToNip19 } from '$lib/utils';
 
+	let { on_view_event = () => {} }: { on_view_event?: () => void } = $props();
 	let outbox_query = liveQueryState(() => {
 		return db.outbox.toArray();
 	});
@@ -27,9 +30,9 @@
 	let selected: EventIdString | undefined = $state(undefined);
 </script>
 
-<div class="h-full bg-base-400">
+<div class="bg-base-400 h-full">
 	<Container>
-		<div class="flex items-center border-b border-primary pb-2">
+		<div class="border-primary flex items-center border-b pb-2">
 			<div class="prose grow">
 				<h3>Outbox</h3>
 			</div>
@@ -73,7 +76,7 @@
 	{#if outbox.length > 0}
 		{#each filtered as o}
 			<div
-				class="group flex w-full items-center justify-between rounded hover:rounded-none hover:bg-base-200"
+				class="group hover:bg-base-200 flex w-full items-center justify-between rounded hover:rounded-none"
 				class:bg-yellow-900={!o.broadly_sent && o.relay_logs.some((l) => l.success)}
 				class:hover:bg-yellow-800={!o.broadly_sent && o.relay_logs.some((l) => l.success)}
 				class:bg-red-900={!o.relay_logs.some((l) => l.success)}
@@ -123,11 +126,19 @@
 
 			{#if selected === o.id}
 				<div class="bg-base-300 px-4 py-2">
+					<div class="prose flex w-full">
+						<h4 class="mt-2 ml-4 grow text-sm">Sent status:</h4>
+						<a
+							class="btn btn-neutral btn-sm"
+							href="/{eventToNip19(o.event)}"
+							onclick={() => on_view_event()}>View Event</a
+						>
+					</div>
 					{#each o.relay_logs.reduce((acc, log) => {
 						log.groups.forEach((group) => acc.add(group));
 						return acc;
 					}, new Set<string>()) as group, i}
-						<div class="collapse collapse-arrow my-2 bg-base-200">
+						<div class="collapse-arrow bg-base-200 collapse my-2">
 							<input type="radio" name="my-accordion-2" />
 							<div class="collapse-title text-sm">
 								{#if group.length === 64}<UserHeader user={group} inline />'s {#if group === o.event.pubkey}outbox{:else}inbox{/if}
