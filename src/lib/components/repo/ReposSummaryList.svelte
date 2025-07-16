@@ -51,7 +51,7 @@
 	});
 </script>
 
-<div class="min-width">
+<div class="min-width @container">
 	{#if title && title.length > 0}
 		<div class="prose mb-3">
 			<h3>{title}</h3>
@@ -60,7 +60,7 @@
 	{#if repos.length == 0 && !loading}
 		<p class="prose">None</p>
 	{:else}
-		<div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+		<div class="@xlg:grid-cols-4 grid gap-4 @md:grid-cols-2 @2xl:grid-cols-3 @4xl:grid-cols-4">
 			{#each grouped_repos as group}
 				{#if group.length === 0}
 					<RepoSummaryCard repo_item={undefined} />
@@ -73,7 +73,7 @@
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
-							class="flex min-h-28 cursor-pointer items-center rounded-lg border border-base-400 bg-base-200 p-4 hover:bg-base-300"
+							class="border-base-400 bg-base-200 hover:bg-base-300 flex min-h-28 cursor-pointer items-center rounded-lg border p-4"
 							onclick={() => {
 								selected_group = group[0][group_by];
 							}}
@@ -84,7 +84,7 @@
 							</div>
 						</div>
 						{#each group as repo_item}
-							<div class="rounded-lg border border-base-400">
+							<div class="border-base-400 rounded-lg border">
 								<RepoSummaryCard {repo_item} />
 							</div>
 						{/each}
@@ -103,7 +103,7 @@
 </div>
 {#if selected_group}
 	<dialog class="modal modal-open">
-		<div class="modal-box max-w-full text-wrap text-xs">
+		<div class="modal-box max-w-full text-xs text-wrap">
 			<div class="prose max-w-full">
 				<h3 class="mb-3 max-w-full text-center">
 					{group_by}: "{selected_group}"
