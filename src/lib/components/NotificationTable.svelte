@@ -35,13 +35,11 @@
 		return true;
 	};
 
-	let events_in_inbox = $derived(
-		[...(notifications_query.timeline ?? [])].filter((e) => notificationInView(e, 'inbox'))
-	);
+	let events_in_inbox = $derived(events.filter((e) => notificationInView(e, 'inbox')));
 	let events_in_view = $derived(
 		current_view === 'inbox'
 			? events_in_inbox
-			: [...(notifications_query.timeline ?? [])].filter((e) => notificationInView(e, current_view))
+			: events.filter((e) => notificationInView(e, current_view))
 	);
 
 	// reduce to issues and prs with notifications
