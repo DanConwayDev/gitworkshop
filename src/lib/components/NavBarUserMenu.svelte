@@ -6,6 +6,9 @@
 	import SettingsModal from './SettingsModal.svelte';
 	import Sidebar from './Sidebar.svelte';
 	import UserHeader from './user/UserHeader.svelte';
+	import query_centre from '$lib/query-centre/QueryCentre.svelte';
+	import RepoSummaryCard from './repo/RepoSummaryCard.svelte';
+	import { IssueOrPrStatus, type RepoTableItem } from '$lib/types';
 
 	let is_open = $state(false);
 	const toggle = () => {
@@ -15,6 +18,23 @@
 	let show_login_modal = $state(false);
 	let show_feedback_modal = $state(false);
 	let show_settings_modal = $state(false);
+
+	let repos_query = $derived(
+		store.logged_in_account && is_open
+			? query_centre.fetchPubkeyRepos(store.logged_in_account.pubkey)
+			: undefined
+	);
+	let repos = $derived(repos_query?.current ?? []);
+	let countPRsIssues = (repo_item: RepoTableItem): number =>
+		(repo_item.issues?.[IssueOrPrStatus.Open].length ?? 0) +
+		(repo_item.issues?.[IssueOrPrStatus.Draft].length ?? 0) +
+		(repo_item.issues?.[IssueOrPrStatus.Applied].length ?? 0) +
+		(repo_item.issues?.[IssueOrPrStatus.Closed].length ?? 0) +
+		(repo_item.PRs?.[IssueOrPrStatus.Open].length ?? 0) +
+		(repo_item.PRs?.[IssueOrPrStatus.Draft].length ?? 0) +
+		(repo_item.PRs?.[IssueOrPrStatus.Applied].length ?? 0) +
+		(repo_item.PRs?.[IssueOrPrStatus.Closed].length ?? 0);
+	let repos_sorted = $derived([...repos].sort((a, b) => countPRsIssues(b) - countPRsIssues(a)));
 </script>
 
 <div class="relative ml-2">
@@ -55,6 +75,16 @@
 						}}
 					/>
 				</div>
+				{#if repos.length > 0}
+					<div class="mb-2">
+						<div class="prose mb-2"><h4>My Repositories</h4></div>
+						{#each repos_sorted as repo_item}
+							<!-- todo we need to toggle is_open -->
+							<RepoSummaryCard {repo_item} lite on_go={() => toggle()} />
+						{/each}
+						{#if repos_query?.isLoading}<RepoSummaryCard repo_item={undefined} lite />{/if}
+					</div>
+				{/if}
 			{/if}
 			<div class="prose mb-2"><h4>Accounts</h4></div>
 			{#each store.accounts as account}
@@ -90,7 +120,7 @@
 								</div>
 							{/if}
 						</div>
-						<div class="px-3 text-sm text-neutral-content">{account.type}</div>
+						<div class="text-neutral-content px-3 text-sm">{account.type}</div>
 					{:else}
 						<button
 							class="flex grow items-center"
@@ -102,7 +132,7 @@
 								<UserHeader user={account.pubkey} link_to_profile={false} />
 							</div>
 							<div class="grow"></div>
-							<div class="px-3 text-sm text-neutral-content">{account.type}</div>
+							<div class="text-neutral-content px-3 text-sm">{account.type}</div>
 						</button>
 					{/if}
 					<button
@@ -130,7 +160,7 @@
 				{#if store.experimental}
 					<li class="w-full overflow-hidden rounded-md">
 						<button
-							class="flex h-10 w-full items-center justify-end px-4 transition-colors hover:bg-base-200 active:bg-base-100"
+							class="hover:bg-base-200 active:bg-base-100 flex h-10 w-full items-center justify-end px-4 transition-colors"
 							onclick={() => {
 								show_feedback_modal = true;
 							}}
@@ -153,7 +183,7 @@
 				{/if}
 				<li class="w-full overflow-hidden rounded-md">
 					<button
-						class="flex h-10 w-full items-center justify-end px-4 transition-colors hover:bg-base-200 active:bg-base-100"
+						class="hover:bg-base-200 active:bg-base-100 flex h-10 w-full items-center justify-end px-4 transition-colors"
 						onclick={() => {
 							show_settings_modal = true;
 						}}
@@ -175,7 +205,7 @@
 				</li>
 				<li class="w-full overflow-hidden rounded-md">
 					<button
-						class="flex h-10 w-full items-center justify-end px-4 transition-colors hover:bg-base-200 active:bg-base-100"
+						class="hover:bg-base-200 active:bg-base-100 flex h-10 w-full items-center justify-end px-4 transition-colors"
 						onclick={() => {
 							accounts_manager.clearActive();
 						}}
