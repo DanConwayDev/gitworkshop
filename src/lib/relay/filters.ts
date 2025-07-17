@@ -139,7 +139,8 @@ export const createRepoChildrenFilters = (
 		return [
 			{
 				kinds: [IssueKind, PatchKind, DeletionKind],
-				'#a': [...items]
+				'#a': [...items],
+				'#q': [...items]
 			}
 		];
 	}
@@ -154,7 +155,8 @@ export const createRepoChildrenFilters = (
 	sinces.forEach((a_refs, since) => {
 		const filter: Filter = {
 			kinds: [IssueKind, PatchKind, DeletionKind],
-			'#a': a_refs
+			'#a': a_refs,
+			'#q': a_refs
 		};
 		if (since > 0) {
 			filter.since = since;
