@@ -174,7 +174,7 @@ KindLabels[GitIssue] = 'Git Issue';
 
 export const LegacyGiReply = 1622;
 export type LegacyGiReply = typeof LegacyGiReply;
-KindLabels[LegacyGiReply] = 'Legacy GitHub Issue Reply';
+KindLabels[LegacyGiReply] = 'Legacy Git Issue Reply';
 
 export const GitStatusOpen = 1630;
 export type GitStatusOpen = typeof GitStatusOpen;
