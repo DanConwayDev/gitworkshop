@@ -654,7 +654,10 @@ export class RelayManager {
 				filters: [
 					{
 						'#a': query_a_tags.size == 0 ? undefined : [...query_a_tags],
-						'#q': query_a_tags.size == 0 ? undefined : [...query_a_tags],
+						since: unixNow()
+					},
+
+					{
 						'#e': query_e_tags.size == 0 ? undefined : [...query_e_tags],
 						since: unixNow()
 					},
