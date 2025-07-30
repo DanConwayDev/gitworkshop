@@ -1,3 +1,4 @@
+import { LegacyGiReply } from '$lib/kind_labels';
 import {
 	IssueKind,
 	PatchKind,
@@ -91,7 +92,7 @@ export const createPubkeyNoficiationsFilters = (pubkey: PubKeyString, since?: nu
 		},
 		{
 			'#p': [pubkey],
-			kinds: [PatchKind, IssueKind],
+			kinds: [PatchKind, IssueKind, LegacyGiReply],
 			since
 		}
 	];
