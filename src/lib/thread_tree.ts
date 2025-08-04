@@ -73,7 +73,16 @@ export const splitIntoRevisionThreadTrees = (tree: ThreadTreeNode): ThreadTreeNo
 	];
 	thread_revision_trees[0].child_nodes = [
 		...thread_revision_trees[0].child_nodes.filter((n) => {
-			if (n.event.tags.some((t) => t.length > 1 && t[1] === 'revision-root')) {
+			if (
+				n.event.tags.some(
+					(t) =>
+						t.length > 1 &&
+						[
+							'revision-root', // until v1.8 ngit incorrectly create revisions with this tag
+							'root-revision'
+						].includes(t[1])
+				)
+			) {
 				thread_revision_trees.push(n);
 				return false;
 			}
