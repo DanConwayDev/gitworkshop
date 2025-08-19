@@ -68,12 +68,12 @@ export const extractUserRoute = (s: string): UserRoute | undefined => {
 		};
 	}
 	if (isNprofile(s)) {
-		const p = nip19.decode(s).data as ProfilePointer;
+		const p = nip19.decode(s).data as unknown as ProfilePointer;
 		return {
 			type: 'npub',
 			s,
-			pubkey: p.pubkey
-			// relays: TODO
+			pubkey: p.pubkey,
+			relays: p.relays
 		};
 	}
 
