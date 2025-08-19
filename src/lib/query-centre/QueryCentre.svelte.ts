@@ -97,7 +97,7 @@ class QueryCentre {
 		});
 	}
 
-	fetchRepo(a_ref: RepoRef | string | undefined, hint_relays: undefined | string[]) {
+	fetchRepo(a_ref: RepoRef | string | undefined, hint_relays?: undefined | string[]) {
 		const relays = $state.snapshot(hint_relays);
 		let loading = $state(isRepoRef(a_ref));
 		if (isRepoRef(a_ref)) {
@@ -177,7 +177,9 @@ class QueryCentre {
 			return liveQueryState(() =>
 				db.issues.where('repos').equals(a_ref_or_issue_ids).reverse().sortBy('last_activity')
 			);
-		return liveQueryState(() => db.issues.bulkGet(a_ref_or_issue_ids));
+		return liveQueryState(async () =>
+			(await db.issues.bulkGet(a_ref_or_issue_ids)).filter((r) => !!r)
+		);
 	}
 
 	fetchIssue(issue_id: EventIdString) {
@@ -205,7 +207,7 @@ class QueryCentre {
 			return liveQueryState(() =>
 				db.prs.where('repos').equals(a_refor_pr_ids).reverse().sortBy('last_activity')
 			);
-		return liveQueryState(() => db.prs.bulkGet(a_refor_pr_ids));
+		return liveQueryState(async () => (await db.prs.bulkGet(a_refor_pr_ids)).filter((r) => !!r));
 	}
 
 	fetchPr(pr_id: EventIdString) {

@@ -4,7 +4,9 @@ import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 
 export default defineConfig({
 	plugins: [
+		// @ts-ignore
 		sveltekit(),
+		// @ts-ignore
 		SvelteKitPWA({
 			registerType: 'autoUpdate',
 			manifestFilename: 'manifest.json'

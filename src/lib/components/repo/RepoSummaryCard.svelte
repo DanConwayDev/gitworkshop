@@ -8,7 +8,7 @@
 		repo_item = undefined,
 		lite = false,
 		on_go = () => {}
-	}: { repo_item: RepoTableItem | undefined; lite: boolean; on_go?: () => void } = $props();
+	}: { repo_item: RepoTableItem | undefined; lite?: boolean; on_go?: () => void } = $props();
 
 	let short_name = $derived(repo_item ? getRepoShortName(repo_item) : '');
 	let short_description = $derived(getRepoShortDescription(repo_item));

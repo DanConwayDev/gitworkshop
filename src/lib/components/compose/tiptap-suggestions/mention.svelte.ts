@@ -78,7 +78,7 @@ export const suggestion: (
 						return true;
 					}
 				};
-
+				// @ts-ignore
 				component = mount(MentionList, {
 					target: wrapper,
 					props: componentProps
@@ -93,6 +93,7 @@ export const suggestion: (
 
 					return true;
 				}
+				// @ts-ignore
 				return component.onKeyDown(props.event);
 			},
 			onUpdate: (props) => {
