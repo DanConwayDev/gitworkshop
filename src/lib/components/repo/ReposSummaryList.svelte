@@ -61,11 +61,11 @@
 		<p class="prose">None</p>
 	{:else}
 		<div class="@xlg:grid-cols-4 grid gap-4 @md:grid-cols-2 @2xl:grid-cols-3 @4xl:grid-cols-4">
-			{#each grouped_repos as group}
+			{#each grouped_repos as group (group.map((r) => r.uuid).join())}
 				{#if group.length === 0}
 					<RepoSummaryCard repo_item={undefined} />
 				{:else if group.length === 1}
-					{#each group as repo_item}
+					{#each group as repo_item (repo_item.uuid)}
 						<RepoSummaryCard {repo_item} />
 					{/each}
 				{:else if group_by}
@@ -83,7 +83,8 @@
 								<div class=" text-sm opacity-50">{group.length} Items</div>
 							</div>
 						</div>
-						{#each group as repo_item}
+						{#each group as repo_item (repo_item.uuid)}
+							(repo_item.uuid)
 							<div class="border-base-400 rounded-lg border">
 								<RepoSummaryCard {repo_item} />
 							</div>
@@ -110,7 +111,7 @@
 				</h3>
 			</div>
 			<div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-				{#each repos.filter((summary) => group_by && summary[group_by] === selected_group) as repo_item}
+				{#each repos.filter((summary) => group_by && summary[group_by] === selected_group) as repo_item (repo_item.uuid)}
 					<RepoSummaryCard {repo_item} />
 				{/each}
 			</div>

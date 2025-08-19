@@ -65,7 +65,7 @@
 				</div>
 			{:else}
 				<ul class="divide-base-400 border-base-400 divide-y border">
-					{#each recent_runs_events as run_event}
+					{#each recent_runs_events as run_event (run_event.id)}
 						<RecentRunItem request_event={run_event} />
 					{/each}
 				</ul>

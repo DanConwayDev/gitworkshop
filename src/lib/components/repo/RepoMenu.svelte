@@ -78,7 +78,7 @@
 				viewBox="0 0 16 16"
 				class="fill-base-content mr-1 mb-1 h-4 w-4 flex-none pt-1 opacity-50"
 			>
-				{#each issue_icon_path.open as p}
+				{#each issue_icon_path.open as p (p)}
 					<path d={p} />
 				{/each}
 			</svg>
@@ -103,7 +103,7 @@
 					viewBox="0 0 24 24"
 					class="fill-base-content mr-1 mb-1 h-4 w-4 flex-none pt-1 opacity-50"
 				>
-					{#each icons_misc.actions as p}
+					{#each icons_misc.actions as p (p)}
 						<path d={p} />
 					{/each}
 				</svg>

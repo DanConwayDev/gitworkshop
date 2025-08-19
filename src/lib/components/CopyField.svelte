@@ -60,7 +60,7 @@
 				class="fill-base-content mt-1 mr-1 inline h-4 w-4 flex-none opacity-50"
 				class:fill-success={copied}
 			>
-				{#each icon as d}
+				{#each icon as d (d)}
 					<path {d} />
 				{/each}
 			</svg>{/if}
@@ -77,7 +77,7 @@
 			class:opacity-100={copied}
 			class:fill-success={copied}
 		>
-			{#each icons_misc.copy as d}
+			{#each icons_misc.copy as d (d)}
 				<path {d} />
 			{/each}
 		</svg>

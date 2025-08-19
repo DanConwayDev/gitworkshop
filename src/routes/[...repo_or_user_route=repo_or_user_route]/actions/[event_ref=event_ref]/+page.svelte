@@ -137,5 +137,5 @@
 		<AlertError>{short_status_text}</AlertError>
 	{/if}
 {:else}
-	<NotFound404Page repo_header_on_page msg={`cannot find action request`} />
+	<NotFound404Page repo_header_on_page msg="cannot find action request" />
 {/if}

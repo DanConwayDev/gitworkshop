@@ -35,6 +35,7 @@
 	} from 'applesauce-wallet/helpers/history';
 	import FromNow from './FromNow.svelte';
 	import ContainerCenterPage from './ContainerCenterPage.svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	let { pubkey }: { pubkey: PubKeyString } = $props();
 
@@ -83,7 +84,7 @@
 	});
 	// TODO add mints without tokens in
 	let mints = $derived.by(() => {
-		let mints = new Set<HttpUrl>();
+		let mints = new SvelteSet<HttpUrl>();
 		if (!mint_balances || !wallet || wallet.locked) {
 			return mints;
 		}
@@ -364,7 +365,7 @@
 
 		<div class="mb-4 rounded-lg p-4">
 			<div class="flex flex-col gap-2">
-				{#each mints as mint_url}
+				{#each mints as mint_url (mint_url)}
 					<div class="bg-base-100 flex items-center justify-between rounded-md p-2">
 						<div class="max-w-[200px] truncate text-sm">{mint_url}</div>
 						<div class="badge badge-primary">
@@ -395,7 +396,7 @@
 		<div class="rounded-lg p-4">
 			<h3 class="mb-3 text-lg">Transaction History</h3>
 			<div class="divide-base-300 divide-y">
-				{#each history as h}
+				{#each history as h (h.created.join())}
 					<div class="py-3">
 						<div class="mb-2 flex items-center justify-between">
 							<div class={h.direction === 'in' ? 'text-success' : 'text-warning'}>

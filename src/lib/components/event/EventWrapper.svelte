@@ -196,7 +196,7 @@
 		{@render addReactionButton(reaction, true)}
 
 		<div class="join-item bg-base-400 inline-flex items-center rounded-lg py-1">
-			{#each grouped_reactions[reaction] as pubkey}
+			{#each grouped_reactions[reaction] as pubkey (pubkey)}
 				<div class="mx-2 flex items-center">
 					<div
 						class="badge flex items-center"
@@ -359,7 +359,7 @@
 		{@render children?.()}
 		<div class="pt-3">
 			{#if !show_reactions}
-				{#each Object.keys(grouped_reactions) as reaction}
+				{#each Object.keys(grouped_reactions) as reaction (reaction)}
 					<div class="group relative mr-2 inline-block">
 						<div class="absolute bottom-full left-0 hidden min-w-max group-hover:block">
 							{@render reactionGroup(reaction)}
@@ -408,7 +408,7 @@
 					</div>
 				{/if}
 			{:else}
-				{#each Object.keys(grouped_reactions) as reaction}
+				{#each Object.keys(grouped_reactions) as reaction (reaction)}
 					<div class="mb-2">
 						{@render reactionGroup(reaction)}
 					</div>
@@ -416,7 +416,7 @@
 				<div class="mb-2">
 					<div class="mr-2 inline-block">
 						{#if store.logged_in_account}
-							{#each ['+', '🚀', '🤙', '🙏', '❤️', '🫂', '👀', '😂'] as reaction}
+							{#each ['+', '🚀', '🤙', '🙏', '❤️', '🫂', '👀', '😂'] as reaction (reaction)}
 								<span class="mr-2">
 									{@render addReactionButton(reaction)}
 								</span>

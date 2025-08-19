@@ -6,11 +6,11 @@
 </script>
 
 <ul>
-	{#each Object.keys(item.relays_info) as relay}
+	{#each Object.keys(item.relays_info) as relay (relay)}
 		<li>
 			{relay}
 			{item.relays_info[relay as WebSocketUrl].score}
-			{#each item.relays_info[relay as WebSocketUrl].huristics.filter(isRelayCheck) as huristic}
+			{#each item.relays_info[relay as WebSocketUrl].huristics.filter(isRelayCheck) as huristic, i (`${i}${huristic.type}${huristic.timestamp}`)}
 				{huristic.type}
 				<FromNow unix_seconds={huristic.timestamp} />
 			{/each}

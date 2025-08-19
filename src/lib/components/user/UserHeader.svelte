@@ -168,7 +168,7 @@
 							viewBox="0 0 16 16"
 							class="fill-base-content mr-1 inline h-4 w-4 flex-none opacity-50"
 						>
-							{#each icons_misc.link as d}
+							{#each icons_misc.link as d (d)}
 								<path {d} />
 							{/each}
 						</svg>
@@ -184,7 +184,7 @@
 							viewBox="0 0 16 16"
 							class="fill-base-content mt-1 mr-1 inline h-4 w-4 flex-none opacity-50"
 						>
-							{#each icons_misc.info as d}
+							{#each icons_misc.info as d (d)}
 								<path {d} />
 							{/each}
 						</svg>

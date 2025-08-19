@@ -12,7 +12,7 @@
 </script>
 
 <div class="avatar-group -space-x-2 rtl:space-x-reverse">
-	{#each users.slice(0, max_show) as user}
+	{#each users.slice(0, max_show) as user (user)}
 		<div class="avatar border-none">
 			<div class="">
 				<UserHeader {user} avatar_only inline size="md" link_to_profile={false} in_group />

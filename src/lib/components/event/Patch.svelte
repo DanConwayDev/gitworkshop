@@ -60,7 +60,7 @@
 		</div>
 	</div>
 
-	{#each files as file, index}
+	{#each files as file, index (index)}
 		<div
 			class="border-base-300 my-2 border {expand_full_files[index]
 				? 'bg-base-300 absolute left-0 z-10 w-screen px-5'
@@ -112,13 +112,13 @@
 			{#if expand_files[index]}
 				<div class="border-base-300 flex border-t font-mono text-xs">
 					<div class="flex-full text-right select-none">
-						{#each file.chunks as chunk, index}
+						{#each file.chunks as chunk, index (index)}
 							{#if index !== 0}
 								<div class="bg-base-200 flex w-full">
 									<div class="w-8 flex-none pt-1 pr-2 pb-2 whitespace-pre opacity-50">...</div>
 								</div>
 							{/if}
-							{#each chunk.changes as change, i}
+							{#each chunk.changes as change, i (i)}
 								<div class="bg-base-100 flex w-full">
 									<div
 										class="w-8 flex-none whitespace-pre {change.type == 'add'
@@ -139,11 +139,11 @@
 					</div>
 					<div class="flex-auto overflow-x-auto">
 						<div class="w-fit">
-							{#each file.chunks as chunk, index}
+							{#each file.chunks as chunk, index (index)}
 								{#if index !== 0}
 									<div class="bg-base-200 flex h-7 w-full"></div>
 								{/if}
-								{#each chunk.changes as change, i}
+								{#each chunk.changes as change, i (i)}
 									<div class="bg-base-100 flex w-full">
 										<div
 											class="w-full grow whitespace-pre {change.type == 'add'
@@ -183,11 +183,11 @@
 		{#if expand_full_files[index]}
 			<div class="w-full font-mono text-xs whitespace-pre">
 				<span class="block p-3 text-sm"> </span>
-				{#each file.chunks as chunk, index}
+				{#each file.chunks as chunk, index (index)}
 					{#if index !== 0}
 						<span class="block h-7 p-3"> </span>
 					{/if}
-					{#each Array.from(chunk.changes.keys()) as i}
+					{#each Array.from(chunk.changes.keys()) as i (i)}
 						<span
 							class="block"
 							class:pt-3={index === 0 && i === 0}

@@ -42,7 +42,7 @@
 	{#if path !== ''}
 		<div class="border-base-400 bg-base-200 border-b px-6 py-1">
 			<h4 class="">
-				{#each path_structure as dir}
+				{#each path_structure as dir (dir)}
 					/ {dir}
 				{/each}
 			</h4>
@@ -71,7 +71,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each file_details_wrapper as f}
+						{#each file_details_wrapper as f (`${f.path}/${f.name}`)}
 							<tr class="hover:bg-base-200" class:bg-base-200={f.path === selected_file}>
 								<th class="w-1">
 									{#if f.type === 'directory'}

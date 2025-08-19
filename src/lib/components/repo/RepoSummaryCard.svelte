@@ -87,7 +87,7 @@
 						<span>with</span>
 
 						<ul class="reposummarycard inline">
-							{#each additional_maintainers as user}
+							{#each additional_maintainers as user (user)}
 								<li class="inline">
 									<UserHeader {user} inline={true} size="xs" />
 								</li>

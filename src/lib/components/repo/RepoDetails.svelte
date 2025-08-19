@@ -182,7 +182,7 @@
 					class:fill-success={nostr_url_copied}
 					class:opacity-100={nostr_url_copied}
 				>
-					{#each icons_misc.copy as d}
+					{#each icons_misc.copy as d (d)}
 						<path {d} />
 					{/each}
 				</svg>
@@ -220,7 +220,7 @@
 			<div class="badge skeleton w-20"></div>
 			<div class="badge skeleton w-20"></div>
 		{:else if item.tags}
-			{#each item.tags as tag}
+			{#each item.tags as tag (tag)}
 				<div class="badge badge-secondary mr-2">{tag}</div>
 			{/each}
 		{/if}
@@ -240,7 +240,7 @@
 			{#if !item.clone || item.clone.length == 0}
 				<div>none</div>
 			{:else}
-				{#each item.clone as git_url}
+				{#each item.clone as git_url (git_url)}
 					<!-- eslint-disable-next-line svelte/valid-compile -->
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -270,7 +270,7 @@
 							class:fill-success={git_url_copied === git_url}
 							class:opacity-100={git_url_copied === git_url}
 						>
-							{#each icons_misc.copy as d}
+							{#each icons_misc.copy as d (d)}
 								<path {d} />
 							{/each}
 						</svg>
@@ -291,7 +291,7 @@
 			<div>none</div>
 		{:else}
 			<h4 class="text-xs opacity-50">websites</h4>
-			{#each item.web as site}
+			{#each item.web as site (site)}
 				<a href={site} target="_blank" class="link link-primary my-2 text-sm break-words">
 					{site}
 				</a>
@@ -316,7 +316,7 @@
 					<UserHeader user={item.author} />
 				</div>
 			{:else}
-				{#each item.maintainers as maintainer}
+				{#each item.maintainers as maintainer (maintainer)}
 					<div class="my-2 mt-3 text-xs break-words">
 						<UserHeader user={maintainer} />
 					</div>
@@ -336,7 +336,7 @@
 			<div>none</div>
 		{:else}
 			<h4 class="text-xs opacity-50">relays</h4>
-			{#each item.relays as relay}
+			{#each item.relays as relay (relay)}
 				<div class="badge badge-secondary badge-sm my-2 block">{relay}</div>
 			{/each}
 		{/if}

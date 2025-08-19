@@ -73,7 +73,7 @@
 		</div>
 	</Container>
 	{#if outbox.length > 0}
-		{#each filtered as o}
+		{#each filtered as o (o.id)}
 			<div
 				class="group hover:bg-base-200 flex w-full items-center justify-between rounded hover:rounded-none"
 				class:bg-yellow-900={!o.broadly_sent && o.relay_logs.some((l) => l.success)}
@@ -136,7 +136,7 @@
 					{#each o.relay_logs.reduce((acc, log) => {
 						log.groups.forEach((group) => acc.add(group));
 						return acc;
-					}, new Set<string>()) as group}
+					}, new Set<string>()) as group (group)}
 						<div class="collapse-arrow bg-base-200 collapse my-2">
 							<input type="radio" name="my-accordion-2" />
 							<div class="collapse-title text-sm">
@@ -150,13 +150,13 @@
 								{o.relay_logs.filter((l) => l.groups.includes(group)).length})
 							</div>
 							<div class="collapse-content">
-								{#each o.relay_logs.filter((l) => l.groups.includes(group)) as log}
+								{#each o.relay_logs.filter((l) => l.groups.includes(group)) as log (log.url)}
 									<div class:text-success={log.success}>{log.url}</div>
 									{#if !log.success}
 										<div>
 											attempts:
 											<div>
-												{#each log.attempts as attempt}
+												{#each log.attempts as attempt (attempt.timestamp)}
 													<div class="text-xs">
 														{attempt.success ? 'succeded' : 'failed'}
 														<FromNow unix_seconds={attempt.timestamp} />

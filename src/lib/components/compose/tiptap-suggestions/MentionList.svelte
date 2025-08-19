@@ -33,7 +33,7 @@
 </script>
 
 <div class="border-neutral bg-base-300 max-w-lg rounded">
-	{#each items as item, i}
+	{#each items as item, i (item.pubkey)}
 		<button
 			class="w-full items-center text-left"
 			class:bg-base-400={i === activeIdx}

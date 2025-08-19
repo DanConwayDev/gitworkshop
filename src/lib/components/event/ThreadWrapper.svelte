@@ -48,7 +48,7 @@
 						class:fill-error-content={missing_parent}
 						class:fill-blue-500={!missing_parent}
 					>
-						{#each show_replies ? icons_misc.chevron_up : icons_misc.chevron_down as p}
+						{#each show_replies ? icons_misc.chevron_up : icons_misc.chevron_down as p (p)}
 							<path d={p} />
 						{/each}
 					</svg>

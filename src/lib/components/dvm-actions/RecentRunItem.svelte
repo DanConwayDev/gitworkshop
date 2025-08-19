@@ -52,7 +52,7 @@
 				class="fill-success h-5 w-5 flex-none pt-1"
 			>
 				<title>Success</title>
-				{#each issue_icon_path.open as p}
+				{#each issue_icon_path.open as p (p)}
 					<path d={p} />
 				{/each}
 			</svg>
@@ -71,7 +71,7 @@
 						No Response
 					{/if}
 				</title>
-				{#each issue_icon_path.closed as p}
+				{#each issue_icon_path.closed as p (p)}
 					<path d={p} />
 				{/each}
 			</svg>
@@ -82,7 +82,7 @@
 				class="fill-error h-5 w-5 flex-none pt-1"
 			>
 				<title>Payment Issue</title>
-				{#each issue_icon_path.closed as p}
+				{#each issue_icon_path.closed as p (p)}
 					<path d={p} />
 				{/each}
 			</svg>

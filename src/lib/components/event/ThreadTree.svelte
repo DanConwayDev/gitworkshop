@@ -44,7 +44,7 @@
 		reactions={node.child_nodes.filter((n) => n.event.kind === Reaction).map((n) => n.event)}
 	/>
 	<ThreadWrapper num_replies={countReplies(node)}>
-		{#each node.child_nodes.filter((n) => n.event.kind !== Reaction) as childNode}
+		{#each node.child_nodes.filter((n) => n.event.kind !== Reaction) as childNode (childNode.event.id)}
 			{@render renderThread(childNode)}
 		{/each}
 	</ThreadWrapper>

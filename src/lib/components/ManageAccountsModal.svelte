@@ -26,7 +26,7 @@
 <dialog class="modal modal-open">
 	<div class="modal-box max-w-lg text-wrap">
 		<div class="prose mb-5"><h3>Manage Accounts</h3></div>
-		{#each store.accounts as account}
+		{#each store.accounts as account (account.id)}
 			<div
 				class="flex items-center rounded-lg p-2"
 				class:bg-base-300={store.logged_in_account?.id === account.id}

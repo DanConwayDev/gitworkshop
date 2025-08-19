@@ -114,7 +114,7 @@
 			viewBox="0 0 16 16"
 			class="fill-success mx-auto mb-3 h-16 w-16"
 		>
-			{#each icons_misc.complete as d}
+			{#each icons_misc.complete as d (d)}
 				<path {d} />
 			{/each}
 		</svg>

@@ -40,7 +40,7 @@
 {#snippet nodeSnippet(n?: ContentSchema | Node)}
 	{#if n === undefined}{:else if n.type === 'doc'}
 		<div class="prose">
-			{#each n.content as child}{@render nodeSnippet(child)}{/each}
+			{#each n.content as child, i (i)}{@render nodeSnippet(child)}{/each}
 		</div>
 	{:else if isNProfileNode(n)}
 		<Mention node={n} />
@@ -64,7 +64,7 @@
 	{#if isParagraphNode(n)}
 		{#if n.content !== undefined}
 			<p>
-				{#each n.content as child}{@render nodeSnippet(child)}{/each}
+				{#each n.content as child, i (i)}{@render nodeSnippet(child)}{/each}
 			</p>
 		{/if}
 	{:else if isTextNode(n)}
@@ -73,27 +73,27 @@
 		{@render headingSnippet(n)}
 	{:else if isBulletListNode(n)}
 		<ul>
-			{#each n.content as child}
+			{#each n.content as child, i (i)}
 				<li>
-					{#each child.content as grandchild}{@render nodeSnippet(grandchild)}{/each}
+					{#each child.content as grandchild, i (i)}{@render nodeSnippet(grandchild)}{/each}
 				</li>
 			{/each}
 		</ul>
 	{:else if isOrderedListNode(n)}
 		<ol>
-			{#each n.content as child}
+			{#each n.content as child, i (i)}
 				<li>
-					{#each child.content as grandchild}{@render nodeSnippet(grandchild)}{/each}
+					{#each child.content as grandchild, i (i)}{@render nodeSnippet(grandchild)}{/each}
 				</li>
 			{/each}
 		</ol>
 	{:else if isBlockQuoteNode(n)}
 		<blockquote>
-			{#each n.content as child}{@render nodeSnippet(child)}{/each}
+			{#each n.content as child, i (i)}{@render nodeSnippet(child)}{/each}
 		</blockquote>
 	{:else if isCodeBlockNode(n)}
 		<pre><code
-				>{#each n.content as child}{@render nodeSnippet(child)}{/each}</code
+				>{#each n.content as child, i (i)}{@render nodeSnippet(child)}{/each}</code
 			></pre>
 	{:else if isHardBreak(n)}
 		<br />
@@ -111,7 +111,7 @@
 		{JSON.stringify(n)}
 		UNHANDLED SNIPPET
 		{#if 'content' in n && Array.isArray(n.content)}
-			{#each (n as { content: Node[] }).content as child}{@render nodeSnippet(child)}{/each}
+			{#each (n as { content: Node[] }).content as child, i (i)}{@render nodeSnippet(child)}{/each}
 		{/if}
 	{/if}
 {/snippet}
@@ -135,31 +135,32 @@
 {#snippet headingSnippet(n: HeadingNode)}
 	{#if n.attrs.level === 1}
 		<h1>
-			{#each n.content as child}{@render nodeSnippet(child)}{/each}
+			{#each n.content as child, i (i)}{@render nodeSnippet(child)}{/each}
 		</h1>
 	{:else if n.attrs.level === 2}
 		<h2>
-			{#each n.content as child}{@render nodeSnippet(child)}{/each}
+			{#each n.content as child, i (i)}
+				{@render nodeSnippet(child)}{/each}
 		</h2>
 	{:else if n.attrs.level === 3}
 		<h3>
-			{#each n.content as child}{@render nodeSnippet(child)}{/each}
+			{#each n.content as child, i (i)}{@render nodeSnippet(child)}{/each}
 		</h3>
 	{:else if n.attrs.level === 4}
 		<h4>
-			{#each n.content as child}{@render nodeSnippet(child)}{/each}
+			{#each n.content as child, i (i)}{@render nodeSnippet(child)}{/each}
 		</h4>
 	{:else if n.attrs.level === 5}
 		<h5>
-			{#each n.content as child}{@render nodeSnippet(child)}{/each}
+			{#each n.content as child, i (i)}{@render nodeSnippet(child)}{/each}
 		</h5>
 	{:else if n.attrs.level === 6}
 		<h6>
-			{#each n.content as child}{@render nodeSnippet(child)}{/each}
+			{#each n.content as child, i (i)}{@render nodeSnippet(child)}{/each}
 		</h6>
 	{:else}
 		<div class="custom-heading">
-			{#each n.content as child}{@render nodeSnippet(child)}{/each}
+			{#each n.content as child, i (i)}{@render nodeSnippet(child)}{/each}
 		</div>
 	{/if}
 {/snippet}

@@ -437,7 +437,7 @@
 						>
 					{/if}
 				</li>
-				{#each page_issues_prs as table_item}
+				{#each page_issues_prs as table_item, i (table_item || i)}
 					<PrOrIssueItem
 						type={table_item?.type ?? 'issue'}
 						{table_item}
@@ -476,7 +476,7 @@
 						onclick={() => (pages_current_page = Math.max(1, pages_current_page - 1))}>«</button
 					>
 
-					{#each Array(pages_total_pages) as _, i}
+					{#each Array(pages_total_pages) as _, i (i)}
 						{@const page_number = i + 1}
 						{#if page_number === pages_current_page || (page_number >= Math.max(1, pages_current_page - 2) && page_number <= Math.min(pages_total_pages, pages_current_page + 2))}
 							<button

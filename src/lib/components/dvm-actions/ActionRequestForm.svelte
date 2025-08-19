@@ -158,7 +158,7 @@
 					<option disabled selected
 						>{#if default_branch_or_tag}{default_branch_or_tag}{:else}choose branch or tag{/if}</option
 					>
-					{#each refs as tag}
+					{#each refs as tag (tag.join())}
 						<option>{tag[0]}</option>
 					{/each}
 				</select>
@@ -211,7 +211,9 @@
 	</div>
 
 	<div>
-		{#each dvm_providers_anns.map(eventToActionsDVMProvider).filter((p) => !!p) as provider_ann}
+		{#each dvm_providers_anns
+			.map(eventToActionsDVMProvider)
+			.filter((p) => !!p) as provider_ann (provider_ann.pubkey)}
 			<div class="bg-base-300 relative m-2 mt-4 rounded-lg p-4">
 				{#if unixNow() - provider_ann.last_pong > 300}
 					<div class="absolute inset-0 flex items-end justify-end rounded-lg bg-red-600 opacity-25">

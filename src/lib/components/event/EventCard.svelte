@@ -57,7 +57,7 @@
 <div class="relative">
 	<div
 		bind:this={content_container}
-		class={`overflow-hidden transition-all duration-300`}
+		class="overflow-hidden transition-all duration-300"
 		class:max-h-[1250px]={!embedded && enable_truncation && !show_more}
 		class:max-h-[400px]={embedded && !show_more}
 	>

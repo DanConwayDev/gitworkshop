@@ -21,7 +21,7 @@
 	let thread_trees = $derived(getThreadTrees(type, event, replies));
 </script>
 
-{#each thread_trees as tree, i}
+{#each thread_trees as tree, i (tree.event.id)}
 	{#if i > 0}
 		<div class="divider">new revision</div>
 	{/if}

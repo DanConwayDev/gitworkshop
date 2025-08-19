@@ -89,15 +89,12 @@
 <div class="prose max-w-none" class:text-sm={size === 'sm'}>
 	<p>Installation Command:</p>
 	<div class="bg-base-400 rounded-md pb-3 font-mono text-sm text-white">
-		<CopyField content={`curl -Ls https://ngit.dev/install.sh | bash`} border_color="none" />
+		<CopyField content="curl -Ls https://ngit.dev/install.sh | bash" border_color="none" />
 	</div>
 	{#if download && download.name === 'Windows (x64)'}
 		<p>or one-liner for windows:</p>
 		<div class="bg-base-400 rounded-md pb-3 font-mono text-sm text-white">
-			<CopyField
-				content={`iwr -useb https://yourdomain.com/install.ps1 | iex`}
-				border_color="none"
-			/>
+			<CopyField content="iwr -useb https://yourdomain.com/install.ps1 | iex" border_color="none" />
 		</div>
 	{/if}
 
@@ -212,7 +209,7 @@
 				<div class="collapse-content">
 					<p>Download, extract binaries and add them to PATH</p>
 					<div class="my-6">
-						{#each platforms as platform}
+						{#each platforms as platform (platform.url)}
 							<div class="mb-6 flex items-center gap-4">
 								<a
 									href={platform.url}

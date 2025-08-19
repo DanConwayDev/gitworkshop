@@ -62,7 +62,7 @@
 				{#if type === 'pr'}
 					<path d={pr_icon_path.close} />
 				{:else if type === 'issue'}
-					{#each issue_icon_path.closed as p}
+					{#each issue_icon_path.closed as p (p)}
 						<path d={p} />
 					{/each}
 				{/if}
@@ -81,7 +81,7 @@
 				{#if type === 'pr'}
 					<path d={pr_icon_path.open_patch} />
 				{:else if type === 'issue'}
-					{#each issue_icon_path.open as p}
+					{#each issue_icon_path.open as p (p)}
 						<path d={p} />
 					{/each}
 				{/if}
@@ -101,7 +101,7 @@
 				{#if type === 'pr'}
 					<path d={pr_icon_path.applied} />
 				{:else if type === 'issue'}
-					{#each issue_icon_path.resolved as p}
+					{#each issue_icon_path.resolved as p (p)}
 						<path d={p} />
 					{/each}
 				{/if}
@@ -121,7 +121,7 @@
 				{#if type === 'pr'}
 					<path d={pr_icon_path.close} />
 				{:else if type === 'issue'}
-					{#each issue_icon_path.closed as p}
+					{#each issue_icon_path.closed as p (p)}
 						<path d={p} />
 					{/each}
 				{/if}

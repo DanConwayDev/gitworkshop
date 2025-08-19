@@ -78,7 +78,7 @@
 				{#if repos.length > 0}
 					<div class="mb-2">
 						<div class="prose mb-2"><h4>My Repositories</h4></div>
-						{#each repos_sorted as repo_item}
+						{#each repos_sorted as repo_item (repo_item.uuid)}
 							<!-- todo we need to toggle is_open -->
 							<RepoSummaryCard {repo_item} lite on_go={() => toggle()} />
 						{/each}
@@ -87,7 +87,7 @@
 				{/if}
 			{/if}
 			<div class="prose mb-2"><h4>Accounts</h4></div>
-			{#each store.accounts as account}
+			{#each store.accounts as account (account.id)}
 				<div
 					class="flex items-center rounded-lg p-2"
 					class:bg-base-100={store.logged_in_account?.id === account.id}

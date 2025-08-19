@@ -35,7 +35,7 @@
 			<div class="badge skeleton w-20"></div>
 		{:else}
 			<h4>Labels</h4>
-			{#each table_item.tags as label}
+			{#each table_item.tags as label (label)}
 				<div class="badge badge-secondary mr-2">{label}</div>
 			{/each}
 		{/if}

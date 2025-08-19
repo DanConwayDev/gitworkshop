@@ -96,7 +96,7 @@
 					{#if type === 'pr'}
 						<path d={pr_icon_path.open_patch} />
 					{:else if type === 'issue'}
-						{#each issue_icon_path.open as p}
+						{#each issue_icon_path.open as p (p)}
 							<path d={p} />
 						{/each}
 					{/if}
@@ -111,7 +111,7 @@
 					{#if type === 'pr'}
 						<path d={pr_icon_path.close} />
 					{:else if type === 'issue'}
-						{#each issue_icon_path.closed as p}
+						{#each issue_icon_path.closed as p (p)}
 							<path d={p} />
 						{/each}
 					{/if}
@@ -137,7 +137,7 @@
 					{#if type === 'pr'}
 						<path d={pr_icon_path.applied} />
 					{:else if type === 'issue'}
-						{#each issue_icon_path.resolved as p}
+						{#each issue_icon_path.resolved as p (p)}
 							<path d={p} />
 						{/each}
 					{/if}
@@ -152,7 +152,7 @@
 				{:else}
 					<div class="text-base-content text-sm">
 						{short_title}
-						{#each table_item.tags as tag}
+						{#each table_item.tags as tag (tag)}
 							<div class="badge badge-secondary mx-1">{tag}</div>
 						{/each}
 					</div>

@@ -103,7 +103,6 @@ Code Collaboration via Nostr
 ## Maintainer's Quick Start Guide
 
 0. for completely fresh git repositories
-
    1. create a new local git repository
       - `git init`
       - add an initial commit with a `README.md`
