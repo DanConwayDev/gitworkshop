@@ -1,16 +1,15 @@
 <script lang="ts">
 	/* eslint-disable @typescript-eslint/no-unused-vars */
-	import { InMemoryQuery, inMemoryRelayTimeline } from '$lib/helpers.svelte';
+	import { InMemoryModel, inMemoryRelayTimeline } from '$lib/helpers.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store from '$lib/store.svelte';
 	import { isHttpUrl, type HttpUrl, type PubKeyString } from '$lib/types';
-	import { Queries } from 'applesauce-wallet';
 	import { decodeTokenFromEmojiString, encodeTokenToEmoji } from 'applesauce-wallet/helpers/tokens';
 	import { ActionHub } from 'applesauce-actions';
 	import { EventFactory } from 'applesauce-factory';
 	import { onMount } from 'svelte';
 	import accounts_manager from '$lib/accounts';
-	import memory_db, { memory_db_query_store } from '$lib/dbs/InMemoryRelay';
+	import memory_db from '$lib/dbs/InMemoryRelay';
 	import { generateSecretKey } from 'nostr-tools/pure';
 	import type { NostrEvent } from 'nostr-tools';
 	import { CreateWallet } from 'applesauce-wallet/actions';
@@ -23,7 +22,6 @@
 	} from 'applesauce-wallet/helpers/tokens';
 	import { getDecodedToken, getEncodedToken, type Token } from '@cashu/cashu-ts';
 	import { NostrWalletTokenKind } from '$lib/kinds';
-	import type { Query } from 'applesauce-core';
 	import { createWalletFilter, createWalletHistoryFilter } from '$lib/relay/filters/wallet';
 	import { filter } from 'rxjs';
 	import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
@@ -36,16 +34,23 @@
 	import FromNow from './FromNow.svelte';
 	import ContainerCenterPage from './ContainerCenterPage.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
+	import {
+		WalletBalanceModel,
+		WalletHistoryModel,
+		WalletModel,
+		WalletTokensModel
+	} from 'applesauce-wallet/models';
+	import type { Model } from 'applesauce-core';
 
 	let { pubkey }: { pubkey: PubKeyString } = $props();
 
 	let t = $derived(query_centre.watchWallet(pubkey));
-	let wallet_query = new InMemoryQuery(Queries.WalletQuery, () => [pubkey] as const);
+	let wallet_query = new InMemoryModel(WalletModel, () => [pubkey] as const);
 	let wallet = $derived(wallet_query.result);
 
 	let tok_q = inMemoryRelayTimeline([{ kinds: [NostrWalletTokenKind], authors: [pubkey] }]);
-	let tokens_query = new InMemoryQuery(Queries.WalletTokensQuery, () => [pubkey] as const);
-	let history_query = new InMemoryQuery(Queries.WalletHistoryQuery, () => [pubkey] as const);
+	let tokens_query = new InMemoryModel(WalletTokensModel, () => [pubkey] as const);
+	let history_query = new InMemoryModel(WalletHistoryModel, () => [pubkey] as const);
 	let history_events = $derived(history_query.result);
 	let history: (HistoryContent & { created_at: number })[] = $derived(
 		(history_events ?? [])
@@ -71,7 +76,7 @@
 	// 			})
 	// 		: undefined
 	// );
-	let mint_balances_query = new InMemoryQuery(Queries.WalletBalanceQuery, () => [pubkey] as const);
+	let mint_balances_query = new InMemoryModel(WalletBalanceModel, () => [pubkey] as const);
 	let mint_balances = $derived(mint_balances_query.result);
 	let balance = $derived.by(() => {
 		try {
@@ -104,7 +109,7 @@
 
 	let masked = $state(false);
 
-	function lockedTokenStream(pubkey: PubKeyString): Query<NostrEvent> {
+	function lockedTokenStream(pubkey: PubKeyString): Model<NostrEvent> {
 		return (events) => {
 			return events
 				.filters(createWalletFilter(pubkey))
@@ -112,7 +117,7 @@
 		};
 	}
 
-	function lockedHistoryStream(pubkey: PubKeyString): Query<NostrEvent> {
+	function lockedHistoryStream(pubkey: PubKeyString): Model<NostrEvent> {
 		return (events) => {
 			return events
 				.filters(createWalletHistoryFilter(pubkey))
@@ -126,20 +131,16 @@
 		}, 1000);
 		const unsubWatchWallet = query_centre.watchWallet(pubkey);
 		// if auto_unlock start unlocking newly arrived tokens
-		const subLockedTokens = memory_db_query_store
-			.createQuery(lockedTokenStream, pubkey)
-			.subscribe((e) => {
-				let active_account = accounts_manager.getActive();
-				if (!auto_unlock || !e || !active_account || active_account.pubkey !== e.pubkey) return;
-				unlockTokenContent(e, active_account);
-			});
-		const subLockedHistory = memory_db_query_store
-			.createQuery(lockedHistoryStream, pubkey)
-			.subscribe((e) => {
-				let active_account = accounts_manager.getActive();
-				if (!auto_unlock || !e || !active_account || active_account.pubkey !== e.pubkey) return;
-				unlockHistoryContent(e, active_account);
-			});
+		const subLockedTokens = memory_db.model(lockedTokenStream, pubkey).subscribe((e) => {
+			let active_account = accounts_manager.getActive();
+			if (!auto_unlock || !e || !active_account || active_account.pubkey !== e.pubkey) return;
+			unlockTokenContent(e, active_account);
+		});
+		const subLockedHistory = memory_db.model(lockedHistoryStream, pubkey).subscribe((e) => {
+			let active_account = accounts_manager.getActive();
+			if (!auto_unlock || !e || !active_account || active_account.pubkey !== e.pubkey) return;
+			unlockHistoryContent(e, active_account);
+		});
 		return () => {
 			unsubWatchWallet();
 			subLockedTokens?.unsubscribe?.();

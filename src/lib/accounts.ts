@@ -36,9 +36,8 @@ export const subscriptionMethod: NostrSubscriptionMethod = (relays, filters) => 
 
 NostrConnectSigner.subscriptionMethod = subscriptionMethod;
 
-NostrConnectSigner.publishMethod = (relays, event) => {
+NostrConnectSigner.publishMethod = async (relays, event) =>
 	nostr_connect_pools.publish(relays, event);
-};
 
 // load accounts from storage
 manager.fromJSON(JSON.parse(localStorage.getItem('accounts') || '[]'));

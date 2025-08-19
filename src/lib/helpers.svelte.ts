@@ -1,6 +1,6 @@
 import { liveQuery } from 'dexie';
 import { nip19, type Filter, type NostrEvent } from 'nostr-tools';
-import { memory_db_query_store } from './dbs/InMemoryRelay';
+import memory_db from './dbs/InMemoryRelay';
 import {
 	isNpub,
 	isRepoRef,
@@ -22,7 +22,8 @@ import query_centre from './query-centre/QueryCentre.svelte';
 import { onDestroy as onDestroySvelte, untrack } from 'svelte';
 import type { AddressPointer, EventPointer } from 'nostr-tools/nip19';
 import { RepoAnnKind } from './kinds';
-import type { QueryConstructor } from 'applesauce-core';
+import type { ModelConstructor } from 'applesauce-core';
+import { EventModel, ReplaceableModel, TimelineModel } from 'applesauce-core/models';
 
 /// this is taken and adapted from https://github.com/dexie/Dexie.js/pull/2116
 /// when merged the version from the library should be used
@@ -68,7 +69,7 @@ export function inMemoryRelayTimeline(
 	const result = $state<{ timeline: NostrEvent[] }>({ timeline: [] });
 	$effect(() => {
 		dependencies?.();
-		const sub = memory_db_query_store.timeline(filters).subscribe((events) => {
+		const sub = memory_db.model(TimelineModel, filters).subscribe((events) => {
 			result.timeline = [...(events ?? [])];
 		});
 		return () => {
@@ -92,7 +93,7 @@ export function inMemoryRelayTimelineRecursiveThread(
 	const result = $state<{ timeline: NostrEvent[] }>({ timeline: [] });
 	$effect(() => {
 		dependencies?.();
-		const sub = memory_db_query_store.timeline(filters).subscribe((events) => {
+		const sub = memory_db.model(TimelineModel, filters).subscribe((events) => {
 			result.timeline = [...(events ?? [])];
 			(events ?? []).forEach((e) => {
 				if (!ids.includes(e.id)) ids.push(e.id);
@@ -120,8 +121,8 @@ export function inMemoryRelayEvent(
 		if (!event_ref) return;
 		const sub = (
 			typeof event_ref === 'string' || !('identifier' in event_ref)
-				? memory_db_query_store.event(typeof event_ref === 'string' ? event_ref : event_ref.id)
-				: memory_db_query_store.replaceable(event_ref.kind, event_ref.pubkey, event_ref.identifier)
+				? memory_db.model(EventModel, typeof event_ref === 'string' ? event_ref : event_ref.id)
+				: memory_db.model(ReplaceableModel, event_ref)
 		).subscribe((event) => {
 			result.event = event;
 		});
@@ -137,19 +138,17 @@ export function inMemoryRelayEvent(
 }
 /**
  * The class design pattern is used here for turning the Observable into
- * a state object so that raw Query response can be retunred instead of
+ * a state object so that raw Model response can be retunred instead of
  * a proxy object
  * */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export class InMemoryQuery<T, Args extends Array<any>> {
+export class InMemoryModel<T, Args extends Array<any>> {
 	result = $state.raw<T | undefined>(undefined);
-	constructor(queryConstructor: QueryConstructor<T, Args>, args: () => Args) {
+	constructor(modelConstructor: ModelConstructor<T, Args>, args: () => Args) {
 		$effect(() => {
-			const sub = memory_db_query_store
-				.createQuery(queryConstructor, ...args())
-				.subscribe((res: T | undefined) => {
-					this.result = res;
-				});
+			const sub = memory_db.model(modelConstructor, ...args()).subscribe((res: T | undefined) => {
+				this.result = res;
+			});
 			return () => {
 				sub.unsubscribe();
 			};
