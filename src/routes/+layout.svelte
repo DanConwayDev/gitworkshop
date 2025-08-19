@@ -14,15 +14,15 @@
 		{@render children()}
 	</main>
 
-	<footer class="mt-24 bg-base-200">
+	<footer class="bg-base-200 mt-24">
 		<div class="my-3 flex">
 			<div class="grow"></div>
 			<div class="flex items-center">
-				<div class="flex h-10 items-center text-center text-xs text-neutral-content">
+				<div class="text-neutral-content flex h-10 items-center text-center text-xs">
 					<a class="inline" href="/">
 						<img src="/icons/icon.svg" alt="gitworkshop.dev logo" class="inline h-5 w-5" />
 					</a>
-					<span class="ml-2 mt-0.5">GitWorkshop.dev</span>
+					<span class="mt-0.5 ml-2">GitWorkshop.dev</span>
 				</div>
 			</div>
 			<div class="grow"></div>

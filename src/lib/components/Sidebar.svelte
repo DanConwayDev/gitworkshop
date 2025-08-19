@@ -26,10 +26,10 @@
 	<div class="pointer-events-auto fixed inset-0 z-10 h-16" onclick={toggle}></div>
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="fixed inset-0 z-10 mt-16 bg-base-200 opacity-50" onclick={toggle}></div>
+	<div class="bg-base-200 fixed inset-0 z-10 mt-16 opacity-50" onclick={toggle}></div>
 
 	<div
-		class="fixed top-16 {side}-0 z-20 {classes} overflow-y-auto bg-base-400 px-2 drop-shadow-2xl"
+		class="fixed top-16 {side}-0 z-20 {classes} bg-base-400 overflow-y-auto px-2 drop-shadow-2xl"
 		style="height: calc(100vh); max-width: calc(100vw - 40px);"
 		transition:slide={{ axis: 'x', duration: 100 }}
 	>

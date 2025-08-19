@@ -13,19 +13,19 @@
 	});
 </script>
 
-<div class="grow border-b border-accent-content bg-base-200 pb-4 pt-2 text-xs text-neutral-content">
+<div class="border-accent-content bg-base-200 text-neutral-content grow border-b pt-2 pb-4 text-xs">
 	<Container>
 		{#if !table_item}
 			<div>
 				<div class="skeleton h-7 w-60 pt-1"></div>
 				<div class="">
 					<div class="skeleton mt-3 inline-block h-8 w-20 align-middle"></div>
-					<div class="skeleton ml-3 mt-5 inline-block h-3 w-28 align-middle"></div>
-					<div class="skeleton ml-3 mt-5 inline-block h-3 w-28 align-middle"></div>
+					<div class="skeleton mt-5 ml-3 inline-block h-3 w-28 align-middle"></div>
+					<div class="skeleton mt-5 ml-3 inline-block h-3 w-28 align-middle"></div>
 				</div>
 			</div>
 		{:else}
-			<div class="mb-2 text-lg text-base-content">
+			<div class="text-base-content mb-2 text-lg">
 				{short_title}
 			</div>
 			<div class="pt-1">

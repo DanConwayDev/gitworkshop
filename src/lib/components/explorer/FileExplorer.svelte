@@ -37,9 +37,9 @@
 	);
 </script>
 
-<div class="my-3 rounded-lg border border-base-400">
+<div class="border-base-400 my-3 rounded-lg border">
 	{#if path !== ''}
-		<div class="border-b border-base-400 bg-base-200 px-6 py-1">
+		<div class="border-base-400 bg-base-200 border-b px-6 py-1">
 			<h4 class="">
 				{#each path_structure as dir}
 					/ {dir}
@@ -59,7 +59,7 @@
 			<div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
 		{:else}
 			<div class="overflow-x-auto">
-				<table class="table table-sm">
+				<table class="table-sm table">
 					<!-- head -->
 					<thead class="bg-base-200">
 						<tr>
@@ -72,14 +72,14 @@
 							<tr class="hover:bg-base-200" class:bg-base-200={f.path === selected_file}>
 								<th class="w-1">
 									{#if f.type === 'directory'}
-										<svg class="h-5 w-5 text-secondary" fill="currentColor" viewBox="0 0 24 24">
+										<svg class="text-secondary h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
 											<path
 												d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"
 											/>
 										</svg>
 									{:else}
 										<svg
-											class="h-5 w-5 text-base-content opacity-70"
+											class="text-base-content h-5 w-5 opacity-70"
 											fill="currentColor"
 											viewBox="0 0 24 24"
 										>

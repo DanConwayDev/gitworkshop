@@ -17,9 +17,9 @@
 	);
 </script>
 
-<div class="border-b border-accent-content bg-base-300" class:bg-error={repo?.deleted}>
+<div class="border-accent-content bg-base-300 border-b" class:bg-error={repo?.deleted}>
 	<Container no_wrap={true}>
-		<a href={`/${repo_route.s}`} class="strong btn btn-ghost mb-0 mt-0 break-words px-3 text-sm"
+		<a href={`/${repo_route.s}`} class="strong btn btn-ghost mt-0 mb-0 px-3 text-sm break-words"
 			>{short_name}</a
 		>
 		{#if repo && repo.deleted}
@@ -31,7 +31,7 @@
 			>
 		{/if}
 		{#if repo && !repo.created_at && struggling}
-			<span class="text-xs text-warning">
+			<span class="text-warning text-xs">
 				struggling to find referenced repository event by <div
 					class="badge bg-base-400 text-warning"
 				>

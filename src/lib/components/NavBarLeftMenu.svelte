@@ -33,7 +33,7 @@
 		<li class="w-full overflow-hidden rounded-md">
 			<a
 				href="/"
-				class="flex h-10 items-center px-4 transition-colors hover:bg-base-200 active:bg-base-100"
+				class="hover:bg-base-200 active:bg-base-100 flex h-10 items-center px-4 transition-colors"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -54,7 +54,7 @@
 		<li class="w-full overflow-hidden rounded-md">
 			<a
 				href="/search"
-				class="flex h-10 items-center px-4 transition-colors hover:bg-base-200 active:bg-base-100"
+				class="hover:bg-base-200 active:bg-base-100 flex h-10 items-center px-4 transition-colors"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -75,7 +75,7 @@
 		<li class="w-full overflow-hidden rounded-md">
 			<a
 				href="/quick-start"
-				class="flex h-10 items-center px-4 transition-colors hover:bg-base-200 active:bg-base-100"
+				class="hover:bg-base-200 active:bg-base-100 flex h-10 items-center px-4 transition-colors"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"

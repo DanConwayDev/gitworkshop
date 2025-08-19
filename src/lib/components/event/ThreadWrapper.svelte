@@ -21,7 +21,7 @@
 </script>
 
 {#if missing_parent}<div
-		class="border-3 text-content border-x border-error bg-error text-center text-sm text-error-content opacity-50"
+		class="text-content border-error bg-error text-error-content border-3 border-x text-center text-sm opacity-50"
 	>
 		missing parent note
 	</div>{/if}
@@ -37,7 +37,7 @@
 					onclick={() => {
 						toggle_replies();
 					}}
-					class="-ml-1 -mt-1 sm:-ml-1 sm:-mt-6"
+					class="-mt-1 -ml-1 sm:-mt-6 sm:-ml-1"
 					class:absolute={show_replies}
 				>
 					<svg
@@ -59,7 +59,7 @@
 				onclick={() => {
 					toggle_replies();
 				}}
-				class="w-full cursor-pointer bg-base-300 p-3 text-left hover:bg-base-400"
+				class="bg-base-300 hover:bg-base-400 w-full cursor-pointer p-3 text-left"
 			>
 				show {num_replies} hidden replies
 			</button>

@@ -62,7 +62,7 @@
 			></div>
 
 			<div
-				class="absolute right-0 top-full z-20 mt-2 h-80 w-96 overflow-y-auto rounded-lg bg-base-400 p-4 shadow-lg"
+				class="bg-base-400 absolute top-full right-0 z-20 mt-2 h-80 w-96 overflow-y-auto rounded-lg p-4 shadow-lg"
 			>
 				<div class="flex space-x-2">
 					<button
@@ -89,7 +89,7 @@
 				</div>
 
 				{#each filtered as o}
-					<div class="group flex w-full items-center justify-between p-2 hover:bg-base-200">
+					<div class="group hover:bg-base-200 flex w-full items-center justify-between p-2">
 						<button
 							class="grow cursor-pointer"
 							class:bg-base-300={selected === o.id}
@@ -130,7 +130,7 @@
 								log.groups.forEach((group) => acc.add(group));
 								return acc;
 							}, new Set<string>()) as group, i}
-								<div class="collapse collapse-arrow bg-base-300">
+								<div class="collapse-arrow bg-base-300 collapse">
 									<input type="radio" name="my-accordion-2" checked={i ? true : undefined} />
 									<div class="collapse-title">
 										{#if group.length === 64}<UserHeader user={group} inline />'s inbox relays

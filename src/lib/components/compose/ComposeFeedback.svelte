@@ -112,7 +112,7 @@
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 16 16"
-			class="mx-auto mb-3 h-16 w-16 fill-success"
+			class="fill-success mx-auto mb-3 h-16 w-16"
 		>
 			{#each icons_misc.complete as d}
 				<path {d} />
@@ -126,7 +126,7 @@
 			<label class="form-control w-full">
 				<div class="prose grow pt-2">
 					<div
-						class=" w-full rounded-md border border-neutral"
+						class=" border-neutral w-full rounded-md border"
 						class:focus-within:ring-2={!submitting}
 						class:focus-within:ring-primary={!submitting}
 						class:focus-within:focus:outline-none={!submitting}
@@ -152,7 +152,7 @@
 
 				<div class="grow"></div>
 				{#if submit_attempted && content.length < 10}
-					<div class="pr-3 align-middle text-sm text-warning">
+					<div class="text-warning pr-3 align-middle text-sm">
 						feedback must be at least 10 characters
 					</div>
 				{/if}

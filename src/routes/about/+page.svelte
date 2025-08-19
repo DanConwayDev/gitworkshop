@@ -154,21 +154,21 @@
 				<ul>
 					<li>
 						Open and Draft PRs become branches with the prefix <span
-							class="rounded bg-neutral p-2 font-mono"><span class="py-5">pr/</span></span
+							class="bg-neutral rounded p-2 font-mono"><span class="py-5">pr/</span></span
 						>
 					</li>
 					<li>
 						the PR author and maintainers can add new commits can using <span
-							class="rounded bg-neutral p-2 font-mono"><span class="py-5">git&nbsp;push</span></span
+							class="bg-neutral rounded p-2 font-mono"><span class="py-5">git&nbsp;push</span></span
 						>
 					</li>
 					<li>
 						commits can be rebased, updated or replaced using <span
-							class="rounded bg-neutral p-2 font-mono"
+							class="bg-neutral rounded p-2 font-mono"
 							><span class="py-5">git&nbsp;push&nbsp;--force</span></span
 						>
 						or
-						<span class="rounded bg-neutral p-2 font-mono"
+						<span class="bg-neutral rounded p-2 font-mono"
 							><span class="py-5">ngit&nbsp;send&nbsp;--in-reply-to&nbsp;nevent123...</span></span
 						>
 					</li>

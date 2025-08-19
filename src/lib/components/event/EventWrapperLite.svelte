@@ -24,7 +24,7 @@
 	let created_at = $derived(event?.created_at ?? undefined);
 </script>
 
-<div class="max-w-4xl border-b border-base-300 p-3 pl-3">
+<div class="border-base-300 max-w-4xl border-b p-3 pl-3">
 	<div class="flex">
 		<div class="flex-auto">
 			{#if !name_first}

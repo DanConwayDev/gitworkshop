@@ -53,7 +53,7 @@
 							</div>
 						{/if}
 					</div>
-					<div class="px-3 text-sm text-neutral-content">{account.type}</div>
+					<div class="text-neutral-content px-3 text-sm">{account.type}</div>
 				{:else}
 					<button
 						class="flex grow items-center"
@@ -65,7 +65,7 @@
 							<UserHeader user={account.pubkey} link_to_profile={false} />
 						</div>
 						<div class="grow"></div>
-						<div class="px-3 text-sm text-neutral-content">{account.type}</div>
+						<div class="text-neutral-content px-3 text-sm">{account.type}</div>
 					</button>
 				{/if}
 				<button

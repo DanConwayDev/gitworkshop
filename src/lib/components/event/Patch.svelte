@@ -47,8 +47,8 @@
 </script>
 
 <div class="">
-	<div class="flex rounded-t bg-base-300 p-1">
-		<article class="prose ml-2 max-w-4xl grow break-words font-mono prose-p:text-sm">
+	<div class="bg-base-300 flex rounded-t p-1">
+		<article class="prose prose-p:text-sm ml-2 max-w-4xl grow font-mono break-words">
 			<ContentTree node={commit_message_node} />
 		</article>
 	</div>
@@ -62,11 +62,11 @@
 
 	{#each files as file, index}
 		<div
-			class="my-2 border border-base-300 {expand_full_files[index]
-				? 'absolute left-0 z-10 w-screen bg-base-300 px-5'
+			class="border-base-300 my-2 border {expand_full_files[index]
+				? 'bg-base-300 absolute left-0 z-10 w-screen px-5'
 				: ''}"
 		>
-			<div class="flex w-full bg-base-200">
+			<div class="bg-base-200 flex w-full">
 				<button
 					class="flex shrink grow p-3 text-sm"
 					onclick={() => {
@@ -79,7 +79,7 @@
 							expand_files[index] = true;
 						}
 					}}
-					><div class="shrink text-wrap text-left">
+					><div class="shrink text-left text-wrap">
 						<span class="pr-3">{file.to || file.from}</span>
 						<span class="text-middle flex-none align-middle font-mono text-xs opacity-70"
 							>{#if file.new}<span>created&nbsp;file</span>&nbsp;{/if}{#if file.deleted}<span
@@ -110,16 +110,16 @@
 				</button>
 			</div>
 			{#if expand_files[index]}
-				<div class="border-t flex border-base-300 font-mono text-xs">
-					<div class="flex-full select-none text-right">
+				<div class="border-base-300 flex border-t font-mono text-xs">
+					<div class="flex-full text-right select-none">
 						{#each file.chunks as chunk, index}
 							{#if index !== 0}
-								<div class="flex w-full bg-base-200">
-									<div class="w-8 flex-none whitespace-pre pb-2 pr-2 pt-1 opacity-50">...</div>
+								<div class="bg-base-200 flex w-full">
+									<div class="w-8 flex-none pt-1 pr-2 pb-2 whitespace-pre opacity-50">...</div>
 								</div>
 							{/if}
 							{#each chunk.changes as change, i}
-								<div class="flex w-full bg-base-100">
+								<div class="bg-base-100 flex w-full">
 									<div
 										class="w-8 flex-none whitespace-pre {change.type == 'add'
 											? 'bg-success/50'
@@ -141,10 +141,10 @@
 						<div class="w-fit">
 							{#each file.chunks as chunk, index}
 								{#if index !== 0}
-									<div class="flex h-7 w-full bg-base-200"></div>
+									<div class="bg-base-200 flex h-7 w-full"></div>
 								{/if}
 								{#each chunk.changes as change, i}
-									<div class="flex w-full bg-base-100">
+									<div class="bg-base-100 flex w-full">
 										<div
 											class="w-full grow whitespace-pre {change.type == 'add'
 												? 'bg-success/20'
@@ -181,7 +181,7 @@
 		</div>
 		<!-- vertical padding for full width so that content retains it space -->
 		{#if expand_full_files[index]}
-			<div class="w-full whitespace-pre font-mono text-xs">
+			<div class="w-full font-mono text-xs whitespace-pre">
 				<span class="block p-3 text-sm"> </span>
 				{#each file.chunks as chunk, index}
 					{#if index !== 0}

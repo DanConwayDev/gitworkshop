@@ -105,7 +105,7 @@
 		{#if edit_mode}
 			<ul
 				tabIndex={0}
-				class="menu dropdown-content z-1 ml-0 w-52 rounded-box bg-base-300 p-2 shadow"
+				class="menu dropdown-content rounded-box bg-base-300 z-1 ml-0 w-52 p-2 shadow"
 			>
 				{#if status !== StatusDraftKind && item.type !== 'issue'}
 					<li class="my-2 pl-0">

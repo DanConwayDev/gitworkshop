@@ -41,7 +41,7 @@
 	{#if table_items.length == 0 && !loading}
 		<p class="prose">None</p>
 	{/if}
-	<ul class=" divide-y divide-base-400">
+	<ul class=" divide-base-400 divide-y">
 		{#each potentially_sorted_items as table_item, index}
 			{#if current_limit === 0 || index + 1 <= current_limit}
 				<PrOrIssueItem {type} {table_item} {repo_route} {show_repo} />

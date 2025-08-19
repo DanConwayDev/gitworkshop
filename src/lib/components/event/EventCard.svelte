@@ -77,9 +77,7 @@
 	</div>
 
 	{#if enable_truncation && is_truncated && !show_more}
-		<div
-			class="absolute inset-x-0 bottom-0 h-6 bg-linear-to-t from-base-400 to-transparent"
-		></div>
+		<div class="from-base-400 absolute inset-x-0 bottom-0 h-6 bg-linear-to-t to-transparent"></div>
 		<div class="absolute bottom-0 left-1/2 mb-2 -translate-x-1/2 transform">
 			<button class="btn btn-neutral btn-sm mt-2" onclick={() => (show_more = !show_more)}>
 				{show_more ? 'Show Less' : 'Show More'}

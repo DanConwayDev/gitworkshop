@@ -135,7 +135,7 @@
 	</div>
 	<div class="prose grow pt-2">
 		<div
-			class=" w-full rounded-md border border-primary"
+			class=" border-primary w-full rounded-md border"
 			class:focus-within:ring-2={!submitting}
 			class:focus-within:ring-primary={!submitting}
 			class:focus-within:focus:outline-none={!submitting}

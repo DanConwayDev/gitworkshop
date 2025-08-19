@@ -43,7 +43,7 @@
 >
 	{#if label.length > 0}
 		{label}
-		{#if copied}<span class="text-sm text-success opacity-50"> (copied to clipboard)</span>{/if}
+		{#if copied}<span class="text-success text-sm opacity-50"> (copied to clipboard)</span>{/if}
 	{/if}
 	<div
 		class="items flex w-full items-center rounded-lg border border-{border_color} opacity-50"
@@ -57,7 +57,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="mr-1 mt-1 inline h-4 w-4 flex-none fill-base-content opacity-50"
+				class="fill-base-content mt-1 mr-1 inline h-4 w-4 flex-none opacity-50"
 				class:fill-success={copied}
 			>
 				{#each icon as d}
@@ -73,7 +73,7 @@
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 16 16"
-			class="ml-1 inline h-4 w-4 flex-none fill-base-content opacity-50 group-hover:opacity-100"
+			class="fill-base-content ml-1 inline h-4 w-4 flex-none opacity-50 group-hover:opacity-100"
 			class:opacity-100={copied}
 			class:fill-success={copied}
 		>

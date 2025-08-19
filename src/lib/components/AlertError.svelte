@@ -5,7 +5,7 @@
 </script>
 
 <div role="alert" class="m-auto max-w-xl">
-	<div role="alert" class="alert alert-error mt-{mt} m-auto bg-error">
+	<div role="alert" class="alert alert-error mt-{mt} bg-error m-auto">
 		<!-- https://icon-sets.iconify.design/ph/warning-fill/ -->
 		<svg
 			xmlns="http://www.w3.org/2000/svg"

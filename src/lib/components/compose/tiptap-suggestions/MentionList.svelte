@@ -32,7 +32,7 @@
 	}
 </script>
 
-<div class="max-w-lg rounded border-neutral bg-base-300">
+<div class="border-neutral bg-base-300 max-w-lg rounded">
 	{#each items as item, i}
 		<button
 			class="w-full items-center text-left"

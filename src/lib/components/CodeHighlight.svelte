@@ -13,7 +13,8 @@
 </svelte:head>
 
 <HighlightAuto code={content} let:highlighted>
-	<LineNumbers wrapLines
+	<LineNumbers
+		wrapLines
 		--border-color="var(--fallback-b3, oklch(var(--b3) / var(--tw-bg-opacity, 1)))0"
 		--line-number-color="#8b949e"
 		{highlighted}

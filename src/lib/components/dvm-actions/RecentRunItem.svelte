@@ -33,8 +33,8 @@
 </script>
 
 <li
-	class="flex p-2 @container {status !== 'pending_response' && status !== 'no_response'
-		? 'cursor-pointer hover:bg-base-200'
+	class="@container flex p-2 {status !== 'pending_response' && status !== 'no_response'
+		? 'hover:bg-base-200 cursor-pointer'
 		: ''}"
 	class:opacity-50={status === 'no_response' || status === 'payment_issue'}
 >
@@ -49,7 +49,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="h-5 w-5 flex-none fill-success pt-1"
+				class="fill-success h-5 w-5 flex-none pt-1"
 			>
 				<title>Success</title>
 				{#each issue_icon_path.open as p}
@@ -60,7 +60,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="h-5 w-5 flex-none fill-neutral pt-1"
+				class="fill-neutral h-5 w-5 flex-none pt-1"
 			>
 				<title>
 					{#if status === 'payment_issue'}
@@ -79,7 +79,7 @@
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 16 16"
-				class="h-5 w-5 flex-none fill-error pt-1"
+				class="fill-error h-5 w-5 flex-none pt-1"
 			>
 				<title>Payment Issue</title>
 				{#each issue_icon_path.closed as p}
@@ -90,11 +90,11 @@
 	</div>
 	<a
 		href={`/${repo_route ? repo_route.s : 'TODO'}/actions/${nevent}`}
-		class="ml-3 flex grow overflow-hidden text-xs text-neutral-content"
+		class="text-neutral-content ml-3 flex grow overflow-hidden text-xs"
 	>
 		<div class="flex grow pt-2">
 			<div class="grow">
-				<div class="text-sm text-base-content">
+				<div class="text-base-content text-sm">
 					{#if summary.branch}branch: {summary.branch}{/if}
 					{#if summary.tag}tag: {summary.tag}{/if}
 					{#if summary.commit_id}
@@ -106,7 +106,7 @@
 				</div>
 				<ul class="pt-2">
 					{#if status === 'payment_issue'}
-						<li class="mr-3 inline text-error">payment issue</li>
+						<li class="text-error mr-3 inline">payment issue</li>
 					{/if}
 
 					<li class="mr-3 inline">

@@ -88,12 +88,12 @@
 
 <div class="prose max-w-none" class:text-sm={size === 'sm'}>
 	<p>Installation Command:</p>
-	<div class="rounded-md bg-base-400 pb-3 font-mono text-sm text-white">
+	<div class="bg-base-400 rounded-md pb-3 font-mono text-sm text-white">
 		<CopyField content={`curl -Ls https://ngit.dev/install.sh | bash`} border_color="none" />
 	</div>
 	{#if download && download.name === 'Windows (x64)'}
 		<p>or one-liner for windows:</p>
-		<div class="rounded-md bg-base-400 pb-3 font-mono text-sm text-white">
+		<div class="bg-base-400 rounded-md pb-3 font-mono text-sm text-white">
 			<CopyField
 				content={`iwr -useb https://yourdomain.com/install.ps1 | iex`}
 				border_color="none"
@@ -114,7 +114,7 @@
 		<!-- Accordion ---------------------------------------------------------------->
 		<div class="space-y-2">
 			<!-- 1. Build from source --------------------------------------------------->
-			<div class="collapse collapse-arrow rounded-box border border-base-300 bg-base-200">
+			<div class="collapse-arrow rounded-box border-base-300 bg-base-200 collapse border">
 				<input type="radio" name="installation-accordion" checked />
 				<div class="collapse-title font-medium">1. Build from Source</div>
 				<div class="collapse-content">
@@ -144,7 +144,7 @@
 						</li>
 						<li>
 							move the following binaries to your PATH:
-							<div class="rounded-md bg-base-400 p-2 font-mono text-sm">
+							<div class="bg-base-400 rounded-md p-2 font-mono text-sm">
 								<div>./target/release/ngit</div>
 								<div>./target/release/git-remote-nostr</div>
 							</div>
@@ -154,7 +154,7 @@
 			</div>
 
 			<!-- 2. Install with Cargo --------------------------------------------------->
-			<div class="collapse collapse-arrow rounded-box border border-base-300 bg-base-200">
+			<div class="collapse-arrow rounded-box border-base-300 bg-base-200 collapse border">
 				<input type="radio" name="installation-accordion" />
 				<div class="collapse-title font-medium">2. Install with Cargo</div>
 				<div class="collapse-content">
@@ -169,7 +169,7 @@
 							</a>
 						</li>
 						<li>
-							<div class="rounded-md bg-base-400 p-2 font-mono text-sm">cargo install ngit</div>
+							<div class="bg-base-400 rounded-md p-2 font-mono text-sm">cargo install ngit</div>
 						</li>
 						<li>add <code class="whitespace-nowrap">~/.cargo/bin</code> to your PATH</li>
 					</ul>
@@ -177,20 +177,20 @@
 			</div>
 
 			<!-- 3. Install with Nix ----------------------------------------------------->
-			<div class="collapse collapse-arrow rounded-box border border-base-300 bg-base-200">
+			<div class="collapse-arrow rounded-box border-base-300 bg-base-200 collapse border">
 				<input type="radio" name="installation-accordion" />
 				<div class="collapse-title font-medium">3. Install with Nix</div>
 				<div class="collapse-content">
 					<ul>
 						<li>
 							Add ngit as a flake input:
-							<div class="rounded-md bg-base-400 p-2 font-mono text-sm">
+							<div class="bg-base-400 rounded-md p-2 font-mono text-sm">
 								{`{ inputs = { ngit.url = "github:DanConwayDev/ngit-cli"; } }`}
 							</div>
 						</li>
 						<li>
 							include default packages. eg when using home-manager:
-							<div class="rounded-md bg-base-400 p-2 font-mono text-sm">
+							<div class="bg-base-400 rounded-md p-2 font-mono text-sm">
 								{`{ inputs, ... }: {
   home-manager.users.myuser = { pkgs, ... }: {
     home.packages = [
@@ -204,7 +204,7 @@
 				</div>
 			</div>
 			<!-- 4. Download Binaries For Other Platforms -------------------------------->
-			<div class="collapse collapse-arrow rounded-box border border-base-300 bg-base-200">
+			<div class="collapse-arrow rounded-box border-base-300 bg-base-200 collapse border">
 				<input type="radio" name="installation-accordion" />
 				<div class="collapse-title font-medium">
 					4. Download for Linux (various), macOS and Windows
@@ -231,7 +231,7 @@
 		<p class="mt-6">
 			Verify install - check both binaries are in your PATH and set as executable by running:
 		</p>
-		<div class="rounded-md bg-base-400 p-2 font-mono text-sm">
+		<div class="bg-base-400 rounded-md p-2 font-mono text-sm">
 			ngit --version<br />
 			git-remote-nostr --version
 		</div>

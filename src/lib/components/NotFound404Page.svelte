@@ -13,6 +13,6 @@
 	<div class="text-center">
 		<h1 class="mb-2 text-9xl font-bold">404</h1>
 		<h3 class="mb-4 text-2xl font-bold">Not Found</h3>
-		<p class="mb-4 mt-2 text-neutral-content">{use_msg}</p>
+		<p class="text-neutral-content mt-2 mb-4">{use_msg}</p>
 	</div>
 </ContainerCenterPage>

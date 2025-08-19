@@ -72,14 +72,14 @@
 {#if with_sidebar}
 	<Container no_wrap_on_md>
 		<div class="md:flex lg:mt-2">
-			<div class="md:mr-2 md:mt-2 md:w-2/3">
+			<div class="md:mt-2 md:mr-2 md:w-2/3">
 				{@render contents()}
 			</div>
 			<div
 				class:hidden={!show_sidebar_on_mobile}
-				class=" rounded-lg border border-base-400 md:flex md:w-1/3 md:border-none"
+				class=" border-base-400 rounded-lg border md:flex md:w-1/3 md:border-none"
 			>
-				<div class="border-b border-base-400 bg-base-300 px-6 py-3 md:hidden">
+				<div class="border-base-400 bg-base-300 border-b px-6 py-3 md:hidden">
 					<h4 class="">Repository Details</h4>
 				</div>
 				<div class="prose my-3 w-full px-6 md:ml-2 md:px-0">

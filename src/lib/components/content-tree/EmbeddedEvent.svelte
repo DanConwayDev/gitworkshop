@@ -24,7 +24,7 @@
 </script>
 
 <div
-	class="rounded-lg border border-base-300 bg-base-200"
+	class="border-base-300 bg-base-200 rounded-lg border"
 	class:border-neutral-content={edit_mode?.selected}
 >
 	{#if edit_mode || !e.event || [IssueKind, PatchKind, RepoAnnKind].includes(e.event?.kind)}

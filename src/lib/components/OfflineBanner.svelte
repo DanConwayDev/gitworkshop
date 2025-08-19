@@ -3,7 +3,7 @@
 	let { msg } = $props();
 </script>
 
-<div class="border-b border-accent-content bg-error text-accent-content">
+<div class="border-accent-content bg-error text-accent-content border-b">
 	<Container no_wrap={true}>
 		<div class="flex items-center justify-between p-3 py-1">
 			<div class="flex-1 text-left text-xs font-semibold">Offline Mode</div>

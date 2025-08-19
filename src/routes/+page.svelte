@@ -16,7 +16,7 @@
 						class="text-neutral">.dev</span
 					>
 				</h1>
-				<p class="mb-8 mt-3">collaborate on code over nostr</p>
+				<p class="mt-3 mb-8">collaborate on code over nostr</p>
 			</div>
 		</div>
 	</div>
@@ -26,7 +26,7 @@
 	<div class="m-auto max-w-5xl">
 		<div class="grid gap-4 md:grid-cols-6">
 			<div class=""></div>
-			<div class="card col-span-2 bg-base-300">
+			<div class="card bg-base-300 col-span-2">
 				<div class="card-body">
 					<div class="card-title">
 						<h3>nostr</h3>
@@ -37,7 +37,7 @@
 					</div>
 				</div>
 			</div>
-			<div class="card col-span-2 bg-base-300">
+			<div class="card bg-base-300 col-span-2">
 				<div class="card-body">
 					<div class="card-title">
 						<h3>
@@ -65,10 +65,10 @@
 			</div>
 			<div class="grid h-5 grid-cols-6 gap-0">
 				<div class=""></div>
-				<div class="border-l border-t"></div>
+				<div class="border-t border-l"></div>
 				<div class="border-t"></div>
-				<div class="border-l border-t"></div>
-				<div class="border-r border-t"></div>
+				<div class="border-t border-l"></div>
+				<div class="border-t border-r"></div>
 			</div>
 		</div>
 
@@ -112,7 +112,7 @@
 </Container>
 
 <Container>
-	<div class="prose m-auto mb-6 mt-6">
+	<div class="prose m-auto mt-6 mb-6">
 		<h2>How it works</h2>
 		<p>
 			Git is a decentralized version control system, yet most freedom tech projects use centralized
@@ -131,7 +131,7 @@
 >
 
 <Container>
-	<div class="prose m-auto mb-6 mt-6">
+	<div class="prose m-auto mt-6 mb-6">
 		<h2>Quick Start</h2>
 		<h3>Install ngit and git-remote-nostr</h3>
 		<InstallNgit />
