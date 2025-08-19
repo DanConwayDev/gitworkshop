@@ -149,7 +149,7 @@
 					<input
 						type="checkbox"
 						id="feedback-checkbox"
-						class="checkbox checkbox-xs p-2"
+						class="checkbox checkbox-xs p-1"
 						bind:checked={anon_force}
 					/>
 					<label for="feedback-checkbox" class="p-2">Anonymous</label>
