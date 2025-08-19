@@ -29,14 +29,14 @@
 			kind: RepoStateKind
 		} as AddressPointer)
 	);
-	let state_not_found = $state(false);
-	onMount(() => {
-		setTimeout(() => {
-			if (!repo_state_query.event) {
-				state_not_found = true;
-			}
-		}, 5000);
-	});
+	// let state_not_found = $state(false);
+	// onMount(() => {
+	// 	setTimeout(() => {
+	// 		if (!repo_state_query.event) {
+	// 			state_not_found = true;
+	// 		}
+	// 	}, 5000);
+	// });
 
 	let refs = $derived(
 		repo_state_query && repo_state_query.event
@@ -46,15 +46,17 @@
 			: []
 	);
 
-	let default_branch_or_tag = $derived.by(() => {
-		if (repo_state_query && repo_state_query.event) {
-			if (refs.map((t) => t[0]).includes('refs/heads/main')) return 'refs/heads/main';
-			if (refs.map((t) => t[0]).includes('refs/heads/master')) return 'refs/heads/master';
-			return refs.map((t) => t[0]).find((t) => t.includes('refs/heads/'));
-		}
-		return undefined;
-	});
+	// let default_branch_or_tag = $derived.by(() => {
+	// 	if (repo_state_query && repo_state_query.event) {
+	// 		if (refs.map((t) => t[0]).includes('refs/heads/main')) return 'refs/heads/main';
+	// 		if (refs.map((t) => t[0]).includes('refs/heads/master')) return 'refs/heads/master';
+	// 		return refs.map((t) => t[0]).find((t) => t.includes('refs/heads/'));
+	// 	}
+	// 	return undefined;
+	// });
 	$effect(() => {
+		// required for $effect
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 		refs;
 	});
 
@@ -63,7 +65,7 @@
 	// repo
 	let repo: Repository | undefined = $state();
 	let loading_repo_msg: undefined | string = $state();
-	let loading_repo_error: undefined | string = $state();
+	let loading_repo_error: undefined | string = $state(); // eslint-disable-line @typescript-eslint/no-unused-vars
 
 	// selected
 	let branch_in_path = $derived(
@@ -94,7 +96,7 @@
 
 	// directory
 	let directory_structure: FileEntry[] | undefined = $state();
-	let loading_directory: boolean = $state(true);
+	let loading_directory: boolean = $state(true); // eslint-disable-line @typescript-eslint/no-unused-vars
 	let loading_directory_error: undefined | string = $state();
 
 	// file
@@ -269,10 +271,11 @@
 <!-- <div>TODO HEADER: {selected_branch}</div> -->
 
 <FileExplorer
+	loading_msg={loading_repo_msg}
 	path={path_is_dir ? path : getParentDir(path)}
 	file_details={directory_structure}
 	selected_file={file_path}
-	error={loading_directory_error}
+	error={loading_directory_error || loading_file_error}
 	base_url={`/${store.route?.s}/tree/${selected_branch}`}
 />
 <div id="file-viewer">

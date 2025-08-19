@@ -13,7 +13,6 @@
 	import AlertWarning from '$lib/components/AlertWarning.svelte';
 	import { DeletionKind, kindtoTextLabel } from '$lib/kinds';
 	import { GitRepositoryAnnouncement } from '$lib/kind_labels';
-	import type { NostrEvent } from 'nostr-tools';
 	import { unixNow } from 'applesauce-core/helpers';
 	import accounts_manager from '$lib/accounts';
 	import AlertError from '../AlertError.svelte';
@@ -65,7 +64,6 @@
 	});
 	let show_delete_sure_modal = $state(false);
 	let sending_deletion = $state(false);
-	let event_to_delete_override: NostrEvent | undefined = $state(undefined);
 	let rejected_deletion = $state(false);
 	let deletion_rationale = $state('');
 	const sendDeletion = async () => {
@@ -103,7 +101,6 @@
 				if (!rejected_deletion) {
 					show_delete_sure_modal = false;
 					deletion_rationale = '';
-					event_to_delete_override = undefined;
 				}
 				rejected_deletion = false;
 				sending_deletion = false;
@@ -113,7 +110,6 @@
 	};
 	const closeModals = () => {
 		show_delete_sure_modal = false;
-		event_to_delete_override = undefined;
 	};
 </script>
 

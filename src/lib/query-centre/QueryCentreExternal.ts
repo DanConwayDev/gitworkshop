@@ -291,7 +291,7 @@ class QueryCentreExternal {
 		const relays = await chooseRelaysForPubkey(pubkey);
 		try {
 			await Promise.all(
-				relays.map(({ url, check_timestamps }) =>
+				relays.map(({ url }) =>
 					(async () => {
 						const unsubsriber = await this.get_relay(url).fetchPubkeyNotifications(pubkey, since);
 						this.subscriber_manager.addUnsubsriber(query, unsubsriber);

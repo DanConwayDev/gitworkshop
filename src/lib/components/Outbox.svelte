@@ -7,7 +7,6 @@
 	import UserHeader from './user/UserHeader.svelte';
 	import { GitRepositoryAnnouncement } from '$lib/kind_labels';
 	import Container from './Container.svelte';
-	import EmbeddedEvent from './content-tree/EmbeddedEvent.svelte';
 	import { eventToNip19 } from '$lib/utils';
 
 	let { on_view_event = () => {} }: { on_view_event?: () => void } = $props();
@@ -137,7 +136,7 @@
 					{#each o.relay_logs.reduce((acc, log) => {
 						log.groups.forEach((group) => acc.add(group));
 						return acc;
-					}, new Set<string>()) as group, i}
+					}, new Set<string>()) as group}
 						<div class="collapse-arrow bg-base-200 collapse my-2">
 							<input type="radio" name="my-accordion-2" />
 							<div class="collapse-title text-sm">

@@ -42,5 +42,6 @@ export interface CORSError extends Error {
 export interface GitError extends Error {
 	type: 'git';
 	operation: string;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	details?: any;
 }

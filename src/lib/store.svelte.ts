@@ -1,5 +1,4 @@
 import { browser } from '$app/environment';
-import { unixNow } from 'applesauce-core/helpers';
 import {
 	type AccountSummary,
 	type EventIdString,

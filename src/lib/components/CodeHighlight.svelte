@@ -2,13 +2,15 @@
 	import { HighlightAuto, LineNumbers } from 'svelte-highlight';
 	import github from 'svelte-highlight/styles/github-dark';
 	// Props
-	let { content, path } = $props();
+	let { content } = $props();
 
 	// Derive language from file path
 	// let language = $derived(getLanguageFromPath(path));
 </script>
 
 <svelte:head>
+	<!-- this is a tradeoff for using svelte-highlight -->
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 	{@html github}
 </svelte:head>
 

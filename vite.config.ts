@@ -4,9 +4,9 @@ import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 
 export default defineConfig({
 	plugins: [
-		// @ts-ignore
+		// @ts-expect-error https://github.com/sveltejs/cli/issues/341 mismatch in types is because vitest
 		sveltekit(),
-		// @ts-ignore
+		// @ts-expect-error https://github.com/sveltejs/cli/issues/341 mismatch in types is because vitest
 		SvelteKitPWA({
 			registerType: 'autoUpdate',
 			manifestFilename: 'manifest.json'

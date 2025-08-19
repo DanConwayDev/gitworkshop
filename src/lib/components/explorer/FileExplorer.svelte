@@ -1,14 +1,15 @@
 <script lang="ts">
-	import store from '$lib/store.svelte';
 	import type { FileEntry } from '$lib/types/git-manager';
 
 	let {
+		loading_msg = undefined,
 		path,
 		selected_file,
 		file_details,
 		base_url,
 		error
 	}: {
+		loading_msg?: string | undefined;
 		path: string;
 		selected_file?: string;
 		file_details?: FileEntry[];
@@ -51,6 +52,8 @@
 		{#if error}
 			{error}
 		{:else if !file_details_wrapper}
+			<div>{loading_msg}</div>
+
 			<div class="skeleton my-3 h-5 w-20"></div>
 			<div class="skeleton my-2 h-4"></div>
 			<div class="skeleton my-2 mb-3 h-4 w-2/3"></div>

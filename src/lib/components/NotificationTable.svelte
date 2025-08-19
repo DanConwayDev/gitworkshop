@@ -85,6 +85,8 @@
 	// svelte-ignore non_reactive_update
 	let listElement: HTMLUListElement;
 	$effect(() => {
+		// required for $effect
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 		pages_current_page;
 		if (listElement) {
 			listElement.scrollIntoView({ behavior: 'smooth' });
@@ -129,7 +131,7 @@
 
 	// fetch threads
 	let page_issue_prs_loaded = $derived(
-		page_issues_prs.filter((e, index) => e && e.repos[0]).filter((i) => i !== undefined) // for typings
+		page_issues_prs.filter((e) => e && e.repos[0]).filter((i) => i !== undefined) // for typings
 	);
 
 	$effect(() => {
@@ -141,7 +143,7 @@
 						{
 							id: table_item.uuid,
 							relays: Object.entries(table_item.relays_info)
-								.filter(([url, huristicsForRelay]) =>
+								.filter(([_url, huristicsForRelay]) =>
 									huristicsForRelay.huristics.some(isRelayCheckFound)
 								)
 								.map(([url]) => url)

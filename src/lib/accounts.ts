@@ -1,14 +1,10 @@
 import { AccountManager, type SerializedAccount } from 'applesauce-accounts';
 import store from './store.svelte';
 import type { AccountSummary } from './types';
-import { NostrConnectAccount, registerCommonAccountTypes } from 'applesauce-accounts/accounts';
-import {
-	NostrConnectSigner,
-	type NostrPublishMethod,
-	type NostrSubscriptionMethod
-} from 'applesauce-signers';
+import { registerCommonAccountTypes } from 'applesauce-accounts/accounts';
+import { NostrConnectSigner, type NostrSubscriptionMethod } from 'applesauce-signers';
 import { SimplePool } from 'nostr-tools';
-import { Observable, Subject } from 'rxjs';
+import { Observable } from 'rxjs';
 
 const manager = new AccountManager();
 

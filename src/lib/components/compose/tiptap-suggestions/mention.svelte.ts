@@ -78,7 +78,7 @@ export const suggestion: (
 						return true;
 					}
 				};
-				// @ts-ignore
+				// @ts-expect-error typscript isnt working for this
 				component = mount(MentionList, {
 					target: wrapper,
 					props: componentProps
@@ -93,14 +93,14 @@ export const suggestion: (
 
 					return true;
 				}
-				// @ts-ignore
+				// @ts-expect-error typscript isnt working for this
 				return component.onKeyDown(props.event);
 			},
 			onUpdate: (props) => {
 				componentProps.items = props.items;
 			},
 			// ...
-			onExit: (props) => {
+			onExit: () => {
 				wrapper.remove();
 			}
 		};

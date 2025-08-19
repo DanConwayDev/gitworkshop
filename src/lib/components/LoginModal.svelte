@@ -64,7 +64,9 @@
 			accounts_manager.addAccount(account);
 			accounts_manager.setActive(account);
 			complete();
-		} catch {}
+		} catch {
+			/* empty */
+		}
 	}
 
 	const complete = () => {

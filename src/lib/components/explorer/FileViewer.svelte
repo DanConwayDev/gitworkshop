@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { stringToDocTree } from '$lib/doc_tree';
-	import store from '$lib/store.svelte';
 	import CodeHighlight from '../CodeHighlight.svelte';
 	import ContentTree from '../content-tree/ContentTree.svelte';
 
@@ -47,7 +46,7 @@
 		</div>
 	{:else}
 		<article class="">
-			<CodeHighlight {content} {path} />
+			<CodeHighlight {content} />
 		</article>
 	{/if}
 </div>

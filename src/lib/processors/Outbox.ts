@@ -27,7 +27,9 @@ export const processOutboxUpdates = async (updates: OutboxRelayProcessorUpdate[]
 			const logs = item.relay_logs.filter((l) => l.groups.includes(group));
 			return logs.length < 2 || logs.some((l) => l.success);
 		});
-		const waiting = item.relay_logs.some((l) => {
+		// maybe this will be useful
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const _waiting = item.relay_logs.some((l) => {
 			if (l.success) return false;
 			if (l.attempts.length == 0) return true;
 			const last = l.attempts[l.attempts.length - 1];

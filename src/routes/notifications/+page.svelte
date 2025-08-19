@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Container from '$lib/components/Container.svelte';
-	import InstallNgit from '$lib/components/InstallNgit.svelte';
 	import NotificationTable from '$lib/components/NotificationTable.svelte';
 </script>
 

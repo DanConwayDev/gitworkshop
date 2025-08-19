@@ -108,7 +108,7 @@ export const extractRepoRoute = (s: RepoRouteString): RepoRoute | undefined => {
 		};
 	}
 	if (isNpub(split[0]) && split[1]) {
-		let with_hint = parseNpubRelayHintIdentifierRepoRoute(s);
+		const with_hint = parseNpubRelayHintIdentifierRepoRoute(s);
 		if (with_hint) return with_hint;
 		const pubkey = nip19.decode(split[0]).data as PubKeyString;
 		return {

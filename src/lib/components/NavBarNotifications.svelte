@@ -33,6 +33,8 @@
 	);
 
 	$effect(() => {
+		// required for $effect
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 		store.logged_in_account?.pubkey;
 		store.notifications_all_read_before = loadAllReadBefore();
 		store.notifications_ids_read_after_date = loadReadAfterDate();

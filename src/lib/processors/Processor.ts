@@ -37,7 +37,6 @@ import processIssueUpdates, { getCurrentStatusFromStatusHistory, updateRepoMetri
 import processPrUpdates from './Pr';
 import { processOutboxUpdates } from './Outbox';
 import { deletionRelatedToIssueOrPrItem, extractRootIdIfNonReplaceable } from '$lib/git-utils';
-import { GitRepositoryAnnouncement } from '$lib/kind_labels';
 
 class Processor {
 	/// Processes all new data points to update LocalDb or send events to the InMemoryDB

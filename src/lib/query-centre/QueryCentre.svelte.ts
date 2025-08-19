@@ -24,7 +24,6 @@ import { RepoAnnKind } from '$lib/kinds';
 import { liveQuery } from 'dexie';
 import type { EventPointer } from 'nostr-tools/nip19';
 import {
-	createActionsRequestFilter,
 	createRecentActionsRequestFilter,
 	createRecentActionsResultFilter
 } from '$lib/relay/filters/actions';
@@ -126,7 +125,7 @@ class QueryCentre {
 
 	searchRepoAnns(query: string, from_relays?: WebSocketUrl[]) {
 		return liveQueryState(async () => {
-			let res = await db.repos
+			const res = await db.repos
 				.where('searchWords')
 				.startsWithAnyOfIgnoreCase(query)
 				.distinct()

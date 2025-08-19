@@ -3,11 +3,13 @@ import LightningFS from '@isomorphic-git/lightning-fs';
 import type { Repository, FileEntry, Commit, GitError } from '$lib/types/git-manager';
 import { Buffer as BufferPolyfill } from 'buffer';
 // required for isomorphic-git with vite
-declare var Buffer: typeof BufferPolyfill;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+declare let Buffer: typeof BufferPolyfill;
 globalThis.Buffer = BufferPolyfill;
 
 export class GitManager {
 	fs: LightningFS;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	private cache: Map<string, any> = new Map();
 
 	constructor() {
@@ -47,9 +49,11 @@ export class GitManager {
 			}
 
 			// Clone repository with shallow clone for performance
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const cloneOptions: any = {
 				fs: this.fs,
 				http: {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
 					request: async (args: any) => {
 						const response = await fetch(args.url, {
 							method: args.method,
@@ -138,7 +142,7 @@ export class GitManager {
 			// Check if the repository directory exists and has a .git folder
 			const files = await this.fs.promises.readdir(dir);
 			return files.includes('.git');
-		} catch (error) {
+		} catch {
 			// Directory doesn't exist or is not accessible
 			return false;
 		}
@@ -187,6 +191,7 @@ export class GitManager {
 			await git.pull({
 				fs: this.fs,
 				http: {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
 					request: async (args: any) => {
 						const response = await fetch(args.url, {
 							method: args.method,
@@ -266,7 +271,7 @@ export class GitManager {
 		} catch {
 			/* empty */
 		}
-		let branches = all_branches || (await this.getBranches(dir));
+		const branches = all_branches || (await this.getBranches(dir));
 		if (branches.includes('master')) return 'master';
 		if (branches.includes('main')) return 'main';
 		if (branches[0]) return branches[0];
@@ -375,7 +380,7 @@ export class GitManager {
 						if (commits.length > 0) {
 							lastModified = new Date(commits[0].commit.committer.timestamp * 1000);
 						}
-					} catch (error) {
+					} catch {
 						// Last resort: use current time
 						lastModified = new Date();
 					}
@@ -552,6 +557,7 @@ export class GitManager {
 	}
 
 	// Helper Methods
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	private createGitError(operation: string, originalError: any): GitError {
 		const error = new Error(`Git ${operation} failed: ${originalError.message}`) as GitError;
 		error.type = 'git';

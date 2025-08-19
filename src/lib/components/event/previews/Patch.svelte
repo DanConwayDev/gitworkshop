@@ -1,6 +1,5 @@
 <script lang="ts">
 	import {
-		extractIssueTitle,
 		extractPatchMessage,
 		extractPatchTitle,
 		extractRepoRefsFromPrOrIssue
@@ -15,7 +14,7 @@
 	} from '$lib/types';
 	import { eventIsPrRoot, getRootUuid } from '$lib/utils';
 	import { getTagValue } from 'applesauce-core/helpers';
-	import { nip19, type Event, type NostrEvent } from 'nostr-tools';
+	import { nip19, type NostrEvent } from 'nostr-tools';
 
 	let { event, relay_hint }: { event: NostrEvent; relay_hint?: WebSocketUrl } = $props();
 	let route_a_ref = $derived(routeToRepoRef(store.route));
