@@ -41,13 +41,7 @@
 	{:else if path.toLowerCase().endsWith('.md') && use_markdown}
 		<div class="p-6">
 			<article class="">
-				<ContentTree
-					node={stringToMarkDownOnlyDocTree(
-						content +
-							' nostr:nprofile1qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vngnh633s',
-						true
-					)}
-				/>
+				<ContentTree node={stringToMarkDownOnlyDocTree(content, true)} />
 			</article>
 		</div>
 	{:else}
