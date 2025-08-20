@@ -18,6 +18,8 @@ export const nostrEventToDocTree = (event: NostrEvent): ContentSchema => {
 };
 
 export const stringToDocTree = (s: string): ContentSchema => {
-	editor.commands.setContent(s);
+	editor.commands.setEventContent({ kind: 1, content: s, tags: [] });
+	// setContent doesnt work anymore(?) with nostr-editor
+	// editor.commands.setContent(s);
 	return editor.getJSON() as ContentSchema;
 };
