@@ -115,7 +115,7 @@
 			>
 				<h2 class="mb-2 text-lg font-bold">Job Output</h2>
 				<pre class="code">
-					<ContentTree node={stringToDocTree(log)} />
+					<ContentTree node={stringToDocTree(log, true)} />
 				</pre>
 			</div>
 		</Container>

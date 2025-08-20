@@ -41,7 +41,7 @@
 	{:else if path.toLowerCase().endsWith('.md') && use_markdown}
 		<div class="p-6">
 			<article class="">
-				<ContentTree node={stringToDocTree(content)} />
+				<ContentTree node={stringToDocTree(content, true)} />
 			</article>
 		</div>
 	{:else}

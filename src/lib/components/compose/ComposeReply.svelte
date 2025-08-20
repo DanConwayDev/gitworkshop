@@ -138,7 +138,7 @@
 						nevent: { addNodeView: () => SvelteNodeViewRenderer(EmbeddedEventEditor) },
 						naddr: { addNodeView: () => SvelteNodeViewRenderer(EmbeddedEventEditor) }
 					},
-					link: { autolink: true } // needed for markdown links
+					link: { autolink: false } // needed for markdown links
 				}),
 				Mention.configure({
 					suggestion: mention([event.pubkey, ...person_tags.map((t) => t[1])])

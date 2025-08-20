@@ -140,7 +140,7 @@
 						nevent: { addNodeView: () => SvelteNodeViewRenderer(EmbeddedEventEditor) },
 						naddr: { addNodeView: () => SvelteNodeViewRenderer(EmbeddedEventEditor) }
 					},
-					link: { autolink: true } // needed for markdown links
+					link: { autolink: false } // needed for markdown links
 				}),
 				Mention.configure({
 					suggestion: mention(maintainers)

@@ -21,7 +21,7 @@
 		reactions?: NostrEvent[];
 	} = $props();
 
-	let node = $derived(nostrEventToDocTree(event));
+	let node = $derived(nostrEventToDocTree(event, true));
 
 	let enable_truncation = true; // embedded;
 	let content_container: HTMLDivElement;

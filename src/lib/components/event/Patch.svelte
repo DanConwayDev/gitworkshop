@@ -15,7 +15,7 @@
 	let commit_message =
 		getTagValue(event, 'description') || extractPatchMessage(event.content) || '[untitled]';
 	let commit_message_node = $derived(
-		nostrEventToDocTree({ content: commit_message, tags: [] } as unknown as NostrEvent)
+		nostrEventToDocTree({ content: commit_message, tags: [] } as unknown as NostrEvent, true)
 	);
 
 	let files = parseDiff(event.content);
