@@ -16,9 +16,10 @@ export type StatusKinds =
 	| typeof StatusClosedKind
 	| typeof StatusDraftKind;
 
-export function statusKindtoText(kind: number, type: 'pr' | 'issue'): string {
+export function statusKindtoText(kind: number, type: 'pr' | 'patch' | 'issue'): string {
 	if (kind === StatusOpenKind) return 'Open';
-	if (type === 'pr' && kind === StatusAppliedKind) return 'Applied';
+	if (type === 'patch' && kind === StatusAppliedKind) return 'Applied';
+	if (type === 'pr' && kind === StatusAppliedKind) return 'Merged';
 	if (type === 'issue' && kind === StatusAppliedKind) return 'Resolved';
 	if (kind === StatusClosedKind) return 'Closed';
 	return 'Draft';

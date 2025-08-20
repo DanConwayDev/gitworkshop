@@ -9,6 +9,7 @@
 	import Patch from './Patch.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import EventWrapperLite from './EventWrapperLite.svelte';
+	import PullRequest from './PullRequest.svelte';
 	let {
 		event,
 		issue_or_pr_table_item,
@@ -69,7 +70,7 @@
 			</EventWrapper>
 		{:else if PrKind === event.kind}
 			<EventWrapper {event} {issue_or_pr_table_item} {embedded} {reactions}>
-				<Patch {event} />
+				<PullRequest {event} />
 			</EventWrapper>
 		{:else if DeletionKind === event.kind}
 			<EventWrapperLite {event}>deletion request from</EventWrapperLite>

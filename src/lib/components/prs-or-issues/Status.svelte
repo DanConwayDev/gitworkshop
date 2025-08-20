@@ -18,7 +18,7 @@
 		xs = false
 	}: {
 		status: IssueOrPrStatus;
-		type: 'pr' | 'issue';
+		type: 'patch' | 'pr' | 'issue';
 		deleted?: boolean;
 		edit_mode?: boolean;
 		xs?: boolean;
@@ -78,8 +78,10 @@
 				class:w-5={!xs}
 				class="fill-success-content flex-none"
 			>
-				{#if type === 'pr'}
+				{#if type === 'patch'}
 					<path d={pr_icon_path.open_patch} />
+				{:else if type === 'pr'}
+					<path d={pr_icon_path.open_pull} />
 				{:else if type === 'issue'}
 					{#each issue_icon_path.open as p (p)}
 						<path d={p} />

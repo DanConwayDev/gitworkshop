@@ -1,6 +1,7 @@
 <script lang="ts">
 	import {
 		CommentKinds,
+		PatchKind,
 		StatusAppliedKind,
 		StatusClosedKind,
 		StatusDraftKind,
@@ -93,8 +94,10 @@
 					class="fill-success h-5 w-5 flex-none pt-1"
 				>
 					<title>Open</title>
-					{#if type === 'pr'}
+					{#if table_item.event.kind === PatchKind}
 						<path d={pr_icon_path.open_patch} />
+					{:else if type === 'pr'}
+						<path d={pr_icon_path.open_pull} />
 					{:else if type === 'issue'}
 						{#each issue_icon_path.open as p (p)}
 							<path d={p} />
