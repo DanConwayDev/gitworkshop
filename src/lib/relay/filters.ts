@@ -7,7 +7,8 @@ import {
 	RepoStateKind,
 	QualityChildKinds,
 	DeletionKind,
-	ReplyKind
+	ReplyKind,
+	PrKind
 } from '$lib/kinds';
 import type {
 	EventIdString,
@@ -86,13 +87,13 @@ export const createPubkeyNoficiationsFilters = (pubkey: PubKeyString, since?: nu
 	return [
 		{
 			'#P': [pubkey],
-			'#K': [PatchKind.toString(), IssueKind.toString()],
+			'#K': [PatchKind.toString(), PrKind.toString(), IssueKind.toString()],
 			kinds: [ReplyKind],
 			since
 		},
 		{
 			'#p': [pubkey],
-			kinds: [PatchKind, IssueKind, LegacyGiReply],
+			kinds: [PatchKind, IssueKind, PrKind, LegacyGiReply],
 			since
 		}
 	];
@@ -139,7 +140,7 @@ export const createRepoChildrenFilters = (
 	if (items instanceof Set) {
 		return [
 			{
-				kinds: [IssueKind, PatchKind, DeletionKind],
+				kinds: [IssueKind, PatchKind, PrKind, DeletionKind],
 				'#a': [...items]
 			}
 		];
@@ -154,7 +155,7 @@ export const createRepoChildrenFilters = (
 	});
 	sinces.forEach((a_refs, since) => {
 		const filter: Filter = {
-			kinds: [IssueKind, PatchKind, DeletionKind],
+			kinds: [IssueKind, PatchKind, PrKind, DeletionKind],
 			'#a': a_refs
 		};
 		if (since > 0) {

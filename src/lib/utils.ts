@@ -16,7 +16,7 @@ import {
 	type IssueOrPRTableItem
 } from './types';
 import type { AddressPointer, EventPointer, NEvent } from 'nostr-tools/nip19';
-import { IssueKind, PatchKind, RepoAnnKind } from './kinds';
+import { IssueKind, PatchKind, PrKind, RepoAnnKind } from './kinds';
 import { getSeenRelays } from 'applesauce-core/helpers';
 import { isReplaceableKind } from 'nostr-tools/kinds';
 
@@ -116,7 +116,7 @@ const getRootKind = (event: NostrEvent, issue_or_pr_table_item?: IssueOrPRTableI
 	if (K) return K[1];
 	if (event.id === (getRootUuid(event) || issue_or_pr_table_item?.uuid) || !issue_or_pr_table_item)
 		return `${event.kind}`;
-	return issue_or_pr_table_item.type === 'issue' ? `${IssueKind}` : `${PatchKind}`;
+	return `${issue_or_pr_table_item.event.kind}`;
 };
 
 const getRootEventPubkey = (
@@ -311,10 +311,11 @@ export const getRepoRefs = (event: NostrEvent): RepoRef[] =>
 		.filter((t) => t[0] && t[0] === 'a' && t[1] && isRepoRef(t[1]))
 		.map((t) => t[1]) as RepoRef[];
 
-export const eventIsPrRoot = (event: NostrEvent): event is NostrEvent & { kind: 1621 } => {
+export const eventIsPrRoot = (event: NostrEvent): event is NostrEvent & { kind: 1617 | 1618 } => {
 	const hashtags = getValueOfEachTagOccurence(event.tags, 't');
 	return (
-		event.kind == PatchKind && hashtags.includes('root') && !hashtags.includes('revision-root')
+		event.kind == PrKind ||
+		(event.kind == PatchKind && hashtags.includes('root') && !hashtags.includes('revision-root'))
 	);
 	/// TODO root and revisions root
 };

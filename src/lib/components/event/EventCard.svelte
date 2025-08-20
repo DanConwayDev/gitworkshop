@@ -4,7 +4,7 @@
 	import { nostrEventToDocTree } from '$lib/doc_tree';
 	import ContentTree from '../content-tree/ContentTree.svelte';
 	import type { IssueOrPRTableItem } from '$lib/types';
-	import { DeletionKind, PatchKind, StatusKinds } from '$lib/kinds';
+	import { DeletionKind, PatchKind, PrKind, StatusKinds } from '$lib/kinds';
 	import StatusCard from './StatusCard.svelte';
 	import Patch from './Patch.svelte';
 	import { onDestroy, onMount } from 'svelte';
@@ -64,6 +64,10 @@
 		{#if StatusKinds.includes(event.kind)}
 			<StatusCard {event} {issue_or_pr_table_item} />
 		{:else if PatchKind === event.kind}
+			<EventWrapper {event} {issue_or_pr_table_item} {embedded} {reactions}>
+				<Patch {event} />
+			</EventWrapper>
+		{:else if PrKind === event.kind}
 			<EventWrapper {event} {issue_or_pr_table_item} {embedded} {reactions}>
 				<Patch {event} />
 			</EventWrapper>

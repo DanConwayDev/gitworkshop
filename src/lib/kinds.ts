@@ -42,6 +42,12 @@ export type RepoStateKind = typeof RepoStateKind;
 export const PatchKind = 1617;
 export type PatchKind = typeof PatchKind;
 
+export const PrKind = 1618;
+export type PrKind = typeof PrKind;
+
+export const PrUpdateKind = 1618;
+export type PrUpdateKind = typeof PrUpdateKind;
+
 export const IssueKind = 1621;
 export type IssueKind = typeof IssueKind;
 
@@ -78,7 +84,7 @@ export type CommentKinds = typeof ShortTextNote | typeof LegacyGitReplyKind | ty
 export const DeletionKind = EventDeletion;
 export type DeletionKind = typeof DeletionKind;
 
-export const QualityChildKinds = [...CommentKinds, Zap];
+export const QualityChildKinds = [...CommentKinds, Zap, PrUpdateKind];
 export type QualityChildKinds = CommentKinds | typeof Zap;
 
 // no nip but I've seen in the wild

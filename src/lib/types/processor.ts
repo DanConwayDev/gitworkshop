@@ -18,6 +18,7 @@ import {
 	DeletionKind,
 	IssueKind,
 	PatchKind,
+	PrKind,
 	QualityChildKinds,
 	RepoAnnKind,
 	StatusKinds
@@ -74,12 +75,17 @@ export interface ProcessorIssueUpdate {
 
 export const isProcessorIssueUpdate = (u: ProcessorUpdate): u is ProcessorIssueUpdate =>
 	(u.event &&
-		[IssueKind, ...StatusKinds, ...QualityChildKinds, DeletionKind].includes(u.event.kind)) ||
+		[
+			IssueKind,
+			...StatusKinds,
+			...QualityChildKinds.filter((k) => k !== PrKind),
+			DeletionKind
+		].includes(u.event.kind)) ||
 	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdateIssue(ru)));
 
 export interface ProcessorPrUpdate {
 	event:
-		| (NostrEvent & { kind: StatusKinds | PatchKind | QualityChildKinds | DeletionKind })
+		| (NostrEvent & { kind: StatusKinds | PatchKind | PrKind | QualityChildKinds | DeletionKind })
 		| undefined;
 	relay_updates: RelayUpdatePR[];
 }

@@ -17,7 +17,7 @@ import {
 	type WebSocketUrl
 } from '$lib/types';
 import { unixNow } from 'applesauce-core/helpers';
-import { IssueKind, PatchKind, RepoAnnKind } from '$lib/kinds';
+import { IssueKind, PatchKind, PrKind, RepoAnnKind } from '$lib/kinds';
 
 export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.damus.io',
@@ -279,7 +279,10 @@ export const repoTableItemToRelayCheckTimestamp = (
 	last_child_check:
 		record.relays_info[relay_url]?.huristics.reduce(
 			(max, h) =>
-				isRelayCheck(h) && h.kinds.includes(IssueKind) && h.kinds.includes(PatchKind)
+				isRelayCheck(h) &&
+				h.kinds.includes(IssueKind) &&
+				h.kinds.includes(PatchKind) &&
+				h.kinds.includes(PrKind)
 					? Math.max(max ?? 0, h.timestamp)
 					: max,
 			undefined as number | undefined

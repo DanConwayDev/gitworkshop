@@ -13,7 +13,7 @@ import {
 	type StatusHistoryItem,
 	type WebSocketUrl
 } from './types';
-import { QualityChildKinds } from './kinds';
+import { PrKind, QualityChildKinds } from './kinds';
 
 export const isCoverLetter = (s: string): boolean => {
 	return s.indexOf('PATCH 0/') > 0;
@@ -111,7 +111,8 @@ export const eventToStatusHistoryItem = (event?: NostrEvent): StatusHistoryItem 
 };
 
 export const eventToQualityChild = (event?: NostrEvent): ChildEventRef | undefined => {
-	if (!event || !QualityChildKinds.includes(event.kind)) return undefined;
+	if (!event || !QualityChildKinds.filter((k) => k !== PrKind).includes(event.kind))
+		return undefined;
 	const { id, kind, pubkey } = event;
 	return { id, kind, pubkey };
 };

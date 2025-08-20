@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { IssueKind, PatchKind } from '$lib/kinds';
+	import { IssueKind, PatchKind, PrKind } from '$lib/kinds';
 	import { isRelayCheckFound, type EventIdString } from '$lib/types';
 	import Container from './Container.svelte';
 	import store from '$lib/store.svelte';
@@ -45,6 +45,7 @@
 	// reduce to issues and prs with notifications
 	const getRelatedIssueOrPr = (e: NostrEvent): EventIdString | undefined => {
 		if (e.kind === IssueKind) return e.id;
+		if (e.kind === PrKind) return e.id;
 		if (e.kind === PatchKind && eventIsPrRoot(e)) return e.id;
 		let pointer = getRootPointer(e);
 		if (pointer && isEventPointer(pointer)) return pointer.id;

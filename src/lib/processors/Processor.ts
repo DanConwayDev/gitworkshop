@@ -18,6 +18,7 @@ import {
 	DeletionKind,
 	IssueKind,
 	PatchKind,
+	PrKind,
 	QualityChildKinds,
 	RepoAnnKind,
 	StatusKinds
@@ -353,7 +354,12 @@ function identifyExistingItemsToUpdate(updates: ProcessorUpdate[]): DbItemsKeysC
 				}
 				case PatchKind: {
 					// TODO only if root patch
-					exiting_db_item_keys.issues.add(u.event.id);
+					exiting_db_item_keys.prs.add(u.event.id);
+					getRepoRefs(u.event).forEach((r) => exiting_db_item_keys.repos.add(r));
+					break;
+				}
+				case PrKind: {
+					exiting_db_item_keys.prs.add(u.event.id);
 					getRepoRefs(u.event).forEach((r) => exiting_db_item_keys.repos.add(r));
 					break;
 				}
@@ -390,6 +396,7 @@ export function eventKindToTable(kind: number): LocalDbTableNames | undefined {
 	if ([Metadata, RelayList].includes(kind)) return 'pubkeys';
 	if (kind === IssueKind) return 'issues';
 	if (kind === PatchKind) return 'prs';
+	if (kind === PrKind) return 'prs';
 	return undefined;
 }
 

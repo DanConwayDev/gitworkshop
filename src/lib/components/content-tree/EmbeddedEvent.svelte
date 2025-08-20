@@ -4,7 +4,7 @@
 	import type { NAddrAttributes, NEventAttributes } from 'nostr-editor';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import Issue from '../event/previews/Issue.svelte';
-	import { IssueKind, PatchKind, RepoAnnKind } from '$lib/kinds';
+	import { IssueKind, PatchKind, PrKind, RepoAnnKind } from '$lib/kinds';
 	import Repo from '../event/previews/Repo.svelte';
 	import Patch from '../event/previews/Patch.svelte';
 	import EventCard from '../event/EventCard.svelte';
@@ -27,11 +27,13 @@
 	class="border-base-300 bg-base-200 rounded-lg border"
 	class:border-neutral-content={edit_mode?.selected}
 >
-	{#if edit_mode || !e.event || [IssueKind, PatchKind, RepoAnnKind].includes(e.event?.kind)}
+	{#if edit_mode || !e.event || [IssueKind, PatchKind, PrKind, RepoAnnKind].includes(e.event?.kind)}
 		<EventWrapperLite {n_attr} event={e.event} disable_links={!!edit_mode}>
 			{#if e.event?.kind === IssueKind}
 				<Issue event={e.event} />
 			{:else if e.event?.kind === PatchKind}
+				<Patch event={e.event} />
+			{:else if e.event?.kind === PrKind}
 				<Patch event={e.event} />
 			{:else if e.event?.kind === RepoAnnKind}
 				<Repo event={e.event} />

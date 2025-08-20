@@ -1,6 +1,6 @@
 import { matchFilters, Relay, type Filter, type NostrEvent } from 'nostr-tools';
 import db from '$lib/dbs/LocalDb';
-import { IgnoreKinds, IssueKind, PatchKind, RepoAnnKind } from '$lib/kinds';
+import { IgnoreKinds, IssueKind, PatchKind, PrKind, RepoAnnKind } from '$lib/kinds';
 import { addSeenRelay, getEventUID, unixNow } from 'applesauce-core/helpers';
 import {
 	type PubKeyString,
@@ -482,7 +482,7 @@ export class RelayManager {
 					type: 'checked',
 					uuid: a_ref,
 					table: 'repos',
-					kinds: [PatchKind, IssueKind],
+					kinds: [PatchKind, PrKind, IssueKind],
 					url: this.url
 				} as RelayUpdateRepoChildren);
 				const filtered_for_a_ref_without_since = filters.some(

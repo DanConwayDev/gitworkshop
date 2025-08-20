@@ -6,7 +6,7 @@ import {
 	isRelayUpdatePR,
 	isRelayUpdatePRFound
 } from '$lib/types';
-import { PatchKind, StatusOpenKind, RepoAnnKind } from '$lib/kinds';
+import { PatchKind, StatusOpenKind, RepoAnnKind, PrKind } from '$lib/kinds';
 import type {
 	EventIdString,
 	HuristicsForRelay,
@@ -19,7 +19,7 @@ import type {
 	RepoRef,
 	WithEvent
 } from '$lib/types';
-import { getParentUuid, getValueOfEachTagOccurence } from '$lib/utils';
+import { getParentUuid, getTagValue, getValueOfEachTagOccurence } from '$lib/utils';
 import { unixNow } from 'applesauce-core/helpers';
 import { calculateRelayScore } from '$lib/relay/RelaySelection';
 import {
@@ -38,6 +38,7 @@ import { processNewStatus, processQualityChild, updateRepoMetrics } from './Issu
 
 const processPrUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
+		if (u.event?.kind === PrKind) console.log('bla');
 		if (!isProcessorPrUpdate(u)) return true;
 		const uuid = getPrId(u);
 		// drop update with no uuid as it will never process correctly
@@ -92,7 +93,7 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 
 const getPrId = (u: ProcessorPrUpdate): EventIdString | undefined => {
 	if (u.event) {
-		if (u.event && u.event.kind === PatchKind) return u.event.id;
+		if (u.event && [PatchKind, PrKind].includes(u.event.kind)) return u.event.id;
 		// TODO get the root
 		else {
 			const uuid = getParentUuid(u.event);
@@ -158,9 +159,11 @@ function processHuristic(
 }
 
 const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
-	if (event.kind !== PatchKind) return undefined;
-	const title = extractPatchTitle(event) ?? '';
-	const description = extractPatchDescription(event) ?? '';
+	if (![PatchKind, PrKind].includes(event.kind)) return undefined;
+	const title =
+		(PrKind === event.kind ? getTagValue(event.tags, 'subject') : extractPatchTitle(event)) ?? '';
+	const description =
+		(PrKind === event.kind ? event.content : extractPatchDescription(event)) ?? '';
 
 	const repos = event.tags
 		.filter((t) => t[1] && t[0] === 'a' && t[1].startsWith(RepoAnnKind.toString()))

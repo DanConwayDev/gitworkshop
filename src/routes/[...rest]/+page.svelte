@@ -3,7 +3,7 @@
 	import ContainerCenterPage from '$lib/components/ContainerCenterPage.svelte';
 	import NotFound404Page from '$lib/components/NotFound404Page.svelte';
 	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
-	import { IssueKind, PatchKind } from '$lib/kinds';
+	import { IssueKind, PatchKind, PrKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import {
 		isWebSocketUrl,
@@ -51,6 +51,7 @@
 		event_query &&
 			event_query.event &&
 			event_query.event.kind !== IssueKind &&
+			event_query.event.kind !== PrKind &&
 			(event_query.event.kind !== PatchKind || !eventIsPrRoot(event_query.event))
 			? getRootPointer(event_query.event)
 			: undefined
