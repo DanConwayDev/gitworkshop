@@ -4,6 +4,7 @@
 	import EventWrapperLite from './EventWrapperLite.svelte';
 	import { liveQueryState } from '$lib/helpers.svelte';
 	import db from '$lib/dbs/LocalDb';
+	import { getTagValue } from '$lib/utils';
 	let {
 		event,
 		issue_or_pr_table_item
@@ -22,10 +23,17 @@
 		item_maintainers_query.current ?? [issue_or_pr_table_item?.author]
 	);
 	let with_permission = $derived(item_maintainers.includes(event.pubkey));
+
+	let commit_id_shorthand = $derived(
+		getTagValue(event.tags, 'c')?.substring(0, 8) || '[commit_id unknown]'
+	);
 </script>
 
 <EventWrapperLite {event} name_first>
-	{#if with_permission}updated
-	{:else}suggested update to
-	{/if} PR branch
+	<span class="text-sm">
+		{#if with_permission}updated
+		{:else}suggested update to
+		{/if} PR branch
+	</span>
+	<span class="badge badge-secondary badge-sm mx-1">{commit_id_shorthand}</span>
 </EventWrapperLite>
