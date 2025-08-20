@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { stringToDocTree } from '$lib/doc_tree';
+	import { stringToMarkDownOnlyDocTree } from '$lib/doc_tree';
 	import CodeHighlight from '../CodeHighlight.svelte';
 	import ContentTree from '../content-tree/ContentTree.svelte';
 
@@ -41,7 +41,13 @@
 	{:else if path.toLowerCase().endsWith('.md') && use_markdown}
 		<div class="p-6">
 			<article class="">
-				<ContentTree node={stringToDocTree(content, true)} />
+				<ContentTree
+					node={stringToMarkDownOnlyDocTree(
+						content +
+							' nostr:nprofile1qqs2qzx779ted7af5rt04vzw3l2hpzfgtk0a2pw6t2plaz4d2734vngnh633s',
+						true
+					)}
+				/>
 			</article>
 		</div>
 	{:else}

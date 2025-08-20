@@ -36,3 +36,12 @@ export const stringToDocTree = (s: string, markdown_links: boolean = false): Con
 		markdown_links
 	);
 };
+
+export const stringToMarkDownOnlyDocTree = (
+	s: string,
+	markdown_links: boolean = false
+): ContentSchema => {
+	const e = markdown_links ? editor_with_links : editor;
+	e.commands.setContent(s);
+	return e.getJSON() as ContentSchema;
+};
