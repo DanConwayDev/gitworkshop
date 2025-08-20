@@ -4,12 +4,13 @@
 	import { nostrEventToDocTree } from '$lib/doc_tree';
 	import ContentTree from '../content-tree/ContentTree.svelte';
 	import type { IssueOrPRTableItem } from '$lib/types';
-	import { DeletionKind, PatchKind, PrKind, StatusKinds } from '$lib/kinds';
+	import { DeletionKind, PatchKind, PrKind, PrUpdateKind, StatusKinds } from '$lib/kinds';
 	import StatusCard from './StatusCard.svelte';
 	import Patch from './Patch.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import EventWrapperLite from './EventWrapperLite.svelte';
 	import PullRequest from './PullRequest.svelte';
+	import PullRequestUpdate from './PullRequestUpdate.svelte';
 	let {
 		event,
 		issue_or_pr_table_item,
@@ -72,6 +73,8 @@
 			<EventWrapper {event} {issue_or_pr_table_item} {embedded} {reactions}>
 				<PullRequest {event} />
 			</EventWrapper>
+		{:else if PrUpdateKind === event.kind}
+			<PullRequestUpdate {event} {issue_or_pr_table_item} />
 		{:else if DeletionKind === event.kind}
 			<EventWrapperLite {event}>deletion request from</EventWrapperLite>
 		{:else}

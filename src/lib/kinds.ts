@@ -46,7 +46,7 @@ export type PatchKind = typeof PatchKind;
 export const PrKind = 1618;
 export type PrKind = typeof PrKind;
 
-export const PrUpdateKind = 1618;
+export const PrUpdateKind = 1619;
 export type PrUpdateKind = typeof PrUpdateKind;
 
 export const IssueKind = 1621;
