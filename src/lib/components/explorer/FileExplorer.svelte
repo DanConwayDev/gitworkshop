@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { FileEntry } from '$lib/types/git-manager';
+	import { onMount } from 'svelte';
 
 	let {
 		loading_msg = undefined,
@@ -36,6 +37,12 @@
 					...file_details
 				]
 	);
+	let waited_a_bit = $state(false);
+	onMount(() => {
+		setTimeout(() => {
+			waited_a_bit = true;
+		}, 1500);
+	});
 </script>
 
 <div class="border-base-400 my-3 rounded-lg border">
@@ -52,8 +59,11 @@
 		{#if error}
 			{error}
 		{:else if !file_details_wrapper}
-			<div>{loading_msg}</div>
-
+			{#if waited_a_bit}
+				<div class="text-center text-wrap break-all opacity-50">
+					{loading_msg}
+				</div>
+			{/if}
 			<div class="skeleton my-3 h-5 w-20"></div>
 			<div class="skeleton my-2 h-4"></div>
 			<div class="skeleton my-2 mb-3 h-4 w-2/3"></div>
