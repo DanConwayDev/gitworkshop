@@ -5,6 +5,7 @@
 	import { liveQueryState } from '$lib/helpers.svelte';
 	import db from '$lib/dbs/LocalDb';
 	import { getTagValue } from '$lib/utils';
+	import { icons_misc } from '$lib/icons';
 	let {
 		event,
 		issue_or_pr_table_item
@@ -24,9 +25,8 @@
 	);
 	let with_permission = $derived(item_maintainers.includes(event.pubkey));
 
-	let commit_id_shorthand = $derived(
-		getTagValue(event.tags, 'c')?.substring(0, 8) || '[commit_id unknown]'
-	);
+	let commit_id = $derived(getTagValue(event.tags, 'c') || '[commit_id unknown]');
+	let commit_id_shorthand = $derived(commit_id.substring(0, 8) || '[commit_id unknown]');
 </script>
 
 <EventWrapperLite {event} name_first>
@@ -36,4 +36,20 @@
 		{/if} PR branch
 	</span>
 	<span class="badge badge-secondary badge-sm mx-1">{commit_id_shorthand}</span>
+	<button
+		class="btn btn-ghost btn-xs"
+		onclick={() => {
+			navigator.clipboard.writeText(commit_id);
+		}}
+	>
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			viewBox="0 0 16 16"
+			class="fill-base-content ml-1 inline h-4 w-4 flex-none opacity-50 group-hover:opacity-100"
+		>
+			{#each icons_misc.copy as d (d)}
+				<path {d} />
+			{/each}
+		</svg>
+	</button>
 </EventWrapperLite>
