@@ -48,11 +48,23 @@
 <div class="border-base-400 my-3 rounded-lg border">
 	{#if path !== ''}
 		<div class="border-base-400 bg-base-200 border-b px-6 py-1">
-			<h4 class="">
-				{#each path_structure as dir (dir)}
-					/ {dir}
-				{/each}
-			</h4>
+			<a class="link-hover link link-secondary" href={base_url}>/</a>
+			{#each path_structure as dir, i (i)}
+				<span class="px-1">
+					{#if i > 0}<span class="opacity-25">/</span>{/if}
+					{#if i === path_structure.length - 1}
+						<span>{dir}</span>
+					{:else}
+						<a
+							class="link-hover link link-secondary"
+							href={`${base_url}/${path
+								.split('/')
+								.slice(0, i + 1)
+								.join('/')}`}>{dir}</a
+						>
+					{/if}
+				</span>
+			{/each}
 		</div>
 	{/if}
 	<div class="">
