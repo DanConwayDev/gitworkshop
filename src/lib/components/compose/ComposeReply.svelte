@@ -209,7 +209,7 @@
 									textareaElement?.focus();
 								}, 1);
 							}
-						}}><span class="text-xs">Raw Text</span></button
+						}}><span class="text-xs">Plain Text</span></button
 					>
 					<button
 						class="tab"
