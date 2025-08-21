@@ -8,4 +8,5 @@
 @plugin "daisyui/theme" {
 	name: 'dracula';
 	default: true;
+	prefersdark: true;
 }
