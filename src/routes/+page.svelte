@@ -12,9 +12,8 @@
 		<div class="m-auto mt-5 max-w-lg text-center">
 			<div class="prose">
 				<h1 class="mb-2">
-					<span class="text-purple-600">git</span><span class="text-white">workshop</span><span
-						class="text-neutral">.dev</span
-					>
+					<span class="text-purple-600">git</span><span class="base-content-400">workshop</span
+					><span class="text-neutral">.dev</span>
 				</h1>
 				<p class="mt-3 mb-8">collaborate on code over nostr</p>
 			</div>

@@ -4,9 +4,42 @@
 @plugin "@tailwindcss/typography";
 @theme {
 	--color-base-400: oklch(21% 0.0135 270);
+	--color-base-content-400: oklch(100% 0 0); /* white */
+	--color-base-alt-300: oklch(20.8% 0.042 265.755); /* this is --color-slate-900 */
+	--color-base-alt-400: oklch(70.8% 0.042 265.755);
 }
+@plugin "daisyui/theme" {
+	name: 'light';
+	/* add an extra base (400) */
+	--color-base-400: oklch(92% 0 0);
+	--color-base-content-400: oklch(50% 0 0);
+	/* lighter neutral  */
+	--color-neutral: oklch(82% 0.004 286.32);
+	--color-neutral-content: oklch(37% 0.013 285.805);
+	/* use dracula primary and secondary */
+	--color-primary: oklch(75.461% 0.183 346.812);
+	--color-primary-content: oklch(100% 0 0); /* white instead of black */
+	--color-secondary: oklch(74.202% 0.148 301.883);
+	--color-secondary-content: oklch(100% 0 0); /* white instead of black */
+	--color-accent-content: oklch(92% 0 0);
+
+	--color-base-alt-300: oklch(95% 0 0);
+	--color-base-alt-400: oklch(70.8% 0.042 265.755); /* this is --color-slate-900 */
+}
+
 @plugin "daisyui/theme" {
 	name: 'dracula';
 	default: true;
 	prefersdark: true;
+	--color-base-400: oklch(21% 0.0135 270);
+	--color-base-content-400: oklch(100% 0 0); /* white */
+	--color-base-alt-300: oklch(20.8% 0.042 265.755); /* this is --color-slate-900 */
+	--color-base-alt-400: oklch(70.8% 0.042 265.755);
 }
+
+/* @plugin "daisyui/theme" {
+	name: 'light';
+	default: true;
+	--color-base-400: oklch(92% 0 0);
+	--color-neutral: oklch(92% 0.004 286.32);
+} */

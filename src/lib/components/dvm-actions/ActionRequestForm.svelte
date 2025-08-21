@@ -217,7 +217,7 @@
 			<div class="bg-base-300 relative m-2 mt-4 rounded-lg p-4">
 				{#if unixNow() - provider_ann.last_pong > 300}
 					<div class="absolute inset-0 flex items-end justify-end rounded-lg bg-red-600 opacity-25">
-						<span class="mr-4 mb-4 rounded bg-red-900 p-2 text-xl font-bold text-white"
+						<span class="base-content-400 mr-4 mb-4 rounded bg-red-900 p-2 text-xl font-bold"
 							>Offline</span
 						>
 					</div>

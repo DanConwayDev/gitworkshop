@@ -32,7 +32,7 @@
 </script>
 
 <div class="border-base-400 rounded-tr-lg border">
-	<div class="scrollbar-hide flex overflow-x-auto rounded-r-lg bg-slate-900">
+	<div class="scrollbar-hide bg-base-alt-300 flex overflow-x-auto rounded-r-lg">
 		<div class="flex-none">
 			<div class="tabs tabs-xs p-2">
 				<button

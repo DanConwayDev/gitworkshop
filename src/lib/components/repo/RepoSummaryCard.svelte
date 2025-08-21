@@ -72,14 +72,14 @@
 				</p>
 			{/if}
 
-			<div class="text-right text-xs break-words text-slate-400">
+			<div class="text-base-alt-400 text-right text-xs break-words">
 				{#if author}
 					<div
 						class="inline"
 						class:p-1={additional_maintainers.length > 0}
 						class:rounded-md={additional_maintainers.length > 0}
 						class:bg-base-400={additional_maintainers.length > 0}
-						class:text-white={additional_maintainers.length > 0}
+						class:text-base-content-400={additional_maintainers.length > 0}
 					>
 						<UserHeader user={author} inline={true} size="xs" />
 					</div>

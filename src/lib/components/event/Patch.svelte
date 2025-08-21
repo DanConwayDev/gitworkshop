@@ -125,7 +125,7 @@
 											? 'bg-success/50'
 											: change.type == 'del'
 												? 'bg-error/50'
-												: 'bg-slate-500/20'} pr-2 opacity-50"
+												: 'bg-base-alt-300'} pr-2 opacity-50"
 										class:pt-3={index === 0 && i === 0}
 										class:pb-3={index === file.chunks.length - 1 && i === chunk.changes.length - 1}
 									>

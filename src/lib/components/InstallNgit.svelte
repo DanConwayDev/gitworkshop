@@ -88,12 +88,12 @@
 
 <div class="prose max-w-none" class:text-sm={size === 'sm'}>
 	<p>Installation Command:</p>
-	<div class="bg-base-400 rounded-md pb-3 font-mono text-sm text-white">
+	<div class="bg-base-400 base-content-400 rounded-md pb-3 font-mono text-sm">
 		<CopyField content="curl -Ls https://ngit.dev/install.sh | bash" border_color="none" />
 	</div>
 	{#if download && download.name === 'Windows (x64)'}
 		<p>or one-liner for windows:</p>
-		<div class="bg-base-400 rounded-md pb-3 font-mono text-sm text-white">
+		<div class="bg-base-400 base-content-400 rounded-md pb-3 font-mono text-sm">
 			<CopyField content="iwr -useb https://yourdomain.com/install.ps1 | iex" border_color="none" />
 		</div>
 	{/if}
