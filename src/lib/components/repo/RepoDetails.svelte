@@ -2,9 +2,11 @@
 	import { icons_misc } from '$lib/icons';
 	import {
 		repoTableItemDefaults,
+		type PubKeyString,
 		type RepoRef,
 		type RepoRoute,
-		type RepoTableItem
+		type RepoTableItem,
+		type WebSocketUrl
 	} from '$lib/types';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import type { WithLoading } from '$lib/types/ui';
@@ -17,6 +19,7 @@
 	import accounts_manager from '$lib/accounts';
 	import AlertError from '../AlertError.svelte';
 	import store from '$lib/store.svelte';
+	import { nip19 } from 'nostr-tools';
 
 	let {
 		repo,
@@ -44,6 +47,43 @@
 
 	let loading = $derived(!item || (!item.created_at && item?.loading));
 	let repo_not_found = $derived(!loading && item && !item.created_at);
+
+	const cloneUrlToGrasp = (
+		clone_url: string,
+		relay_urls: string[]
+	): { shorthand: string; clone: string; wss: WebSocketUrl; pubkey: PubKeyString } | undefined => {
+		if (!(clone_url.startsWith('http://') || clone_url.startsWith('https://'))) return undefined;
+		if (!(clone_url.endsWith('.git/') || clone_url.endsWith('.git'))) return undefined;
+		if (!clone_url.includes('/npub1')) return undefined;
+		try {
+			let res = nip19.decode(`npub1${clone_url.split('npub1')[1].split('/')[0]}`);
+			if (res.type !== 'npub') return undefined;
+			let pubkey: PubKeyString = res.data;
+			let wss = clone_url.split('/npub1')[0].replace('http', 'ws') as WebSocketUrl;
+			if (!relay_urls.some((u) => u.startsWith(wss))) return undefined;
+			return {
+				clone: clone_url,
+				wss,
+				shorthand: wss.replace('wss://', ''),
+				pubkey
+			};
+		} catch {
+			return undefined;
+		}
+	};
+
+	let grasp_servers = $derived(
+		item?.clone
+			?.map((url) => cloneUrlToGrasp(url, item?.relays ?? []))
+			.filter((v) => v !== undefined) ?? []
+	);
+	// let other_clone_urls = $derived(
+	// 	item?.clone?.filter((url) => !grasp_servers.some((o) => o?.clone == url)) ?? []
+	// );
+	// let other_relays = $derived(
+	// 	item?.relays?.filter((url) => !grasp_servers.some((o) => url == o.wss || url == `${o.wss}/`)) ??
+	// 		[]
+	// );
 
 	// deletion
 	let allow_delete = $derived.by(() => {
@@ -223,6 +263,25 @@
 			{#each item.tags as tag (tag)}
 				<div class="badge badge-secondary mr-2">{tag}</div>
 			{/each}
+		{/if}
+	</div>
+
+	<div>
+		{#if repo_not_found}<div></div>
+		{:else if !item || loading}
+			<div class="skeleton my-3 h-5 w-20"></div>
+			<div class="badge skeleton my-2 block w-60"></div>
+		{:else}
+			<h4 class="text-xs opacity-50">grasp servers</h4>
+			{#if !item.clone || grasp_servers.length == 0}
+				<div>none</div>
+			{:else}
+				{#each grasp_servers as { shorthand, clone } (clone)}
+					<div class="my-1">
+						<a href="/relay/{shorthand}" class="btn btn-secondary btn-xs">{shorthand}</a>
+					</div>
+				{/each}
+			{/if}
 		{/if}
 	</div>
 
