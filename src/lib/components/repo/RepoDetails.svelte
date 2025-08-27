@@ -396,7 +396,11 @@
 		{:else}
 			<h4 class="text-xs opacity-50">relays</h4>
 			{#each item.relays as relay (relay)}
-				<div class="badge badge-secondary badge-sm my-2 block">{relay}</div>
+				<div class="my-1">
+					<a href="/relay/{relay.replace('wss://', '')}" class="btn btn-secondary btn-xs"
+						>{relay.replace('wss://', '')}</a
+					>
+				</div>
 			{/each}
 		{/if}
 	</div>
