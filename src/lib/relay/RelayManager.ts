@@ -180,6 +180,7 @@ export class RelayManager {
 	}
 
 	onEvent(event: NostrEvent) {
+		if (event.kind === undefined || !event.tags || !event.created_at || !event.pubkey) return;
 		if (IgnoreKinds.includes(event.kind)) return;
 		addSeenRelay(event, this.url);
 		this.processor.enqueueEvent(event);
