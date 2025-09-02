@@ -35,7 +35,7 @@
 
 					<!-- sun icon -->
 					<svg
-						class="swap-off h-5 w-5 fill-current"
+						class="swap-on h-5 w-5 fill-current"
 						xmlns="http://www.w3.org/2000/svg"
 						viewBox="0 0 24 24"
 					>
@@ -46,7 +46,7 @@
 
 					<!-- moon icon -->
 					<svg
-						class="swap-on h-5 w-5 fill-current"
+						class="swap-off h-5 w-5 fill-current"
 						xmlns="http://www.w3.org/2000/svg"
 						viewBox="0 0 24 24"
 					>
