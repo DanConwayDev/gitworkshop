@@ -97,12 +97,14 @@ export class GitManager {
 
 			// Get repository metadata
 			const branches = await this.getBranches(dir);
+			const tags = await this.getTags(dir);
 			const defaultBranch = await this.getDefaultBranch(dir, branches);
 
 			const repository: Repository = {
 				a_ref,
 				cloneUrls: [url],
 				branches,
+				tags,
 				defaultBranch,
 				lastUpdated: new Date()
 			};
@@ -157,6 +159,7 @@ export class GitManager {
 		try {
 			// Get repository metadata from the filesystem
 			const branches = await this.getBranches(dir);
+			const tags = await this.getTags(dir);
 			const defaultBranch = await this.getDefaultBranch(dir);
 
 			// Create a basic repository object
@@ -164,6 +167,7 @@ export class GitManager {
 				a_ref,
 				cloneUrls: [], // Will be populated from Nostr data
 				branches,
+				tags,
 				defaultBranch,
 				lastUpdated: new Date()
 			};
@@ -253,6 +257,14 @@ export class GitManager {
 			dir
 		});
 		return branches;
+	}
+
+	async getTags(dir: string): Promise<string[]> {
+		const tags = await git.listTags({
+			fs: this.fs,
+			dir
+		});
+		return tags;
 	}
 
 	async getDefaultBranch(dir: string, all_branches?: string[]): Promise<string> {

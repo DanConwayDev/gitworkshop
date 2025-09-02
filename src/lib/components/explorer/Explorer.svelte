@@ -10,6 +10,7 @@
 	import type { AddressPointer } from 'nostr-tools/nip19';
 	import { RepoStateKind } from '$lib/kinds';
 	import FileExplorer from './FileExplorer.svelte';
+	import ExplorerLocator from './ExplorerLocator.svelte';
 
 	let {
 		a_ref,
@@ -29,6 +30,7 @@
 			kind: RepoStateKind
 		} as AddressPointer)
 	);
+	let identifier = $derived(a_ref ? a_ref.split(':')[2] : '');
 	// let state_not_found = $state(false);
 	// onMount(() => {
 	// 	setTimeout(() => {
@@ -85,6 +87,8 @@
 	); // Remove trailing slashes
 	let selected_branch = $derived(branch_in_path ?? repo?.defaultBranch);
 
+	let base_url = $derived(`/${store.route?.s}/tree/${selected_branch}`);
+
 	let path_is_dir: boolean | undefined = $state();
 
 	const getParentDir = (path: string) => {
@@ -104,8 +108,14 @@
 	let file_content: string | undefined = $state();
 	let loading_file: boolean = $state(true);
 	let loading_file_error: undefined | string = $state();
+
+	let branches: string[] = $state([]);
+	let tags: string[] = $state([]);
+
 	$effect(() => {
 		if (!repo) return;
+		branches = [...repo.branches];
+		tags = [...repo.tags];
 		path_is_dir = undefined;
 		let b = $state.snapshot(selected_branch);
 		let f = $state.snapshot(path);
@@ -268,7 +278,14 @@
 	}
 </script>
 
-<!-- <div>TODO HEADER: {selected_branch}</div> -->
+<ExplorerLocator
+	{identifier}
+	{base_url}
+	path={file_path}
+	selected_ref={`refs/heads/${selected_branch}`}
+	{branches}
+	{tags}
+/>
 
 <FileExplorer
 	loading_msg={loading_repo_msg}
@@ -276,7 +293,7 @@
 	file_details={directory_structure}
 	selected_file={file_path}
 	error={loading_directory_error || loading_file_error}
-	base_url={`/${store.route?.s}/tree/${selected_branch}`}
+	{base_url}
 />
 <div id="file-viewer">
 	{#if loading_file || file_content || path_is_dir === false}

@@ -3,6 +3,7 @@ export interface Repository {
 	a_ref: string;
 	cloneUrls: string[];
 	branches: string[];
+	tags: string[];
 	defaultBranch: string;
 	lastUpdated: Date;
 }
