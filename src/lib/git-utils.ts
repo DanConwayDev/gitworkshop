@@ -132,3 +132,8 @@ export const deletionRelatedToIssueOrPrItem = (
 				item.status_history.some((h) => h.uuid === id)
 		);
 };
+
+export const refsToBranches = (refs: string[]) =>
+	refs.filter((r) => r.startsWith('refs/heads/')).map((r) => r.replace('refs/heads/', ''));
+export const refsToTags = (refs: string[]) =>
+	refs.filter((r) => r.startsWith('refs/tags/')).map((r) => r.replace('refs/tags/', ''));

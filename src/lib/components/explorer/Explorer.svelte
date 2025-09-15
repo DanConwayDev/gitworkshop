@@ -11,6 +11,7 @@
 	import { RepoStateKind } from '$lib/kinds';
 	import FileExplorer from './FileExplorer.svelte';
 	import ExplorerLocator from './ExplorerLocator.svelte';
+	import { refsToBranches, refsToTags } from '$lib/git-utils';
 
 	let {
 		a_ref,
@@ -109,14 +110,11 @@
 	let loading_file: boolean = $state(true);
 	let loading_file_error: undefined | string = $state();
 
-	let branches: string[] = $state([]);
-	let tags: string[] = $state([]);
+	let branches: string[] = $derived(refsToBranches(refs.map((r) => r[0])));
+	let tags: string[] = $derived(refsToTags(refs.map((r) => r[0])));
 
 	$effect(() => {
 		if (!repo) return;
-		branches = [...repo.branches];
-		tags = [...repo.tags];
-		path_is_dir = undefined;
 		let b = $state.snapshot(selected_branch);
 		let f = $state.snapshot(path);
 
