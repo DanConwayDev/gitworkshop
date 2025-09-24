@@ -547,13 +547,15 @@ export class GitManager extends EventTarget {
 			});
 
 			const path_is_file = files.includes(path);
-			const path_is_dir = !path_is_file && files.some((f) => f.startsWith(`${path}/`));
+			const path_is_dir =
+				path == '' || (!path_is_file && files.some((f) => f.startsWith(`${path}/`)));
+			const potential_readme_path = path === '' ? 'README.md' : `${path}/README.md`;
 			const info: SelectedPathInfo = {
 				path,
 				exists: path_is_file || path_is_dir,
 				path_is_dir,
 				readme_path:
-					path_is_dir && files.includes(`${path}/README.md`) ? `${path}/README.md` : undefined
+					path_is_dir && files.includes(potential_readme_path) ? potential_readme_path : undefined
 			};
 
 			return { info, tree };

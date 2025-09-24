@@ -155,7 +155,6 @@
 	error={undefined}
 	{base_url}
 />
-
 <div id="file-viewer">
 	{#if file_content || file_path}
 		<FileViewer path={file_path ?? ''} content={file_content} />
