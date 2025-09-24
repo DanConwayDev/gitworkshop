@@ -72,9 +72,11 @@
 	}) as EventListener);
 
 	let path: string | undefined = $state();
+	let path_exists: boolean | undefined = $state();
 	let path_is_dir: boolean | undefined = $state();
 	let file_path: string | undefined = $state();
 	git.addEventListener('selectedPath', ((e: CustomEvent<SelectedPathInfo>) => {
+		path_exists = e.detail.exists;
 		path_is_dir = e.detail.path_is_dir;
 		path = e.detail.path;
 		if (e.detail.readme_path) {
@@ -149,16 +151,24 @@
 	{tags}
 />
 
-<FileExplorer
-	loading_msg={undefined}
-	path={path_is_dir ? (path ?? '') : getParentDir(path ?? '')}
-	file_details={directory_structure}
-	selected_file={file_path}
-	error={undefined}
-	{base_url}
-/>
-<div id="file-viewer">
-	{#if file_content || file_path}
-		<FileViewer path={file_path ?? ''} content={file_content} />
-	{/if}
-</div>
+{#if path_exists !== undefined && !path_exists}
+	<div class="my-10 text-center">
+		<h1 class="mb-2 text-9xl font-bold">¯\_(ツ)_/¯</h1>
+		<h3 class="mb-4 text-2xl font-bold">Not Found</h3>
+		<p class="text-neutral-content mt-2 mb-4">path does not exist in at this ref</p>
+	</div>
+{:else}
+	<FileExplorer
+		loading_msg={undefined}
+		path={path_is_dir ? (path ?? '') : getParentDir(path ?? '')}
+		file_details={directory_structure}
+		selected_file={file_path}
+		error={undefined}
+		{base_url}
+	/>
+	<div id="file-viewer">
+		{#if file_content || file_path}
+			<FileViewer path={file_path ?? ''} content={file_content} />
+		{/if}
+	</div>
+{/if}
