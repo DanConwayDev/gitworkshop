@@ -1,3 +1,5 @@
+import type { CommitObject } from 'isomorphic-git';
+
 // Git Types
 export interface Repository {
 	a_ref: string;
@@ -38,6 +40,12 @@ export interface SelectedPathInfo {
 	exists: boolean;
 	path_is_dir: boolean;
 	readme_path?: string;
+}
+
+export interface SelectedRefInfo {
+	ref: string;
+	commit_id: string;
+	commit: CommitObject;
 }
 
 export interface Commit {

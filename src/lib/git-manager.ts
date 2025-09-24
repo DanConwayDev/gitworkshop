@@ -1,6 +1,6 @@
 import git, { type FetchResult, type HttpClient } from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
-import type { FileEntry, SelectedPathInfo } from '$lib/types/git-manager';
+import type { FileEntry, SelectedPathInfo, SelectedRefInfo } from '$lib/types/git-manager';
 import { Buffer as BufferPolyfill } from 'buffer';
 import { hashCloneUrl } from './git-utils';
 // required for isomorphic-git with vite
@@ -223,9 +223,19 @@ export class GitManager extends EventTarget {
 						ref,
 						commit_id
 					};
+					const commit = await git.log({
+						fs: this.fs,
+						dir: `/${this.a_ref}`,
+						ref: commit_id,
+						depth: 1
+					});
 					this.dispatchEvent(
-						new CustomEvent<string>('selectedRef', {
-							detail: normaliseRemoteRef(ref, true)
+						new CustomEvent<SelectedRefInfo>('selectedRef', {
+							detail: {
+								ref: normaliseRemoteRef(ref, true),
+								commit_id,
+								commit: commit[0].commit
+							}
 						})
 					);
 				}

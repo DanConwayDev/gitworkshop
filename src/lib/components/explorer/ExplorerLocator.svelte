@@ -1,22 +1,25 @@
 <script lang="ts">
+	import type { SelectedRefInfo } from '$lib/types/git-manager';
+	import FromNow from '../FromNow.svelte';
 	import { pr_icon_path } from '../prs/icons';
 
 	let {
 		base_url,
 		identifier,
 		path,
-		selected_ref,
+		selected_ref_info,
 		branches = [],
 		tags = []
 	}: {
 		base_url: string;
 		identifier: string;
 		path: string;
-		selected_ref: string;
+		selected_ref_info: SelectedRefInfo | undefined;
 		branches: string[];
 		tags: string[];
 	} = $props();
 
+	let selected_ref = $derived(selected_ref_info?.ref ?? '');
 	let path_structure = $derived(path.split('/'));
 	let is_branch = $derived(selected_ref.startsWith('refs/heads/'));
 	let selected_ref_short = $derived(
@@ -112,4 +115,11 @@
 			{/each}
 		{/if}
 	</div>
+	{#if selected_ref_info}
+		<div class="text-base-content/50 text-xs">
+			<FromNow unix_seconds={selected_ref_info.commit.committer.timestamp} />
+		</div>
+		<div class="text-base-content/50 mx-2 text-xs">{selected_ref_info.commit.author.name}</div>
+		<div class="badge badge-sm mr-2">{selected_ref_info.commit_id.substring(0, 8)}</div>
+	{/if}
 </div>

@@ -4,7 +4,7 @@
 	import { type RepoRef } from '$lib/types';
 	import { onMount } from 'svelte';
 	import FileViewer from './FileViewer.svelte';
-	import type { FileEntry, SelectedPathInfo } from '$lib/types/git-manager';
+	import type { FileEntry, SelectedPathInfo, SelectedRefInfo } from '$lib/types/git-manager';
 	import { inMemoryRelayEvent } from '$lib/helpers.svelte';
 	import { aRefToAddressPointer } from '$lib/utils';
 	import type { AddressPointer } from 'nostr-tools/nip19';
@@ -91,12 +91,14 @@
 		git_refs = e.detail;
 	}) as EventListener);
 
-	let checked_out_ref: string | undefined = $state();
-	git.addEventListener('selectedRef', ((e: CustomEvent<string>) => {
+	let checked_out_ref: SelectedRefInfo | undefined = $state();
+	git.addEventListener('selectedRef', ((e: CustomEvent<SelectedRefInfo>) => {
 		checked_out_ref = e.detail;
 	}) as EventListener);
 
-	let base_url = $derived(`/${store.route?.s}/tree/${checked_out_ref?.replace('refs/heads/', '')}`);
+	let base_url = $derived(
+		`/${store.route?.s}/tree/${checked_out_ref?.ref.replace('refs/heads/', '')}`
+	);
 
 	const getParentDir = (path: string) => {
 		// Split the path by '/' and remove the last segment
@@ -142,7 +144,7 @@
 	{identifier}
 	{base_url}
 	path={path ?? ''}
-	selected_ref={checked_out_ref ?? ''}
+	selected_ref_info={checked_out_ref}
 	{branches}
 	{tags}
 />
