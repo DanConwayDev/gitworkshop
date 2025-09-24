@@ -1,4 +1,4 @@
-import { nip19, type NostrEvent } from 'nostr-tools';
+import { getEventHash, nip19, type NostrEvent } from 'nostr-tools';
 import { getRootUuid, getTagValue } from './utils';
 import {
 	getIssueOrPrStatus,
@@ -133,7 +133,18 @@ export const deletionRelatedToIssueOrPrItem = (
 		);
 };
 
-export const refsToBranches = (refs: string[]) =>
-	refs.filter((r) => r.startsWith('refs/heads/')).map((r) => r.replace('refs/heads/', ''));
-export const refsToTags = (refs: string[]) =>
-	refs.filter((r) => r.startsWith('refs/tags/')).map((r) => r.replace('refs/tags/', ''));
+export const refsToBranches = (refs: string[][]) =>
+	refs.filter((r) => r[0].startsWith('refs/heads/')).map((r) => r[0].replace('refs/heads/', ''));
+export const refsToTags = (refs: string[][]) =>
+	refs.filter((r) => r[0].startsWith('refs/tags/')).map((r) => r[0].replace('refs/tags/', ''));
+
+export const hashCloneUrl = (url: string): string => {
+	// using nostr-tools sha256 hashing dependancy without a seperate import
+	return getEventHash({
+		pubkey: '0'.repeat(64),
+		kind: 1,
+		content: url,
+		tags: [],
+		created_at: 0
+	}).slice(0, 8);
+};

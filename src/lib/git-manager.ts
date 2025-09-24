@@ -1,20 +1,67 @@
-import git, { type ReadCommitResult } from 'isomorphic-git';
+import git, { type FetchResult, type HttpClient } from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
-import type { Repository, FileEntry, Commit, GitError } from '$lib/types/git-manager';
+import type { FileEntry, SelectedPathInfo } from '$lib/types/git-manager';
 import { Buffer as BufferPolyfill } from 'buffer';
+import { hashCloneUrl } from './git-utils';
 // required for isomorphic-git with vite
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 declare let Buffer: typeof BufferPolyfill;
 globalThis.Buffer = BufferPolyfill;
 
-export class GitManager {
-	fs: LightningFS;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	private cache: Map<string, any> = new Map();
+async function testRepositoryAccess(url: string): Promise<boolean> {
+	try {
+		// Try a simple HTTP request to test CORS
+		const response = await fetch(url + '/info/refs?service=git-upload-pack', {
+			method: 'GET',
+			mode: 'cors'
+		});
+		return response.ok;
+	} catch (error) {
+		console.error('CORS test failed:', error);
+		return false;
+	}
+}
 
+function CloneUrlToRemoteName(url: string) {
+	return hashCloneUrl(url);
+}
+
+export class GitManager extends EventTarget {
 	constructor() {
+		super();
 		this.fs = new LightningFS('git-cache');
 	}
+
+	fs: LightningFS;
+	// for isomorphic-git
+	http: HttpClient = {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		request: async (args: any) => {
+			const response = await fetch(args.url, {
+				method: args.method,
+				headers: args.headers,
+				body: args.body
+			});
+
+			// Convert Headers to plain object
+			const headers: { [key: string]: string } = {};
+			response.headers.forEach((value, key) => {
+				headers[key] = value;
+			});
+
+			// Convert ReadableStream to AsyncIterableIterator
+			const body = response.body ? this.streamToAsyncIterator(response.body) : undefined;
+
+			return {
+				url: response.url,
+				method: args.method,
+				statusCode: response.status,
+				statusMessage: response.statusText,
+				body,
+				headers
+			};
+		}
+	};
 
 	// Helper method to convert ReadableStream to AsyncIterableIterator
 	private async *streamToAsyncIterator(
@@ -32,280 +79,365 @@ export class GitManager {
 		}
 	}
 
-	// Repository Operations
-	async cloneRepository(
-		url: string,
+	private log(msg?: string, remote?: string) {
+		const detail: GitManagerLogEntry = { msg, remote };
+		this.dispatchEvent(new CustomEvent<GitManagerLogEntry>('log', { detail }));
+	}
+
+	a_ref?: string;
+	clone_urls?: string[];
+	ref_and_path?: string;
+	nostr_state_refs?: string[][];
+	connected_remotes: {
+		remote: string;
+		url: string;
+	}[] = []; // fasted first
+	remote_states: Map<string, string[][]> = new Map();
+	file_structure?: FileEntry[];
+	file_content?: string;
+	selected_ref?: { ref: string; commit_id: string };
+	selected_path?: SelectedPathInfo;
+
+	private reset(
 		a_ref: string,
-		options: { singleBranch?: boolean; ref?: string; proxy?: boolean } = {}
-	): Promise<Repository> {
-		const dir = `/${a_ref}`;
-		const { singleBranch = true, ref, proxy = false } = options;
-
-		try {
-			// Check if repository already exists in cache
-			const cacheKey = `/${a_ref}`;
-			if (this.cache.has(cacheKey)) {
-				return this.cache.get(cacheKey);
-			}
-
-			// Clone repository with shallow clone for performance
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const cloneOptions: any = {
-				fs: this.fs,
-				http: {
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					request: async (args: any) => {
-						const response = await fetch(args.url, {
-							method: args.method,
-							headers: args.headers,
-							body: args.body
-						});
-
-						// Convert Headers to plain object
-						const headers: { [key: string]: string } = {};
-						response.headers.forEach((value, key) => {
-							headers[key] = value;
-						});
-
-						// Convert ReadableStream to AsyncIterableIterator
-						const body = response.body ? this.streamToAsyncIterator(response.body) : undefined;
-
-						return {
-							url: response.url,
-							method: args.method,
-							statusCode: response.status,
-							statusMessage: response.statusText,
-							body,
-							headers
-						};
-					}
-				},
-				dir,
-				url,
-				depth: 1,
-				noCheckout: true,
-				singleBranch,
-				corsProxy: proxy ? 'https://cors.isomorphic-git.org' : undefined
-			};
-
-			// Add ref if specified (branch to clone)
-			if (ref) {
-				cloneOptions.ref = ref;
-			}
-
-			await git.clone(cloneOptions);
-
-			// Get repository metadata
-			const branches = await this.getBranches(dir);
-			const tags = await this.getTags(dir);
-			const defaultBranch = await this.getDefaultBranch(dir, branches);
-
-			const repository: Repository = {
-				a_ref,
-				cloneUrls: [url],
-				branches,
-				tags,
-				defaultBranch,
-				lastUpdated: new Date()
-			};
-
-			// set git config to supress some errors during `pull` command
-			await git.setConfig({
-				fs: this.fs,
-				dir,
-				path: 'user.name',
-				value: 'Alice Doe'
-			});
-			await git.setConfig({
-				fs: this.fs,
-				dir,
-				path: 'user.email',
-				value: 'alice@example.com'
-			});
-
-			// Cache the repository
-			this.cache.set(cacheKey, repository);
-
-			return repository;
-		} catch (error) {
-			console.error('Failed to clone repository:', error);
-			throw this.createGitError('clone', error);
-		}
+		clone_urls: string[],
+		nostr_state_refs: string[][] | undefined,
+		ref_and_path?: string
+	) {
+		this.a_ref = a_ref;
+		this.clone_urls = [...clone_urls];
+		this.nostr_state_refs = nostr_state_refs ? [...nostr_state_refs] : undefined;
+		this.ref_and_path = ref_and_path;
+		// clear cache
+		this.connected_remotes = [];
+		this.remote_states = new Map();
+		this.file_structure = undefined;
+		this.file_content = undefined;
+		this.selected_ref = undefined;
+		this.selected_path = undefined;
 	}
 
-	async getRepository(a_ref: string): Promise<Repository | null> {
-		const cacheKey = `/${a_ref}`;
-		return this.cache.get(cacheKey) || null;
-	}
-
-	async isRepositoryCloned(a_ref: string): Promise<boolean> {
-		const dir = `/${a_ref}`;
-		try {
-			// Check if the repository directory exists and has a .git folder
-			const files = await this.fs.promises.readdir(dir);
-			return files.includes('.git');
-		} catch {
-			// Directory doesn't exist or is not accessible
-			return false;
-		}
-	}
-
-	async loadRepositoryFromFilesystem(a_ref: string): Promise<Repository | null> {
-		const isCloned = await this.isRepositoryCloned(a_ref);
-		if (!isCloned) {
-			return null;
-		}
-		const dir = `/${a_ref}`;
-		try {
-			// Get repository metadata from the filesystem
-			const branches = await this.getBranches(dir);
-			const tags = await this.getTags(dir);
-			const defaultBranch = await this.getDefaultBranch(dir);
-
-			// Create a basic repository object
-			const repository: Repository = {
-				a_ref,
-				cloneUrls: [], // Will be populated from Nostr data
-				branches,
-				tags,
-				defaultBranch,
-				lastUpdated: new Date()
-			};
-
-			// Cache the repository for future use
-			const cacheKey = `/${a_ref}`;
-			this.cache.set(cacheKey, repository);
-
-			return repository;
-		} catch (error) {
-			console.error('Failed to load repository from filesystem:', error);
-			return null;
-		}
-	}
-
-	async pullRepository(
+	async loadRepository(
 		a_ref: string,
-		branch: string = 'master',
-		proxy: boolean = false
-	): Promise<void> {
-		const dir = `/${a_ref}`;
-
-		try {
-			// Fetch latest changes from remote
-			await git.pull({
-				fs: this.fs,
-				http: {
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					request: async (args: any) => {
-						const response = await fetch(args.url, {
-							method: args.method,
-							headers: args.headers,
-							body: args.body
-						});
-
-						// Convert Headers to plain object
-						const headers: { [key: string]: string } = {};
-						response.headers.forEach((value, key) => {
-							headers[key] = value;
-						});
-
-						// Convert ReadableStream to AsyncIterableIterator
-						const body = response.body ? this.streamToAsyncIterator(response.body) : undefined;
-
-						return {
-							url: response.url,
-							method: args.method,
-							statusCode: response.status,
-							statusMessage: response.statusText,
-							body,
-							headers
-						};
-					}
-				},
-				dir,
-				corsProxy: proxy ? 'https://cors.isomorphic-git.org' : undefined,
-				ref: branch,
-				singleBranch: true
-			});
-
-			console.log(`Successfully pulled updates for ${a_ref} on branch ${branch}`);
-		} catch (error) {
-			console.error('Failed to pull repository updates:', error);
-			throw this.createGitError('pull', error);
+		clone_urls: string[],
+		nostr_state_refs: string[][] | undefined,
+		ref_and_path?: string
+	) {
+		if (a_ref === this.a_ref) return;
+		this.fs = new LightningFS('git-cache');
+		this.reset(a_ref, clone_urls, nostr_state_refs, ref_and_path);
+		if (this.nostr_state_refs) {
+			const detail: string[][] = this.nostr_state_refs;
+			this.dispatchEvent(new CustomEvent<string[][]>('stateUpdate', { detail }));
 		}
-	}
-
-	async getLatestCommitHash(a_ref: string, branch: string = 'master'): Promise<string | null> {
-		const dir = `/${a_ref}`;
-
+		let already_cloned = false;
 		try {
-			const oid = await git.resolveRef({
-				fs: this.fs,
-				dir,
-				ref: branch
-			});
-			return oid;
-		} catch (error) {
-			console.error('Failed to get latest commit hash:', error);
-			return null;
-		}
-	}
-
-	async getBranches(dir: string): Promise<string[]> {
-		const branches = await git.listBranches({
-			fs: this.fs,
-			dir
-		});
-		return branches;
-	}
-
-	async getTags(dir: string): Promise<string[]> {
-		const tags = await git.listTags({
-			fs: this.fs,
-			dir
-		});
-		return tags;
-	}
-
-	async getDefaultBranch(dir: string, all_branches?: string[]): Promise<string> {
-		try {
-			// Try to get the default branch from HEAD
-			const head = await git.resolveRef({
-				fs: this.fs,
-				dir,
-				ref: 'HEAD'
-			});
-
-			// If HEAD points to a branch, extract the branch name
-			if (head.startsWith('refs/heads/')) {
-				return head.replace('refs/heads/', '');
-			}
+			already_cloned = (await this.fs.promises.readdir(`/${this.a_ref}`)).includes('.git');
 		} catch {
 			/* empty */
 		}
-		const branches = all_branches || (await this.getBranches(dir));
-		if (branches.includes('master')) return 'master';
-		if (branches.includes('main')) return 'main';
-		if (branches[0]) return branches[0];
-		throw Error('no branches available');
+		if (!already_cloned) {
+			await git.init({ fs: this.fs, dir: `/${this.a_ref}` });
+		} else {
+			// TODO attempt checkout before fetch
+		}
+		await this.addRemotes();
+		await Promise.all(
+			this.clone_urls?.map(async (url) => {
+				const remote = CloneUrlToRemoteName(url);
+				this.log('testing connection', remote);
+				const accessable = await testRepositoryAccess(url);
+				if (!accessable) {
+					this.log('connection failed - CORS?', remote);
+					return;
+				}
+				// TODO check connection and only fetch first
+				this.connected_remotes.push({ remote, url });
+				// TODO get ref / commit_id to fetch
+				await this.fetchFromRemote(remote);
+			}) ?? []
+		);
+	}
+	private async fetchFromRemote(
+		remote: string,
+		remote_ref?: string
+	): Promise<FetchResult | string> {
+		this.log(`fetching`, remote);
+		try {
+			const res = await git.fetch({
+				fs: this.fs,
+				dir: `/${this.a_ref}`,
+				http: this.http,
+				remote,
+				remoteRef: remote_ref,
+				// url,
+				depth: 1, // https://github.com/isomorphic-git/isomorphic-git/issues/1735
+				tags: true
+				// singleBranch: true,
+			});
+			this.log(`fetched`, remote);
+			const state = await this.getRemoteRefsFromLocal(remote);
+			if (state && !this.nostr_state_refs && this.clone_urls) {
+				// if highest priority (order in clone_url announcement) connected remote use as state
+				const top_connected_clone_url = this.clone_urls.find((url) =>
+					this.connected_remotes.some((r) => r.url === url)
+				);
+				if (top_connected_clone_url && CloneUrlToRemoteName(top_connected_clone_url) == remote) {
+					const detail: string[][] = state.map((r) => [
+						normaliseRemoteRef(r[0]),
+						normaliseRemoteRef(r[1])
+					]);
+					this.dispatchEvent(new CustomEvent<string[][]>('stateUpdate', { detail }));
+				}
+			}
+			this.refreshSelectedRef();
+			return res;
+		} catch (error) {
+			this.log(`fetch error: ${error}`, remote);
+			return `${error}`;
+		}
 	}
 
-	async getFileTree(
-		a_ref: string,
-		branch: string = 'master',
-		path: string = ''
-	): Promise<FileEntry[]> {
-		const dir = `/${a_ref}`;
+	private async refreshSelectedRef(fetch_missing: boolean = false) {
+		const ref_paths = this.getDesiredRefPath();
+		for (const { ref, path } of ref_paths) {
+			// TODO if from nostr_state we need to change ref to a remote ref
+			try {
+				const commit_id = await git.resolveRef({
+					fs: this.fs,
+					dir: `/${this.a_ref}`,
+					ref
+				});
+				const change_selected_ref =
+					!this.selected_ref ||
+					this.selected_ref.ref !== ref ||
+					this.selected_ref.commit_id !== commit_id;
 
+				const reload_dirs_and_file =
+					!this.selected_ref ||
+					this.selected_ref.commit_id !== commit_id ||
+					!this.selected_path ||
+					this.selected_path.path !== path;
+				if (change_selected_ref) {
+					this.selected_ref = {
+						ref,
+						commit_id
+					};
+					this.dispatchEvent(
+						new CustomEvent<string>('selectedRef', {
+							detail: normaliseRemoteRef(ref, true)
+						})
+					);
+				}
+				if (reload_dirs_and_file) {
+					this.loadDirsAndFile(path, normaliseRemoteRef(ref, true), commit_id);
+				}
+				return; // use first match (most desirable ref that we have the blobs for)
+			} catch (e) {
+				if (fetch_missing) {
+					this.log(`TODO -fix this missing ref: ${ref}: error: ${e}`);
+					// fetchFromRemote gets all tips, so we should only get here when nostr_state_refs changes and we need a new fetch
+					// TODO - try and fetch for git severs - we need to be careful not to create a infinate loop of fetching from git servers when the nost refs aren't available
+				} else {
+					// fetchFromRemote gets all tips so should only get here if nostr_refs aren't avialable on git servers
+					this.log(`missing ref: ${ref}: error: ${e}`);
+					console.log(`error: couldnt resolve ${ref} - need to fetch it. error: ${e}`);
+				}
+			}
+		}
+	}
+
+	private async loadDirsAndFile(path: string, ref_label: string, commit_id: string) {
+		const stillMatches = () => this.selected_ref && this.selected_ref.commit_id == commit_id;
+		// update tree
+		const res = await this.getPathInfoAndTree(commit_id, path);
+		if (!stillMatches()) return;
+		if (!res) {
+			this.log(`error loading file tree`);
+			return;
+		}
+		const { info, tree } = res;
+		this.file_structure = tree;
+		this.dispatchEvent(new CustomEvent<FileEntry[]>('directoryStructure', { detail: tree }));
+
+		// update file contents
+		const clearFile = () => {
+			if (this.file_content) {
+				this.file_content = undefined;
+				this.dispatchEvent(
+					new CustomEvent<string | undefined>('fileContents', { detail: undefined })
+				);
+			}
+		};
+
+		// issue new selected path if needed
+		if (JSON.stringify(info) !== JSON.stringify(this.selected_path)) {
+			this.selected_path = info;
+			this.dispatchEvent(
+				new CustomEvent<SelectedPathInfo>('selectedPath', {
+					detail: this.selected_path
+				})
+			);
+			this.file_content = undefined;
+		}
+		const filepath = getFilePath(this.selected_path);
+		if (!filepath) {
+			clearFile();
+			return;
+		}
+		if (this.file_content) return;
 		try {
+			const content = await git.readBlob({
+				fs: this.fs,
+				dir: `/${this.a_ref}`,
+				oid: commit_id,
+				filepath
+			});
+			// Convert Uint8Array to string
+			const s = new TextDecoder().decode(content.blob);
+
+			if (this.file_content !== s) {
+				this.file_content = s;
+				if (s) {
+					this.dispatchEvent(new CustomEvent<string | undefined>('fileContents', { detail: s }));
+				} else {
+					// TODO how do we indicate error no longer loading file - selectedPath Maybe? how do we know we arn't still loading form other remotes
+				}
+			}
+			return;
+		} catch (error) {
+			this.log(`failed to load file contents ${filepath}: ${error}`);
+		}
+	}
+
+	// if ref_and_path undefined this.ref_and_path will be used
+	private getDesiredRefPath(ref_and_path?: string) {
+		const desired: { ref: string; path: string; ref_value: string }[] = [];
+		if (this.nostr_state_refs) {
+			if (!ref_and_path && !this.ref_and_path) {
+				const d =
+					getDefaultBranchRef(this.nostr_state_refs) ?? // use nostr default branch if it exists in state
+					getFallbackDefaultBranchRef(this.nostr_state_refs); // fallback to master, main or any branch
+				if (d) {
+					const r = extractRefAndPath(d, this.nostr_state_refs);
+					if (r) desired.push(r);
+				}
+			}
+		}
+		this.clone_urls?.forEach((url) => {
+			const r = this.getRefAndPathFromRemote(CloneUrlToRemoteName(url), ref_and_path);
+			if (r) desired.push(r);
+		});
+		return desired;
+	}
+
+	// if ref_and_path undefined this.ref_and_path will be used
+	private getRefAndPathFromRemote(
+		remote: string,
+		ref_and_path?: string
+	): { ref: string; path: string; ref_value: string } | undefined {
+		const state = this.remote_states.get(remote);
+		if (!state) return;
+		// if not specified - use default
+		if (!this.ref_and_path) {
+			let d: string | undefined = undefined;
+			d =
+				getDefaultBranchRef(this.nostr_state_refs, remote) ?? // use nostr default branch if it exists in state
+				getDefaultBranchRef(state, remote) ?? // fallback to remote default branch
+				getFallbackDefaultBranchRef(state, remote); // fallback to master, main or any branch
+			const entry = state.find(([r, _v]) => r === d);
+			if (d && entry) {
+				return { ref: d, path: '', ref_value: entry[1] };
+			}
+		} else {
+			// TODO should we look for the oid as the tip of other branches?
+			// if (this.nostr_state_refs) {
+			// 	const r = extractRefAndPath(this.ref_and_path, this.nostr_state_refs);
+			// 	if (r) {
+			// 		let remote_ref = r.ref
+			// 			.replace('refs/heads/', `/refs/remotes/${remote}/`)
+			// 			.replace('refs/tags/', `/refs/remotes/${remote}/tags/`);
+
+			// 		const entry = state.find(([ref, _v]) => ref === `/refs/remotes/${remote}/${r.ref}`);
+			// 		if (entry) return { ...r, ref_value: entry[1] };
+			// 	}
+			// }
+			return extractRefAndPath(ref_and_path || this.ref_and_path, state, remote);
+		}
+	}
+
+	private async addRemotes() {
+		const remotes = await git.listRemotes({ fs: this.fs, dir: `/${this.a_ref}` });
+		for (const url of this.clone_urls ?? []) {
+			const remote_name = CloneUrlToRemoteName(url);
+			if (!remotes.some((r) => r.url === url)) {
+				try {
+					await git.addRemote({ fs: this.fs, dir: `/${this.a_ref}`, remote: remote_name, url });
+				} catch {
+					/* empty */
+				}
+			}
+			await git.setConfig({
+				fs: this.fs,
+				dir: `/${this.a_ref}`,
+				path: `remote.${remote_name}.fetch`,
+				value: `+refs/*:refs/remotes/${remote_name}/*`
+			});
+		}
+	}
+
+	private async getRemoteRefsFromLocal(remote_name: string): Promise<string[][] | undefined> {
+		const fs = this.fs;
+		const dir = `/${this.a_ref}`;
+		if (!this.connected_remotes || !this.connected_remotes.some((r) => r.remote == remote_name)) {
+			return undefined;
+		}
+		const refs = await git.listRefs({ fs, dir, filepath: `refs/remotes/${remote_name}` });
+		const state = await Promise.all(
+			refs.map(async (ref) => {
+				const v = await git.resolveRef({
+					fs,
+					dir,
+					ref: `refs/remotes/${remote_name}/${ref}`,
+					depth: 1
+				});
+				return [`refs/remotes/${remote_name}/${ref}`, v];
+			})
+		);
+		this.remote_states.set(remote_name, state);
+		return state;
+	}
+
+	private async getPathInfoAndTree(
+		ref: string,
+		path: string = ''
+	): Promise<{ info: SelectedPathInfo; tree: FileEntry[] } | undefined> {
+		const dir = `/${this.a_ref}`;
+		this.log(`fectching file structure for '${normaliseRemoteRef(ref, true)}'`);
+		try {
+			const oid = await git.resolveRef({
+				fs: this.fs,
+				dir: `/${this.a_ref}`,
+				ref
+			});
 			const files = await git.listFiles({
 				fs: this.fs,
 				dir,
-				ref: branch
+				ref: oid
 			});
-
+			// if path is file, get tree of parent directory
+			let dir_path = path;
+			if (files.includes(path)) {
+				const getParentDir = (path: string) => {
+					// Split the path by '/' and remove the last segment
+					const segments = path.split('/');
+					segments.pop();
+					return segments.join('/');
+				};
+				dir_path = getParentDir(path);
+			}
 			// Filter files by path and create FileEntry objects with last modified time
-			const pathPrefix = path ? `${path}/` : '';
+			const pathPrefix = dir_path ? `${dir_path}/` : '';
 			const filteredFileNames = files
 				.filter((file: string) => file.startsWith(pathPrefix))
 				.map((file: string) => file.substring(pathPrefix.length))
@@ -314,7 +446,7 @@ export class GitManager {
 			// Get last modified time for each file
 			const filteredFiles: FileEntry[] = [];
 			for (const file of filteredFileNames) {
-				const filePath = path ? `${path}/${file}` : file;
+				const filePath = dir_path ? `${dir_path}/${file}` : file;
 				let lastModified: Date | undefined;
 
 				try {
@@ -322,16 +454,16 @@ export class GitManager {
 					const commits = await git.log({
 						fs: this.fs,
 						dir,
-						ref: branch,
+						ref: oid,
 						filepath: filePath,
-						depth: 1
+						depth: 3
 					});
 
 					if (commits.length > 0) {
 						lastModified = new Date(commits[0].commit.committer.timestamp * 1000);
 					}
 				} catch (error) {
-					// If we can't get the commit history, skip the timestamp
+					// we dont need to use this.log() here as its a warning rather than a failure
 					console.warn(`Could not get last modified time for ${filePath}:`, error);
 				}
 
@@ -358,7 +490,7 @@ export class GitManager {
 			// For directories, use the most recent timestamp from files we already processed
 			const directoryEntries: FileEntry[] = [];
 			for (const dirName of Array.from(directories)) {
-				const dirPath = path ? `${path}/${dirName}` : dirName;
+				const dirPath = dir_path ? `${dir_path}/${dirName}` : dirName;
 
 				// Find the most recent lastModified time from files in this directory
 				let lastModified: Date | undefined;
@@ -385,7 +517,7 @@ export class GitManager {
 						const commits = await git.log({
 							fs: this.fs,
 							dir,
-							ref: branch,
+							ref,
 							depth: 1
 						});
 
@@ -406,191 +538,177 @@ export class GitManager {
 				});
 			}
 
-			return [...directoryEntries, ...filteredFiles].sort((a, b) => {
+			const tree: FileEntry[] = [...directoryEntries, ...filteredFiles].sort((a, b) => {
 				// Directories first, then files
 				if (a.type !== b.type) {
 					return a.type === 'directory' ? -1 : 1;
 				}
 				return a.name.localeCompare(b.name);
 			});
-		} catch (error) {
-			console.error('Failed to get file tree:', error);
-			throw this.createGitError('listFiles', error);
-		}
-	}
 
-	async getFileContent(a_ref: string, branch: string, filePath: string): Promise<string> {
-		const dir = `/${a_ref}`;
-
-		try {
-			// First resolve the branch to get the commit ID
-			const oid = await git.resolveRef({
-				fs: this.fs,
-				dir,
-				ref: branch
-			});
-
-			const content = await git.readBlob({
-				fs: this.fs,
-				dir,
-				oid,
-				filepath: filePath
-			});
-
-			// Convert Uint8Array to string
-			return new TextDecoder().decode(content.blob);
-		} catch (error) {
-			console.error('Failed to get file content:', error);
-			throw this.createGitError('readFile', error);
-		}
-	}
-
-	async getFileBinaryContent(a_ref: string, branch: string, filePath: string): Promise<Uint8Array> {
-		const dir = `/${a_ref}`;
-
-		try {
-			// First resolve the branch to get the commit ID
-			const oid = await git.resolveRef({
-				fs: this.fs,
-				dir,
-				ref: branch
-			});
-
-			const content = await git.readBlob({
-				fs: this.fs,
-				dir,
-				oid,
-				filepath: filePath
-			});
-
-			// Return raw binary data
-			return content.blob;
-		} catch (error) {
-			console.error('Failed to get binary file content:', error);
-			throw this.createGitError('readBinaryFile', error);
-		}
-	}
-
-	async getCommitHistory(
-		a_ref: string,
-		branch: string = 'master',
-		limit: number = 50
-	): Promise<Commit[]> {
-		const dir = `/${a_ref}`;
-
-		try {
-			const commits = await git.log({
-				fs: this.fs,
-				dir,
-				ref: branch,
-				depth: limit
-			});
-
-			return commits.map(
-				(commit: ReadCommitResult): Commit => ({
-					hash: commit.oid,
-					author: {
-						name: commit.commit.author.name,
-						email: commit.commit.author.email,
-						timestamp: commit.commit.author.timestamp
-					},
-					committer: {
-						name: commit.commit.committer.name,
-						email: commit.commit.committer.email,
-						timestamp: commit.commit.committer.timestamp
-					},
-					message: commit.commit.message,
-					parents: commit.commit.parent || []
-				})
-			);
-		} catch (error) {
-			console.error('Failed to get commit history:', error);
-			throw this.createGitError('log', error);
-		}
-	}
-
-	async getCommitDetails(a_ref: string, commitHash: string): Promise<Commit | null> {
-		const dir = `/${a_ref}`;
-
-		try {
-			const commits = await git.log({
-				fs: this.fs,
-				dir,
-				ref: commitHash,
-				depth: 1
-			});
-
-			if (commits.length === 0) return null;
-
-			const commit = commits[0];
-			return {
-				hash: commit.oid,
-				author: {
-					name: commit.commit.author.name,
-					email: commit.commit.author.email,
-					timestamp: commit.commit.author.timestamp
-				},
-				committer: {
-					name: commit.commit.committer.name,
-					email: commit.commit.committer.email,
-					timestamp: commit.commit.committer.timestamp
-				},
-				message: commit.commit.message,
-				parents: commit.commit.parent || []
+			const path_is_file = files.includes(path);
+			const path_is_dir = !path_is_file && files.some((f) => f.startsWith(`${path}/`));
+			const info: SelectedPathInfo = {
+				path,
+				exists: path_is_file || path_is_dir,
+				path_is_dir,
+				readme_path:
+					path_is_dir && files.includes(`${path}/README.md`) ? `${path}/README.md` : undefined
 			};
+
+			return { info, tree };
 		} catch (error) {
-			console.error('Failed to get commit details:', error);
-			return null;
+			this.log(`failed load dir structure for '${normaliseRemoteRef(ref, true)}': ${error}`);
+			return undefined;
 		}
 	}
 
-	// CORS Error Detection
-	async testRepositoryAccess(url: string): Promise<boolean> {
-		try {
-			// Try a simple HTTP request to test CORS
-			const response = await fetch(url + '/info/refs?service=git-upload-pack', {
-				method: 'GET',
-				mode: 'cors'
-			});
-			return response.ok;
-		} catch (error) {
-			console.error('CORS test failed:', error);
-			return false;
+	updateNostrState(nostr_state?: string[][]) {
+		this.nostr_state_refs = nostr_state ? [...nostr_state] : undefined;
+		// do stuff
+		this.dispatchEvent(new CustomEvent<string[][]>('stateUpdate', { detail: nostr_state }));
+
+		this.refreshSelectedRef(true);
+	}
+	async updateCloneUrls(clone_urls: string[]) {
+		// remote old clone urls
+		this.clone_urls?.forEach((url) => {
+			if (!clone_urls.some((u) => u === url)) {
+				this.remote_states.delete(CloneUrlToRemoteName(url));
+			}
+		});
+		// add new clone urls
+		await Promise.all(
+			clone_urls
+				.filter((url) => !this.clone_urls || !this.clone_urls.some((u) => u === url))
+				.map(async (url) => {
+					const remote = CloneUrlToRemoteName(url);
+					try {
+						await git.addRemote({ fs: this.fs, dir: `/${this.a_ref}`, remote, url });
+					} catch {
+						/* empty */
+					}
+					await git.setConfig({
+						fs: this.fs,
+						dir: `/${this.a_ref}`,
+						path: `remote.${remote}.fetch`,
+						value: `+refs/*:refs/remotes/${remote}/*`
+					});
+					this.fetchFromRemote(remote);
+				})
+		);
+		await this.refreshSelectedRef();
+	}
+
+	updateRefAndPath(ref_and_path: string) {
+		if (ref_and_path == this.ref_and_path) return;
+		this.ref_and_path = ref_and_path;
+		this.refreshSelectedRef();
+	}
+}
+
+export interface GitManagerLogEntry {
+	msg?: string;
+	remote?: string;
+}
+
+function getDefaultBranchRef(state?: string[][], remote?: string): string | undefined {
+	const h = state?.find(
+		(r) =>
+			r.length > 1 &&
+			(r[0] === 'HEAD' || r[0] === `refs/remotes/${remote}/HEAD`) &&
+			r[1].startsWith('ref: ')
+	);
+	if (h) {
+		const b = h[1].replace('ref: ', '');
+		if (remote && b.startsWith('refs/heads/')) {
+			return makeRefRemoteSpecific(b, remote);
+		}
+		return b;
+	}
+}
+
+function getFallbackDefaultBranchRef(state?: string[][], remote?: string): string | undefined {
+	let h = state?.find(
+		(r) =>
+			r.length > 1 &&
+			(r[0] === 'refs/heads/master' || r[0] === `refs/remotes/${remote}/heads/master`)
+	);
+	if (!h) {
+		h = state?.find(
+			(r) =>
+				r.length > 1 && (r[0] === 'refs/heads/main' || r[0] === `refs/remotes/${remote}/heads/main`)
+		);
+	}
+	if (!h) {
+		h = state?.find(
+			(r) =>
+				r.length > 0 &&
+				(r[0].startsWith('refs/heads/') || r[0].startsWith(`refs/remotes/${remote}/heads/`))
+		);
+	}
+	if (h) {
+		if (remote && h[0].startsWith('refs/heads/')) {
+			return makeRefRemoteSpecific(h[0], remote);
+		}
+		return h[0];
+	}
+}
+
+// return undefined if no matching ref exists in state
+function extractRefAndPath(
+	ref_and_path: string,
+	state: string[][],
+	remote?: string
+): { ref: string; path: string; ref_value: string } | undefined {
+	// add prefix found in state
+	if (!ref_and_path.startsWith('refs/')) ref_and_path = `refs/heads/${ref_and_path}`; // eg. master to refs/heads/master
+	if (remote) {
+		ref_and_path = makeRefRemoteSpecific(ref_and_path, remote);
+	}
+
+	// Initialize variables to hold the longest ref and the path
+	let longestRef = '';
+	let ref_value = '';
+	let path = '';
+
+	// Iterate through the possible refs
+	for (const r of state) {
+		// Check if the ref is in the parts
+		if (ref_and_path.startsWith(r[0]) && r[0].length > longestRef.length) {
+			longestRef = r[0];
+			ref_value = r[1];
 		}
 	}
-
-	// Cache Management
-	clearCache(): void {
-		indexedDB.deleteDatabase('git-cache');
-	}
-
-	getCacheSize(): number {
-		return this.cache.size;
-	}
-
-	// Helper Methods
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	private createGitError(operation: string, originalError: any): GitError {
-		const error = new Error(`Git ${operation} failed: ${originalError.message}`) as GitError;
-		error.type = 'git';
-		error.operation = operation;
-		error.details = originalError;
-		return error;
-	}
-
-	// Repository cleanup
-	async removeRepository(a_ref: string): Promise<void> {
-		const cacheKey = `/${a_ref}`;
-
-		try {
-			// Remove from cache
-			this.cache.delete(cacheKey);
-
-			// Remove from filesystem (if needed for cleanup)
-			// Note: LightningFS doesn't have a direct rmdir method
-			// The data will be cleared when the browser cache is cleared
-		} catch (error) {
-			console.error('Failed to remove repository:', error);
+	// If a longest ref was found, construct the path
+	if (longestRef.length > 0) {
+		path = ref_and_path.replace(longestRef, '');
+		if (path.charAt(0) === '/') {
+			path = path.slice(1);
 		}
+	} else return undefined;
+
+	// Return the result or null if no ref was found
+	return longestRef ? { ref: longestRef, path, ref_value } : undefined;
+}
+
+// also works for symbolic refs eg 'ref: refs/remotes/123/heads/main' ~> 'ref: refs/heads/main'
+function normaliseRemoteRef(ref: string, shorten: boolean = false): string {
+	const update = ref
+		// replace refs/remotes/[hex-string]/ with refs/heads/
+		.replace(/^refs\/remotes\/[0-9a-f]+\/(.*)$/, 'refs/$1');
+	if (shorten) return update.replace('ref/heads/', '').replace('refs/tags/', 'tags/');
+	return update;
+}
+
+function makeRefRemoteSpecific(ref: string, remote: string): string {
+	// eg refs/heads/master to refs/remotes/123/master or refs/tags/v0.1 to refs/remotes/123/tags/v0.1
+	return ref.replace('refs/', `refs/remotes/${remote}/`);
+}
+
+function getFilePath(selected_path?: SelectedPathInfo): string | undefined {
+	if (selected_path) {
+		if (selected_path.readme_path) return selected_path.readme_path;
+		if (!selected_path.path_is_dir && selected_path.exists) return selected_path.path;
 	}
 }
