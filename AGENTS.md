@@ -1,153 +1,165 @@
-# Architecture Overview
+# Agent Rules Standard (AGENTS.md)
 
-gitworkshop.dev implements a sophisticated multi-threaded, agent-based architecture that separates concerns between internal UI components and external data processing components, bridging them through a central `query-centre`. This design enables efficient data handling, responsive user interfaces, and scalable external data fetching.
+## Summary
 
-## System Architecture Overview
+gitworkshop.dev is a decentralized alternative to GitHub built on Nostr. It's a web application (PWA) for collaborating on issues and code PRs for git repositories via Nostr relays. The application implements a sophisticated multi-threaded architecture that separates internal UI components from external data processing components, bridging them through a central `query-centre`.
 
-The architecture follows a clear separation between internal and external components, with the `QueryCentre` serving as the central communication hub. Internal components run in the main thread, while external components operate in separate threads (Web Workers) to prevent UI blocking and ensure optimal performance.
+## Entry points / where to run
 
-```mermaid
-graph TB
-    subgraph "Internal Components (Main Thread)"
-        UI[/lib/components<br/>UI Components]
-        QC[/lib/query-centre<br/>QueryCentre]
-        IMR[/lib/dbs/InMemoryRelay<br/>In-Memory Cache]
-        LD[/lib/dbs/LocalDb<br/>Local Database]
-        GM[/lib/dbs/git-manager<br/>Git Manager]
-    end
+- **Development**: Run locally with `pnpm run dev` for development server
+- **Production**: Deployed at https://gitworkshop.dev with same local experience
+- **PWA**: Progressive Web App functionality available
+- **Nostr Integration**: Connects to Nostr relays for data synchronization
+- **Git Operations**: Browser-based Git operations via isomorphic-git
 
-    subgraph "External Components (Web Worker)"
-        QCE[/lib/query-centre<br/>QueryCentreExternal]
-        PROC[/lib/processors<br/>Processor & Specialized Processors]
-        LRD[/lib/dbs/LocalRelayDb<br/>Local Relay Cache]
-        RS[/lib/relay/RelaySelection<br/>Relay Selection]
-        RM[/lib/relay/RelayManager<br/>Per-Relay Manager]
-    end
+## Setup (install/build)
 
-    subgraph "External Data Sources"
-        RELAYS[Nostr Relays]
-        GIT[Git Repositories]
-    end
+```bash
+# Install dependencies
+pnpm install
 
-    UI --> QC
-    QC --> IMR
-    QC --> LD
-    QC --> GM
+# Build the project
+pnpm run build
 
-    QC --> QCE
-    QCE --> RS
-    RS --> RM
-    RM --> RELAYS
-    QCE --> PROC
-    PROC --> LRD
-    PROC --> LD
-    GM --> GIT
+# Type checking
+pnpm run check
 
-    IMR -.->|Data Flow| QC
-    LRD -.->|Cache Population| IMR
+# Format code
+pnpm run format
 ```
 
-## Internal Components
+## Test and lint commands
 
-The internal components run in the main thread and are responsible for user interface rendering and local data management:
+```bash
+# Run unit tests
+pnpm run test:unit
 
-### `/lib/components`
+# Run tests once
+pnpm run test
 
-All UI elements, which exclusively retrieve data via the `query-centre`. These components are reactive and automatically update when underlying data changes.
+# Type checking in watch mode
+pnpm run check:watch
 
-### `/lib/query-centre`
+# Lint and format check
+pnpm run lint
+```
 
-The central communication hub that:
+## Formatters and style
 
-- Returns observables for data from internal sources (InMemoryRelay and LocalDb)
-- Requests updates from external sources (relays, etc) via `QueryCentreExternal`
-- Manages data synchronization between internal and external components
-- Handles message passing and event-driven communication
+- **Prettier**: Code formatter with configuration in `.prettierrc`
+  - Uses tabs, single quotes, 100 char width
+  - Svelte and Tailwind CSS plugins enabled
+- **ESLint**: Linter with TypeScript and Svelte support
+  - Configured in `eslint.config.js`
+  - Includes Prettier integration for consistent formatting
+- **Style Guidelines**:
+  - Use tabs for indentation
+  - Single quotes for strings
+  - Trailing commas disabled
+  - 100 character line width
+  - **DaisyUI**: Always prefer DaisyUI components over custom CSS
+  - **Tailwind**: Prioritize Tailwind utility classes over custom CSS
+  - **Colors**: Use DaisyUI color classes (base-400 available for darker base-300)
 
-### `/lib/dbs/InMemoryRelay`
+## Build and run (dev & prod)
 
-A high-performance in-memory cache utilized by the `query-centre` for fast internal data calls. This provides immediate feedback to UI components while external queries are in progress.
+```bash
+# Development server with hot reload
+pnpm run dev
 
-### `/lib/dbs/LocalDb`
+# Build for production
+pnpm run build
 
-A custom Dexie database that stores comprehensive information about key data types:
+# Preview production build
+pnpm run preview
 
-- Pubkeys, repositories, issues, and PRs with full metadata
-- Summary information and relationships between entities
-- Relay heuristics and query optimization details
-- Counts of children and relay hints for efficient sub-item retrieval
-- Offline capability and data persistence
+# PWA build includes manifest generation
+pnpm run build  # Automatically generates PWA assets
+```
 
-### `/lib/dbs/git-manager`
+## Common tasks / common fixes
 
-Browser-based Git operations using isomorphic-git, enabling:
+- **Code Formatting**: Run `pnpm run format` to format all code
+- **Type Checking**: Run `pnpm run check` to verify TypeScript types
+- **Dependency Updates**: Update packages with `pnpm update`
+- **Git Operations**: Use browser-based Git via isomorphic-git in `/lib/dbs/git-manager`
+- **Nostr Relays**: Configure relay connections through the application UI
+- **Database**: Dexie local database at `/lib/dbs/LocalDb` for offline capability
 
-- Repository cloning and management
-- Code diff generation and PR handling
-- Local file operations and version control
+## CI notes
 
-## External Components
+- **Netlify Deployment**: Configured via `netlify.toml`
+  - Build command: `pnpm run build`
+  - Publish directory: `build`
+  - Custom headers for Nostr JSON and manifest files
+- **Static Site Generation**: Uses SvelteKit adapter for static export
+- **PWA Support**: Progressive Web App capabilities enabled
+- **Nostr Headers**: CORS headers configured for Nostr relay integration
 
-External components operate in separate threads to prevent UI blocking and handle resource-intensive operations:
+## Files & directories to ignore or preserve
 
-### `/lib/query-centre.QueryCentreExternal`
+### Ignore
 
-Runs in a web worker and serves as the external communication bridge:
+- `node_modules/` - Dependencies
+- `.output/`, `.vercel/`, `.netlify/`, `.wrangler/` - Build outputs
+- `.svelte-kit/` - SvelteKit build artifacts
+- `build/` - Production build output
+- `.DS_Store`, `Thumbs.db` - OS files
+- `.env`, `.env.*` - Environment files (except examples)
+- `vite.config.js.timestamp-*` - Vite cache files
+- `.direnv/` - Nix development environment
+- `tmp/` - Temporary files
+- `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock` - Lock files
 
-- Fetches data from external sources when requested by the main `query-centre`
-- Passes retrieved data to the `Processor` for handling
-- Sends selected events back to `query-centre` to be added to `InMemoryRelay`
-- Manages external API calls and relay communication
+### Preserve
 
-### `/lib/processors`
+- `src/` - Source code
+- `static/` - Static assets
+- `lib/` - Library code with architecture components
+- `src/routes/` - SvelteKit routing
+- `.prettierrc`, `eslint.config.js` - Configuration files
+- `tsconfig.json` - TypeScript configuration
+- `vite.config.ts` - Vite configuration
+- `svelte.config.js` - Svelte configuration
+- `netlify.toml` - Netlify deployment configuration
 
-A sophisticated processing system with specialized processors:
+## Dangerous patterns / forbidden changes
 
-- **`Processor`**: Base processor that coordinates data handling
-- **`Issue`**: Handles issue-related events and updates
-- **`Pr`**: Manages pull request data and workflows
-- **`Repo`**: Processes repository information and metadata
-- **`Pubkey`**: Handles user pubkey management and profiles
-- **`Outbox`**: Manages outgoing events and message queuing
-- Each processor updates `LocalDb` and selects events to be added to `InMemoryRelay`
+- **Thread Architecture**: Do not modify the separation between internal (main thread) and external (Web Worker) components
+- **Query Centre**: Do not bypass the `query-centre` for data access - all UI components must use it
+- **Nostr Integration**: Preserve Nostr relay communication patterns in `/lib/relay/`
+- **Database Schema**: Avoid modifying Dexie database schema without migration planning
+- **Git Operations**: Do not break browser-based Git functionality in `/lib/dbs/git-manager`
+- **Processor System**: Maintain the specialized processor architecture in `/lib/processors/`
+- **Memory Management**: Preserve the InMemoryRelay cache system for performance
 
-### `/lib/dbs/LocalRelayDb`
+## Testing expectations for PRs
 
-A persistent local cache relay that the `query-centre` uses to populate the InMemoryRelay before each external query, reducing redundant network calls.
+- **Unit Tests**: All new features must include unit tests in `src/**/*.spec.ts`
+- **Type Checking**: Must pass TypeScript checking with `pnpm run check`
+- **Linting**: Must pass ESLint with `pnpm run lint`
+- **Formatting**: Code must be formatted with `pnpm run format`
+- **Integration**: Test Nostr relay integration and Git operations
+- **PWA**: Verify PWA functionality on mobile devices
+- **Performance**: Ensure thread separation maintains UI responsiveness
 
-### `/lib/relay/RelaySelection`
+## Contact / human fallback
 
-Intelligent relay selection algorithm used by `QueryCentreExternal` to identify the most appropriate relays for specific queries based on:
+- **Repository**: Report issues and see PRs at https://gitworkshop.dev/repo/gitworkshop
+- **Sister Project**: Use ngit for PR submissions - https://gitworkshop.dev/ngit
+- **Documentation**: Architecture details at https://gitworkshop.dev/about
+- **Quick Start**: Getting guide at https://gitworkshop.dev/quick-start
+- **Nostr Integration**: Relay-specific documentation in `/lib/relay/`
 
-- Historical performance data
-- Content specialization
-- Network proximity and reliability
-- User preferences and relay configurations
+## Metadata
 
-### `/lib/relay/RelayManager`
-
-Individual relay managers that:
-
-- Handle communication with specific Nostr relays
-- Manage connection pooling and error handling
-- Add events and data points to the processor queue
-- Implement relay-specific protocols and optimizations
-
-## Message Passing and Event-Driven Architecture
-
-The system operates through sophisticated message passing and event-driven patterns:
-
-1. **Data Flow**: UI components request data through `QueryCentre`, which either serves from local caches or delegates to `QueryCentreExternal`
-2. **Event Processing**: External data flows through specialized processors that transform and enrich the data
-3. **State Synchronization**: Processed data updates both `LocalDb` (for persistence) and `InMemoryRelay` (for UI responsiveness)
-4. **Bidirectional Communication**: Components communicate through observable streams and event emitters, ensuring real-time updates
-
-## Thread Separation Benefits
-
-This multi-threaded architecture provides several key advantages:
-
-- **UI Responsiveness**: Main thread remains unblocked by external network operations
-- **Performance**: Parallel processing of data operations and relay communications
-- **Scalability**: Each relay manager operates independently, handling multiple connections
-- **Reliability**: Isolated error handling prevents system-wide failures
-- **Resource Management**: CPU-intensive operations (like Git processing) don't impact UI performance
+- **Framework**: SvelteKit with TypeScript
+- **Adapter**: Netlify static adapter
+- **Package Manager**: pnpm (preferred)
+- **Build Tool**: Vite
+- **Database**: Dexie for client-side storage
+- **Git**: isomorphic-git for browser operations
+- **Nostr**: applesauce (primary), nostr-tools, nostr-idb for relay integration
+- **Styling**: Tailwind CSS with DaisyUI components
+- **Rich Text**: Tiptap editor for content composition
+- **PWA**: @vite-pwa/sveltekit for progressive web app features
