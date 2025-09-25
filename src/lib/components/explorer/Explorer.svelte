@@ -11,7 +11,7 @@
 	import { RepoStateKind } from '$lib/kinds';
 	import FileExplorer from './FileExplorer.svelte';
 	import ExplorerLocator from './ExplorerLocator.svelte';
-	import { refsToBranches, refsToTags } from '$lib/git-utils';
+	import { refsToBranches, refsToTags, remoteNameToShortName } from '$lib/git-utils';
 
 	let {
 		a_ref,
@@ -146,7 +146,7 @@
 <div>
 	<div>overall: {status.msg ?? ''}</div>
 	{#each Object.keys(status.remotes) as remote (remote)}
-		<div>remote: {remote} {status.remotes[remote] ?? ''}</div>
+		<div>remote: {remoteNameToShortName(remote, clone_urls)} {status.remotes[remote] ?? ''}</div>
 	{/each}
 </div>
 <ExplorerLocator

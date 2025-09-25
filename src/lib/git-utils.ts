@@ -151,3 +151,40 @@ export const hashCloneUrl = (url: string): string => {
 		created_at: 0
 	}).slice(0, 8);
 };
+
+export function cloneUrlToRemoteName(url: string) {
+	return hashCloneUrl(url);
+}
+
+export function remoteNameToCloneUrl(name: string, clone_urls: string[]) {
+	return clone_urls.find((url) => cloneUrlToRemoteName(url) == name);
+}
+
+export function cloneUrlToShortName(url: string) {
+	const sanitizeDomain = (d: string) =>
+		d
+			.trim()
+			.toLowerCase()
+			.replace(/^https?:\/\//, '')
+			.replace(/^ssh:\/\//, '')
+			.replace(/\/.*$/, '');
+	const extractDomain = (u: string) => {
+		if (!u) return '';
+		// SCP-like "git@host:owner/repo.git"
+		const scp = u.match(/^[^@]+@([^:/]+)[:/]/);
+		if (scp) return sanitizeDomain(scp[1]);
+		try {
+			const withProto = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(u) ? u : 'ssh://' + u;
+			return sanitizeDomain(new URL(withProto).hostname || '');
+		} catch {
+			// fallback: take up to first slash or colon
+			return sanitizeDomain(u.split(/[/:]/)[0]);
+		}
+	};
+	return extractDomain(url);
+}
+
+export function remoteNameToShortName(name: string, clone_urls: string[]) {
+	const url = remoteNameToCloneUrl(name, clone_urls);
+	if (url) return cloneUrlToShortName(url);
+}

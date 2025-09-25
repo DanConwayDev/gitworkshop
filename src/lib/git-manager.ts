@@ -2,7 +2,7 @@ import git, { type FetchResult, type HttpClient } from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import type { FileEntry, SelectedPathInfo, SelectedRefInfo } from '$lib/types/git-manager';
 import { Buffer as BufferPolyfill } from 'buffer';
-import { hashCloneUrl } from './git-utils';
+import { cloneUrlToRemoteName } from './git-utils';
 // required for isomorphic-git with vite
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 declare let Buffer: typeof BufferPolyfill;
@@ -24,7 +24,10 @@ type ConnectionResult = ConnectionOk | ConnectionFail;
 
 function isAbortError(err: unknown): err is { name?: string } {
 	return (
-		typeof err === 'object' && err !== null && 'name' in err && (err as any).name === 'AbortError'
+		typeof err === 'object' &&
+		err !== null &&
+		'name' in err &&
+		(err as { name: string | undefined }).name === 'AbortError'
 	);
 }
 
@@ -99,10 +102,6 @@ async function httpGitServerConnectionTest(
 		tried: candidate,
 		httpStatus: lastStatus
 	};
-}
-
-function CloneUrlToRemoteName(url: string) {
-	return hashCloneUrl(url);
 }
 
 export class GitManager extends EventTarget {
@@ -225,7 +224,7 @@ export class GitManager extends EventTarget {
 		await this.addRemotes();
 		await Promise.all(
 			this.clone_urls?.map(async (url) => {
-				const remote = CloneUrlToRemoteName(url);
+				const remote = cloneUrlToRemoteName(url);
 				this.log('connecting', remote);
 
 				const result = await httpGitServerConnectionTest(url);
@@ -286,7 +285,7 @@ export class GitManager extends EventTarget {
 				const top_connected_clone_url = this.clone_urls.find((url) =>
 					this.connected_remotes.some((r) => r.url === url)
 				);
-				if (top_connected_clone_url && CloneUrlToRemoteName(top_connected_clone_url) == remote) {
+				if (top_connected_clone_url && cloneUrlToRemoteName(top_connected_clone_url) == remote) {
 					const detail: string[][] = state.map((r) => [
 						normaliseRemoteRef(r[0]),
 						normaliseRemoteRef(r[1])
@@ -439,7 +438,7 @@ export class GitManager extends EventTarget {
 			}
 		}
 		this.clone_urls?.forEach((url) => {
-			const r = this.getRefAndPathFromRemote(CloneUrlToRemoteName(url), ref_and_path);
+			const r = this.getRefAndPathFromRemote(cloneUrlToRemoteName(url), ref_and_path);
 			if (r) desired.push(r);
 		});
 		return desired;
@@ -483,7 +482,7 @@ export class GitManager extends EventTarget {
 	private async addRemotes() {
 		const remotes = await git.listRemotes({ fs: this.fs, dir: `/${this.a_ref}` });
 		for (const url of this.clone_urls ?? []) {
-			const remote_name = CloneUrlToRemoteName(url);
+			const remote_name = cloneUrlToRemoteName(url);
 			if (!remotes.some((r) => r.url === url)) {
 				try {
 					await git.addRemote({ fs: this.fs, dir: `/${this.a_ref}`, remote: remote_name, url });
@@ -690,7 +689,7 @@ export class GitManager extends EventTarget {
 		// remote old clone urls
 		this.clone_urls?.forEach((url) => {
 			if (!clone_urls.some((u) => u === url)) {
-				this.remote_states.delete(CloneUrlToRemoteName(url));
+				this.remote_states.delete(cloneUrlToRemoteName(url));
 			}
 		});
 		// add new clone urls
@@ -698,7 +697,7 @@ export class GitManager extends EventTarget {
 			clone_urls
 				.filter((url) => !this.clone_urls || !this.clone_urls.some((u) => u === url))
 				.map(async (url) => {
-					const remote = CloneUrlToRemoteName(url);
+					const remote = cloneUrlToRemoteName(url);
 					try {
 						await git.addRemote({ fs: this.fs, dir: `/${this.a_ref}`, remote, url });
 					} catch {
