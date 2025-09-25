@@ -36,7 +36,12 @@
 	let nostr_state = $derived(
 		nostr_state_query && nostr_state_query.event
 			? nostr_state_query.event.tags
-					.filter((t) => t[0] && t[0].startsWith('refs/') && t[0].indexOf('^{}') === -1)
+					.filter(
+						(t) =>
+							t[0] &&
+							(t[0].startsWith('refs/') || t[0].startsWith('HEAD')) &&
+							t[0].indexOf('^{}') === -1
+					)
 					.sort((a, b) => a[0].localeCompare(b[0]))
 			: undefined
 	);
@@ -116,6 +121,9 @@
 	}) as EventListener);
 
 	let branches: string[] = $derived(refsToBranches(git_refs ?? []));
+	let default_branch = $derived(
+		git_refs?.find((r) => r[0] === 'refs/HEAD' || r[0] === 'HEAD')?.[1].replace('ref: ', '')
+	);
 	let tags: string[] = $derived(refsToTags(git_refs ?? []));
 
 	function scrollToAnchor() {
@@ -141,12 +149,12 @@
 		<div>remote: {remote} {status.remotes[remote] ?? ''}</div>
 	{/each}
 </div>
-
 <ExplorerLocator
 	{identifier}
 	{base_url}
 	path={path ?? ''}
 	selected_ref_info={checked_out_ref}
+	{default_branch}
 	{branches}
 	{tags}
 />

@@ -8,6 +8,7 @@
 		identifier,
 		path,
 		selected_ref_info,
+		default_branch,
 		branches = [],
 		tags = []
 	}: {
@@ -15,6 +16,7 @@
 		identifier: string;
 		path: string;
 		selected_ref_info: SelectedRefInfo | undefined;
+		default_branch?: string | undefined;
 		branches: string[];
 		tags: string[];
 	} = $props();
@@ -63,22 +65,37 @@
 						type="radio"
 						name="my_tabs_3"
 						class="tab"
-						aria-label="Branches"
+						aria-label="Branches ({branches.length})"
 						checked={is_branch}
 					/>
 					<ul class="tab-content menu">
+						{#if branches.length == 0}
+							<li class="menu-disabled mx-10"><div class="m-auto my-6">none</div></li>
+						{/if}
 						{#each branches as branch (branch)}
 							<li>
 								<a
 									class:menu-active={is_branch && branch === selected_ref_short}
 									href="{base_url_without_tree}/tree/{branch}/{path}"
 									>{branch}
+									{#if branch === default_branch?.replace('refs/heads/', '')}<span
+											class="badge badge-sm">default</span
+										>{/if}
 								</a>
 							</li>
 						{/each}
 					</ul>
-					<input type="radio" name="my_tabs_3" class="tab" aria-label="Tags" checked={!is_branch} />
+					<input
+						type="radio"
+						name="my_tabs_3"
+						class="tab"
+						aria-label="Tags ({tags.length})"
+						checked={!is_branch}
+					/>
 					<ul class="tab-content menu max-h-98 overflow-y-auto">
+						{#if tags.length == 0}
+							<li class="menu-disabled mx-10"><div class="m-auto my-6">none</div></li>
+						{/if}
 						{#each tags as tag (tag)}
 							<li>
 								<a

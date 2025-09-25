@@ -136,7 +136,10 @@ export const deletionRelatedToIssueOrPrItem = (
 export const refsToBranches = (refs: string[][]) =>
 	refs.filter((r) => r[0].startsWith('refs/heads/')).map((r) => r[0].replace('refs/heads/', ''));
 export const refsToTags = (refs: string[][]) =>
-	refs.filter((r) => r[0].startsWith('refs/tags/')).map((r) => r[0].replace('refs/tags/', ''));
+	refs
+		.filter((r) => r[0].startsWith('refs/tags/'))
+		.map((r) => r[0].replace('refs/tags/', ''))
+		.sort((a, b) => b.localeCompare(a));
 
 export const hashCloneUrl = (url: string): string => {
 	// using nostr-tools sha256 hashing dependancy without a seperate import
