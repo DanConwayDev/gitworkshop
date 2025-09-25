@@ -8,18 +8,97 @@ import { hashCloneUrl } from './git-utils';
 declare let Buffer: typeof BufferPolyfill;
 globalThis.Buffer = BufferPolyfill;
 
-async function testRepositoryAccess(url: string): Promise<boolean> {
+const cors_proxy_base_url = 'https://cors.isomorphic-git.org';
+
+type ConnectionErrors = 'cors' | '404' | 'timeout' | 'unknown';
+
+type ConnectionOk = { status: 'ok' };
+type ConnectionFail = {
+	status: 'fail';
+	kind: ConnectionErrors;
+	message?: string;
+	tried: string; // single URL attempted
+	httpStatus?: number;
+};
+type ConnectionResult = ConnectionOk | ConnectionFail;
+
+function isAbortError(err: unknown): err is { name?: string } {
+	return (
+		typeof err === 'object' && err !== null && 'name' in err && (err as any).name === 'AbortError'
+	);
+}
+
+async function httpGitServerConnectionTest(
+	url: string,
+	use_proxy: boolean = false,
+	timeoutMs: number = 8000
+): Promise<ConnectionResult> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+	const base = (
+		use_proxy ? `${cors_proxy_base_url}/${url.replace(/^https?:\/\//, '')}` : url
+	).replace(/\/+$/, '');
+	const candidate = `${base}/info/refs?service=git-upload-pack`;
+
+	let lastKind: ConnectionErrors = 'unknown';
+	let lastMessage: string | undefined;
+	let lastStatus: number | undefined;
+
 	try {
-		// Try a simple HTTP request to test CORS
-		const response = await fetch(url + '/info/refs?service=git-upload-pack', {
-			method: 'GET',
-			mode: 'cors'
-		});
-		return response.ok;
-	} catch (error) {
-		console.error('CORS test failed:', error);
-		return false;
+		try {
+			const res = await fetch(candidate, {
+				method: 'GET',
+				mode: 'cors',
+				signal: controller.signal
+			});
+
+			lastStatus = res.status;
+
+			if (use_proxy && !res.ok) {
+				lastKind = 'cors';
+				lastMessage = `proxy returned ${res.status}`;
+			} else if (!use_proxy && res.status === 404) {
+				lastKind = '404';
+				lastMessage = 'resource not found';
+			} else if (!res.ok) {
+				lastKind = 'unknown';
+				lastMessage = `http ${res.status}`;
+			} else {
+				clearTimeout(timeout);
+				return { status: 'ok' };
+			}
+		} catch (err: unknown) {
+			if (isAbortError(err)) {
+				lastKind = 'timeout';
+				lastMessage = 'request aborted (timeout)';
+			} else {
+				const msg =
+					typeof err === 'string'
+						? err
+						: typeof err === 'object' &&
+							  err !== null &&
+							  'message' in err &&
+							  typeof (err as { message?: unknown }).message === 'string'
+							? (err as { message: string }).message
+							: String(err);
+				lastMessage = msg;
+				if (use_proxy || /cors/i.test(msg)) lastKind = 'cors';
+				else if (/failed to fetch|network/i.test(msg)) lastKind = 'unknown';
+				else lastKind = 'unknown';
+			}
+		}
+	} finally {
+		clearTimeout(timeout);
 	}
+
+	return {
+		status: 'fail',
+		kind: lastKind,
+		message: lastMessage,
+		tried: candidate,
+		httpStatus: lastStatus
+	};
 }
 
 function CloneUrlToRemoteName(url: string) {
@@ -92,6 +171,7 @@ export class GitManager extends EventTarget {
 		remote: string;
 		url: string;
 	}[] = []; // fasted first
+	remotes_using_proxy: string[] = [];
 	remote_states: Map<string, string[][]> = new Map();
 	file_structure?: FileEntry[];
 	file_content?: string;
@@ -110,6 +190,7 @@ export class GitManager extends EventTarget {
 		this.ref_and_path = ref_and_path;
 		// clear cache
 		this.connected_remotes = [];
+		this.remotes_using_proxy = [];
 		this.remote_states = new Map();
 		this.file_structure = undefined;
 		this.file_content = undefined;
@@ -145,15 +226,37 @@ export class GitManager extends EventTarget {
 		await Promise.all(
 			this.clone_urls?.map(async (url) => {
 				const remote = CloneUrlToRemoteName(url);
-				this.log('testing connection', remote);
-				const accessable = await testRepositoryAccess(url);
-				if (!accessable) {
-					this.log('connection failed - CORS?', remote);
+				this.log('connecting', remote);
+
+				const result = await httpGitServerConnectionTest(url);
+
+				if (result.status === 'ok') {
+					this.log('connected', remote);
+				} else if (result.kind === 'cors') {
+					this.log(
+						`connecting via proxy as we failed with ${result.kind} error: ${result.message ?? 'unknown'} `,
+						remote
+					);
+					const proxyResult = await httpGitServerConnectionTest(url, true);
+
+					if (proxyResult.status === 'ok') {
+						this.log('connected with proxy', remote);
+						this.remotes_using_proxy.push(remote);
+					} else {
+						this.log(
+							`failed to connect via proxy. ${result.kind} error: ${result.message ?? 'unknown'}`,
+							remote
+						);
+						return;
+					}
+				} else {
+					this.log(
+						`failed to connect. ${result.kind} error: ${result.message ?? 'unknown'}`,
+						remote
+					);
 					return;
 				}
-				// TODO check connection and only fetch first
 				this.connected_remotes.push({ remote, url });
-				// TODO get ref / commit_id to fetch
 				await this.fetchFromRemote(remote);
 			}) ?? []
 		);
@@ -162,15 +265,16 @@ export class GitManager extends EventTarget {
 		remote: string,
 		remote_ref?: string
 	): Promise<FetchResult | string> {
-		this.log(`fetching`, remote);
+		const use_proxy = this.remotes_using_proxy.includes(remote);
+		this.log(`fetching${use_proxy ? '  via proxy' : ''}`, remote);
 		try {
 			const res = await git.fetch({
 				fs: this.fs,
 				dir: `/${this.a_ref}`,
 				http: this.http,
 				remote,
+				corsProxy: use_proxy ? cors_proxy_base_url : undefined,
 				remoteRef: remote_ref,
-				// url,
 				depth: 1, // https://github.com/isomorphic-git/isomorphic-git/issues/1735
 				tags: true
 				// singleBranch: true,
