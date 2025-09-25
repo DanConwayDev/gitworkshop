@@ -25,6 +25,7 @@ gitworkshop.dev runs internal and external components and logic in seperate thre
   - Summary information
   - Relay huristics and query details
   - Counts of children and relay hints for sub-items
+- **`/lib/dbs/git-manager`**: Use to clone and interact with git repositories using isomorphic-git
 
 #### External Components
 
