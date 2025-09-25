@@ -71,37 +71,41 @@
 	});
 
 	let file_content: string | undefined = $state();
-	git.addEventListener('fileContents', ((e: CustomEvent<string>) => {
-		file_content = e.detail;
+	git.addEventListener('fileContents', (e: Event) => {
+		const customEvent = e as CustomEvent<string>;
+		file_content = customEvent.detail;
 		scrollToAnchor();
-	}) as EventListener);
+	});
 
 	let path: string | undefined = $state();
 	let path_exists: boolean | undefined = $state();
 	let path_is_dir: boolean | undefined = $state();
 	let file_path: string | undefined = $state();
-	git.addEventListener('selectedPath', ((e: CustomEvent<SelectedPathInfo>) => {
-		path_exists = e.detail.exists;
-		path_is_dir = e.detail.path_is_dir;
-		path = e.detail.path;
-		if (e.detail.readme_path) {
-			file_path = e.detail.readme_path;
+	git.addEventListener('selectedPath', (e: Event) => {
+		const customEvent = e as CustomEvent<SelectedPathInfo>;
+		path_exists = customEvent.detail.exists;
+		path_is_dir = customEvent.detail.path_is_dir;
+		path = customEvent.detail.path;
+		if (customEvent.detail.readme_path) {
+			file_path = customEvent.detail.readme_path;
 		} else if (!path_is_dir) {
-			file_path = e.detail.path;
+			file_path = customEvent.detail.path;
 		} else {
 			file_path = undefined;
 		}
-	}) as EventListener);
+	});
 
 	let git_refs: string[][] | undefined = $state();
-	git.addEventListener('stateUpdate', ((e: CustomEvent<string[][]>) => {
-		git_refs = e.detail;
-	}) as EventListener);
+	git.addEventListener('stateUpdate', (e: Event) => {
+		const customEvent = e as CustomEvent<string[][]>;
+		git_refs = customEvent.detail;
+	});
 
 	let checked_out_ref: SelectedRefInfo | undefined = $state();
-	git.addEventListener('selectedRef', ((e: CustomEvent<SelectedRefInfo>) => {
-		checked_out_ref = e.detail;
-	}) as EventListener);
+	git.addEventListener('selectedRef', (e: Event) => {
+		const customEvent = e as CustomEvent<SelectedRefInfo>;
+		checked_out_ref = customEvent.detail;
+	});
 
 	let base_url = $derived(
 		`/${store.route?.s}/tree/${checked_out_ref?.ref.replace('refs/heads/', '')}`
@@ -116,9 +120,10 @@
 
 	// directory
 	let directory_structure: FileEntry[] | undefined = $state();
-	git.addEventListener('directoryStructure', ((e: CustomEvent<FileEntry[]>) => {
-		directory_structure = e.detail;
-	}) as EventListener);
+	git.addEventListener('directoryStructure', (e: Event) => {
+		const customEvent = e as CustomEvent<FileEntry[]>;
+		directory_structure = customEvent.detail;
+	});
 
 	let branches: string[] = $derived(refsToBranches(git_refs ?? []));
 	let default_branch = $derived(
@@ -136,11 +141,15 @@
 	let status: { msg?: string; remotes: { [key: string]: string | undefined } } = $state({
 		remotes: {}
 	});
-	git.addEventListener('log', ((e: CustomEvent<GitManagerLogEntry>) => {
-		if (e.detail.remote) status.remotes[e.detail.remote] = e.detail.msg;
-		else status.msg = e.detail.msg;
-		console.log(`${e.detail.remote ? `${e.detail.remote} ` : ''}${e.detail.msg}`);
-	}) as EventListener);
+	git.addEventListener('log', (e: Event) => {
+		const customEvent = e as CustomEvent<GitManagerLogEntry>;
+		if (customEvent.detail.remote)
+			status.remotes[customEvent.detail.remote] = customEvent.detail.msg;
+		else status.msg = customEvent.detail.msg;
+		console.log(
+			`${customEvent.detail.remote ? `${customEvent.detail.remote} ` : ''}${customEvent.detail.msg}`
+		);
+	});
 </script>
 
 <div>
