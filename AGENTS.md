@@ -153,7 +153,7 @@ pnpm run build  # Automatically generates PWA assets
 
 ## Metadata
 
-- **Framework**: SvelteKit with TypeScript
+- **Framework**: Svelte 5, SvelteKit with TypeScript
 - **Adapter**: Netlify static adapter
 - **Package Manager**: pnpm (preferred)
 - **Build Tool**: Vite
@@ -163,3 +163,32 @@ pnpm run build  # Automatically generates PWA assets
 - **Styling**: Tailwind CSS with DaisyUI components
 - **Rich Text**: Tiptap editor for content composition
 - **PWA**: @vite-pwa/sveltekit for progressive web app features
+
+## Svelte 5 Preferences
+
+Good
+
+```
+<script type="ts">
+  // ✅ Read props via $props (read-only)
+  let { count, label }: { count: number; label: string  } = $props();
+  // ✅ Local mutable state via $state
+  let n = $state(0);
+  // ✅ Pure computed values via $derived
+  const sum = $derived(() => n + count);
+</script>
+```
+
+Bad
+
+```
+<script>
+  // 🚫 exported prop
+  export let count = 0;
+  // 🚫 Implicit mutable top-level var (not using $state)
+  let n = 0;
+  function inc() { n += 1; }
+  // 🚫 Using $: for pure computed values
+  $: sum = n + count;
+</script>
+```
