@@ -121,7 +121,9 @@
 	});
 
 	let base_url = $derived(
-		`/${store.route?.s}/tree/${checked_out_ref?.ref.replace('refs/heads/', '')}`
+		checked_out_ref
+			? `/${store.route?.s}/tree/${checked_out_ref.ref.replace('refs/heads/', '')}`
+			: `/${store.route?.s}`
 	);
 
 	const getParentDir = (path: string) => {
@@ -179,7 +181,7 @@
 	let git_warning: string | undefined = $derived.by(() => {
 		if (waited_1s) {
 			if (!checked_out_ref && overal_server_status === 'connected')
-				return `ref not found${nostr_state ? ' in nostr or connected git servers' : ''}`;
+				return undefined; // not found shown
 			else if (!nostr_state)
 				// should this be a warning? maybe just an indicator?
 				return 'cannot find git state from nostr, using state from listed git servers';
@@ -205,11 +207,21 @@
 	{git_warning}
 />
 
-{#if path_exists !== undefined && !path_exists}
+{#if checked_out_ref && path_exists !== undefined && !path_exists}
 	<div class="my-10 text-center">
-		<h1 class="mb-2 text-9xl font-bold">¯\_(ツ)_/¯</h1>
-		<h3 class="mb-4 text-2xl font-bold">Not Found</h3>
-		<p class="text-neutral-content mt-2 mb-4">path does not exist in at this ref</p>
+		<h3 class="mb-6 text-2xl font-bold">Not Found</h3>
+		<p class="text-neutral-content mt-2 mb-4">
+			path <kbd class="kbd">{path}</kbd> does not exist in at ref
+			<kbd class="kbd">{checked_out_ref?.ref}</kbd>
+		</p>
+	</div>
+{:else if waited_1s && !checked_out_ref && overal_server_status === 'connected'}
+	<div class="my-10 text-center">
+		<h3 class="mb-6 text-2xl font-bold">Ref Not Found</h3>
+		<p class="text-neutral-content mt-2 mb-4">
+			no subset of this combined ref and path <kbd class="kbd">{ref_and_path}</kbd> matches a repository
+			ref
+		</p>
 	</div>
 {:else}
 	<FileExplorer
