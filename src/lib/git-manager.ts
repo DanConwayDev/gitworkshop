@@ -52,7 +52,17 @@ async function httpGitServerConnectionTest(
 	let lastKind: ConnectionErrors = 'unknown';
 	let lastMessage: string | undefined;
 	let lastStatus: number | undefined;
-
+	if (
+		!use_proxy &&
+		['github.com', 'gitlab.com', 'codeberg.org', 'gitea.com'].some((s) => url.includes(s))
+	) {
+		return {
+			status: 'fail',
+			kind: 'cors',
+			message: 'hardcoded not to try due to CORS at domain',
+			tried: candidate
+		};
+	}
 	try {
 		try {
 			const res = await fetch(candidate, {
@@ -91,8 +101,9 @@ async function httpGitServerConnectionTest(
 							? (err as { message: string }).message
 							: String(err);
 				lastMessage = msg;
-				if (use_proxy || /cors/i.test(msg)) lastKind = 'cors';
-				else if (/failed to fetch|network/i.test(msg)) lastKind = 'unknown';
+				console.log(err);
+				if (use_proxy || /failed to fetch|cors/i.test(msg)) lastKind = 'cors';
+				else if (/network/i.test(msg)) lastKind = 'unknown';
 				else lastKind = 'unknown';
 			}
 		}
