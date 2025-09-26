@@ -1,5 +1,7 @@
 <script lang="ts">
-	import type { SelectedRefInfo } from '$lib/types/git-manager';
+	import { icons_misc } from '$lib/icons';
+	import type { GitServerState, GitServerStatus, SelectedRefInfo } from '$lib/types/git-manager';
+	import type { SvelteMap } from 'svelte/reactivity';
 	import FromNow from '../FromNow.svelte';
 	import { pr_icon_path } from '../prs/icons';
 
@@ -10,7 +12,8 @@
 		selected_ref_info,
 		default_branch,
 		branches = [],
-		tags = []
+		tags = [],
+		server_status
 	}: {
 		base_url: string;
 		identifier: string;
@@ -19,6 +22,7 @@
 		default_branch?: string | undefined;
 		branches: string[];
 		tags: string[];
+		server_status: SvelteMap<string, GitServerStatus>;
 	} = $props();
 
 	let selected_ref = $derived(selected_ref_info?.ref ?? '');
@@ -29,9 +33,33 @@
 	);
 	let base_url_without_tree = $derived(base_url.split('/tree/')[0]);
 	let show_branch_selector = $derived(branches.length > 0 && selected_ref);
+	let show_bottom = $state(true);
+
+	let overal_server_status: GitServerState | undefined = $derived.by(() => {
+		if (server_status.entries().some((e) => e[1].state === 'connected')) return 'connected';
+		if (server_status.entries().some((e) => e[1].state === 'fetching')) return 'fetching';
+		if (server_status.entries().some((e) => e[1].state === 'connecting')) return 'connecting';
+		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
+	});
 </script>
 
-<div class="border-base-400 bg-base-200 my-2 flex items-center rounded rounded-lg border">
+{#snippet showStatusIndicatorStatus(state: GitServerState | undefined, classes: string = '')}
+	{#if state}
+		<span
+			class="indicator-item status {classes}"
+			class:status-success={state === 'connected'}
+			class:status-warning={state === 'connecting' || state === 'fetching'}
+			class:status-error={state === 'failed'}
+		></span>
+	{/if}
+{/snippet}
+
+<div
+	class="border-base-400 bg-base-200 my-2 flex items-center rounded-t-lg border-x border-t"
+	class:mb-0={show_bottom}
+	class:rounded-lg={!show_bottom}
+	class:border={!show_bottom}
+>
 	{#if show_branch_selector}
 		<div class="dropdown">
 			<div tabindex="0" role="button" class="btn btn-sm btn-neutral m-2 pr-2">
@@ -139,4 +167,37 @@
 		<div class="text-base-content/50 mx-2 text-xs">{selected_ref_info.commit.author.name}</div>
 		<div class="badge badge-sm mr-2">{selected_ref_info.commit_id.substring(0, 8)}</div>
 	{/if}
+	<button
+		class="btn btn-sm btn-neutral mr-2"
+		onclick={() => {
+			show_bottom = !show_bottom;
+		}}
+	>
+		<div class="indicator">
+			{@render showStatusIndicatorStatus(overal_server_status, 'indicator-bottom indicator-right')}
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				viewBox="0 0 20 20"
+				class="fill-neutral-content/70 inline h-4 w-4"
+			>
+				{#each icons_misc.servers as d (d)}
+					<path {d} />
+				{/each}
+			</svg>
+		</div>
+	</button>
 </div>
+{#if show_bottom}
+	<div class="border-base-400 bg-base-100 mb-2 flex items-center rounded-b-lg border-x border-b">
+		<div class="mx-5 my-5">
+			{#each server_status.entries() as [remote, status] (remote)}
+				<div>
+					{@render showStatusIndicatorStatus(status.state)}
+					{status.short_name}
+					<span class="text-base-content/50 text-xs">{status.state}</span>
+					<span class="text-base-content/50 text-xs">{status.msg}</span>
+				</div>
+			{/each}
+		</div>
+	</div>
+{/if}

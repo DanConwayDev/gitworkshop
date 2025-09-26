@@ -187,4 +187,5 @@ export function cloneUrlToShortName(url: string) {
 export function remoteNameToShortName(name: string, clone_urls: string[]) {
 	const url = remoteNameToCloneUrl(name, clone_urls);
 	if (url) return cloneUrlToShortName(url);
+	return name;
 }

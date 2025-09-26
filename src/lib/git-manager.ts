@@ -1,6 +1,11 @@
 import git, { type FetchResult, type HttpClient } from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
-import type { FileEntry, SelectedPathInfo, SelectedRefInfo } from '$lib/types/git-manager';
+import type {
+	FileEntry,
+	GitManagerLogEntry,
+	SelectedPathInfo,
+	SelectedRefInfo
+} from '$lib/types/git-manager';
 import { Buffer as BufferPolyfill } from 'buffer';
 import { cloneUrlToRemoteName } from './git-utils';
 // required for isomorphic-git with vite
@@ -157,9 +162,8 @@ export class GitManager extends EventTarget {
 		}
 	}
 
-	private log(msg?: string, remote?: string) {
-		const detail: GitManagerLogEntry = { msg, remote };
-		this.dispatchEvent(new CustomEvent<GitManagerLogEntry>('log', { detail }));
+	private log(entry: GitManagerLogEntry) {
+		this.dispatchEvent(new CustomEvent<GitManagerLogEntry>('log', { detail: entry }));
 	}
 
 	a_ref?: string;
@@ -225,34 +229,37 @@ export class GitManager extends EventTarget {
 		await Promise.all(
 			this.clone_urls?.map(async (url) => {
 				const remote = cloneUrlToRemoteName(url);
-				this.log('connecting', remote);
+				this.log({ remote, state: 'connecting' });
 
 				const result = await httpGitServerConnectionTest(url);
 
 				if (result.status === 'ok') {
-					this.log('connected', remote);
+					this.log({ remote, state: 'connected' });
 				} else if (result.kind === 'cors') {
-					this.log(
-						`connecting via proxy as we failed with ${result.kind} error: ${result.message ?? 'unknown'} `,
-						remote
-					);
+					this.log({
+						remote,
+						state: 'connecting',
+						msg: `via proxy as we failed with ${result.kind} error: ${result.message ?? 'unknown'} `
+					});
 					const proxyResult = await httpGitServerConnectionTest(url, true);
 
 					if (proxyResult.status === 'ok') {
-						this.log('connected with proxy', remote);
+						this.log({ remote, state: 'connected', msg: 'with proxy' });
 						this.remotes_using_proxy.push(remote);
 					} else {
-						this.log(
-							`failed to connect via proxy. ${result.kind} error: ${result.message ?? 'unknown'}`,
-							remote
-						);
+						this.log({
+							remote,
+							state: 'failed',
+							msg: `failed to connect via proxy. ${result.kind} error: ${result.message ?? 'unknown'}`
+						});
 						return;
 					}
 				} else {
-					this.log(
-						`failed to connect. ${result.kind} error: ${result.message ?? 'unknown'}`,
-						remote
-					);
+					this.log({
+						remote,
+						state: 'failed',
+						msg: `failed to connect. ${result.kind} error: ${result.message ?? 'unknown'}`
+					});
 					return;
 				}
 				this.connected_remotes.push({ remote, url });
@@ -265,7 +272,7 @@ export class GitManager extends EventTarget {
 		remote_ref?: string
 	): Promise<FetchResult | string> {
 		const use_proxy = this.remotes_using_proxy.includes(remote);
-		this.log(`fetching${use_proxy ? '  via proxy' : ''}`, remote);
+		this.log({ remote, state: 'fetching' });
 		try {
 			const res = await git.fetch({
 				fs: this.fs,
@@ -278,7 +285,7 @@ export class GitManager extends EventTarget {
 				tags: true
 				// singleBranch: true,
 			});
-			this.log(`fetched`, remote);
+			this.log({ remote, state: 'connected' });
 			const state = await this.getRemoteRefsFromLocal(remote);
 			if (state && !this.nostr_state_refs && this.clone_urls) {
 				// if highest priority (order in clone_url announcement) connected remote use as state
@@ -296,7 +303,7 @@ export class GitManager extends EventTarget {
 			this.refreshSelectedRef();
 			return res;
 		} catch (error) {
-			this.log(`fetch error: ${error}`, remote);
+			this.log({ remote, state: 'failed', msg: `fetch error: ${error}` });
 			return `${error}`;
 		}
 	}
@@ -348,12 +355,12 @@ export class GitManager extends EventTarget {
 				return; // use first match (most desirable ref that we have the blobs for)
 			} catch (e) {
 				if (fetch_missing) {
-					this.log(`TODO -fix this missing ref: ${ref}: error: ${e}`);
+					this.log({ level: 'error', msg: `TODO -fix this missing ref: ${ref}: error: ${e}` });
 					// fetchFromRemote gets all tips, so we should only get here when nostr_state_refs changes and we need a new fetch
 					// TODO - try and fetch for git severs - we need to be careful not to create a infinate loop of fetching from git servers when the nost refs aren't available
 				} else {
 					// fetchFromRemote gets all tips so should only get here if nostr_refs aren't avialable on git servers
-					this.log(`missing ref: ${ref}: error: ${e}`);
+					this.log({ level: 'error', msg: `missing ref: ${ref}: error: ${e}` });
 					console.log(`error: couldnt resolve ${ref} - need to fetch it. error: ${e}`);
 				}
 			}
@@ -366,7 +373,7 @@ export class GitManager extends EventTarget {
 		const res = await this.getPathInfoAndTree(commit_id, path);
 		if (!stillMatches()) return;
 		if (!res) {
-			this.log(`error loading file tree`);
+			this.log({ level: 'error', msg: `error loading file tree` });
 			return;
 		}
 		const { info, tree } = res;
@@ -419,7 +426,7 @@ export class GitManager extends EventTarget {
 			}
 			return;
 		} catch (error) {
-			this.log(`failed to load file contents ${filepath}: ${error}`);
+			this.log({ level: 'error', msg: `failed to load file contents ${filepath}: ${error}` });
 		}
 	}
 
@@ -526,7 +533,10 @@ export class GitManager extends EventTarget {
 		path: string = ''
 	): Promise<{ info: SelectedPathInfo; tree: FileEntry[] } | undefined> {
 		const dir = `/${this.a_ref}`;
-		this.log(`fectching file structure for '${normaliseRemoteRef(ref, true)}'`);
+		this.log({
+			level: 'error',
+			msg: `fectching file structure for '${normaliseRemoteRef(ref, true)}'`
+		});
 		try {
 			const oid = await git.resolveRef({
 				fs: this.fs,
@@ -673,7 +683,10 @@ export class GitManager extends EventTarget {
 
 			return { info, tree };
 		} catch (error) {
-			this.log(`failed load dir structure for '${normaliseRemoteRef(ref, true)}': ${error}`);
+			this.log({
+				level: 'error',
+				msg: `failed load dir structure for '${normaliseRemoteRef(ref, true)}': ${error}`
+			});
 			return undefined;
 		}
 	}
@@ -720,11 +733,6 @@ export class GitManager extends EventTarget {
 		this.ref_and_path = ref_and_path;
 		this.refreshSelectedRef();
 	}
-}
-
-export interface GitManagerLogEntry {
-	msg?: string;
-	remote?: string;
 }
 
 function getDefaultBranchRef(state?: string[][], remote?: string): string | undefined {

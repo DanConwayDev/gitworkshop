@@ -1,10 +1,18 @@
 <script lang="ts">
-	import { GitManager, type GitManagerLogEntry } from '$lib/git-manager';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { GitManager } from '$lib/git-manager';
 	import store from '$lib/store.svelte';
 	import { type RepoRef } from '$lib/types';
 	import { onMount } from 'svelte';
 	import FileViewer from './FileViewer.svelte';
-	import type { FileEntry, SelectedPathInfo, SelectedRefInfo } from '$lib/types/git-manager';
+	import {
+		isGitManagerLogEntryServer,
+		type FileEntry,
+		type GitManagerLogEntry,
+		type GitServerStatus,
+		type SelectedPathInfo,
+		type SelectedRefInfo
+	} from '$lib/types/git-manager';
 	import { inMemoryRelayEvent } from '$lib/helpers.svelte';
 	import { aRefToAddressPointer } from '$lib/utils';
 	import type { AddressPointer } from 'nostr-tools/nip19';
@@ -138,25 +146,30 @@
 		}
 	}
 
-	let status: { msg?: string; remotes: { [key: string]: string | undefined } } = $state({
-		remotes: {}
-	});
+	let git_status: string | undefined = $state();
+	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
 	git.addEventListener('log', (e: Event) => {
 		const customEvent = e as CustomEvent<GitManagerLogEntry>;
-		if (customEvent.detail.remote)
-			status.remotes[customEvent.detail.remote] = customEvent.detail.msg;
-		else status.msg = customEvent.detail.msg;
-		console.log(
-			`${customEvent.detail.remote ? `${customEvent.detail.remote} ` : ''}${customEvent.detail.msg}`
-		);
+		if (isGitManagerLogEntryServer(customEvent.detail)) {
+			let status = server_status.get(customEvent.detail.remote) || {
+				short_name: remoteNameToShortName(customEvent.detail.remote, clone_urls),
+				state: 'connecting',
+				with_proxy: false
+			};
+			if (customEvent.detail.msg?.includes('proxy')) status.with_proxy = true;
+			server_status.set(customEvent.detail.remote, {
+				...status,
+				state: customEvent.detail.state,
+				msg: customEvent.detail.msg
+			});
+		} else {
+			git_status = `${customEvent.detail.level}: ${customEvent.detail.msg}`;
+		}
 	});
 </script>
 
 <div>
-	<div>overall: {status.msg ?? ''}</div>
-	{#each Object.keys(status.remotes) as remote (remote)}
-		<div>remote: {remoteNameToShortName(remote, clone_urls)} {status.remotes[remote] ?? ''}</div>
-	{/each}
+	<div>overall: {git_status ?? ''}</div>
 </div>
 <ExplorerLocator
 	{identifier}
@@ -166,6 +179,7 @@
 	{default_branch}
 	{branches}
 	{tags}
+	{server_status}
 />
 
 {#if path_exists !== undefined && !path_exists}
