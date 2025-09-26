@@ -310,13 +310,12 @@ export class GitManager extends EventTarget {
 
 	private async refreshSelectedRef(fetch_missing: boolean = false) {
 		const ref_paths = this.getDesiredRefPath();
-		for (const { ref, path } of ref_paths) {
-			// TODO if from nostr_state we need to change ref to a remote ref
+		for (const [index, { ref, path, ref_value }] of ref_paths.entries()) {
 			try {
 				const commit_id = await git.resolveRef({
 					fs: this.fs,
 					dir: `/${this.a_ref}`,
-					ref
+					ref: ref_value
 				});
 				const change_selected_ref =
 					!this.selected_ref ||
@@ -344,7 +343,8 @@ export class GitManager extends EventTarget {
 							detail: {
 								ref: normaliseRemoteRef(ref, true),
 								commit_id,
-								commit: commit[0].commit
+								commit: commit[0].commit,
+								is_nostr_ref: index === 0 && !ref.includes('refs/remotes/')
 							}
 						})
 					);
@@ -442,6 +442,12 @@ export class GitManager extends EventTarget {
 					const r = extractRefAndPath(d, this.nostr_state_refs);
 					if (r) desired.push(r);
 				}
+			} else {
+				const r = extractRefAndPath(
+					(ref_and_path || this.ref_and_path) as string,
+					this.nostr_state_refs
+				);
+				if (r) desired.push(r);
 			}
 		}
 		this.clone_urls?.forEach((url) => {

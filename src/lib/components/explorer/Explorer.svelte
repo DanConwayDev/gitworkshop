@@ -9,6 +9,7 @@
 		isGitManagerLogEntryServer,
 		type FileEntry,
 		type GitManagerLogEntry,
+		type GitServerState,
 		type GitServerStatus,
 		type SelectedPathInfo,
 		type SelectedRefInfo
@@ -58,8 +59,12 @@
 	function loadRepository() {
 		git.loadRepository(a_ref, clone_urls, nostr_state, ref_and_path);
 	}
+	let waited_1s = $state(false);
 	onMount(() => {
 		loadRepository();
+		setTimeout(() => {
+			waited_1s = true;
+		}, 1000);
 	});
 	$effect(() => {
 		// required to trigger when a_ref changes
@@ -146,8 +151,13 @@
 		}
 	}
 
-	let git_status: string | undefined = $state();
 	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
+	let overal_server_status: GitServerState | undefined = $derived.by(() => {
+		if (server_status.entries().some((e) => e[1].state === 'connected')) return 'connected';
+		if (server_status.entries().some((e) => e[1].state === 'fetching')) return 'fetching';
+		if (server_status.entries().some((e) => e[1].state === 'connecting')) return 'connecting';
+		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
+	});
 	git.addEventListener('log', (e: Event) => {
 		const customEvent = e as CustomEvent<GitManagerLogEntry>;
 		if (isGitManagerLogEntryServer(customEvent.detail)) {
@@ -163,14 +173,26 @@
 				msg: customEvent.detail.msg
 			});
 		} else {
-			git_status = `${customEvent.detail.level}: ${customEvent.detail.msg}`;
+			// not showing any global git logging
+		}
+	});
+	let git_warning: string | undefined = $derived.by(() => {
+		if (waited_1s) {
+			if (!checked_out_ref && overal_server_status === 'connected')
+				return `ref not found${nostr_state ? ' in nostr or connected git servers' : ''}`;
+			else if (!nostr_state)
+				// should this be a warning? maybe just an indicator?
+				return 'cannot find git state from nostr, using state from listed git servers';
+			else if (checked_out_ref && !checked_out_ref.is_nostr_ref) {
+				if (nostr_state.some(([ref]) => checked_out_ref && ref === checked_out_ref.ref))
+					return 'cannot find git data for this ref in nostr state, showing ref from git server instead';
+				else
+					return 'selected ref not in nostr state but is in state of a listed git server so showing that instead';
+			}
 		}
 	});
 </script>
 
-<div>
-	<div>overall: {git_status ?? ''}</div>
-</div>
 <ExplorerLocator
 	{identifier}
 	{base_url}
@@ -180,6 +202,7 @@
 	{branches}
 	{tags}
 	{server_status}
+	{git_warning}
 />
 
 {#if path_exists !== undefined && !path_exists}

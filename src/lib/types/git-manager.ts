@@ -22,6 +22,7 @@ export interface SelectedRefInfo {
 	ref: string;
 	commit_id: string;
 	commit: CommitObject;
+	is_nostr_ref: boolean;
 }
 
 export interface GitManagerLogEntryServer {

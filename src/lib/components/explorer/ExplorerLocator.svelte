@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { slide } from 'svelte/transition';
 	import { icons_misc } from '$lib/icons';
 	import type { GitServerState, GitServerStatus, SelectedRefInfo } from '$lib/types/git-manager';
 	import type { SvelteMap } from 'svelte/reactivity';
 	import FromNow from '../FromNow.svelte';
 	import { pr_icon_path } from '../prs/icons';
+	import AlertWarning from '../AlertWarning.svelte';
 
 	let {
 		base_url,
@@ -13,7 +15,8 @@
 		default_branch,
 		branches = [],
 		tags = [],
-		server_status
+		server_status,
+		git_warning
 	}: {
 		base_url: string;
 		identifier: string;
@@ -23,6 +26,7 @@
 		branches: string[];
 		tags: string[];
 		server_status: SvelteMap<string, GitServerStatus>;
+		git_warning?: string;
 	} = $props();
 
 	let selected_ref = $derived(selected_ref_info?.ref ?? '');
@@ -33,13 +37,20 @@
 	);
 	let base_url_without_tree = $derived(base_url.split('/tree/')[0]);
 	let show_branch_selector = $derived(branches.length > 0 && selected_ref);
-	let show_bottom = $state(true);
 
 	let overal_server_status: GitServerState | undefined = $derived.by(() => {
 		if (server_status.entries().some((e) => e[1].state === 'connected')) return 'connected';
 		if (server_status.entries().some((e) => e[1].state === 'fetching')) return 'fetching';
 		if (server_status.entries().some((e) => e[1].state === 'connecting')) return 'connecting';
 		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
+	});
+
+	let force_show_bottom = $state(false);
+	let force_hide_bottom = $state(false);
+	let show_bottom = $derived.by(() => {
+		if (force_show_bottom) return true;
+		if (force_hide_bottom) return false;
+		return overal_server_status !== 'connected';
 	});
 </script>
 
@@ -170,7 +181,13 @@
 	<button
 		class="btn btn-sm btn-neutral mr-2"
 		onclick={() => {
-			show_bottom = !show_bottom;
+			if (show_bottom) {
+				force_hide_bottom = false;
+				force_show_bottom = false;
+			} else {
+				force_hide_bottom = true;
+				force_show_bottom = true;
+			}
 		}}
 	>
 		<div class="indicator">
@@ -188,16 +205,28 @@
 	</button>
 </div>
 {#if show_bottom}
-	<div class="border-base-400 bg-base-100 mb-2 flex items-center rounded-b-lg border-x border-b">
+	<div
+		in:slide={{ duration: 100 }}
+		out:slide={{ duration: 100 }}
+		class="border-base-400 bg-base-100 mb-2 flex items-center rounded-b-lg border-x border-b"
+	>
 		<div class="mx-5 my-5">
 			{#each server_status.entries() as [remote, status] (remote)}
 				<div>
 					{@render showStatusIndicatorStatus(status.state)}
 					{status.short_name}
+					{#if status.with_proxy}
+						<span class="text-base-content/50 text-xs">(via proxy)</span>
+					{/if}
 					<span class="text-base-content/50 text-xs">{status.state}</span>
 					<span class="text-base-content/50 text-xs">{status.msg}</span>
 				</div>
 			{/each}
 		</div>
 	</div>
+{/if}
+{#if git_warning}
+	<AlertWarning>
+		<div>{git_warning}</div>
+	</AlertWarning>
 {/if}
