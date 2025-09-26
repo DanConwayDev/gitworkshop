@@ -80,7 +80,7 @@
 	});
 
 	$effect(() => {
-		git.updateRefAndPath(ref_and_path ?? '');
+		git.updateRefAndPath(ref_and_path);
 	});
 
 	let file_content: string | undefined = $state();

@@ -323,37 +323,32 @@ export class GitManager extends EventTarget {
 		const ref_paths = this.getDesiredRefPath();
 		for (const [index, { ref, path, ref_value }] of ref_paths.entries()) {
 			try {
-				const commit_id = await git.resolveRef({
+				const commit = await git.log({
 					fs: this.fs,
 					dir: `/${this.a_ref}`,
-					ref: ref_value
+					ref: ref_value.replace('ref: ', ''),
+					depth: 1
 				});
 				const change_selected_ref =
 					!this.selected_ref ||
 					this.selected_ref.ref !== ref ||
-					this.selected_ref.commit_id !== commit_id;
+					this.selected_ref.commit_id !== commit[0].oid;
 
 				const reload_dirs_and_file =
 					!this.selected_ref ||
-					this.selected_ref.commit_id !== commit_id ||
+					this.selected_ref.commit_id !== commit[0].oid ||
 					!this.selected_path ||
 					this.selected_path.path !== path;
 				if (change_selected_ref) {
 					this.selected_ref = {
 						ref,
-						commit_id
+						commit_id: commit[0].oid
 					};
-					const commit = await git.log({
-						fs: this.fs,
-						dir: `/${this.a_ref}`,
-						ref: commit_id,
-						depth: 1
-					});
 					this.dispatchEvent(
 						new CustomEvent<SelectedRefInfo>('selectedRef', {
 							detail: {
 								ref: normaliseRemoteRef(ref, true),
-								commit_id,
+								commit_id: commit[0].oid,
 								commit: commit[0].commit,
 								is_nostr_ref: index === 0 && !ref.includes('refs/remotes/')
 							}
@@ -361,12 +356,13 @@ export class GitManager extends EventTarget {
 					);
 				}
 				if (reload_dirs_and_file) {
-					this.loadDirsAndFile(path, normaliseRemoteRef(ref, true), commit_id);
+					this.loadDirsAndFile(path, normaliseRemoteRef(ref, true), commit[0].oid);
 				}
 				return; // use first match (most desirable ref that we have the blobs for)
 			} catch (e) {
 				if (fetch_missing) {
-					this.log({ level: 'error', msg: `TODO -fix this missing ref: ${ref}: error: ${e}` });
+					this.log({ level: 'error', msg: `TODO - fix this missing ref: ${ref}: error: ${e}` });
+					console.log(`error: couldnt resolve ${ref} - need to fetch it. error: ${e}`);
 					// fetchFromRemote gets all tips, so we should only get here when nostr_state_refs changes and we need a new fetch
 					// TODO - try and fetch for git severs - we need to be careful not to create a infinate loop of fetching from git servers when the nost refs aren't available
 				} else {
@@ -745,7 +741,7 @@ export class GitManager extends EventTarget {
 		await this.refreshSelectedRef();
 	}
 
-	updateRefAndPath(ref_and_path: string) {
+	updateRefAndPath(ref_and_path?: string) {
 		if (ref_and_path == this.ref_and_path) return;
 		this.ref_and_path = ref_and_path;
 		this.refreshSelectedRef();
