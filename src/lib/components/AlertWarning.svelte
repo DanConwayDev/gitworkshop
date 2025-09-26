@@ -1,11 +1,11 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 
-	let { children }: { children: Snippet } = $props();
+	let { children, mt = 6 }: { children: Snippet; mt?: number } = $props();
 </script>
 
 <div role="alert" class="m-auto max-w-xl">
-	<div role="alert" class="alert alert-warning m-auto mt-6 bg-yellow-300">
+	<div role="alert" class="alert alert-warning m-auto mt-{mt} bg-yellow-300">
 		<!-- https://icon-sets.iconify.design/ph/warning-fill/ -->
 		<svg
 			xmlns="http://www.w3.org/2000/svg"

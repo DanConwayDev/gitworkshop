@@ -67,7 +67,7 @@
 
 <div
 	class="border-base-400 bg-base-200 my-2 flex items-center rounded-t-lg border-x border-t"
-	class:mb-0={show_bottom}
+	class:mb-0={show_bottom || !!git_warning}
 	class:rounded-lg={!show_bottom}
 	class:border={!show_bottom}
 >
@@ -208,7 +208,9 @@
 	<div
 		in:slide={{ duration: 100 }}
 		out:slide={{ duration: 100 }}
-		class="border-base-400 bg-base-100 mb-2 flex items-center rounded-b-lg border-x border-b"
+		class="border-base-400 bg-base-100 flex items-center rounded-b-lg border-x border-b"
+		class:mb-0={!!git_warning}
+		class:mb-2={!git_warning}
 	>
 		<div class="mx-5 my-5">
 			{#each server_status.entries() as [remote, status] (remote)}
@@ -226,7 +228,9 @@
 	</div>
 {/if}
 {#if git_warning}
-	<AlertWarning>
-		<div>{git_warning}</div>
-	</AlertWarning>
+	<div class="mb-4">
+		<AlertWarning mt={4}>
+			<div>{git_warning}</div>
+		</AlertWarning>
+	</div>
 {/if}
