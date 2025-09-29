@@ -51,7 +51,7 @@
 	let show_bottom = $derived.by(() => {
 		if (force_show_bottom) return true;
 		if (force_hide_bottom) return false;
-		return !['connected', 'fetched'].includes(overal_server_status ?? '');
+		return overal_server_status === 'fetched';
 	});
 </script>
 

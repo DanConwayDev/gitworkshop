@@ -234,9 +234,10 @@ export class GitManager extends EventTarget {
 		if (!already_cloned) {
 			await git.init({ fs: this.fs, dir: `/${this.a_ref}` });
 		} else {
-			// TODO attempt checkout before fetch
+			this.refreshSelectedRef();
 		}
 		await this.addRemotes();
+		let fetched_from_one_remote = already_cloned;
 		await Promise.all(
 			this.clone_urls?.map(async (url) => {
 				const remote = cloneUrlToRemoteName(url);
@@ -274,7 +275,22 @@ export class GitManager extends EventTarget {
 					return;
 				}
 				this.connected_remotes.push({ remote, url });
-				await this.fetchFromRemote(remote);
+				// only do a full fetch (like clone) from first connected remote
+				if (already_cloned || this.connected_remotes.length === 1) {
+					await this.fetchFromRemote(remote);
+					fetched_from_one_remote = true;
+				} else {
+					// wait until first connected remote has finished fetchFromRemote before proceeding to fetchFromRemote(remote)
+					await new Promise<void>((r) => {
+						const id = setTimeout(async () => {
+							if (fetched_from_one_remote) {
+								clearTimeout(id);
+								await this.fetchFromRemote(remote);
+								r();
+							}
+						}, 1);
+					});
+				}
 			}) ?? []
 		);
 	}
