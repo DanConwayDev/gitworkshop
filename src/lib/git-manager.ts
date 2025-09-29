@@ -296,7 +296,7 @@ export class GitManager extends EventTarget {
 				tags: true
 				// singleBranch: true,
 			});
-			this.log({ remote, state: 'connected' });
+			this.log({ remote, state: 'fetched' });
 			const state = await this.getRemoteRefsFromLocal(remote);
 			if (state && !this.nostr_state_refs && this.clone_urls) {
 				// if highest priority (order in clone_url announcement) connected remote use as state

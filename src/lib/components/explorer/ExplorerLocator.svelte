@@ -39,9 +39,10 @@
 	let show_branch_selector = $derived(branches.length > 0 && selected_ref);
 
 	let overal_server_status: GitServerState | undefined = $derived.by(() => {
+		if (server_status.entries().some((e) => e[1].state === 'connecting')) return 'connecting';
 		if (server_status.entries().some((e) => e[1].state === 'connected')) return 'connected';
 		if (server_status.entries().some((e) => e[1].state === 'fetching')) return 'fetching';
-		if (server_status.entries().some((e) => e[1].state === 'connecting')) return 'connecting';
+		if (server_status.entries().some((e) => e[1].state === 'fetched')) return 'fetched';
 		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
 	});
 
@@ -50,7 +51,7 @@
 	let show_bottom = $derived.by(() => {
 		if (force_show_bottom) return true;
 		if (force_hide_bottom) return false;
-		return overal_server_status !== 'connected';
+		return !['connected', 'fetched'].includes(overal_server_status ?? '');
 	});
 </script>
 
@@ -58,7 +59,7 @@
 	{#if state}
 		<span
 			class="indicator-item status {classes}"
-			class:status-success={state === 'connected'}
+			class:status-success={['connected', 'fetched'].includes(state)}
 			class:status-warning={state === 'connecting' || state === 'fetching'}
 			class:status-error={state === 'failed'}
 		></span>

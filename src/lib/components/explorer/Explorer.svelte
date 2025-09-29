@@ -155,9 +155,10 @@
 
 	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
 	let overal_server_status: GitServerState | undefined = $derived.by(() => {
+		if (server_status.entries().some((e) => e[1].state === 'connecting')) return 'connecting';
 		if (server_status.entries().some((e) => e[1].state === 'connected')) return 'connected';
 		if (server_status.entries().some((e) => e[1].state === 'fetching')) return 'fetching';
-		if (server_status.entries().some((e) => e[1].state === 'connecting')) return 'connecting';
+		if (server_status.entries().some((e) => e[1].state === 'fetched')) return 'fetched';
 		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
 	});
 	git.addEventListener('log', (e: Event) => {
@@ -215,7 +216,7 @@
 			<kbd class="kbd">{checked_out_ref?.ref}</kbd>
 		</p>
 	</div>
-{:else if waited_1s && !checked_out_ref && overal_server_status === 'connected'}
+{:else if waited_1s && !checked_out_ref && overal_server_status === 'fetched'}
 	<div class="my-10 text-center">
 		<h3 class="mb-6 text-2xl font-bold">Ref Not Found</h3>
 		<p class="text-neutral-content mt-2 mb-4">

@@ -34,7 +34,7 @@ export interface GitManagerLogEntryGlobal {
 	level: 'info' | 'warning' | 'error';
 	msg: string;
 }
-export type GitServerState = 'connecting' | 'fetching' | 'connected' | 'failed';
+export type GitServerState = 'connecting' | 'connected' | 'fetching' | 'fetched' | 'failed';
 
 export type GitManagerLogEntry = GitManagerLogEntryServer | GitManagerLogEntryGlobal;
 
