@@ -298,6 +298,7 @@ export class GitManager extends EventTarget {
 		remote: string,
 		remote_ref?: string
 	): Promise<FetchResult | string> {
+		await this.addRemotes(remote); // added as some reports error "The function requires a remote of 'remote OR url' paremeter but none was provied"
 		const use_proxy = this.remotes_using_proxy.includes(remote);
 		this.log({ remote, state: 'fetching' });
 		try {
@@ -334,6 +335,8 @@ export class GitManager extends EventTarget {
 			return `${error}`;
 		}
 	}
+
+	private async ensureRemoteExists() {}
 
 	private async refreshSelectedRef(fetch_missing: boolean = false) {
 		const ref_paths = this.getDesiredRefPath();
@@ -515,11 +518,12 @@ export class GitManager extends EventTarget {
 		}
 	}
 
-	private async addRemotes() {
+	/// specifiy a remote name to only attempt to add that remote (to ensure it exists)
+	private async addRemotes(remote?: string) {
 		const remotes = await git.listRemotes({ fs: this.fs, dir: `/${this.a_ref}` });
 		for (const url of this.clone_urls ?? []) {
 			const remote_name = cloneUrlToRemoteName(url);
-			if (!remotes.some((r) => r.url === url)) {
+			if ((!remote || remote === remote_name) && !remotes.some((r) => r.url === url)) {
 				try {
 					await git.addRemote({ fs: this.fs, dir: `/${this.a_ref}`, remote: remote_name, url });
 				} catch {
