@@ -200,7 +200,6 @@
 		}}
 	>
 		<div class="indicator">
-			{@render showStatusIndicatorStatus(overal_server_status, 'indicator-bottom indicator-right')}
 			<ExplorerServerStatusIcon {server_status} />
 		</div>
 	</button>

@@ -7,15 +7,9 @@
 	}: {
 		server_status: SvelteMap<string, GitServerStatus>;
 	} = $props();
-
-	let icon_state: [
-		'success' | 'warning' | 'error' | undefined,
-		'success' | 'warning' | 'error' | undefined,
-		'success' | 'warning' | 'error' | undefined
-	] = $derived.by(() => {
-		let statuses: ('success' | 'warning' | 'error' | undefined)[] = Array.from(
-			server_status.entries()
-		).map(([_, e]) => {
+	type ServerState = 'success' | 'warning' | 'error' | undefined;
+	let icon_state: [ServerState, ServerState, ServerState] = $derived.by(() => {
+		let statuses: ServerState[] = Array.from(server_status.entries()).map(([_, e]) => {
 			if (e.state === 'fetched') return 'success';
 			if (e.state === 'connected') return 'success';
 			if (e.state === 'connecting') return 'warning';
@@ -47,14 +41,16 @@
 
 		// fill until length is 3 with undefined
 		while (statuses.length < 3) statuses.push(undefined);
-		return statuses as [
-			'success' | 'warning' | 'error' | undefined,
-			'success' | 'warning' | 'error' | undefined,
-			'success' | 'warning' | 'error' | undefined
-		];
+		return statuses as [ServerState, ServerState, ServerState];
 	});
 </script>
 
+{#snippet showLights(state: ServerState, y: number)}
+	{#if state}
+		<rect x="12" {y} width="2" height="2" class="fill-{state}" class:flash={state === 'warning'} />
+		<rect x="16" {y} width="2" height="2" class="fill-{state}" class:flash={state === 'warning'} />
+	{/if}
+{/snippet}
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="inline h-4 w-4">
 	<!-- original stacked server path (unchanged) -->
 	<path
@@ -67,19 +63,30 @@
 	<!-- column X positions match the small rectangles' horizontal placement -->
 	<g pointer-events="none" transform="translate(0,0)">
 		<!-- Top row lights -->
-		{#if icon_state[0]}
-			<rect x="12" y="2" width="2" height="2" class="fill-{icon_state[0]}" />
-			<rect x="16" y="2" width="2" height="2" class="fill-{icon_state[0]}" />
-		{/if}
+		{@render showLights(icon_state[0], 2)}
 		<!-- Middle row lights -->
-		{#if icon_state[1]}
-			<rect x="12" y="9" width="2" height="2" class="fill-{icon_state[1]}" />
-			<rect x="16" y="9" width="2" height="2" class="fill-{icon_state[1]}" />
-		{/if}
+		{@render showLights(icon_state[1], 9)}
 		<!-- Bottom row lights -->
-		{#if icon_state[2]}
-			<rect x="12" y="16" width="2" height="2" class="fill-{icon_state[2]}" />
-			<rect x="16" y="16" width="2" height="2" class="fill-{icon_state[2]}" />
-		{/if}
+		{@render showLights(icon_state[2], 16)}
 	</g>
 </svg>
+
+<style>
+	/* simple flashing animation */
+	@keyframes flash {
+		0%,
+		100% {
+			opacity: 1;
+			transform: scale(1);
+		}
+		50% {
+			opacity: 0.15;
+			transform: scale(0.9);
+		}
+	}
+	/* apply when .flash is present */
+	.flash {
+		animation: flash 1s infinite ease-in-out;
+		transform-origin: center;
+	}
+</style>
