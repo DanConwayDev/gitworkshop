@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { slide } from 'svelte/transition';
-	import { icons_misc } from '$lib/icons';
 	import type { GitServerState, GitServerStatus, SelectedRefInfo } from '$lib/types/git-manager';
 	import type { SvelteMap } from 'svelte/reactivity';
 	import FromNow from '../FromNow.svelte';
 	import { pr_icon_path } from '../prs/icons';
 	import AlertWarning from '../AlertWarning.svelte';
+	import ExplorerServerStatusIcon from './ExplorerServerStatusIcon.svelte';
 
 	let {
 		base_url,
@@ -201,15 +201,7 @@
 	>
 		<div class="indicator">
 			{@render showStatusIndicatorStatus(overal_server_status, 'indicator-bottom indicator-right')}
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				viewBox="0 0 20 20"
-				class="fill-neutral-content/70 inline h-4 w-4"
-			>
-				{#each icons_misc.servers as d (d)}
-					<path {d} />
-				{/each}
-			</svg>
+			<ExplorerServerStatusIcon {server_status} />
 		</div>
 	</button>
 </div>
