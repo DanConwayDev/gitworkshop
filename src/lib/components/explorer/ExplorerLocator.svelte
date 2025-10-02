@@ -185,9 +185,17 @@
 			if (show_bottom) {
 				force_hide_bottom = false;
 				force_show_bottom = false;
+				// force show only if required
+				if (show_bottom) {
+					force_hide_bottom = true;
+				}
 			} else {
-				force_hide_bottom = true;
-				force_show_bottom = true;
+				force_hide_bottom = false;
+				force_show_bottom = false;
+				// force hide only if required
+				if (!show_bottom) {
+					force_show_bottom = true;
+				}
 			}
 		}}
 	>
