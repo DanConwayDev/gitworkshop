@@ -262,7 +262,7 @@ export class GitManager extends EventTarget {
 						this.log({
 							remote,
 							state: 'failed',
-							msg: `failed to connect via proxy. ${result.kind} error: ${result.message ?? 'unknown'}`
+							msg: `error: ${proxyResult.message ?? 'unknown'}`
 						});
 						return;
 					}
