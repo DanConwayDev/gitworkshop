@@ -1,4 +1,9 @@
-import git, { type FetchResult, type HttpClient } from 'isomorphic-git';
+import git, {
+	type CommitObject,
+	type FetchResult,
+	type HttpClient,
+	type ReadCommitResult
+} from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import type {
 	FileEntry,
@@ -184,6 +189,7 @@ export class GitManager extends EventTarget {
 	connected_remotes: {
 		remote: string;
 		url: string;
+		fetched: boolean;
 	}[] = []; // fasted first
 	remotes_using_proxy: string[] = [];
 	remote_states: Map<string, string[][]> = new Map();
@@ -241,40 +247,9 @@ export class GitManager extends EventTarget {
 		await Promise.all(
 			this.clone_urls?.map(async (url) => {
 				const remote = cloneUrlToRemoteName(url);
-				this.log({ remote, state: 'connecting' });
-
-				const result = await httpGitServerConnectionTest(url);
-
-				if (result.status === 'ok') {
-					this.log({ remote, state: 'connected' });
-				} else if (result.kind === 'cors') {
-					this.log({
-						remote,
-						state: 'connecting',
-						msg: `via proxy as we failed with ${result.kind} error: ${result.message ?? 'unknown'} `
-					});
-					const proxyResult = await httpGitServerConnectionTest(url, true);
-
-					if (proxyResult.status === 'ok') {
-						this.log({ remote, state: 'connected', msg: 'with proxy' });
-						this.remotes_using_proxy.push(remote);
-					} else {
-						this.log({
-							remote,
-							state: 'failed',
-							msg: `error: ${proxyResult.message ?? 'unknown'}`
-						});
-						return;
-					}
-				} else {
-					this.log({
-						remote,
-						state: 'failed',
-						msg: `failed to connect. ${result.kind} error: ${result.message ?? 'unknown'}`
-					});
-					return;
-				}
-				this.connected_remotes.push({ remote, url });
+				const connected = await this.connectToRemote(url);
+				if (!connected) return;
+				this.connected_remotes.push({ remote, url, fetched: false });
 				// only do a full fetch (like clone) from first connected remote
 				if (already_cloned || this.connected_remotes.length === 1) {
 					await this.fetchFromRemote(remote);
@@ -282,9 +257,9 @@ export class GitManager extends EventTarget {
 				} else {
 					// wait until first connected remote has finished fetchFromRemote before proceeding to fetchFromRemote(remote)
 					await new Promise<void>((r) => {
-						const id = setTimeout(async () => {
+						const id = setInterval(async () => {
 							if (fetched_from_one_remote) {
-								clearTimeout(id);
+								clearInterval(id);
 								await this.fetchFromRemote(remote);
 								r();
 							}
@@ -294,6 +269,90 @@ export class GitManager extends EventTarget {
 			}) ?? []
 		);
 	}
+
+	connecting: Set<string> = new Set();
+	private async connectToRemote(url: string): Promise<boolean> {
+		const remote = cloneUrlToRemoteName(url);
+		// don't make multiple conneciton attempts
+		if (this.isConnected(url)) return true;
+		if (this.connecting.has(url)) {
+			return this.awaitConnected(url);
+		}
+		this.log({ remote, state: 'connecting' });
+
+		const result = await httpGitServerConnectionTest(url);
+
+		if (result.status === 'ok') {
+			this.log({ remote, state: 'connected' });
+			this.connected_remotes.push({ remote, url, fetched: false });
+			this.connecting.delete(url);
+			return true;
+		} else if (result.kind === 'cors') {
+			this.log({
+				remote,
+				state: 'connecting',
+				msg: `via proxy as we failed with ${result.kind} error: ${result.message ?? 'unknown'} `
+			});
+			const proxyResult = await httpGitServerConnectionTest(url, true);
+
+			if (proxyResult.status === 'ok') {
+				this.log({ remote, state: 'connected', msg: 'with proxy' });
+				this.remotes_using_proxy.push(remote);
+				this.connected_remotes.push({ remote, url, fetched: false });
+				this.connecting.delete(url);
+				return true;
+			} else {
+				this.log({
+					remote,
+					state: 'failed',
+					msg: `error: ${proxyResult.message ?? 'unknown'}`
+				});
+				this.connecting.delete(url);
+				return false;
+			}
+		} else {
+			this.log({
+				remote,
+				state: 'failed',
+				msg: `failed to connect. ${result.kind} error: ${result.message ?? 'unknown'}`
+			});
+			this.connecting.delete(url);
+			return false;
+		}
+	}
+
+	private isConnected(url_or_name: string) {
+		return this.connected_remotes.some(
+			(rmt) => rmt.remote === url_or_name || rmt.url === url_or_name
+		);
+	}
+
+	private async awaitConnected(url: string): Promise<boolean> {
+		return new Promise((r) => {
+			const id = setInterval(() => {
+				if (!this.connecting.has(url)) {
+					clearInterval(id);
+					r(this.isConnected(url));
+				}
+			}, 1);
+		});
+	}
+
+	/// if url ommited, await fetched from at least remote
+	private async awaitFetched(url?: string): Promise<void> {
+		return new Promise((r) => {
+			const id = setInterval(() => {
+				const fetched = this.connected_remotes.some(
+					(rmt) => rmt.fetched && (!url || rmt.url === url)
+				);
+				if (fetched) {
+					clearInterval(id);
+					r();
+				}
+			}, 1);
+		});
+	}
+
 	private async fetchFromRemote(
 		remote: string,
 		remote_ref?: string
@@ -309,7 +368,7 @@ export class GitManager extends EventTarget {
 				remote,
 				corsProxy: use_proxy ? cors_proxy_base_url : undefined,
 				remoteRef: remote_ref,
-				depth: 1, // https://github.com/isomorphic-git/isomorphic-git/issues/1735
+				depth: 20, // https://github.com/isomorphic-git/isomorphic-git/issues/1735
 				tags: true
 				// singleBranch: true,
 			});
@@ -328,6 +387,8 @@ export class GitManager extends EventTarget {
 					this.dispatchEvent(new CustomEvent<string[][]>('stateUpdate', { detail }));
 				}
 			}
+			const connected = this.connected_remotes.find((rmt) => rmt.remote === remote);
+			if (connected) connected.fetched = true;
 			this.refreshSelectedRef();
 			return res;
 		} catch (error) {
@@ -335,8 +396,6 @@ export class GitManager extends EventTarget {
 			return `${error}`;
 		}
 	}
-
-	private async ensureRemoteExists() {}
 
 	private async refreshSelectedRef(fetch_missing: boolean = false) {
 		const ref_paths = this.getDesiredRefPath();
@@ -755,6 +814,7 @@ export class GitManager extends EventTarget {
 						path: `remote.${remote}.fetch`,
 						value: `+refs/*:refs/remotes/${remote}/*`
 					});
+					this.connectToRemote(url);
 					this.fetchFromRemote(remote);
 				})
 		);
@@ -765,6 +825,125 @@ export class GitManager extends EventTarget {
 		if (ref_and_path == this.ref_and_path) return;
 		this.ref_and_path = ref_and_path;
 		this.refreshSelectedRef();
+	}
+
+	async fetchPrData(
+		event_id: string,
+		tip_commit_id: string
+		// extra_clone_urls: string[]
+	): Promise<boolean> {
+		// TODO: we need do to add support to isomorphic git for git.fetch({oids: string[]})
+		// for now we should just fetch 'refs/nostr/<event-id>
+		// TODO: could we just try and use a commit id as a ref and see if it works?
+
+		const checkForCommit = async () => {
+			try {
+				await git.expandOid({
+					fs: this.fs,
+					dir: `/${this.a_ref}`,
+					oid: tip_commit_id
+				});
+				return true;
+			} catch {
+				return false;
+			}
+		};
+		if (await checkForCommit()) return true;
+		const a_ref = this.a_ref;
+		await this.awaitFetched();
+		if (a_ref !== this.a_ref) return false; // fetch no longer needed
+		if (await checkForCommit()) return true;
+		let finished_search = false;
+		return new Promise((r) => {
+			let count = 0;
+			const clone_length = this.clone_urls?.length ?? 0; // use const here as this.clone_urls can change
+			this.clone_urls?.map(async (url) => {
+				try {
+					await this.awaitFetched(url);
+					if (finished_search) return;
+					if (a_ref !== this.a_ref) return false; // fetch no longer needed
+					const remote = cloneUrlToRemoteName(url);
+					const res = await this.fetchFromRemote(remote, `refs/nostr/${event_id}`);
+					if (typeof res !== 'string') {
+						if (a_ref !== this.a_ref) return r(false); // fetch no longer needed
+						if (!(await checkForCommit())) {
+							count++;
+						}
+						finished_search = true;
+						return r(true);
+					}
+				} catch (e) {
+					count++;
+					console.log(e);
+				}
+				if (count == clone_length) r(false);
+			});
+		});
+	}
+
+	private async getDefaultTip(): Promise<string | undefined> {
+		const ref_paths = this.getDesiredRefPath();
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		for (const [_, { ref_value }] of ref_paths.entries()) {
+			try {
+				const commit = await git.log({
+					fs: this.fs,
+					dir: `/${this.a_ref}`,
+					ref: ref_value.replace('ref: ', ''),
+					depth: 1
+				});
+				if (commit.length > 0) return commit[0].oid;
+			} catch {
+				/* empty */
+			}
+		}
+		return undefined;
+	}
+
+	async loadPrCommitInfo(tip_commit_id: string): Promise<CommitObject[] | undefined> {
+		const default_tip = await this.getDefaultTip();
+		if (!default_tip) return undefined;
+		// 1) find merge base(s)
+		const bases = await git.findMergeBase({
+			fs: this.fs,
+			dir: `/${this.a_ref}`,
+			oids: [tip_commit_id, default_tip]
+		});
+		const baseSet = new Set(bases); // may be empty
+
+		// 2) collect oids reachable from tip_commit_id until any base (exclude base)
+		const seen = new Set<string>();
+		const collected = new Set<string>();
+		const stack: string[] = [tip_commit_id];
+
+		while (stack.length) {
+			const oid = stack.pop()!;
+			if (!oid) continue;
+			if (seen.has(oid)) continue;
+			seen.add(oid);
+			if (baseSet.has(oid)) continue;
+			collected.add(oid);
+			const { commit }: ReadCommitResult = await git.readCommit({
+				fs: this.fs,
+				dir: `/${this.a_ref}`,
+				oid
+			});
+			for (const p of commit.parent) stack.push(p);
+		}
+
+		if (collected.size === 0) return [];
+
+		// 3) get ordered log (newest->oldest), filter to collected, then reverse to ancestor-first
+		const log = await git.log({
+			fs: this.fs,
+			dir: `/${this.a_ref}`,
+			ref: tip_commit_id,
+			depth: Infinity
+		});
+
+		const filtered = log.filter((e) => collected.has(e.oid)).reverse(); // now oldest -> newest
+
+		return filtered.map((e) => e.commit);
 	}
 }
 
