@@ -342,6 +342,8 @@ export class GitManager extends EventTarget {
 		return new Promise((r) => {
 			const id = setInterval(() => {
 				const fetched =
+					this.clone_urls &&
+					this.clone_urls.length > 0 &&
 					this.connected_remotes.length > 0 &&
 					this.connected_remotes.some((rmt) => rmt.fetched && (!url || rmt.url === url));
 				if (fetched) {
@@ -834,24 +836,26 @@ export class GitManager extends EventTarget {
 		// TODO: we need do to add support to isomorphic git for git.fetch({oids: string[]})
 		// for now we should just fetch 'refs/nostr/<event-id>
 		// TODO: could we just try and use a commit id as a ref and see if it works?
-
-		const checkForCommit = async () => {
-			try {
-				await git.expandOid({
-					fs: this.fs,
-					dir: `/${this.a_ref}`,
-					oid: tip_commit_id
-				});
-				return true;
-			} catch {
-				return false;
-			}
-		};
-		if (await checkForCommit()) return true;
 		const a_ref = this.a_ref;
 		await this.awaitFetched();
 		if (a_ref !== this.a_ref) return false; // fetch no longer needed
+
+		const checkForCommit = async () => {
+			try {
+				const res = await git.log({
+					fs: this.fs,
+					dir: `/${this.a_ref}`,
+					ref: tip_commit_id,
+					depth: 1
+				});
+				if (res.length > 0) return true;
+			} catch {
+				/* empty*/
+			}
+			return false;
+		};
 		if (await checkForCommit()) return true;
+		if (a_ref !== this.a_ref) return false; // fetch no longer needed
 		let finished_search = false;
 		return new Promise((r) => {
 			let count = 0;
@@ -999,11 +1003,16 @@ export class GitManager extends EventTarget {
 		event_id: string,
 		tip_commit_id: string
 	): Promise<CommitInfo[] | undefined> {
+		const infos = await this.loadPrCommitInfo(tip_commit_id);
+		if (infos) return infos;
+		// either Pr commit data or defaultTip isn't available yet
+		// sometimes default tip data is stored locally but default tip data returns undefined (not loaded yet)
+		// TODO we could make this better by not waiting for a fetch.
+		//  1) fix getDefaultTip so it waits for local data to be first.
+		//  2) only awaitFetch in fetchPrData if getDefaultTip doesnt return anything
 		const fetched = await this.fetchPrData(event_id, tip_commit_id);
-		if (fetched) {
-			return this.loadPrCommitInfo(tip_commit_id);
-		}
-		return undefined;
+		if (!fetched) return undefined; // cant fetch pr data
+		return await this.loadPrCommitInfo(tip_commit_id);
 	}
 }
 
