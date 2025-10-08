@@ -74,7 +74,7 @@
 				<PullRequest {event} />
 			</EventWrapper>
 		{:else if PrUpdateKind === event.kind}
-			<PullRequestUpdate {event} {issue_or_pr_table_item} />
+			<PullRequestUpdate {event} />
 		{:else if DeletionKind === event.kind}
 			<EventWrapperLite {event}>deletion request from</EventWrapperLite>
 		{:else}
