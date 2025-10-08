@@ -6,7 +6,7 @@
 </script>
 
 {#snippet showInfoLine(info: CommitInfo)}
-	<div class="m-1 flex items-center gap-2">
+	<div class="bg-base-200 m-1 my-2 flex items-center gap-2 rounded p-2">
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 16 16"
@@ -31,7 +31,7 @@
 	</div>
 {/snippet}
 
-<div class="bg-base-200 my-2 gap-2 rounded p-2">
+<div class="">
 	{#each infos as info (info.oid)}
 		{@render showInfoLine(info)}
 	{/each}
