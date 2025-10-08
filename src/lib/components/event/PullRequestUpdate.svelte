@@ -5,7 +5,6 @@
 	import { liveQueryState } from '$lib/helpers.svelte';
 	import db from '$lib/dbs/LocalDb';
 	import { getTagValue } from '$lib/utils';
-	import { icons_misc } from '$lib/icons';
 	import git_manager from '$lib/git-manager';
 	import type { CommitInfo } from '$lib/types/git-manager';
 	import CommitOneLineSummaries from '../prs/CommitOneLineSummaries.svelte';
@@ -30,7 +29,6 @@
 	let with_permission = $derived(item_maintainers.includes(event.pubkey));
 
 	let tip_id = $derived(getTagValue(event.tags, 'c') || '[commit_id unknown]');
-	let tip_id_shorthand = $derived(tip_id.substring(0, 8) || '[commit_id unknown]');
 
 	let repo_refs = $derived(
 		event.tags.flatMap((s) => (s[0] === 'a' && s[1] !== undefined ? [s[1]] : []))
@@ -62,13 +60,7 @@
 
 {#snippet commitInfos()}
 	<div class="md:ml-10">
-		{#if loading}
-			loading
-		{:else if commits && commits.length > 0}
-			<CommitOneLineSummaries infos={commits} />
-		{:else}
-			couldnt load commits
-		{/if}
+		<CommitOneLineSummaries infos={commits} {loading} />
 	</div>
 {/snippet}
 

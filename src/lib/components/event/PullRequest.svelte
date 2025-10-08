@@ -46,11 +46,5 @@
 
 <div class="">
 	<ContentTree node={content} />
-	{#if loading}
-		loading
-	{:else if commits && commits.length > 0}
-		<CommitOneLineSummaries infos={commits} />
-	{:else}
-		couldnt load commits
-	{/if}
+	<CommitOneLineSummaries infos={commits} {loading} />
 </div>
