@@ -1,8 +1,17 @@
 <script lang="ts">
 	import type { CommitInfo } from '$lib/types/git-manager';
+	import { onMount } from 'svelte';
 	import { pr_icon_path } from './icons';
+	import { fade } from 'svelte/transition';
 
 	let { infos, loading }: { infos: CommitInfo[] | undefined; loading: boolean } = $props();
+
+	let waited = $state(false);
+	onMount(() => {
+		setTimeout(() => {
+			waited = true;
+		}, 2000);
+	});
 </script>
 
 {#snippet showInfoLine(info: CommitInfo)}
@@ -30,15 +39,31 @@
 		</div>
 	</div>
 {/snippet}
-
 <div class="">
 	{#if infos && infos.length > 0}
 		{#each infos as info (info.oid)}
 			{@render showInfoLine(info)}
 		{/each}
 	{:else if loading}
-		<div class="bg-base-200 skeleton my-2 h-7 rounded p-2"></div>
-		<div class="bg-base-200 skeleton my-2 h-7 rounded p-2"></div>
+		<div class="relative py-2">
+			<div class="bg-base-200 skeleton my-2 h-7 rounded p-2"></div>
+			<div class="bg-base-200 skeleton my-2 h-7 rounded p-2"></div>
+			{#if waited}
+				<div
+					class="pointer-events-none absolute inset-0 flex items-center justify-center"
+					in:fade={{ duration: 500 }}
+				>
+					<div
+						class="bg-base-200 text-muted flex items-center gap-3 rounded-lg px-3 py-2 text-xs opacity-80 shadow-none"
+					>
+						<span class="loading loading-spinner loading-sm opacity-60"></span>
+						<div class="min-w-0">
+							<div class="text-muted text-[0.85rem] font-medium">fetching commits</div>
+						</div>
+					</div>
+				</div>
+			{/if}
+		</div>
 	{:else}
 		<div
 			class="bg-base-200/70 text-base-content/65 my-2 flex items-center gap-3 rounded-lg p-3 text-sm"
