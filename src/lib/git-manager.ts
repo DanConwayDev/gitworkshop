@@ -6,6 +6,7 @@ import git, {
 } from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import type {
+	CommitInfo,
 	FileEntry,
 	GitManagerLogEntry,
 	SelectedPathInfo,
@@ -827,7 +828,7 @@ export class GitManager extends EventTarget {
 		this.refreshSelectedRef();
 	}
 
-	async fetchPrData(
+	private async fetchPrData(
 		event_id: string,
 		tip_commit_id: string
 		// extra_clone_urls: string[]
@@ -900,50 +901,65 @@ export class GitManager extends EventTarget {
 		return undefined;
 	}
 
-	async loadPrCommitInfo(tip_commit_id: string): Promise<CommitObject[] | undefined> {
+	private async loadPrCommitInfo(tip_commit_id: string): Promise<CommitInfo[] | undefined> {
 		const default_tip = await this.getDefaultTip();
 		if (!default_tip) return undefined;
-		// 1) find merge base(s)
-		const bases = await git.findMergeBase({
-			fs: this.fs,
-			dir: `/${this.a_ref}`,
-			oids: [tip_commit_id, default_tip]
-		});
-		const baseSet = new Set(bases); // may be empty
-
-		// 2) collect oids reachable from tip_commit_id until any base (exclude base)
-		const seen = new Set<string>();
-		const collected = new Set<string>();
-		const stack: string[] = [tip_commit_id];
-
-		while (stack.length) {
-			const oid = stack.pop()!;
-			if (!oid) continue;
-			if (seen.has(oid)) continue;
-			seen.add(oid);
-			if (baseSet.has(oid)) continue;
-			collected.add(oid);
-			const { commit }: ReadCommitResult = await git.readCommit({
+		try {
+			// 1) find merge base(s)
+			const bases = await git.findMergeBase({
 				fs: this.fs,
 				dir: `/${this.a_ref}`,
-				oid
+				oids: [tip_commit_id, default_tip]
 			});
-			for (const p of commit.parent) stack.push(p);
+			const baseSet = new Set(bases); // may be empty
+
+			// 2) collect oids reachable from tip_commit_id until any base (exclude base)
+			const seen = new Set<string>();
+			const collected = new Set<string>();
+			const stack: string[] = [tip_commit_id];
+
+			while (stack.length) {
+				const oid = stack.pop()!;
+				if (!oid) continue;
+				if (seen.has(oid)) continue;
+				seen.add(oid);
+				if (baseSet.has(oid)) continue;
+				collected.add(oid);
+				const { commit }: ReadCommitResult = await git.readCommit({
+					fs: this.fs,
+					dir: `/${this.a_ref}`,
+					oid
+				});
+				for (const p of commit.parent) stack.push(p);
+			}
+
+			if (collected.size === 0) return [];
+
+			// 3) get ordered log (newest->oldest), filter to collected, then reverse to ancestor-first
+			const log = await git.log({
+				fs: this.fs,
+				dir: `/${this.a_ref}`,
+				ref: tip_commit_id,
+				depth: Infinity
+			});
+
+			const filtered = log.filter((e) => collected.has(e.oid)).reverse(); // now oldest -> newest
+
+			return filtered.map((e) => ({ oid: e.oid, ...e.commit }));
+		} catch {
+			return undefined;
 		}
+	}
 
-		if (collected.size === 0) return [];
-
-		// 3) get ordered log (newest->oldest), filter to collected, then reverse to ancestor-first
-		const log = await git.log({
-			fs: this.fs,
-			dir: `/${this.a_ref}`,
-			ref: tip_commit_id,
-			depth: Infinity
-		});
-
-		const filtered = log.filter((e) => collected.has(e.oid)).reverse(); // now oldest -> newest
-
-		return filtered.map((e) => e.commit);
+	async getPrCommitInfos(
+		event_id: string,
+		tip_commit_id: string
+	): Promise<CommitInfo[] | undefined> {
+		const fetched = await this.fetchPrData(event_id, tip_commit_id);
+		if (fetched) {
+			return this.loadPrCommitInfo(tip_commit_id);
+		}
+		return undefined;
 	}
 }
 

@@ -48,3 +48,7 @@ export interface GitServerStatus {
 export function isGitManagerLogEntryServer(x?: GitManagerLogEntry): x is GitManagerLogEntryServer {
 	return !!x && Object.keys(x).includes('remote');
 }
+
+export interface CommitInfo extends CommitObject {
+	oid: string;
+}
