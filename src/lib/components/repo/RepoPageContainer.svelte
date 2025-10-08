@@ -15,8 +15,13 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import OfflineBanner from '../OfflineBanner.svelte';
-	import { type Snippet } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
 	import RepoDetails from './RepoDetails.svelte';
+	import { inMemoryRelayEvent } from '$lib/helpers.svelte';
+	import { aRefToAddressPointer } from '$lib/utils';
+	import { RepoStateKind } from '$lib/kinds';
+	import type { AddressPointer } from 'nostr-tools/nip19';
+	import git_manager from '$lib/git-manager';
 
 	let {
 		url,
@@ -43,6 +48,55 @@
 		const lastCheckTimestamp = lastSuccessfulCheck(repo);
 		return lastCheckTimestamp ? dayjs(lastCheckTimestamp * 1000).fromNow() : 'never';
 	};
+
+	let nostr_state_query = $derived(
+		a_ref
+			? inMemoryRelayEvent({
+					...aRefToAddressPointer(a_ref),
+					kind: RepoStateKind
+				} as AddressPointer)
+			: undefined
+	);
+	let nostr_state = $derived(
+		nostr_state_query && nostr_state_query.event
+			? nostr_state_query.event.tags
+					.filter(
+						(t) =>
+							t[0] &&
+							(t[0].startsWith('refs/') || t[0].startsWith('HEAD')) &&
+							t[0].indexOf('^{}') === -1
+					)
+					.sort((a, b) => a[0].localeCompare(b[0]))
+			: undefined
+	);
+	let clone_urls = $derived(repo?.clone);
+
+	function loadRepository() {
+		if (a_ref && clone_urls && clone_urls.length > 0)
+			git_manager.loadRepository(
+				$state.snapshot(a_ref),
+				$state.snapshot(clone_urls),
+				$state.snapshot(nostr_state)
+			);
+	}
+	onMount(() => {
+		loadRepository();
+	});
+	$effect(() => {
+		// required to trigger when a_ref changes
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		a_ref;
+		loadRepository();
+	});
+	$effect(() => {
+		git_manager.updateNostrState($state.snapshot(nostr_state));
+	});
+	$effect(() => {
+		if (clone_urls) {
+			loadRepository();
+			git_manager.updateCloneUrls($state.snapshot(clone_urls));
+		}
+	});
 </script>
 
 {#if repo && network_status.offline}

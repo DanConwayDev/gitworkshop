@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { SvelteMap } from 'svelte/reactivity';
-	import { GitManager } from '$lib/git-manager';
+	import git_manager from '$lib/git-manager';
 	import store from '$lib/store.svelte';
 	import { type RepoRef } from '$lib/types';
 	import { onMount } from 'svelte';
@@ -55,36 +55,19 @@
 			: undefined
 	);
 
-	let git = new GitManager();
-	function loadRepository() {
-		git.loadRepository(a_ref, clone_urls, nostr_state, ref_and_path);
-	}
 	let waited_1s = $state(false);
 	onMount(() => {
-		loadRepository();
 		setTimeout(() => {
 			waited_1s = true;
 		}, 1000);
 	});
-	$effect(() => {
-		// required to trigger when a_ref changes
-		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
-		a_ref;
-		loadRepository();
-	});
-	$effect(() => {
-		git.updateNostrState(nostr_state);
-	});
-	$effect(() => {
-		git.updateCloneUrls(clone_urls);
-	});
 
 	$effect(() => {
-		git.updateRefAndPath(ref_and_path);
+		git_manager.updateRefAndPath($state.snapshot(ref_and_path));
 	});
 
 	let file_content: string | undefined = $state();
-	git.addEventListener('fileContents', (e: Event) => {
+	git_manager.addEventListener('fileContents', (e: Event) => {
 		const customEvent = e as CustomEvent<string>;
 		file_content = customEvent.detail;
 		scrollToAnchor();
@@ -94,7 +77,7 @@
 	let path_exists: boolean | undefined = $state();
 	let path_is_dir: boolean | undefined = $state();
 	let file_path: string | undefined = $state();
-	git.addEventListener('selectedPath', (e: Event) => {
+	git_manager.addEventListener('selectedPath', (e: Event) => {
 		const customEvent = e as CustomEvent<SelectedPathInfo>;
 		path_exists = customEvent.detail.exists;
 		path_is_dir = customEvent.detail.path_is_dir;
@@ -109,13 +92,13 @@
 	});
 
 	let git_refs: string[][] | undefined = $state();
-	git.addEventListener('stateUpdate', (e: Event) => {
+	git_manager.addEventListener('stateUpdate', (e: Event) => {
 		const customEvent = e as CustomEvent<string[][]>;
 		git_refs = customEvent.detail;
 	});
 
 	let checked_out_ref: SelectedRefInfo | undefined = $state();
-	git.addEventListener('selectedRef', (e: Event) => {
+	git_manager.addEventListener('selectedRef', (e: Event) => {
 		const customEvent = e as CustomEvent<SelectedRefInfo>;
 		checked_out_ref = customEvent.detail;
 	});
@@ -135,7 +118,7 @@
 
 	// directory
 	let directory_structure: FileEntry[] | undefined = $state();
-	git.addEventListener('directoryStructure', (e: Event) => {
+	git_manager.addEventListener('directoryStructure', (e: Event) => {
 		const customEvent = e as CustomEvent<FileEntry[]>;
 		directory_structure = customEvent.detail;
 	});
@@ -161,11 +144,13 @@
 		if (server_status.entries().some((e) => e[1].state === 'fetched')) return 'fetched';
 		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
 	});
-	git.addEventListener('log', (e: Event) => {
+	git_manager.addEventListener('log', (e: Event) => {
 		const customEvent = e as CustomEvent<GitManagerLogEntry>;
 		if (isGitManagerLogEntryServer(customEvent.detail)) {
 			let status = server_status.get(customEvent.detail.remote) || {
-				short_name: remoteNameToShortName(customEvent.detail.remote, clone_urls),
+				short_name: clone_urls
+					? remoteNameToShortName(customEvent.detail.remote, clone_urls)
+					: customEvent.detail.remote,
 				state: 'connecting',
 				with_proxy: false
 			};

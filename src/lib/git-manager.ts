@@ -1047,3 +1047,6 @@ function getFilePath(selected_path?: SelectedPathInfo): string | undefined {
 		if (!selected_path.path_is_dir && selected_path.exists) return selected_path.path;
 	}
 }
+const git_manager = new GitManager();
+
+export default git_manager;
