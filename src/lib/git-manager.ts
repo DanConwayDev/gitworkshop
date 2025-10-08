@@ -1,9 +1,4 @@
-import git, {
-	type CommitObject,
-	type FetchResult,
-	type HttpClient,
-	type ReadCommitResult
-} from 'isomorphic-git';
+import git, { type FetchResult, type HttpClient, type ReadCommitResult } from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import type {
 	CommitInfo,
@@ -883,21 +878,66 @@ export class GitManager extends EventTarget {
 	}
 
 	private async getDefaultTip(): Promise<string | undefined> {
-		const ref_paths = this.getDesiredRefPath();
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		for (const [_, { ref_value }] of ref_paths.entries()) {
-			try {
-				const commit = await git.log({
-					fs: this.fs,
-					dir: `/${this.a_ref}`,
-					ref: ref_value.replace('ref: ', ''),
-					depth: 1
-				});
-				if (commit.length > 0) return commit[0].oid;
-			} catch {
-				/* empty */
+		// Try nostr_state_refs first
+		if (this.nostr_state_refs) {
+			const defaultRef =
+				getDefaultBranchRef(this.nostr_state_refs) ??
+				getFallbackDefaultBranchRef(this.nostr_state_refs);
+			if (defaultRef) {
+				// extra a layer of symref
+				let refInfo = extractRefAndPath(defaultRef, this.nostr_state_refs);
+				if (refInfo && refInfo.ref_value.includes('ref: ')) {
+					refInfo = extractRefAndPath(
+						refInfo.ref_value.replace('ref: ', ''),
+						this.nostr_state_refs
+					);
+				}
+				if (refInfo) {
+					try {
+						const commit = await git.log({
+							fs: this.fs,
+							dir: `/${this.a_ref}`,
+							ref: refInfo.ref_value,
+							depth: 1
+						});
+						if (commit.length > 0) return commit[0].oid;
+					} catch {
+						/* empty */
+					}
+				}
 			}
 		}
+
+		// Fall back to remote states
+		for (const url of this.clone_urls || []) {
+			const remote = cloneUrlToRemoteName(url);
+			const state = this.remote_states.get(remote);
+
+			if (state) {
+				const defaultRef = getDefaultBranchRef(state) ?? getFallbackDefaultBranchRef(state);
+				if (defaultRef) {
+					// extra a layer of symref
+					let refInfo = extractRefAndPath(defaultRef, state);
+					if (refInfo && refInfo.ref_value.includes('ref: ')) {
+						refInfo = extractRefAndPath(refInfo.ref_value.replace('ref: ', ''), state);
+					}
+					if (refInfo) {
+						try {
+							const commit = await git.log({
+								fs: this.fs,
+								dir: `/${this.a_ref}`,
+								ref: refInfo.ref_value,
+								depth: 1
+							});
+							if (commit.length > 0) return commit[0].oid;
+						} catch {
+							/* empty */
+						}
+					}
+				}
+			}
+		}
+
 		return undefined;
 	}
 
