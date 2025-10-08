@@ -247,7 +247,10 @@ export class GitManager extends EventTarget {
 				if (!connected) return;
 				this.connected_remotes.push({ remote, url, fetched: false });
 				// only do a full fetch (like clone) from first connected remote
-				if (already_cloned || this.connected_remotes.length === 1) {
+				if (
+					already_cloned ||
+					(this.connected_remotes.length > 0 && this.connected_remotes[0].remote === remote)
+				) {
 					await this.fetchFromRemote(remote);
 					fetched_from_one_remote = true;
 				} else {
@@ -338,9 +341,9 @@ export class GitManager extends EventTarget {
 	private async awaitFetched(url?: string): Promise<void> {
 		return new Promise((r) => {
 			const id = setInterval(() => {
-				const fetched = this.connected_remotes.some(
-					(rmt) => rmt.fetched && (!url || rmt.url === url)
-				);
+				const fetched =
+					this.connected_remotes.length > 0 &&
+					this.connected_remotes.some((rmt) => rmt.fetched && (!url || rmt.url === url));
 				if (fetched) {
 					clearInterval(id);
 					r();
@@ -914,7 +917,8 @@ export class GitManager extends EventTarget {
 			const state = this.remote_states.get(remote);
 
 			if (state) {
-				const defaultRef = getDefaultBranchRef(state) ?? getFallbackDefaultBranchRef(state);
+				const defaultRef =
+					getDefaultBranchRef(state, remote) ?? getFallbackDefaultBranchRef(state, remote);
 				if (defaultRef) {
 					// extra a layer of symref
 					let refInfo = extractRefAndPath(defaultRef, state);
