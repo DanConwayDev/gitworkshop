@@ -6,6 +6,10 @@
 	import db from '$lib/dbs/LocalDb';
 	import { getTagValue } from '$lib/utils';
 	import { icons_misc } from '$lib/icons';
+	import git_manager from '$lib/git-manager';
+	import type { CommitInfo } from '$lib/types/git-manager';
+	import CommitOneLineSummaries from '../prs/CommitOneLineSummaries.svelte';
+	import { onMount } from 'svelte';
 	let {
 		event,
 		issue_or_pr_table_item
@@ -25,31 +29,53 @@
 	);
 	let with_permission = $derived(item_maintainers.includes(event.pubkey));
 
-	let commit_id = $derived(getTagValue(event.tags, 'c') || '[commit_id unknown]');
-	let commit_id_shorthand = $derived(commit_id.substring(0, 8) || '[commit_id unknown]');
+	let tip_id = $derived(getTagValue(event.tags, 'c') || '[commit_id unknown]');
+	let tip_id_shorthand = $derived(tip_id.substring(0, 8) || '[commit_id unknown]');
+
+	let repo_refs = $derived(
+		event.tags.flatMap((s) => (s[0] === 'a' && s[1] !== undefined ? [s[1]] : []))
+	);
+
+	let commits: CommitInfo[] | undefined = $state();
+	let interval_id = $state<number | undefined>();
+	let loading: boolean = $state(true);
+	const loadCommitInfos = async (event_id: string, tip_id: string) => {
+		if (interval_id) clearInterval(interval_id);
+		if (git_manager.a_ref && repo_refs.includes(git_manager.a_ref)) {
+			const infos = await git_manager.getPrCommitInfos(
+				$state.snapshot(event_id),
+				$state.snapshot(tip_id)
+			);
+			if (infos) commits = infos;
+			loading = false;
+		} else {
+			interval_id = setInterval(() => {
+				loadCommitInfos(event_id, tip_id);
+			}, 100) as unknown as number;
+		}
+	};
+
+	onMount(() => {
+		loadCommitInfos(event.id, tip_id);
+	});
 </script>
 
-<EventWrapperLite {event} name_first>
+{#snippet commitInfos()}
+	<div class="md:ml-10">
+		{#if loading}
+			loading
+		{:else if commits && commits.length > 0}
+			<CommitOneLineSummaries infos={commits} />
+		{:else}
+			couldnt load commits
+		{/if}
+	</div>
+{/snippet}
+
+<EventWrapperLite {event} name_first children_below={commitInfos}>
 	<span class="text-sm">
-		{#if with_permission}updated
-		{:else}suggested update to
-		{/if} PR branch
+		{#if with_permission}pushed PR updates
+		{:else}suggested pr updates
+		{/if}
 	</span>
-	<span class="badge badge-secondary badge-sm mx-1">{commit_id_shorthand}</span>
-	<button
-		class="btn btn-ghost btn-xs"
-		onclick={() => {
-			navigator.clipboard.writeText(commit_id);
-		}}
-	>
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			viewBox="0 0 16 16"
-			class="fill-base-content ml-1 inline h-4 w-4 flex-none opacity-50 group-hover:opacity-100"
-		>
-			{#each icons_misc.copy as d (d)}
-				<path {d} />
-			{/each}
-		</svg>
-	</button>
 </EventWrapperLite>

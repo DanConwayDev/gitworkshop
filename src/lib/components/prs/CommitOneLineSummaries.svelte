@@ -6,7 +6,7 @@
 </script>
 
 {#snippet showInfoLine(info: CommitInfo)}
-	<div class="bg-base-200 m-1 my-2 flex items-center gap-2 rounded p-2">
+	<div class="bg-base-200 my-2 flex items-center gap-2 rounded p-2">
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 16 16"

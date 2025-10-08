@@ -9,13 +9,15 @@
 		event,
 		disable_links = false,
 		name_first = false,
-		children
+		children,
+		children_below
 	}: {
 		event?: NostrEvent;
 		n_attr?: NEventAttributes | NAddrAttributes;
 		disable_links?: boolean;
 		name_first?: boolean;
 		children?: Snippet;
+		children_below?: Snippet;
 	} = $props();
 
 	let author = $derived(
@@ -45,4 +47,5 @@
 				><FromNow unix_seconds={created_at} /></span
 			>{/if}
 	</div>
+	{@render children_below?.()}
 </div>
