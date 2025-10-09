@@ -10,12 +10,14 @@
 	let {
 		table_item,
 		active_tab = 'conversation'
-	}: { table_item?: IssueOrPRTableItem; active_tab: 'conversation' | 'files' } = $props();
+	}: { table_item?: IssueOrPRTableItem; active_tab: 'conversation' | 'commits' | 'files' } =
+		$props();
 
 	let short_title = $derived.by(() => {
 		const n = table_item ? table_item.title : 'Untitled';
 		return n.length > 70 ? `${n.slice(0, 65)}...` : n;
 	});
+	let pr_base_url = $derived(active_tab == 'conversation' ? page.url.href.replace(/\/$/, '') : '.');
 </script>
 
 <div class="border-accent-content bg-base-200 text-neutral-content grow border-b text-xs">
@@ -56,7 +58,7 @@
 							class="tab [--tab-border-color:black]"
 							class:tab-active={active_tab === 'conversation'}
 							class:border-none={active_tab !== 'conversation'}
-							href={active_tab === 'conversation' ? page.url.href : './'}
+							href={active_tab === 'conversation' ? page.url.href : pr_base_url}
 							onclick={(e) => {
 								if (active_tab === 'conversation') e.preventDefault();
 							}}
@@ -65,11 +67,20 @@
 						</a>
 						<a
 							class="tab [--tab-border-color:black]"
+							class:tab-active={active_tab === 'commits'}
+							class:border-none={active_tab !== 'commits'}
+							href={active_tab === 'commits' ? page.url.href : `${pr_base_url}/commits`}
+							onclick={(e) => {
+								if (active_tab === 'commits') e.preventDefault();
+							}}
+						>
+							Commits
+						</a>
+						<a
+							class="tab [--tab-border-color:black]"
 							class:tab-active={active_tab === 'files'}
 							class:border-none={active_tab !== 'files'}
-							href={active_tab === 'files'
-								? page.url.href
-								: `${page.url.href.replace(/\/$/, '')}/files`}
+							href={active_tab === 'files' ? page.url.href : `${pr_base_url}/files`}
 							onclick={(e) => {
 								if (active_tab === 'files') e.preventDefault();
 							}}
