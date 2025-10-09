@@ -54,7 +54,9 @@
 
 		<div class="min-w-0 flex-1">
 			<div class="flex items-center gap-2">
-				<div class="flex-grow truncate font-mono text-sm font-medium">{info.message}</div>
+				<div class="flex-grow truncate font-mono text-sm font-medium">
+					{info.message.split(/[\r\n]/)[0]}
+				</div>
 				{#if info.author.name}
 					<div class="text-base-content/50 shrink-0 text-xs">{info.author.name}</div>
 				{/if}
