@@ -14,6 +14,7 @@
 	let commit_message_node = $derived(
 		nostrEventToDocTree({ content: commit_message, tags: [] } as unknown as NostrEvent, true)
 	);
+	let diff = $derived(event.content);
 </script>
 
 <div class="">
@@ -29,5 +30,5 @@
 			{commit_id_shorthand}
 		</div>
 	</div>
-	<ChangesToFiles diff={event.content} />
+	<ChangesToFiles {diff} />
 </div>

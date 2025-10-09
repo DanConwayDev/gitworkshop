@@ -8,8 +8,8 @@
 
 	let files = $derived(parseDiff(diff));
 
-	let expand_files = $derived(files.map(() => false));
-	let expand_full_files = $derived(files.map(() => false));
+	let expand_files = $state(files.map(() => false));
+	let expand_full_files = $state(files.map(() => false));
 
 	let isAddChange = (change: Change): change is AddChange => change.type == 'add';
 	let isDeleteChange = (change: Change): change is DeleteChange => change.type == 'del';
