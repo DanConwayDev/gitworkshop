@@ -6,8 +6,8 @@
 	import { getTagValue } from '$lib/utils';
 	import git_manager from '$lib/git-manager';
 	import type { CommitInfo } from '$lib/types/git-manager';
-	import CommitOneLineSummaries from '../prs/CommitOneLineSummaries.svelte';
 	import { onMount } from 'svelte';
+	import CommitsDetails from '../prs/CommitsDetails.svelte';
 
 	let { event }: { event: NostrEvent } = $props();
 
@@ -46,5 +46,6 @@
 
 <div class="">
 	<ContentTree node={content} />
-	<CommitOneLineSummaries infos={commits} {loading} />
+
+	<CommitsDetails infos={commits} {loading} />
 </div>

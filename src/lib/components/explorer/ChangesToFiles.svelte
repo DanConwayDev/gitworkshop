@@ -37,7 +37,7 @@
 	};
 </script>
 
-<div class="">
+<div class="w-full">
 	{#each files as file, index (index)}
 		<div
 			class="border-base-300 my-2 border {expand_full_files[index]

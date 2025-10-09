@@ -7,7 +7,7 @@
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
 	import type { CommitInfo } from '$lib/types/git-manager';
-	import CommitsDetails from './CommitsDetails.svelte';
+	import CommitOneLineSummaries from './CommitOneLineSummaries.svelte';
 	let { table_item }: { table_item: IssueOrPRTableItem } = $props();
 
 	let pr_repos = $derived(table_item?.repos ?? []);
@@ -74,4 +74,4 @@
 	});
 </script>
 
-<CommitsDetails infos={commits} {loading} grouped_by_date={true} />
+<CommitOneLineSummaries infos={commits} {loading} grouped_by_date={true} />

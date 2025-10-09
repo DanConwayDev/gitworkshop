@@ -1200,6 +1200,51 @@ export class GitManager extends EventTarget {
 		if (!fetched) return undefined; // cant fetch pr data
 		return this.loadPrDiff(tip_commit_id);
 	}
+
+	private async loadCommitDiff(commit_id: string): Promise<string | undefined> {
+		try {
+			const commitData = await git.readCommit({
+				fs: this.fs,
+				dir: `/${this.a_ref}`,
+				oid: commit_id
+			});
+			const commit = commitData.commit;
+			const parents = commit.parent || [];
+
+			if (parents.length === 0) {
+				// Root commit: diff against empty tree — use a synthetic "empty" base
+				// Create a special sentinel id for an empty tree (null) and handle it in loadDiffBetween,
+				// or call loadDiffBetween with a fake base that your helper understands.
+				// Simpler: produce added files by reusing loadDiffBetween with an empty tree oid if you can
+				// else fall back to manual behavior:
+				const tipTree = commit.tree;
+				const tipFiles = await this.getFilesFromTree(tipTree);
+				let diffOutput = '';
+				for (const [path, tipFile] of tipFiles) {
+					const tipContent = await this.readBlobContent(tipFile.oid);
+					diffOutput += this.formatFileDiff(path, null, tipContent, 'added');
+				}
+				return diffOutput || undefined;
+			}
+
+			// Use first parent and reuse loadDiffBetween
+			const parentOid = parents[0];
+			return await this.loadDiffBetween(parentOid, commit_id);
+		} catch (error) {
+			this.log({ level: 'error', msg: `Error generating commit diff: ${error}` });
+			return undefined;
+		}
+	}
+
+	async getCommitDiff(commit_id: string, event_id_ref_hint?: string): Promise<string | undefined> {
+		const diff = await this.loadCommitDiff(commit_id);
+		if (diff) return diff;
+		if (!event_id_ref_hint) return undefined;
+		// see comment in this.getPrCommitInfos about defect in getDefaultTip
+		const fetched = await this.fetchPrData(event_id_ref_hint, commit_id);
+		if (!fetched) return undefined; // cant fetch pr data
+		return this.loadCommitDiff(commit_id);
+	}
 }
 
 function getDefaultBranchRef(state?: string[][], remote?: string): string | undefined {

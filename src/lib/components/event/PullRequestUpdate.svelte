@@ -7,11 +7,11 @@
 	import { getTagValue } from '$lib/utils';
 	import git_manager from '$lib/git-manager';
 	import type { CommitInfo } from '$lib/types/git-manager';
-	import CommitOneLineSummaries from '../prs/CommitOneLineSummaries.svelte';
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import EventWrapper from './EventWrapper.svelte';
+	import CommitsDetails from '../prs/CommitsDetails.svelte';
 	let { event }: { event: NostrEvent } = $props();
 
 	let pr_event_id: string | undefined = $derived(getTagValue(event.tags, 'E'));
@@ -119,6 +119,6 @@
 				</div>
 			</div>
 		{/if}
-		<CommitOneLineSummaries infos={new_commits} {loading} />
+		<CommitsDetails infos={new_commits} {loading} />
 	</EventWrapper>
 {/if}
