@@ -8,7 +8,9 @@
 
 	let files = $derived(parseDiff(diff));
 
+	// svelte-ignore state_referenced_locally
 	let expand_files = $state(files.map(() => false));
+	// svelte-ignore state_referenced_locally
 	let expand_full_files = $state(files.map(() => false));
 
 	let isAddChange = (change: Change): change is AddChange => change.type == 'add';
