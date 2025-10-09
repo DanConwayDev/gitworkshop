@@ -58,6 +58,7 @@
 		"daisyui": "^5.0.50",
 		"dayjs": "^1.11.13",
 		"dexie": "^4.2.0",
+		"diff": "^8.0.2",
 		"highlight.js": "^11.11.1",
 		"isomorphic-git": "^1.33.0",
 		"nostr-editor": "1.0.0",

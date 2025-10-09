@@ -8,6 +8,7 @@ import type {
 	SelectedRefInfo
 } from '$lib/types/git-manager';
 import { Buffer as BufferPolyfill } from 'buffer';
+import { createPatch } from 'diff';
 import { cloneUrlToRemoteName } from './git-utils';
 import type { RepoRef } from './types';
 // required for isomorphic-git with vite
@@ -1057,18 +1058,18 @@ export class GitManager extends EventTarget {
 				if (!baseFile && tipFile) {
 					// File was added
 					const content = await this.readBlobContent(tipFile.oid);
-					diffOutput += this.formatFileDiff(path, null, content, 'added');
+					diffOutput += this.formatFileDiff(path, null, content);
 				} else if (baseFile && !tipFile) {
 					// File was deleted
 					const content = await this.readBlobContent(baseFile.oid);
-					diffOutput += this.formatFileDiff(path, content, null, 'deleted');
+					diffOutput += this.formatFileDiff(path, content, null);
 				} else if (baseFile && tipFile && baseFile.oid !== tipFile.oid) {
 					// File was modified
 					const [baseContent, tipContent] = await Promise.all([
 						this.readBlobContent(baseFile.oid),
 						this.readBlobContent(tipFile.oid)
 					]);
-					diffOutput += this.formatFileDiff(path, baseContent, tipContent, 'modified');
+					diffOutput += this.formatFileDiff(path, baseContent, tipContent);
 				}
 			}
 
@@ -1106,75 +1107,39 @@ export class GitManager extends EventTarget {
 		return files;
 	}
 
-	private async readBlobContent(oid: string): Promise<string> {
+	private async readBlobContent(oid: string): Promise<Uint8Array> {
 		try {
 			const { blob } = await git.readBlob({
 				fs: this.fs,
 				dir: `/${this.a_ref}`,
 				oid
 			});
-			return new TextDecoder().decode(blob);
+			return blob;
 		} catch {
-			return '';
+			return new Uint8Array();
 		}
 	}
 
 	private formatFileDiff(
 		path: string,
-		oldContent: string | null,
-		newContent: string | null,
-		changeType: 'added' | 'deleted' | 'modified'
+		oldBytes: Uint8Array | null,
+		newBytes: Uint8Array | null
 	): string {
-		let diff = '';
+		const decode = (b: Uint8Array | null) => {
+			if (!b) return '';
+			let s = new TextDecoder('utf-8', { fatal: false }).decode(b);
+			if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
+			return s.replace(/\r\n/g, '\n');
+		};
 
-		// Generate diff header
-		if (changeType === 'added') {
-			diff += `diff --git a/${path} b/${path}\n`;
-			diff += `new file mode 100644\n`;
-			diff += `index 0000000..1234567\n`;
-			diff += `--- /dev/null\n`;
-			diff += `+++ b/${path}\n`;
-		} else if (changeType === 'deleted') {
-			diff += `diff --git a/${path} b/${path}\n`;
-			diff += `deleted file mode 100644\n`;
-			diff += `index 1234567..0000000\n`;
-			diff += `--- a/${path}\n`;
-			diff += `+++ /dev/null\n`;
-		} else {
-			diff += `diff --git a/${path} b/${path}\n`;
-			diff += `index 1234567..2345678 100644\n`;
-			diff += `--- a/${path}\n`;
-			diff += `+++ b/${path}\n`;
-		}
+		const oldText = oldBytes ? decode(oldBytes) : '';
+		const newText = newBytes ? decode(newBytes) : '';
 
-		// Generate unified diff content
-		const oldLines = oldContent ? oldContent.split('\n') : [];
-		const newLines = newContent ? newContent.split('\n') : [];
+		// createPatch already emits file headers and hunks
+		const patch = createPatch(path, oldText, newText, '', '', { context: 3 });
 
-		// Simple diff generation (showing all lines as changed for simplicity)
-		// In a production system, you'd want to use a proper diff algorithm
-		if (changeType === 'added') {
-			diff += `@@ -0,0 +1,${newLines.length} @@\n`;
-			newLines.forEach((line) => {
-				diff += `+${line}\n`;
-			});
-		} else if (changeType === 'deleted') {
-			diff += `@@ -1,${oldLines.length} +0,0 @@\n`;
-			oldLines.forEach((line) => {
-				diff += `-${line}\n`;
-			});
-		} else {
-			// For modified files, show a simple before/after
-			diff += `@@ -1,${oldLines.length} +1,${newLines.length} @@\n`;
-			oldLines.forEach((line) => {
-				diff += `-${line}\n`;
-			});
-			newLines.forEach((line) => {
-				diff += `+${line}\n`;
-			});
-		}
-
-		return diff;
+		// Optionally prepend git-style headers you want to keep
+		return patch;
 	}
 
 	private async loadPrDiff(tip_commit_id: string): Promise<string | undefined> {
@@ -1222,7 +1187,7 @@ export class GitManager extends EventTarget {
 				let diffOutput = '';
 				for (const [path, tipFile] of tipFiles) {
 					const tipContent = await this.readBlobContent(tipFile.oid);
-					diffOutput += this.formatFileDiff(path, null, tipContent, 'added');
+					diffOutput += this.formatFileDiff(path, null, tipContent);
 				}
 				return diffOutput || undefined;
 			}
