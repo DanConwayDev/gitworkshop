@@ -60,6 +60,8 @@
 		setTimeout(() => {
 			waited_1s = true;
 		}, 1000);
+		git_manager.refreshExplorer();
+		git_manager.logs.forEach(onLog);
 	});
 
 	$effect(() => {
@@ -144,25 +146,26 @@
 		if (server_status.entries().some((e) => e[1].state === 'fetched')) return 'fetched';
 		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
 	});
-	git_manager.addEventListener('log', (e: Event) => {
-		const customEvent = e as CustomEvent<GitManagerLogEntry>;
-		if (isGitManagerLogEntryServer(customEvent.detail)) {
-			let status = server_status.get(customEvent.detail.remote) || {
-				short_name: clone_urls
-					? remoteNameToShortName(customEvent.detail.remote, clone_urls)
-					: customEvent.detail.remote,
+	const onLog = (entry: GitManagerLogEntry) => {
+		if (isGitManagerLogEntryServer(entry)) {
+			let status = server_status.get(entry.remote) || {
+				short_name: clone_urls ? remoteNameToShortName(entry.remote, clone_urls) : entry.remote,
 				state: 'connecting',
 				with_proxy: false
 			};
-			if (customEvent.detail.msg?.includes('proxy')) status.with_proxy = true;
-			server_status.set(customEvent.detail.remote, {
+			if (entry.msg?.includes('proxy')) status.with_proxy = true;
+			server_status.set(entry.remote, {
 				...status,
-				state: customEvent.detail.state,
-				msg: customEvent.detail.msg
+				state: entry.state,
+				msg: entry.msg
 			});
 		} else {
 			// not showing any global git logging
 		}
+	};
+	git_manager.addEventListener('log', (e: Event) => {
+		const customEvent = e as CustomEvent<GitManagerLogEntry>;
+		onLog(customEvent.detail);
 	});
 	let git_warning: string | undefined = $derived.by(() => {
 		if (waited_1s) {

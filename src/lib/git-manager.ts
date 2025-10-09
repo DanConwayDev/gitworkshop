@@ -176,7 +176,9 @@ export class GitManager extends EventTarget {
 		}
 	}
 
+	logs: GitManagerLogEntry[] = [];
 	private log(entry: GitManagerLogEntry) {
+		this.logs.push(entry);
 		this.dispatchEvent(new CustomEvent<GitManagerLogEntry>('log', { detail: entry }));
 	}
 
@@ -207,6 +209,7 @@ export class GitManager extends EventTarget {
 		this.nostr_state_refs = nostr_state_refs ? [...nostr_state_refs] : undefined;
 		this.ref_and_path = ref_and_path;
 		// clear cache
+		this.logs = [];
 		this.connected_remotes = [];
 		this.remotes_using_proxy = [];
 		this.remote_states = new Map();
@@ -214,6 +217,40 @@ export class GitManager extends EventTarget {
 		this.file_content = undefined;
 		this.selected_ref = undefined;
 		this.selected_path = undefined;
+	}
+
+	async refreshExplorer() {
+		if (this.nostr_state_refs) {
+			this.dispatchEvent(
+				new CustomEvent<string[][]>('stateUpdate', { detail: this.nostr_state_refs })
+			);
+		} else if (this.clone_urls) {
+			this.clone_urls.find((url) => {
+				const remote = cloneUrlToRemoteName(url);
+				const state = this.remote_states.get(remote);
+				if (state) {
+					this.dispatchEvent(new CustomEvent<string[][]>('stateUpdate', { detail: state }));
+					return true;
+				}
+				return false;
+			});
+		}
+		if (this.file_content)
+			this.dispatchEvent(
+				new CustomEvent<string | undefined>('fileContents', { detail: this.file_content })
+			);
+
+		if (this.file_structure)
+			this.dispatchEvent(
+				new CustomEvent<FileEntry[]>('directoryStructure', { detail: this.file_structure })
+			);
+		if (this.selected_path)
+			this.dispatchEvent(
+				new CustomEvent<SelectedPathInfo>('selectedPath', {
+					detail: this.selected_path
+				})
+			);
+		this.refreshSelectedRef(false, true);
 	}
 
 	async loadRepository(
@@ -380,7 +417,7 @@ export class GitManager extends EventTarget {
 			if (state && !this.nostr_state_refs && this.clone_urls) {
 				// if highest priority (order in clone_url announcement) connected remote use as state
 				const top_connected_clone_url = this.clone_urls.find((url) =>
-					this.connected_remotes.some((r) => r.url === url)
+					this.connected_remotes.some((r) => r.url === url && r.fetched)
 				);
 				if (top_connected_clone_url && cloneUrlToRemoteName(top_connected_clone_url) == remote) {
 					const detail: string[][] = state.map((r) => [
@@ -400,7 +437,7 @@ export class GitManager extends EventTarget {
 		}
 	}
 
-	private async refreshSelectedRef(fetch_missing: boolean = false) {
+	private async refreshSelectedRef(fetch_missing: boolean = false, force_dispatch_event = false) {
 		const ref_paths = this.getDesiredRefPath();
 		for (const [index, { ref, path, ref_value }] of ref_paths.entries()) {
 			try {
@@ -420,7 +457,7 @@ export class GitManager extends EventTarget {
 					this.selected_ref.commit_id !== commit[0].oid ||
 					!this.selected_path ||
 					this.selected_path.path !== path;
-				if (change_selected_ref) {
+				if (change_selected_ref || force_dispatch_event) {
 					this.selected_ref = {
 						ref,
 						commit_id: commit[0].oid
@@ -436,7 +473,7 @@ export class GitManager extends EventTarget {
 						})
 					);
 				}
-				if (reload_dirs_and_file) {
+				if (reload_dirs_and_file || force_dispatch_event) {
 					this.loadDirsAndFile(path, normaliseRemoteRef(ref, true), commit[0].oid);
 				}
 				return; // use first match (most desirable ref that we have the blobs for)
@@ -507,6 +544,7 @@ export class GitManager extends EventTarget {
 			if (this.file_content !== s) {
 				this.file_content = s;
 				if (s) {
+					this.file_content = s;
 					this.dispatchEvent(new CustomEvent<string | undefined>('fileContents', { detail: s }));
 				} else {
 					// TODO how do we indicate error no longer loading file - selectedPath Maybe? how do we know we arn't still loading form other remotes
