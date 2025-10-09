@@ -9,6 +9,7 @@ import type {
 } from '$lib/types/git-manager';
 import { Buffer as BufferPolyfill } from 'buffer';
 import { cloneUrlToRemoteName } from './git-utils';
+import type { RepoRef } from './types';
 // required for isomorphic-git with vite
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 declare let Buffer: typeof BufferPolyfill;
@@ -178,7 +179,7 @@ export class GitManager extends EventTarget {
 		this.dispatchEvent(new CustomEvent<GitManagerLogEntry>('log', { detail: entry }));
 	}
 
-	a_ref?: string;
+	a_ref?: RepoRef;
 	clone_urls?: string[];
 	ref_and_path?: string;
 	nostr_state_refs?: string[][];
@@ -195,7 +196,7 @@ export class GitManager extends EventTarget {
 	selected_path?: SelectedPathInfo;
 
 	private reset(
-		a_ref: string,
+		a_ref: RepoRef,
 		clone_urls: string[],
 		nostr_state_refs: string[][] | undefined,
 		ref_and_path?: string
@@ -215,7 +216,7 @@ export class GitManager extends EventTarget {
 	}
 
 	async loadRepository(
-		a_ref: string,
+		a_ref: RepoRef,
 		clone_urls: string[],
 		nostr_state_refs: string[][] | undefined,
 		ref_and_path?: string
@@ -1000,7 +1001,7 @@ export class GitManager extends EventTarget {
 	}
 
 	async getPrCommitInfos(
-		event_id: string,
+		event_id_listing_tip: string,
 		tip_commit_id: string
 	): Promise<CommitInfo[] | undefined> {
 		const infos = await this.loadPrCommitInfo(tip_commit_id);
@@ -1010,7 +1011,7 @@ export class GitManager extends EventTarget {
 		// TODO we could make this better by not waiting for a fetch.
 		//  1) fix getDefaultTip so it waits for local data to be first.
 		//  2) only awaitFetch in fetchPrData if getDefaultTip doesnt return anything
-		const fetched = await this.fetchPrData(event_id, tip_commit_id);
+		const fetched = await this.fetchPrData(event_id_listing_tip, tip_commit_id);
 		if (!fetched) return undefined; // cant fetch pr data
 		return await this.loadPrCommitInfo(tip_commit_id);
 	}

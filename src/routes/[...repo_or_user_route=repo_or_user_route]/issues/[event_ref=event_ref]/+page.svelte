@@ -27,7 +27,7 @@
 	let thread_events = $derived(thread_query?.timeline ?? []);
 </script>
 
-<PrOrIssueHeader {table_item} />
+<PrOrIssueHeader {table_item} active_tab="conversation" />
 
 <Container no_wrap_on_md>
 	{#if table_item}
