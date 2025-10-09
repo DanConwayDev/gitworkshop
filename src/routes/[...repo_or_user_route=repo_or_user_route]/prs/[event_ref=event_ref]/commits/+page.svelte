@@ -29,6 +29,8 @@
 <PrOrIssueHeader {table_item} active_tab="commits" />
 <Container>
 	{#if table_item}
-		<ListCommits {table_item} />
+		<div class="my-4">
+			<ListCommits {table_item} />
+		</div>
 	{/if}
 </Container>

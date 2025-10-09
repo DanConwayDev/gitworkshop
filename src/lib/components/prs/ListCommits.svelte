@@ -74,4 +74,4 @@
 	});
 </script>
 
-<CommitOneLineSummaries infos={commits} {loading} />
+<CommitOneLineSummaries infos={commits} {loading} grouped_by_date={true} />

@@ -4,13 +4,40 @@
 	import { pr_icon_path } from './icons';
 	import { fade } from 'svelte/transition';
 
-	let { infos, loading }: { infos: CommitInfo[] | undefined; loading: boolean } = $props();
-
+	let {
+		infos,
+		loading,
+		grouped_by_date = false
+	}: { infos: CommitInfo[] | undefined; loading: boolean; grouped_by_date?: boolean } = $props();
 	let waited = $state(false);
 	onMount(() => {
 		setTimeout(() => {
 			waited = true;
 		}, 2000);
+	});
+
+	// Group commits by date when grouped_by_date is true
+	let groupedCommits: { date: string; commits: CommitInfo[] }[] = $derived.by(() => {
+		if (!infos || !grouped_by_date) {
+			return [];
+		}
+
+		const groups: Record<string, CommitInfo[]> = {};
+
+		for (const info of infos) {
+			const date = new Date(info.author.timestamp * 1000);
+			const dateKey = date.toDateString().replace(/^[A-Za-z]+,\s*/, '');
+
+			if (!groups[dateKey]) {
+				groups[dateKey] = [];
+			}
+			groups[dateKey].push(info);
+		}
+
+		// Convert to array and sort by date (newest first)
+		return Object.entries(groups)
+			.sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
+			.map(([date, commits]) => ({ date, commits }));
 	});
 </script>
 
@@ -41,9 +68,22 @@
 {/snippet}
 <div class="">
 	{#if infos && infos.length > 0}
-		{#each infos as info (info.oid)}
-			{@render showInfoLine(info)}
-		{/each}
+		{#if grouped_by_date && groupedCommits.length > 0}
+			{#each groupedCommits as { date, commits } (date)}
+				<div class="mb-4">
+					<div class="text-base-content/70 border-base-300 mb-2 border-b pb-1 text-sm font-medium">
+						{date}
+					</div>
+					{#each commits as info (info.oid)}
+						{@render showInfoLine(info)}
+					{/each}
+				</div>
+			{/each}
+		{:else}
+			{#each infos as info (info.oid)}
+				{@render showInfoLine(info)}
+			{/each}
+		{/if}
 	{:else if loading}
 		<div class="relative py-2">
 			<div class="bg-base-200 skeleton my-2 h-7 rounded p-2"></div>
