@@ -4,10 +4,9 @@
 	import db from '$lib/dbs/LocalDb';
 	import { getTagValue } from '$lib/utils';
 	import git_manager from '$lib/git-manager';
-	import type { CommitInfo } from '$lib/types/git-manager';
-	import CommitOneLineSummaries from './CommitOneLineSummaries.svelte';
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
+	import ChangesToFiles from '../explorer/ChangesToFiles.svelte';
 	let { table_item }: { table_item: IssueOrPRTableItem } = $props();
 
 	let pr_repos = $derived(table_item?.repos ?? []);
@@ -28,21 +27,21 @@
 
 	let repo_refs = $derived(table_item.repos);
 
-	let commits_on_branch: CommitInfo[] | undefined = $state();
+	let diff: string | undefined = $state();
 	let interval_id = $state<number | undefined>();
 	let loading: boolean = $state(true);
-	const loadCommitInfos = async (event_id: string, tip_id: string) => {
+	const loadDiff = async (event_id: string, tip_id: string) => {
 		if (interval_id) clearInterval(interval_id);
 		if (git_manager.a_ref && repo_refs.includes(git_manager.a_ref)) {
-			const infos = await git_manager.getPrCommitInfos(
+			const git_diff = await git_manager.getPrDiff(
 				$state.snapshot(event_id),
 				$state.snapshot(tip_id)
 			);
-			if (infos) commits_on_branch = infos;
+			diff = git_diff;
 			loading = false;
 		} else {
 			interval_id = setInterval(() => {
-				loadCommitInfos(event_id, tip_id);
+				loadDiff(event_id, tip_id);
 			}, 100) as unknown as number;
 		}
 	};
@@ -67,11 +66,17 @@
 	);
 
 	onMount(() => {
-		if (tip_and_event_id) loadCommitInfos(tip_and_event_id.event_id, tip_and_event_id.tip);
+		if (tip_and_event_id) loadDiff(tip_and_event_id.event_id, tip_and_event_id.tip);
 	});
 	$effect(() => {
-		if (tip_and_event_id) loadCommitInfos(tip_and_event_id.event_id, tip_and_event_id.tip);
+		if (tip_and_event_id) loadDiff(tip_and_event_id.event_id, tip_and_event_id.tip);
 	});
 </script>
 
-<CommitOneLineSummaries infos={commits_on_branch} {loading} />
+{#if loading}
+	<div class="placeholder h-5 w-full"></div>
+{:else if !diff}
+	failed
+{:else}
+	<ChangesToFiles {diff} />
+{/if}

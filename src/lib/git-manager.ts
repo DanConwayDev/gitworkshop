@@ -1015,6 +1015,191 @@ export class GitManager extends EventTarget {
 		if (!fetched) return undefined; // cant fetch pr data
 		return await this.loadPrCommitInfo(tip_commit_id);
 	}
+
+	// returns a diff string showing whats changed since the base commit
+	private async loadDiffBetween(
+		base_commit_id: string,
+		tip_commit_id: string
+	): Promise<string | undefined> {
+		try {
+			// Get the trees for both commits
+			const [baseCommit, tipCommit] = await Promise.all([
+				git.readCommit({
+					fs: this.fs,
+					dir: `/${this.a_ref}`,
+					oid: base_commit_id
+				}),
+				git.readCommit({
+					fs: this.fs,
+					dir: `/${this.a_ref}`,
+					oid: tip_commit_id
+				})
+			]);
+
+			// Walk through both trees to find differences
+			const baseTree = baseCommit.commit.tree;
+			const tipTree = tipCommit.commit.tree;
+
+			// Get all file paths from both trees
+			const baseFiles = await this.getFilesFromTree(baseTree);
+			const tipFiles = await this.getFilesFromTree(tipTree);
+
+			// Create a set of all unique file paths
+			const allPaths = new Set([...baseFiles.keys(), ...tipFiles.keys()]);
+
+			// Generate diff output
+			let diffOutput = '';
+
+			for (const path of allPaths) {
+				const baseFile = baseFiles.get(path);
+				const tipFile = tipFiles.get(path);
+
+				if (!baseFile && tipFile) {
+					// File was added
+					const content = await this.readBlobContent(tipFile.oid);
+					diffOutput += this.formatFileDiff(path, null, content, 'added');
+				} else if (baseFile && !tipFile) {
+					// File was deleted
+					const content = await this.readBlobContent(baseFile.oid);
+					diffOutput += this.formatFileDiff(path, content, null, 'deleted');
+				} else if (baseFile && tipFile && baseFile.oid !== tipFile.oid) {
+					// File was modified
+					const [baseContent, tipContent] = await Promise.all([
+						this.readBlobContent(baseFile.oid),
+						this.readBlobContent(tipFile.oid)
+					]);
+					diffOutput += this.formatFileDiff(path, baseContent, tipContent, 'modified');
+				}
+			}
+
+			return diffOutput || undefined;
+		} catch (error) {
+			this.log({ level: 'error', msg: `Error generating diff: ${error}` });
+			return undefined;
+		}
+	}
+
+	private async getFilesFromTree(
+		treeOid: string
+	): Promise<Map<string, { oid: string; mode: string }>> {
+		const files = new Map<string, { oid: string; mode: string }>();
+
+		const walkTree = async (oid: string, prefix: string = '') => {
+			const tree = await git.readTree({
+				fs: this.fs,
+				dir: `/${this.a_ref}`,
+				oid
+			});
+
+			for (const entry of tree.tree) {
+				const fullPath = prefix ? `${prefix}/${entry.path}` : entry.path;
+
+				if (entry.type === 'tree') {
+					await walkTree(entry.oid, fullPath);
+				} else if (entry.type === 'blob') {
+					files.set(fullPath, { oid: entry.oid, mode: entry.mode });
+				}
+			}
+		};
+
+		await walkTree(treeOid);
+		return files;
+	}
+
+	private async readBlobContent(oid: string): Promise<string> {
+		try {
+			const { blob } = await git.readBlob({
+				fs: this.fs,
+				dir: `/${this.a_ref}`,
+				oid
+			});
+			return new TextDecoder().decode(blob);
+		} catch {
+			return '';
+		}
+	}
+
+	private formatFileDiff(
+		path: string,
+		oldContent: string | null,
+		newContent: string | null,
+		changeType: 'added' | 'deleted' | 'modified'
+	): string {
+		let diff = '';
+
+		// Generate diff header
+		if (changeType === 'added') {
+			diff += `diff --git a/${path} b/${path}\n`;
+			diff += `new file mode 100644\n`;
+			diff += `index 0000000..1234567\n`;
+			diff += `--- /dev/null\n`;
+			diff += `+++ b/${path}\n`;
+		} else if (changeType === 'deleted') {
+			diff += `diff --git a/${path} b/${path}\n`;
+			diff += `deleted file mode 100644\n`;
+			diff += `index 1234567..0000000\n`;
+			diff += `--- a/${path}\n`;
+			diff += `+++ /dev/null\n`;
+		} else {
+			diff += `diff --git a/${path} b/${path}\n`;
+			diff += `index 1234567..2345678 100644\n`;
+			diff += `--- a/${path}\n`;
+			diff += `+++ b/${path}\n`;
+		}
+
+		// Generate unified diff content
+		const oldLines = oldContent ? oldContent.split('\n') : [];
+		const newLines = newContent ? newContent.split('\n') : [];
+
+		// Simple diff generation (showing all lines as changed for simplicity)
+		// In a production system, you'd want to use a proper diff algorithm
+		if (changeType === 'added') {
+			diff += `@@ -0,0 +1,${newLines.length} @@\n`;
+			newLines.forEach((line) => {
+				diff += `+${line}\n`;
+			});
+		} else if (changeType === 'deleted') {
+			diff += `@@ -1,${oldLines.length} +0,0 @@\n`;
+			oldLines.forEach((line) => {
+				diff += `-${line}\n`;
+			});
+		} else {
+			// For modified files, show a simple before/after
+			diff += `@@ -1,${oldLines.length} +1,${newLines.length} @@\n`;
+			oldLines.forEach((line) => {
+				diff += `-${line}\n`;
+			});
+			newLines.forEach((line) => {
+				diff += `+${line}\n`;
+			});
+		}
+
+		return diff;
+	}
+
+	private async loadPrDiff(tip_commit_id: string): Promise<string | undefined> {
+		const default_tip = await this.getDefaultTip();
+		if (!default_tip) return undefined;
+		const bases = await git.findMergeBase({
+			fs: this.fs,
+			dir: `/${this.a_ref}`,
+			oids: [tip_commit_id, default_tip]
+		});
+		if (bases.length === 0) return undefined;
+		return this.loadDiffBetween(bases[0], tip_commit_id);
+	}
+
+	async getPrDiff(
+		event_id_listing_tip: string,
+		tip_commit_id: string
+	): Promise<string | undefined> {
+		const diff = await this.loadPrDiff(tip_commit_id);
+		if (diff) return diff;
+		// see comment in this.getPrCommitInfos about defect in getDefaultTip
+		const fetched = await this.fetchPrData(event_id_listing_tip, tip_commit_id);
+		if (!fetched) return undefined; // cant fetch pr data
+		return this.loadPrDiff(tip_commit_id);
+	}
 }
 
 function getDefaultBranchRef(state?: string[][], remote?: string): string | undefined {
