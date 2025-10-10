@@ -3,6 +3,7 @@
 	import hljs from 'highlight.js/lib/common';
 	import 'highlight.js/styles/agate.min.css';
 	import type { Change, AddChange, DeleteChange } from 'parse-diff';
+	import { icons_misc } from '$lib/icons';
 
 	let { diff }: { diff: string } = $props();
 
@@ -46,13 +47,30 @@
 		>
 			<div class="bg-base-200 flex w-full">
 				<button
-					class="flex shrink grow p-3 text-sm"
+					class="flex items-center justify-center p-2 text-right text-xs opacity-40"
+					onclick={() => {
+						expand_files[index] = !expand_files[index];
+						expand_full_files[index] = false;
+					}}
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 12 12"
+						class="fill-base-content h-4 w-4"
+					>
+						{#each icons_misc[expand_files[index] ? 'arrow_down_12' : 'arrow_right_12'] as d (d)}
+							<path {d} />
+						{/each}
+					</svg>
+				</button>
+				<button
+					class="flex shrink grow p-3 pl-0 text-sm"
 					onclick={() => {
 						if (expand_full_files[index]) {
 							expand_full_files[index] = false;
 							expand_files[index] = false;
 						} else if (expand_files[index]) {
-							expand_full_files[index] = true;
+							expand_files[index] = false;
 						} else {
 							expand_files[index] = true;
 						}
@@ -69,22 +87,21 @@
 					<div class="grow"></div>
 				</button>
 				<button
-					class="flex-none p-3 text-right text-xs opacity-40"
-					onclick={() => {
-						expand_files[index] = !expand_files[index];
-						expand_full_files[index] = false;
-					}}
-				>
-					{expand_files[index] ? 'collapse' : 'expand'}
-				</button>
-				<button
-					class="flex-none p-3 text-right text-xs opacity-40"
+					class="flex-none px-3 text-right text-xs opacity-40"
 					onclick={() => {
 						expand_full_files[index] = !expand_full_files[index];
 						if (expand_full_files[index]) expand_files[index] = true;
 					}}
 				>
-					full
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						class="fill-base-content h-6 w-6"
+					>
+						{#each icons_misc[expand_files[index] ? 'expand_width_24' : 'expand_width_24'] as d (d)}
+							<path {d} />
+						{/each}
+					</svg>
 				</button>
 			</div>
 			{#if expand_files[index]}
