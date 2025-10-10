@@ -96,7 +96,13 @@
 	onMount(() => {
 		git_manager.addEventListener('log', (e: Event) => {
 			const customEvent = e as CustomEvent<GitManagerLogEntry>;
-			onLog(customEvent.detail);
+			if (
+				// log subscription matches the tip id
+				customEvent.detail.sub &&
+				tip_and_event_id &&
+				customEvent.detail.sub === tip_and_event_id.tip
+			)
+				onLog(customEvent.detail);
 		});
 		if (tip_and_event_id) loadCommitInfos(tip_and_event_id.event_id, tip_and_event_id.tip);
 	});

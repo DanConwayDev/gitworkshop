@@ -901,22 +901,65 @@ export class GitManager extends EventTarget {
 			let count = 0;
 			const clone_length = this.clone_urls?.length ?? 0; // use const here as this.clone_urls can change
 			this.clone_urls?.map(async (url) => {
+				const remote = cloneUrlToRemoteName(url);
 				try {
+					this.log({
+						remote,
+						level: 'info',
+						sub: tip_commit_id,
+						msg: 'awaiting default branch fetch'
+					});
 					await this.awaitFetched(url);
+					this.log({
+						remote,
+						level: 'info',
+						state: 'fetching',
+						sub: tip_commit_id,
+						msg: `fetching refs/nostr/${shortenEventId(event_id)}`
+					});
 					if (finished_search) return;
 					if (a_ref !== this.a_ref) return false; // fetch no longer needed
-					const remote = cloneUrlToRemoteName(url);
 					const res = await this.fetchFromRemote(remote, `refs/nostr/${event_id}`);
 					if (typeof res !== 'string') {
 						if (a_ref !== this.a_ref) return r(false); // fetch no longer needed
 						if (!(await checkForCommit())) {
+							this.log({
+								remote,
+								level: 'warning',
+								state: 'failed',
+								sub: tip_commit_id,
+								msg: `fetched refs/nostr/${shortenEventId(event_id)} but didn't contain desired commit`
+							});
 							count++;
+							return;
 						}
+						this.log({
+							remote,
+							level: 'info',
+							state: 'fetched',
+							sub: tip_commit_id,
+							msg: `refs/nostr/${shortenEventId(event_id)} contains desired commit`
+						});
 						finished_search = true;
 						return r(true);
+					} else {
+						this.log({
+							remote,
+							state: 'failed',
+							level: 'error',
+							sub: tip_commit_id,
+							msg: `${res}`
+						});
 					}
 				} catch (e) {
 					count++;
+					this.log({
+						remote,
+						state: 'failed',
+						level: 'error',
+						sub: tip_commit_id,
+						msg: `${e}`
+					});
 					console.log(e);
 				}
 				if (count == clone_length) r(false);
@@ -1349,6 +1392,12 @@ function getFilePath(selected_path?: SelectedPathInfo): string | undefined {
 		if (selected_path.readme_path) return selected_path.readme_path;
 		if (!selected_path.path_is_dir && selected_path.exists) return selected_path.path;
 	}
+}
+
+function shortenEventId(event_id: string): string {
+	if (typeof event_id !== 'string') return '';
+	if (event_id.length < 10) return event_id;
+	return event_id.slice(0, 5) + '...' + event_id.slice(-5);
 }
 const git_manager = new GitManager();
 

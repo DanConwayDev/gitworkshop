@@ -29,10 +29,12 @@ export interface GitManagerLogEntryServer {
 	remote: string;
 	state: GitServerState;
 	msg?: string;
+	sub?: string;
 }
 export interface GitManagerLogEntryGlobal {
 	level: 'info' | 'warning' | 'error';
 	msg: string;
+	sub?: string;
 }
 export type GitServerState = 'connecting' | 'connected' | 'fetching' | 'fetched' | 'failed';
 
