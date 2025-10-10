@@ -893,6 +893,10 @@ export class GitManager extends EventTarget {
 		const a_ref = this.a_ref;
 
 		const res = await waitForResult(
+			async () => {
+				if (a_ref !== this.a_ref) return false;
+				if (await checkForCommit()) return true;
+			},
 			async (): Promise<boolean> => {
 				const a_ref = this.a_ref;
 				await this.awaitFetched();
@@ -965,10 +969,6 @@ export class GitManager extends EventTarget {
 						if (count == clone_length) r(false);
 					});
 				});
-			},
-			async () => {
-				if (a_ref !== this.a_ref) return false;
-				if (await checkForCommit()) return true;
 			},
 			{
 				intervalMs: 500,
@@ -1429,8 +1429,8 @@ type WaitOpts = {
  * waits finalAttemptDelayMs (if provided) and tries once more, and gives up after timeoutMs.
  */
 async function waitForResult<T>(
-	loader: AsyncFn<T>,
-	trigger?: () => Promise<unknown>,
+	localLoader: AsyncFn<T>,
+	longRunningFetcher?: () => Promise<unknown>,
 	opts?: WaitOpts
 ): Promise<T | undefined> {
 	const intervalMs = opts?.intervalMs ?? 500;
@@ -1458,7 +1458,7 @@ async function waitForResult<T>(
 
 	const intervalPromise = new Promise<T | undefined>((resolve) => {
 		intervalHandle = setInterval(() => {
-			loader()
+			localLoader()
 				.then((r) => {
 					if (r !== undefined && !settled) {
 						settled = true;
@@ -1472,7 +1472,7 @@ async function waitForResult<T>(
 		}, intervalMs);
 
 		// immediate attempt without waiting for first interval
-		loader()
+		localLoader()
 			.then((r) => {
 				if (r !== undefined && !settled) {
 					settled = true;
@@ -1486,8 +1486,8 @@ async function waitForResult<T>(
 	});
 
 	const triggerPromise = new Promise<T | undefined>((resolve) => {
-		if (!trigger) return;
-		trigger()
+		if (!longRunningFetcher) return;
+		longRunningFetcher()
 			.catch(() => {
 				/* ignore trigger errors */
 			})
@@ -1495,7 +1495,7 @@ async function waitForResult<T>(
 				if (settled) return;
 				// attempt immediately after trigger
 				try {
-					const r = await loader();
+					const r = await localLoader();
 					if (r !== undefined && !settled) {
 						settled = true;
 						clearAll();
@@ -1513,7 +1513,7 @@ async function waitForResult<T>(
 
 				if (settled) return;
 				try {
-					const r2 = await loader();
+					const r2 = await localLoader();
 					if (!settled) {
 						settled = true;
 						clearAll();
