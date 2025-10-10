@@ -1441,6 +1441,9 @@ async function waitForResult<T>(
 	let intervalHandle: ReturnType<typeof setInterval> | undefined;
 	let settled = false;
 
+	const res = await localLoader();
+	if (res) return res;
+
 	const clearAll = () => {
 		if (timeoutHandle) clearTimeout(timeoutHandle);
 		if (intervalHandle) clearInterval(intervalHandle);
