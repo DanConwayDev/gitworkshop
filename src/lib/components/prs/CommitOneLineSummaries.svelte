@@ -13,7 +13,7 @@
 	onMount(() => {
 		setTimeout(() => {
 			waited = true;
-		}, 2000);
+		}, 3000);
 	});
 
 	// Group commits by date when grouped_by_date is true

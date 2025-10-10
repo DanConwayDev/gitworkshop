@@ -119,7 +119,12 @@
 	onMount(() => {
 		git_manager.addEventListener('log', (e: Event) => {
 			const customEvent = e as CustomEvent<GitManagerLogEntry>;
-			onLog(customEvent.detail);
+			if (
+				// log subscription matches the tip id
+				customEvent.detail.sub &&
+				customEvent.detail.sub === tip_id
+			)
+				onLog(customEvent.detail);
 		});
 	});
 	let identical_tip = $derived(

@@ -20,7 +20,7 @@
 	onMount(() => {
 		setTimeout(() => {
 			waited = true;
-		}, 2000);
+		}, 3000);
 	});
 
 	// Group commits by date when grouped_by_date is true
@@ -84,7 +84,7 @@
 			{/each}
 		{/if}
 	{:else if loading || !waited}
-		<div class="relative py-2">
+		<div class="relative mb-4">
 			<div class="bg-base-300 skeleton border-base-400 my-2 rounded border border-2 opacity-70">
 				<div class="bg-base-400 p-2">
 					<div
@@ -97,7 +97,7 @@
 				</div>
 				<div class="">
 					<div
-						class="min-h-16transition-opacity duration-3000"
+						class="min-h-16 transition-opacity duration-3000"
 						class:opacity-0={!waited && loading}
 					>
 						{@render showServerStatus()}
@@ -106,12 +106,12 @@
 			</div>
 		</div>
 	{:else}
-		<div class="relative py-2">
+		<div class="relative mb-4">
 			<div class="bg-base-200 border-error/90 my-2 rounded border border-2">
 				<div class="bg-error text-error-content p-2 text-center">Error: cannot find commits</div>
 				<div class="">
 					<div
-						class="min-h-16transition-opacity duration-1500"
+						class="min-h-16 transition-opacity duration-1500"
 						class:opacity-0={!waited && loading}
 					>
 						{@render showServerStatus()}

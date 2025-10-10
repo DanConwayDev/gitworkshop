@@ -7,6 +7,14 @@
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
 	import ChangesToFiles from '../explorer/ChangesToFiles.svelte';
+	import { SvelteMap } from 'svelte/reactivity';
+	import {
+		isGitManagerLogEntryServer,
+		type GitManagerLogEntry,
+		type GitServerStatus
+	} from '$lib/types/git-manager';
+	import { remoteNameToShortName } from '$lib/git-utils';
+	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
 	let { table_item }: { table_item: IssueOrPRTableItem } = $props();
 
 	let pr_repos = $derived(table_item?.repos ?? []);
@@ -71,12 +79,104 @@
 	$effect(() => {
 		if (tip_and_event_id) loadDiff(tip_and_event_id.event_id, tip_and_event_id.tip);
 	});
+
+	let waited = $state(false);
+	onMount(() => {
+		setTimeout(() => {
+			waited = true;
+		}, 3000);
+	});
+
+	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
+	const onLog = (entry: GitManagerLogEntry) => {
+		if (isGitManagerLogEntryServer(entry)) {
+			let status = server_status.get(entry.remote) || {
+				short_name: git_manager.clone_urls
+					? remoteNameToShortName(entry.remote, git_manager.clone_urls)
+					: entry.remote,
+				state: 'connecting',
+				with_proxy: false
+			};
+			if (entry.msg?.includes('proxy')) status.with_proxy = true;
+			server_status.set(entry.remote, {
+				...status,
+				state: entry.state,
+				msg: entry.msg
+			});
+		} else {
+			// not showing any global git logging
+		}
+	};
+	onMount(() => {
+		git_manager.addEventListener('log', (e: Event) => {
+			const customEvent = e as CustomEvent<GitManagerLogEntry>;
+			if (
+				// log subscription matches the tip id
+				customEvent.detail.sub &&
+				tip_and_event_id &&
+				customEvent.detail.sub === tip_and_event_id.tip
+			)
+				onLog(customEvent.detail);
+		});
+	});
 </script>
 
-{#if loading}
-	<div class="placeholder h-5 w-full"></div>
-{:else if !diff}
-	failed
+{#snippet showServerStatus()}
+	{#if server_status}
+		<div class="mx-5 my-5">
+			{#each server_status.entries() as [remote, status] (remote)}
+				<div>
+					<GitServerStateIndicator state={status.state} />
+					{status.short_name}
+					{#if status.with_proxy}
+						<span class="text-base-content/50 text-xs">(via proxy)</span>
+					{/if}
+					<span class="text-base-content/50 text-xs">{status.state}</span>
+					<span class="text-base-content/50 text-xs">{status.msg}</span>
+				</div>
+			{/each}
+		</div>
+	{/if}
+{/snippet}
+
+{#if diff && diff.length > 0}
+	<div class="flex w-full rounded-t p-2">
+		<ChangesToFiles {diff} />
+	</div>
+{:else if loading || !waited}
+	<div class="relative py-2">
+		<div class="skeleton bg-base-200 my-2 rounded">
+			<div class="p-2">
+				<div
+					class="text-center transition-opacity duration-3000"
+					class:opacity-0={!waited && loading}
+				>
+					<span class="loading loading-spinner loading-sm opacity-60"></span>
+					<span class=" text-muted ml-2 text-[0.85rem] font-medium"
+						>fetching latest PR commit data</span
+					>
+				</div>
+			</div>
+		</div>
+		<div class="skeleton bg-base-200 my-2 rounded">
+			<div class="">
+				<div class="min-h-10 transition-opacity duration-3000" class:opacity-0={!waited && loading}>
+					{@render showServerStatus()}
+				</div>
+			</div>
+		</div>
+	</div>
 {:else}
-	<ChangesToFiles {diff} />
+	<div class="relative py-2">
+		<div class="bg-base-200 border-error/90 my-2 rounded border border-2">
+			<div class="bg-error text-error-content p-2 text-center">
+				Error: cannot find PR commit data
+			</div>
+			<div class="">
+				<div class="min-h-5 transition-opacity duration-1500" class:opacity-0={!waited && loading}>
+					{@render showServerStatus()}
+				</div>
+			</div>
+		</div>
+	</div>
 {/if}
