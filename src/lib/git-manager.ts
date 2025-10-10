@@ -381,8 +381,6 @@ export class GitManager extends EventTarget {
 		return new Promise((r) => {
 			const id = setInterval(() => {
 				const fetched =
-					this.clone_urls &&
-					this.clone_urls.length > 0 &&
 					this.connected_remotes.length > 0 &&
 					this.connected_remotes.some((rmt) => rmt.fetched && (!url || rmt.url === url));
 				if (fetched) {
@@ -626,16 +624,34 @@ export class GitManager extends EventTarget {
 			if ((!remote || remote === remote_name) && !remotes.some((r) => r.url === url)) {
 				try {
 					await git.addRemote({ fs: this.fs, dir: `/${this.a_ref}`, remote: remote_name, url });
+					await git.setConfig({
+						fs: this.fs,
+						dir: `/${this.a_ref}`,
+						path: `remote.${remote_name}.fetch`,
+						value: `+refs/*:refs/remotes/${remote_name}/*`
+					});
 				} catch {
 					/* empty */
 				}
 			}
-			await git.setConfig({
-				fs: this.fs,
-				dir: `/${this.a_ref}`,
-				path: `remote.${remote_name}.fetch`,
-				value: `+refs/*:refs/remotes/${remote_name}/*`
-			});
+		}
+	}
+
+	private async addPrRemote(url: string) {
+		const remotes = await git.listRemotes({ fs: this.fs, dir: `/${this.a_ref}` });
+		const remote_name = cloneUrlToRemoteName(url);
+		if (!remotes.some((r) => r.url === url)) {
+			try {
+				await git.addRemote({ fs: this.fs, dir: `/${this.a_ref}`, remote: remote_name, url });
+				await git.setConfig({
+					fs: this.fs,
+					dir: `/${this.a_ref}`,
+					path: `remote.${remote_name}.fetch`,
+					value: `+refs/*:refs/remotes/${remote_name}/*`
+				});
+			} catch {
+				/* empty */
+			}
 		}
 	}
 
@@ -870,8 +886,8 @@ export class GitManager extends EventTarget {
 
 	private async fetchPrData(
 		event_id: string,
-		tip_commit_id: string
-		// extra_clone_urls: string[]
+		tip_commit_id: string,
+		extra_clone_urls: string[]
 	): Promise<boolean> {
 		// TODO: we need do to add support to isomorphic git for git.fetch({oids: string[]})
 		// for now we should just fetch 'refs/nostr/<event-id>
@@ -903,17 +919,53 @@ export class GitManager extends EventTarget {
 				let finished_search = false;
 				return new Promise((r) => {
 					let count = 0;
-					const clone_length = this.clone_urls?.length ?? 0; // use const here as this.clone_urls can change
-					this.clone_urls?.map(async (url) => {
+					const clone_urls = [...(this.clone_urls || [])];
+					extra_clone_urls.forEach((c) => {
+						if (!clone_urls.includes(c)) clone_urls.push(c);
+					});
+					const clone_length = clone_urls?.length; // use const here as this.clone_urls can change
+
+					clone_urls.map(async (url) => {
 						const remote = cloneUrlToRemoteName(url);
 						try {
-							this.log({
-								remote,
-								level: 'info',
-								sub: tip_commit_id,
-								msg: 'awaiting default branch fetch'
-							});
-							await this.awaitFetched(url);
+							if (this.clone_urls?.includes(url)) {
+								this.log({
+									remote,
+									level: 'info',
+									sub: tip_commit_id,
+									msg: 'awaiting default branch fetch'
+								});
+								await this.awaitFetched(url);
+							} else {
+								// test connection
+								await this.addPrRemote(url);
+								this.log({
+									remote,
+									level: 'info',
+									state: 'connecting',
+									sub: tip_commit_id,
+									msg: 'remote provided by PR / PR update author'
+								});
+								const connected = await this.connectToRemote(url);
+								if (!connected) {
+									this.log({
+										remote,
+										level: 'error',
+										state: 'failed',
+										sub: tip_commit_id,
+										msg: 'failed to connect to server provided by PR / PR update author'
+									});
+									return;
+								}
+								this.log({
+									remote,
+									level: 'info',
+									state: 'connected',
+									sub: tip_commit_id,
+									msg: 'remote provided by PR / PR update author'
+								});
+								await this.addPrRemote(url);
+							}
 							this.log({
 								remote,
 								level: 'info',
@@ -1098,11 +1150,12 @@ export class GitManager extends EventTarget {
 
 	async getPrCommitInfos(
 		event_id_listing_tip: string,
-		tip_commit_id: string
+		tip_commit_id: string,
+		extra_clone_urls: string[]
 	): Promise<CommitInfo[] | undefined> {
 		return await waitForResult<CommitInfo[]>(
 			() => this.loadPrCommitInfo(tip_commit_id),
-			() => this.fetchPrData(event_id_listing_tip, tip_commit_id),
+			() => this.fetchPrData(event_id_listing_tip, tip_commit_id, extra_clone_urls),
 			{
 				intervalMs: 500,
 				timeoutMs: 60_000,
@@ -1252,12 +1305,13 @@ export class GitManager extends EventTarget {
 
 	async getPrDiff(
 		event_id_listing_tip: string,
-		tip_commit_id: string
+		tip_commit_id: string,
+		extra_clone_urls: string[]
 	): Promise<string | undefined> {
 		const diff = await this.loadPrDiff(tip_commit_id);
 		if (diff) return diff;
 		// see comment in this.getPrCommitInfos about defect in getDefaultTip
-		const fetched = await this.fetchPrData(event_id_listing_tip, tip_commit_id);
+		const fetched = await this.fetchPrData(event_id_listing_tip, tip_commit_id, extra_clone_urls);
 		if (!fetched) return undefined; // cant fetch pr data
 		return this.loadPrDiff(tip_commit_id);
 	}
@@ -1297,12 +1351,16 @@ export class GitManager extends EventTarget {
 		}
 	}
 
-	async getCommitDiff(commit_id: string, event_id_ref_hint?: string): Promise<string | undefined> {
+	async getCommitDiff(
+		commit_id: string,
+		event_id_ref_hint?: string,
+		extra_clone_urls?: string[]
+	): Promise<string | undefined> {
 		const diff = await this.loadCommitDiff(commit_id);
 		if (diff) return diff;
 		if (!event_id_ref_hint) return undefined;
 		// see comment in this.getPrCommitInfos about defect in getDefaultTip
-		const fetched = await this.fetchPrData(event_id_ref_hint, commit_id);
+		const fetched = await this.fetchPrData(event_id_ref_hint, commit_id, extra_clone_urls || []);
 		if (!fetched) return undefined; // cant fetch pr data
 		return this.loadCommitDiff(commit_id);
 	}

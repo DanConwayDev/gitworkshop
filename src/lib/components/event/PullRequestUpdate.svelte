@@ -4,7 +4,7 @@
 	import EventWrapperLite from './EventWrapperLite.svelte';
 	import { inMemoryRelayTimeline, liveQueryState } from '$lib/helpers.svelte';
 	import db from '$lib/dbs/LocalDb';
-	import { getTagValue } from '$lib/utils';
+	import { getTagMultiValue, getTagValue } from '$lib/utils';
 	import git_manager from '$lib/git-manager';
 	import {
 		isGitManagerLogEntryServer,
@@ -44,6 +44,7 @@
 	let with_permission = $derived(item_maintainers.includes(event.pubkey));
 
 	let tip_id = $derived(getTagValue(event.tags, 'c') || '[commit_id unknown]');
+	let extra_clone_urls = $derived(getTagMultiValue(event.tags, 'clone') || []);
 
 	let repo_refs = $derived(
 		event.tags.flatMap((s) => (s[0] === 'a' && s[1] !== undefined ? [s[1]] : []))
@@ -52,18 +53,19 @@
 	let commits_on_branch: CommitInfo[] | undefined = $state();
 	let interval_id = $state<number | undefined>();
 	let loading: boolean = $state(true);
-	const loadCommitInfos = async (event_id: string, tip_id: string) => {
+	const loadCommitInfos = async (event_id: string, tip_id: string, extra_clone_urls: string[]) => {
 		if (interval_id) clearInterval(interval_id);
 		if (git_manager.a_ref && repo_refs.includes(git_manager.a_ref)) {
 			const infos = await git_manager.getPrCommitInfos(
 				$state.snapshot(event_id),
-				$state.snapshot(tip_id)
+				$state.snapshot(tip_id),
+				$state.snapshot(extra_clone_urls)
 			);
 			if (infos) commits_on_branch = infos;
 			loading = false;
 		} else {
 			interval_id = setInterval(() => {
-				loadCommitInfos(event_id, tip_id);
+				loadCommitInfos(event_id, tip_id, extra_clone_urls);
 			}, 100) as unknown as number;
 		}
 	};
@@ -94,7 +96,7 @@
 	let waited = $state(false); // avoid flashing incorrect !with_permission messages
 	onMount(() => {
 		setTimeout(() => (waited = true), 2000);
-		loadCommitInfos(event.id, tip_id);
+		loadCommitInfos(event.id, tip_id, extra_clone_urls);
 	});
 	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
 	const onLog = (entry: GitManagerLogEntry) => {

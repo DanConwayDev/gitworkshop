@@ -2,7 +2,7 @@
 	import type { IssueOrPRTableItem, PubKeyString } from '$lib/types';
 	import { inMemoryRelayTimeline, liveQueryState } from '$lib/helpers.svelte';
 	import db from '$lib/dbs/LocalDb';
-	import { getTagValue } from '$lib/utils';
+	import { getTagMultiValue, getTagValue } from '$lib/utils';
 	import git_manager from '$lib/git-manager';
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
@@ -38,18 +38,19 @@
 	let commits: CommitInfo[] | undefined = $state();
 	let interval_id = $state<number | undefined>();
 	let loading: boolean = $state(true);
-	const loadCommitInfos = async (event_id: string, tip_id: string) => {
+	const loadCommitInfos = async (event_id: string, tip_id: string, extra_clone_urls: string[]) => {
 		if (interval_id) clearInterval(interval_id);
 		if (git_manager.a_ref && repo_refs.includes(git_manager.a_ref)) {
 			const infos = await git_manager.getPrCommitInfos(
 				$state.snapshot(event_id),
-				$state.snapshot(tip_id)
+				$state.snapshot(tip_id),
+				$state.snapshot(extra_clone_urls)
 			);
 			commits = infos;
 			loading = false;
 		} else {
 			interval_id = setInterval(() => {
-				loadCommitInfos(event_id, tip_id);
+				loadCommitInfos(event_id, tip_id, extra_clone_urls);
 			}, 100) as unknown as number;
 		}
 	};
@@ -60,7 +61,7 @@
 			{ kinds: [PrUpdateKind], '#E': [table_item.uuid] }
 		])
 	);
-	let tip_and_event_id = $derived(
+	let tip_details = $derived(
 		// the PR event may not be in local relay so supliment with pr_table_item.event
 		[...(table_item ? [table_item.event] : []), ...pr_or_pr_update_query.timeline]
 			.filter((e) => item_maintainers.includes(e.pubkey))
@@ -68,7 +69,8 @@
 			.map((e) => {
 				let tip = getTagValue(e.tags, 'c');
 				if (!tip) return undefined;
-				return { event_id: e.id, tip };
+				let extra_clone_urls = getTagMultiValue(e.tags, 'clone') || [];
+				return { event_id: e.id, tip, extra_clone_urls };
 			})
 			.find((e) => !!e)
 	);
@@ -99,15 +101,17 @@
 			if (
 				// log subscription matches the tip id
 				customEvent.detail.sub &&
-				tip_and_event_id &&
-				customEvent.detail.sub === tip_and_event_id.tip
+				tip_details &&
+				customEvent.detail.sub === tip_details.tip
 			)
 				onLog(customEvent.detail);
 		});
-		if (tip_and_event_id) loadCommitInfos(tip_and_event_id.event_id, tip_and_event_id.tip);
+		if (tip_details)
+			loadCommitInfos(tip_details.event_id, tip_details.tip, tip_details.extra_clone_urls);
 	});
 	$effect(() => {
-		if (tip_and_event_id) loadCommitInfos(tip_and_event_id.event_id, tip_and_event_id.tip);
+		if (tip_details)
+			loadCommitInfos(tip_details.event_id, tip_details.tip, tip_details.extra_clone_urls);
 	});
 </script>
 
