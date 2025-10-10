@@ -6,8 +6,15 @@
 	import git_manager from '$lib/git-manager';
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
-	import type { CommitInfo } from '$lib/types/git-manager';
+	import {
+		isGitManagerLogEntryServer,
+		type CommitInfo,
+		type GitManagerLogEntry,
+		type GitServerStatus
+	} from '$lib/types/git-manager';
 	import CommitsDetails from './CommitsDetails.svelte';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { remoteNameToShortName } from '$lib/git-utils';
 	let { table_item }: { table_item: IssueOrPRTableItem } = $props();
 
 	let pr_repos = $derived(table_item?.repos ?? []);
@@ -66,7 +73,31 @@
 			.find((e) => !!e)
 	);
 
+	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
+	const onLog = (entry: GitManagerLogEntry) => {
+		if (isGitManagerLogEntryServer(entry)) {
+			let status = server_status.get(entry.remote) || {
+				short_name: git_manager.clone_urls
+					? remoteNameToShortName(entry.remote, git_manager.clone_urls)
+					: entry.remote,
+				state: 'connecting',
+				with_proxy: false
+			};
+			if (entry.msg?.includes('proxy')) status.with_proxy = true;
+			server_status.set(entry.remote, {
+				...status,
+				state: entry.state,
+				msg: entry.msg
+			});
+		} else {
+			// not showing any global git logging
+		}
+	};
 	onMount(() => {
+		git_manager.addEventListener('log', (e: Event) => {
+			const customEvent = e as CustomEvent<GitManagerLogEntry>;
+			onLog(customEvent.detail);
+		});
 		if (tip_and_event_id) loadCommitInfos(tip_and_event_id.event_id, tip_and_event_id.tip);
 	});
 	$effect(() => {
@@ -74,4 +105,4 @@
 	});
 </script>
 
-<CommitsDetails infos={commits} {loading} grouped_by_date={true} />
+<CommitsDetails infos={commits} {loading} grouped_by_date={true} {server_status} />

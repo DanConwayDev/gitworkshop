@@ -6,6 +6,7 @@
 	import { pr_icon_path } from '../prs/icons';
 	import AlertWarning from '../AlertWarning.svelte';
 	import ExplorerServerStatusIcon from './ExplorerServerStatusIcon.svelte';
+	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
 
 	let {
 		base_url,
@@ -55,16 +56,6 @@
 	});
 </script>
 
-{#snippet showStatusIndicatorStatus(state: GitServerState | undefined, classes: string = '')}
-	{#if state}
-		<span
-			class="indicator-item status {classes}"
-			class:status-success={['connected', 'fetched'].includes(state)}
-			class:status-warning={state === 'connecting' || state === 'fetching'}
-			class:status-error={state === 'failed'}
-		></span>
-	{/if}
-{/snippet}
 <div
 	class="border-base-400 bg-base-200 my-2 flex items-center rounded-t-lg border-x border-t"
 	class:mb-0={show_bottom || !!git_warning}
@@ -214,7 +205,7 @@
 		<div class="mx-5 my-5">
 			{#each server_status.entries() as [remote, status] (remote)}
 				<div>
-					{@render showStatusIndicatorStatus(status.state)}
+					<GitServerStateIndicator state={status.state} />
 					{status.short_name}
 					{#if status.with_proxy}
 						<span class="text-base-content/50 text-xs">(via proxy)</span>

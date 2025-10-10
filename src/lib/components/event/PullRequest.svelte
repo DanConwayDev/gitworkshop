@@ -5,9 +5,16 @@
 	import { nostrEventToDocTree } from '$lib/doc_tree';
 	import { getTagValue } from '$lib/utils';
 	import git_manager from '$lib/git-manager';
-	import type { CommitInfo } from '$lib/types/git-manager';
+	import {
+		isGitManagerLogEntryServer,
+		type CommitInfo,
+		type GitManagerLogEntry,
+		type GitServerStatus
+	} from '$lib/types/git-manager';
 	import { onMount } from 'svelte';
 	import CommitsDetails from '../prs/CommitsDetails.svelte';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { remoteNameToShortName } from '$lib/git-utils';
 
 	let { event }: { event: NostrEvent } = $props();
 
@@ -42,10 +49,36 @@
 		loadCommitInfos(event.id, tip_id);
 	});
 	// let tip_id_shorthand = $derived(tip_id.substring(0, 8) || '[commit_id unknown]');
+	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
+	const onLog = (entry: GitManagerLogEntry) => {
+		if (isGitManagerLogEntryServer(entry)) {
+			let status = server_status.get(entry.remote) || {
+				short_name: git_manager.clone_urls
+					? remoteNameToShortName(entry.remote, git_manager.clone_urls)
+					: entry.remote,
+				state: 'connecting',
+				with_proxy: false
+			};
+			if (entry.msg?.includes('proxy')) status.with_proxy = true;
+			server_status.set(entry.remote, {
+				...status,
+				state: entry.state,
+				msg: entry.msg
+			});
+		} else {
+			// not showing any global git logging
+		}
+	};
+	onMount(() => {
+		git_manager.addEventListener('log', (e: Event) => {
+			const customEvent = e as CustomEvent<GitManagerLogEntry>;
+			onLog(customEvent.detail);
+		});
+	});
 </script>
 
 <div class="">
 	<ContentTree node={content} />
 
-	<CommitsDetails infos={commits} {loading} />
+	<CommitsDetails infos={commits} {loading} {server_status} />
 </div>

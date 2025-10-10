@@ -6,12 +6,19 @@
 	import db from '$lib/dbs/LocalDb';
 	import { getTagValue } from '$lib/utils';
 	import git_manager from '$lib/git-manager';
-	import type { CommitInfo } from '$lib/types/git-manager';
+	import {
+		isGitManagerLogEntryServer,
+		type CommitInfo,
+		type GitManagerLogEntry,
+		type GitServerStatus
+	} from '$lib/types/git-manager';
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import EventWrapper from './EventWrapper.svelte';
 	import CommitsDetails from '../prs/CommitsDetails.svelte';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { remoteNameToShortName } from '$lib/git-utils';
 	let { event }: { event: NostrEvent } = $props();
 
 	let pr_event_id: string | undefined = $derived(getTagValue(event.tags, 'E'));
@@ -89,6 +96,32 @@
 		setTimeout(() => (waited = true), 2000);
 		loadCommitInfos(event.id, tip_id);
 	});
+	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
+	const onLog = (entry: GitManagerLogEntry) => {
+		if (isGitManagerLogEntryServer(entry)) {
+			let status = server_status.get(entry.remote) || {
+				short_name: git_manager.clone_urls
+					? remoteNameToShortName(entry.remote, git_manager.clone_urls)
+					: entry.remote,
+				state: 'connecting',
+				with_proxy: false
+			};
+			if (entry.msg?.includes('proxy')) status.with_proxy = true;
+			server_status.set(entry.remote, {
+				...status,
+				state: entry.state,
+				msg: entry.msg
+			});
+		} else {
+			// not showing any global git logging
+		}
+	};
+	onMount(() => {
+		git_manager.addEventListener('log', (e: Event) => {
+			const customEvent = e as CustomEvent<GitManagerLogEntry>;
+			onLog(customEvent.detail);
+		});
+	});
 	let identical_tip = $derived(
 		new_commits && commits_on_branch && new_commits.length === 0 && commits_on_branch.length > 0
 	);
@@ -119,6 +152,6 @@
 				</div>
 			</div>
 		{/if}
-		<CommitsDetails infos={new_commits} {loading} />
+		<CommitsDetails infos={new_commits} {loading} {server_status} />
 	</EventWrapper>
 {/if}
