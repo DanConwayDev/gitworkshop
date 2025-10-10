@@ -875,11 +875,6 @@ export class GitManager extends EventTarget {
 	): Promise<boolean> {
 		// TODO: we need do to add support to isomorphic git for git.fetch({oids: string[]})
 		// for now we should just fetch 'refs/nostr/<event-id>
-		// TODO: could we just try and use a commit id as a ref and see if it works?
-		const a_ref = this.a_ref;
-		await this.awaitFetched();
-		if (a_ref !== this.a_ref) return false; // fetch no longer needed
-
 		const checkForCommit = async () => {
 			try {
 				const res = await git.log({
@@ -894,77 +889,96 @@ export class GitManager extends EventTarget {
 			}
 			return false;
 		};
-		if (await checkForCommit()) return true;
-		if (a_ref !== this.a_ref) return false; // fetch no longer needed
-		let finished_search = false;
-		return new Promise((r) => {
-			let count = 0;
-			const clone_length = this.clone_urls?.length ?? 0; // use const here as this.clone_urls can change
-			this.clone_urls?.map(async (url) => {
-				const remote = cloneUrlToRemoteName(url);
-				try {
-					this.log({
-						remote,
-						level: 'info',
-						sub: tip_commit_id,
-						msg: 'awaiting default branch fetch'
-					});
-					await this.awaitFetched(url);
-					this.log({
-						remote,
-						level: 'info',
-						state: 'fetching',
-						sub: tip_commit_id,
-						msg: `fetching refs/nostr/${shortenEventId(event_id)}`
-					});
-					if (finished_search) return;
-					if (a_ref !== this.a_ref) return false; // fetch no longer needed
-					const res = await this.fetchFromRemote(remote, `refs/nostr/${event_id}`);
-					if (typeof res !== 'string') {
-						if (a_ref !== this.a_ref) return r(false); // fetch no longer needed
-						if (!(await checkForCommit())) {
+
+		const a_ref = this.a_ref;
+
+		const res = await waitForResult(
+			async (): Promise<boolean> => {
+				const a_ref = this.a_ref;
+				await this.awaitFetched();
+				let finished_search = false;
+				return new Promise((r) => {
+					let count = 0;
+					const clone_length = this.clone_urls?.length ?? 0; // use const here as this.clone_urls can change
+					this.clone_urls?.map(async (url) => {
+						const remote = cloneUrlToRemoteName(url);
+						try {
 							this.log({
 								remote,
-								level: 'warning',
-								state: 'failed',
+								level: 'info',
 								sub: tip_commit_id,
-								msg: `fetched refs/nostr/${shortenEventId(event_id)} but didn't contain desired commit`
+								msg: 'awaiting default branch fetch'
 							});
+							await this.awaitFetched(url);
+							this.log({
+								remote,
+								level: 'info',
+								state: 'fetching',
+								sub: tip_commit_id,
+								msg: `fetching refs/nostr/${shortenEventId(event_id)}`
+							});
+							if (finished_search) return;
+							if (a_ref !== this.a_ref) return false; // fetch no longer needed
+							const res = await this.fetchFromRemote(remote, `refs/nostr/${event_id}`);
+							if (typeof res !== 'string') {
+								if (a_ref !== this.a_ref) return r(false); // fetch no longer needed
+								if (!(await checkForCommit())) {
+									this.log({
+										remote,
+										level: 'warning',
+										state: 'failed',
+										sub: tip_commit_id,
+										msg: `fetched refs/nostr/${shortenEventId(event_id)} but didn't contain desired commit`
+									});
+									count++;
+									return;
+								}
+								this.log({
+									remote,
+									level: 'info',
+									state: 'fetched',
+									sub: tip_commit_id,
+									msg: `refs/nostr/${shortenEventId(event_id)} contains desired commit`
+								});
+								finished_search = true;
+								return r(true);
+							} else {
+								this.log({
+									remote,
+									state: 'failed',
+									level: 'error',
+									sub: tip_commit_id,
+									msg: `${res}`
+								});
+							}
+						} catch (e) {
 							count++;
-							return;
+							this.log({
+								remote,
+								state: 'failed',
+								level: 'error',
+								sub: tip_commit_id,
+								msg: `${e}`
+							});
+							console.log(e);
 						}
-						this.log({
-							remote,
-							level: 'info',
-							state: 'fetched',
-							sub: tip_commit_id,
-							msg: `refs/nostr/${shortenEventId(event_id)} contains desired commit`
-						});
-						finished_search = true;
-						return r(true);
-					} else {
-						this.log({
-							remote,
-							state: 'failed',
-							level: 'error',
-							sub: tip_commit_id,
-							msg: `${res}`
-						});
-					}
-				} catch (e) {
-					count++;
-					this.log({
-						remote,
-						state: 'failed',
-						level: 'error',
-						sub: tip_commit_id,
-						msg: `${e}`
+						if (count == clone_length) r(false);
 					});
-					console.log(e);
-				}
-				if (count == clone_length) r(false);
-			});
-		});
+				});
+			},
+			async () => {
+				if (a_ref !== this.a_ref) return false;
+				if (await checkForCommit()) return true;
+			},
+			{
+				intervalMs: 500,
+				timeoutMs: 60_000,
+				// sometimes either Pr commit data or defaultTip isn't available straight after fetchPrData
+				// maybe a better fix would be for getDefaultTip wait for a bit if unavailable but we are doing it here instead
+				finalAttemptDelayMs: 500
+			}
+		);
+		return res || false;
 	}
 
 	private async getDefaultTip(): Promise<string | undefined> {
@@ -1086,16 +1100,17 @@ export class GitManager extends EventTarget {
 		event_id_listing_tip: string,
 		tip_commit_id: string
 	): Promise<CommitInfo[] | undefined> {
-		const infos = await this.loadPrCommitInfo(tip_commit_id);
-		if (infos) return infos;
-		// either Pr commit data or defaultTip isn't available yet
-		// sometimes default tip data is stored locally but default tip data returns undefined (not loaded yet)
-		// TODO we could make this better by not waiting for a fetch.
-		//  1) fix getDefaultTip so it waits for local data to be first.
-		//  2) only awaitFetch in fetchPrData if getDefaultTip doesnt return anything
-		const fetched = await this.fetchPrData(event_id_listing_tip, tip_commit_id);
-		if (!fetched) return undefined; // cant fetch pr data
-		return await this.loadPrCommitInfo(tip_commit_id);
+		return await waitForResult<CommitInfo[]>(
+			() => this.loadPrCommitInfo(tip_commit_id),
+			() => this.fetchPrData(event_id_listing_tip, tip_commit_id),
+			{
+				intervalMs: 500,
+				timeoutMs: 60_000,
+				// sometimes either Pr commit data or defaultTip isn't available straight after fetchPrData
+				// maybe a better fix would be for getDefaultTip wait for a bit if unavailable but we are doing it here instead
+				finalAttemptDelayMs: 500
+			}
+		);
 	}
 
 	// returns a diff string showing whats changed since the base commit
@@ -1399,6 +1414,129 @@ function shortenEventId(event_id: string): string {
 	if (event_id.length < 10) return event_id;
 	return event_id.slice(0, 5) + '...' + event_id.slice(-5);
 }
+
+type AsyncFn<T> = () => Promise<T | undefined>;
+
+type WaitOpts = {
+	intervalMs?: number;
+	timeoutMs?: number;
+	finalAttemptDelayMs?: number; // optional delay before the final attempt after trigger (ms)
+};
+
+/**
+ * Wait for loader to return a defined value. Starts polling immediately,
+ * runs trigger (if provided) and then tries loader once after trigger resolves,
+ * waits finalAttemptDelayMs (if provided) and tries once more, and gives up after timeoutMs.
+ */
+async function waitForResult<T>(
+	loader: AsyncFn<T>,
+	trigger?: () => Promise<unknown>,
+	opts?: WaitOpts
+): Promise<T | undefined> {
+	const intervalMs = opts?.intervalMs ?? 500;
+	const timeoutMs = opts?.timeoutMs ?? 60_000;
+	const finalAttemptDelayMs = opts?.finalAttemptDelayMs ?? 0;
+
+	let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+	let intervalHandle: ReturnType<typeof setInterval> | undefined;
+	let settled = false;
+
+	const clearAll = () => {
+		if (timeoutHandle) clearTimeout(timeoutHandle);
+		if (intervalHandle) clearInterval(intervalHandle);
+	};
+
+	const timeoutPromise = new Promise<T | undefined>((resolve) => {
+		timeoutHandle = setTimeout(() => {
+			if (!settled) {
+				settled = true;
+				clearAll();
+				resolve(undefined);
+			}
+		}, timeoutMs);
+	});
+
+	const intervalPromise = new Promise<T | undefined>((resolve) => {
+		intervalHandle = setInterval(() => {
+			loader()
+				.then((r) => {
+					if (r !== undefined && !settled) {
+						settled = true;
+						clearAll();
+						resolve(r);
+					}
+				})
+				.catch(() => {
+					/* ignore loader errors */
+				});
+		}, intervalMs);
+
+		// immediate attempt without waiting for first interval
+		loader()
+			.then((r) => {
+				if (r !== undefined && !settled) {
+					settled = true;
+					clearAll();
+					resolve(r);
+				}
+			})
+			.catch(() => {
+				/* ignore */
+			});
+	});
+
+	const triggerPromise = new Promise<T | undefined>((resolve) => {
+		if (!trigger) return;
+		trigger()
+			.catch(() => {
+				/* ignore trigger errors */
+			})
+			.then(async () => {
+				if (settled) return;
+				// attempt immediately after trigger
+				try {
+					const r = await loader();
+					if (r !== undefined && !settled) {
+						settled = true;
+						clearAll();
+						resolve(r);
+						return;
+					}
+				} catch {
+					// ignore
+				}
+
+				// optional final attempt delay, then try once more
+				if (finalAttemptDelayMs > 0) {
+					await new Promise((res) => setTimeout(res, finalAttemptDelayMs));
+				}
+
+				if (settled) return;
+				try {
+					const r2 = await loader();
+					if (!settled) {
+						settled = true;
+						clearAll();
+						resolve(r2);
+					}
+				} catch {
+					if (!settled) {
+						settled = true;
+						clearAll();
+						resolve(undefined);
+					}
+				}
+			});
+	});
+
+	const result = (await Promise.race([timeoutPromise, intervalPromise, triggerPromise])) as
+		| T
+		| undefined;
+
+	clearAll();
+	return result;
+}
+
 const git_manager = new GitManager();
 
 export default git_manager;
