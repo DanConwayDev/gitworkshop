@@ -133,7 +133,7 @@
 						{/each}
 					</div>
 					<div class="flex-auto overflow-x-auto">
-						<div class="w-fit">
+						<div class="w-fit min-w-full">
 							{#each file.chunks as chunk, index (index)}
 								{#if index !== 0}
 									<div class="bg-base-200 flex h-7 w-full"></div>
