@@ -34,11 +34,11 @@
 	const loadCommitInfos = async (event_id: string, tip_id: string, extra_clone_urls: string[]) => {
 		if (interval_id) clearInterval(interval_id);
 		if (git_manager.a_ref && repo_refs.includes(git_manager.a_ref)) {
-			const infos = await git_manager.getPrCommitInfos(
-				$state.snapshot(event_id),
-				$state.snapshot(tip_id),
-				$state.snapshot(extra_clone_urls)
-			);
+			const infos = await git_manager.getPrCommitInfos({
+				event_id_listing_tip: $state.snapshot(event_id),
+				tip_commit_id: $state.snapshot(tip_id),
+				extra_clone_urls: $state.snapshot(extra_clone_urls)
+			});
 			commits = infos;
 			loading = false;
 		} else {

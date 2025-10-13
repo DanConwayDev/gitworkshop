@@ -60,12 +60,14 @@
 		setTimeout(() => {
 			waited_1s = true;
 		}, 1000);
-		git_manager.refreshExplorer();
+		git_manager.refreshExplorer({});
 		git_manager.logs.forEach(onLog);
 	});
 
 	$effect(() => {
-		git_manager.updateRefAndPath($state.snapshot(ref_and_path));
+		git_manager.updateRefAndPath({
+			ref_and_path: $state.snapshot(ref_and_path)
+		});
 	});
 
 	let file_content: string | undefined = $state();

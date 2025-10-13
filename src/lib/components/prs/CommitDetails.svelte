@@ -30,7 +30,7 @@
 	let loading_diff = $state(true);
 	let diff: string | undefined = $state();
 	onMount(async () => {
-		let git_diff = await git_manager.getCommitDiff(info.oid, event_id_ref_hint);
+		let git_diff = await git_manager.getCommitDiff({ commit_id: info.oid, event_id_ref_hint });
 		diff = git_diff;
 		loading_diff = false;
 	});

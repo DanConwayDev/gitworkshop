@@ -38,7 +38,6 @@ import { processNewStatus, processQualityChild, updateRepoMetrics } from './Issu
 
 const processPrUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
-		if (u.event?.kind === PrKind) console.log('bla');
 		if (!isProcessorPrUpdate(u)) return true;
 		const uuid = getPrId(u);
 		// drop update with no uuid as it will never process correctly

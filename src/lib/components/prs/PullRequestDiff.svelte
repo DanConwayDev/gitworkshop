@@ -41,11 +41,11 @@
 	const loadDiff = async (event_id: string, tip_id: string, extra_clone_urls: string[]) => {
 		if (interval_id) clearInterval(interval_id);
 		if (git_manager.a_ref && repo_refs.includes(git_manager.a_ref)) {
-			const git_diff = await git_manager.getPrDiff(
-				$state.snapshot(event_id),
-				$state.snapshot(tip_id),
-				$state.snapshot(extra_clone_urls)
-			);
+			const git_diff = await git_manager.getPrDiff({
+				event_id_listing_tip: $state.snapshot(event_id),
+				tip_commit_id: $state.snapshot(tip_id),
+				extra_clone_urls: $state.snapshot(extra_clone_urls)
+			});
 			diff = git_diff;
 			loading = false;
 		} else {

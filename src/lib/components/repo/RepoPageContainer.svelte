@@ -73,11 +73,11 @@
 
 	function loadRepository() {
 		if (a_ref && clone_urls && clone_urls.length > 0)
-			git_manager.loadRepository(
-				$state.snapshot(a_ref),
-				$state.snapshot(clone_urls),
-				$state.snapshot(nostr_state)
-			);
+			git_manager.loadRepository({
+				a_ref: $state.snapshot(a_ref),
+				clone_urls: $state.snapshot(clone_urls),
+				nostr_state_refs: $state.snapshot(nostr_state)
+			});
 	}
 	onMount(() => {
 		loadRepository();
@@ -89,12 +89,12 @@
 		loadRepository();
 	});
 	$effect(() => {
-		git_manager.updateNostrState($state.snapshot(nostr_state));
+		git_manager.updateNostrState({ nostr_state: $state.snapshot(nostr_state) });
 	});
 	$effect(() => {
 		if (clone_urls) {
 			loadRepository();
-			git_manager.updateCloneUrls($state.snapshot(clone_urls));
+			git_manager.updateCloneUrls({ clone_urls: $state.snapshot(clone_urls) });
 		}
 	});
 </script>
