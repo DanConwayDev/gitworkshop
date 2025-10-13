@@ -435,7 +435,40 @@ export class GitManager extends EventTarget {
 		}
 	}
 
+	private isRefreshing: boolean = false;
+	private queueNextRefresh = false;
+	private refreshPromise: Promise<void> | null = null;
+
 	private async refreshSelectedRef(fetch_missing: boolean = false, force_dispatch_event = false) {
+		if (this.isRefreshing) {
+			this.queueNextRefresh = true;
+			await this.refreshPromise;
+			if (this.queueNextRefresh) {
+				this.queueNextRefresh = false;
+				await this.refreshPromise;
+			}
+			return;
+		}
+
+		this.isRefreshing = true;
+
+		// Create a new promise for the refresh operation
+		this.refreshPromise = new Promise((resolve) => {
+			this.processRefs(fetch_missing, force_dispatch_event, resolve);
+		});
+
+		await this.refreshPromise;
+
+		// Reset the state after the promise resolves
+		this.isRefreshing = false;
+		this.refreshPromise = null;
+	}
+
+	private async processRefs(
+		fetch_missing: boolean,
+		force_dispatch_event: boolean,
+		resolve: () => void
+	) {
 		const ref_paths = this.getDesiredRefPath();
 		for (const [index, { ref, path, ref_value }] of ref_paths.entries()) {
 			try {
@@ -474,20 +507,25 @@ export class GitManager extends EventTarget {
 				if (reload_dirs_and_file || force_dispatch_event) {
 					this.loadDirsAndFile(path, normaliseRemoteRef(ref, true), commit[0].oid);
 				}
-				return; // use first match (most desirable ref that we have the blobs for)
+				// Resolve after first match (most desirable ref that we have the blobs for)
+				resolve();
+				return;
 			} catch (e) {
 				if (fetch_missing) {
 					this.log({ level: 'error', msg: `TODO - fix this missing ref: ${ref}: error: ${e}` });
-					console.log(`error: couldnt resolve ${ref} - need to fetch it. error: ${e}`);
+					console.log(`error: couldn't resolve ${ref} - need to fetch it. error: ${e}`);
 					// fetchFromRemote gets all tips, so we should only get here when nostr_state_refs changes and we need a new fetch
 					// TODO - try and fetch for git severs - we need to be careful not to create a infinate loop of fetching from git servers when the nost refs aren't available
 				} else {
 					// fetchFromRemote gets all tips so should only get here if nostr_refs aren't avialable on git servers
 					this.log({ level: 'error', msg: `missing ref: ${ref}: error: ${e}` });
-					console.log(`error: couldnt resolve ${ref} - need to fetch it. error: ${e}`);
+					console.log(`error: couldn't resolve ${ref} - need to fetch it. error: ${e}`);
 				}
 			}
 		}
+
+		// Resolve when done with the loop
+		resolve();
 	}
 
 	private async loadDirsAndFile(path: string, ref_label: string, commit_id: string) {
