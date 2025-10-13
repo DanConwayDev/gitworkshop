@@ -27,10 +27,12 @@
 		)
 	);
 
+	let loading_diff = $state(true);
 	let diff: string | undefined = $state();
 	onMount(async () => {
 		let git_diff = await git_manager.getCommitDiff(info.oid, event_id_ref_hint);
 		diff = git_diff;
+		loading_diff = false;
 	});
 </script>
 
@@ -67,9 +69,20 @@
 			</article>
 		</div>
 	{/if}
-	<div class="flex w-full rounded-t p-2">
+	<div class="w-full rounded-t p-2">
 		{#if diff}
 			<ChangesToFiles {diff} />
+		{:else if loading_diff}
+			<div class="skeleton bg-base-200 my-2 h-10 w-full rounded"></div>
+			<div class="skeleton bg-base-200 my-2 h-10 w-full rounded"></div>
+		{:else}
+			<div class="bg-base-200 text-ceter my-2 flex h-10 w-full items-center rounded">
+				<div class="m-auto text-center">
+					<span class=" text-muted text-error ml-2 text-[0.85rem] font-medium">
+						no changes found
+					</span>
+				</div>
+			</div>
 		{/if}
 	</div>
 </div>
