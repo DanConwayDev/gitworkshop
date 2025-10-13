@@ -41,6 +41,8 @@ import { getIssuesAndPrsIdsFromRepoItem } from '$lib/repos';
 import type { EventPointer } from 'nostr-tools/nip19';
 import { createWalletFilter, createWalletHistoryFilter } from './filters/wallet';
 
+const startup_time = unixNow();
+
 export class RelayManager {
 	url: WebSocketUrl;
 	processor: Processor;
@@ -238,11 +240,15 @@ export class RelayManager {
 		});
 		await this.connect();
 		return new Promise<void>((r) => {
+			let since = !pubkey && checks ? Math.round(checks.timestamp - 60 * 10) : 0;
+			// DISABLE SINCE - remove since if not fetched this session
+			if (since < startup_time - 60 * 10) since = 0;
+
 			const sub = this.relay.subscribe(
 				[
 					{
 						kinds: [RepoAnnKind],
-						since: !pubkey && checks ? Math.round(checks.timestamp - 60 * 10) : 0
+						since
 						// TODO: what if this last check failed to reach the relay?
 						// limit: 100,
 						// TODO request next batch if 100 recieved

@@ -18,9 +18,11 @@ import type {
 	Timestamp
 } from '$lib/types';
 import { aRefPToAddressPointer } from '$lib/utils';
+import { unixNow } from 'applesauce-core/helpers';
 import type { Filter } from 'nostr-tools';
 import { Metadata, RelayList } from 'nostr-tools/kinds';
 
+const startup_time = unixNow();
 const replication_delay = 15 * 60; // 900 seconds
 
 export const createPubkeyFiltersGroupedBySince = (
@@ -39,7 +41,12 @@ export const createPubkeyFiltersGroupedBySince = (
 
 	// put aside undefined last check for filter without since
 	items.forEach((t, pubkey) => {
-		if (!t.last_check || !t.last_update) {
+		if (
+			!t.last_check ||
+			!t.last_update ||
+			// DISABLE SINCE - remove since if not fetched this session
+			t.last_check < startup_time
+		) {
 			authors_unkown_or_unchecked.push(pubkey);
 		} else {
 			checked.push({
@@ -84,6 +91,8 @@ export const createPubkeyFiltersGroupedBySince = (
 };
 
 export const createPubkeyNoficiationsFilters = (pubkey: PubKeyString, since?: number) => {
+	// DISABLE SINCE - remove since if not fetched this session
+	if (since && since < startup_time) since = undefined;
 	return [
 		{
 			'#P': [pubkey],
@@ -116,10 +125,13 @@ export const createRepoIdentifierFilters = (
 	items.forEach((t, a_ref) => {
 		const identifier = aRefPToAddressPointer(a_ref).identifier;
 		const map_entry = identifiers.get(identifier) || 0;
-		identifiers.set(
-			identifier,
-			Math.min(map_entry, t.last_child_check ? t.last_child_check - replication_delay : 0)
+		let since = Math.min(
+			map_entry,
+			t.last_child_check ? t.last_child_check - replication_delay : 0
 		);
+		// DISABLE SINCE - remove since if not fetched this session
+		if (since && since < startup_time - replication_delay) since = 0;
+		identifiers.set(identifier, since);
 	});
 	const filters: Filter[] = [];
 	identifiers.forEach((since, identifier) => {
@@ -148,7 +160,9 @@ export const createRepoChildrenFilters = (
 	const sinces = new Map<number, RepoRef[]>();
 	const filters: Filter[] = [];
 	items.forEach((t, a_ref) => {
-		const since = t.last_child_check ? t.last_child_check - replication_delay : 0;
+		let since = t.last_child_check ? t.last_child_check - replication_delay : 0;
+		// DISABLE SINCE - remove since if not fetched this session
+		if (since && since < startup_time - replication_delay) since = 0;
 		const map_item = sinces.get(since) || [];
 		map_item.push(a_ref);
 		sinces.set(since, map_item);
@@ -196,6 +210,9 @@ export const createRepoChildrenStatusAndDeletionFilters = (
 		if (since > earliest_since) earliest_since = since;
 	});
 
+	// DISABLE SINCE - remove since if not fetched this session
+	if (earliest_since < startup_time - replication_delay) earliest_since = 0;
+
 	return [
 		{
 			kinds: [...StatusKinds, DeletionKind],
@@ -240,6 +257,9 @@ export const createRepoChildrenQualityFilters = (
 		const since = t.last_child_check ? t.last_child_check - replication_delay : 0;
 		if (since > earliest_since) earliest_since = since;
 	});
+
+	// DISABLE SINCE - remove since if not fetched this session
+	if (earliest_since < startup_time - replication_delay) earliest_since = 0;
 
 	return [
 		{

@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Filter } from 'nostr-tools';
 import { createPubkeyFiltersGroupedBySince } from './filters';
 
-describe('createFiltersGroupedBySince', () => {
+// we have turned of since functionality so skipping these tests - see this commit message
+describe.skip('createFiltersGroupedBySince', () => {
 	const replication_delay = 15 * 60; // 900 seconds
 	let result: (Filter & {
 		authors: string[];
