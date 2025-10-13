@@ -435,33 +435,51 @@ export class GitManager extends EventTarget {
 		}
 	}
 
-	private isRefreshing: boolean = false;
-	private queueNextRefresh = false;
-	private refreshPromise: Promise<void> | null = null;
+	private throttle_refresh_refs_state = {
+		isRefreshing: false,
+		queueNextRefresh: false,
+		refreshPromise: null as Promise<void> | null,
+		lastInvocationTime: 0,
+		THROTTLE_TIME: 200 // Set throttle time to 200 ms
+	};
 
-	private async refreshSelectedRef(fetch_missing: boolean = false, force_dispatch_event = false) {
-		if (this.isRefreshing) {
-			this.queueNextRefresh = true;
-			await this.refreshPromise;
-			if (this.queueNextRefresh) {
-				this.queueNextRefresh = false;
-				await this.refreshPromise;
+	private async refreshSelectedRef(
+		fetch_missing: boolean = false,
+		force_dispatch_event = false
+	): Promise<void> {
+		const now = Date.now();
+
+		// Check if we have waited long enough since the last invocation
+		if (
+			this.throttle_refresh_refs_state.isRefreshing ||
+			now - this.throttle_refresh_refs_state.lastInvocationTime <
+				this.throttle_refresh_refs_state.THROTTLE_TIME
+		) {
+			this.throttle_refresh_refs_state.queueNextRefresh = true;
+			await this.throttle_refresh_refs_state.refreshPromise;
+
+			// Check for and process queued request
+			if (this.throttle_refresh_refs_state.queueNextRefresh) {
+				this.throttle_refresh_refs_state.queueNextRefresh = false;
+				return this.refreshSelectedRef(fetch_missing, force_dispatch_event); // Process the queued request
 			}
 			return;
 		}
 
-		this.isRefreshing = true;
+		this.throttle_refresh_refs_state.isRefreshing = true;
+		this.throttle_refresh_refs_state.lastInvocationTime = now; // Update last invocation time
 
 		// Create a new promise for the refresh operation
-		this.refreshPromise = new Promise((resolve) => {
+		this.throttle_refresh_refs_state.refreshPromise = new Promise((resolve) => {
+			// Call your processing logic here (e.g., processRefs)
 			this.processRefs(fetch_missing, force_dispatch_event, resolve);
 		});
 
-		await this.refreshPromise;
+		await this.throttle_refresh_refs_state.refreshPromise;
 
 		// Reset the state after the promise resolves
-		this.isRefreshing = false;
-		this.refreshPromise = null;
+		this.throttle_refresh_refs_state.isRefreshing = false;
+		this.throttle_refresh_refs_state.refreshPromise = null;
 	}
 
 	private async processRefs(
