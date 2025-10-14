@@ -7,6 +7,8 @@
 	import AlertWarning from '../AlertWarning.svelte';
 	import ExplorerServerStatusIcon from './ExplorerServerStatusIcon.svelte';
 	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
+	import BackgroundProgressWrapper from '../BackgroundProgressWrapper.svelte';
+	import { gitProgressToPc, serverStatustoMsg } from '$lib/git-utils';
 
 	let {
 		base_url,
@@ -204,15 +206,18 @@
 	>
 		<div class="mx-5 my-5">
 			{#each server_status.entries() as [remote, status] (remote)}
-				<div>
+				<BackgroundProgressWrapper
+					complete_bg_color_class="bg-base-400"
+					pc={status.progress ? gitProgressToPc(status.progress) : 0}
+				>
 					<GitServerStateIndicator state={status.state} />
 					{status.short_name}
 					{#if status.with_proxy}
 						<span class="text-base-content/50 text-xs">(via proxy)</span>
 					{/if}
 					<span class="text-base-content/50 text-xs">{status.state}</span>
-					<span class="text-base-content/50 text-xs">{status.msg}</span>
-				</div>
+					<span class="text-base-content/50 text-xs">{serverStatustoMsg(status)}</span>
+				</BackgroundProgressWrapper>
 			{/each}
 		</div>
 	</div>

@@ -6,7 +6,6 @@
 	import { onMount } from 'svelte';
 	import FileViewer from './FileViewer.svelte';
 	import {
-		isGitManagerLogEntryServer,
 		type FileEntry,
 		type GitManagerLogEntry,
 		type GitServerState,
@@ -20,7 +19,7 @@
 	import { RepoStateKind } from '$lib/kinds';
 	import FileExplorer from './FileExplorer.svelte';
 	import ExplorerLocator from './ExplorerLocator.svelte';
-	import { refsToBranches, refsToTags, remoteNameToShortName } from '$lib/git-utils';
+	import { onLogUpdateServerStatus, refsToBranches, refsToTags } from '$lib/git-utils';
 
 	let {
 		a_ref,
@@ -61,7 +60,7 @@
 			waited_1s = true;
 		}, 1000);
 		git_manager.refreshExplorer({});
-		git_manager.logs.forEach(onLog);
+		git_manager.logs.forEach((l) => onLogUpdateServerStatus(l, server_status, clone_urls ?? []));
 	});
 
 	$effect(() => {
@@ -148,26 +147,10 @@
 		if (server_status.entries().some((e) => e[1].state === 'fetched')) return 'fetched';
 		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
 	});
-	const onLog = (entry: GitManagerLogEntry) => {
-		if (isGitManagerLogEntryServer(entry)) {
-			let status = server_status.get(entry.remote) || {
-				short_name: clone_urls ? remoteNameToShortName(entry.remote, clone_urls) : entry.remote,
-				state: 'connecting',
-				with_proxy: false
-			};
-			if (entry.msg?.includes('proxy')) status.with_proxy = true;
-			server_status.set(entry.remote, {
-				...status,
-				state: entry.state,
-				msg: entry.msg
-			});
-		} else {
-			// not showing any global git logging
-		}
-	};
+
 	git_manager.addEventListener('log', (e: Event) => {
 		const customEvent = e as CustomEvent<GitManagerLogEntry>;
-		onLog(customEvent.detail);
+		onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls ?? []);
 	});
 	let git_warning: string | undefined = $derived.by(() => {
 		if (waited_1s) {

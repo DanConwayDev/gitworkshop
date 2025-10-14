@@ -8,12 +8,8 @@
 	import { PrUpdateKind } from '$lib/kinds';
 	import ChangesToFiles from '../explorer/ChangesToFiles.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import {
-		isGitManagerLogEntryServer,
-		type GitManagerLogEntry,
-		type GitServerStatus
-	} from '$lib/types/git-manager';
-	import { remoteNameToShortName } from '$lib/git-utils';
+	import { type GitManagerLogEntry, type GitServerStatus } from '$lib/types/git-manager';
+	import { onLogUpdateServerStatus } from '$lib/git-utils';
 	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
 	let { table_item }: { table_item: IssueOrPRTableItem } = $props();
 
@@ -90,25 +86,6 @@
 	});
 
 	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
-	const onLog = (entry: GitManagerLogEntry) => {
-		if (isGitManagerLogEntryServer(entry)) {
-			let status = server_status.get(entry.remote) || {
-				short_name: git_manager.clone_urls
-					? remoteNameToShortName(entry.remote, git_manager.clone_urls)
-					: entry.remote,
-				state: 'connecting',
-				with_proxy: false
-			};
-			if (entry.msg?.includes('proxy')) status.with_proxy = true;
-			server_status.set(entry.remote, {
-				...status,
-				state: entry.state,
-				msg: entry.msg
-			});
-		} else {
-			// not showing any global git logging
-		}
-	};
 	onMount(() => {
 		git_manager.addEventListener('log', (e: Event) => {
 			const customEvent = e as CustomEvent<GitManagerLogEntry>;
@@ -118,7 +95,7 @@
 				tip_details &&
 				customEvent.detail.sub === tip_details.tip
 			)
-				onLog(customEvent.detail);
+				onLogUpdateServerStatus(customEvent.detail, server_status, git_manager.clone_urls ?? []);
 		});
 	});
 </script>

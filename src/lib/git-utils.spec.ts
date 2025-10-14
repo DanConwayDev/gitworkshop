@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { extractPatchMessage } from './git-utils';
+import { extractPatchMessage, gitProgressToPc } from './git-utils';
 
 // const simple =
 // const example = `From 35ef1fe53b5a460266a1666709d886560d99cd67 Mon Sep 17 00:00:00 2001\nFrom: fiatjaf <fiatjaf@gmail.com>\nDate: Mon, 29 Jan 2024 09:41:27 -0300\nSubject: [PATCH] fix multi-attempt password prompt.\n\nthe print was doing nothing\nand the continue was missing\n---\nfound this bug while copying these functions to be used in nak\n\n helpers.go | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n\ndiff --git a/helpers.go b/helpers.go\nindex 0b3790d..9b5c3da 100644\n--- a/helpers.go\n+++ b/helpers.go\n@@ -176,7 +176,7 @@ func promptDecrypt(ncryptsec1 string) (string, error) {\n \t\t}\n \t\tsec, err := nip49.Decrypt(ncryptsec1, password)\n \t\tif err != nil {\n-\t\t\tfmt.Fprintf(os.Stderr, "failed to decrypt: %s", err)\n+\t\t\tcontinue\n \t\t}\n \t\treturn sec, nil\n \t}\n--\n2.43.0\n', tags: (3) […], kind: 1617, id: "fd5d1be541bf2d20c51ca63265cc893eecb4be8720db9b42abec21b9ca9747de", sig: "d4733b8b32c05d1fb33a76105926fc537e4060df25405521b3f74f91ed7d65f345386260e8a825c79d67c3dd67f5e7eea7d532cda48cb8d45f09f9be19775289", pubkey: "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d", … }`
@@ -50,5 +50,38 @@ describe('extractPatchMessage', () => {
 		).toEqual(
 			'Revert "mention: fix broken mentions when there is text is\n directly after"\n\nThis reverts commit af75eed83a2a1dd0eb33a0a27ded71c9f44dacbd.'
 		);
+	});
+});
+
+describe('gitProgressToPc', () => {
+	test('new phase progress correct', () => {
+		expect(gitProgressToPc({ phase: 'Counting objects', loaded: 0, total: 1 })).toBe(0);
+		expect(gitProgressToPc({ phase: 'Compressing objects', loaded: 0, total: 1 })).toBe(10);
+		expect(gitProgressToPc({ phase: 'Receiving objects', loaded: 0, total: 1 })).toBe(30);
+		expect(gitProgressToPc({ phase: 'Resolving deltas', loaded: 0, total: 1 })).toBe(90);
+	});
+
+	test('receiving phase computes partial progress correctly', () => {
+		// previous phases = 10 + 20 = 30
+		expect(gitProgressToPc({ phase: 'Counting objects', loaded: 50, total: 100 })).toBe(0 + 10 / 2);
+		// corrected expectations:
+		expect(gitProgressToPc({ phase: 'Compressing objects', loaded: 50, total: 100 })).toBe(
+			10 + 20 / 2
+		);
+		expect(gitProgressToPc({ phase: 'Receiving objects', loaded: 50, total: 100 })).toBe(
+			30 + 60 / 2
+		);
+		expect(gitProgressToPc({ phase: 'Resolving deltas', loaded: 50, total: 100 })).toBe(
+			90 + 10 / 2
+		);
+	});
+
+	test('loaded greater than total can exceed 100', () => {
+		// floor((120/100)*60)=72; + previous 30 = 102
+		expect(gitProgressToPc({ phase: 'Resolving deltas', loaded: 120, total: 100 })).toBe(100);
+	});
+
+	test('unknown phase returns 0', () => {
+		expect(gitProgressToPc({ phase: 'Unknown phase', loaded: 10, total: 100 })).toBe(0);
 	});
 });

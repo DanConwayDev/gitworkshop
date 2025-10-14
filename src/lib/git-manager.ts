@@ -107,7 +107,8 @@ export class GitManagerRpc extends EventTarget {
 			const t = setTimeout(() => {
 				if (this.pending.has(id)) {
 					this.pending.delete(id);
-					reject(new Error('timeout'));
+					resolve(undefined as unknown as RpcMethods[M]['result']); // prefered error handling
+					// reject(new Error('timeout'));
 				}
 			}, 120_000);
 			entry.timer = t;
@@ -128,7 +129,8 @@ export class GitManagerRpc extends EventTarget {
 		}
 		for (const [, entry] of this.pending) {
 			if (entry.timer) clearTimeout(entry.timer);
-			entry.reject(new Error('terminated'));
+			entry.resolve(undefined); // prefered error handling
+			// entry.reject(new Error('terminated'));
 		}
 		this.pending.clear();
 	}

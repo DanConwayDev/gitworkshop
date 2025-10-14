@@ -7,7 +7,6 @@
 	import { getTagMultiValue, getTagValue } from '$lib/utils';
 	import git_manager from '$lib/git-manager';
 	import {
-		isGitManagerLogEntryServer,
 		type CommitInfo,
 		type GitManagerLogEntry,
 		type GitServerStatus
@@ -18,7 +17,7 @@
 	import EventWrapper from './EventWrapper.svelte';
 	import CommitsDetails from '../prs/CommitsDetails.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { remoteNameToShortName } from '$lib/git-utils';
+	import { onLogUpdateServerStatus } from '$lib/git-utils';
 	let { event }: { event: NostrEvent } = $props();
 
 	let pr_event_id: string | undefined = $derived(getTagValue(event.tags, 'E'));
@@ -99,34 +98,15 @@
 		loadCommitInfos(event.id, tip_id, extra_clone_urls);
 	});
 	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
-	const onLog = (entry: GitManagerLogEntry) => {
-		if (isGitManagerLogEntryServer(entry)) {
-			let status = server_status.get(entry.remote) || {
-				short_name: git_manager.clone_urls
-					? remoteNameToShortName(entry.remote, git_manager.clone_urls)
-					: entry.remote,
-				state: 'connecting',
-				with_proxy: false
-			};
-			if (entry.msg?.includes('proxy')) status.with_proxy = true;
-			server_status.set(entry.remote, {
-				...status,
-				state: entry.state,
-				msg: entry.msg
-			});
-		} else {
-			// not showing any global git logging
-		}
-	};
 	onMount(() => {
 		git_manager.addEventListener('log', (e: Event) => {
 			const customEvent = e as CustomEvent<GitManagerLogEntry>;
 			if (
 				// log subscription matches the tip id
 				customEvent.detail.sub &&
-				customEvent.detail.sub === tip_id
+				(customEvent.detail.sub === tip_id || customEvent.detail.sub === 'main')
 			)
-				onLog(customEvent.detail);
+				onLogUpdateServerStatus(customEvent.detail, server_status, git_manager.clone_urls ?? []);
 		});
 	});
 	let identical_tip = $derived(

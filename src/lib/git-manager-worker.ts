@@ -130,7 +130,6 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 	constructor() {
 		this.fs = new LightningFS('git-cache');
 	}
-
 	private postEvent(event: GitManagerEvent) {
 		self.postMessage({ kind: 'event', ...event });
 	}
@@ -389,11 +388,13 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 
 	private async fetchFromRemote(
 		remote: string,
-		remote_ref?: string
+		remote_ref?: string,
+		sub_id?: string
 	): Promise<FetchResult | string> {
 		await this.addRemotes(remote); // added as some reports error "The function requires a remote of 'remote OR url' paremeter but none was provied"
 		const use_proxy = this.remotes_using_proxy.includes(remote);
-		this.log({ remote, state: 'fetching' });
+		const sub = sub_id ?? 'main';
+		this.log({ remote, state: 'fetching', sub });
 		try {
 			const res = await git.fetch({
 				fs: this.fs,
@@ -403,7 +404,10 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				corsProxy: use_proxy ? cors_proxy_base_url : undefined,
 				remoteRef: remote_ref,
 				depth: 20, // https://github.com/isomorphic-git/isomorphic-git/issues/1735
-				tags: true
+				tags: true,
+				onProgress: (progress) => {
+					this.log({ remote, state: 'fetching', progress, sub });
+				}
 				// singleBranch: true,
 			});
 			this.log({ remote, state: 'fetched' });
@@ -426,7 +430,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			this.refreshSelectedRef();
 			return res;
 		} catch (error) {
-			this.log({ remote, state: 'failed', msg: `fetch error: ${error}` });
+			this.log({ remote, state: 'failed', msg: `fetch error: ${error}`, sub });
 			return `${error}`;
 		}
 	}
@@ -1025,7 +1029,11 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 							});
 							if (finished_search) return;
 							if (a_ref !== this.a_ref) return false; // fetch no longer needed
-							const res = await this.fetchFromRemote(remote, `refs/nostr/${event_id}`);
+							const res = await this.fetchFromRemote(
+								remote,
+								`refs/nostr/${event_id}`,
+								tip_commit_id
+							);
 							if (typeof res !== 'string') {
 								if (a_ref !== this.a_ref) return r(false); // fetch no longer needed
 								if (!(await checkForCommit())) {
@@ -1073,7 +1081,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				});
 			},
 			{
-				intervalMs: 500,
+				intervalMs: 1000,
 				timeoutMs: 60_000,
 				// sometimes either Pr commit data or defaultTip isn't available straight after fetchPrData
 				// maybe a better fix would be for getDefaultTip wait for a bit if unavailable but we are doing it here instead
@@ -1208,7 +1216,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			() => this.loadPrCommitInfo(tip_commit_id),
 			() => this.fetchPrData(event_id_listing_tip, tip_commit_id, extra_clone_urls),
 			{
-				intervalMs: 500,
+				intervalMs: 1000,
 				timeoutMs: 60_000,
 				// sometimes either Pr commit data or defaultTip isn't available straight after fetchPrData
 				// maybe a better fix would be for getDefaultTip wait for a bit if unavailable but we are doing it here instead

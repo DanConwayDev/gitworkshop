@@ -4,6 +4,8 @@
 	import CommitDetails from './CommitDetails.svelte';
 	import type { SvelteMap } from 'svelte/reactivity';
 	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
+	import { gitProgressesToPc, gitProgressToPc, serverStatustoMsg } from '$lib/git-utils';
+	import BackgroundProgressWrapper from '../BackgroundProgressWrapper.svelte';
 
 	let {
 		infos,
@@ -46,21 +48,39 @@
 			.sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
 			.map(([date, commits]) => ({ date, commits }));
 	});
+	let pcLoaded = $derived.by(() => {
+		return gitProgressesToPc(
+			Array.from(server_status.values()).flatMap((s) => (s.progress ? [s.progress] : []))
+		);
+		// for (const entry of server_status.values()) {
+		// 	if (entry && entry.progress) {
+		// 		console.log('bla');
+		// 		console.log(entry.progress);
+		// 		console.log(gitProgressToPc(entry.progress));
+		// 		return gitProgressToPc(entry.progress);
+		// 	}
+		// }
+		// return 0;
+	});
+	// value={status.progress ? gitProgressToPc(status.progress) : 10}
 </script>
 
 {#snippet showServerStatus()}
 	{#if server_status}
 		<div class="mx-5 my-5">
 			{#each server_status.entries() as [remote, status] (remote)}
-				<div>
+				<BackgroundProgressWrapper
+					complete_bg_color_class="bg-base-400"
+					pc={status.progress ? gitProgressToPc(status.progress) : 0}
+				>
 					<GitServerStateIndicator state={status.state} />
 					{status.short_name}
 					{#if status.with_proxy}
 						<span class="text-base-content/50 text-xs">(via proxy)</span>
 					{/if}
 					<span class="text-base-content/50 text-xs">{status.state}</span>
-					<span class="text-base-content/50 text-xs">{status.msg}</span>
-				</div>
+					<span class="text-base-content/50 text-xs">{serverStatustoMsg(status)}</span>
+				</BackgroundProgressWrapper>
 			{/each}
 		</div>
 	{/if}
@@ -85,19 +105,21 @@
 		{/if}
 	{:else if loading || !waited}
 		<div class="relative mb-4">
-			<div class="bg-base-300 skeleton border-base-400 my-2 rounded border border-2 opacity-70">
-				<div class="bg-base-400 p-2">
-					<div
-						class="text-center transition-opacity duration-3000"
-						class:opacity-0={!waited && loading}
-					>
-						<span class="loading loading-spinner loading-sm opacity-60"></span>
-						<span class=" text-muted ml-2 text-[0.85rem] font-medium">fetching commits</span>
+			<div class="skeleton border-base-400 my-2 rounded border border-2 opacity-70">
+				<BackgroundProgressWrapper complete_bg_color_class="bg-base-400" pc={pcLoaded}>
+					<div class="p-2">
+						<div
+							class="text-center transition-opacity duration-2000"
+							class:opacity-0={!waited && loading}
+						>
+							<span class="loading loading-spinner loading-sm opacity-60"></span>
+							<span class=" text-muted ml-2 text-[0.85rem] font-medium">fetching commits</span>
+						</div>
 					</div>
-				</div>
+				</BackgroundProgressWrapper>
 				<div class="">
 					<div
-						class="min-h-16 transition-opacity duration-3000"
+						class="min-h-16 transition-opacity duration-2000"
 						class:opacity-0={!waited && loading}
 					>
 						{@render showServerStatus()}

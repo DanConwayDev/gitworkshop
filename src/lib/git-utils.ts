@@ -14,6 +14,14 @@ import {
 	type WebSocketUrl
 } from './types';
 import { PrKind, QualityChildKinds } from './kinds';
+import {
+	isGitManagerLogEntryServer,
+	type GitManagerLogEntry,
+	type GitProgressObj,
+	type GitProgressPhase,
+	type GitServerStatus
+} from './types/git-manager';
+import type { SvelteMap } from 'svelte/reactivity';
 
 export const isCoverLetter = (s: string): boolean => {
 	return s.indexOf('PATCH 0/') > 0;
@@ -189,3 +197,85 @@ export function remoteNameToShortName(name: string, clone_urls: string[]) {
 	if (url) return cloneUrlToShortName(url);
 	return name;
 }
+
+export const onLogUpdateServerStatus = (
+	entry: GitManagerLogEntry,
+	server_status: SvelteMap<string, GitServerStatus>,
+	clone_urls: string[]
+) => {
+	if (isGitManagerLogEntryServer(entry)) {
+		const status = server_status.get(entry.remote) || {
+			short_name: clone_urls ? remoteNameToShortName(entry.remote, clone_urls) : entry.remote,
+			state: 'connecting',
+			with_proxy: false
+		};
+		if (entry.msg?.includes('proxy')) status.with_proxy = true;
+		server_status.set(entry.remote, {
+			...status,
+			state: (entry.progress ? status : entry).state,
+			msg: (entry.progress ? status : entry).msg,
+			progress: entry.progress
+		});
+	} else {
+		// not showing any global git logging
+	}
+};
+
+export const serverStatustoMsg = (status: GitServerStatus) =>
+	status.msg ??
+	(status.progress
+		? `${status.progress.phase} ${status.progress.loaded}/${status.progress.total}`
+		: '');
+
+export const gitProgressToPc = (progress: GitProgressObj): number => {
+	const phasePercentages: { [key in GitProgressPhase]: number } = {
+		'Counting objects': 10,
+		'Compressing objects': 20,
+		'Receiving objects': 60,
+		'Resolving deltas': 10
+	};
+
+	const { phase, loaded, total } = progress;
+
+	// Inner function to calculate total percentage from completed phases
+	const getPreviousPhasesCompletion = (currentPhase: GitProgressPhase): number => {
+		let completion = 0;
+		const phasesOrder = [
+			'Counting objects',
+			'Compressing objects',
+			'Receiving objects',
+			'Resolving deltas'
+		];
+
+		for (const p of phasesOrder) {
+			if (p === currentPhase) break;
+			completion += phasePercentages[p];
+		}
+
+		return completion;
+	};
+
+	if (phase in phasePercentages) {
+		return Math.min(
+			Math.floor((loaded / total) * phasePercentages[phase]) + getPreviousPhasesCompletion(phase),
+			100
+		);
+	}
+
+	// If the phase is not recognized or invalid, return 0
+	return 0;
+};
+
+export const gitProgressesToPc = (progresses: GitProgressObj[]): number => {
+	if (!progresses || progresses.length === 0) return 0;
+
+	const totalWeight = progresses.reduce((sum, p) => sum + (p.total ?? 0), 0);
+	if (totalWeight === 0) return 0;
+
+	const weightedSum = progresses.reduce((sum, p) => {
+		const pct = gitProgressToPc(p); // 0-100
+		return sum + pct * (p.total ?? 0);
+	}, 0);
+
+	return Math.floor(weightedSum / totalWeight);
+};
