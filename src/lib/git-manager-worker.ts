@@ -46,83 +46,104 @@ async function httpGitServerConnectionTest(
 	use_proxy: boolean = false,
 	timeoutMs: number = 8000
 ): Promise<ConnectionResult> {
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), timeoutMs);
+	const tryOnce = async (): Promise<ConnectionResult> => {
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-	const base = (
-		use_proxy ? `${cors_proxy_base_url}/${url.replace(/^https?:\/\//, '')}` : url
-	).replace(/\/+$/, '');
-	const candidate = `${base}/info/refs?service=git-upload-pack`;
+		const base = (
+			use_proxy ? `${cors_proxy_base_url}/${url.replace(/^https?:\/\//, '')}` : url
+		).replace(/\/+$/, '');
+		const candidate = `${base}/info/refs?service=git-upload-pack`;
 
-	let lastKind: ConnectionErrors = 'unknown';
-	let lastMessage: string | undefined;
-	let lastStatus: number | undefined;
-	if (
-		!use_proxy &&
-		['github.com', 'gitlab.com', 'codeberg.org', 'gitea.com'].some((s) => url.includes(s))
-	) {
+		let lastKind: ConnectionErrors = 'unknown';
+		let lastMessage: string | undefined;
+		let lastStatus: number | undefined;
+
+		if (
+			!use_proxy &&
+			['github.com', 'gitlab.com', 'codeberg.org', 'gitea.com'].some((s) => url.includes(s))
+		) {
+			clearTimeout(timeout);
+			return {
+				status: 'fail',
+				kind: 'cors',
+				message: 'hardcoded not to try due to CORS at domain',
+				tried: candidate
+			};
+		}
+
+		try {
+			try {
+				const res = await fetch(candidate, {
+					method: 'GET',
+					mode: 'cors',
+					signal: controller.signal
+				});
+
+				lastStatus = res.status;
+
+				if (use_proxy && !res.ok) {
+					lastKind = 'cors';
+					lastMessage = `proxy returned ${res.status}`;
+				} else if (!use_proxy && res.status === 404) {
+					lastKind = '404';
+					lastMessage = 'resource not found';
+				} else if (!res.ok) {
+					lastKind = 'unknown';
+					lastMessage = `http ${res.status}`;
+				} else {
+					clearTimeout(timeout);
+					return { status: 'ok' };
+				}
+			} catch (err: unknown) {
+				if (isAbortError(err)) {
+					lastKind = 'timeout';
+					lastMessage = 'request aborted (timeout)';
+				} else {
+					const msg =
+						typeof err === 'string'
+							? err
+							: typeof err === 'object' &&
+								  err !== null &&
+								  'message' in err &&
+								  typeof (err as { message?: unknown }).message === 'string'
+								? (err as { message: string }).message
+								: String(err);
+					lastMessage = msg;
+					if (use_proxy || /failed to fetch|cors/i.test(msg)) lastKind = 'cors';
+					else if (/network/i.test(msg)) lastKind = 'unknown';
+					else lastKind = 'unknown';
+				}
+			}
+		} finally {
+			clearTimeout(timeout);
+		}
+
 		return {
 			status: 'fail',
-			kind: 'cors',
-			message: 'hardcoded not to try due to CORS at domain',
-			tried: candidate
+			kind: lastKind,
+			message: lastMessage,
+			tried: candidate,
+			httpStatus: lastStatus
 		};
-	}
-	try {
-		try {
-			const res = await fetch(candidate, {
-				method: 'GET',
-				mode: 'cors',
-				signal: controller.signal
-			});
-
-			lastStatus = res.status;
-
-			if (use_proxy && !res.ok) {
-				lastKind = 'cors';
-				lastMessage = `proxy returned ${res.status}`;
-			} else if (!use_proxy && res.status === 404) {
-				lastKind = '404';
-				lastMessage = 'resource not found';
-			} else if (!res.ok) {
-				lastKind = 'unknown';
-				lastMessage = `http ${res.status}`;
-			} else {
-				clearTimeout(timeout);
-				return { status: 'ok' };
-			}
-		} catch (err: unknown) {
-			if (isAbortError(err)) {
-				lastKind = 'timeout';
-				lastMessage = 'request aborted (timeout)';
-			} else {
-				const msg =
-					typeof err === 'string'
-						? err
-						: typeof err === 'object' &&
-							  err !== null &&
-							  'message' in err &&
-							  typeof (err as { message?: unknown }).message === 'string'
-							? (err as { message: string }).message
-							: String(err);
-				lastMessage = msg;
-				console.log(err);
-				if (use_proxy || /failed to fetch|cors/i.test(msg)) lastKind = 'cors';
-				else if (/network/i.test(msg)) lastKind = 'unknown';
-				else lastKind = 'unknown';
-			}
-		}
-	} finally {
-		clearTimeout(timeout);
-	}
-
-	return {
-		status: 'fail',
-		kind: lastKind,
-		message: lastMessage,
-		tried: candidate,
-		httpStatus: lastStatus
 	};
+
+	const maxRetriesOnTimeout = 2;
+	let attempt = 0;
+	let lastResult: ConnectionResult | undefined;
+
+	while (attempt <= maxRetriesOnTimeout) {
+		lastResult = await tryOnce();
+		if (lastResult.status === 'ok') return lastResult;
+		if (lastResult.kind !== 'timeout') break;
+		// retry only on timeout
+		attempt++;
+		// small exponential backoff before retrying
+		await new Promise((r) => setTimeout(r, 200 * Math.pow(2, attempt - 1)));
+	}
+
+	// return the last result (either non-timeout failure or timeout after retries)
+	return lastResult!;
 }
 
 export class GitManagerWorker implements GitManagerRpcMethodSigs {
