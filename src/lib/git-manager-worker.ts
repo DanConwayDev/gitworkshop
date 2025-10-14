@@ -308,6 +308,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				) {
 					await this.fetchFromRemote(remote);
 					fetched_from_one_remote = true;
+					await this.refreshSelectedRef();
 				} else {
 					// wait until first connected remote has finished fetchFromRemote before proceeding to fetchFromRemote(remote)
 					await new Promise<void>((r) => {
@@ -315,6 +316,8 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 							if (fetched_from_one_remote) {
 								clearInterval(id);
 								await this.fetchFromRemote(remote);
+								await this.refreshSelectedRef();
+
 								r();
 							}
 						}, 1);
