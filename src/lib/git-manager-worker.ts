@@ -778,23 +778,25 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				const filePath = dir_path ? `${dir_path}/${file}` : file;
 				let lastModified: Date | undefined;
 
-				try {
-					// Get the last commit that modified this file
-					const commits = await git.log({
-						fs: this.fs,
-						dir,
-						ref: oid,
-						filepath: filePath,
-						depth: 3
-					});
+				// COMMENTED OUT - this is expensive - maybe do this after its loaded when we need this info?
 
-					if (commits.length > 0) {
-						lastModified = new Date(commits[0].commit.committer.timestamp * 1000);
-					}
-				} catch (error) {
-					// we dont need to use this.log() here as its a warning rather than a failure
-					console.warn(`Could not get last modified time for ${filePath}:`, error);
-				}
+				// try {
+				// 	// Get the last commit that modified this file
+				// 	const commits = await git.log({
+				// 		fs: this.fs,
+				// 		dir,
+				// 		ref: oid,
+				// 		filepath: filePath,
+				// 		depth: 3
+				// 	});
+
+				// 	if (commits.length > 0) {
+				// 		lastModified = new Date(commits[0].commit.committer.timestamp * 1000);
+				// 	}
+				// } catch (error) {
+				// 	// we dont need to use this.log() here as its a warning rather than a failure
+				// 	console.warn(`Could not get last modified time for ${filePath}:`, error);
+				// }
 
 				filteredFiles.push({
 					name: file,
