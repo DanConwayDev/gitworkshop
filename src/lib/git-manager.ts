@@ -31,7 +31,9 @@ export class GitManagerRpc extends EventTarget {
 			const msg = ev?.message ?? 'worker-error';
 			for (const [id, entry] of this.pending) {
 				if (entry.timer) clearTimeout(entry.timer);
-				entry.reject(new Error(String(msg)));
+				entry.resolve(undefined); // TODO better error handling
+				// entry.reject(new Error(String(msg)));
+				console.log(new Error(String(msg)));
 				this.pending.delete(id);
 			}
 		};
