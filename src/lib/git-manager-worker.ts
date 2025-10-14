@@ -254,7 +254,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		ref_and_path?: string;
 	}) {
 		const { a_ref, clone_urls, nostr_state_refs, ref_and_path } = params;
-		if (a_ref === this.a_ref) return;
+		if (a_ref == this.a_ref) return;
 		this.fs = new LightningFS('git-cache');
 		this.reset(a_ref, clone_urls, nostr_state_refs, ref_and_path);
 		if (this.nostr_state_refs) {
@@ -894,6 +894,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 
 	async updateNostrState(params: { nostr_state?: string[][] }) {
 		const { nostr_state } = params;
+		if (this.nostr_state_refs == nostr_state) return;
 		this.nostr_state_refs = nostr_state ? [...nostr_state] : undefined;
 		// do stuff
 		this.postEvent({ name: 'stateUpdate', detail: nostr_state || [] });
@@ -902,6 +903,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 	}
 	async updateCloneUrls(params: { clone_urls: string[] }) {
 		const { clone_urls } = params;
+		if (this.clone_urls == clone_urls) return;
 		// remote old clone urls
 		this.clone_urls?.forEach((url) => {
 			if (!clone_urls.some((u) => u === url)) {

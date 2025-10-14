@@ -93,7 +93,6 @@
 	});
 	$effect(() => {
 		if (clone_urls) {
-			loadRepository();
 			git_manager.updateCloneUrls({ clone_urls: $state.snapshot(clone_urls) });
 		}
 	});
