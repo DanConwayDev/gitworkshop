@@ -388,7 +388,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 	private async fetchFromRemote(
 		remote: string,
 		remote_ref?: string,
-		sub_id?: string
+		sub_id: string = 'main'
 	): Promise<FetchResult | string> {
 		await this.addRemotes(remote); // added as some reports error "The function requires a remote of 'remote OR url' paremeter but none was provied"
 		const use_proxy = this.remotes_using_proxy.includes(remote);
@@ -426,7 +426,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			}
 			const connected = this.connected_remotes.find((rmt) => rmt.remote === remote);
 			if (connected) connected.fetched = true;
-			this.refreshSelectedRef();
+			if (sub_id == 'main') this.refreshSelectedRef();
 			return res;
 		} catch (error) {
 			this.log({ remote, state: 'failed', msg: `fetch error: ${error}`, sub });
@@ -482,14 +482,15 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				return;
 			} catch (e) {
 				if (fetch_missing) {
-					this.log({ level: 'error', msg: `TODO - fix this missing ref: ${ref}: error: ${e}` });
-					console.log(`error: couldn't resolve ${ref} - need to fetch it. error: ${e}`);
-					// fetchFromRemote gets all tips, so we should only get here when nostr_state_refs changes and we need a new fetch
-					// TODO - try and fetch for git severs - we need to be careful not to create a infinate loop of fetching from git servers when the nost refs aren't available
+					this.log({
+						level: 'error',
+						msg: `could not find latest ${ref}. fetching from connected remotes. error: ${e}`
+					});
+					this.connected_remotes.forEach((r) => {
+						this.fetchFromRemote(r.remote);
+					});
 				} else {
-					// fetchFromRemote gets all tips so should only get here if nostr_refs aren't avialable on git servers
-					this.log({ level: 'error', msg: `missing ref: ${ref}: error: ${e}` });
-					console.log(`error: couldn't resolve ${ref} - need to fetch it. error: ${e}`);
+					// fetchFromRemote gets all tips so should only get here if nostr_refs aren't avialable on git servers or proccessRefs called before data fetched
 				}
 			}
 		}
@@ -846,10 +847,11 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		const { nostr_state } = params;
 		if (this.nostr_state_refs == nostr_state) return;
 		this.nostr_state_refs = nostr_state ? [...nostr_state] : undefined;
-		// do stuff
 		this.postEvent({ name: 'stateUpdate', detail: nostr_state || [] });
-
-		await this.refreshSelectedRef(true);
+		// only refresh selected ref if we already have one loaded
+		if (this.file_structure) {
+			await this.refreshSelectedRef(true);
+		}
 	}
 	async updateCloneUrls(params: { clone_urls: string[] }) {
 		const { clone_urls } = params;
@@ -877,11 +879,11 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 						path: `remote.${remote}.fetch`,
 						value: `+refs/*:refs/remotes/${remote}/*`
 					});
-					this.connectToRemote(url);
-					this.fetchFromRemote(remote);
+					await this.connectToRemote(url);
+					await this.fetchFromRemote(remote);
+					await this.refreshSelectedRef();
 				})
 		);
-		await this.refreshSelectedRef();
 	}
 
 	async updateRefAndPath(params: { ref_and_path?: string }) {
