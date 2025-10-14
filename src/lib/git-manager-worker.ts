@@ -402,7 +402,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				remote,
 				corsProxy: use_proxy ? cors_proxy_base_url : undefined,
 				remoteRef: remote_ref,
-				depth: 20, // https://github.com/isomorphic-git/isomorphic-git/issues/1735
+				depth: 200, // https://github.com/isomorphic-git/isomorphic-git/issues/1735
 				tags: true,
 				onProgress: (progress) => {
 					this.log({ remote, state: 'fetching', progress, sub });
