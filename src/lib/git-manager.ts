@@ -23,9 +23,11 @@ export class GitManagerRpc extends EventTarget {
 	private nextId = 1;
 	private pending = new Map<number, Pending>();
 
-	constructor(workerUrl = new URL('./git-manager-worker.ts', import.meta.url)) {
+	constructor() {
 		super();
-		this.worker = new Worker(workerUrl, { type: 'module' });
+		this.worker = new Worker(new URL('./git-manager-worker.ts', import.meta.url), {
+			type: 'module'
+		});
 		this.worker.onmessage = this.onMessage.bind(this);
 		this.worker.onerror = (ev) => {
 			const msg = ev?.message ?? 'worker-error';
