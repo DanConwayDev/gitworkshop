@@ -87,6 +87,10 @@ export const RPC_METHODS = [
 	'getCommitDiff'
 ] as const;
 
+export function isGitManagerMethod(method: string): method is GitManagerRpcMethodNames {
+	return (RPC_METHODS as readonly string[]).includes(method);
+}
+
 export type GitManagerRpcMethodNames = (typeof RPC_METHODS)[number];
 
 type Req = {

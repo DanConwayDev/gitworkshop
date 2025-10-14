@@ -1,12 +1,11 @@
 import git, { type FetchResult, type HttpClient, type ReadCommitResult } from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import {
-	RPC_METHODS,
+	isGitManagerMethod,
 	type CommitInfo,
 	type FileEntry,
 	type GitManagerEvent,
 	type GitManagerLogEntry,
-	type GitManagerRpcMethodNames,
 	type GitManagerRpcMethodSigs,
 	type SelectedPathInfo
 } from '$lib/types/git-manager';
@@ -435,58 +434,13 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		}
 	}
 
-	private throttle_refresh_refs_state = {
-		isRefreshing: false,
-		queueNextRefresh: false,
-		refreshPromise: null as Promise<void> | null,
-		lastInvocationTime: 0,
-		THROTTLE_TIME: 200 // Set throttle time to 200 ms
-	};
+	private refreshSelectedRef = throttleAsync(
+		async (fetch_missing: boolean = false, force_dispatch_event: boolean = false): Promise<void> =>
+			this.processRefs(fetch_missing, force_dispatch_event),
+		200
+	);
 
-	private async refreshSelectedRef(
-		fetch_missing: boolean = false,
-		force_dispatch_event = false
-	): Promise<void> {
-		const now = Date.now();
-
-		// Check if we have waited long enough since the last invocation
-		if (
-			this.throttle_refresh_refs_state.isRefreshing ||
-			now - this.throttle_refresh_refs_state.lastInvocationTime <
-				this.throttle_refresh_refs_state.THROTTLE_TIME
-		) {
-			this.throttle_refresh_refs_state.queueNextRefresh = true;
-			await this.throttle_refresh_refs_state.refreshPromise;
-
-			// Check for and process queued request
-			if (this.throttle_refresh_refs_state.queueNextRefresh) {
-				this.throttle_refresh_refs_state.queueNextRefresh = false;
-				return this.refreshSelectedRef(fetch_missing, force_dispatch_event); // Process the queued request
-			}
-			return;
-		}
-
-		this.throttle_refresh_refs_state.isRefreshing = true;
-		this.throttle_refresh_refs_state.lastInvocationTime = now; // Update last invocation time
-
-		// Create a new promise for the refresh operation
-		this.throttle_refresh_refs_state.refreshPromise = new Promise((resolve) => {
-			// Call your processing logic here (e.g., processRefs)
-			this.processRefs(fetch_missing, force_dispatch_event, resolve);
-		});
-
-		await this.throttle_refresh_refs_state.refreshPromise;
-
-		// Reset the state after the promise resolves
-		this.throttle_refresh_refs_state.isRefreshing = false;
-		this.throttle_refresh_refs_state.refreshPromise = null;
-	}
-
-	private async processRefs(
-		fetch_missing: boolean,
-		force_dispatch_event: boolean,
-		resolve: () => void
-	) {
+	private async processRefs(fetch_missing: boolean, force_dispatch_event: boolean) {
 		const ref_paths = this.getDesiredRefPath();
 		for (const [index, { ref, path, ref_value }] of ref_paths.entries()) {
 			try {
@@ -524,8 +478,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				if (reload_dirs_and_file || force_dispatch_event) {
 					this.loadDirsAndFile(path, normaliseRemoteRef(ref, true), commit[0].oid);
 				}
-				// Resolve after first match (most desirable ref that we have the blobs for)
-				resolve();
+				// return after first match
 				return;
 			} catch (e) {
 				if (fetch_missing) {
@@ -540,9 +493,6 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				}
 			}
 		}
-
-		// Resolve when done with the loop
-		resolve();
 	}
 
 	private async loadDirsAndFile(path: string, ref_label: string, commit_id: string) {
@@ -1661,11 +1611,57 @@ async function waitForResult<T>(
 	return result;
 }
 
-const git_manager = new GitManagerWorker();
+// Generic typed throttle for async functions.
+// Runs immediately if interval elapsed; when a call occurs during a running execution
+// a single trailing call with the latest args will be scheduled.
+function throttleAsync<Args extends unknown[], R>(
+	fn: (...args: Args) => Promise<R>,
+	interval: number
+) {
+	let lastRun = 0;
+	let running = false;
+	let scheduledTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+	let latestArgs: Args | null = null;
 
-function isGitManagerMethod(method: string): method is GitManagerRpcMethodNames {
-	return (RPC_METHODS as readonly string[]).includes(method);
+	const wrapper = async (...args: Args): Promise<R | void> => {
+		const now = Date.now();
+		latestArgs = args;
+
+		if (running) {
+			if (scheduledTimer == null) {
+				scheduledTimer = globalThis.setTimeout(() => {
+					scheduledTimer = null;
+					void wrapper(...(latestArgs as Args));
+				}, interval);
+			}
+			return;
+		}
+
+		const canRunNow = now - lastRun >= interval;
+		if (!canRunNow) {
+			if (scheduledTimer == null) {
+				const wait = interval - (now - lastRun);
+				scheduledTimer = globalThis.setTimeout(() => {
+					scheduledTimer = null;
+					void wrapper(...(latestArgs as Args));
+				}, wait);
+			}
+			return;
+		}
+
+		running = true;
+		lastRun = Date.now();
+		try {
+			return await fn(...args);
+		} finally {
+			running = false;
+		}
+	};
+
+	return wrapper;
 }
+
+const git_manager = new GitManagerWorker();
 
 function errToMessage(e: unknown): string {
 	if (e instanceof Error) return e.message;
