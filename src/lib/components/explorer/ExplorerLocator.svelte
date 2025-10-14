@@ -58,14 +58,26 @@
 		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
 	});
 
+	let useful_stuff_in_bottom = $derived(
+		overal_server_status !== 'fetched' || loading || (git_status && git_status.level !== 'info')
+	);
+	let useful_stuff_in_bottom_for_2s = $state(false);
+	let id: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		if (id) clearTimeout(id);
+		if (useful_stuff_in_bottom)
+			id = setTimeout(() => {
+				useful_stuff_in_bottom_for_2s = true;
+			}, 2000);
+		else useful_stuff_in_bottom_for_2s = false;
+	});
+
 	let force_show_bottom = $state(false);
 	let force_hide_bottom = $state(false);
 	let show_bottom = $derived.by(() => {
 		if (force_show_bottom) return true;
 		if (force_hide_bottom) return false;
-		return (
-			overal_server_status !== 'fetched' || loading || (git_status && git_status.level !== 'info')
-		);
+		return useful_stuff_in_bottom_for_2s;
 	});
 </script>
 
