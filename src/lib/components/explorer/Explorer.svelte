@@ -6,8 +6,10 @@
 	import { onMount } from 'svelte';
 	import FileViewer from './FileViewer.svelte';
 	import {
+		isGitManagerLogEntryGlobal,
 		type FileEntry,
 		type GitManagerLogEntry,
+		type GitManagerLogEntryGlobal,
 		type GitServerState,
 		type GitServerStatus,
 		type SelectedPathInfo,
@@ -151,9 +153,12 @@
 	git_manager.addEventListener('log', (e: Event) => {
 		const customEvent = e as CustomEvent<GitManagerLogEntry>;
 		onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls ?? []);
+		if (isGitManagerLogEntryGlobal(customEvent.detail)) git_status = { ...customEvent.detail };
 	});
+
+	let git_status: GitManagerLogEntryGlobal | undefined = $state();
 	let git_warning: string | undefined = $derived.by(() => {
-		if (waited_1s) {
+		if (waited_1s && directory_structure) {
 			if (!checked_out_ref && overal_server_status === 'connected')
 				return undefined; // not found shown
 			else if (!nostr_state)
@@ -178,7 +183,9 @@
 	{branches}
 	{tags}
 	{server_status}
+	{git_status}
 	{git_warning}
+	loading={!directory_structure}
 />
 
 {#if checked_out_ref && path_exists !== undefined && !path_exists}

@@ -34,7 +34,7 @@ export interface GitManagerLogEntryServer {
 	sub?: string;
 }
 export interface GitManagerLogEntryGlobal {
-	level: 'info' | 'warning' | 'error';
+	level: 'info' | 'loading' | 'warning' | 'error';
 	msg: string;
 	sub?: string;
 }
@@ -62,6 +62,9 @@ export interface GitProgressObj extends GitProgressEvent {
 
 export function isGitManagerLogEntryServer(x?: GitManagerLogEntry): x is GitManagerLogEntryServer {
 	return !!x && Object.keys(x).includes('remote');
+}
+export function isGitManagerLogEntryGlobal(x?: GitManagerLogEntry): x is GitManagerLogEntryGlobal {
+	return !!x && !Object.keys(x).includes('remote');
 }
 
 export interface CommitInfo extends CommitObject {

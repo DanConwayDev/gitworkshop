@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { slide } from 'svelte/transition';
-	import type { GitServerState, GitServerStatus, SelectedRefInfo } from '$lib/types/git-manager';
+	import type {
+		GitManagerLogEntryGlobal,
+		GitServerState,
+		GitServerStatus,
+		SelectedRefInfo
+	} from '$lib/types/git-manager';
 	import type { SvelteMap } from 'svelte/reactivity';
 	import FromNow from '../FromNow.svelte';
 	import { pr_icon_path } from '../prs/icons';
@@ -19,7 +24,9 @@
 		branches = [],
 		tags = [],
 		server_status,
-		git_warning
+		git_warning,
+		git_status,
+		loading = false
 	}: {
 		base_url: string;
 		identifier: string;
@@ -30,6 +37,8 @@
 		tags: string[];
 		server_status: SvelteMap<string, GitServerStatus>;
 		git_warning?: string;
+		git_status?: GitManagerLogEntryGlobal;
+		loading?: boolean;
 	} = $props();
 
 	let selected_ref = $derived(selected_ref_info?.ref ?? '');
@@ -54,7 +63,9 @@
 	let show_bottom = $derived.by(() => {
 		if (force_show_bottom) return true;
 		if (force_hide_bottom) return false;
-		return overal_server_status !== 'fetched';
+		return (
+			overal_server_status !== 'fetched' || loading || (git_status && git_status.level !== 'info')
+		);
 	});
 </script>
 
@@ -200,11 +211,20 @@
 	<div
 		in:slide={{ duration: 100 }}
 		out:slide={{ duration: 100 }}
-		class="border-base-400 bg-base-100 flex items-center rounded-b-lg border-x border-b"
+		class="border-base-400 bg-base-100 rounded-b-lg border-x border-b"
 		class:mb-0={!!git_warning}
 		class:mb-2={!git_warning}
 	>
-		<div class="mx-5 my-5">
+		<div class="p-5" class:pt-2={git_status && git_status.level !== 'info'}>
+			{#if git_status && git_status.level !== 'info'}
+				<div class="flex w-full items-center">
+					<div class="bg-base-300 m-auto mt-2 mb-2 rounded px-6 py-2 text-center">
+						{#if git_status.level == 'loading'}
+							<span class="loading loading-spinner loading-xs mr-3"></span>
+						{:else}<span class="pr-3">{git_status.level}:</span>{/if}{git_status.msg}
+					</div>
+				</div>
+			{/if}
 			{#each server_status.entries() as [remote, status] (remote)}
 				<BackgroundProgressWrapper
 					complete_bg_color_class="bg-base-400"

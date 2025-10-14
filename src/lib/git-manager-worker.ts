@@ -290,7 +290,8 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		if (!already_cloned) {
 			await git.init({ fs: this.fs, dir: `/${this.a_ref}` });
 		} else {
-			this.refreshSelectedRef();
+			await this.getRemoteRefsFromLocal();
+			await this.refreshSelectedRef();
 		}
 		await this.addRemotes();
 		let fetched_from_one_remote = already_cloned;
@@ -409,11 +410,11 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 	private async fetchFromRemote(
 		remote: string,
 		remote_ref?: string,
-		sub_id: string = 'main'
+		sub_id: string = ''
 	): Promise<FetchResult | string> {
 		await this.addRemotes(remote); // added as some reports error "The function requires a remote of 'remote OR url' paremeter but none was provied"
 		const use_proxy = this.remotes_using_proxy.includes(remote);
-		const sub = sub_id ?? 'main';
+		const sub = sub_id ?? 'explorer';
 		this.log({ remote, state: 'fetching', sub });
 		try {
 			const res = await git.fetch({
@@ -447,7 +448,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			}
 			const connected = this.connected_remotes.find((rmt) => rmt.remote === remote);
 			if (connected) connected.fetched = true;
-			if (sub_id == 'main') this.refreshSelectedRef();
+			if (sub_id == 'explorer') this.refreshSelectedRef();
 			return res;
 		} catch (error) {
 			this.log({ remote, state: 'failed', msg: `fetch error: ${error}`, sub });
@@ -462,7 +463,10 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 	);
 
 	private async processRefs(fetch_missing: boolean, force_dispatch_event: boolean) {
-		const ref_paths = this.getDesiredRefPath();
+		const ref_paths = await this.waitForDesiredRefPath({
+			timeout_ms: 5000,
+			interval_ms: 100
+		});
 		for (const [index, { ref, path, ref_value }] of ref_paths.entries()) {
 			try {
 				const commit = await git.log({
@@ -497,13 +501,25 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 					});
 				}
 				if (reload_dirs_and_file || force_dispatch_event) {
-					this.loadDirsAndFile(path, normaliseRemoteRef(ref, true), commit[0].oid);
+					const short_ref = normaliseRemoteRef(ref, true);
+					this.log({
+						sub: 'explorer',
+						level: 'loading',
+						msg: `opening '${short_ref}'`
+					});
+					await this.loadDirsAndFile(path, short_ref, commit[0].oid);
+					this.log({
+						sub: 'explorer',
+						level: 'info',
+						msg: `opened '${short_ref}'`
+					});
 				}
 				// return after first match
 				return;
 			} catch (e) {
 				if (fetch_missing) {
 					this.log({
+						sub: 'explorer',
 						level: 'error',
 						msg: `could not find latest ${ref}. fetching from connected remotes. error: ${e}`
 					});
@@ -604,6 +620,21 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		});
 		return desired;
 	}
+	private async waitForDesiredRefPath({
+		timeout_ms = 5000,
+		interval_ms = 100
+	}: {
+		timeout_ms?: number;
+		interval_ms?: number;
+	} = {}) {
+		const start = Date.now();
+		while (true) {
+			const v = this.getDesiredRefPath();
+			if (v.length > 0) return v;
+			if (Date.now() - start >= timeout_ms) return [];
+			await new Promise((r) => setTimeout(r, interval_ms));
+		}
+	}
 
 	// if ref_and_path undefined this.ref_and_path will be used
 	private getRefAndPathFromRemote(
@@ -679,7 +710,13 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		}
 	}
 
-	private async getRemoteRefsFromLocal(remote_name: string): Promise<string[][] | undefined> {
+	// if remote_name is ommitted all local remote states will be loaded into this.remote_states
+	private async getRemoteRefsFromLocal(remote_name?: string): Promise<string[][] | undefined> {
+		if (!remote_name) {
+			const remotes = await git.listRemotes({ fs: this.fs, dir: `/${this.a_ref}` });
+			await Promise.all(remotes.map((r) => this.getRemoteRefsFromLocal(r.remote)));
+			return;
+		}
 		const fs = this.fs;
 		const dir = `/${this.a_ref}`;
 		if (!this.connected_remotes || !this.connected_remotes.some((r) => r.remote == remote_name)) {
@@ -706,10 +743,6 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		path: string = ''
 	): Promise<{ info: SelectedPathInfo; tree: FileEntry[] } | undefined> {
 		const dir = `/${this.a_ref}`;
-		this.log({
-			level: 'error',
-			msg: `fectching file structure for '${normaliseRemoteRef(ref, true)}'`
-		});
 		try {
 			const oid = await git.resolveRef({
 				fs: this.fs,
@@ -1487,7 +1520,7 @@ function normaliseRemoteRef(ref: string, shorten: boolean = false): string {
 	const update = ref
 		// replace refs/remotes/[hex-string]/ with refs/heads/
 		.replace(/^refs\/remotes\/[0-9a-f]+\/(.*)$/, 'refs/$1');
-	if (shorten) return update.replace('ref/heads/', '').replace('refs/tags/', 'tags/');
+	if (shorten) return update.replace('refs/heads/', '').replace('refs/tags/', 'tags/');
 	return update;
 }
 

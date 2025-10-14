@@ -57,7 +57,7 @@
 			if (
 				// log subscription matches the tip id
 				customEvent.detail.sub &&
-				(customEvent.detail.sub === tip_id || customEvent.detail.sub === 'main')
+				(customEvent.detail.sub === tip_id || customEvent.detail.sub === 'explorer')
 			)
 				onLogUpdateServerStatus(customEvent.detail, server_status, git_manager.clone_urls ?? []);
 		});
