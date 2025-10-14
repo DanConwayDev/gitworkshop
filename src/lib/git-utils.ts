@@ -266,16 +266,31 @@ export const gitProgressToPc = (progress: GitProgressObj): number => {
 	return 0;
 };
 
+// assumes that the item with the most progress is doing the clone and therefore is 90% of the work
 export const gitProgressesToPc = (progresses: GitProgressObj[]): number => {
-	if (!progresses || progresses.length === 0) return 0;
+	// give the highest 90% and split the remaining 10% among the others
 
-	const totalWeight = progresses.reduce((sum, p) => sum + (p.total ?? 0), 0);
-	if (totalWeight === 0) return 0;
+	const pcs = progresses.map(gitProgressToPc); // numbers in 0-100
+	if (pcs.length === 0) return 0;
 
-	const weightedSum = progresses.reduce((sum, p) => {
-		const pct = gitProgressToPc(p); // 0-100
-		return sum + pct * (p.total ?? 0);
-	}, 0);
+	const biggest = Math.max(...pcs);
 
-	return Math.floor(weightedSum / totalWeight);
+	// collect the others (exclude one instance of the biggest)
+	const others: number[] = [];
+	let removed = false;
+	for (const p of pcs) {
+		if (!removed && p === biggest) {
+			removed = true;
+			continue;
+		}
+		others.push(p);
+	}
+
+	// average of others (if none, treat average as 0)
+	const avgOthers = others.length ? others.reduce((s, v) => s + v, 0) / others.length : 0;
+
+	// biggest contributes 90% of its progress, others collectively contribute 10% of their average
+	const total = biggest * 0.9 + avgOthers * 0.1;
+
+	return Math.floor(Math.max(0, Math.min(100, total)));
 };
