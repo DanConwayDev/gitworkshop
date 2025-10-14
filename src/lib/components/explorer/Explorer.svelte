@@ -56,11 +56,7 @@
 			: undefined
 	);
 
-	let waited_1s = $state(false);
 	onMount(() => {
-		setTimeout(() => {
-			waited_1s = true;
-		}, 1000);
 		git_manager.refreshExplorer({});
 		git_manager.logs.forEach((l) => onLogUpdateServerStatus(l, server_status, clone_urls ?? []));
 	});
@@ -121,10 +117,16 @@
 		return segments.join('/');
 	};
 
+	let waited_1s_after_load = $state(false);
+
 	// directory
 	let directory_structure: FileEntry[] | undefined = $state();
 	git_manager.addEventListener('directoryStructure', (e: Event) => {
 		const customEvent = e as CustomEvent<FileEntry[]>;
+		if (!directory_structure && customEvent.detail)
+			setTimeout(() => {
+				waited_1s_after_load = true;
+			}, 1000);
 		directory_structure = customEvent.detail;
 	});
 
@@ -158,7 +160,7 @@
 
 	let git_status: GitManagerLogEntryGlobal | undefined = $state();
 	let git_warning: string | undefined = $derived.by(() => {
-		if (waited_1s && directory_structure) {
+		if (waited_1s_after_load && directory_structure) {
 			if (!checked_out_ref && overal_server_status === 'connected')
 				return undefined; // not found shown
 			else if (!nostr_state)
@@ -196,7 +198,7 @@
 			<kbd class="kbd">{checked_out_ref?.ref}</kbd>
 		</p>
 	</div>
-{:else if waited_1s && !checked_out_ref && overal_server_status === 'fetched'}
+{:else if waited_1s_after_load && !checked_out_ref && overal_server_status === 'fetched'}
 	<div class="my-10 text-center">
 		<h3 class="mb-6 text-2xl font-bold">Ref Not Found</h3>
 		<p class="text-neutral-content mt-2 mb-4">
