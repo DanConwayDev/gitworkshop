@@ -96,7 +96,7 @@
 	<BackgroundProgressWrapper complete_bg_color_class="bg-base-400" pc={loading ? pcLoaded : 0}>
 		<div class=" flex items-center">
 			{#if show_branch_selector}
-				<div class="dropdown z-100">
+				<div class="dropdown z-5">
 					<div tabindex="0" role="button" class="btn btn-sm btn-neutral m-2 pr-2">
 						{#if !selected_ref}
 							<div class="skeleton h-4 w-4 opacity-25"></div>
