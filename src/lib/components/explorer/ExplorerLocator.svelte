@@ -89,9 +89,9 @@
 
 <div
 	class="border-base-400 bg-base-200 my-2 rounded-t-lg border-x border-t"
-	class:mb-0={show_bottom || !!git_warning}
-	class:rounded-lg={!show_bottom}
-	class:border={!show_bottom}
+	class:mb-0={show_bottom || selected_ref_info || !!git_warning}
+	class:rounded-lg={!show_bottom && !selected_ref_info}
+	class:border={!show_bottom && !selected_ref_info}
 >
 	<BackgroundProgressWrapper complete_bg_color_class="bg-base-400" pc={loading ? pcLoaded : 0}>
 		<div class=" flex items-center">
@@ -174,11 +174,14 @@
 					</div>
 				</div>
 			{/if}
-			<div class:mx-4={!show_branch_selector} class="m-2 mx-2 flex-grow py-1">
+			<div
+				class:mx-4={!show_branch_selector}
+				class="m-2 mx-2 flex min-w-0 flex-grow flex-wrap gap-1 py-1"
+			>
 				<a class="link-hover link link-secondary" href={base_url}>{identifier}</a>
 				{#if path !== ''}
 					{#each path_structure as dir, i (i)}
-						<span class="px-1">
+						<span class="px-1 break-words break-all">
 							<span class="opacity-25">/</span>
 							{#if i === path_structure.length - 1}
 								<span>{dir}</span>
@@ -195,13 +198,6 @@
 					{/each}
 				{/if}
 			</div>
-			{#if selected_ref_info}
-				<div class="text-base-content/50 text-xs">
-					<FromNow unix_seconds={selected_ref_info.commit.committer.timestamp} />
-				</div>
-				<div class="text-base-content/50 mx-2 text-xs">{selected_ref_info.commit.author.name}</div>
-				<div class="badge badge-sm mr-2">{selected_ref_info.commit_id.substring(0, 8)}</div>
-			{/if}
 			<button
 				class="btn btn-sm btn-neutral mr-2"
 				onclick={() => {
@@ -229,6 +225,51 @@
 		</div>
 	</BackgroundProgressWrapper>
 </div>
+{#if selected_ref_info}
+	<div
+		class="border-base-400 bg-base-200/50 bg-base-100 flex items-start gap-3 border-x px-3 py-3 sm:flex-row sm:items-center sm:gap-4"
+		class:rounded-b-lg={!show_bottom}
+		class:border-b={!show_bottom}
+		role="group"
+		aria-label="Commit summary"
+	>
+		<!-- left: icon + author -->
+		<div class="flex min-w-0 items-center gap-3">
+			<div
+				class="bg-base-300 hidden h-10 w-10 shrink-0 items-center justify-center rounded-full sm:flex"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 16 16"
+					class="text-base-content h-5 w-5 rotate-90"
+					aria-hidden="true"
+				>
+					<title>Commit</title>
+					<path fill="currentColor" d={pr_icon_path.commit} />
+				</svg>
+			</div>
+
+			<div class="min-w-0">
+				<div class="text-base-content truncate text-sm font-medium">
+					{selected_ref_info.commit.message.split('\n')[0]}
+				</div>
+				<div class="text-base-content/60 truncate text-xs">
+					{selected_ref_info.commit.author.name}
+				</div>
+			</div>
+		</div>
+
+		<!-- right: id + time -->
+		<div class="ml-auto flex shrink-0 items-center gap-3">
+			<div class="flex flex-col items-end text-right">
+				<div class="badge badge-sm">{selected_ref_info.commit_id.substring(0, 8)}</div>
+				<div class="text-base-content/60 mt-1 text-xs">
+					<FromNow unix_seconds={selected_ref_info.commit.committer.timestamp} />
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
 {#if show_bottom}
 	<div
 		in:slide={{ duration: 100 }}
