@@ -419,11 +419,10 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 	private async fetchFromRemote(
 		remote: string,
 		remote_ref?: string,
-		sub_id: string = ''
+		sub: string = 'explorer'
 	): Promise<FetchResult | string> {
 		await this.addRemotes(remote); // added as some reports error "The function requires a remote of 'remote OR url' paremeter but none was provied"
 		const use_proxy = this.remotes_using_proxy.includes(remote);
-		const sub = sub_id ?? 'explorer';
 		this.log({ remote, state: 'fetching', sub });
 		try {
 			const res = await git.fetch({
@@ -457,7 +456,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			}
 			const connected = this.connected_remotes.find((rmt) => rmt.remote === remote);
 			if (connected) connected.fetched = true;
-			if (sub_id == 'explorer') this.refreshSelectedRef();
+			if (sub == 'explorer') this.refreshSelectedRef();
 			return res;
 		} catch (error) {
 			this.log({ remote, state: 'failed', msg: `fetch error: ${error}`, sub });
@@ -993,6 +992,11 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			},
 			async (): Promise<boolean> => {
 				const a_ref = this.a_ref;
+				this.log({
+					level: 'info',
+					sub: tip_commit_id,
+					msg: 'awaiting default branch fetch'
+				});
 				await this.awaitFetched();
 				let finished_search = false;
 				return new Promise((r) => {
@@ -1113,6 +1117,22 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			}
 		);
 		return res || false;
+	}
+
+	private async waitForDefaultTip({
+		timeout_ms = 5000,
+		interval_ms = 100
+	}: {
+		timeout_ms?: number;
+		interval_ms?: number;
+	} = {}) {
+		const start = Date.now();
+		while (true) {
+			const v = await this.getDefaultTip();
+			if (v) return v;
+			if (Date.now() - start >= timeout_ms) return undefined;
+			await new Promise((r) => setTimeout(r, interval_ms));
+		}
 	}
 
 	private async getDefaultTip(): Promise<string | undefined> {
@@ -1238,7 +1258,13 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		const { event_id_listing_tip, tip_commit_id, extra_clone_urls } = params;
 		return await waitForResult<CommitInfo[]>(
 			() => this.loadPrCommitInfo(tip_commit_id),
-			() => this.fetchPrData(event_id_listing_tip, tip_commit_id, extra_clone_urls),
+			async () => {
+				await this.fetchPrData(event_id_listing_tip, tip_commit_id, extra_clone_urls);
+				await this.waitForDefaultTip({
+					timeout_ms: 20_000,
+					interval_ms: 200
+				});
+			},
 			{
 				intervalMs: 1000,
 				timeoutMs: 60_000,
