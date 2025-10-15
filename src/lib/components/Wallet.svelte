@@ -17,7 +17,7 @@
 	import { unlockWallet } from 'applesauce-wallet/helpers';
 	import {
 		unlockTokenContent,
-		isTokenContentLocked,
+		isTokenContentUnlocked,
 		getTokenContent
 	} from 'applesauce-wallet/helpers/tokens';
 	import { getDecodedToken, getEncodedToken, type Token } from '@cashu/cashu-ts';
@@ -27,7 +27,7 @@
 	import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
 	import {
 		getHistoryContent,
-		isHistoryContentLocked,
+		isHistoryContentUnlocked,
 		unlockHistoryContent,
 		type HistoryContent
 	} from 'applesauce-wallet/helpers/history';
@@ -113,7 +113,7 @@
 		return (events) => {
 			return events
 				.filters(createWalletFilter(pubkey))
-				.pipe(filter((e) => isTokenContentLocked(e)));
+				.pipe(filter((e) => !isTokenContentUnlocked(e)));
 		};
 	}
 
@@ -121,7 +121,7 @@
 		return (events) => {
 			return events
 				.filters(createWalletHistoryFilter(pubkey))
-				.pipe(filter((e) => isHistoryContentLocked(e)));
+				.pipe(filter((e) => !isHistoryContentUnlocked(e)));
 		};
 	}
 

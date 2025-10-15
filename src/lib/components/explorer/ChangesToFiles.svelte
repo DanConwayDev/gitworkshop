@@ -92,6 +92,7 @@
 						expand_full_files[index] = !expand_full_files[index];
 						if (expand_full_files[index]) expand_files[index] = true;
 					}}
+					title="full width"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"

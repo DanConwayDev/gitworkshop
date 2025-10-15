@@ -76,11 +76,15 @@ const processPubkeyUpdates: UpdateProcessor = (items, updates) => {
 		if (u.event) {
 			if (u.event.kind === Metadata) {
 				try {
-					if (!item.metadata.stamp || item.metadata.stamp.created_at < u.event.created_at)
-						item.metadata = {
-							fields: getProfileContent(u.event),
-							stamp: { event_id: u.event.id, created_at: u.event.created_at }
-						};
+					if (!item.metadata.stamp || item.metadata.stamp.created_at < u.event.created_at) {
+						const profileContent = getProfileContent(u.event);
+						if (profileContent) {
+							item.metadata = {
+								fields: profileContent,
+								stamp: { event_id: u.event.id, created_at: u.event.created_at }
+							};
+						}
+					}
 				} catch {
 					/* empty */
 				}

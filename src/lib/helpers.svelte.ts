@@ -22,7 +22,7 @@ import query_centre from './query-centre/QueryCentre.svelte';
 import { onDestroy as onDestroySvelte, untrack } from 'svelte';
 import type { AddressPointer, EventPointer } from 'nostr-tools/nip19';
 import { RepoAnnKind } from './kinds';
-import type { ModelConstructor } from 'applesauce-core';
+import type { IAsyncEventStore, IEventStore, ModelConstructor } from 'applesauce-core';
 import { EventModel, ReplaceableModel, TimelineModel } from 'applesauce-core/models';
 
 /// this is taken and adapted from https://github.com/dexie/Dexie.js/pull/2116
@@ -144,7 +144,10 @@ export function inMemoryRelayEvent(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class InMemoryModel<T, Args extends Array<any>> {
 	result = $state.raw<T | undefined>(undefined);
-	constructor(modelConstructor: ModelConstructor<T, Args>, args: () => Args) {
+	constructor(
+		modelConstructor: ModelConstructor<T, Args, IAsyncEventStore | IEventStore>,
+		args: () => Args
+	) {
 		$effect(() => {
 			const sub = memory_db.model(modelConstructor, ...args()).subscribe((res: T | undefined) => {
 				this.result = res;
