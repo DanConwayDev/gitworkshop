@@ -340,35 +340,56 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			await this.refreshSelectedRef();
 		}
 		await this.addRemotes();
-		let fetched_from_one_remote = already_cloned;
+		await this.connectToRemotesAndFetchDefault(already_cloned);
+	}
+
+	/// fetch from first connected remote (if fail fallback to the next) then do the rest async
+	private async connectToRemotesAndFetchDefault(all_async: boolean) {
+		let ready = all_async;
+		let cleared_for_early_fetch: string[] = [];
 		await Promise.all(
 			this.clone_urls?.map(async (url) => {
 				const remote = cloneUrlToRemoteName(url);
 				const connected = await this.connectToRemote(url);
 				if (!connected) return;
 				this.connected_remotes.push({ remote, url, fetched: false });
-				// only do a full fetch (like clone) from first connected remote
-				if (
-					already_cloned ||
-					(this.connected_remotes.length > 0 && this.connected_remotes[0].remote === remote)
-				) {
-					await this.fetchFromRemote(remote);
-					await this.refreshSelectedRef();
-					// will this stop fetching all the data again from more remotes
-					fetched_from_one_remote = true;
-				} else {
-					// wait until first connected remote has finished fetchFromRemote before proceeding to fetchFromRemote(remote)
-					await new Promise<void>((r) => {
-						const id = setInterval(async () => {
-							if (fetched_from_one_remote) {
-								clearInterval(id);
-								await this.fetchFromRemote(remote);
-								await this.refreshSelectedRef();
-								r();
+
+				await new Promise<void>((r) => {
+					// eslint-disable-next-line prefer-const
+					let int_id: ReturnType<typeof setInterval> | undefined;
+					const tryRun = async () => {
+						if (
+							ready ||
+							// start first connected
+							cleared_for_early_fetch.length == 0 ||
+							cleared_for_early_fetch.includes(url)
+						) {
+							if (int_id) clearInterval(int_id);
+							// mark it as cleared
+							if (!cleared_for_early_fetch.includes(url)) cleared_for_early_fetch.push(url);
+							// do fetch
+							const res = await this.fetchFromRemote(remote);
+							await this.refreshSelectedRef();
+							// if success we are ready to fetch from all remotes async
+							if (typeof res !== 'string') ready = true;
+							// if it failed and we arn't ready
+							else if (!ready) {
+								// clear next connected remote
+								const next_one = this.connected_remotes.find(
+									(rm) => !cleared_for_early_fetch.includes(rm.url)
+								);
+								if (next_one) cleared_for_early_fetch.push(next_one.url);
+								// if no connecteted remotes empty cleared_for_early_fetch so the next connected remote will start
+								else {
+									cleared_for_early_fetch = [];
+								}
 							}
-						}, 1);
-					});
-				}
+							r();
+						}
+					};
+					int_id = setInterval(tryRun, 50);
+					tryRun();
+				});
 			}) ?? []
 		);
 	}
@@ -381,7 +402,6 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		if (this.connecting.has(url)) {
 			return this.awaitConnected(url);
 		}
-		this.log({ remote, state: 'connecting' });
 
 		const result = await httpGitServerConnectionTest(url);
 
@@ -479,6 +499,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				}
 				// singleBranch: true,
 			});
+			if (res.defaultBranch == null) throw Error('no default branch, usually a bad sign');
 			this.log({ remote, state: 'fetched', sub });
 			const state = await this.getRemoteRefsFromLocal(remote);
 			if (state && !this.nostr_state_refs && this.clone_urls) {
@@ -499,7 +520,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			if (sub == 'explorer') this.refreshSelectedRef();
 			return res;
 		} catch (error) {
-			this.log({ remote, state: 'failed', msg: `fetch error: ${error}`, sub });
+			this.log({ remote, state: 'failed', msg: `${error}`, sub });
 			return `${error}`;
 		}
 	}
