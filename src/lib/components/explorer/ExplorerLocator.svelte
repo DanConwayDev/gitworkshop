@@ -13,7 +13,7 @@
 	import ExplorerServerStatusIcon from './ExplorerServerStatusIcon.svelte';
 	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
 	import BackgroundProgressWrapper from '../BackgroundProgressWrapper.svelte';
-	import { gitProgressToPc, serverStatustoMsg } from '$lib/git-utils';
+	import { gitProgressesToPc, gitProgressToPc, serverStatustoMsg } from '$lib/git-utils';
 
 	let {
 		base_url,
@@ -58,6 +58,12 @@
 		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
 	});
 
+	let pcLoaded = $derived(
+		gitProgressesToPc(
+			Array.from(server_status.values()).flatMap((s) => (s.progress ? [s.progress] : []))
+		)
+	);
+
 	let useful_stuff_in_bottom = $derived(
 		overal_server_status !== 'fetched' || loading || (git_status && git_status.level !== 'info')
 	);
@@ -82,142 +88,146 @@
 </script>
 
 <div
-	class="border-base-400 bg-base-200 my-2 flex items-center rounded-t-lg border-x border-t"
+	class="border-base-400 bg-base-200 my-2 rounded-t-lg border-x border-t"
 	class:mb-0={show_bottom || !!git_warning}
 	class:rounded-lg={!show_bottom}
 	class:border={!show_bottom}
 >
-	{#if show_branch_selector}
-		<div class="dropdown">
-			<div tabindex="0" role="button" class="btn btn-sm btn-neutral m-2 pr-2">
-				{#if !selected_ref}
-					<div class="skeleton h-4 w-4 opacity-25"></div>
-					<div class="skeleton h-4 w-12 opacity-25"></div>
-				{:else}
-					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="h-4 w-4 flex-none">
-						{#if is_branch}
-							<title>Branch</title>
-							<path fill="currentColor" d={pr_icon_path.branch} />
+	<BackgroundProgressWrapper complete_bg_color_class="bg-base-400" pc={loading ? pcLoaded : 0}>
+		<div class=" flex items-center">
+			{#if show_branch_selector}
+				<div class="dropdown z-100">
+					<div tabindex="0" role="button" class="btn btn-sm btn-neutral m-2 pr-2">
+						{#if !selected_ref}
+							<div class="skeleton h-4 w-4 opacity-25"></div>
+							<div class="skeleton h-4 w-12 opacity-25"></div>
 						{:else}
-							<title>Branch</title>
-							<path fill="currentColor" d={pr_icon_path.tag} />
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="h-4 w-4 flex-none">
+								{#if is_branch}
+									<title>Branch</title>
+									<path fill="currentColor" d={pr_icon_path.branch} />
+								{:else}
+									<title>Branch</title>
+									<path fill="currentColor" d={pr_icon_path.tag} />
+								{/if}
+							</svg>
+							{selected_ref_short}
 						{/if}
-					</svg>
-					{selected_ref_short}
-				{/if}
-				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-4 w-4 flex-none"
-					><path
-						fill="currentColor"
-						d="M11.646 15.146L5.854 9.354a.5.5 0 0 1 .353-.854h11.586a.5.5 0 0 1 .353.854l-5.793 5.792a.5.5 0 0 1-.707 0"
-					/></svg
-				>
-			</div>
-			<div
-				class="dropdown-content bg-base-100 border-base-400 bg-base-200 z-1 w-sm rounded border p-2 shadow-sm"
-			>
-				<div class="tabs tabs-border">
-					<input
-						type="radio"
-						name="my_tabs_3"
-						class="tab"
-						aria-label="Branches ({branches.length})"
-						checked={is_branch}
-					/>
-					<ul class="tab-content menu">
-						{#if branches.length == 0}
-							<li class="menu-disabled mx-10"><div class="m-auto my-6">none</div></li>
-						{/if}
-						{#each branches as branch (branch)}
-							<li>
-								<a
-									class:menu-active={is_branch && branch === selected_ref_short}
-									href="{base_url_without_tree}/tree/{branch}/{path}"
-									>{branch}
-									{#if branch === default_branch?.replace('refs/heads/', '')}<span
-											class="badge badge-sm">default</span
-										>{/if}
-								</a>
-							</li>
-						{/each}
-					</ul>
-					<input
-						type="radio"
-						name="my_tabs_3"
-						class="tab"
-						aria-label="Tags ({tags.length})"
-						checked={!is_branch}
-					/>
-					<ul class="tab-content menu max-h-98 overflow-y-auto">
-						{#if tags.length == 0}
-							<li class="menu-disabled mx-10"><div class="m-auto my-6">none</div></li>
-						{/if}
-						{#each tags as tag (tag)}
-							<li>
-								<a
-									class:menu-active={!is_branch && tag === selected_ref_short}
-									href="{base_url_without_tree}/tree/{encodeURIComponent(
-										`refs/tags/${tag}`
-									)}/{path}">{tag}</a
-								>
-							</li>
-						{/each}
-					</ul>
-				</div>
-			</div>
-		</div>
-	{/if}
-	<div class:mx-4={!show_branch_selector} class="m-2 mx-2 flex-grow py-1">
-		<a class="link-hover link link-secondary" href={base_url}>{identifier}</a>
-		{#if path !== ''}
-			{#each path_structure as dir, i (i)}
-				<span class="px-1">
-					<span class="opacity-25">/</span>
-					{#if i === path_structure.length - 1}
-						<span>{dir}</span>
-					{:else}
-						<a
-							class="link-hover link link-secondary"
-							href={`${base_url}/${path
-								.split('/')
-								.slice(0, i + 1)
-								.join('/')}`}>{dir}</a
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-4 w-4 flex-none"
+							><path
+								fill="currentColor"
+								d="M11.646 15.146L5.854 9.354a.5.5 0 0 1 .353-.854h11.586a.5.5 0 0 1 .353.854l-5.793 5.792a.5.5 0 0 1-.707 0"
+							/></svg
 						>
-					{/if}
-				</span>
-			{/each}
-		{/if}
-	</div>
-	{#if selected_ref_info}
-		<div class="text-base-content/50 text-xs">
-			<FromNow unix_seconds={selected_ref_info.commit.committer.timestamp} />
+					</div>
+					<div
+						class="dropdown-content bg-base-100 border-base-400 bg-base-200 z-1 w-sm rounded border p-2 shadow-sm"
+					>
+						<div class="tabs tabs-border">
+							<input
+								type="radio"
+								name="my_tabs_3"
+								class="tab"
+								aria-label="Branches ({branches.length})"
+								checked={is_branch}
+							/>
+							<ul class="tab-content menu">
+								{#if branches.length == 0}
+									<li class="menu-disabled mx-10"><div class="m-auto my-6">none</div></li>
+								{/if}
+								{#each branches as branch (branch)}
+									<li>
+										<a
+											class:menu-active={is_branch && branch === selected_ref_short}
+											href="{base_url_without_tree}/tree/{branch}/{path}"
+											>{branch}
+											{#if branch === default_branch?.replace('refs/heads/', '')}<span
+													class="badge badge-sm">default</span
+												>{/if}
+										</a>
+									</li>
+								{/each}
+							</ul>
+							<input
+								type="radio"
+								name="my_tabs_3"
+								class="tab"
+								aria-label="Tags ({tags.length})"
+								checked={!is_branch}
+							/>
+							<ul class="tab-content menu max-h-98 overflow-y-auto">
+								{#if tags.length == 0}
+									<li class="menu-disabled mx-10"><div class="m-auto my-6">none</div></li>
+								{/if}
+								{#each tags as tag (tag)}
+									<li>
+										<a
+											class:menu-active={!is_branch && tag === selected_ref_short}
+											href="{base_url_without_tree}/tree/{encodeURIComponent(
+												`refs/tags/${tag}`
+											)}/{path}">{tag}</a
+										>
+									</li>
+								{/each}
+							</ul>
+						</div>
+					</div>
+				</div>
+			{/if}
+			<div class:mx-4={!show_branch_selector} class="m-2 mx-2 flex-grow py-1">
+				<a class="link-hover link link-secondary" href={base_url}>{identifier}</a>
+				{#if path !== ''}
+					{#each path_structure as dir, i (i)}
+						<span class="px-1">
+							<span class="opacity-25">/</span>
+							{#if i === path_structure.length - 1}
+								<span>{dir}</span>
+							{:else}
+								<a
+									class="link-hover link link-secondary"
+									href={`${base_url}/${path
+										.split('/')
+										.slice(0, i + 1)
+										.join('/')}`}>{dir}</a
+								>
+							{/if}
+						</span>
+					{/each}
+				{/if}
+			</div>
+			{#if selected_ref_info}
+				<div class="text-base-content/50 text-xs">
+					<FromNow unix_seconds={selected_ref_info.commit.committer.timestamp} />
+				</div>
+				<div class="text-base-content/50 mx-2 text-xs">{selected_ref_info.commit.author.name}</div>
+				<div class="badge badge-sm mr-2">{selected_ref_info.commit_id.substring(0, 8)}</div>
+			{/if}
+			<button
+				class="btn btn-sm btn-neutral mr-2"
+				onclick={() => {
+					if (show_bottom) {
+						force_hide_bottom = false;
+						force_show_bottom = false;
+						// force show only if required
+						if (show_bottom) {
+							force_hide_bottom = true;
+						}
+					} else {
+						force_hide_bottom = false;
+						force_show_bottom = false;
+						// force hide only if required
+						if (!show_bottom) {
+							force_show_bottom = true;
+						}
+					}
+				}}
+			>
+				<div class="indicator">
+					<ExplorerServerStatusIcon {server_status} />
+				</div>
+			</button>
 		</div>
-		<div class="text-base-content/50 mx-2 text-xs">{selected_ref_info.commit.author.name}</div>
-		<div class="badge badge-sm mr-2">{selected_ref_info.commit_id.substring(0, 8)}</div>
-	{/if}
-	<button
-		class="btn btn-sm btn-neutral mr-2"
-		onclick={() => {
-			if (show_bottom) {
-				force_hide_bottom = false;
-				force_show_bottom = false;
-				// force show only if required
-				if (show_bottom) {
-					force_hide_bottom = true;
-				}
-			} else {
-				force_hide_bottom = false;
-				force_show_bottom = false;
-				// force hide only if required
-				if (!show_bottom) {
-					force_show_bottom = true;
-				}
-			}
-		}}
-	>
-		<div class="indicator">
-			<ExplorerServerStatusIcon {server_status} />
-		</div>
-	</button>
+	</BackgroundProgressWrapper>
 </div>
 {#if show_bottom}
 	<div
