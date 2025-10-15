@@ -8,6 +8,7 @@
 	import Repo from '../event/previews/Repo.svelte';
 	import Patch from '../event/previews/Patch.svelte';
 	import EventCard from '../event/EventCard.svelte';
+	import { isEvent } from 'applesauce-core/helpers';
 
 	let {
 		n_attr,
@@ -27,7 +28,7 @@
 	class="border-base-300 bg-base-200 rounded-lg border"
 	class:border-neutral-content={edit_mode?.selected}
 >
-	{#if edit_mode || !e.event || [IssueKind, PatchKind, PrKind, RepoAnnKind].includes(e.event?.kind)}
+	{#if edit_mode || !e.event || !isEvent(e.event) || [IssueKind, PatchKind, PrKind, RepoAnnKind].includes(e.event?.kind)}
 		<EventWrapperLite {n_attr} event={e.event} disable_links={!!edit_mode}>
 			{#if e.event?.kind === IssueKind}
 				<Issue event={e.event} />
