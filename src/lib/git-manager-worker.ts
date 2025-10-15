@@ -1,4 +1,10 @@
-import git, { type FetchResult, type HttpClient, type ReadCommitResult } from 'isomorphic-git';
+import git, {
+	type FetchResult,
+	type GitHttpRequest,
+	type GitHttpResponse,
+	type HttpClient,
+	type ReadCommitResult
+} from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import {
 	isGitManagerLogEntryServer,
@@ -156,50 +162,84 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 	}
 
 	fs: LightningFS;
-	// for isomorphic-git
-	http: HttpClient = {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		request: async (args: any) => {
-			const response = await fetch(args.url, {
-				method: args.method,
-				headers: args.headers,
-				body: args.body
-			});
 
-			// Convert Headers to plain object
-			const headers: { [key: string]: string } = {};
-			response.headers.forEach((value, key) => {
-				headers[key] = value;
-			});
+	private getHttp(opts: { remote: string; sub: string }): HttpClient {
+		const { remote, sub } = opts;
 
-			// Convert ReadableStream to AsyncIterableIterator
-			const body = response.body ? this.streamToAsyncIterator(response.body) : undefined;
+		return {
+			request: async (args: GitHttpRequest): Promise<GitHttpResponse> => {
+				const response = await fetch(args.url, {
+					method: args.method,
+					headers: args.headers as HeadersInit,
+					body: args.body as unknown as BodyInit | null
+				});
 
-			return {
-				url: response.url,
-				method: args.method,
-				statusCode: response.status,
-				statusMessage: response.statusText,
-				body,
-				headers
-			};
-		}
-	};
+				// Convert Headers to plain object
+				const headersObj: Record<string, string> = {};
+				response.headers.forEach((value, key) => {
+					headersObj[key] = value;
+				});
 
-	// Helper method to convert ReadableStream to AsyncIterableIterator
-	private async *streamToAsyncIterator(
-		stream: ReadableStream<Uint8Array>
-	): AsyncIterableIterator<Uint8Array> {
-		const reader = stream.getReader();
-		try {
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				yield value;
+				// Determine total bytes (if provided)
+				const contentLength = response.headers.get('content-length');
+				const totalBytes = contentLength ? parseInt(contentLength, 10) : undefined;
+				const totalKB = totalBytes ? Math.round(totalBytes / 1024) : undefined;
+
+				// ReadableStream and progress tracking
+				const stream = response.body;
+				let loadedBytes = 0;
+
+				async function* bodyIterator(this: GitManagerWorker): AsyncIterableIterator<Uint8Array> {
+					if (!stream) return;
+					const reader = stream.getReader();
+					try {
+						while (true) {
+							const read = await reader.read();
+							if (read.done) break;
+							const value = read.value ?? new Uint8Array(0);
+							const chunkBytes = value.byteLength;
+							loadedBytes += chunkBytes;
+							const loadedKB = Math.round(loadedBytes / 1024);
+
+							// Log progress; cast this to the surrounding class type as needed
+							try {
+								this.log({
+									remote,
+									sub,
+									state: 'fetching',
+									progress: {
+										phase: 'Downloading data',
+										loaded: loadedKB,
+										total: totalKB
+									}
+								});
+							} catch {
+								// ignore logging errors
+							}
+
+							yield value;
+						}
+					} finally {
+						try {
+							reader.releaseLock();
+						} catch {
+							/* empty */
+						}
+					}
+				}
+
+				const httpResponse: GitHttpResponse = {
+					url: response.url,
+					method: args.method,
+					statusCode: response.status,
+					statusMessage: response.statusText,
+					headers: headersObj,
+					body: bodyIterator.call(this)
+				};
+
+				return httpResponse;
 			}
-		} finally {
-			reader.releaseLock();
-		}
+		};
 	}
 
 	logs: Map<string, GitManagerLogEntry> = new Map();
@@ -313,8 +353,9 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 					(this.connected_remotes.length > 0 && this.connected_remotes[0].remote === remote)
 				) {
 					await this.fetchFromRemote(remote);
-					fetched_from_one_remote = true;
 					await this.refreshSelectedRef();
+					// will this stop fetching all the data again from more remotes
+					fetched_from_one_remote = true;
 				} else {
 					// wait until first connected remote has finished fetchFromRemote before proceeding to fetchFromRemote(remote)
 					await new Promise<void>((r) => {
@@ -323,7 +364,6 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 								clearInterval(id);
 								await this.fetchFromRemote(remote);
 								await this.refreshSelectedRef();
-
 								r();
 							}
 						}, 1);
@@ -428,7 +468,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			const res = await git.fetch({
 				fs: this.fs,
 				dir: `/${this.a_ref}`,
-				http: this.http,
+				http: this.getHttp({ remote, sub }),
 				remote,
 				corsProxy: use_proxy ? cors_proxy_base_url : undefined,
 				remoteRef: remote_ref,

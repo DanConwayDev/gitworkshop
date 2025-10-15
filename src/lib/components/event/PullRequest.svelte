@@ -60,6 +60,7 @@
 		git_manager.addEventListener('log', (e: Event) => {
 			const customEvent = e as CustomEvent<GitManagerLogEntry>;
 			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, log_subs);
+			// we could introduce a git_status and capture global log for sub (this will enable detection of awaiting default branch phase)
 		});
 	});
 </script>

@@ -225,18 +225,23 @@ export const onLogUpdateServerStatus = (
 	}
 };
 
-export const serverStatustoMsg = (status: GitServerStatus) =>
-	status.msg ??
-	(status.progress
-		? `${status.progress.phase} ${status.progress.loaded}/${status.progress.total}`
-		: '');
+export const serverStatustoMsg = (status: GitServerStatus) => {
+	if (status.msg) return status.msg;
+	if (!status.progress) return '';
+	if (status.progress.phase === 'Downloading data') {
+		const total = status.progress.total ? (status.progress.total / 1024).toFixed(1) : 'unknown ';
+		return `${status.progress.phase} ${(status.progress.loaded / 1024).toFixed(1)}mb / ${total}mb`;
+	}
+	return `${status.progress.phase} ${status.progress.loaded}/${status.progress.total}`;
+};
 
 export const gitProgressToPc = (progress: GitProgressObj): number => {
 	const phasePercentages: { [key in GitProgressPhase]: number } = {
-		'Counting objects': 10,
-		'Compressing objects': 20,
-		'Receiving objects': 60,
-		'Resolving deltas': 10
+		'Counting objects': 3,
+		'Compressing objects': 7,
+		'Downloading data': 70,
+		'Receiving objects': 15,
+		'Resolving deltas': 5
 	};
 
 	const { phase, loaded, total } = progress;
@@ -247,6 +252,7 @@ export const gitProgressToPc = (progress: GitProgressObj): number => {
 		const phasesOrder = [
 			'Counting objects',
 			'Compressing objects',
+			'Downloading data',
 			'Receiving objects',
 			'Resolving deltas'
 		];
@@ -261,7 +267,8 @@ export const gitProgressToPc = (progress: GitProgressObj): number => {
 
 	if (phase in phasePercentages) {
 		return Math.min(
-			Math.floor((loaded / total) * phasePercentages[phase]) + getPreviousPhasesCompletion(phase),
+			Math.floor((total ? loaded / total : 0) * phasePercentages[phase]) +
+				getPreviousPhasesCompletion(phase),
 			100
 		);
 	}

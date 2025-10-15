@@ -1,4 +1,4 @@
-import type { CommitObject, GitProgressEvent } from 'isomorphic-git';
+import type { CommitObject } from 'isomorphic-git';
 import type { RepoRef } from './git';
 
 // Git Types
@@ -47,17 +47,22 @@ export interface GitServerStatus {
 	state: GitServerState;
 	with_proxy: boolean;
 	msg?: string;
-	progress?: GitProgressEvent;
+	progress?: GitProgressObj;
 }
 
 export type GitProgressPhase =
 	| 'Counting objects'
 	| 'Compressing objects'
+	| 'Downloading data' // note we get this from http not, onProgress
 	| 'Receiving objects'
 	| 'Resolving deltas'
 	| string;
-export interface GitProgressObj extends GitProgressEvent {
+
+// GitProgressEvent with optional total and typed
+export interface GitProgressObj {
 	phase: GitProgressPhase;
+	total: number | undefined;
+	loaded: number;
 }
 
 export function isGitManagerLogEntryServer(x?: GitManagerLogEntry): x is GitManagerLogEntryServer {
