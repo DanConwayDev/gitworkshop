@@ -1,10 +1,12 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	let {
+		classes = '',
 		complete_bg_color_class,
 		pc = 0,
 		children
 	}: {
+		classes?: string;
 		complete_bg_color_class: string;
 		pc?: number;
 		children?: Snippet;
@@ -16,7 +18,7 @@
 		class="{complete_bg_color_class} absolute top-0 bottom-0 left-0 transition-all duration-300"
 		style="width: {Math.min(pc, 100)}%;"
 	></div>
-	<div class="relative">
+	<div class="relative {classes}">
 		{@render children?.()}
 	</div>
 </div>
