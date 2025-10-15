@@ -267,7 +267,7 @@ export const gitProgressToPc = (progress: GitProgressObj): number => {
 
 	if (phase in phasePercentages) {
 		return Math.min(
-			Math.floor((total ? loaded / total : 0) * phasePercentages[phase]) +
+			Math.floor((loaded / (total || Math.max(50 * 1024, loaded))) * phasePercentages[phase]) +
 				getPreviousPhasesCompletion(phase),
 			100
 		);
