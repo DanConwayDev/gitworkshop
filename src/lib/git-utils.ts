@@ -201,9 +201,13 @@ export function remoteNameToShortName(name: string, clone_urls: string[]) {
 export const onLogUpdateServerStatus = (
 	entry: GitManagerLogEntry,
 	server_status: SvelteMap<string, GitServerStatus>,
-	clone_urls: string[]
+	clone_urls: string[],
+	sub_filter?: string[]
 ) => {
-	if (isGitManagerLogEntryServer(entry)) {
+	if (
+		isGitManagerLogEntryServer(entry) &&
+		(!sub_filter || !entry.sub || sub_filter.includes(entry.sub))
+	) {
 		const status = server_status.get(entry.remote) || {
 			short_name: clone_urls ? remoteNameToShortName(entry.remote, clone_urls) : entry.remote,
 			state: 'connecting',

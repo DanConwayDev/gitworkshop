@@ -58,7 +58,6 @@
 
 	onMount(() => {
 		git_manager.refreshExplorer({});
-		git_manager.logs.forEach((l) => onLogUpdateServerStatus(l, server_status, clone_urls ?? []));
 	});
 
 	$effect(() => {
@@ -152,10 +151,16 @@
 		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
 	});
 
-	git_manager.addEventListener('log', (e: Event) => {
-		const customEvent = e as CustomEvent<GitManagerLogEntry>;
-		onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls ?? []);
-		if (isGitManagerLogEntryGlobal(customEvent.detail)) git_status = { ...customEvent.detail };
+	onMount(async () => {
+		const subs = ['explorer'];
+		for (const l of git_manager.logs.values()) {
+			onLogUpdateServerStatus(l, server_status, clone_urls, subs);
+		}
+		git_manager.addEventListener('log', (e: Event) => {
+			const customEvent = e as CustomEvent<GitManagerLogEntry>;
+			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, subs);
+			if (isGitManagerLogEntryGlobal(customEvent.detail)) git_status = { ...customEvent.detail };
+		});
 	});
 
 	let git_status: GitManagerLogEntryGlobal | undefined = $state();

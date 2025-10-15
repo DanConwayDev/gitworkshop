@@ -1,6 +1,7 @@
 import git, { type FetchResult, type HttpClient, type ReadCommitResult } from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import {
+	isGitManagerLogEntryServer,
 	isGitManagerMethod,
 	type CommitInfo,
 	type FileEntry,
@@ -201,9 +202,14 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		}
 	}
 
-	logs: GitManagerLogEntry[] = [];
+	logs: Map<string, GitManagerLogEntry> = new Map();
+
+	logCatchup(): GitManagerLogEntry[] {
+		return Array.from(this.logs.values());
+	}
+
 	private log(entry: GitManagerLogEntry) {
-		this.logs.push(entry);
+		this.logs.set(`${isGitManagerLogEntryServer(entry) ? entry.remote : ''}-${entry.sub}`, entry);
 		this.postEvent({ name: 'log', detail: entry });
 	}
 
@@ -234,7 +240,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		this.nostr_state_refs = nostr_state_refs ? [...nostr_state_refs] : undefined;
 		this.ref_and_path = ref_and_path;
 		// clear cache
-		this.logs = [];
+		this.logs = new Map();
 		this.connected_remotes = [];
 		this.remotes_using_proxy = [];
 		this.remote_states = new Map();
@@ -434,7 +440,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				}
 				// singleBranch: true,
 			});
-			this.log({ remote, state: 'fetched' });
+			this.log({ remote, state: 'fetched', sub });
 			const state = await this.getRemoteRefsFromLocal(remote);
 			if (state && !this.nostr_state_refs && this.clone_urls) {
 				// if highest priority (order in clone_url announcement) connected remote use as state
@@ -542,7 +548,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		const res = await this.getPathInfoAndTree(commit_id, path);
 		if (!stillMatches()) return;
 		if (!res) {
-			this.log({ level: 'error', msg: `error loading file tree` });
+			this.log({ level: 'error', msg: `error loading file tree`, sub: 'explorer' });
 			return;
 		}
 		const { info, tree } = res;
@@ -593,7 +599,11 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			}
 			return;
 		} catch (error) {
-			this.log({ level: 'error', msg: `failed to load file contents ${filepath}: ${error}` });
+			this.log({
+				level: 'error',
+				msg: `failed to load file contents ${filepath}: ${error}`,
+				sub: 'explorer'
+			});
 		}
 	}
 
@@ -896,7 +906,8 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		} catch (error) {
 			this.log({
 				level: 'error',
-				msg: `failed load dir structure for '${normaliseRemoteRef(ref, true)}': ${error}`
+				msg: `failed load dir structure for '${normaliseRemoteRef(ref, true)}': ${error}`,
+				sub: 'explorer'
 			});
 			return undefined;
 		}
@@ -1764,7 +1775,7 @@ self.onmessage = async (ev) => {
 				id,
 				ok: true,
 				result: {
-					logs: git_manager.logs,
+					logs: Array.from(git_manager.logs.values()),
 					a_ref: git_manager.a_ref,
 					clone_urls: git_manager.clone_urls
 				}

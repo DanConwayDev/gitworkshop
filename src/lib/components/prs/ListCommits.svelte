@@ -75,20 +75,23 @@
 	);
 
 	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
-	onMount(() => {
+	let clone_urls = $derived([
+		...(git_manager.clone_urls ?? []),
+		...(tip_details ? tip_details.extra_clone_urls : [])
+	]);
+	let log_subs = $derived(tip_details ? ['explorer', tip_details.tip] : ['explorer']);
+	onMount(async () => {
+		for (const l of git_manager.logs.values()) {
+			onLogUpdateServerStatus(l, server_status, clone_urls, log_subs);
+		}
 		git_manager.addEventListener('log', (e: Event) => {
 			const customEvent = e as CustomEvent<GitManagerLogEntry>;
-			if (
-				// log subscription matches the tip id
-				customEvent.detail.sub &&
-				tip_details &&
-				customEvent.detail.sub === tip_details.tip
-			)
-				onLogUpdateServerStatus(customEvent.detail, server_status, git_manager.clone_urls ?? []);
+			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, log_subs);
 		});
 		if (tip_details)
 			loadCommitInfos(tip_details.event_id, tip_details.tip, tip_details.extra_clone_urls);
 	});
+
 	$effect(() => {
 		if (tip_details)
 			loadCommitInfos(tip_details.event_id, tip_details.tip, tip_details.extra_clone_urls);

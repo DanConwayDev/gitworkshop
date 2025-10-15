@@ -5,7 +5,8 @@ import {
 	type GitManagerRpcMethodInfo,
 	type GitManagerRpcMethodSigs,
 	type GitManagerLogEntry,
-	RPC_METHODS
+	RPC_METHODS,
+	isGitManagerLogEntryServer
 } from './types/git-manager';
 
 type RpcMethods = GitManagerRpcMethodInfo;
@@ -61,7 +62,8 @@ export class GitManagerRpc extends EventTarget {
 		return true;
 	}
 
-	logs: GitManagerLogEntry[] = [];
+	logs: Map<string, GitManagerLogEntry> = new Map();
+
 	private onMessage(ev: MessageEvent) {
 		const msg = ev.data;
 		if (typeof msg !== 'object' || msg === null) return;
@@ -71,7 +73,10 @@ export class GitManagerRpc extends EventTarget {
 		if (asRec.kind === 'event' && typeof asRec.name === 'string') {
 			const evt = msg as GitManagerEvent;
 			if (evt.name === 'log') {
-				this.logs.push(evt.detail);
+				this.logs.set(
+					`${isGitManagerLogEntryServer(evt.detail) ? evt.detail.remote : ''}-${evt.detail.sub}`,
+					evt.detail
+				);
 			}
 			this.dispatchEvent(new CustomEvent(evt.name, { detail: evt.detail }));
 			return;

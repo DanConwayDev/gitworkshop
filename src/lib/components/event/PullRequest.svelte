@@ -51,15 +51,15 @@
 	});
 	// let tip_id_shorthand = $derived(tip_id.substring(0, 8) || '[commit_id unknown]');
 	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
-	onMount(() => {
+	const log_subs = $derived(['explorer', tip_id]);
+	const clone_urls = $derived([...(git_manager.clone_urls ?? []), ...extra_clone_urls]);
+	onMount(async () => {
+		for (const l of git_manager.logs.values()) {
+			onLogUpdateServerStatus(l, server_status, clone_urls, log_subs);
+		}
 		git_manager.addEventListener('log', (e: Event) => {
 			const customEvent = e as CustomEvent<GitManagerLogEntry>;
-			if (
-				// log subscription matches the tip id
-				customEvent.detail.sub &&
-				(customEvent.detail.sub === tip_id || customEvent.detail.sub === 'explorer')
-			)
-				onLogUpdateServerStatus(customEvent.detail, server_status, git_manager.clone_urls ?? []);
+			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, log_subs);
 		});
 	});
 </script>
