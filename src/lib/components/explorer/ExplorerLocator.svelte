@@ -232,11 +232,12 @@
 		class:border-b={!show_bottom}
 		role="group"
 		aria-label="Commit summary"
+		title={selected_ref_info.commit.message}
 	>
 		<!-- left: icon + author -->
-		<div class="flex min-w-0 items-center gap-3">
+		<div class="flex min-w-0 items-center gap-1 sm:gap-3">
 			<div
-				class="bg-base-300 hidden h-10 w-10 shrink-0 items-center justify-center rounded-full sm:flex"
+				class="sm:bg-base-300 -ml-1 flex shrink-0 items-center justify-center rounded-full sm:ml-0 sm:h-10 sm:w-10"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
