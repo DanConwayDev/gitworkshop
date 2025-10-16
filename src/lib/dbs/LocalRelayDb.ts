@@ -17,12 +17,16 @@ export async function getCacheRelayDb(): Promise<{
 	cache_relay_index: IndexCache;
 }> {
 	if (!cache_relay_db) {
+		// @ts-expect-error TS2345: ignore incompatible type -- problem with nostr-idb type exports at v3.0.0
 		cache_relay_db = await openDB('LocalStorageRelay');
 	}
 	if (!cache_relay_index) {
 		cache_relay_index = new IndexCache();
 	}
-	return { cache_relay_db, cache_relay_index };
+	return {
+		cache_relay_db: cache_relay_db as NostrIDB,
+		cache_relay_index: cache_relay_index as IndexCache
+	};
 }
 
 export const InCacheSymbol = Symbol.for('in-cache');
@@ -44,6 +48,7 @@ export function isInCache(event: NostrEvent): boolean {
 
 export async function getCacheEventsForFilters(filters: Filter[]): Promise<NostrEvent[]> {
 	const { cache_relay_db, cache_relay_index } = await getCacheRelayDb();
+	// @ts-expect-error TS2345: ignore incompatible type -- problem with nostr-idb type exports at v3.0.0
 	const events = await getEventsForFilters(cache_relay_db, filters, cache_relay_index);
 	return events.filter((event) => {
 		markInCache(event);
@@ -56,6 +61,7 @@ export async function addEventsToCache(events: NostrEvent[]) {
 
 	for (const event of events) {
 		if (!isInCache(event)) {
+			// @ts-expect-error TS2345: ignore incompatible type -- problem with nostr-idb type exports at v3.0.0
 			await addEvents(cache_relay_db, events);
 			cache_relay_index.addEventToIndexes(event);
 		}
@@ -64,5 +70,6 @@ export async function addEventsToCache(events: NostrEvent[]) {
 
 export async function clearLocalRelayDb() {
 	const { cache_relay_db } = await getCacheRelayDb();
+	// @ts-expect-error TS2345: ignore incompatible type -- problem with nostr-idb type exports at v3.0.0
 	await clearDB(cache_relay_db);
 }
