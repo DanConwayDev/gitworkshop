@@ -78,20 +78,20 @@
 		else useful_stuff_in_bottom_for_2s = false;
 	});
 
-	let force_show_bottom = $state(false);
-	let force_hide_bottom = $state(false);
-	let show_bottom = $derived.by(() => {
-		if (force_show_bottom) return true;
-		if (force_hide_bottom) return false;
+	let force_show_server_info = $state(false);
+	let force_hide_server_info = $state(false);
+	let show_server_info = $derived.by(() => {
+		if (force_show_server_info) return true;
+		if (force_hide_server_info) return false;
 		return useful_stuff_in_bottom_for_2s;
 	});
 </script>
 
 <div
 	class="border-base-400 bg-base-200 my-2 rounded-t-lg border-x border-t"
-	class:mb-0={show_bottom || selected_ref_info || !!git_warning}
-	class:rounded-lg={!show_bottom && !selected_ref_info}
-	class:border={!show_bottom && !selected_ref_info}
+	class:mb-0={show_server_info || selected_ref_info || !!git_warning}
+	class:rounded-lg={!show_server_info && !selected_ref_info}
+	class:border={!show_server_info && !selected_ref_info}
 >
 	<BackgroundProgressWrapper complete_bg_color_class="bg-base-400" pc={loading ? pcLoaded : 0}>
 		<div class=" flex items-center">
@@ -201,19 +201,19 @@
 			<button
 				class="btn btn-sm btn-neutral mr-2"
 				onclick={() => {
-					if (show_bottom) {
-						force_hide_bottom = false;
-						force_show_bottom = false;
+					if (show_server_info) {
+						force_hide_server_info = false;
+						force_show_server_info = false;
 						// force show only if required
-						if (show_bottom) {
-							force_hide_bottom = true;
+						if (show_server_info) {
+							force_hide_server_info = true;
 						}
 					} else {
-						force_hide_bottom = false;
-						force_show_bottom = false;
+						force_hide_server_info = false;
+						force_show_server_info = false;
 						// force hide only if required
-						if (!show_bottom) {
-							force_show_bottom = true;
+						if (!show_server_info) {
+							force_show_server_info = true;
 						}
 					}
 				}}
@@ -225,11 +225,47 @@
 		</div>
 	</BackgroundProgressWrapper>
 </div>
+{#if show_server_info}
+	<div
+		in:slide={{ duration: 100 }}
+		out:slide={{ duration: 100 }}
+		class="border-base-400 bg-base-100 rounded-b-lg border-x border-b"
+		class:mb-0={!!git_warning}
+		class:mb-2={!git_warning}
+	>
+		<div class="p-5" class:pt-2={git_status && git_status.level !== 'info'}>
+			{#if git_status && git_status.level !== 'info'}
+				<div class="flex w-full items-center">
+					<div class="bg-base-300 m-auto mt-2 mb-2 rounded px-6 py-2 text-center">
+						{#if git_status.level == 'loading'}
+							<span class="loading loading-spinner loading-xs mr-3"></span>
+						{:else}<span class="pr-3">{git_status.level}:</span>{/if}{git_status.msg}
+					</div>
+				</div>
+			{/if}
+			{#each server_status.entries() as [remote, status] (remote)}
+				<BackgroundProgressWrapper
+					complete_bg_color_class="bg-base-400"
+					pc={status.progress ? gitProgressToPc(status.progress) : 0}
+				>
+					<GitServerStateIndicator state={status.state} />
+					{status.short_name}
+					{#if status.with_proxy}
+						<span class="text-base-content/50 text-xs">(via proxy)</span>
+					{/if}
+					<span class="text-base-content/50 text-xs">{status.state}</span>
+					<span class="text-base-content/50 text-xs">{serverStatustoMsg(status)}</span>
+				</BackgroundProgressWrapper>
+			{/each}
+		</div>
+	</div>
+{/if}
+
 {#if selected_ref_info}
 	<div
-		class="border-base-400 bg-base-200/50 bg-base-100 flex items-start gap-3 border-x px-3 py-3 sm:flex-row sm:items-center sm:gap-4"
-		class:rounded-b-lg={!show_bottom}
-		class:border-b={!show_bottom}
+		class="border-base-400 bg-base-200/50 bg-base-100 ounded-b-lg flex items-start gap-3 rounded-b-lg border-x border-b px-3 py-3 sm:flex-row sm:items-center sm:gap-4"
+		class:border-t={show_server_info}
+		class:rounded-lg={show_server_info}
 		role="group"
 		aria-label="Commit summary"
 		title={selected_ref_info.commit.message}
@@ -271,41 +307,7 @@
 		</div>
 	</div>
 {/if}
-{#if show_bottom}
-	<div
-		in:slide={{ duration: 100 }}
-		out:slide={{ duration: 100 }}
-		class="border-base-400 bg-base-100 rounded-b-lg border-x border-b"
-		class:mb-0={!!git_warning}
-		class:mb-2={!git_warning}
-	>
-		<div class="p-5" class:pt-2={git_status && git_status.level !== 'info'}>
-			{#if git_status && git_status.level !== 'info'}
-				<div class="flex w-full items-center">
-					<div class="bg-base-300 m-auto mt-2 mb-2 rounded px-6 py-2 text-center">
-						{#if git_status.level == 'loading'}
-							<span class="loading loading-spinner loading-xs mr-3"></span>
-						{:else}<span class="pr-3">{git_status.level}:</span>{/if}{git_status.msg}
-					</div>
-				</div>
-			{/if}
-			{#each server_status.entries() as [remote, status] (remote)}
-				<BackgroundProgressWrapper
-					complete_bg_color_class="bg-base-400"
-					pc={status.progress ? gitProgressToPc(status.progress) : 0}
-				>
-					<GitServerStateIndicator state={status.state} />
-					{status.short_name}
-					{#if status.with_proxy}
-						<span class="text-base-content/50 text-xs">(via proxy)</span>
-					{/if}
-					<span class="text-base-content/50 text-xs">{status.state}</span>
-					<span class="text-base-content/50 text-xs">{serverStatustoMsg(status)}</span>
-				</BackgroundProgressWrapper>
-			{/each}
-		</div>
-	</div>
-{/if}
+
 {#if git_warning}
 	<div class="mb-4">
 		<AlertWarning mt={4}>
