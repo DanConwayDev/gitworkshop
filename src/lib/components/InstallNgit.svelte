@@ -211,13 +211,16 @@
 					<div class="my-6">
 						{#each platforms as platform (platform.url)}
 							<div class="mb-6 flex items-center gap-4">
+								<!-- eslint-disable svelte/no-navigation-without-resolve -- external URLs known safe -->
 								<a
 									href={platform.url}
+									rel="external"
 									class="btn {platform.primary ? 'btn-primary' : 'btn-neutral'} w-44 justify-center"
 									class:btn-sm={size === 'sm'}
 								>
 									{platform.name}
 								</a>
+								<!-- eslint-enable svelte/no-navigation-without-resolve -->
 								<small class="opacity-70">{platform.compatibility}</small>
 							</div>
 						{/each}

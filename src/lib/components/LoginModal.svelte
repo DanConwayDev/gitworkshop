@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import {
 		NostrConnectSigner,
@@ -260,7 +261,9 @@
 						}}>Use Amber</button
 					>
 					<a
-						href="/naddr1qvzqqqrhnypzqateqake4lc2fn77lflzq30jfpk8uhvtccalc66989er8cdmljceqy88wumn8ghj7mn0wvhxcmmv9uqq2stdvfjhyfhlzef"
+						href={resolve(
+							'/naddr1qvzqqqrhnypzqateqake4lc2fn77lflzq30jfpk8uhvtccalc66989er8cdmljceqy88wumn8ghj7mn0wvhxcmmv9uqq2stdvfjhyfhlzef'
+						)}
 						class="bl-1 btn btn-primary join-item items-center opacity-80"
 						onclick={() => {
 							done();

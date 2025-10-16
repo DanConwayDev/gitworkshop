@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import Container from '$lib/components/Container.svelte';
 	import InstallNgit from '$lib/components/InstallNgit.svelte';
 </script>
@@ -27,8 +28,9 @@
 						<h4>1. find repository</h4>
 						<ul>
 							<li>
-								search <a href="/repos" class="link link-primary">gitworkshop.dev/search</a> for the
-								repository
+								search <a href={resolve('/repos')} class="link link-primary"
+									>gitworkshop.dev/search</a
+								> for the repository
 							</li>
 							<li>explore PRs and issues</li>
 							<li>

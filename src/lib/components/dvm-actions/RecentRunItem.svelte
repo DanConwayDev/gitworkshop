@@ -9,6 +9,7 @@
 	import { eventsToDVMActionSummary } from '$lib/types/dvm';
 	import FromNow from '../FromNow.svelte';
 	import UserHeader from '../user/UserHeader.svelte';
+	import { resolve } from '$app/paths';
 
 	let { request_event }: { request_event: NostrEvent } = $props();
 
@@ -89,7 +90,7 @@
 		{/if}
 	</div>
 	<a
-		href={`/${repo_route ? repo_route.s : 'TODO'}/actions/${nevent}`}
+		href={resolve(`/${repo_route ? repo_route.s : 'TODO'}/actions/${nevent}`)}
 		class="text-neutral-content ml-3 flex grow overflow-hidden text-xs"
 	>
 		<div class="flex grow pt-2">

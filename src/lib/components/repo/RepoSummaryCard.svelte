@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
 	import { getRepoShortDescription, getRepoShortName } from '$lib/type-helpers/repo';
 	import { type PubKeyString, type RepoRouteString, type RepoTableItem } from '$lib/types';
@@ -36,7 +37,7 @@
 		class:btn-disabled={!repo_item}
 		class:w-20={!repo_item}
 		class:rounded-lg={!repo_item}
-		href="/{repo_link}"
+		href={resolve(`/${repo_link}`)}
 		onclick={(event) => {
 			if (!repo_link) {
 				event.preventDefault();
@@ -59,7 +60,7 @@
 		{:else}
 			<a
 				class="link-primary break-words"
-				href="/{repo_link}"
+				href={resolve(`/${repo_link}`)}
 				onclick={(event) => {
 					if (!repo_link) {
 						event.preventDefault();

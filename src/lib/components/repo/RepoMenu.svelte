@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { issue_icon_path } from '$lib/components/issues/icons';
 	import { pr_icon_path as pr_icon_path } from '$lib/components/prs/icons';
 	import { icons_misc } from '$lib/icons';
@@ -39,7 +40,7 @@
 	<div role="tablist" class="tabs tabs-border min-w-max flex-nowrap">
 		{#if readme_available}
 			<a
-				href={`/${repo_route.s}`}
+				href={resolve(`/${repo_route.s}`)}
 				class="tab"
 				class:tab-active={url.includes(`${repo_route.s}/about`) || url.endsWith(repo_route.s)}
 			>
@@ -47,7 +48,7 @@
 			</a>
 		{/if}
 		<a
-			href={`/${repo_route.s}/prs`}
+			href={resolve(`/${repo_route.s}/prs`)}
 			class="tab"
 			class:tab-active={url.includes(`${repo_route.s}/prs`)}
 		>
@@ -69,7 +70,7 @@
 			{/if}
 		</a>
 		<a
-			href={`/${repo_route.s}/issues`}
+			href={resolve(`/${repo_route.s}/issues`)}
 			class="tab"
 			class:tab-active={url.includes(`${repo_route.s}/issues`)}
 		>
@@ -94,7 +95,7 @@
 		</a>
 		{#if enable_actions}
 			<a
-				href={`/${repo_route.s}/actions`}
+				href={resolve(`/${repo_route.s}/actions`)}
 				class="tab"
 				class:tab-active={url.includes(`${repo_route.s}/actions`)}
 			>

@@ -126,6 +126,7 @@
 	{:else if (n.marks || []).some((m) => isStrikeMark(m))}
 		<del>{n.text}</del>
 	{:else if (n.marks || []).some((m) => isLinkMark(m))}
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external URLs known safe -->
 		<a href={n.marks.find((m) => isLinkMark(m))?.attrs.href}>{n.text}</a>
 	{:else if (n.marks || []).some((m) => isCodeMark(m))}
 		<code>{n.text}</code>

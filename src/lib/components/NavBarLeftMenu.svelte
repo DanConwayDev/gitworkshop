@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import store from '$lib/store.svelte';
 	import Sidebar from './Sidebar.svelte';
 
@@ -32,7 +33,7 @@
 	<ul class="flex h-full w-full flex-col gap-1 py-2">
 		<li class="w-full overflow-hidden rounded-md">
 			<a
-				href="/"
+				href={resolve('/')}
 				class="hover:bg-base-200 active:bg-base-100 flex h-10 items-center px-4 transition-colors"
 			>
 				<svg
@@ -53,7 +54,7 @@
 		</li>
 		<li class="w-full overflow-hidden rounded-md">
 			<a
-				href="/search"
+				href={resolve('/search')}
 				class="hover:bg-base-200 active:bg-base-100 flex h-10 items-center px-4 transition-colors"
 			>
 				<svg
@@ -74,7 +75,7 @@
 		</li>
 		<li class="w-full overflow-hidden rounded-md">
 			<a
-				href="/quick-start"
+				href={resolve('/quick-start')}
 				class="hover:bg-base-200 active:bg-base-100 flex h-10 items-center px-4 transition-colors"
 			>
 				<svg
@@ -96,10 +97,10 @@
 </Sidebar>
 
 <div class="navbar-start hidden sm:flex">
-	<a class="h-8 overflow-hidden align-middle" href="/">
+	<a class="h-8 overflow-hidden align-middle" href={resolve('/')}>
 		<img src="/icons/icon.svg" alt="gitworkshop.dev logo" class="h-full max-w-full" />
 	</a>
 	<div class="p-2"></div>
-	<a href="/" class="btn btn-ghost btn-sm hidden normal-case sm:flex">Home</a>
-	<a href="/quick-start" class="btn btn-ghost btn-sm normal-case">Quick Start</a>
+	<a href={resolve('/')} class="btn btn-ghost btn-sm hidden normal-case sm:flex">Home</a>
+	<a href={resolve('/quick-start')} class="btn btn-ghost btn-sm normal-case">Quick Start</a>
 </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { icons_misc } from '$lib/icons';
 	import {
 		repoTableItemDefaults,
@@ -230,7 +231,7 @@
 
 			<div class="bg-base-300 inline-block p-2">
 				<span class="opacity-60">
-					just <a href="/ngit" class="link-primary">install ngit</a> and run</span
+					just <a href={resolve('/ngit')} class="link-primary">install ngit</a> and run</span
 				>
 				<div class="bg-base-400 inline-block rounded-md p-2 font-mono text-sm">
 					git clone nostr://...
@@ -278,7 +279,8 @@
 			{:else}
 				{#each grasp_servers as { shorthand, clone } (clone)}
 					<div class="my-1">
-						<a href="/relay/{shorthand}" class="btn btn-secondary btn-xs">{shorthand}</a>
+						<a href={resolve(`/relay/${shorthand}`)} class="btn btn-secondary btn-xs">{shorthand}</a
+						>
 					</div>
 				{/each}
 			{/if}
@@ -351,6 +353,7 @@
 		{:else}
 			<h4 class="text-xs opacity-50">websites</h4>
 			{#each item.web as site (site)}
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external URLs known safe -->
 				<a href={site} target="_blank" class="link link-primary my-2 text-sm break-words">
 					{site}
 				</a>
@@ -397,8 +400,9 @@
 			<h4 class="text-xs opacity-50">relays</h4>
 			{#each item.relays as relay (relay)}
 				<div class="my-1">
-					<a href="/relay/{relay.replace('wss://', '')}" class="btn btn-secondary btn-xs"
-						>{relay.replace('wss://', '')}</a
+					<a
+						href={resolve(`/relay/${relay.replace('wss://', '')}`)}
+						class="btn btn-secondary btn-xs">{relay.replace('wss://', '')}</a
 					>
 				</div>
 			{/each}

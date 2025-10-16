@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import type { FileEntry } from '$lib/types/git-manager';
 	import { onMount } from 'svelte';
 
@@ -92,7 +93,11 @@
 										</svg>
 									{/if}
 								</th>
-								<td> <a class="link-hover link" href={`${base_url}/${f.path}`}>{f.name}</a></td>
+								<td>
+									<a class="link-hover link" href={resolve(`${base_url}/${f.path}` as `/${string}`)}
+										>{f.name}</a
+									></td
+								>
 							</tr>
 						{/each}
 					</tbody>

@@ -14,6 +14,7 @@
 	import { nip19 } from 'nostr-tools';
 	import { goto } from '$app/navigation';
 	import store from '$lib/store.svelte';
+	import { resolve } from '$app/paths';
 
 	let { a_ref, onsubmitted }: { a_ref: RepoRef; onsubmitted: (id: EventIdString) => void } =
 		$props();
@@ -117,7 +118,7 @@
 				//       we just need to be be received by one of the dvm relays before continuing
 				query_centre.publishEvent(request);
 				submitted = true;
-				if (repo_route) goto(`/${repo_route.s}/actions/${eventToNip19(request)}`);
+				if (repo_route) goto(resolve(`/${repo_route.s}/actions/${eventToNip19(request)}`));
 				onsubmitted(request.id);
 			} else {
 				rejectedBySigner();

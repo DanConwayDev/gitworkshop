@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import db from '$lib/dbs/LocalDb';
 	import { liveQueryState } from '$lib/helpers.svelte';
 	import { kindtoTextLabel } from '$lib/kinds';
@@ -129,7 +130,7 @@
 						<h4 class="mt-2 ml-4 grow text-sm">Sent status:</h4>
 						<a
 							class="btn btn-neutral btn-sm"
-							href="/{eventToNip19(o.event)}"
+							href={resolve(`/${eventToNip19(o.event)}`)}
 							onclick={() => on_view_event()}>View Event</a
 						>
 					</div>

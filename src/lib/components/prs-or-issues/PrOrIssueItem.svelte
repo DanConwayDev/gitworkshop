@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import {
 		CommentKinds,
 		PatchKind,
@@ -71,9 +72,11 @@
 	class:border-r-1={unread}
 >
 	<a
-		href="{repo_route_c ? `/${repo_route_c.s}/${type}s` : ''}/{nip19.noteEncode(
-			table_item?.uuid ?? ''
-		) || ''}"
+		href={resolve(
+			`${repo_route_c ? `/${repo_route_c.s}/${type}s` : ''}/${
+				nip19.noteEncode(table_item?.uuid ?? '') || ''
+			}` as `/${string}`
+		)}
 		class="text-neutral-content flex grow overflow-hidden text-xs"
 		class:pointer-events-none={!table_item}
 		onclick={mark_as_read}
@@ -184,7 +187,7 @@
 						{#if show_repo && repo_route_c}
 							<li class="ml-3 inline">
 								<!-- svelte-ignore node_invalid_placement_ssr -->
-								<a class="link-primary z-10" href="/{repo_route_c.s}">
+								<a class="link-primary z-10" href={resolve(`/${repo_route_c.s}`)}>
 									{repo_route_c.identifier}
 								</a>
 							</li>

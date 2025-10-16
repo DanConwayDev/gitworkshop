@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import ContainerCenterPage from '$lib/components/ContainerCenterPage.svelte';
 	import NotFound404Page from '$lib/components/NotFound404Page.svelte';
 	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
@@ -87,7 +88,9 @@
 		if (!routing) {
 			let fagment = child_event_id ? `#${child_event_id.substring(0, 15)}` : '';
 			goto(
-				`/${new RepoRouteStringCreator(a_ref, hint_relays ? hint_relays[0] : undefined).s}/${type}s/${bech32}${fagment}`
+				resolve(
+					`/${new RepoRouteStringCreator(a_ref, hint_relays ? hint_relays[0] : undefined).s}/${type}s/${bech32}${fagment}` as `/${string}`
+				)
 			);
 			routing = true;
 		}

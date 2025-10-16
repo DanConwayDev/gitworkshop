@@ -14,6 +14,7 @@
 	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
 	import BackgroundProgressWrapper from '../BackgroundProgressWrapper.svelte';
 	import { gitProgressesToPc, gitProgressToPc, serverStatustoMsg } from '$lib/git-utils';
+	import { resolve } from '$app/paths';
 
 	let {
 		base_url,
@@ -139,7 +140,9 @@
 									<li>
 										<a
 											class:menu-active={is_branch && branch === selected_ref_short}
-											href="{base_url_without_tree}/tree/{branch}/{path}"
+											href={resolve(
+												`${base_url_without_tree}/tree/${branch}/${path}` as `/${string}`
+											)}
 											>{branch}
 											{#if branch === default_branch?.replace('refs/heads/', '')}<span
 													class="badge badge-sm">default</span
@@ -163,9 +166,11 @@
 									<li>
 										<a
 											class:menu-active={!is_branch && tag === selected_ref_short}
-											href="{base_url_without_tree}/tree/{encodeURIComponent(
-												`refs/tags/${tag}`
-											)}/{path}">{tag}</a
+											href={resolve(
+												`${base_url_without_tree}/tree/${encodeURIComponent(
+													`refs/tags/${tag}`
+												)}/${path}` as `/${string}`
+											)}>{tag}</a
 										>
 									</li>
 								{/each}
@@ -178,7 +183,9 @@
 				class:mx-4={!show_branch_selector}
 				class="m-2 mx-2 flex min-w-0 flex-grow flex-wrap gap-1 py-1"
 			>
-				<a class="link-hover link link-secondary" href={base_url}>{identifier}</a>
+				<a class="link-hover link link-secondary" href={resolve(base_url as `/${string}`)}
+					>{identifier}</a
+				>
 				{#if path !== ''}
 					{#each path_structure as dir, i (i)}
 						<span class="px-1 break-words break-all">
@@ -188,10 +195,12 @@
 							{:else}
 								<a
 									class="link-hover link link-secondary"
-									href={`${base_url}/${path
-										.split('/')
-										.slice(0, i + 1)
-										.join('/')}`}>{dir}</a
+									href={resolve(
+										`${base_url}/${path
+											.split('/')
+											.slice(0, i + 1)
+											.join('/')}` as `/${string}`
+									)}>{dir}</a
 								>
 							{/if}
 						</span>

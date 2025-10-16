@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import {
 		extractPatchMessage,
 		extractPatchTitle,
@@ -57,12 +58,13 @@
 
 <span>
 	{#if repo_link}
-		Git {patch_or_pr} for <a class="opacity-50" href={`/${repo_link}`}>{repo_identifier}</a>:
-		<a href={`/${repo_link}/prs/${pr_nevent ? `${pr_nevent}#` : ''}${nevent}`}
+		Git {patch_or_pr} for
+		<a class="opacity-50" href={resolve(`/${repo_link}`)}>{repo_identifier}</a>:
+		<a href={resolve(`/${repo_link}/prs/${pr_nevent ? `${pr_nevent}#` : ''}${nevent}`)}
 			>{extractPatchTitle(event)}</a
 		> by
 	{:else}
 		Git {patch_or_pr} not linked to a repository (badly formatted):
-		<a href={`/${nevent}`}>{commit_title}</a> by
+		<a href={resolve(`/${nevent}`)}>{commit_title}</a> by
 	{/if}
 </span>

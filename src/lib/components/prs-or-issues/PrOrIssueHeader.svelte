@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { PrKind } from '$lib/kinds';
 	import type { IssueOrPRTableItem } from '$lib/types';
@@ -58,7 +59,9 @@
 							class="tab [--tab-border-color:black]"
 							class:tab-active={active_tab === 'conversation'}
 							class:border-none={active_tab !== 'conversation'}
-							href={active_tab === 'conversation' ? page.url.href : pr_base_url}
+							href={resolve(
+								(active_tab === 'conversation' ? page.url.href : pr_base_url) as `/${string}`
+							)}
 							onclick={(e) => {
 								if (active_tab === 'conversation') e.preventDefault();
 							}}
@@ -69,7 +72,11 @@
 							class="tab [--tab-border-color:black]"
 							class:tab-active={active_tab === 'commits'}
 							class:border-none={active_tab !== 'commits'}
-							href={active_tab === 'commits' ? page.url.href : `${pr_base_url}/commits`}
+							href={resolve(
+								(active_tab === 'commits'
+									? page.url.href
+									: `${pr_base_url}/commits`) as `/${string}`
+							)}
 							onclick={(e) => {
 								if (active_tab === 'commits') e.preventDefault();
 							}}
@@ -80,7 +87,9 @@
 							class="tab [--tab-border-color:black]"
 							class:tab-active={active_tab === 'files'}
 							class:border-none={active_tab !== 'files'}
-							href={active_tab === 'files' ? page.url.href : `${pr_base_url}/files`}
+							href={resolve(
+								(active_tab === 'files' ? page.url.href : `${pr_base_url}/files`) as `/${string}`
+							)}
 							onclick={(e) => {
 								if (active_tab === 'files') e.preventDefault();
 							}}

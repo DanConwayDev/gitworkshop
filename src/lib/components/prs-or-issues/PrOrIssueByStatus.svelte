@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { statusKindtoText } from '$lib/kinds';
 	import { IssueOrPrStatus, type IssueOrPRTableItem, type RepoRoute } from '$lib/types';
 	import PrOrIssueList from './PrOrIssueList.svelte';
@@ -88,7 +89,10 @@
 		<div class="flex-auto"></div>
 		<div class="flex-none">
 			{#if type === 'issue'}
-				<a class="btn btn-success btn-sm text-base-400 h-full" href={`/${repo_route.s}/issues/new`}>
+				<a
+					class="btn btn-success btn-sm text-base-400 h-full"
+					href={resolve(`/${repo_route.s}/issues/new`)}
+				>
 					create issue
 				</a>
 			{/if}

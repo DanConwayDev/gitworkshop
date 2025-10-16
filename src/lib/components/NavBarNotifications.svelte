@@ -1,5 +1,6 @@
 <script>
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store, {
 		loadAllArchivedBefore,
@@ -82,7 +83,7 @@
 	<button
 		class="btn btn-ghost btn-sm hover:bg-neutral mx-0 mt-2 px-2"
 		onclick={() => {
-			goto('/notifications');
+			goto(resolve('/notifications'));
 		}}
 	>
 		<div class="indicator">

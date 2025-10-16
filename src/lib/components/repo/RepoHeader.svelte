@@ -7,6 +7,7 @@
 	import RepoMenu from './RepoMenu.svelte';
 	import type { WithLoading } from '$lib/types/ui';
 	import store, { network_status } from '$lib/store.svelte';
+	import { resolve } from '$app/paths';
 
 	let { repo, url }: { repo?: RepoTableItem & WithLoading; url: string } = $props();
 
@@ -19,8 +20,9 @@
 
 <div class="border-accent-content bg-base-300 border-b" class:bg-error={repo?.deleted}>
 	<Container no_wrap={true}>
-		<a href={`/${repo_route.s}`} class="strong btn btn-ghost mt-0 mb-0 px-3 text-sm break-words"
-			>{short_name}</a
+		<a
+			href={resolve(`/${repo_route.s}`)}
+			class="strong btn btn-ghost mt-0 mb-0 px-3 text-sm break-words">{short_name}</a
 		>
 		{#if repo && repo.deleted}
 			<span class="text-xs">

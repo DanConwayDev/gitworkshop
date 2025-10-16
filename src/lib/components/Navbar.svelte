@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import store, { search } from '$lib/store.svelte';
 	import Container from './Container.svelte';
 	import LoginModal from './LoginModal.svelte';
@@ -15,7 +16,7 @@
 	function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
 		search.text = search_input;
-		if (search_input.length > 0) goto(`/search`);
+		if (search_input.length > 0) goto(resolve('/search'));
 	}
 </script>
 
@@ -28,7 +29,7 @@
 		<div class="navbar">
 			<NavBarLeftMenu />
 			<div class="navbar-cente">
-				<a class="h-8 overflow-hidden align-middle sm:hidden" href="/">
+				<a class="h-8 overflow-hidden align-middle sm:hidden" href={resolve('/')}>
 					<img src="/icons/icon.svg" alt="gitworkshop.dev logo" class="h-8 max-w-full" />
 				</a>
 			</div>
@@ -61,7 +62,7 @@
 				</form>
 				<div class="relative sm:hidden">
 					<a
-						href="/search"
+						href={resolve('/search')}
 						aria-label="search"
 						class="btn btn-ghost btn-sm mt-1 h-6 px-2 pt-1 pb-1"
 					>

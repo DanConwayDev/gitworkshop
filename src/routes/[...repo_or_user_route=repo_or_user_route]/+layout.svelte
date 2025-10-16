@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import RepoPageContainer from '$lib/components/repo/RepoPageContainer.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import store from '$lib/store.svelte';
@@ -61,7 +62,7 @@
 			'a_ref' in store.route &&
 			store.readme[store.route.a_ref]?.failed
 		) {
-			goto(`/${store.route.s}/prs`);
+			goto(resolve(`/${store.route.s}/prs`));
 		}
 	};
 	updateStore(data);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { icons_misc } from '$lib/icons';
 	import { createPubKeyInfo, isPubkeyString, type PubKeyString } from '$lib/types';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
@@ -70,7 +71,7 @@
 			onclick={on_link_press}
 			class:inline-block={inline}
 			class="text-inherit no-underline"
-			href="/{user_link}"
+			href={resolve(`/${user_link}`)}
 		>
 			{@render inside()}
 		</a>
@@ -104,7 +105,7 @@
 						hovered = true;
 					}}
 					onclick={on_link_press}
-					href="/{user_link}"
+					href={resolve(`/${user_link}`)}
 				>
 					{@render profileImage()}</a
 				>
@@ -143,7 +144,7 @@
 								hovered = true;
 							}}
 							onclick={on_link_press}
-							href="/{user_link}"
+							href={resolve(`/${user_link}`)}
 						>
 							{display_name}
 						</a>
@@ -158,6 +159,7 @@
 					<CopyField icon={icons_misc.lightning} content={info.metadata.fields.lud16} no_border />
 				{/if}
 				{#if info.metadata.fields && info.metadata.fields.website}
+					<!-- eslint-disable svelte/no-navigation-without-resolve -- external URLs known safe -->
 					<a
 						href={info.metadata.fields.website}
 						target="_blank"
@@ -176,6 +178,7 @@
 							{info.metadata.fields.website}
 						</div>
 					</a>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
 				{/if}
 				{#if size === 'full' && info.metadata.fields && info.metadata.fields.about}
 					<div class="items items-top flex max-w-md opacity-60">

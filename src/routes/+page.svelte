@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import Container from '$lib/components/Container.svelte';
 	import InstallNgit from '$lib/components/InstallNgit.svelte';
 </script>
@@ -124,7 +125,7 @@
 			repository setup and advanced PR submission.
 		</p>
 		<div class="flex justify-end">
-			<a href="/about" class="btn btn-secondary text-right">details</a>
+			<a href={resolve('/about')} class="btn btn-secondary text-right">details</a>
 		</div>
 	</div></Container
 >
@@ -179,7 +180,9 @@
 						</div>
 					</div>
 					<div class="card-actions mt-auto justify-end">
-						<a href="/quick-start#contributor" class="btn btn-secondary text-right">full guide</a>
+						<a href={resolve('/quick-start#contributor')} class="btn btn-secondary text-right"
+							>full guide</a
+						>
 					</div>
 				</div>
 			</div>
@@ -234,7 +237,9 @@
 							</div>
 						</div>
 						<div class="card-actions mt-auto justify-end">
-							<a href="/quick-start#maintainer" class="btn btn-secondary text-right">full guide</a>
+							<a href={resolve('/quick-start#maintainer')} class="btn btn-secondary text-right"
+								>full guide</a
+							>
 						</div>
 					</div>
 				</div>

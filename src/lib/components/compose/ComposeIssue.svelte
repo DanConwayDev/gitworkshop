@@ -98,6 +98,7 @@
 				const nevent = nip19.neventEncode({
 					id: event.id
 				});
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- known-safe internal route
 				goto(`./${nevent}`);
 			} else {
 				rejectedBySigner();

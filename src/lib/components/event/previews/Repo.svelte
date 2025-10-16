@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { RepoRouteStringCreator } from '$lib/helpers.svelte';
 	import { type RepoRouteString } from '$lib/types';
 	import { getTagValue } from '$lib/utils';
@@ -14,6 +15,6 @@
 
 <span>
 	{#if repo_link}
-		Git Repository: <a href={`/${repo_link}`}>{getTagValue(event.tags, 'd')}</a> by
+		Git Repository:<a href={resolve(`/${repo_link}`)}>{getTagValue(event.tags, 'd')}</a> by
 	{/if}
 </span>

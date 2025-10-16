@@ -5,6 +5,7 @@
 	import Navbar from '$lib/components/Navbar.svelte';
 	import '../app.css';
 	import Container from '$lib/components/Container.svelte';
+	import { resolve } from '$app/paths';
 	let { children } = $props();
 </script>
 
@@ -21,7 +22,7 @@
 				<div class="grow"></div>
 				<div class="flex items-center">
 					<div class="text-neutral-content flex h-10 items-center text-center text-xs">
-						<a class="inline" href="/">
+						<a class="inline" href={resolve('/')}>
 							<img src="/icons/icon.svg" alt="gitworkshop.dev logo" class="inline h-5 w-5" />
 						</a>
 						<span class="mt-0.5 ml-2">GitWorkshop.dev</span>
