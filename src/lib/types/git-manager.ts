@@ -82,7 +82,8 @@ export type GitManagerEvent =
 	| { name: 'fileContents'; detail?: string }
 	| { name: 'directoryStructure'; detail: FileEntry[] }
 	| { name: 'selectedPath'; detail: SelectedPathInfo }
-	| { name: 'selectedRef'; detail: SelectedRefInfo };
+	| { name: 'selectedRef'; detail: SelectedRefInfo }
+	| { name: 'recentCommitsInfos'; detail: CommitInfo[] };
 
 export const RPC_METHODS = [
 	'loadRepository',
@@ -92,7 +93,9 @@ export const RPC_METHODS = [
 	'updateRefAndPath',
 	'getPrCommitInfos',
 	'getPrDiff',
-	'getCommitDiff'
+	'getCommitDiff',
+	'listenForRecentCommitsInfos',
+	'stopListeningForRecentCommitsInfos'
 ] as const;
 
 export function isGitManagerMethod(method: string): method is GitManagerRpcMethodNames {
@@ -128,6 +131,16 @@ type Req = {
 		params: { commit_id: string; event_id_ref_hint?: string; extra_clone_urls?: string[] };
 		result: Promise<string | undefined>;
 	};
+
+	listenForRecentCommitsInfos: {
+		params: {
+			count: number;
+			start_from_depth: number;
+		};
+		result: Promise<void>;
+	};
+	// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+	stopListeningForRecentCommitsInfos: { params: {}; result: Promise<void> };
 };
 
 // Force Req to have exactly the keys from RPC_METHODS (no missing keys).

@@ -569,6 +569,13 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 							is_nostr_ref: index === 0 && !ref.includes('refs/remotes/')
 						}
 					});
+					if (this.publish_commit_infos_from_selected_ref) {
+						await this.loadCommitInfosHistory(
+							commit[0].oid,
+							this.publish_commit_infos_from_selected_ref.count,
+							this.publish_commit_infos_from_selected_ref.start_from_depth
+						);
+					}
 				}
 				if (reload_dirs_and_file || force_dispatch_event) {
 					const short_ref = normaliseRemoteRef(ref, true);
@@ -1301,7 +1308,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				fs: this.fs,
 				dir: `/${this.a_ref}`,
 				ref: tip_commit_id,
-				depth: Infinity
+				depth: 100
 			});
 
 			const filtered = log.filter((e) => collected.has(e.oid)).reverse(); // now oldest -> newest
@@ -1536,6 +1543,49 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		const fetched = await this.fetchPrData(event_id_ref_hint, commit_id, extra_clone_urls || []);
 		if (!fetched) return undefined; // cant fetch pr data
 		return this.loadCommitDiff(commit_id);
+	}
+
+	publish_commit_infos_from_selected_ref?: { count: number; start_from_depth: number };
+
+	async listenForRecentCommitsInfos(
+		params: { count: number; start_from_depth: number } = {
+			count: 20,
+			start_from_depth: 0
+		}
+	) {
+		this.publish_commit_infos_from_selected_ref = { ...params };
+		if (this.selected_ref) {
+			await this.loadCommitInfosHistory(
+				this.selected_ref.commit_id,
+				this.publish_commit_infos_from_selected_ref.count,
+				this.publish_commit_infos_from_selected_ref.start_from_depth
+			);
+		}
+	}
+
+	private async loadCommitInfosHistory(
+		tip_commit_id: string,
+		count: number = 20,
+		start_from_depth: number = 0
+	) {
+		try {
+			const log = await git.log({
+				fs: this.fs,
+				dir: `/${this.a_ref}`,
+				ref: tip_commit_id,
+				depth: count + start_from_depth
+			});
+			const infos = log.slice(start_from_depth).map((e) => ({ oid: e.oid, ...e.commit }));
+			this.postEvent({ name: 'recentCommitsInfos', detail: infos });
+
+			return infos;
+		} catch {
+			return undefined;
+		}
+	}
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	async stopListeningForRecentCommitsInfos(params: object) {
+		this.publish_commit_infos_from_selected_ref = undefined;
 	}
 }
 
