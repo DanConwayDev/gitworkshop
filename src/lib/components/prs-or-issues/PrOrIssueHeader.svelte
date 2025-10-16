@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { PrKind } from '$lib/kinds';
 	import type { IssueOrPRTableItem } from '$lib/types';
@@ -55,13 +54,12 @@
 			<div class="flex items-end">
 				{#if table_item?.event.kind === PrKind}
 					<div class="tabs tabs-lift -mb-[1px]">
+						<!-- eslint-disable svelte/no-navigation-without-resolve -- how do you do use resolve with relative paths? -->
 						<a
 							class="tab [--tab-border-color:black]"
 							class:tab-active={active_tab === 'conversation'}
 							class:border-none={active_tab !== 'conversation'}
-							href={resolve(
-								(active_tab === 'conversation' ? page.url.href : pr_base_url) as `/${string}`
-							)}
+							href={active_tab === 'conversation' ? page.url.href : pr_base_url}
 							onclick={(e) => {
 								if (active_tab === 'conversation') e.preventDefault();
 							}}
@@ -72,11 +70,7 @@
 							class="tab [--tab-border-color:black]"
 							class:tab-active={active_tab === 'commits'}
 							class:border-none={active_tab !== 'commits'}
-							href={resolve(
-								(active_tab === 'commits'
-									? page.url.href
-									: `${pr_base_url}/commits`) as `/${string}`
-							)}
+							href={active_tab === 'commits' ? page.url.href : `${pr_base_url}/commits`}
 							onclick={(e) => {
 								if (active_tab === 'commits') e.preventDefault();
 							}}
@@ -87,15 +81,14 @@
 							class="tab [--tab-border-color:black]"
 							class:tab-active={active_tab === 'files'}
 							class:border-none={active_tab !== 'files'}
-							href={resolve(
-								(active_tab === 'files' ? page.url.href : `${pr_base_url}/files`) as `/${string}`
-							)}
+							href={active_tab === 'files' ? page.url.href : `${pr_base_url}/files`}
 							onclick={(e) => {
 								if (active_tab === 'files') e.preventDefault();
 							}}
 						>
 							Files Changed
 						</a>
+						<!-- eslint-enable svelte/no-navigation-without-resolve -->
 					</div>
 				{/if}
 			</div>
