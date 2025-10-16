@@ -499,7 +499,8 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				}
 				// singleBranch: true,
 			});
-			if (res.defaultBranch == null) throw Error('no default branch, usually a bad sign');
+			if (sub == 'explorer' && res.defaultBranch == null)
+				throw Error('no default branch, usually a bad sign');
 			this.log({ remote, state: 'fetched', sub });
 			const state = await this.getRemoteRefsFromLocal(remote);
 			if (state && !this.nostr_state_refs && this.clone_urls) {
