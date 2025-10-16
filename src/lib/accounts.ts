@@ -25,11 +25,14 @@ export const nostr_connect_pools = new SimplePool();
 
 export const subscriptionMethod: NostrSubscriptionMethod = (relays, filters) => {
 	return new Observable((obs) => {
-		const subcloser = nostr_connect_pools.subscribeMany(relays, filters, {
-			onevent: (event) => {
-				obs.next(event);
+		const subcloser = nostr_connect_pools.subscribeMap(
+			relays.flatMap((url) => filters.map((filter) => ({ url, filter }))),
+			{
+				onevent: (event) => {
+					obs.next(event);
+				}
 			}
-		});
+		);
 		return () => subcloser.close();
 	});
 };
