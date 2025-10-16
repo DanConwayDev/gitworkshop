@@ -104,6 +104,7 @@ export class GitManagerRpc extends EventTarget {
 		if (method === 'loadRepository') {
 			this.a_ref = (params as RpcMethods['loadRepository']['params']).a_ref;
 			this.clone_urls = (params as RpcMethods['loadRepository']['params']).clone_urls;
+			this.logs = new Map();
 		} else if (method === 'updateCloneUrls') {
 			this.clone_urls = (params as RpcMethods['updateCloneUrls']['params']).clone_urls;
 		}
