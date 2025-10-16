@@ -229,8 +229,9 @@ export const serverStatustoMsg = (status: GitServerStatus) => {
 	if (status.msg) return status.msg;
 	if (!status.progress) return '';
 	if (status.progress.phase === 'Downloading data') {
-		const total = status.progress.total ? (status.progress.total / 1024).toFixed(1) : 'unknown ';
-		return `${status.progress.phase} ${(status.progress.loaded / 1024).toFixed(1)}mb / ${total}mb`;
+		return status.progress.total
+			? `Downloading ${(status.progress.loaded / 1024).toFixed(1)} MB of ${(status.progress.total / 1024).toFixed(1)} MB`
+			: `Downloading ${(status.progress.loaded / 1024).toFixed(1)} MB`;
 	}
 	return `${status.progress.phase} ${status.progress.loaded}/${status.progress.total}`;
 };
