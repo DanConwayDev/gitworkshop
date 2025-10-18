@@ -21,8 +21,9 @@ import { IssueKind, PatchKind, PrKind, RepoAnnKind } from '$lib/kinds';
 
 export const base_relays: AtLeastThreeArray<WebSocketUrl> = [
 	'wss://relay.damus.io',
+	'wss://relay.ngit.dev',
+	'wss://gitnostr.com',
 	'wss://nos.lol',
-	'wss://relay.nostr.band',
 	'wss://relay.primal.net'
 ];
 
