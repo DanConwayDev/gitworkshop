@@ -8,9 +8,15 @@
 	import { PrUpdateKind } from '$lib/kinds';
 	import ChangesToFiles from '../explorer/ChangesToFiles.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { type GitManagerLogEntry, type GitServerStatus } from '$lib/types/git-manager';
-	import { onLogUpdateServerStatus } from '$lib/git-utils';
+	import {
+		type GitManagerLogEntry,
+		type GitManagerLogEntryGlobal,
+		type GitServerStatus
+	} from '$lib/types/git-manager';
+	import { onLogUpdateGitStatus, onLogUpdateServerStatus } from '$lib/git-utils';
 	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
+	import AlertWarning from '../AlertWarning.svelte';
+
 	let { table_item }: { table_item: IssueOrPRTableItem } = $props();
 
 	let pr_repos = $derived(table_item?.repos ?? []);
@@ -91,13 +97,19 @@
 		...(tip_details ? tip_details.extra_clone_urls : [])
 	]);
 	let log_subs = $derived(tip_details ? ['explorer', tip_details.tip] : ['explorer']);
+	let git_status: GitManagerLogEntryGlobal | undefined = $state();
+
 	onMount(async () => {
 		for (const l of git_manager.logs.values()) {
 			onLogUpdateServerStatus(l, server_status, clone_urls, log_subs);
+			const status = onLogUpdateGitStatus(l, tip_details ? [tip_details.tip] : []);
+			if (status) git_status = status;
 		}
 		git_manager.addEventListener('log', (e: Event) => {
 			const customEvent = e as CustomEvent<GitManagerLogEntry>;
 			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, log_subs);
+			const status = onLogUpdateGitStatus(customEvent.detail, tip_details ? [tip_details.tip] : []);
+			if (status) git_status = status;
 		});
 	});
 </script>
@@ -121,6 +133,13 @@
 {/snippet}
 
 {#if diff && diff.length > 0}
+	{#if git_status && git_status.level === 'warning'}
+		<div class="mb-4">
+			<AlertWarning mt={4}>
+				<div>{git_status.msg}</div>
+			</AlertWarning>
+		</div>
+	{/if}
 	<div class="flex w-full rounded-t p-2">
 		<ChangesToFiles {diff} />
 	</div>

@@ -1493,6 +1493,17 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			oids: [tip_commit_id, default_tip]
 		});
 		if (bases.length === 0) return undefined;
+		const baseSet = new Set(bases);
+
+		if (baseSet.has(tip_commit_id)) {
+			this.log({
+				level: 'warning',
+				sub: tip_commit_id,
+				msg: 'This PR was merged via fast-forward. Only showing changes from the tip commit; the total diff is unknown.'
+			});
+			return this.loadCommitDiff(tip_commit_id);
+		}
+
 		return this.loadDiffBetween(bases[0], tip_commit_id);
 	}
 
