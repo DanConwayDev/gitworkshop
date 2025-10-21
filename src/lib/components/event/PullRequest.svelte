@@ -5,16 +5,9 @@
 	import { nostrEventToDocTree } from '$lib/doc_tree';
 	import { getTagMultiValue, getTagValue } from '$lib/utils';
 	import git_manager from '$lib/git-manager';
-	import {
-		type CommitInfo,
-		type GitManagerLogEntry,
-		type GitManagerLogEntryGlobal,
-		type GitServerStatus
-	} from '$lib/types/git-manager';
+	import { type CommitInfo } from '$lib/types/git-manager';
 	import { onMount } from 'svelte';
 	import CommitsDetails from '../prs/CommitsDetails.svelte';
-	import { SvelteMap } from 'svelte/reactivity';
-	import { onLogUpdateGitStatus, onLogUpdateServerStatus } from '$lib/git-utils';
 
 	let { event }: { event: NostrEvent } = $props();
 
@@ -51,27 +44,11 @@
 		loadCommitInfos(event.id, tip_id, extra_clone_urls);
 	});
 	// let tip_id_shorthand = $derived(tip_id.substring(0, 8) || '[commit_id unknown]');
-	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
-	const log_subs = $derived(['explorer', tip_id]);
+	const sub_filter = $derived(['explorer', tip_id]);
 	const clone_urls = $derived([...(git_manager.clone_urls ?? []), ...extra_clone_urls]);
-	let git_status: GitManagerLogEntryGlobal | undefined = $state();
-
-	onMount(async () => {
-		for (const l of git_manager.logs.values()) {
-			onLogUpdateServerStatus(l, server_status, clone_urls, log_subs);
-			const status = onLogUpdateGitStatus(l, [tip_id]);
-			if (status) git_status = status;
-		}
-		git_manager.addEventListener('log', (e: Event) => {
-			const customEvent = e as CustomEvent<GitManagerLogEntry>;
-			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, log_subs);
-			const status = onLogUpdateGitStatus(customEvent.detail, [tip_id]);
-			if (status) git_status = status;
-		});
-	});
 </script>
 
 <div class="">
 	<ContentTree node={content} />
-	<CommitsDetails infos={commits} {loading} {server_status} {git_status} />
+	<CommitsDetails infos={commits} {loading} {clone_urls} {sub_filter} />
 </div>

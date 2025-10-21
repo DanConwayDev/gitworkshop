@@ -1,34 +1,40 @@
 <script lang="ts">
-	import type {
-		CommitInfo,
-		GitManagerLogEntryGlobal,
-		GitServerStatus
-	} from '$lib/types/git-manager';
+	import type { CommitInfo } from '$lib/types/git-manager';
 	import { onMount } from 'svelte';
 	import CommitDetails from './CommitDetails.svelte';
-	import type { SvelteMap } from 'svelte/reactivity';
 	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
-	import { gitProgressesToPc, gitProgressToPc, serverStatustoMsg } from '$lib/git-utils';
+	import {
+		getGitLog,
+		getLatestLogFromEachServer,
+		gitProgressesToPc,
+		gitProgressToPc,
+		remoteNameToShortName,
+		serverStatustoMsg
+	} from '$lib/git-utils';
 	import BackgroundProgressWrapper from '../BackgroundProgressWrapper.svelte';
 	import { pr_icon_path } from './icons';
 	import FromNow from '../FromNow.svelte';
 	import AlertWarning from '../AlertWarning.svelte';
+	import store from '$lib/store.svelte';
 
 	let {
 		infos,
 		loading,
-		server_status,
-		git_status,
+		clone_urls,
+		sub_filter = [],
 		grouped_by_date = false,
 		lite_view = false
 	}: {
 		infos: CommitInfo[] | undefined;
 		loading: boolean;
-		server_status: SvelteMap<string, GitServerStatus>;
-		git_status?: GitManagerLogEntryGlobal;
+		clone_urls: string[];
+		sub_filter?: string[];
 		grouped_by_date?: boolean;
 		lite_view?: boolean;
 	} = $props();
+
+	let git_status = $derived(getGitLog(store.git_log, sub_filter));
+
 	let waited = $state(false);
 	onMount(() => {
 		setTimeout(() => {
@@ -59,34 +65,30 @@
 			.sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
 			.map(([date, commits]) => ({ date, commits }));
 	});
-	let pcLoaded = $derived.by(() => {
-		return gitProgressesToPc(
-			Array.from(server_status.values()).flatMap((s) => (s.progress ? [s.progress] : []))
-		);
-		// for (const entry of server_status.values()) {
-		// 	if (entry && entry.progress) {
-		// 		console.log('bla');
-		// 		console.log(entry.progress);
-		// 		console.log(gitProgressToPc(entry.progress));
-		// 		return gitProgressToPc(entry.progress);
-		// 	}
-		// }
-		// return 0;
-	});
-	// value={status.progress ? gitProgressToPc(status.progress) : 10}
+
+	let server_latest_log = $derived(
+		getLatestLogFromEachServer(store.git_log, sub_filter, clone_urls)
+	);
+	let pcLoaded = $derived(
+		gitProgressesToPc(
+			server_latest_log.flatMap((s) => {
+				return s && s.progress ? [s.progress] : [];
+			})
+		)
+	);
 </script>
 
 {#snippet showServerStatus()}
-	{#if server_status}
+	{#if server_latest_log.length > 0}
 		<div class="mx-5 my-5">
-			{#each server_status.entries() as [remote, status] (remote)}
+			{#each server_latest_log as status (status.remote)}
 				<BackgroundProgressWrapper
 					complete_bg_color_class="bg-base-400"
 					pc={status.progress ? gitProgressToPc(status.progress) : 0}
 				>
 					<GitServerStateIndicator state={status.state} />
-					{status.short_name}
-					{#if status.with_proxy}
+					{remoteNameToShortName(status.remote, clone_urls)}
+					{#if status.msg?.includes('proxy')}
 						<span class="text-base-content/50 text-xs">(via proxy)</span>
 					{/if}
 					<span class="text-base-content/50 text-xs">{status.state}</span>

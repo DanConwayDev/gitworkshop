@@ -42,14 +42,6 @@ export type GitServerState = 'connecting' | 'connected' | 'fetching' | 'fetched'
 
 export type GitManagerLogEntry = GitManagerLogEntryServer | GitManagerLogEntryGlobal;
 
-export interface GitServerStatus {
-	short_name: string;
-	state: GitServerState;
-	with_proxy: boolean;
-	msg?: string;
-	progress?: GitProgressObj;
-}
-
 export type GitProgressPhase =
 	| 'Counting objects'
 	| 'Compressing objects'

@@ -6,15 +6,8 @@
 	import git_manager from '$lib/git-manager';
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
-	import {
-		type CommitInfo,
-		type GitManagerLogEntry,
-		type GitManagerLogEntryGlobal,
-		type GitServerStatus
-	} from '$lib/types/git-manager';
+	import { type CommitInfo } from '$lib/types/git-manager';
 	import CommitsDetails from './CommitsDetails.svelte';
-	import { SvelteMap } from 'svelte/reactivity';
-	import { onLogUpdateGitStatus, onLogUpdateServerStatus } from '$lib/git-utils';
 
 	let { table_item }: { table_item: IssueOrPRTableItem } = $props();
 
@@ -76,26 +69,13 @@
 			.find((e) => !!e)
 	);
 
-	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
 	let clone_urls = $derived([
 		...(git_manager.clone_urls ?? []),
 		...(tip_details ? tip_details.extra_clone_urls : [])
 	]);
-	let log_subs = $derived(tip_details ? ['explorer', tip_details.tip] : ['explorer']);
-	let git_status: GitManagerLogEntryGlobal | undefined = $state();
+	let sub_filter = $derived(tip_details ? ['explorer', tip_details.tip] : ['explorer']);
 
 	onMount(async () => {
-		for (const l of git_manager.logs.values()) {
-			onLogUpdateServerStatus(l, server_status, clone_urls, log_subs);
-			const status = onLogUpdateGitStatus(l, tip_details ? [tip_details.tip] : []);
-			if (status) git_status = status;
-		}
-		git_manager.addEventListener('log', (e: Event) => {
-			const customEvent = e as CustomEvent<GitManagerLogEntry>;
-			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, log_subs);
-			const status = onLogUpdateGitStatus(customEvent.detail, tip_details ? [tip_details.tip] : []);
-			if (status) git_status = status;
-		});
 		if (tip_details)
 			loadCommitInfos(tip_details.event_id, tip_details.tip, tip_details.extra_clone_urls);
 	});
@@ -106,4 +86,4 @@
 	});
 </script>
 
-<CommitsDetails infos={commits} {loading} grouped_by_date={true} {server_status} {git_status} />
+<CommitsDetails infos={commits} {loading} grouped_by_date={true} {clone_urls} {sub_filter} />

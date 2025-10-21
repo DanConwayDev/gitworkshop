@@ -8,6 +8,7 @@ import {
 	type RepoRouteType,
 	type UserRoute
 } from './types';
+import type { GitManagerLogEntry } from './types/git-manager';
 
 export const search = $state({
 	text: ''
@@ -58,6 +59,9 @@ class Store {
 	notifications_ids_read_after_date: EventIdString[] = $state([]);
 	notifications_all_archived_before: number = $state(0);
 	notifications_ids_archived_after_date: EventIdString[] = $state([]);
+
+	// git logging - updated by git-manager
+	git_log: GitManagerLogEntry[] = $state([]);
 }
 
 export const loadAllReadBefore = () =>

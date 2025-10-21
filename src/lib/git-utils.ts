@@ -19,11 +19,11 @@ import {
 	isGitManagerLogEntryServer,
 	type GitManagerLogEntry,
 	type GitManagerLogEntryGlobal,
+	type GitManagerLogEntryServer,
 	type GitProgressObj,
 	type GitProgressPhase,
-	type GitServerStatus
+	type GitServerState
 } from './types/git-manager';
-import type { SvelteMap } from 'svelte/reactivity';
 
 export const isCoverLetter = (s: string): boolean => {
 	return s.indexOf('PATCH 0/') > 0;
@@ -200,31 +200,84 @@ export function remoteNameToShortName(name: string, clone_urls: string[]) {
 	return name;
 }
 
-export const onLogUpdateServerStatus = (
-	entry: GitManagerLogEntry,
-	server_status: SvelteMap<string, GitServerStatus>,
-	clone_urls: string[],
+// Overload: Get server log entry for a specific server
+export function getGitLog(
+	logs: GitManagerLogEntry[],
+	sub_filter: string[],
+	server: string,
+	clone_urls: string[]
+): GitManagerLogEntryServer | undefined;
+
+// Overload: Get global log entry
+export function getGitLog(
+	logs: GitManagerLogEntry[],
 	sub_filter?: string[]
-) => {
-	if (
-		isGitManagerLogEntryServer(entry) &&
-		(!sub_filter || !entry.sub || sub_filter.includes(entry.sub))
-	) {
-		const status = server_status.get(entry.remote) || {
-			short_name: clone_urls ? remoteNameToShortName(entry.remote, clone_urls) : entry.remote,
-			state: 'connecting',
-			with_proxy: false
-		};
-		if (entry.msg?.includes('proxy')) status.with_proxy = true;
-		server_status.set(entry.remote, {
-			...status,
-			state: (entry.progress ? status : entry).state,
-			msg: (entry.progress ? status : entry).msg,
-			progress: entry.progress
-		});
+): GitManagerLogEntryGlobal | undefined;
+
+// Implementation
+export function getGitLog(
+	logs: GitManagerLogEntry[],
+	sub_filter: string[] = [],
+	server?: string,
+	clone_urls?: string[]
+): GitManagerLogEntryServer | GitManagerLogEntryGlobal | undefined {
+	if (server !== undefined && clone_urls !== undefined) {
+		let remote = server;
+		if (server.length !== 8) remote = cloneUrlToRemoteName(server);
+		// Server-specific log entry
+		for (let i = logs.length - 1; i >= 0; i--) {
+			const entry = logs[i];
+			if (
+				isGitManagerLogEntryServer(entry) &&
+				entry.remote === remote &&
+				(!sub_filter.length || !entry.sub || sub_filter.includes(entry.sub))
+			) {
+				return entry;
+			}
+		}
+		return undefined;
 	} else {
-		// not showing any global git logging
+		// Global log entry
+		for (let i = logs.length - 1; i >= 0; i--) {
+			const entry = logs[i];
+			if (
+				isGitManagerLogEntryGlobal(entry) &&
+				(!sub_filter || !sub_filter.length || !entry.sub || sub_filter.includes(entry.sub))
+			) {
+				return entry;
+			}
+		}
+		return undefined;
 	}
+}
+
+export const getLatestLogFromEachServer = (
+	git_logs: GitManagerLogEntry[] = [],
+	sub_filter: string[] = [],
+	clone_urls: string[]
+): GitManagerLogEntryServer[] => {
+	// Deduplicate clone_urls
+	const unique_clone_urls = [...new Set(clone_urls)];
+
+	const server_latest_log: GitManagerLogEntryServer[] = [];
+	unique_clone_urls.forEach((url) => {
+		const s = getGitLog(git_logs, sub_filter, url, unique_clone_urls);
+		if (s) server_latest_log.push(s);
+	});
+	return server_latest_log;
+};
+
+export const getOveralGitServerStatus = (
+	git_logs: GitManagerLogEntry[] = [],
+	sub_filter: string[] = ['explorer'],
+	clone_urls: string[]
+): GitServerState | undefined => {
+	const server_latest_log = getLatestLogFromEachServer(git_logs, sub_filter, clone_urls);
+	if (server_latest_log.some((e) => e.state === 'connecting')) return 'connecting';
+	if (server_latest_log.some((e) => e.state === 'connected')) return 'connected';
+	if (server_latest_log.some((e) => e.state === 'fetching')) return 'fetching';
+	if (server_latest_log.some((e) => e.state === 'fetched')) return 'fetched';
+	if (server_latest_log.some((e) => e.state === 'failed')) return 'failed';
 };
 
 export const onLogUpdateGitStatus = (
@@ -240,15 +293,15 @@ export const onLogUpdateGitStatus = (
 	return undefined;
 };
 
-export const serverStatustoMsg = (status: GitServerStatus) => {
-	if (status.msg) return status.msg;
-	if (!status.progress) return '';
-	if (status.progress.phase === 'Downloading data') {
-		return status.progress.total
-			? `Downloading ${(status.progress.loaded / 1024).toFixed(1)} MB of ${(status.progress.total / 1024).toFixed(1)} MB`
-			: `Downloading ${(status.progress.loaded / 1024).toFixed(1)} MB`;
+export const serverStatustoMsg = (log: GitManagerLogEntryServer) => {
+	if (log.msg) return log.msg;
+	if (!log.progress) return '';
+	if (log.progress.phase === 'Downloading data') {
+		return log.progress.total
+			? `Downloading ${(log.progress.loaded / 1024).toFixed(1)} MB of ${(log.progress.total / 1024).toFixed(1)} MB`
+			: `Downloading ${(log.progress.loaded / 1024).toFixed(1)} MB`;
 	}
-	return `${status.progress.phase} ${status.progress.loaded}/${status.progress.total}`;
+	return `${log.progress.phase} ${log.progress.loaded}/${log.progress.total}`;
 };
 
 export const gitProgressToPc = (progress: GitProgressObj): number => {

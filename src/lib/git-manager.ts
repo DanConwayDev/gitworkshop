@@ -4,10 +4,9 @@ import {
 	type GitManagerRpcMethodNames,
 	type GitManagerRpcMethodInfo,
 	type GitManagerRpcMethodSigs,
-	type GitManagerLogEntry,
-	RPC_METHODS,
-	isGitManagerLogEntryServer
+	RPC_METHODS
 } from './types/git-manager';
+import store from './store.svelte';
 
 type RpcMethods = GitManagerRpcMethodInfo;
 type RpcNames = GitManagerRpcMethodNames;
@@ -62,8 +61,6 @@ export class GitManagerRpc extends EventTarget {
 		return true;
 	}
 
-	logs: Map<string, GitManagerLogEntry> = new Map();
-
 	private onMessage(ev: MessageEvent) {
 		const msg = ev.data;
 		if (typeof msg !== 'object' || msg === null) return;
@@ -73,10 +70,8 @@ export class GitManagerRpc extends EventTarget {
 		if (asRec.kind === 'event' && typeof asRec.name === 'string') {
 			const evt = msg as GitManagerEvent;
 			if (evt.name === 'log') {
-				this.logs.set(
-					`${isGitManagerLogEntryServer(evt.detail) ? evt.detail.remote : ''}-${evt.detail.sub}`,
-					evt.detail
-				);
+				// should we check its length and keep it to < 500 or 1000
+				store.git_log.push(evt.detail);
 			}
 			this.dispatchEvent(new CustomEvent(evt.name, { detail: evt.detail }));
 			return;
@@ -102,9 +97,10 @@ export class GitManagerRpc extends EventTarget {
 		const payload = { id, action: 'call', params: { method: String(method), params } };
 		this.worker.postMessage(payload);
 		if (method === 'loadRepository') {
+			if (this.a_ref !== (params as RpcMethods['loadRepository']['params']).a_ref)
+				store.git_log = [];
 			this.a_ref = (params as RpcMethods['loadRepository']['params']).a_ref;
 			this.clone_urls = (params as RpcMethods['loadRepository']['params']).clone_urls;
-			this.logs = new Map();
 		} else if (method === 'updateCloneUrls') {
 			this.clone_urls = (params as RpcMethods['updateCloneUrls']['params']).clone_urls;
 		}

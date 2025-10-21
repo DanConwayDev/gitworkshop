@@ -1,16 +1,11 @@
 <script lang="ts">
-	import { SvelteMap } from 'svelte/reactivity';
 	import git_manager from '$lib/git-manager';
 	import store from '$lib/store.svelte';
 	import { type RepoRef } from '$lib/types';
 	import { onMount } from 'svelte';
 	import {
-		isGitManagerLogEntryGlobal,
 		type CommitInfo,
-		type GitManagerLogEntry,
-		type GitManagerLogEntryGlobal,
 		type GitServerState,
-		type GitServerStatus,
 		type SelectedRefInfo
 	} from '$lib/types/git-manager';
 	import { inMemoryRelayEvent } from '$lib/helpers.svelte';
@@ -18,7 +13,7 @@
 	import type { AddressPointer } from 'nostr-tools/nip19';
 	import { RepoStateKind } from '$lib/kinds';
 	import ExplorerLocator from './ExplorerLocator.svelte';
-	import { onLogUpdateServerStatus, refsToBranches, refsToTags } from '$lib/git-utils';
+	import { getOveralGitServerStatus, refsToBranches, refsToTags } from '$lib/git-utils';
 	import CommitsDetails from '../prs/CommitsDetails.svelte';
 
 	let {
@@ -92,26 +87,10 @@
 	);
 	let tags: string[] = $derived(refsToTags(git_refs ?? []));
 
-	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
-	let overal_server_status: GitServerState | undefined = $derived.by(() => {
-		if (server_status.entries().some((e) => e[1].state === 'connecting')) return 'connecting';
-		if (server_status.entries().some((e) => e[1].state === 'connected')) return 'connected';
-		if (server_status.entries().some((e) => e[1].state === 'fetching')) return 'fetching';
-		if (server_status.entries().some((e) => e[1].state === 'fetched')) return 'fetched';
-		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
-	});
-
-	onMount(async () => {
-		const subs = ['explorer'];
-		for (const l of git_manager.logs.values()) {
-			onLogUpdateServerStatus(l, server_status, clone_urls, subs);
-		}
-		git_manager.addEventListener('log', (e: Event) => {
-			const customEvent = e as CustomEvent<GitManagerLogEntry>;
-			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, subs);
-			if (isGitManagerLogEntryGlobal(customEvent.detail)) git_status = { ...customEvent.detail };
-		});
-	});
+	let sub_filter = ['explorer'];
+	let overal_server_status: GitServerState | undefined = $derived(
+		getOveralGitServerStatus(store.git_log, ['explorer'], clone_urls)
+	);
 
 	let commits_infos: CommitInfo[] | undefined = $state();
 
@@ -120,10 +99,9 @@
 		commits_infos = customEvent.detail;
 	});
 
-	let git_status: GitManagerLogEntryGlobal | undefined = $state();
 	let git_warning: string | undefined = $derived.by(() => {
 		if (waited_1s_after_load && commits_infos) {
-			if (!checked_out_ref && overal_server_status === 'connected')
+			if (!checked_out_ref)
 				return undefined; // not found shown
 			else if (!nostr_state)
 				// should this be a warning? maybe just an indicator?
@@ -146,8 +124,8 @@
 	{default_branch}
 	{branches}
 	{tags}
-	{server_status}
-	{git_status}
+	{clone_urls}
+	{sub_filter}
 	{git_warning}
 	loading={!commits_infos}
 />
@@ -160,5 +138,11 @@
 		</p>
 	</div>
 {:else if !commits_infos}{:else}
-	<CommitsDetails infos={commits_infos} loading={!commits_infos} {server_status} grouped_by_date />
+	<CommitsDetails
+		infos={commits_infos}
+		loading={!commits_infos}
+		{clone_urls}
+		{sub_filter}
+		grouped_by_date
+	/>
 {/if}

@@ -1,17 +1,12 @@
 <script lang="ts">
-	import { SvelteMap } from 'svelte/reactivity';
 	import git_manager from '$lib/git-manager';
 	import store from '$lib/store.svelte';
 	import { type RepoRef } from '$lib/types';
 	import { onMount } from 'svelte';
 	import FileViewer from './FileViewer.svelte';
 	import {
-		isGitManagerLogEntryGlobal,
 		type FileEntry,
-		type GitManagerLogEntry,
-		type GitManagerLogEntryGlobal,
 		type GitServerState,
-		type GitServerStatus,
 		type SelectedPathInfo,
 		type SelectedRefInfo
 	} from '$lib/types/git-manager';
@@ -21,7 +16,7 @@
 	import { RepoStateKind } from '$lib/kinds';
 	import FileExplorer from './FileExplorer.svelte';
 	import ExplorerLocator from './ExplorerLocator.svelte';
-	import { onLogUpdateServerStatus, refsToBranches, refsToTags } from '$lib/git-utils';
+	import { getOveralGitServerStatus, refsToBranches, refsToTags } from '$lib/git-utils';
 
 	let {
 		a_ref,
@@ -142,31 +137,13 @@
 		}
 	}
 
-	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
-	let overal_server_status: GitServerState | undefined = $derived.by(() => {
-		if (server_status.entries().some((e) => e[1].state === 'connecting')) return 'connecting';
-		if (server_status.entries().some((e) => e[1].state === 'connected')) return 'connected';
-		if (server_status.entries().some((e) => e[1].state === 'fetching')) return 'fetching';
-		if (server_status.entries().some((e) => e[1].state === 'fetched')) return 'fetched';
-		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
-	});
+	let overal_server_status: GitServerState | undefined = $derived(
+		getOveralGitServerStatus(store.git_log, ['explorer'], clone_urls)
+	);
 
-	onMount(async () => {
-		const subs = ['explorer'];
-		for (const l of git_manager.logs.values()) {
-			onLogUpdateServerStatus(l, server_status, clone_urls, subs);
-		}
-		git_manager.addEventListener('log', (e: Event) => {
-			const customEvent = e as CustomEvent<GitManagerLogEntry>;
-			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, subs);
-			if (isGitManagerLogEntryGlobal(customEvent.detail)) git_status = { ...customEvent.detail };
-		});
-	});
-
-	let git_status: GitManagerLogEntryGlobal | undefined = $state();
 	let git_warning: string | undefined = $derived.by(() => {
 		if (waited_1s_after_load && directory_structure) {
-			if (!checked_out_ref && overal_server_status === 'connected')
+			if (!checked_out_ref)
 				return undefined; // not found shown
 			else if (!nostr_state)
 				// should this be a warning? maybe just an indicator?
@@ -189,8 +166,8 @@
 	{default_branch}
 	{branches}
 	{tags}
-	{server_status}
-	{git_status}
+	{clone_urls}
+	sub_filter={['explorer']}
 	{git_warning}
 	loading={!directory_structure}
 />

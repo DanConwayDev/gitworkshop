@@ -1,15 +1,14 @@
 <script lang="ts">
-	import type { GitServerStatus } from '$lib/types/git-manager';
-	import type { SvelteMap } from 'svelte/reactivity';
+	import type { GitManagerLogEntryServer } from '$lib/types/git-manager';
 
 	let {
-		server_status
+		server_latest_log
 	}: {
-		server_status: SvelteMap<string, GitServerStatus>;
+		server_latest_log: GitManagerLogEntryServer[];
 	} = $props();
 	type ServerState = 'success' | 'warning' | 'error' | undefined;
 	let icon_state: [ServerState, ServerState, ServerState] = $derived.by(() => {
-		let statuses: ServerState[] = Array.from(server_status.entries()).map(([_, e]) => {
+		let statuses: ServerState[] = server_latest_log.map((e) => {
 			if (e.state === 'fetched') return 'success';
 			if (e.state === 'connected') return 'success';
 			if (e.state === 'connecting') return 'warning';

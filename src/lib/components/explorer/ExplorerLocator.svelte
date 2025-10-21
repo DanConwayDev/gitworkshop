@@ -1,20 +1,22 @@
 <script lang="ts">
 	import { slide } from 'svelte/transition';
-	import type {
-		GitManagerLogEntryGlobal,
-		GitServerState,
-		GitServerStatus,
-		SelectedRefInfo
-	} from '$lib/types/git-manager';
-	import type { SvelteMap } from 'svelte/reactivity';
+	import type { GitServerState, SelectedRefInfo } from '$lib/types/git-manager';
 	import FromNow from '../FromNow.svelte';
 	import { pr_icon_path } from '../prs/icons';
 	import AlertWarning from '../AlertWarning.svelte';
 	import ExplorerServerStatusIcon from './ExplorerServerStatusIcon.svelte';
 	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
 	import BackgroundProgressWrapper from '../BackgroundProgressWrapper.svelte';
-	import { gitProgressesToPc, gitProgressToPc, serverStatustoMsg } from '$lib/git-utils';
+	import {
+		getGitLog,
+		getLatestLogFromEachServer,
+		getOveralGitServerStatus,
+		gitProgressesToPc,
+		gitProgressToPc,
+		remoteNameToShortName
+	} from '$lib/git-utils';
 	import { resolve } from '$app/paths';
+	import store from '$lib/store.svelte';
 
 	let {
 		base_url,
@@ -24,9 +26,9 @@
 		default_branch,
 		branches = [],
 		tags = [],
-		server_status,
+		clone_urls,
+		sub_filter = ['explorer'],
 		git_warning,
-		git_status,
 		loading = false
 	}: {
 		base_url: string;
@@ -36,11 +38,13 @@
 		default_branch?: string | undefined;
 		branches: string[];
 		tags: string[];
-		server_status: SvelteMap<string, GitServerStatus>;
+		clone_urls: string[];
+		sub_filter?: string[];
 		git_warning?: string;
-		git_status?: GitManagerLogEntryGlobal;
 		loading?: boolean;
 	} = $props();
+
+	let git_status = $derived(getGitLog(store.git_log, sub_filter));
 
 	let selected_ref = $derived(selected_ref_info?.ref ?? '');
 	let path_structure = $derived(path.split('/'));
@@ -51,17 +55,17 @@
 	let base_url_without_tree = $derived(base_url.split('/tree/')[0]);
 	let show_branch_selector = $derived(branches.length > 0 && selected_ref);
 
-	let overal_server_status: GitServerState | undefined = $derived.by(() => {
-		if (server_status.entries().some((e) => e[1].state === 'fetched')) return 'fetched';
-		if (server_status.entries().some((e) => e[1].state === 'connected')) return 'connected';
-		if (server_status.entries().some((e) => e[1].state === 'fetching')) return 'fetching';
-		if (server_status.entries().some((e) => e[1].state === 'connecting')) return 'connecting';
-		if (server_status.entries().some((e) => e[1].state === 'failed')) return 'failed';
-	});
-
+	let server_latest_log = $derived(
+		getLatestLogFromEachServer(store.git_log, sub_filter, clone_urls)
+	);
+	let overal_server_status: GitServerState | undefined = $derived(
+		getOveralGitServerStatus(server_latest_log, ['explorer'], clone_urls)
+	);
 	let pcLoaded = $derived(
 		gitProgressesToPc(
-			Array.from(server_status.values()).flatMap((s) => (s.progress ? [s.progress] : []))
+			server_latest_log.flatMap((s) => {
+				return s && s.progress ? [s.progress] : [];
+			})
 		)
 	);
 
@@ -228,7 +232,7 @@
 				}}
 			>
 				<div class="indicator">
-					<ExplorerServerStatusIcon {server_status} />
+					<ExplorerServerStatusIcon {server_latest_log} />
 				</div>
 			</button>
 		</div>
@@ -252,18 +256,18 @@
 					</div>
 				</div>
 			{/if}
-			{#each server_status.entries() as [remote, status] (remote)}
+			{#each server_latest_log as log (log.remote)}
 				<BackgroundProgressWrapper
 					complete_bg_color_class="bg-base-400"
-					pc={status.progress ? gitProgressToPc(status.progress) : 0}
+					pc={log.progress ? gitProgressToPc(log.progress) : 0}
 				>
-					<GitServerStateIndicator state={status.state} />
-					{status.short_name}
-					{#if status.with_proxy}
+					<GitServerStateIndicator state={log.state} />
+					{remoteNameToShortName(log.remote, clone_urls)}
+					{#if log.msg?.includes('proxy')}
 						<span class="text-base-content/50 text-xs">(via proxy)</span>
 					{/if}
-					<span class="text-base-content/50 text-xs">{status.state}</span>
-					<span class="text-base-content/50 text-xs">{serverStatustoMsg(status)}</span>
+					<span class="text-base-content/50 text-xs">{log.state}</span>
+					<span class="text-base-content/50 text-xs">{log.msg || ''}</span>
 				</BackgroundProgressWrapper>
 			{/each}
 		</div>

@@ -6,19 +6,12 @@
 	import db from '$lib/dbs/LocalDb';
 	import { getTagMultiValue, getTagValue } from '$lib/utils';
 	import git_manager from '$lib/git-manager';
-	import {
-		type CommitInfo,
-		type GitManagerLogEntry,
-		type GitManagerLogEntryGlobal,
-		type GitServerStatus
-	} from '$lib/types/git-manager';
+	import { type CommitInfo } from '$lib/types/git-manager';
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import EventWrapper from './EventWrapper.svelte';
 	import CommitsDetails from '../prs/CommitsDetails.svelte';
-	import { SvelteMap } from 'svelte/reactivity';
-	import { onLogUpdateGitStatus, onLogUpdateServerStatus } from '$lib/git-utils';
 
 	let { event }: { event: NostrEvent } = $props();
 
@@ -99,24 +92,10 @@
 		setTimeout(() => (waited = true), 2000);
 		loadCommitInfos(event.id, tip_id, extra_clone_urls);
 	});
-	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
-	const log_subs = $derived(['explorer', tip_id]);
-	const clone_urls = $derived([...(git_manager.clone_urls ?? []), ...extra_clone_urls]);
-	let git_status: GitManagerLogEntryGlobal | undefined = $state();
 
-	onMount(async () => {
-		for (const l of git_manager.logs.values()) {
-			onLogUpdateServerStatus(l, server_status, clone_urls, log_subs);
-			const status = onLogUpdateGitStatus(l, [tip_id]);
-			if (status) git_status = status;
-		}
-		git_manager.addEventListener('log', (e: Event) => {
-			const customEvent = e as CustomEvent<GitManagerLogEntry>;
-			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, log_subs);
-			const status = onLogUpdateGitStatus(customEvent.detail, [tip_id]);
-			if (status) git_status = status;
-		});
-	});
+	const sub_filter = $derived(['explorer', tip_id]);
+	const clone_urls = $derived([...(git_manager.clone_urls ?? []), ...extra_clone_urls]);
+
 	let identical_tip = $derived(
 		new_commits && commits_on_branch && new_commits.length === 0 && commits_on_branch.length > 0
 	);
@@ -147,6 +126,6 @@
 				</div>
 			</div>
 		{/if}
-		<CommitsDetails infos={new_commits} {loading} {server_status} {git_status} />
+		<CommitsDetails infos={new_commits} {loading} {clone_urls} {sub_filter} />
 	</EventWrapper>
 {/if}

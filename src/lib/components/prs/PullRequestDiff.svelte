@@ -4,16 +4,11 @@
 	import db from '$lib/dbs/LocalDb';
 	import { getTagMultiValue, getTagValue } from '$lib/utils';
 	import git_manager from '$lib/git-manager';
+	import store from '$lib/store.svelte';
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
 	import ChangesToFiles from '../explorer/ChangesToFiles.svelte';
-	import { SvelteMap } from 'svelte/reactivity';
-	import {
-		type GitManagerLogEntry,
-		type GitManagerLogEntryGlobal,
-		type GitServerStatus
-	} from '$lib/types/git-manager';
-	import { onLogUpdateGitStatus, onLogUpdateServerStatus } from '$lib/git-utils';
+	import { getGitLog, getLatestLogFromEachServer, remoteNameToShortName } from '$lib/git-utils';
 	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
 	import AlertWarning from '../AlertWarning.svelte';
 
@@ -91,41 +86,31 @@
 		}, 3000);
 	});
 
-	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
 	let clone_urls = $derived([
 		...(git_manager.clone_urls ?? []),
 		...(tip_details ? tip_details.extra_clone_urls : [])
 	]);
-	let log_subs = $derived(tip_details ? ['explorer', tip_details.tip] : ['explorer']);
-	let git_status: GitManagerLogEntryGlobal | undefined = $state();
+	let sub_filter = $derived(tip_details ? ['explorer', tip_details.tip] : ['explorer']);
 
-	onMount(async () => {
-		for (const l of git_manager.logs.values()) {
-			onLogUpdateServerStatus(l, server_status, clone_urls, log_subs);
-			const status = onLogUpdateGitStatus(l, tip_details ? [tip_details.tip] : []);
-			if (status) git_status = status;
-		}
-		git_manager.addEventListener('log', (e: Event) => {
-			const customEvent = e as CustomEvent<GitManagerLogEntry>;
-			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, log_subs);
-			const status = onLogUpdateGitStatus(customEvent.detail, tip_details ? [tip_details.tip] : []);
-			if (status) git_status = status;
-		});
-	});
+	let git_status = $derived(getGitLog(store.git_log, sub_filter));
+
+	let server_latest_log = $derived(
+		getLatestLogFromEachServer(store.git_log, sub_filter, clone_urls)
+	);
 </script>
 
 {#snippet showServerStatus()}
-	{#if server_status}
+	{#if server_latest_log.length > 0}
 		<div class="mx-5 my-5">
-			{#each server_status.entries() as [remote, status] (remote)}
+			{#each server_latest_log as log (log.remote)}
 				<div>
-					<GitServerStateIndicator state={status.state} />
-					{status.short_name}
-					{#if status.with_proxy}
+					<GitServerStateIndicator state={log.state} />
+					{remoteNameToShortName(log.remote, clone_urls)}
+					{#if log.msg?.includes('proxy')}
 						<span class="text-base-content/50 text-xs">(via proxy)</span>
 					{/if}
-					<span class="text-base-content/50 text-xs">{status.state}</span>
-					<span class="text-base-content/50 text-xs">{status.msg}</span>
+					<span class="text-base-content/50 text-xs">{log.state}</span>
+					<span class="text-base-content/50 text-xs">{log.msg}</span>
 				</div>
 			{/each}
 		</div>
