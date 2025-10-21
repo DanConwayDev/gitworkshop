@@ -104,13 +104,17 @@
 			if (!checked_out_ref)
 				return undefined; // not found shown
 			else if (!nostr_state)
-				// should this be a warning? maybe just an indicator?
-				return 'cannot find git state from nostr, using state from listed git servers';
+				return 'No Nostr state found, displaying git server state. Ask the maintainer to start using ngit for the full nostr experience.';
 			else if (checked_out_ref && !checked_out_ref.is_nostr_ref) {
-				if (nostr_state.some(([ref]) => checked_out_ref && ref === checked_out_ref.ref))
-					return 'cannot find git data for this ref in nostr state, showing ref from git server instead';
+				let nostr_state_ref = nostr_state.find(
+					([ref]) =>
+						checked_out_ref &&
+						(ref == checked_out_ref.ref || ref == `refs/heads/${checked_out_ref.ref}`)
+				);
+				if (nostr_state_ref)
+					return `"${checked_out_ref.ref}" expected at ${nostr_state_ref[1].slice(0, 8)} (nostr state) but showing ${checked_out_ref.commit_id.slice(0, 8)} (git server state) as data not available. Ask mainatainer to run \`ngit sync\`.`;
 				else
-					return 'selected ref not in nostr state but is in state of a listed git server so showing that instead';
+					return `Ref "${checked_out_ref.ref}" not in Nostr state, displaying git server state. Ask mainatainer to run \`ngit sync\`.`;
 			}
 		}
 	});
