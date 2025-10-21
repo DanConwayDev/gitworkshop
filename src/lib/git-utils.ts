@@ -15,8 +15,10 @@ import {
 } from './types';
 import { PrKind, QualityChildKinds } from './kinds';
 import {
+	isGitManagerLogEntryGlobal,
 	isGitManagerLogEntryServer,
 	type GitManagerLogEntry,
+	type GitManagerLogEntryGlobal,
 	type GitProgressObj,
 	type GitProgressPhase,
 	type GitServerStatus
@@ -223,6 +225,19 @@ export const onLogUpdateServerStatus = (
 	} else {
 		// not showing any global git logging
 	}
+};
+
+export const onLogUpdateGitStatus = (
+	entry: GitManagerLogEntry,
+	sub_filter?: string[]
+): GitManagerLogEntryGlobal | undefined => {
+	if (
+		isGitManagerLogEntryGlobal(entry) &&
+		(!sub_filter || !entry.sub || sub_filter.includes(entry.sub))
+	) {
+		return { ...entry };
+	}
+	return undefined;
 };
 
 export const serverStatustoMsg = (status: GitServerStatus) => {

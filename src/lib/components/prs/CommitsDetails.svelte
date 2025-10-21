@@ -1,5 +1,9 @@
 <script lang="ts">
-	import type { CommitInfo, GitServerStatus } from '$lib/types/git-manager';
+	import type {
+		CommitInfo,
+		GitManagerLogEntryGlobal,
+		GitServerStatus
+	} from '$lib/types/git-manager';
 	import { onMount } from 'svelte';
 	import CommitDetails from './CommitDetails.svelte';
 	import type { SvelteMap } from 'svelte/reactivity';
@@ -8,17 +12,20 @@
 	import BackgroundProgressWrapper from '../BackgroundProgressWrapper.svelte';
 	import { pr_icon_path } from './icons';
 	import FromNow from '../FromNow.svelte';
+	import AlertWarning from '../AlertWarning.svelte';
 
 	let {
 		infos,
 		loading,
 		server_status,
+		git_status,
 		grouped_by_date = false,
 		lite_view = false
 	}: {
 		infos: CommitInfo[] | undefined;
 		loading: boolean;
 		server_status: SvelteMap<string, GitServerStatus>;
+		git_status?: GitManagerLogEntryGlobal;
 		grouped_by_date?: boolean;
 		lite_view?: boolean;
 	} = $props();
@@ -142,6 +149,13 @@
 {/snippet}
 
 <div class="">
+	{#if git_status && git_status.level === 'warning'}
+		<div class="mb-4">
+			<AlertWarning mt={4}>
+				<div>{git_status.msg}</div>
+			</AlertWarning>
+		</div>
+	{/if}
 	{#if infos && infos.length > 0}
 		{#if grouped_by_date && groupedCommits.length > 0}
 			{#each groupedCommits as { date, commits } (date)}

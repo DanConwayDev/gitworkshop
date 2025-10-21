@@ -8,12 +8,13 @@
 	import {
 		type CommitInfo,
 		type GitManagerLogEntry,
+		type GitManagerLogEntryGlobal,
 		type GitServerStatus
 	} from '$lib/types/git-manager';
 	import { onMount } from 'svelte';
 	import CommitsDetails from '../prs/CommitsDetails.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { onLogUpdateServerStatus } from '$lib/git-utils';
+	import { onLogUpdateGitStatus, onLogUpdateServerStatus } from '$lib/git-utils';
 
 	let { event }: { event: NostrEvent } = $props();
 
@@ -53,19 +54,24 @@
 	let server_status: SvelteMap<string, GitServerStatus> = new SvelteMap();
 	const log_subs = $derived(['explorer', tip_id]);
 	const clone_urls = $derived([...(git_manager.clone_urls ?? []), ...extra_clone_urls]);
+	let git_status: GitManagerLogEntryGlobal | undefined = $state();
+
 	onMount(async () => {
 		for (const l of git_manager.logs.values()) {
 			onLogUpdateServerStatus(l, server_status, clone_urls, log_subs);
+			const status = onLogUpdateGitStatus(l, [tip_id]);
+			if (status) git_status = status;
 		}
 		git_manager.addEventListener('log', (e: Event) => {
 			const customEvent = e as CustomEvent<GitManagerLogEntry>;
 			onLogUpdateServerStatus(customEvent.detail, server_status, clone_urls, log_subs);
-			// we could introduce a git_status and capture global log for sub (this will enable detection of awaiting default branch phase)
+			const status = onLogUpdateGitStatus(customEvent.detail, [tip_id]);
+			if (status) git_status = status;
 		});
 	});
 </script>
 
 <div class="">
 	<ContentTree node={content} />
-	<CommitsDetails infos={commits} {loading} {server_status} />
+	<CommitsDetails infos={commits} {loading} {server_status} {git_status} />
 </div>

@@ -1281,6 +1281,21 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			});
 			const baseSet = new Set(bases); // may be empty
 
+			if (baseSet.has(tip_commit_id)) {
+				this.log({
+					level: 'warning',
+					sub: tip_commit_id,
+					msg: 'This PR was merged via fast-forward. Only the tip commit at this point of time is shown; the total number of commits is unknown.'
+				});
+				const log = await git.log({
+					fs: this.fs,
+					dir: `/${this.a_ref}`,
+					ref: tip_commit_id,
+					depth: 0
+				});
+				return log.slice(0, 1).map((e) => ({ oid: e.oid, ...e.commit }));
+			}
+
 			// 2) collect oids reachable from tip_commit_id until any base (exclude base)
 			const seen = new Set<string>();
 			const collected = new Set<string>();
