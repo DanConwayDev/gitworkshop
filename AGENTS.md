@@ -196,7 +196,8 @@ SvelteKitPWA({
     enabled: false  // IMPORTANT: Disabled in dev to avoid importScripts errors
   },
   workbox: {
-    navigateFallback: '/',  // Serve index.html for navigation requests
+    globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,woff,woff2}', 'index.html'],
+    navigateFallback: '/index.html',  // IMPORTANT: Must match precached file
     navigateFallbackDenylist: [/^\/_app\//, /^\/api\//, /\.(?:png|jpg|jpeg|svg|gif|webp|ico|css|js|woff|woff2)$/]
   }
 })
@@ -263,11 +264,18 @@ SvelteKitPWA({
 **Issue**: `NetworkError: Failed to execute 'importScripts'` in dev mode
 **Solution**: PWA must be disabled in dev (`devOptions.enabled: false`)
 
+**Issue**: `non-precached-url: non-precached-url :: [{"url":"/"}]`
+**Solution**: 
+1. Add `index.html` to `globPatterns`: `['client/**/*', 'index.html']`
+2. Use `/index.html` not `/` for `navigateFallback`
+3. The navigation fallback URL must be in the precache manifest
+
 **Issue**: `ERR_INTERNET_DISCONNECTED` when testing offline
 **Solution**: 
 1. Use static adapter (not Netlify adapter)
 2. Add navigation fallback in workbox config
-3. Test in preview mode, not dev mode
+3. Ensure index.html is precached
+4. Test in preview mode, not dev mode
 
 **Issue**: Stopping preview server shows "Site can't be reached"
 **Explanation**: This is expected. Browser needs origin to exist. In production, server is always running; it's the network that goes offline, not the server.
@@ -278,11 +286,13 @@ Before deploying PWA changes:
 - [ ] `devOptions.enabled: false` in vite.config.ts
 - [ ] Using `@sveltejs/adapter-static` not `@sveltejs/adapter-netlify`
 - [ ] `fallback: 'index.html'` in adapter config
-- [ ] `navigateFallback: '/'` in workbox config
+- [ ] `globPatterns` includes `'index.html'` in workbox config
+- [ ] `navigateFallback: '/index.html'` in workbox config (must match precached file)
 - [ ] SPA redirect in netlify.toml
 - [ ] Test in preview mode offline works
 - [ ] `build/index.html` exists after build
 - [ ] Service worker has NavigationRoute (`grep NavigationRoute build/sw.js`)
+- [ ] index.html is precached (`grep 'index\.html' build/sw.js`)
 
 ## Svelte 5 Preferences
 

@@ -23,9 +23,9 @@ export default defineConfig({
 				type: 'module'
 			},
 			workbox: {
-				globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,woff,woff2}'],
+				globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,woff,woff2}', 'index.html'],
 				// This is critical for SPA mode - serve index for all navigation requests
-				navigateFallback: '/',
+				navigateFallback: '/index.html',
 				navigateFallbackDenylist: [/^\/_app\//, /^\/api\//, /\.(?:png|jpg|jpeg|svg|gif|webp|ico|css|js|woff|woff2)$/],
 				runtimeCaching: [
 					{
