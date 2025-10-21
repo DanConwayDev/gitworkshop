@@ -13,9 +13,6 @@ export default defineConfig({
 			base: '/',
 			selfDestroying: false,
 			manifest: false, // We use static manifest.json
-			injectManifest: {
-				globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,woff,woff2}']
-			},
 			devOptions: {
 				enabled: false, // Disable in dev mode to avoid errors
 				suppressWarnings: true,
@@ -23,10 +20,11 @@ export default defineConfig({
 				type: 'module'
 			},
 			workbox: {
-				globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,woff,woff2}', 'index.html'],
-				// This is critical for SPA mode - serve index for all navigation requests
+				globDirectory: '.svelte-kit/output/client',
+				globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2,json}'],
+				// Serve index.html for all navigation requests
 				navigateFallback: '/index.html',
-				navigateFallbackDenylist: [/^\/_app\//, /^\/api\//, /\.(?:png|jpg|jpeg|svg|gif|webp|ico|css|js|woff|woff2)$/],
+				navigateFallbackDenylist: [/^\/api\//],
 				runtimeCaching: [
 					{
 						urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

@@ -264,11 +264,12 @@ SvelteKitPWA({
 **Issue**: `NetworkError: Failed to execute 'importScripts'` in dev mode
 **Solution**: PWA must be disabled in dev (`devOptions.enabled: false`)
 
-**Issue**: `non-precached-url: non-precached-url :: [{"url":"/"}]`
+**Issue**: `non-precached-url: non-precached-url :: [{"url":"/"}]` or `[{"url":"/index.html"}]`
 **Solution**: 
-1. Add `index.html` to `globPatterns`: `['client/**/*', 'index.html']`
-2. Use `/index.html` not `/` for `navigateFallback`
-3. The navigation fallback URL must be in the precache manifest
+1. Set `globDirectory: 'build'` to look in the static adapter output directory
+2. Add HTML files to `globPatterns`: `['**/*.{js,css,ico,png,svg,webp,woff,woff2,html,json}']`
+3. Use `/` for `navigateFallback` (workbox precaches `index.html` as `/`)
+4. The navigation fallback URL must match a precached URL in the manifest
 
 **Issue**: `ERR_INTERNET_DISCONNECTED` when testing offline
 **Solution**: 
@@ -286,13 +287,14 @@ Before deploying PWA changes:
 - [ ] `devOptions.enabled: false` in vite.config.ts
 - [ ] Using `@sveltejs/adapter-static` not `@sveltejs/adapter-netlify`
 - [ ] `fallback: 'index.html'` in adapter config
-- [ ] `globPatterns` includes `'index.html'` in workbox config
-- [ ] `navigateFallback: '/index.html'` in workbox config (must match precached file)
+- [ ] `globDirectory: 'build'` in workbox config
+- [ ] `globPatterns` includes HTML files: `['**/*.{js,css,ico,png,svg,webp,woff,woff2,html,json}']`
+- [ ] `navigateFallback: '/'` in workbox config (workbox precaches index.html as `/`)
 - [ ] SPA redirect in netlify.toml
 - [ ] Test in preview mode offline works
 - [ ] `build/index.html` exists after build
 - [ ] Service worker has NavigationRoute (`grep NavigationRoute build/sw.js`)
-- [ ] index.html is precached (`grep 'index\.html' build/sw.js`)
+- [ ] Root URL is precached (`grep '{url:"/"' build/sw.js`)
 
 ## Svelte 5 Preferences
 
