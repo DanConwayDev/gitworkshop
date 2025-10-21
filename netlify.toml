@@ -1,11 +1,40 @@
 [build]
     command = "pnpm run build"
     publish = "build"
+
+# SPA fallback - serve index.html for all routes
+[[redirects]]
+    from = "/*"
+    to = "/index.html"
+    status = 200
+
 [[headers]]
     for = "/.well-known/nostr.json"
     [headers.values]
     Access-Control-Allow-Origin = "*"
+
 [[headers]]
     for = "/manifest.json"
     [headers.values]
     Content-Type = "application/manifest+json"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+    for = "/sw.js"
+    [headers.values]
+    Content-Type = "application/javascript"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+    for = "/registerSW.js"
+    [headers.values]
+    Content-Type = "application/javascript"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+    for = "/*"
+    [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

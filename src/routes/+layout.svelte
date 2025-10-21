@@ -3,6 +3,7 @@
 	import '$lib/accounts';
 
 	import Navbar from '$lib/components/Navbar.svelte';
+	import PwaUpdateNotification from '$lib/components/PwaUpdateNotification.svelte';
 	import '../app.css';
 	import Container from '$lib/components/Container.svelte';
 	import { resolve } from '$app/paths';
@@ -10,6 +11,7 @@
 </script>
 
 <div class="gw-page-container">
+	<PwaUpdateNotification />
 	<Navbar />
 
 	<main class="gw-main">

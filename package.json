@@ -37,7 +37,8 @@
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.46.1",
 		"vite": "^7.1.10",
-		"vitest": "^3.2.4"
+		"vitest": "^3.2.4",
+		"workbox-window": "^7.3.0"
 	},
 	"dependencies": {
 		"@cashu/cashu-ts": "^2.7.2",

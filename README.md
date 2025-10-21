@@ -10,6 +10,32 @@ pairs with sister project see [gitworkshop.dev/ngit](https://gitworkshop.dev/ngi
 
 [gitworkshop.dev/about](https://gitworkshop.dev/about) for more details
 
+## Progressive Web App (PWA)
+
+GitWorkshop.dev is a fully functional Progressive Web App that can be installed on desktop and mobile devices:
+
+- **📱 Installable**: Add to home screen on iOS, Android, and desktop
+- **⚡ Fast**: Instant loading with cached assets
+- **📴 Offline**: Browse cached repositories without internet
+- **🔄 Auto-update**: Automatic updates with user notification
+
+### Installation
+
+- **Desktop**: Click the install icon in the address bar
+- **iOS**: Share → Add to Home Screen
+- **Android**: Menu → Install app
+
+### Testing PWA Features
+
+**Development mode** (`pnpm run dev`): PWA disabled to avoid errors
+
+**Preview mode** (`pnpm run build && pnpm run preview`): Full PWA testing
+- Test offline: DevTools → Network → Check "Offline" → Refresh
+- Service worker registers and caches assets
+- Offline navigation works
+
+**Production**: Full PWA functionality on Netlify
+
 ## Developer Guide
 
 ## System Architecture Overview

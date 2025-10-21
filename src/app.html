@@ -2,7 +2,16 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+		<!-- PWA Meta Tags -->
+		<meta name="application-name" content="GitWorkshop.dev" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content="GitWorkshop" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="msapplication-TileColor" content="#16171e" />
+		<meta name="msapplication-tap-highlight" content="no" />
 
 		<!-- Favicon -->
 		<link rel="icon" href="/favicon.ico" sizes="48x48" />
@@ -20,8 +29,24 @@
 		<link rel="manifest" href="/manifest.json?v=2" />
 
 		<!-- Open Graph and Twitter Card -->
+		<meta property="og:title" content="GitWorkshop.dev" />
+		<meta property="og:description" content="Decentralized github alternative over Nostr" />
+		<meta property="og:type" content="website" />
 		<meta property="og:image" content="/icons/icon-512x512.png?v=1" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content="GitWorkshop.dev" />
+		<meta name="twitter:description" content="Decentralized github alternative over Nostr" />
 		<meta name="twitter:image" content="/icons/icon-512x512.png?v=1" />
+
+		<!-- SEO -->
+		<meta
+			name="description"
+			content="Decentralized github alternative over Nostr. Collaborate on issues and code PRs for git repositories via Nostr relays."
+		/>
+		<meta
+			name="keywords"
+			content="git, github, nostr, decentralized, open source, collaboration, pull requests, issues"
+		/>
 
 		%sveltekit.head%
 	</head>

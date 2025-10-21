@@ -4,6 +4,20 @@
 	"background_color": "#16171e",
 	"theme_color": "#16171e",
 	"description": "Decentralized github alternative over Nostr",
+	"orientation": "any",
+	"scope": "/",
+	"start_url": "/",
+	"display": "standalone",
+	"display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+	"categories": ["development", "productivity", "utilities"],
+	"screenshots": [
+		{
+			"src": "icons/icon-512x512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"form_factor": "wide"
+		}
+	],
 	"icons": [
 		{
 			"src": "icons/icon-512x512.png?v=1",
@@ -83,7 +97,5 @@
 			"type": "image/png",
 			"purpose": "maskable"
 		}
-	],
-	"start_url": "/",
-	"display": "standalone"
+	]
 }
