@@ -292,6 +292,11 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	async refreshExplorer(params: object) {
+		// Re-send all log events to repopulate git_manager.logs in main thread
+		for (const log of this.logs.values()) {
+			this.postEvent({ name: 'log', detail: log });
+		}
+
 		if (this.nostr_state_refs) {
 			this.postEvent({ name: 'stateUpdate', detail: this.nostr_state_refs });
 		} else if (this.clone_urls) {
