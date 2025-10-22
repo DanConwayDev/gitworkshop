@@ -11,8 +11,17 @@
 
 	let { event }: { event: NostrEvent } = $props();
 
-	let content = $derived(nostrEventToDocTree(event, true));
-
+	let content = $derived(
+		event.content.includes('\\n')
+			? nostrEventToDocTree(
+					{
+						content: event.content.replace(/\\n/g, '\n\n\n'),
+						tags: []
+					} as unknown as NostrEvent,
+					true
+				)
+			: nostrEventToDocTree(event, true)
+	);
 	let repo_refs = $derived(
 		event.tags.flatMap((s) => (s[0] === 'a' && s[1] !== undefined ? [s[1]] : []))
 	);
@@ -39,7 +48,6 @@
 			}, 100) as unknown as number;
 		}
 	};
-
 	onMount(() => {
 		loadCommitInfos(event.id, tip_id, extra_clone_urls);
 	});
