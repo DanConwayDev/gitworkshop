@@ -13,6 +13,8 @@ export default defineConfig({
 			base: '/',
 			selfDestroying: false,
 			manifest: false, // We use static manifest.json
+			injectRegister: 'auto',
+			registerType: 'autoUpdate',
 			devOptions: {
 				enabled: false, // Disable in dev mode to avoid errors
 				suppressWarnings: true,
@@ -20,20 +22,26 @@ export default defineConfig({
 				type: 'module'
 			},
 			workbox: {
-				globDirectory: '.svelte-kit/output/client', // this shouldnt be 'build'. PWA issues were fixed by using this globDirectory and adding additionalManifestEntries
+				// ⚠️ CRITICAL: DO NOT CHANGE TO 'build'! Read docs/PWA_CONFIGURATION.md before modifying!
+				// Must use '.svelte-kit/output/client' because PWA plugin runs BEFORE static adapter
+				// creates the 'build' directory. Using 'build' results in EMPTY precache (0 files).
+				globDirectory: '.svelte-kit/output/client',
 				globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2,json}'],
-				// Important fix: Explicitly add root URLs to precache manifest
-				// This bypasses the glob timing issue where index.html doesn't exist yet
+				// ⚠️ REQUIRED: These entries map '/' to index.html for navigation fallback
+				// Without these: offline navigation fails with 'non-precached-url' errors
 				additionalManifestEntries: [
 					{ url: '/', revision: null },
 					{ url: 'index.html', revision: null }
 				],
-				// Serve index.html for all navigation requests
 				navigateFallback: '/',
 				navigateFallbackDenylist: [
 					/^\/api\//,
 					/\.(?:png|jpg|jpeg|svg|gif|webp|ico|css|js|woff|woff2)$/
 				],
+				// ⚠️ REQUIRED: Service worker must take control immediately for offline to work
+				// Without these: hard refresh while offline fails with ERR_INTERNET_DISCONNECTED
+				skipWaiting: true,
+				clientsClaim: true,
 				runtimeCaching: [
 					{
 						urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

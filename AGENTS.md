@@ -175,6 +175,19 @@ GitWorkshop.dev is a fully functional PWA with:
 - **Installable**: Works as standalone app on desktop and mobile
 - **Auto-Update**: User notifications when new version available
 
+### ⚠️ IMPORTANT: PWA Configuration
+
+**BEFORE modifying any PWA configuration, you MUST read [`docs/PWA_CONFIGURATION.md`](docs/PWA_CONFIGURATION.md)!**
+
+The PWA configuration is CRITICAL and uses specific settings that are counter-intuitive but required:
+
+- Works in `pnpm run preview`, `npx serve build -s`, AND Netlify production
+- Uses `.svelte-kit/output/client` NOT `'build'` for `globDirectory`
+- Requires specific `additionalManifestEntries` for navigation fallback
+- See [`docs/PWA_CONFIGURATION.md`](docs/PWA_CONFIGURATION.md) for complete details and rationale
+
+**If you modify PWA config without reading the docs, you WILL break offline functionality!**
+
 ### Debugging PWA
 
 **Launch preview server and check logs**:
