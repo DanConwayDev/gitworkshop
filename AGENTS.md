@@ -169,72 +169,39 @@ pnpm run build  # Automatically generates PWA assets
 ### Architecture
 
 GitWorkshop.dev is a fully functional PWA with:
+
 - **Service Worker**: Auto-generated via @vite-pwa/sveltekit
 - **Offline Support**: Cached assets and navigation fallback
 - **Installable**: Works as standalone app on desktop and mobile
 - **Auto-Update**: User notifications when new version available
 
-### Key Configuration
+### Debugging PWA
 
-**Adapter** (`svelte.config.js`):
-```javascript
-import adapter from '@sveltejs/adapter-static';
+**Launch preview server and check logs**:
 
-adapter({
-  pages: 'build',
-  assets: 'build',
-  fallback: 'index.html',  // SPA fallback for offline navigation
-  precompress: false,
-  strict: true
-})
+```bash
+pnpm run build && nohup pnpm run preview > /tmp/preview.log 2>&1 & sleep 3 && cat /tmp/preview.log
 ```
 
-**PWA Plugin** (`vite.config.ts`):
-```javascript
-SvelteKitPWA({
-  devOptions: {
-    enabled: false  // IMPORTANT: Disabled in dev to avoid importScripts errors
-  },
-  workbox: {
-    globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,woff,woff2}', 'index.html'],
-    navigateFallback: '/index.html',  // IMPORTANT: Must match precached file
-    navigateFallbackDenylist: [/^\/_app\//, /^\/api\//, /\.(?:png|jpg|jpeg|svg|gif|webp|ico|css|js|woff|woff2)$/]
-  }
-})
+This command will:
+
+1. Build the production bundle
+2. Start the preview server in the background
+3. Redirect output to `/tmp/preview.log`
+4. Wait for server to start
+5. Display the log showing the server URL
+
+the browser automation tools won't pick up pre-caching errors in the console, so prompt the user to:
+
+- Open the preview URL
+- Check browser console for errors
+- Check Application → Service Workers for SW status
+
+**Stop preview server when done**:
+
+```bash
+pgrep -f "pnpm run preview" | xargs kill -9
 ```
-
-**Netlify** (`netlify.toml`):
-```toml
-# SPA fallback redirect
-[[redirects]]
-    from = "/*"
-    to = "/index.html"
-    status = 200
-```
-
-### Components
-
-- **`src/lib/components/PwaUpdateNotification.svelte`**: Toast notification for app updates
-- **`src/routes/offline/+page.svelte`**: Offline fallback page
-- **`static/manifest.json`**: Web app manifest with icons and metadata
-
-### Testing PWA
-
-**DO NOT test in dev mode** (`pnpm run dev`):
-- PWA is intentionally disabled
-- Avoids `importScripts` errors with workbox files
-- Use for normal development only
-
-**DO test in preview mode** (`pnpm run build && pnpm run preview`):
-- Full service worker functionality
-- Test offline: DevTools → Network → Check "Offline" → Refresh
-- Test installation
-- Test update notifications
-
-**Production** (Netlify):
-- Full PWA features
-- Works offline (airplane mode, no WiFi)
-- Installable on all platforms
 
 ### Critical Files
 
@@ -246,55 +213,21 @@ SvelteKitPWA({
 ### Caching Strategy
 
 **Precache** (install time):
+
 - All JavaScript bundles
 - All CSS files
 - All static assets (icons, images)
 
 **Runtime Cache**:
+
 - Fonts: CacheFirst, 365 days
 - Images: CacheFirst, 30 days
 - Nostr/API: Not cached (always network)
 
 **Navigation**:
+
 - Offline navigation requests → serve `index.html`
 - SvelteKit router handles client-side routing
-
-### Common Issues
-
-**Issue**: `NetworkError: Failed to execute 'importScripts'` in dev mode
-**Solution**: PWA must be disabled in dev (`devOptions.enabled: false`)
-
-**Issue**: `non-precached-url: non-precached-url :: [{"url":"/"}]` or `[{"url":"/index.html"}]`
-**Solution**: 
-1. Set `globDirectory: 'build'` to look in the static adapter output directory
-2. Add HTML files to `globPatterns`: `['**/*.{js,css,ico,png,svg,webp,woff,woff2,html,json}']`
-3. Use `/` for `navigateFallback` (workbox precaches `index.html` as `/`)
-4. The navigation fallback URL must match a precached URL in the manifest
-
-**Issue**: `ERR_INTERNET_DISCONNECTED` when testing offline
-**Solution**: 
-1. Use static adapter (not Netlify adapter)
-2. Add navigation fallback in workbox config
-3. Ensure index.html is precached
-4. Test in preview mode, not dev mode
-
-**Issue**: Stopping preview server shows "Site can't be reached"
-**Explanation**: This is expected. Browser needs origin to exist. In production, server is always running; it's the network that goes offline, not the server.
-
-### PWA Checklist
-
-Before deploying PWA changes:
-- [ ] `devOptions.enabled: false` in vite.config.ts
-- [ ] Using `@sveltejs/adapter-static` not `@sveltejs/adapter-netlify`
-- [ ] `fallback: 'index.html'` in adapter config
-- [ ] `globDirectory: 'build'` in workbox config
-- [ ] `globPatterns` includes HTML files: `['**/*.{js,css,ico,png,svg,webp,woff,woff2,html,json}']`
-- [ ] `navigateFallback: '/'` in workbox config (workbox precaches index.html as `/`)
-- [ ] SPA redirect in netlify.toml
-- [ ] Test in preview mode offline works
-- [ ] `build/index.html` exists after build
-- [ ] Service worker has NavigationRoute (`grep NavigationRoute build/sw.js`)
-- [ ] Root URL is precached (`grep '{url:"/"' build/sw.js`)
 
 ## Svelte 5 Preferences
 
