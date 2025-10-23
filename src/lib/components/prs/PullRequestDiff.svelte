@@ -8,16 +8,9 @@
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
 	import ChangesToFiles from '../explorer/ChangesToFiles.svelte';
-	import {
-		getGitLog,
-		getLatestLogFromEachServer,
-		getFetchStatusMessage,
-		gitProgressesBySub,
-		remoteNameToShortName
-	} from '$lib/git-utils';
-	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
+	import { getGitLog } from '$lib/git-utils';
 	import AlertWarning from '../AlertWarning.svelte';
-	import BackgroundProgressWrapper from '../BackgroundProgressWrapper.svelte';
+	import GitFetchingStatus from '../GitFetchingStatus.svelte';
 
 	let { table_item }: { table_item: IssueOrPRTableItem } = $props();
 
@@ -100,33 +93,7 @@
 	let sub_filter = $derived(tip_details ? ['explorer', tip_details.tip] : ['explorer']);
 
 	let git_status = $derived(getGitLog(store.git_log, sub_filter));
-
-	let server_latest_log = $derived(
-		getLatestLogFromEachServer(store.git_log, sub_filter, clone_urls)
-	);
-	let statusMessage = $derived(
-		getFetchStatusMessage(store.git_log, sub_filter, clone_urls, diff ? [diff] : undefined)
-	);
-	let pcLoaded = $derived(gitProgressesBySub(store.git_log, sub_filter, clone_urls));
 </script>
-
-{#snippet showServerStatus()}
-	{#if server_latest_log.length > 0}
-		<div class="mx-5 my-5">
-			{#each server_latest_log as log (log.remote)}
-				<div>
-					<GitServerStateIndicator state={log.state} />
-					{remoteNameToShortName(log.remote, clone_urls)}
-					{#if log.msg?.includes('proxy')}
-						<span class="text-base-content/50 text-xs">(via proxy)</span>
-					{/if}
-					<span class="text-base-content/50 text-xs">{log.state}</span>
-					<span class="text-base-content/50 text-xs">{log.msg}</span>
-				</div>
-			{/each}
-		</div>
-	{/if}
-{/snippet}
 
 {#if diff && diff.length > 0}
 	{#if git_status && git_status.level === 'warning'}
@@ -139,38 +106,16 @@
 	<div class="flex w-full rounded-t p-2">
 		<ChangesToFiles {diff} />
 	</div>
-{:else if loading || !waited}
-	<div class="relative py-2">
-		<div class="skeleton border-base-400 my-2 rounded border border-2 opacity-70">
-			<BackgroundProgressWrapper complete_bg_color_class="bg-base-400" pc={pcLoaded}>
-				<div class="p-2">
-					<div
-						class="text-center transition-opacity duration-2000"
-						class:opacity-0={!waited && loading}
-					>
-						<span class="loading loading-spinner loading-sm opacity-60"></span>
-						<span class=" text-muted ml-2 text-[0.85rem] font-medium">{statusMessage}</span>
-					</div>
-				</div>
-			</BackgroundProgressWrapper>
-			<div class="">
-				<div class="min-h-16 transition-opacity duration-2000" class:opacity-0={!waited && loading}>
-					{@render showServerStatus()}
-				</div>
-			</div>
-		</div>
-	</div>
 {:else}
 	<div class="relative py-2">
-		<div class="bg-base-200 border-error/90 my-2 rounded border border-2">
-			<div class="bg-error text-error-content p-2 text-center">
-				Error: cannot find PR commit data
-			</div>
-			<div class="">
-				<div class="min-h-5 transition-opacity duration-1500" class:opacity-0={!waited && loading}>
-					{@render showServerStatus()}
-				</div>
-			</div>
-		</div>
+		<GitFetchingStatus
+			loading={loading || !waited}
+			{waited}
+			git_log={store.git_log}
+			{sub_filter}
+			{clone_urls}
+			commits_or_diffs={diff ? [diff] : undefined}
+			errorMessage="Error: cannot find PR commit data"
+		/>
 	</div>
 {/if}

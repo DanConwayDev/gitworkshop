@@ -2,20 +2,11 @@
 	import type { CommitInfo } from '$lib/types/git-manager';
 	import { onMount } from 'svelte';
 	import CommitDetails from './CommitDetails.svelte';
-	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
-	import {
-		getGitLog,
-		getLatestLogFromEachServer,
-		gitProgressesBySub,
-		getFetchStatusMessage,
-		gitProgressToPc,
-		remoteNameToShortName,
-		serverStatustoMsg
-	} from '$lib/git-utils';
-	import BackgroundProgressWrapper from '../BackgroundProgressWrapper.svelte';
+	import { getGitLog } from '$lib/git-utils';
 	import { pr_icon_path } from './icons';
 	import FromNow from '../FromNow.svelte';
 	import AlertWarning from '../AlertWarning.svelte';
+	import GitFetchingStatus from '../GitFetchingStatus.svelte';
 	import store from '$lib/store.svelte';
 
 	let {
@@ -66,34 +57,7 @@
 			.sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
 			.map(([date, commits]) => ({ date, commits }));
 	});
-
-	let server_latest_log = $derived(
-		getLatestLogFromEachServer(store.git_log, sub_filter, clone_urls)
-	);
-	let pcLoaded = $derived(gitProgressesBySub(store.git_log, sub_filter, clone_urls));
-	let statusMessage = $derived(getFetchStatusMessage(store.git_log, sub_filter, clone_urls, infos));
 </script>
-
-{#snippet showServerStatus()}
-	{#if server_latest_log.length > 0}
-		<div class="mx-5 my-5">
-			{#each server_latest_log as status (status.remote)}
-				<BackgroundProgressWrapper
-					complete_bg_color_class="bg-base-400"
-					pc={status.progress ? gitProgressToPc(status.progress) : 0}
-				>
-					<GitServerStateIndicator state={status.state} />
-					{remoteNameToShortName(status.remote, clone_urls)}
-					{#if status.msg?.includes('proxy')}
-						<span class="text-base-content/50 text-xs">(via proxy)</span>
-					{/if}
-					<span class="text-base-content/50 text-xs">{status.state}</span>
-					<span class="text-base-content/50 text-xs">{serverStatustoMsg(status)}</span>
-				</BackgroundProgressWrapper>
-			{/each}
-		</div>
-	{/if}
-{/snippet}
 
 {#snippet showItem(info: CommitInfo)}
 	{#if lite_view}
@@ -171,43 +135,18 @@
 				{@render showItem(info)}
 			{/each}
 		{/if}
-	{:else if loading || !waited}
-		<div class="relative mb-4">
-			<div class="skeleton border-base-400 my-2 rounded border border-2 opacity-70">
-				<BackgroundProgressWrapper complete_bg_color_class="bg-base-400" pc={pcLoaded}>
-					<div class="p-2">
-						<div
-							class="text-center transition-opacity duration-2000"
-							class:opacity-0={!waited && loading}
-						>
-							<span class="loading loading-spinner loading-sm opacity-60"></span>
-							<span class=" text-muted ml-2 text-[0.85rem] font-medium">{statusMessage}</span>
-						</div>
-					</div>
-				</BackgroundProgressWrapper>
-				<div class="">
-					<div
-						class="min-h-16 transition-opacity duration-2000"
-						class:opacity-0={!waited && loading}
-					>
-						{@render showServerStatus()}
-					</div>
-				</div>
-			</div>
-		</div>
 	{:else}
 		<div class="relative mb-4">
-			<div class="bg-base-200 border-error/90 my-2 rounded border border-2">
-				<div class="bg-error text-error-content p-2 text-center">Error: cannot find commits</div>
-				<div class="">
-					<div
-						class="min-h-16 transition-opacity duration-1500"
-						class:opacity-0={!waited && loading}
-					>
-						{@render showServerStatus()}
-					</div>
-				</div>
-			</div>
+			<GitFetchingStatus
+				loading={loading || !waited}
+				{waited}
+				git_log={store.git_log}
+				{sub_filter}
+				{clone_urls}
+				commits_or_diffs={infos}
+				errorMessage="Error: cannot find commits"
+				use_progress_wrapper={true}
+			/>
 		</div>
 	{/if}
 </div>
