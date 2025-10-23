@@ -374,3 +374,145 @@ export const gitProgressesToPc = (progresses: GitProgressObj[]): number => {
 
 	return Math.floor(Math.max(0, Math.min(100, total)));
 };
+
+/**
+ * Calculate weighted progress based on sub filters
+ * Explorer sub (default branch) is weighted at 90%, other subs at 10%
+ * Progress is monotonic - never decreases
+ */
+const progressCache = new Map<string, number>();
+
+export const gitProgressesBySub = (
+	git_logs: GitManagerLogEntry[] = [],
+	sub_filter: string[] = [],
+	clone_urls: string[]
+): number => {
+	// Create unique cache key for this combination
+	const cacheKey = `${sub_filter.sort().join(',')}:${clone_urls.sort().join(',')}`;
+	const lastProgress = progressCache.get(cacheKey) || 0;
+
+	if (sub_filter.length === 0) {
+		// No sub filters, use the standard approach
+		const server_latest_log = getLatestLogFromEachServer(git_logs, sub_filter, clone_urls);
+		const progress = gitProgressesToPc(
+			server_latest_log.flatMap((s) => (s && s.progress ? [s.progress] : []))
+		);
+		const newProgress = Math.max(lastProgress, progress);
+		progressCache.set(cacheKey, newProgress);
+		return newProgress;
+	}
+
+	// Separate explorer from other subs
+	const explorerSub = 'explorer';
+	const isExplorer = sub_filter.includes(explorerSub);
+	const otherSubs = sub_filter.filter((s) => s !== explorerSub);
+
+	let explorerPc = 0;
+	let othersPc = 0;
+
+	// Calculate explorer progress (weighted at 90%)
+	if (isExplorer) {
+		const explorerLogs = getLatestLogFromEachServer(git_logs, [explorerSub], clone_urls);
+
+		// Filter out failed servers - they shouldn't affect progress
+		const activeExplorerLogs = explorerLogs.filter((log) => log.state !== 'failed');
+
+		// Check if ANY server has completed explorer fetch
+		const hasCompletedExplorer = activeExplorerLogs.some((log) => log.state === 'fetched');
+
+		if (hasCompletedExplorer) {
+			// Lock at 100% once any server completes to prevent regression
+			explorerPc = 100;
+		} else {
+			// Use the max progress among all active servers for explorer
+			const explorerProgresses = activeExplorerLogs.flatMap((s) =>
+				s && s.progress ? [s.progress] : []
+			);
+			if (explorerProgresses.length > 0) {
+				explorerPc = Math.max(...explorerProgresses.map(gitProgressToPc));
+			}
+		}
+	}
+
+	// Calculate other subs progress (weighted at 10%)
+	if (otherSubs.length > 0) {
+		const otherLogs = getLatestLogFromEachServer(git_logs, otherSubs, clone_urls);
+
+		// Filter out failed servers - they shouldn't affect progress
+		const activeOtherLogs = otherLogs.filter((log) => log.state !== 'failed');
+
+		// Check if ANY server has completed the other subs
+		const hasCompletedOthers = activeOtherLogs.some((log) => log.state === 'fetched');
+
+		if (hasCompletedOthers) {
+			// Lock at 100% once any server completes
+			othersPc = 100;
+		} else {
+			// Use the max progress among all active servers for other subs
+			const otherProgresses = activeOtherLogs.flatMap((s) => (s && s.progress ? [s.progress] : []));
+			if (otherProgresses.length > 0) {
+				othersPc = Math.max(...otherProgresses.map(gitProgressToPc));
+			}
+		}
+	}
+
+	// Weight: 90% for explorer, 10% for others
+	const weighted = explorerPc * 0.9 + othersPc * 0.1;
+	const current = Math.floor(Math.max(0, Math.min(100, weighted)));
+
+	// Ensure monotonic progress - never go backwards
+	const newProgress = Math.max(lastProgress, current);
+	progressCache.set(cacheKey, newProgress);
+	return newProgress;
+};
+
+/**
+ * Get descriptive status message based on current fetch state
+ */
+export const getFetchStatusMessage = (
+	git_logs: GitManagerLogEntry[] = [],
+	sub_filter: string[] = [],
+	clone_urls: string[],
+	infos?: unknown[]
+): string => {
+	const explorerSub = 'explorer';
+	const isExplorer = sub_filter.includes(explorerSub);
+	const otherSubs = sub_filter.filter((s) => s !== explorerSub);
+
+	// Check if we have commit data loaded
+	if (infos && infos.length > 0) {
+		return 'loading commit details';
+	}
+
+	// Check explorer status
+	if (isExplorer) {
+		const explorerLogs = getLatestLogFromEachServer(git_logs, [explorerSub], clone_urls);
+		const hasCompletedExplorer = explorerLogs.some((log) => log.state === 'fetched');
+		const isFetchingExplorer = explorerLogs.some((log) => log.state === 'fetching');
+
+		if (!hasCompletedExplorer && isFetchingExplorer) {
+			return 'fetching default branch data';
+		}
+	}
+
+	// Check other subs status
+	if (otherSubs.length > 0) {
+		const otherLogs = getLatestLogFromEachServer(git_logs, otherSubs, clone_urls);
+		const isFetchingOthers = otherLogs.some((log) => log.state === 'fetching');
+
+		if (isFetchingOthers) {
+			return 'fetching commit data';
+		}
+	}
+
+	// Check if everything is complete
+	const allLogs = getLatestLogFromEachServer(git_logs, sub_filter, clone_urls);
+	const allFetched = allLogs.length > 0 && allLogs.every((log) => log.state === 'fetched');
+
+	if (allFetched) {
+		return 'data fetched';
+	}
+
+	// Default fallback
+	return 'fetching commits';
+};

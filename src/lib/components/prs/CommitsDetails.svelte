@@ -6,7 +6,8 @@
 	import {
 		getGitLog,
 		getLatestLogFromEachServer,
-		gitProgressesToPc,
+		gitProgressesBySub,
+		getFetchStatusMessage,
 		gitProgressToPc,
 		remoteNameToShortName,
 		serverStatustoMsg
@@ -69,13 +70,8 @@
 	let server_latest_log = $derived(
 		getLatestLogFromEachServer(store.git_log, sub_filter, clone_urls)
 	);
-	let pcLoaded = $derived(
-		gitProgressesToPc(
-			server_latest_log.flatMap((s) => {
-				return s && s.progress ? [s.progress] : [];
-			})
-		)
-	);
+	let pcLoaded = $derived(gitProgressesBySub(store.git_log, sub_filter, clone_urls));
+	let statusMessage = $derived(getFetchStatusMessage(store.git_log, sub_filter, clone_urls, infos));
 </script>
 
 {#snippet showServerStatus()}
@@ -185,7 +181,7 @@
 							class:opacity-0={!waited && loading}
 						>
 							<span class="loading loading-spinner loading-sm opacity-60"></span>
-							<span class=" text-muted ml-2 text-[0.85rem] font-medium">fetching commits</span>
+							<span class=" text-muted ml-2 text-[0.85rem] font-medium">{statusMessage}</span>
 						</div>
 					</div>
 				</BackgroundProgressWrapper>
