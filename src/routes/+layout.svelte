@@ -10,7 +10,9 @@
 	let { children } = $props();
 
 	// Build-time version info injected by Vite
+	// eslint-disable-next-line no-undef
 	const gitCommit = __GIT_COMMIT__;
+	// eslint-disable-next-line no-undef
 	const commitDate = __COMMIT_DATE__;
 </script>
 
@@ -32,7 +34,7 @@
 							<img src="/icons/icon.svg" alt="gitworkshop.dev logo" class="inline h-5 w-5" />
 						</a>
 						<span class="mt-0.5 ml-2">GitWorkshop.dev</span>
-						<span class="ml-2 opacity-50">v{commitDate}+{gitCommit}</span>
+						<span class="ml-2 opacity-50">v{commitDate}+{gitCommit.slice(0, 7)}</span>
 					</div>
 				</div>
 				<div class="grow"></div>
