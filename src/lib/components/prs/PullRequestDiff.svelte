@@ -12,10 +12,12 @@
 		getGitLog,
 		getLatestLogFromEachServer,
 		getFetchStatusMessage,
+		gitProgressesBySub,
 		remoteNameToShortName
 	} from '$lib/git-utils';
 	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
 	import AlertWarning from '../AlertWarning.svelte';
+	import BackgroundProgressWrapper from '../BackgroundProgressWrapper.svelte';
 
 	let { table_item }: { table_item: IssueOrPRTableItem } = $props();
 
@@ -105,6 +107,7 @@
 	let statusMessage = $derived(
 		getFetchStatusMessage(store.git_log, sub_filter, clone_urls, diff ? [diff] : undefined)
 	);
+	let pcLoaded = $derived(gitProgressesBySub(store.git_log, sub_filter, clone_urls));
 </script>
 
 {#snippet showServerStatus()}
@@ -138,20 +141,20 @@
 	</div>
 {:else if loading || !waited}
 	<div class="relative py-2">
-		<div class="skeleton bg-base-200 my-2 rounded">
-			<div class="p-2">
-				<div
-					class="text-center transition-opacity duration-3000"
-					class:opacity-0={!waited && loading}
-				>
-					<span class="loading loading-spinner loading-sm opacity-60"></span>
-					<span class=" text-muted ml-2 text-[0.85rem] font-medium">{statusMessage}</span>
+		<div class="skeleton border-base-400 my-2 rounded border border-2 opacity-70">
+			<BackgroundProgressWrapper complete_bg_color_class="bg-base-400" pc={pcLoaded}>
+				<div class="p-2">
+					<div
+						class="text-center transition-opacity duration-2000"
+						class:opacity-0={!waited && loading}
+					>
+						<span class="loading loading-spinner loading-sm opacity-60"></span>
+						<span class=" text-muted ml-2 text-[0.85rem] font-medium">{statusMessage}</span>
+					</div>
 				</div>
-			</div>
-		</div>
-		<div class="skeleton bg-base-200 my-2 rounded">
+			</BackgroundProgressWrapper>
 			<div class="">
-				<div class="min-h-10 transition-opacity duration-3000" class:opacity-0={!waited && loading}>
+				<div class="min-h-16 transition-opacity duration-2000" class:opacity-0={!waited && loading}>
 					{@render showServerStatus()}
 				</div>
 			</div>
