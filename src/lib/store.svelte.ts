@@ -15,10 +15,13 @@ export const search = $state({
 });
 
 export const network_status: { offline: boolean } = $state({
-	offline: browser ? navigator.onLine : false
+	offline: false
 });
 
 if (browser) {
+	setTimeout(() => {
+		network_status.offline = !navigator.onLine;
+	}, 4000);
 	window.addEventListener('online', () => {
 		network_status.offline = false;
 	});
