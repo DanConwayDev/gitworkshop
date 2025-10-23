@@ -16,15 +16,24 @@ export default defineConfig({
 			devOptions: {
 				enabled: false, // Disable in dev mode to avoid errors
 				suppressWarnings: true,
-				navigateFallback: '/',
+				navigateFallback: '/index.html',
 				type: 'module'
 			},
 			workbox: {
 				globDirectory: '.svelte-kit/output/client',
 				globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2,json}'],
+				// Important fix: Explicitly add root URLs to precache manifest
+				// This bypasses the glob timing issue where index.html doesn't exist yet
+				additionalManifestEntries: [
+					{ url: '/', revision: null },
+					{ url: 'index.html', revision: null }
+				],
 				// Serve index.html for all navigation requests
-				navigateFallback: '/index.html',
-				navigateFallbackDenylist: [/^\/api\//],
+				navigateFallback: '/',
+				navigateFallbackDenylist: [
+					/^\/api\//,
+					/\.(?:png|jpg|jpeg|svg|gif|webp|ico|css|js|woff|woff2)$/
+				],
 				runtimeCaching: [
 					{
 						urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
