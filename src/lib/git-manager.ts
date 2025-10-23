@@ -1,6 +1,8 @@
 import type { RepoRef } from './types';
 import {
 	type GitManagerEvent,
+	type GitManagerLogEntry,
+	type GitManagerLogEntryServer,
 	type GitManagerRpcMethodNames,
 	type GitManagerRpcMethodInfo,
 	type GitManagerRpcMethodSigs,
@@ -70,8 +72,17 @@ export class GitManagerRpc extends EventTarget {
 		if (asRec.kind === 'event' && typeof asRec.name === 'string') {
 			const evt = msg as GitManagerEvent;
 			if (evt.name === 'log') {
-				// should we check its length and keep it to < 500 or 1000
-				store.git_log.push(evt.detail);
+				const newEntry = evt.detail;
+
+				// Don't push if entry is identical to the last entry
+				if (!this.isIdenticalToLastEntry(newEntry)) {
+					store.git_log.push(newEntry);
+
+					// Remove duplicate phase entries, keeping only the latest
+					if ('remote' in newEntry && newEntry.progress?.phase) {
+						this.removeDuplicatePhaseEntries(newEntry);
+					}
+				}
 			}
 			this.dispatchEvent(new CustomEvent(evt.name, { detail: evt.detail }));
 			return;
@@ -86,6 +97,68 @@ export class GitManagerRpc extends EventTarget {
 		} else {
 			const errMsg = typeof maybe.error === 'string' ? maybe.error : 'rpc-error';
 			this.settle(id, (p) => p.reject(new Error(errMsg)));
+		}
+	}
+
+	/**
+	 * Check if the new entry is identical to the last entry for the same remote/sub combo.
+	 * Searches backwards through the last 10 entries to find a matching remote/sub.
+	 * Compares the content deeply, not just by reference.
+	 */
+	private isIdenticalToLastEntry(newEntry: GitManagerLogEntry): boolean {
+		const log = store.git_log;
+		if (log.length === 0) return false;
+
+		// For server entries, find the last entry with the same remote/sub
+		if ('remote' in newEntry) {
+			const lastIndex = log.length - 1;
+			const searchStart = Math.max(0, lastIndex - 9); // Last 10 entries
+
+			// Search backwards for the last entry with same remote/sub
+			for (let i = lastIndex; i >= searchStart; i--) {
+				const entry = log[i];
+				if ('remote' in entry && entry.remote === newEntry.remote) {
+					const entrySub = entry.sub || '';
+					const newSub = newEntry.sub || '';
+					if (entrySub === newSub) {
+						// Found matching remote/sub - compare content
+						return JSON.stringify(entry) === JSON.stringify(newEntry);
+					}
+				}
+			}
+			// No matching remote/sub found in last 10 entries, not a duplicate
+			return false;
+		}
+
+		// For global entries, just check the very last entry
+		const lastEntry = log[log.length - 1];
+		return JSON.stringify(lastEntry) === JSON.stringify(newEntry);
+	}
+
+	/**
+	 * Remove duplicate phase entries from the last 10 log entries, keeping only the latest.
+	 * This reduces noise by removing earlier progress updates for the same remote/sub/phase.
+	 */
+	private removeDuplicatePhaseEntries(newEntry: GitManagerLogEntryServer) {
+		const log = store.git_log;
+		const lastIndex = log.length - 1;
+		const searchStart = Math.max(0, lastIndex - 10);
+
+		// Build key for the new entry
+		const newKey = `${newEntry.remote}|${newEntry.sub || ''}|${newEntry.progress?.phase}`;
+
+		// Search backwards through last 10 entries (excluding the just-added entry)
+		for (let i = lastIndex - 1; i >= searchStart; i--) {
+			const entry = log[i];
+			if ('remote' in entry && entry.progress?.phase) {
+				const key = `${entry.remote}|${entry.sub || ''}|${entry.progress.phase}`;
+				if (key === newKey) {
+					// Found a duplicate - remove it (splice triggers reactivity)
+					log.splice(i, 1);
+					// Only remove the first duplicate found since entries come in fast
+					break;
+				}
+			}
 		}
 	}
 
