@@ -36,12 +36,16 @@ export default defineConfig({
 				navigateFallback: '/',
 				navigateFallbackDenylist: [
 					/^\/api\//,
+					/^\/_app\//, // Exclude SvelteKit app directory to prevent serving HTML for JS modules
 					/\.(?:png|jpg|jpeg|svg|gif|webp|ico|css|js|woff|woff2)$/
 				],
 				// ⚠️ REQUIRED: Service worker must take control immediately for offline to work
 				// Without these: hard refresh while offline fails with ERR_INTERNET_DISCONNECTED
 				skipWaiting: true,
 				clientsClaim: true,
+				// ⚠️ CRITICAL: Clean up old caches when service worker updates
+				// Without this: old cached assets persist and cause MIME type errors on update
+				cleanupOutdatedCaches: true,
 				runtimeCaching: [
 					{
 						urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

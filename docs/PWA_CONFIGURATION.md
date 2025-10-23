@@ -58,7 +58,25 @@ additionalManifestEntries: [
 - We need BOTH entries to ensure navigation fallback works
 - Without this: offline navigation fails with `non-precached-url` errors
 
-### 3. `skipWaiting: true` and `clientsClaim: true` (REQUIRED!)
+### 3. `navigateFallbackDenylist` with `^\/_app\//` (CRITICAL!)
+
+```typescript
+navigateFallbackDenylist: [
+	/^\/api\//,
+	/^\/_app\//, // CRITICAL: Prevents serving HTML for JS module requests
+	/\.(?:png|jpg|jpeg|svg|gif|webp|ico|css|js|woff|woff2)$/
+];
+```
+
+**Why this is critical:**
+
+- SvelteKit stores all compiled JavaScript modules in `/_app/` directory
+- Without this exclusion: service worker serves `index.html` (text/html) when browser requests `.js` files
+- This causes MIME type errors: "Expected a JavaScript module script but the server responded with MIME type text/html"
+- The error appears on every soft reload, breaking the entire application
+- **This is the #1 cause of PWA white screen issues**
+
+### 4. `skipWaiting: true` and `clientsClaim: true` (REQUIRED!)
 
 ```typescript
 skipWaiting: true,      // Activate new SW immediately
@@ -71,6 +89,19 @@ clientsClaim: true      // Take control of pages immediately
 - `skipWaiting` makes new service worker activate immediately
 - `clientsClaim` makes it control all pages right away
 - Without these: hard refresh while offline fails with `ERR_INTERNET_DISCONNECTED`
+
+### 5. `cleanupOutdatedCaches: true` (REQUIRED!)
+
+```typescript
+cleanupOutdatedCaches: true;
+```
+
+**Why this is critical:**
+
+- Automatically removes old Workbox caches when service worker updates
+- Without this: stale cached assets persist after deployments
+- Prevents MIME type errors from old cached content after updates
+- Essential for smooth PWA update experience
 
 ## Tested and Working Scenarios
 

@@ -34,9 +34,19 @@
 		}
 	});
 
-	function handleUpdate() {
+	async function handleUpdate() {
 		if (updateSW) {
-			updateSW(true);
+			try {
+				// Update the service worker
+				await updateSW(true);
+				// Force a hard reload to ensure all cached content is refreshed
+				// This bypasses the browser cache and ensures fresh content
+				window.location.reload();
+			} catch (error) {
+				console.error('PWA update failed:', error);
+				// Force reload anyway to attempt recovery
+				window.location.reload();
+			}
 		}
 	}
 
