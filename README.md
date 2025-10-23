@@ -30,6 +30,7 @@ GitWorkshop.dev is a fully functional Progressive Web App that can be installed 
 **Development mode** (`pnpm run dev`): PWA disabled to avoid errors
 
 **Preview mode** (`pnpm run build && pnpm run preview`): Full PWA testing
+
 - Test offline: DevTools → Network → Check "Offline" → Refresh
 - Service worker registers and caches assets
 - Offline navigation works
