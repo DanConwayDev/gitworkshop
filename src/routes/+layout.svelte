@@ -16,7 +16,7 @@
 	const commitDate = __COMMIT_DATE__;
 </script>
 
-test21
+test22
 <div class="gw-page-container">
 	<PwaUpdateNotification />
 	<Navbar />
