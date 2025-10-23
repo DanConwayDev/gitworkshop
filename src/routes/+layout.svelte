@@ -8,6 +8,10 @@
 	import Container from '$lib/components/Container.svelte';
 	import { resolve } from '$app/paths';
 	let { children } = $props();
+
+	// Build-time version info injected by Vite
+	const gitCommit = __GIT_COMMIT__;
+	const commitDate = __COMMIT_DATE__;
 </script>
 
 <div class="gw-page-container">
@@ -28,6 +32,7 @@
 							<img src="/icons/icon.svg" alt="gitworkshop.dev logo" class="inline h-5 w-5" />
 						</a>
 						<span class="mt-0.5 ml-2">GitWorkshop.dev</span>
+						<span class="ml-2 opacity-50">v{commitDate}+{gitCommit}</span>
 					</div>
 				</div>
 				<div class="grow"></div>

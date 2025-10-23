@@ -1,8 +1,30 @@
 import { defineConfig } from 'vitest/config';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
+import { execSync } from 'child_process';
+
+// Get git commit info at build time
+function getGitInfo() {
+	try {
+		// Use Netlify env vars if available, otherwise use git commands
+		const commitHash =
+			process.env.COMMIT_REF || execSync('git rev-parse --short HEAD').toString().trim();
+		const commitDate = process.env.NETLIFY
+			? new Date().toISOString().split('T')[0]
+			: execSync('git log -1 --format=%cd --date=short').toString().trim();
+		return { commitHash, commitDate };
+	} catch {
+		return { commitHash: 'dev', commitDate: new Date().toISOString().split('T')[0] };
+	}
+}
+
+const { commitHash, commitDate } = getGitInfo();
 
 export default defineConfig({
+	define: {
+		__GIT_COMMIT__: JSON.stringify(commitHash),
+		__COMMIT_DATE__: JSON.stringify(commitDate)
+	},
 	plugins: [
 		sveltekit(),
 		SvelteKitPWA({
