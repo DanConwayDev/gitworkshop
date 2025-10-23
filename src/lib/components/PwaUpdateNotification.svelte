@@ -37,14 +37,29 @@
 	async function handleUpdate() {
 		if (updateSW) {
 			try {
-				// Update the service worker
+				console.log('PWA: Starting update process...');
+
+				// Clear all caches first to prevent stale content
+				if ('caches' in window) {
+					const cacheNames = await caches.keys();
+					console.log('PWA: Clearing', cacheNames.length, 'caches');
+					await Promise.all(cacheNames.map((name) => caches.delete(name)));
+				}
+
+				// Update the service worker (this triggers skipWaiting)
 				await updateSW(true);
-				// Force a hard reload to ensure all cached content is refreshed
-				// This bypasses the browser cache and ensures fresh content
+
+				console.log('PWA: Service worker updated, reloading...');
+
+				// Force a hard reload - this will fetch fresh content from the server
 				window.location.reload();
 			} catch (error) {
 				console.error('PWA update failed:', error);
-				// Force reload anyway to attempt recovery
+				// Even if update fails, clear caches and reload to recover
+				if ('caches' in window) {
+					const cacheNames = await caches.keys();
+					await Promise.all(cacheNames.map((name) => caches.delete(name)));
+				}
 				window.location.reload();
 			}
 		}

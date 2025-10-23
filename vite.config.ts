@@ -14,7 +14,7 @@ export default defineConfig({
 			selfDestroying: false,
 			manifest: false, // We use static manifest.json
 			injectRegister: 'auto',
-			registerType: 'autoUpdate',
+			registerType: 'prompt', // Changed from 'autoUpdate' to require user action
 			devOptions: {
 				enabled: false, // Disable in dev mode to avoid errors
 				suppressWarnings: true,
@@ -39,10 +39,10 @@ export default defineConfig({
 					/^\/_app\//, // Exclude SvelteKit app directory to prevent serving HTML for JS modules
 					/\.(?:png|jpg|jpeg|svg|gif|webp|ico|css|js|woff|woff2)$/
 				],
-				// ⚠️ REQUIRED: Service worker must take control immediately for offline to work
-				// Without these: hard refresh while offline fails with ERR_INTERNET_DISCONNECTED
-				skipWaiting: true,
-				clientsClaim: true,
+				// ⚠️ IMPORTANT: Do NOT use skipWaiting here - it causes MIME errors on update
+				// The new SW will wait until user clicks "Update" button, then skipWaiting is called manually
+				skipWaiting: false,
+				clientsClaim: true, // Still claim clients, but only after user-initiated update
 				// ⚠️ CRITICAL: Clean up old caches when service worker updates
 				// Without this: old cached assets persist and cause MIME type errors on update
 				cleanupOutdatedCaches: true,

@@ -76,19 +76,28 @@ navigateFallbackDenylist: [
 - The error appears on every soft reload, breaking the entire application
 - **This is the #1 cause of PWA white screen issues**
 
-### 4. `skipWaiting: true` and `clientsClaim: true` (REQUIRED!)
+### 4. `skipWaiting: false` and `registerType: 'prompt'` (CRITICAL!)
 
 ```typescript
-skipWaiting: true,      // Activate new SW immediately
-clientsClaim: true      // Take control of pages immediately
+// In vite.config.ts:
+registerType: 'prompt',  // Wait for user to click "Update" button
+skipWaiting: false,      // Don't auto-activate - prevents MIME errors!
+clientsClaim: true       // Claim clients after user-initiated update
 ```
 
-**Why these are critical:**
+**Why skipWaiting MUST be false:**
 
-- Service workers don't intercept the very first page load by default
-- `skipWaiting` makes new service worker activate immediately
-- `clientsClaim` makes it control all pages right away
-- Without these: hard refresh while offline fails with `ERR_INTERNET_DISCONNECTED`
+- **With `skipWaiting: true`**: New SW takes control while old page is still loaded
+- **Problem**: Old HTML references old JS files (e.g., `start.ABC123.js`)
+- **Result**: Browser tries to load files that don't exist → MIME type errors → white screen
+- **With `skipWaiting: false`**: New SW waits in "waiting" state until user clicks "Update"
+- **Solution**: User gets notification, clicks Update → `updateSW()` calls skipWaiting → reload with fresh content
+
+**Why registerType MUST be 'prompt':**
+
+- `'autoUpdate'` would auto-activate the new SW (same problem as skipWaiting)
+- `'prompt'` shows update notification and waits for user action
+- User controls when the update happens via the update button
 
 ### 5. `cleanupOutdatedCaches: true` (REQUIRED!)
 
