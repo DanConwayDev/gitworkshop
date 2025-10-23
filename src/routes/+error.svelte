@@ -1,26 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { base } from '$app/paths';
-	import { onMount } from 'svelte';
 	import ContainerCenterPage from '$lib/components/ContainerCenterPage.svelte';
+	import { network_status } from '$lib/store.svelte';
 
 	let { data } = $props<{ data: { error?: Error & { status?: number } } }>();
-
-	// Check if we're offline
-	let isOffline = $state(!navigator.onLine);
-
-	onMount(() => {
-		const handleOnline = () => (isOffline = false);
-		const handleOffline = () => (isOffline = true);
-
-		window.addEventListener('online', handleOnline);
-		window.addEventListener('offline', handleOffline);
-
-		return () => {
-			window.removeEventListener('online', handleOnline);
-			window.removeEventListener('offline', handleOffline);
-		};
-	});
 
 	const error = data?.error || $page.error;
 </script>
@@ -28,7 +12,7 @@
 <ContainerCenterPage>
 	<div class="flex flex-col items-center gap-6 text-center">
 		<svg
-			class="h-24 w-24 opacity-50 {isOffline ? 'text-warning' : 'text-error'}"
+			class="h-24 w-24 opacity-50 {network_status.offline ? 'text-warning' : 'text-error'}"
 			fill="none"
 			stroke="currentColor"
 			viewBox="0 0 24 24"
@@ -50,7 +34,7 @@
 			</p>
 		</div>
 
-		{#if isOffline}
+		{#if network_status.offline}
 			<div class="alert alert-warning max-w-md">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -71,7 +55,7 @@
 
 		<div class="flex gap-4">
 			<button class="btn btn-primary" onclick={() => window.location.reload()}>
-				{isOffline ? 'Try Again' : 'Reload'}
+				{network_status.offline ? 'Try Again' : 'Reload'}
 			</button>
 			<button class="btn btn-ghost" onclick={() => (window.location.href = `${base}/`)}>
 				Go Home

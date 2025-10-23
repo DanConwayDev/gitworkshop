@@ -15,8 +15,17 @@ export const search = $state({
 });
 
 export const network_status: { offline: boolean } = $state({
-	offline: false
+	offline: browser ? navigator.onLine : false
 });
+
+if (browser) {
+	window.addEventListener('online', () => {
+		network_status.offline = false;
+	});
+	window.addEventListener('offline', () => {
+		network_status.offline = true;
+	});
+}
 
 class Store {
 	#stored_url_pref: null | RepoRouteType = $state(
