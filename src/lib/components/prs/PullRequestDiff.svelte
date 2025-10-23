@@ -8,7 +8,12 @@
 	import { onMount } from 'svelte';
 	import { PrUpdateKind } from '$lib/kinds';
 	import ChangesToFiles from '../explorer/ChangesToFiles.svelte';
-	import { getGitLog, getLatestLogFromEachServer, remoteNameToShortName } from '$lib/git-utils';
+	import {
+		getGitLog,
+		getLatestLogFromEachServer,
+		getFetchStatusMessage,
+		remoteNameToShortName
+	} from '$lib/git-utils';
 	import GitServerStateIndicator from '../GitServerStateIndicator.svelte';
 	import AlertWarning from '../AlertWarning.svelte';
 
@@ -97,6 +102,9 @@
 	let server_latest_log = $derived(
 		getLatestLogFromEachServer(store.git_log, sub_filter, clone_urls)
 	);
+	let statusMessage = $derived(
+		getFetchStatusMessage(store.git_log, sub_filter, clone_urls, diff ? [diff] : undefined)
+	);
 </script>
 
 {#snippet showServerStatus()}
@@ -137,9 +145,7 @@
 					class:opacity-0={!waited && loading}
 				>
 					<span class="loading loading-spinner loading-sm opacity-60"></span>
-					<span class=" text-muted ml-2 text-[0.85rem] font-medium"
-						>fetching latest PR commit data</span
-					>
+					<span class=" text-muted ml-2 text-[0.85rem] font-medium">{statusMessage}</span>
 				</div>
 			</div>
 		</div>
