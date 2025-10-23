@@ -11,11 +11,22 @@
 
 	let { event }: { event: NostrEvent } = $props();
 
+	function moreThan20LiteralBackslashN(s: string) {
+		let start = 0,
+			idx,
+			count = 0;
+		while ((idx = s.indexOf('\\n', start)) !== -1) {
+			if (++count > 20) return true;
+			start = idx + 2;
+		}
+		return false;
+	}
 	let content = $derived(
-		event.content.includes('\\n')
-			? nostrEventToDocTree(
+		moreThan20LiteralBackslashN(event.content) // probably done by mistake
+			? // added specifically because I created note18hh0lk6grnwljd6y73qgwvmcagtwwnz6n0pvv5jvcxzenszh5t3saer2py via `ngit send`
+				nostrEventToDocTree(
 					{
-						content: event.content.replace(/\\n/g, '\n\n\n'),
+						content: event.content.replace(/\\n/g, '\n'),
 						tags: []
 					} as unknown as NostrEvent,
 					true
