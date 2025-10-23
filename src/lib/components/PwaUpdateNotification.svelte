@@ -15,13 +15,26 @@
 						immediate?: boolean;
 						onNeedRefresh?: () => void;
 						onOfflineReady?: () => void;
+						onRegisteredSW?: (
+							swScriptUrl: string,
+							registration?: ServiceWorkerRegistration
+						) => void;
 					}) => (reloadPage?: boolean) => Promise<void>;
 				};
 
 				updateSW = registerSW({
 					immediate: true,
 					onNeedRefresh() {
-						showUpdate = true;
+						// Only show update prompt if there's actually a waiting service worker
+						// This prevents showing the prompt on fresh page loads where the new SW is already active
+						navigator.serviceWorker.getRegistration().then((registration) => {
+							if (registration && registration.waiting) {
+								console.log('PWA: New version available, showing update prompt');
+								showUpdate = true;
+							} else {
+								console.log('PWA: New SW already active, no prompt needed');
+							}
+						});
 					},
 					onOfflineReady() {
 						console.log('PWA: App ready to work offline');
