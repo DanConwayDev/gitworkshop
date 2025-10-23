@@ -20,7 +20,7 @@ export default defineConfig({
 				type: 'module'
 			},
 			workbox: {
-				globDirectory: '.svelte-kit/output/client',
+				globDirectory: '.svelte-kit/output/client', // this shouldnt be 'build'. PWA issues were fixed by using this globDirectory and adding additionalManifestEntries
 				globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2,json}'],
 				// Important fix: Explicitly add root URLs to precache manifest
 				// This bypasses the glob timing issue where index.html doesn't exist yet
