@@ -142,11 +142,13 @@ function processHuristic(
 ) {
 	relay_info.huristics = [
 		// remove any older huristics with same indicators
+		// but preserve successful checks when the new check is unsuccessful
 		...relay_info.huristics.filter(
 			(v) =>
 				!isRelayCheck(v) ||
 				v.type !== relay_check.type ||
-				relay_check.kinds.join('') !== v.kinds.join('')
+				relay_check.kinds.join('') !== v.kinds.join('') ||
+				(v.up_to_date && !relay_check.up_to_date)
 		),
 		relay_check
 	];
