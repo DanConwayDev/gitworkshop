@@ -484,11 +484,21 @@ export const getFetchStatusMessage = (
 		return 'loading commit details';
 	}
 
+	// Check if everything is complete
+	const allLogs = getLatestLogFromEachServer(git_logs, sub_filter, clone_urls);
+	const activeLogs = allLogs.filter((log) => log.state !== 'failed');
+	const allFetched = activeLogs.length > 0 && activeLogs.every((log) => log.state === 'fetched');
+
+	if (allFetched) {
+		return 'loading changes';
+	}
+
 	// Check explorer status
 	if (isExplorer) {
 		const explorerLogs = getLatestLogFromEachServer(git_logs, [explorerSub], clone_urls);
-		const hasCompletedExplorer = explorerLogs.some((log) => log.state === 'fetched');
-		const isFetchingExplorer = explorerLogs.some((log) => log.state === 'fetching');
+		const activeExplorerLogs = explorerLogs.filter((log) => log.state !== 'failed');
+		const hasCompletedExplorer = activeExplorerLogs.some((log) => log.state === 'fetched');
+		const isFetchingExplorer = activeExplorerLogs.some((log) => log.state === 'fetching');
 
 		if (!hasCompletedExplorer && isFetchingExplorer) {
 			return 'fetching default branch data';
@@ -498,19 +508,12 @@ export const getFetchStatusMessage = (
 	// Check other subs status
 	if (otherSubs.length > 0) {
 		const otherLogs = getLatestLogFromEachServer(git_logs, otherSubs, clone_urls);
-		const isFetchingOthers = otherLogs.some((log) => log.state === 'fetching');
+		const activeOtherLogs = otherLogs.filter((log) => log.state !== 'failed');
+		const isFetchingOthers = activeOtherLogs.some((log) => log.state === 'fetching');
 
 		if (isFetchingOthers) {
 			return 'fetching commit data';
 		}
-	}
-
-	// Check if everything is complete
-	const allLogs = getLatestLogFromEachServer(git_logs, sub_filter, clone_urls);
-	const allFetched = allLogs.length > 0 && allLogs.every((log) => log.state === 'fetched');
-
-	if (allFetched) {
-		return 'data fetched';
 	}
 
 	// Default fallback
