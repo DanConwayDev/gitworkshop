@@ -7,6 +7,8 @@
 	--color-base-content-400: oklch(100% 0 0); /* white */
 	--color-base-alt-300: oklch(20.8% 0.042 265.755); /* this is --color-slate-900 */
 	--color-base-alt-400: oklch(70.8% 0.042 265.755);
+	--color-subtle-error: oklch(0.41 0.11 23.38); /* very subtle red */
+	--color-subtle-error-content: oklch(100% 0 0); /* white instead of black */
 }
 @plugin 'daisyui/theme' {
 	name: 'light';
@@ -25,6 +27,8 @@
 
 	--color-base-alt-300: oklch(95% 0 0);
 	--color-base-alt-400: oklch(70.8% 0.042 265.755); /* this is --color-slate-900 */
+	--color-subtle-error: oklch(0.55 0.15 23.38); /* very subtle red for light theme */
+	--color-subtle-error-content: oklch(100% 0 0); /* white */
 }
 
 @plugin 'daisyui/theme' {
@@ -35,6 +39,8 @@
 	--color-base-content-400: oklch(100% 0 0); /* white */
 	--color-base-alt-300: oklch(20.8% 0.042 265.755); /* this is --color-slate-900 */
 	--color-base-alt-400: oklch(70.8% 0.042 265.755);
+	--color-subtle-error: oklch(0.41 0.11 23.38); /* very subtle red */
+	--color-subtle-error-content: oklch(100% 0 0 / 0.8); /* white 80% opacity*/
 }
 
 /* @plugin "daisyui/theme" {
