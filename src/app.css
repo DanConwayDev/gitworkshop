@@ -49,3 +49,23 @@
 	--color-base-400: oklch(92% 0 0);
 	--color-neutral: oklch(92% 0.004 286.32);
 } */
+
+/* iOS Safe Area Insets - prevents content from being hidden under notches */
+/* These CSS environment variables only apply on iOS devices with notches/dynamic island */
+/* On other platforms, they default to 0px and have no effect */
+:root {
+	--safe-area-inset-top: env(safe-area-inset-top, 0px);
+	--safe-area-inset-right: env(safe-area-inset-right, 0px);
+	--safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+	--safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+/* Set body background to match NavBar color (base-400) */
+/* This ensures the safe area at the top has the same color as the navbar */
+body {
+	background-color: oklch(var(--b4) / var(--tw-bg-opacity, 1));
+	padding-top: var(--safe-area-inset-top);
+	padding-right: var(--safe-area-inset-right);
+	padding-bottom: var(--safe-area-inset-bottom);
+	padding-left: var(--safe-area-inset-left);
+}
