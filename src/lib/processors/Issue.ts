@@ -154,18 +154,18 @@ export function updateRepoMetrics(
 				[IssueOrPrStatus.Draft]: []
 			};
 		}
-		if (!repo[type][item.status].includes(item.uuid))
-			StatusKinds.forEach((status_kind) => {
-				if (!repo[type]) return; // to stop typescript complaining
-				const kind = status_kind as IssueOrPrStatus; // to stop typescript complaining
-				if (kind === item.status && !item.deleted_ids.includes(item.uuid)) {
-					if (!repo[type][kind].includes(item.uuid)) {
-						repo[type][kind].push(item.uuid);
-					}
-				} else {
-					repo[type][kind] = repo[type][kind].filter((uuid) => uuid !== item.uuid);
+		// Always update repo metrics to ensure cached counts stay in sync
+		StatusKinds.forEach((status_kind) => {
+			if (!repo[type]) return; // to stop typescript complaining
+			const kind = status_kind as IssueOrPrStatus; // to stop typescript complaining
+			if (kind === item.status && !item.deleted_ids.includes(item.uuid)) {
+				if (!repo[type][kind].includes(item.uuid)) {
+					repo[type][kind].push(item.uuid);
 				}
-			});
+			} else {
+				repo[type][kind] = repo[type][kind].filter((uuid) => uuid !== item.uuid);
+			}
+		});
 		items.repos.set(a_ref, repo);
 	});
 }
