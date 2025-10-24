@@ -181,6 +181,10 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				});
 
 				// Determine total bytes (if provided)
+				// Note: Git servers rarely provide Content-Length for pack files due to:
+				// - Chunked transfer encoding (size unknown upfront)
+				// - Dynamic pack file generation based on client's existing objects
+				// - CORS proxies may strip headers
 				const contentLength = response.headers.get('content-length');
 				const totalBytes = contentLength ? parseInt(contentLength, 10) : undefined;
 				const totalKB = totalBytes ? Math.round(totalBytes / 1024) : undefined;
@@ -562,6 +566,12 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 					if (tracker) {
 						tracker.lastUpdate = Date.now();
 						tracker.stalled = false;
+					}
+					// Debug: Log when we get progress with total from isomorphic-git
+					if (progress.total !== undefined) {
+						console.log(
+							`[git-manager-worker] Progress from isomorphic-git: ${progress.phase} ${progress.loaded}/${progress.total}`
+						);
 					}
 					this.log({ remote, state: 'fetching', progress, sub });
 				}
