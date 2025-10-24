@@ -28,16 +28,92 @@ import {
 export const isCoverLetter = (s: string): boolean => {
 	return s.indexOf('PATCH 0/') > 0;
 };
-/** this doesn't work for all patch formats and options */
+
+/**
+ * Extract commit message from git format-patch output.
+ * Mimics git's behavior when applying patches with `git am`.
+ */
 export const extractPatchMessage = (s: string): string | undefined => {
 	try {
-		if (isCoverLetter(s)) {
-			return s.substring(s.indexOf('] ') + 2);
+		// Find the Subject header
+		const subjectMatch = s.match(/^Subject: \[PATCH[^\]]*\] (.*)$/m);
+		if (!subjectMatch) {
+			return undefined;
 		}
-		const t = s.split('Subject: [')[1].split('] ')[1];
 
-		if (t.split('\n\n---\n ').length > 1) return t.split('\n\n---\n ')[0];
-		return t.split('\n\ndiff --git ')[0].split('\n\n ').slice(0, -1).join('');
+		// Get position after the Subject line
+		const subjectLineEnd = (subjectMatch.index || 0) + subjectMatch[0].length;
+		const remaining = s.substring(subjectLineEnd);
+
+		// Handle multi-line subjects (continuation lines start with space)
+		let subject = subjectMatch[1];
+		const lines = remaining.split('\n');
+		let bodyStartIndex = 0;
+
+		// Collect continuation lines (lines starting with space after Subject)
+		for (let i = 0; i < lines.length; i++) {
+			if (i === 0 && lines[i] === '') {
+				// Empty line after subject - this is normal
+				bodyStartIndex = i + 1;
+				break;
+			} else if (lines[i].startsWith(' ')) {
+				// Continuation line
+				subject += '\n' + lines[i].substring(1);
+				bodyStartIndex = i + 1;
+			} else if (lines[i] === '') {
+				// Empty line marks end of subject continuation
+				bodyStartIndex = i + 1;
+				break;
+			} else {
+				// Non-continuation, non-empty line - subject is done
+				bodyStartIndex = i;
+				break;
+			}
+		}
+
+		// Get the body starting after subject continuation lines
+		const bodyLines = lines.slice(bodyStartIndex);
+		let message = subject;
+
+		// Find where the commit message ends
+		// The message ends at the line BEFORE the file statistics section
+		// File stats look like: " filename | X +---" or " filename | X +-"
+		let messageEndIndex = bodyLines.length;
+
+		for (let i = 0; i < bodyLines.length; i++) {
+			const line = bodyLines[i];
+
+			// Check for file statistics line (starts with space, has |, has change indicators)
+			// Examples: " helpers.go | 2 +-", " file.txt | 10 +++++-----"
+			// This is the definitive end of the commit message
+			if (line.match(/^ .+ \| \d+/)) {
+				messageEndIndex = i;
+				break;
+			}
+
+			// Check for start of diff (alternative end marker)
+			if (line.startsWith('diff --git ')) {
+				messageEndIndex = i;
+				break;
+			}
+		}
+
+		// Add body if present
+		if (messageEndIndex > 0) {
+			// Join all lines up to the separator/stats/diff and trim completely
+			let bodyText = bodyLines.slice(0, messageEndIndex).join('\n').trim();
+
+			// Remove trailing "---" if it's the last line (patch separator with no body)
+			if (bodyText === '---' || bodyText.endsWith('\n---')) {
+				bodyText = bodyText.replace(/\n?---$/, '').trim();
+			}
+
+			if (bodyText) {
+				message += '\n\n' + bodyText;
+			}
+		}
+
+		return message;
 	} catch {
 		return undefined;
 	}
