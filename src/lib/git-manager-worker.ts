@@ -192,6 +192,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				async function* bodyIterator(this: GitManagerWorker): AsyncIterableIterator<Uint8Array> {
 					if (!stream) return;
 					const reader = stream.getReader();
+					const tracker_key = `${remote}-${sub}`;
 					try {
 						while (true) {
 							const read = await reader.read();
@@ -200,6 +201,13 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 							const chunkBytes = value.byteLength;
 							loadedBytes += chunkBytes;
 							const loadedKB = Math.round(loadedBytes / 1024);
+
+							// Update progress tracker timestamp
+							const tracker = this.fetch_progress_tracker.get(tracker_key);
+							if (tracker) {
+								tracker.lastUpdate = Date.now();
+								tracker.stalled = false;
+							}
 
 							// Log progress; cast this to the surrounding class type as needed
 							try {
@@ -264,6 +272,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 	}[] = []; // fasted first
 	remotes_using_proxy: string[] = [];
 	remote_states: Map<string, string[][]> = new Map();
+	fetch_progress_tracker: Map<string, { lastUpdate: number; stalled: boolean }> = new Map();
 	file_structure?: FileEntry[];
 	file_content?: string;
 	selected_ref?: { ref: string; commit_id: string };
@@ -284,6 +293,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 		this.connected_remotes = [];
 		this.remotes_using_proxy = [];
 		this.remote_states = new Map();
+		this.fetch_progress_tracker = new Map();
 		this.file_structure = undefined;
 		this.file_content = undefined;
 		this.selected_ref = undefined;
@@ -362,6 +372,9 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				await new Promise<void>((r) => {
 					// eslint-disable-next-line prefer-const
 					let int_id: ReturnType<typeof setInterval> | undefined;
+
+					let stall_check_id: ReturnType<typeof setInterval> | undefined;
+
 					const tryRun = async () => {
 						if (
 							ready ||
@@ -372,8 +385,47 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 							if (int_id) clearInterval(int_id);
 							// mark it as cleared
 							if (!cleared_for_early_fetch.includes(url)) cleared_for_early_fetch.push(url);
+
+							// Start stall monitoring for critical first fetch (10s stall threshold)
+							if (!ready) {
+								const stallThreshold = 10000;
+								stall_check_id = setInterval(() => {
+									const tracker_key = `${remote}-explorer`;
+									const tracker = this.fetch_progress_tracker.get(tracker_key);
+									if (tracker) {
+										const timeSinceUpdate = Date.now() - tracker.lastUpdate;
+										if (timeSinceUpdate > stallThreshold && !tracker.stalled) {
+											// Mark as stalled
+											tracker.stalled = true;
+											// This fetch has stalled - fail over to next server
+											if (stall_check_id) clearInterval(stall_check_id);
+											this.log({
+												remote,
+												state: 'failed',
+												msg: 'stalled (no progress for 10s), passing to next server',
+												sub: 'explorer'
+											});
+											// Don't mark as ready - let next server try
+											// Clear next connected remote to take over
+											const next_one = this.connected_remotes.find(
+												(rm) => !cleared_for_early_fetch.includes(rm.url)
+											);
+											if (next_one) {
+												cleared_for_early_fetch.push(next_one.url);
+											} else {
+												// No more servers - empty to allow retry when new server connects
+												cleared_for_early_fetch = [];
+											}
+											r();
+										}
+									}
+								}, 5000); // Check every 5 seconds
+							}
+
 							// do fetch
 							const res = await this.fetchFromRemote(remote);
+							if (stall_check_id) clearInterval(stall_check_id);
+
 							await this.refreshSelectedRef();
 							// if success we are ready to fetch from all remotes async
 							if (typeof res !== 'string') ready = true;
@@ -392,6 +444,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 							r();
 						}
 					};
+
 					int_id = setInterval(tryRun, 50);
 					tryRun();
 				});
@@ -488,6 +541,11 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 	): Promise<FetchResult | string> {
 		await this.addRemotes(remote); // added as some reports error "The function requires a remote of 'remote OR url' paremeter but none was provied"
 		const use_proxy = this.remotes_using_proxy.includes(remote);
+		const tracker_key = `${remote}-${sub}`;
+
+		// Initialize progress tracking
+		this.fetch_progress_tracker.set(tracker_key, { lastUpdate: Date.now(), stalled: false });
+
 		this.log({ remote, state: 'fetching', sub });
 		try {
 			const res = await git.fetch({
@@ -500,10 +558,17 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 				depth: 200, // https://github.com/isomorphic-git/isomorphic-git/issues/1735
 				tags: true,
 				onProgress: (progress) => {
+					const tracker = this.fetch_progress_tracker.get(tracker_key);
+					if (tracker) {
+						tracker.lastUpdate = Date.now();
+						tracker.stalled = false;
+					}
 					this.log({ remote, state: 'fetching', progress, sub });
 				}
 				// singleBranch: true,
 			});
+			this.fetch_progress_tracker.delete(tracker_key);
+
 			if (sub == 'explorer' && res.defaultBranch == null)
 				throw Error('no default branch, usually a bad sign');
 			this.log({ remote, state: 'fetched', sub });
@@ -526,6 +591,7 @@ export class GitManagerWorker implements GitManagerRpcMethodSigs {
 			if (sub == 'explorer') this.refreshSelectedRef();
 			return res;
 		} catch (error) {
+			this.fetch_progress_tracker.delete(tracker_key);
 			this.log({ remote, state: 'failed', msg: `${error}`, sub });
 			return `${error}`;
 		}
