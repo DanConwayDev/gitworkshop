@@ -29,7 +29,7 @@
 	let nip07 = $state(false);
 	let private_key = $state(false);
 	let private_key_invalid = $state(false);
-	let amber_feature_toggle = $state(true);
+	let amber_feature_toggle = $state(false);
 	let amber = $state(false);
 	let nostr_connect = $state(false);
 	let bunker_url = $state(false);
