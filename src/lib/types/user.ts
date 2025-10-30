@@ -99,4 +99,7 @@ export interface AccountSummary {
 	pubkey: PubKeyString;
 	id: string;
 	type: string;
+	metadata?: {
+		connectionType?: 'bunker' | 'nostr-connect';
+	};
 }

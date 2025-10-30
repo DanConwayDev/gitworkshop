@@ -18,7 +18,8 @@ registerCommonAccountTypes(manager);
 const accountJSONtoAccountSummary = (a: SerializedAccount<unknown, unknown>): AccountSummary => ({
 	id: a.id,
 	pubkey: a.pubkey,
-	type: a.type
+	type: a.type,
+	metadata: a.metadata as { connectionType?: 'bunker' | 'nostr-connect' } | undefined
 });
 
 export const nostr_connect_pools = new SimplePool();

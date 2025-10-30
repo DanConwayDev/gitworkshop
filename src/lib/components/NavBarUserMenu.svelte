@@ -7,7 +7,7 @@
 	import UserHeader from './user/UserHeader.svelte';
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import RepoSummaryCard from './repo/RepoSummaryCard.svelte';
-	import { IssueOrPrStatus, type RepoTableItem } from '$lib/types';
+	import { IssueOrPrStatus, type RepoTableItem, type AccountSummary } from '$lib/types';
 
 	let is_open = $state(false);
 	const toggle = () => {
@@ -33,6 +33,13 @@
 		(repo_item.PRs?.[IssueOrPrStatus.Applied].length ?? 0) +
 		(repo_item.PRs?.[IssueOrPrStatus.Closed].length ?? 0);
 	let repos_sorted = $derived([...repos].sort((a, b) => countPRsIssues(b) - countPRsIssues(a)));
+
+	const getAccountTypeLabel = (account: AccountSummary): string => {
+		if (account.type === 'nostr-connect' && account.metadata?.connectionType === 'bunker') {
+			return 'bunker';
+		}
+		return account.type;
+	};
 </script>
 
 <div class="relative ml-2">
@@ -118,7 +125,7 @@
 								</div>
 							{/if}
 						</div>
-						<div class="text-neutral-content px-3 text-sm">{account.type}</div>
+						<div class="text-neutral-content px-3 text-sm">{getAccountTypeLabel(account)}</div>
 					{:else}
 						<button
 							class="flex grow items-center"
@@ -130,7 +137,7 @@
 								<UserHeader user={account.pubkey} link_to_profile={false} />
 							</div>
 							<div class="grow"></div>
-							<div class="text-neutral-content px-3 text-sm">{account.type}</div>
+							<div class="text-neutral-content px-3 text-sm">{getAccountTypeLabel(account)}</div>
 						</button>
 					{/if}
 					<button

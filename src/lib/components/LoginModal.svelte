@@ -79,6 +79,7 @@
 			await nostr_connect_signer.waitForSigner();
 			let pubkey = await nostr_connect_signer.getPublicKey();
 			const account = new NostrConnectAccount(pubkey, nostr_connect_signer);
+			account.metadata = { connectionType: 'nostr-connect' };
 			accounts_manager.addAccount(account);
 			accounts_manager.setActive(account);
 			complete();
@@ -110,6 +111,7 @@
 
 			// Create and add account
 			const account = new NostrConnectAccount(pubkey, nostr_connect_signer);
+			account.metadata = { connectionType: 'bunker' };
 			accounts_manager.addAccount(account);
 			accounts_manager.setActive(account);
 			complete();
