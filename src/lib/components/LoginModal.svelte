@@ -32,18 +32,28 @@
 	let signup_feature_toggle = $state(false);
 	let success = $state(false);
 
-	let nostr_connect_relay_urls = $state('');
+	let nostr_connect_relay_inputs = $state<string[]>(['', '']);
 	const getRelayUrls = (): WebSocketUrl[] => {
 		let relays: WebSocketUrl[] = [];
-		nostr_connect_relay_urls.split(' ').forEach((r) => {
-			if (isWebSocketUrl(r)) relays.push(r);
+		nostr_connect_relay_inputs.forEach((r) => {
+			const trimmed = r.trim();
+			if (trimmed && isWebSocketUrl(trimmed)) relays.push(trimmed);
 		});
 		return relays;
 	};
-	let nostr_connect_relay_invalid = $derived(
-		nostr_connect_relay_urls.length > 0 && getRelayUrls().length === 0
-	);
+
+	// Auto-add new input when last input has valid URL
+	$effect(() => {
+		const lastInput = nostr_connect_relay_inputs[nostr_connect_relay_inputs.length - 1];
+		if (lastInput && lastInput.trim() && isWebSocketUrl(lastInput.trim())) {
+			// Add new empty input if last one is valid
+			if (nostr_connect_relay_inputs[nostr_connect_relay_inputs.length - 1] !== '') {
+				nostr_connect_relay_inputs = [...nostr_connect_relay_inputs, ''];
+			}
+		}
+	});
 	let nostr_connect_url = $state('');
+	let nostr_connect_listening = $state(false);
 	let bunker_url_invalid = $state(false);
 	let bunker_url_connecting = $state(false);
 
@@ -51,11 +61,15 @@
 
 	async function listenForNostrConnect() {
 		let relays = getRelayUrls();
-		if (relays.length === 0 && nostr_connect_relay_urls.length === 0) {
+		// Default to relay.nsec.app if no relays specified
+		if (relays.length === 0) {
 			relays.push('wss://relay.nsec.app');
 		}
+
+		nostr_connect_listening = true;
+		nostr_connect_signer?.close();
+
 		try {
-			nostr_connect_signer?.close();
 			nostr_connect_signer = new NostrConnectSigner({ relays });
 			nostr_connect_url = nostr_connect_signer.getNostrConnectURI({
 				name: 'gitworkshop.dev'
@@ -68,9 +82,18 @@
 			accounts_manager.addAccount(account);
 			accounts_manager.setActive(account);
 			complete();
-		} catch {
-			/* empty */
+		} catch (error) {
+			console.error('Nostr Connect error:', error);
+			// Don't set listening to false - keep showing status
 		}
+	}
+
+	function removeRelayInput(index: number) {
+		nostr_connect_relay_inputs = nostr_connect_relay_inputs.filter((_, i) => i !== index);
+		if (nostr_connect_relay_inputs.length === 0) {
+			nostr_connect_relay_inputs = ['', ''];
+		}
+		listenForNostrConnect();
 	}
 
 	async function connectWithBunkerUrl(bunkerUrl: string) {
@@ -256,31 +279,65 @@
 			</div>
 		{:else if nostr_connect}
 			<div class="prose"><h4 class="text-center">Nostr Connect</h4></div>
-			<div class="mt-3 w-full"><QRCode value={nostr_connect_url} size={512} /></div>
+			<div class="mt-3 flex w-full justify-center">
+				<div class="bg-white p-4">
+					<QRCode value={nostr_connect_url} size={512} />
+				</div>
+			</div>
 			<div class="w-50">
 				<CopyField content={nostr_connect_url} no_border={true} truncate={[100, 105]} />
 			</div>
 			<fieldset class="fieldset w-full">
-				<label class="label" for="nostr-connect-relay">Connection Relay</label>
-				<input
-					id="nostr-connect-relay"
-					type="text"
-					placeholder="wss://relay.nsec.app"
-					class="input input-sm w-full"
-					class:border-error={nostr_connect_relay_invalid}
-					class:focus:border-error={nostr_connect_relay_invalid}
-					bind:value={nostr_connect_relay_urls}
-					onpaste={() => {
-						listenForNostrConnect();
-					}}
-					onfocusout={() => {
-						listenForNostrConnect();
-					}}
-				/>
-				{#if nostr_connect_relay_invalid}
-					<div class="label flex justify-between">
-						<span class="text-error">invalid relay url</span>
-						<span class="text-error">using wss://relay.nsec.app</span>
+				<label class="label" for="nostr-connect-relay-0">
+					<span>Connection Relays</span>
+				</label>
+				<div class="flex flex-col gap-2">
+					{#each nostr_connect_relay_inputs as relay, index (index)}
+						<div class="flex gap-2">
+							<input
+								id="nostr-connect-relay-{index}"
+								type="text"
+								placeholder={index === 0 ? 'wss://relay.nsec.app' : 'wss://...'}
+								class="input input-sm w-full"
+								bind:value={nostr_connect_relay_inputs[index]}
+								oninput={(e) => {
+									const value = (e.target as HTMLInputElement).value.trim();
+									// Only update if it's a complete valid URL
+									if (value && isWebSocketUrl(value)) {
+										listenForNostrConnect();
+									}
+								}}
+								onpaste={() => {
+									setTimeout(() => listenForNostrConnect(), 100);
+								}}
+							/>
+							{#if index > 0 || (nostr_connect_relay_inputs.length > 1 && nostr_connect_relay_inputs[index].trim())}
+								<button
+									class="btn btn-sm btn-square btn-ghost"
+									onclick={() => removeRelayInput(index)}
+									aria-label="Remove relay"
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 16 16"
+										fill="currentColor"
+										class="h-4 w-4"
+									>
+										<path
+											d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"
+										/>
+									</svg>
+								</button>
+							{/if}
+						</div>
+					{/each}
+				</div>
+				{#if nostr_connect_listening}
+					<div class="label">
+						<span class="text-info flex items-center gap-2 text-sm">
+							<span class="loading loading-spinner loading-xs"></span>
+							Listening for signer...
+						</span>
 					</div>
 				{/if}
 			</fieldset>
@@ -290,6 +347,9 @@
 					class="btn btn-sm"
 					onclick={() => {
 						nostr_connect = false;
+						nostr_connect_listening = false;
+						nostr_connect_relay_inputs = ['', ''];
+						nostr_connect_signer?.close();
 					}}>Back</button
 				>
 			</div>
