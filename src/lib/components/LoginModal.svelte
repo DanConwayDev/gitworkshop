@@ -28,6 +28,7 @@
 	let amber_feature_toggle = $state(false);
 	let amber = $state(false);
 	let nostr_connect = $state(false);
+	let bunker_url = $state(false);
 	let signup_feature_toggle = $state(false);
 	let success = $state(false);
 
@@ -43,6 +44,8 @@
 		nostr_connect_relay_urls.length > 0 && getRelayUrls().length === 0
 	);
 	let nostr_connect_url = $state('');
+	let bunker_url_invalid = $state(false);
+	let bunker_url_connecting = $state(false);
 
 	let nostr_connect_signer: NostrConnectSigner | undefined = undefined;
 
@@ -67,6 +70,31 @@
 			complete();
 		} catch {
 			/* empty */
+		}
+	}
+
+	async function connectWithBunkerUrl(bunkerUrl: string) {
+		try {
+			bunker_url_invalid = false;
+			bunker_url_connecting = true;
+			nostr_connect_signer?.close();
+
+			// Create signer from bunker URL
+			nostr_connect_signer = await NostrConnectSigner.fromBunkerURI(bunkerUrl);
+
+			// Get the public key
+			let pubkey = await nostr_connect_signer.getPublicKey();
+
+			// Create and add account
+			const account = new NostrConnectAccount(pubkey, nostr_connect_signer);
+			accounts_manager.addAccount(account);
+			accounts_manager.setActive(account);
+			complete();
+		} catch (error) {
+			console.error('Failed to connect with bunker URL:', error);
+			bunker_url_invalid = true;
+		} finally {
+			bunker_url_connecting = false;
 		}
 	}
 
@@ -180,6 +208,52 @@
 					}}>Back</button
 				>
 			</div>
+		{:else if bunker_url}
+			<div class="prose"><h4 class="text-center">Bunker URL</h4></div>
+			<!-- eslint-disable-next-line svelte/valid-compile -->
+			<!-- svelte-ignore a11y_autofocus -->
+			<input
+				autofocus
+				type="text"
+				placeholder="bunker://"
+				class="input input-sm mt-5 w-full"
+				class:border-error={bunker_url_invalid}
+				class:focus:border-error={bunker_url_invalid}
+				disabled={bunker_url_connecting}
+				onpaste={async (event) => {
+					const s = event.clipboardData?.getData('text');
+					if (!s) {
+						bunker_url_invalid = true;
+						return;
+					}
+					if (s.startsWith('bunker://')) {
+						await connectWithBunkerUrl(s);
+					} else {
+						bunker_url_invalid = true;
+					}
+				}}
+			/>
+			{#if bunker_url_connecting}
+				<div class="label">
+					<span class="text-info flex items-center gap-2 text-sm">
+						<span class="loading loading-spinner loading-xs"></span>
+						Connecting to bunker...
+					</span>
+				</div>
+			{:else if bunker_url_invalid}
+				<div class="label">
+					<span class="text-error text-sm">Invalid bunker URL. Expected format: bunker://...</span>
+				</div>
+			{/if}
+			<div class="modal-action">
+				<button
+					class="btn btn-sm"
+					onclick={() => {
+						bunker_url = false;
+						bunker_url_invalid = false;
+					}}>Back</button
+				>
+			</div>
 		{:else if nostr_connect}
 			<div class="prose"><h4 class="text-center">Nostr Connect</h4></div>
 			<div class="mt-3 w-full"><QRCode value={nostr_connect_url} size={512} /></div>
@@ -210,27 +284,6 @@
 					</div>
 				{/if}
 			</fieldset>
-			<!-- <div class="divider">OR</div>
-			<input
-				type="text"
-				placeholder="bunker://"
-				class="input input-sm w-full"
-				class:border-error={bunker_url_invalid}
-				class:focus:border-error={bunker_url_invalid}
-				onpaste={(event) => {
-					const s = event.clipboardData?.getData('text');
-					try {
-						if (!s) bunker_url_invalid = true;
-						// let client = NostrConnectSigner.fromBunkerURI(
-						// 	s
-						// 	// TODO listen on relay
-						// );
-					} catch {
-						bunker_url_invalid = true;
-					}
-					// TODO is valid
-				}}
-			/> -->
 
 			<div class="modal-action">
 				<button
@@ -281,10 +334,10 @@
 					</a>
 				</div>
 			{/if}
-			<div class="my-3 flex space-x-1">
+			<div class="my-3 flex flex-col gap-3 sm:grid sm:grid-cols-2">
 				{#if nip07_plugin}
 					<button
-						class="btn grow"
+						class="btn btn-sm"
 						onclick={async () => {
 							nip07 = true;
 							let pubkey = await (
@@ -295,23 +348,27 @@
 							accounts_manager.addAccount(account);
 							accounts_manager.setActive(account);
 							complete();
-						}}>Browser <br /> Extension</button
+						}}>Browser Extension</button
 					>
-					<div class="divider divider-horizontal"></div>
 				{/if}
 				<button
-					class="btn grow"
+					class="btn btn-sm"
+					onclick={() => {
+						private_key = true;
+					}}>Private Key</button
+				>
+				<button
+					class="btn btn-sm"
+					onclick={() => {
+						bunker_url = true;
+					}}>Bunker URL</button
+				>
+				<button
+					class="btn btn-sm"
 					onclick={() => {
 						nostr_connect = true;
 						listenForNostrConnect();
 					}}>Nostr Connect</button
-				>
-				<div class="divider divider-horizontal"></div>
-				<button
-					class="btn grow"
-					onclick={() => {
-						private_key = true;
-					}}>Private Key</button
 				>
 			</div>
 			{#if signup_feature_toggle}
