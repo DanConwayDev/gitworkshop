@@ -485,6 +485,19 @@
 				</div>
 			{/if}
 			<div class="my-3 flex flex-col gap-3 sm:grid sm:grid-cols-2">
+				<button
+					class="btn btn-sm"
+					onclick={() => {
+						bunker_url = true;
+					}}>Bunker URL</button
+				>
+				<button
+					class="btn btn-sm"
+					onclick={() => {
+						nostr_connect = true;
+						listenForNostrConnect();
+					}}>Nostr Connect</button
+				>
 				{#if nip07_plugin}
 					<button
 						class="btn btn-sm"
@@ -506,19 +519,6 @@
 					onclick={() => {
 						private_key = true;
 					}}>Private Key</button
-				>
-				<button
-					class="btn btn-sm"
-					onclick={() => {
-						bunker_url = true;
-					}}>Bunker URL</button
-				>
-				<button
-					class="btn btn-sm"
-					onclick={() => {
-						nostr_connect = true;
-						listenForNostrConnect();
-					}}>Nostr Connect</button
 				>
 			</div>
 			{#if signup_feature_toggle}
