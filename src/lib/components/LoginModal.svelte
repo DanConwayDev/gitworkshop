@@ -35,6 +35,7 @@
 	let bunker_url = $state(false);
 	let signup_feature_toggle = $state(false);
 	let success = $state(false);
+	let nostr_connect_url_copied = $state(false);
 
 	let nostr_connect_relay_inputs = $state<string[]>(['', '']);
 	const getRelayUrls = (): WebSocketUrl[] => {
@@ -326,12 +327,52 @@
 		{:else if nostr_connect}
 			<div class="prose"><h4 class="text-center">Nostr Connect</h4></div>
 			<div class="mt-3 flex w-full justify-center">
-				<div class="bg-white p-4">
-					<QRCode value={nostr_connect_url} size={512} />
-				</div>
+				<a href={nostr_connect_url} target="_blank" rel="noopener noreferrer" class="block">
+					<div class="bg-white pt-4 pl-4 transition-opacity hover:opacity-80">
+						<QRCode value={nostr_connect_url} size={512} />
+					</div>
+				</a>
 			</div>
-			<div class="w-50">
-				<CopyField content={nostr_connect_url} no_border={true} truncate={[100, 105]} />
+			<div class="mt-3 flex w-full items-center gap-2">
+				<a
+					href={nostr_connect_url}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="link link-primary flex-1 truncate text-sm"
+					title={nostr_connect_url}
+				>
+					{nostr_connect_url.length > 105
+						? `${nostr_connect_url.substring(0, 100)}...${nostr_connect_url.substring(nostr_connect_url.length - 5)}`
+						: nostr_connect_url}
+				</a>
+				<button
+					class="btn btn-sm btn-square"
+					class:btn-success={nostr_connect_url_copied}
+					onclick={async () => {
+						try {
+							await navigator.clipboard.writeText(nostr_connect_url);
+							nostr_connect_url_copied = true;
+							setTimeout(() => {
+								nostr_connect_url_copied = false;
+							}, 1000);
+						} catch {
+							/* empty */
+						}
+					}}
+					title="Copy to clipboard"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 16 16"
+						class="h-4 w-4"
+						class:fill-success-content={nostr_connect_url_copied}
+						class:fill-base-content={!nostr_connect_url_copied}
+					>
+						{#each icons_misc.copy as d (d)}
+							<path {d} />
+						{/each}
+					</svg>
+				</button>
 			</div>
 			<fieldset class="fieldset w-full">
 				<label class="label" for="nostr-connect-relay-0">
