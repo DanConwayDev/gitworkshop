@@ -7,7 +7,11 @@
 		ExtensionSigner,
 		SimpleSigner
 	} from 'applesauce-signers';
-	import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts';
+	import {
+		ExtensionAccount,
+		SimpleAccount,
+		AmberClipboardAccount
+	} from 'applesauce-accounts/accounts';
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-expect-error
 	import QRCode from 'svelte-qrcode';
@@ -18,14 +22,14 @@
 	import accounts_manager from '$lib/accounts';
 	import { isHexKey } from 'applesauce-core/helpers';
 	import { NostrConnectAccount } from 'applesauce-accounts/accounts/nostr-connect-account';
-	let { done }: { done: () => void } = $props();
+	let { done, onNavigate }: { done: () => void; onNavigate?: () => void } = $props();
 
 	let nip07_plugin: boolean | undefined = $state('nostr' in window);
 
 	let nip07 = $state(false);
 	let private_key = $state(false);
 	let private_key_invalid = $state(false);
-	let amber_feature_toggle = $state(false);
+	let amber_feature_toggle = $state(true);
 	let amber = $state(false);
 	let nostr_connect = $state(false);
 	let bunker_url = $state(false);
@@ -334,7 +338,7 @@
 					<span>Connection Relays</span>
 				</label>
 				<div class="flex flex-col gap-2">
-					{#each nostr_connect_relay_inputs as relay, index (index)}
+					{#each nostr_connect_relay_inputs as _relay, index (index)}
 						<div class="flex gap-2">
 							<input
 								id="nostr-connect-relay-{index}"
@@ -404,13 +408,15 @@
 						onclick={async () => {
 							try {
 								amber = true;
-								// const signer = new AmberClipboardSigner();
-								// const pubkey = await signer.getPublicKey();
-								// const account = new AmberClipboardAccount(pubkey, signer);
-								// accounts_manager.addAccount(account);
-								// accounts_manager.setActive(account);
-								// complete();
-							} catch {
+								const signer = new AmberClipboardSigner();
+								const pubkey = await signer.getPublicKey();
+								const account = new AmberClipboardAccount(pubkey, signer);
+								account.metadata = { connectionType: 'amber' };
+								accounts_manager.addAccount(account);
+								accounts_manager.setActive(account);
+								complete();
+							} catch (error) {
+								console.error('Amber login error:', error);
 								amber = false;
 							}
 						}}>Use Amber</button
@@ -422,6 +428,7 @@
 						class="bl-1 btn btn-primary join-item items-center opacity-80"
 						onclick={() => {
 							done();
+							onNavigate?.();
 						}}
 					>
 						<svg

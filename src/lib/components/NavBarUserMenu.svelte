@@ -38,6 +38,9 @@
 		if (account.type === 'nostr-connect' && account.metadata?.connectionType === 'bunker') {
 			return 'bunker';
 		}
+		if (account.type === 'amber-clipboard') {
+			return 'amber';
+		}
 		return account.type;
 	};
 </script>
@@ -223,6 +226,9 @@
 	<LoginModal
 		done={() => {
 			show_login_modal = false;
+		}}
+		onNavigate={() => {
+			is_open = false;
 		}}
 	/>
 {/if}
