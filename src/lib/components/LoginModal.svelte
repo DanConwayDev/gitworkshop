@@ -54,7 +54,9 @@
 	});
 	let nostr_connect_url = $state('');
 	let nostr_connect_listening = $state(false);
+	let bunker_url_input = $state('');
 	let bunker_url_invalid = $state(false);
+	let bunker_url_error_message = $state('');
 	let bunker_url_connecting = $state(false);
 
 	let nostr_connect_signer: NostrConnectSigner | undefined = undefined;
@@ -100,6 +102,7 @@
 	async function connectWithBunkerUrl(bunkerUrl: string) {
 		try {
 			bunker_url_invalid = false;
+			bunker_url_error_message = '';
 			bunker_url_connecting = true;
 			nostr_connect_signer?.close();
 
@@ -118,6 +121,30 @@
 		} catch (error) {
 			console.error('Failed to connect with bunker URL:', error);
 			bunker_url_invalid = true;
+
+			// Provide more specific error messages
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			if (
+				errorMessage.toLowerCase().includes('unauthorized') ||
+				errorMessage.toLowerCase().includes('auth')
+			) {
+				bunker_url_error_message = 'Authorization failed. Please check your bunker credentials.';
+			} else if (
+				errorMessage.toLowerCase().includes('timeout') ||
+				errorMessage.toLowerCase().includes('timed out')
+			) {
+				bunker_url_error_message =
+					'Connection timed out. Please check the bunker URL and try again.';
+			} else if (
+				errorMessage.toLowerCase().includes('relay') ||
+				errorMessage.toLowerCase().includes('connect')
+			) {
+				bunker_url_error_message = 'Failed to connect to relay. Please check your connection.';
+			} else if (!bunkerUrl.startsWith('bunker://')) {
+				bunker_url_error_message = 'Invalid bunker URL format. Expected format: bunker://...';
+			} else {
+				bunker_url_error_message = `Connection failed: ${errorMessage}`;
+			}
 		} finally {
 			bunker_url_connecting = false;
 		}
@@ -245,29 +272,40 @@
 				class:border-error={bunker_url_invalid}
 				class:focus:border-error={bunker_url_invalid}
 				disabled={bunker_url_connecting}
+				bind:value={bunker_url_input}
+				oninput={() => {
+					// Clear error when user starts typing
+					if (bunker_url_invalid) {
+						bunker_url_invalid = false;
+						bunker_url_error_message = '';
+					}
+				}}
 				onpaste={async (event) => {
 					const s = event.clipboardData?.getData('text');
 					if (!s) {
 						bunker_url_invalid = true;
+						bunker_url_error_message = 'No text found in clipboard.';
 						return;
 					}
+					bunker_url_input = s;
 					if (s.startsWith('bunker://')) {
 						await connectWithBunkerUrl(s);
 					} else {
 						bunker_url_invalid = true;
+						bunker_url_error_message = 'Invalid bunker URL format. Expected format: bunker://...';
 					}
 				}}
 			/>
 			{#if bunker_url_connecting}
-				<div class="label">
+				<div class="mt-2">
 					<span class="text-info flex items-center gap-2 text-sm">
 						<span class="loading loading-spinner loading-xs"></span>
 						Connecting to bunker...
 					</span>
 				</div>
-			{:else if bunker_url_invalid}
-				<div class="label">
-					<span class="text-error text-sm">Invalid bunker URL. Expected format: bunker://...</span>
+			{:else if bunker_url_invalid && bunker_url_error_message}
+				<div class="mt-2">
+					<span class="text-error block text-sm break-all">{bunker_url_error_message}</span>
 				</div>
 			{/if}
 			<div class="modal-action">
@@ -276,6 +314,8 @@
 					onclick={() => {
 						bunker_url = false;
 						bunker_url_invalid = false;
+						bunker_url_error_message = '';
+						bunker_url_input = '';
 					}}>Back</button
 				>
 			</div>
