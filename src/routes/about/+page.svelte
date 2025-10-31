@@ -23,9 +23,13 @@
 		<p>
 			There is an ecosystem of tools to enable git code collaboration over nostr using <a
 				class="link"
-				href="https://nips.nostr.com/34">nip34</a
-			>. gitworkshop.dev, <a href={resolve('/ngit')}>ngit</a> and git-remote-nostr are
-			tightly-coupled examples maintained by
+				href="https://nips.nostr.com/34">NIP-34</a
+			>
+			and <a class="link" href="https://ngit.dev/grasp">GRASP</a>. gitworkshop.dev,
+			<a href={resolve('/ngit')}>ngit</a>
+			and
+			<a class="link" href="https://ngit.dev/relay">ngit-relay</a>
+			are tightly coupled examples maintained by
 			<a
 				class="link-primary"
 				href={resolve(
@@ -35,10 +39,16 @@
 			and there are others such as
 			<a
 				class="link link-primary"
+				href={resolve(
+					'/npub1qqqqqq2stely3ynsgm5mh2nj3v0nk5gjyl3zqrzh34hxhvx806usxmln03/nostr.4rs.nl/n34'
+				)}>n34</a
+			>, <a class="link" href="https://budabit.club">budabit</a>,
+			<a
+				class="link link-primary"
 				href={resolve('/npub1useke4f9maul5nf67dj0m9sq6jcsmnjzzk4ycvldwl4qss35fvgqjdk5ks/gitplaza')}
 				>gitplaza</a
-			>, <a class="link link-primary" href={resolve('/fiatjaf.com/gitstr')}>gitstr</a> and
-			<a class="link link-primary" href={resolve('/fiatjaf.com/song')}>song</a>.
+			>, and
+			<a class="link" href="https://shakespeare.diy">shakespeare</a>.
 		</p>
 		<div role="alert" class="alert my-3">
 			<!-- licence MIT https://icon-sets.iconify.design/ph/hands-praying-fill/ -->
@@ -123,98 +133,245 @@
 
 		<h3>The Philosophy</h3>
 
-		<p>ngit and gitworkshop.dev's philosophy can be summed up as:</p>
+		<p>NIP-34's philosophy can be summed up as:</p>
 		<ul>
 			<li><strong>let git be git</strong> - don't try and reinvent git</li>
 			<li>
 				<strong>let nostr be nostr</strong> - leverage the benefits of nostr
 			</li>
 			<li>
-				<strong>learn from the success of others</strong> - eg. the PR model has proved to be very popular.
-				how can we enable similar experiences with patches?
+				<strong>let users choose their own workflow</strong> - support PRs, patches, gerrit-style reviews,
+				or any other workflow. don't be prescriptive about flow or UX
 			</li>
 		</ul>
-
-		<p>
-			patch-over-email, with its proven scalability, lays the foundation for providing this social
-			layer without having to re-invent the complexities of creating an efficient alternative to git
-			server over nostr, or use specialized relays
-		</p>
 
 		<h3>The Solution</h3>
 
+		<h4>NIP-34: Git Collaboration over Nostr</h4>
+
 		<p>
-			<strong>nip34</strong> is a nostr protocol for sending git patches over nostr, similar to how patches
-			are sent via email using `git format-patch` and `git send-email`. the patches-over-email model
-			has proven to be a robust workflow that is used extensively, including in very large projects such
-			as the linux kernel
+			NIP-34 defines how git collaboration can happen over nostr. it supports both patches (with
+			diffs embedded in nostr events) and pull requests (with commits stored on git servers and
+			referenced in nostr events)
 		</p>
 
 		<p>
-			git-remote-nostr, ngit and gitworkshop.dev implements optional features of nip34, which
-			enable:
+			for small changes, patches work well - the entire diff is contained in the nostr event. for
+			larger changes, PRs are more efficient - commits are pushed to git servers (like GRASP
+			servers) and nostr events reference those commits
 		</p>
+
+		<p>
+			ngit comes with a native git plugin that hides this complexity from users and creates a
+			PR-like experience (see below). it presents patches and PRs as a unified interface,
+			automatically choosing the most appropriate format based on the size of the change. from the
+			user's perspective, they're just proposing changes to a repository
+		</p>
+
+		<p>key features enabled by NIP-34:</p>
 		<ul>
 			<li>
-				patches to be managed as branches, similar to GitHub PRs
-				<ul>
-					<li>
-						Open and Draft PRs become branches with the prefix <span
-							class="bg-neutral rounded p-2 font-mono"><span class="py-5">pr/</span></span
-						>
-					</li>
-					<li>
-						the PR author and maintainers can add new commits can using <span
-							class="bg-neutral rounded p-2 font-mono"><span class="py-5">git&nbsp;push</span></span
-						>
-					</li>
-					<li>
-						commits can be rebased, updated or replaced using <span
-							class="bg-neutral rounded p-2 font-mono"
-							><span class="py-5">git&nbsp;push&nbsp;--force</span></span
-						>
-						or
-						<span class="bg-neutral rounded p-2 font-mono"
-							><span class="py-5">ngit&nbsp;send&nbsp;--in-reply-to&nbsp;nevent123...</span></span
-						>
-					</li>
-					<li>
-						with ngit - author pgp signatures and therefore the original commit&nbsp;ids can be
-						retained
-					</li>
-					<li>
-						features can be 'merged' using a 'merge commit' so that a series of feature commits can
-						remain distinct rather than each applied to the main branch directly
-					</li>
-				</ul>
+				<strong>flexible workflows</strong> - the protocol contains primitives that can support any workflow
 			</li>
 			<li>
-				support multiple maintainers for a repository and a pathway to smoothly transition
-				maintainership when a maintainer moves on
+				<strong>multiple maintainers</strong> - repositories can have multiple maintainers with a smooth
+				pathway for transitioning maintainership
 			</li>
 			<li>
-				the repository state is stored in nostr events, reducing the required trust for git servers
+				<strong>repository state in nostr</strong> - the authoritative state (branches, tags, HEAD) is
+				stored in nostr events, reducing trust requirements for git servers
+			</li>
+			<li>
+				<strong>distributed hosting</strong> - repository announcements can list multiple git server
+				URLs, providing redundancy
 			</li>
 		</ul>
 
-		<h3>FAQs</h3>
-
-		<h4>You're not replacing GitHub, you're still using GitHub as a git server</h4>
-		<p>
-			it is trivial to switch git servers as they all operate with the exact same protocol. changing
-			the social layer requires a social and UX shift which can be challenging, disruptive and
-			timeconsuming
-		</p>
-
-		<h4>Are you trying to replicate / replace Github?</h4>
+		<h4>GRASP: Decentralized Git Hosting with Nostr Authorization</h4>
 
 		<p>
-			no. GitHub is a very large product with a lot of features which don't meet the goal of freedom
-			tech code collaboration
+			git collaboration over nostr works with any git server - GitHub, GitLab, Gitea, or
+			self-hosted. however, early attempts to integrate with existing git servers revealed a
+			critical UX problem for maintainers: authorization was split between two systems. maintainers
+			had to manage permissions on the git server separately from the nostr-based collaboration
+			layer, creating friction and confusion
 		</p>
-		<p>we are specifically looking to address the needs of anarchic FOSS freedom tech products</p>
 
-		<h3>Enhancements</h3>
+		<p>
+			<strong>GRASP</strong> (Git Relays Authorized via Signed-Nostr Proofs) solves this by unifying
+			git hosting and nostr authorization, making it easier for maintainers. like Blossom for media files,
+			GRASP servers can be run anywhere and host repositories from anyone, with all permissions flowing
+			through nostr
+		</p>
+
+		<p>
+			this enables a truly flexible git workflow. with GRASP, PRs work by pushing commits to
+			multiple GRASP servers, then publishing a nostr event that references those commits. the
+			maintainer set defined in nostr events controls who can push, eliminating the need for
+			separate git server permissions
+		</p>
+
+		<p>key features of GRASP:</p>
+		<ul>
+			<li>
+				<strong>unified authorization</strong> - all permissions happen over nostr. no separate git server
+				accounts or access control
+			</li>
+			<li>
+				<strong>distributed hosting</strong> - push to multiple GRASP servers for redundancy and censorship
+				resistance
+			</li>
+			<li>
+				<strong>flexible hosting models</strong> - servers may offer free quotas, require pre-payment,
+				use web-of-trust filtering, or other acceptance criteria
+			</li>
+			<li>
+				<strong>proactive sync</strong> - GRASP servers automatically sync repository data and nostr
+				events from other listed servers
+			</li>
+			<li>
+				<strong>dual service</strong> - each GRASP server provides both a nostr relay and a git service.
+				all git nostr repository data in one place
+			</li>
+		</ul>
+
+		<p>
+			learn more at <a class="link-primary" href="https://ngit.dev/grasp">ngit.dev/grasp</a> and see
+			the reference implementation
+			<a class="link-primary" href="https://ngit.dev/relay">ngit-relay</a>
+		</p>
+
+		<h4>Seamless Git Integration with ngit</h4>
+
+		<p>
+			a git plugin is integrated into ngit, enabling standard git commands to work directly with
+			nostr-based repositories. this means you can:
+		</p>
+		<ul>
+			<li>
+				<span class="bg-neutral rounded p-2 font-mono"
+					><span class="py-5">git&nbsp;clone&nbsp;nostr://npub.../repo</span></span
+				> - clone repositories from nostr
+			</li>
+			<li>
+				<span class="bg-neutral rounded p-2 font-mono"><span class="py-5">git&nbsp;push</span></span
+				> - maintainers push changes branches and tags
+			</li>
+			<li>
+				<span class="bg-neutral rounded p-2 font-mono"><span class="py-5">git&nbsp;pull</span></span
+				> - fetch updates from via GRASP servers
+			</li>
+			<li>
+				<span class="bg-neutral rounded p-2 font-mono"
+					><span class="py-5">git&nbsp;push&nbsp;-u&nbsp;origin&nbsp;pr/name-of-change</span></span
+				>
+				- contributors create PRs with
+				<span class="bg-neutral rounded p-2 font-mono"><span class="py-5">pr/</span></span> branch prefix
+			</li>
+		</ul>
+
+		<p>
+			this integration provides a familiar git workflow while leveraging nostr's permissionless,
+			decentralized infrastructure for authorization and repository discovery
+		</p>
+
+		<h3>Future Improvements</h3>
+
+		<h4>CI/CD Pipelines via Nostr DVMs</h4>
+
+		<p>
+			most projects require CI/CD, and while this is often bundled with git hosting solutions, it is
+			currently not smoothly integrated into the nostr git ecosystem. Nostr Data Vending Machines
+			(DVMs) could provide a marketplace of CI/CD task runners with Cashu for micro payments,
+			enabling everything from simple tests to complex deployment workflows. AI agents with NIP60
+			Cashu wallets could automatically trigger jobs based on repository activity, creating a
+			permissionless and decentralized CI/CD infrastructure. this could also provide a sustainable
+			revenue model for GRASP server runners
+		</p>
+
+		<details class="collapse-arrow bg-base-200 collapse my-4">
+			<summary class="collapse-title text-lg font-medium">read more about CI/CD vision</summary>
+			<div class="collapse-content">
+				<h4>DVMs for CI/CD</h4>
+
+				<p>
+					Nostr Data Vending Machines (DVMs) can provide a marketplace of CI/CD task runners with
+					Cashu for micro payments. there are various trust levels in CI/CD tasks:
+				</p>
+
+				<ul>
+					<li>tasks with no secrets, e.g. tests</li>
+					<li>tasks using updatable secrets, e.g. API keys</li>
+					<li>unverifiable builds and steps that sign with Android, Nostr, or PGP keys</li>
+				</ul>
+
+				<p>
+					DVMs allow tasks to be kicked off with specific providers using a Cashu token as payment.
+					it might be suitable for some high-compute and easily verifiable tasks to be run by the
+					cheapest available providers. medium trust tasks could be run by providers with a good
+					reputation, while high trust tasks could be run on self-hosted runners
+				</p>
+
+				<p>
+					job requests, status, and results all get published to Nostr for display in git-focused
+					Nostr clients. jobs could be triggered manually, or self-hosted runners could be
+					configured to watch a Nostr repository and kick off jobs using their own runners without
+					payment
+				</p>
+
+				<h4>CI/CD Watcher Agents</h4>
+
+				<p>
+					AI agents empowered with a NIP60 Cashu wallet can run tasks based on activity, such as a
+					push to master or a new PR, using the most suitable available DVM runner that meets the
+					user's criteria. to keep them running, anyone could top up their NIP60 Cashu wallet;
+					otherwise, the watcher turns off when the funds run out. it could be users, maintainers,
+					or anyone interested in helping the project who could top up the Watcher Agent's balance
+				</p>
+
+				<p>
+					part of building a reputation as a CI/CD provider could provide a sustainable revenue
+					model for GRASP server runners, creating incentives for many free-at-the-point-of-use
+					hosting providers. this, in turn, would allow one-click Nostr repository creation
+					workflows, instantly hosted by many different providers
+				</p>
+
+				<h4>Progress to Date</h4>
+
+				<p>
+					<a
+						class="link-primary"
+						href={resolve('/npub1hw6amg8p24ne08c9gdq8hhpqx0t0pwanpae9z25crn7m9uy7yarse465gr')}
+						>arjen</a
+					>
+					has been working on a runner that uses GitHub Actions YAML syntax (using act) for the
+					<a class="link-primary" href={resolve('/arjen@swissdash.site/dvm-cicd-runner')}
+						>dvm-cicd-runner</a
+					>
+					and takes Cashu payment. you can see
+					<a class="link-primary" href={resolve('/arjen@swissdash.site/dvm-cicd-runner/actions')}
+						>example runs on gitworkshop</a
+					>. the project is currently dormant but demonstrated the viability of the approach
+				</p>
+
+				<p class="text-sm italic">
+					note: the actions tab on gitworkshop is currently available on all repositories if you
+					turn on experimental mode (under settings in the user menu)
+				</p>
+
+				<h4>Easy Web App Deployment</h4>
+
+				<p>
+					for those disappointed not to find a 'Nostr' button to import a git repository to Vercel
+					menu: take heart, they made it easy. there is a Vercel CLI that can be easily
+					<a class="link" href="https://vercel.com/docs/cli#using-in-a-ci/cd-environment"
+						>called in CI/CD jobs to kick off deployments</a
+					>. not all managed solutions for web app deployment (e.g. Netlify) make it that easy
+				</p>
+			</div>
+		</details>
+
+		<h4>Other Opportunities</h4>
 
 		<p>got ideas? please share them and lets explore as a community</p>
 		<div role="alert" class="alert my-3">
