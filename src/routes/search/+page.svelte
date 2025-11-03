@@ -5,6 +5,10 @@
 	import query_centre from '$lib/query-centre/QueryCentre.svelte';
 	import { search } from '$lib/store.svelte';
 
+	const ITEMS_PER_PAGE = 12;
+	let items_to_show = $state(ITEMS_PER_PAGE);
+	let sentinel: HTMLDivElement | undefined = $state();
+
 	onMount(() => {
 		// Set focus on the input field when the component is mounted
 		const input = document.getElementById('search-field');
@@ -12,10 +16,40 @@
 			input.focus();
 		}
 	});
+
+	// Set up intersection observer for lazy loading when sentinel is available
+	$effect(() => {
+		if (!sentinel) return;
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				entries.forEach((entry) => {
+					if (entry.isIntersecting && items_to_show < all_repos.length) {
+						items_to_show = Math.min(items_to_show + ITEMS_PER_PAGE, all_repos.length);
+					}
+				});
+			},
+			{ rootMargin: '100px' }
+		);
+
+		observer.observe(sentinel);
+
+		return () => {
+			observer.disconnect();
+		};
+	});
+
 	let loading_query = $derived(query_centre.fetchAllRepos());
 	let loading = $derived(loading_query.loading);
 	let repos_query = $derived(query_centre.searchRepoAnns(search.text));
-	let repos = $derived(repos_query.current ?? []);
+	let all_repos = $derived(repos_query.current ?? []);
+	let repos = $derived(all_repos.slice(0, items_to_show));
+
+	// Reset pagination when search text changes
+	$effect(() => {
+		void search.text;
+		items_to_show = ITEMS_PER_PAGE;
+	});
 </script>
 
 <svelte:head>
@@ -57,6 +91,11 @@
 		{#if loading}
 			<div class="flex justify-center">
 				<div class="loading loading-spinner loading-lg"></div>
+			</div>
+		{/if}
+		{#if items_to_show < all_repos.length}
+			<div bind:this={sentinel} class="flex justify-center py-8">
+				<div class="loading loading-spinner loading-md"></div>
 			</div>
 		{/if}
 	</div>
