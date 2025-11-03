@@ -129,7 +129,9 @@ class QueryCentre {
 				.where('searchWords')
 				.startsWithAnyOfIgnoreCase(query)
 				.distinct()
-				.filter((r) => !r.deleted)
+				.filter((r) => !r.deleted && (
+					!r.tags || !r.tags.includes("personal-fork")
+				))
 				.toArray();
 			if (from_relays)
 				return res.filter((repo) =>
