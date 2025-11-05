@@ -57,6 +57,19 @@ class Store {
 	}
 	experimental: boolean = $derived(this.stored_experimental ? true : false);
 
+	#stored_theme: null | 'light' | 'dark' = $state(
+		localStorage.getItem('theme') as null | 'light' | 'dark'
+	);
+	get stored_theme() {
+		return this.#stored_theme;
+	}
+	set stored_theme(theme: null | 'light' | 'dark') {
+		if (theme) localStorage.setItem('theme', theme);
+		else localStorage.removeItem('theme');
+		this.#stored_theme = theme;
+	}
+	theme: 'light' | 'dark' = $derived(this.stored_theme || 'dark');
+
 	route?: RepoRoute | UserRoute = $state(undefined);
 
 	logged_in_account?: AccountSummary = $state(undefined);

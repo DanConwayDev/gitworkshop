@@ -7,6 +7,8 @@
 	import '../app.css';
 	import Container from '$lib/components/Container.svelte';
 	import { resolve } from '$app/paths';
+	import store from '$lib/store.svelte';
+	import { onMount } from 'svelte';
 	let { children } = $props();
 
 	// Build-time version info injected by Vite
@@ -14,6 +16,28 @@
 	const gitCommit = __GIT_COMMIT__;
 	// eslint-disable-next-line no-undef
 	const commitDate = __COMMIT_DATE__;
+
+	// Apply theme on mount and when it changes
+	// Only set data-theme for light mode, remove it for dark (use default)
+	onMount(() => {
+		if (store.theme === 'light') {
+			document.documentElement.setAttribute('data-theme', 'light');
+		} else {
+			document.documentElement.removeAttribute('data-theme');
+		}
+	});
+
+	$effect(() => {
+		if (store.theme === 'light') {
+			document.documentElement.setAttribute('data-theme', 'light');
+		} else {
+			document.documentElement.removeAttribute('data-theme');
+		}
+	});
+
+	function toggleTheme() {
+		store.stored_theme = store.theme === 'light' ? 'dark' : 'light';
+	}
 </script>
 
 <div class="gw-page-container">
@@ -39,13 +63,10 @@
 				</div>
 				<div class="grow"></div>
 
-				<label class="swap swap-rotate btn btn-ghost">
-					<!-- this hidden checkbox controls the state -->
-					<input type="checkbox" class="theme-controller" value="light" />
-
-					<!-- sun icon -->
+				<button class="swap swap-rotate btn btn-ghost" onclick={toggleTheme}>
+					<!-- sun icon (shown when light theme is active) -->
 					<svg
-						class="swap-on h-5 w-5 fill-current"
+						class="h-5 w-5 fill-current {store.theme === 'light' ? '' : 'hidden'}"
 						xmlns="http://www.w3.org/2000/svg"
 						viewBox="0 0 24 24"
 					>
@@ -54,9 +75,9 @@
 						/>
 					</svg>
 
-					<!-- moon icon -->
+					<!-- moon icon (shown when dark theme is active) -->
 					<svg
-						class="swap-off h-5 w-5 fill-current"
+						class="h-5 w-5 fill-current {store.theme === 'dark' ? '' : 'hidden'}"
 						xmlns="http://www.w3.org/2000/svg"
 						viewBox="0 0 24 24"
 					>
@@ -64,7 +85,7 @@
 							d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Zm-9.5,6.69A8.14,8.14,0,0,1,7.08,5.22v.27A10.15,10.15,0,0,0,17.22,15.63a9.79,9.79,0,0,0,2.1-.22A8.11,8.11,0,0,1,12.14,19.73Z"
 						/>
 					</svg>
-				</label>
+				</button>
 			</div>
 		</Container>
 	</footer>

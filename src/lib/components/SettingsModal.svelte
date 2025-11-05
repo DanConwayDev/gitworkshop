@@ -112,6 +112,35 @@
 				bind:checked={store.stored_experimental}
 			/>
 		</label>
+
+		<div class="divider"></div>
+
+		<div class="mb-4">
+			<div class="mb-2 font-bold">Theme:</div>
+			<div class="flex flex-col gap-2">
+				<label class="flex items-center">
+					<input
+						class="radio radio-sm mr-2"
+						type="radio"
+						name="theme-pref"
+						value="dark"
+						bind:group={store.stored_theme}
+					/>
+					<span>Dark theme</span>
+				</label>
+				<label class="flex items-center">
+					<input
+						class="radio radio-sm mr-2"
+						type="radio"
+						name="theme-pref"
+						value="light"
+						bind:group={store.stored_theme}
+					/>
+					<span>Light theme</span>
+				</label>
+			</div>
+		</div>
+
 		<div class="divider"></div>
 
 		<div class="mt-2 flex items-center justify-center">
