@@ -315,7 +315,10 @@ export const eventIsPrRoot = (event: NostrEvent): event is NostrEvent & { kind: 
 	const hashtags = getValueOfEachTagOccurence(event.tags, 't');
 	return (
 		event.kind == PrKind ||
-		(event.kind == PatchKind && hashtags.includes('root') && !hashtags.includes('revision-root'))
+		(event.kind == PatchKind &&
+			hashtags.includes('root') &&
+			!hashtags.includes('revision-root') && // until v1.8 ngit incorrectly created revisions with this tag
+			!hashtags.includes('root-revision'))
 	);
 	/// TODO root and revisions root
 };

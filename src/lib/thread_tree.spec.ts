@@ -199,7 +199,7 @@ describe('getThreadTrees', () => {
 				expect(trees[0].child_nodes[0].child_nodes).to.be.length(0);
 			});
 		});
-		describe('2 roots, 1 reply, 1 revision', () => {
+		describe('2 roots, 1 reply, 1 revision (old tag)', () => {
 			test('array contains node related to specified event with reply, and revision', () => {
 				const root = generateEventWithTags([]);
 				const root2 = generateEventWithTags([]);
@@ -216,9 +216,26 @@ describe('getThreadTrees', () => {
 				expect(trees[1].event.id).to.eq(revision_of_root.id);
 			});
 		});
+		describe('2 roots, 1 reply, 1 revision (new tag)', () => {
+			test('array contains node related to specified event with reply, and revision', () => {
+				const root = generateEventWithTags([]);
+				const root2 = generateEventWithTags([]);
+				const reply_to_root = generateEventWithTags([['e', root.id, '', 'reply']]);
+				const revision_of_root = generateEventWithTags([
+					['e', root.id, '', 'reply'],
+					['t', 'root-revision']
+				]);
+				const trees = getThreadTrees('pr', root, [root, reply_to_root, root2, revision_of_root]);
+				expect(trees).to.have.length(2);
+				expect(trees[0].event.id).to.eq(root.id);
+				expect(trees[0].child_nodes).to.have.length(1);
+				expect(trees[0].child_nodes[0].event.id).to.eq(reply_to_root.id);
+				expect(trees[1].event.id).to.eq(revision_of_root.id);
+			});
+		});
 	});
 	describe('issue', () => {
-		describe('2 roots, 1 reply, 1 revision', () => {
+		describe('2 roots, 1 reply, 1 revision (old tag)', () => {
 			test('array contains only node related to specified event with reply and revision as children', () => {
 				const root = generateEventWithTags([]);
 				const root2 = generateEventWithTags([]);
@@ -226,6 +243,23 @@ describe('getThreadTrees', () => {
 				const revision_of_root = generateEventWithTags([
 					['e', root.id, '', 'reply'],
 					['t', 'revision-root']
+				]);
+				const trees = getThreadTrees('issue', root, [root, reply_to_root, root2, revision_of_root]);
+				expect(trees).to.have.length(1);
+				expect(trees[0].event.id).to.eq(root.id);
+				expect(trees[0].child_nodes).to.have.length(2);
+				expect(trees[0].child_nodes[0].event.id).to.eq(reply_to_root.id);
+				expect(trees[0].child_nodes[1].event.id).to.eq(revision_of_root.id);
+			});
+		});
+		describe('2 roots, 1 reply, 1 revision (new tag)', () => {
+			test('array contains only node related to specified event with reply and revision as children', () => {
+				const root = generateEventWithTags([]);
+				const root2 = generateEventWithTags([]);
+				const reply_to_root = generateEventWithTags([['e', root.id, '', 'reply']]);
+				const revision_of_root = generateEventWithTags([
+					['e', root.id, '', 'reply'],
+					['t', 'root-revision']
 				]);
 				const trees = getThreadTrees('issue', root, [root, reply_to_root, root2, revision_of_root]);
 				expect(trees).to.have.length(1);

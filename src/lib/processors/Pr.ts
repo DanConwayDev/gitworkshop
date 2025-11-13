@@ -169,7 +169,10 @@ const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
 		.map((t) => t[1]) as RepoRef[];
 
 	const tags = getValueOfEachTagOccurence(event.tags, 't').filter(
-		(t) => t !== 'root' && t !== 'revision-root'
+		(t) =>
+			t !== 'root' &&
+			t !== 'revision-root' && // until v1.8 ngit incorrectly created revisions with this tag
+			t !== 'root-revision'
 	);
 	return {
 		type: 'pr',
