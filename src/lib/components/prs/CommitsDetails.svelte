@@ -8,6 +8,8 @@
 	import AlertWarning from '../AlertWarning.svelte';
 	import GitFetchingStatus from '../GitFetchingStatus.svelte';
 	import store from '$lib/store.svelte';
+	import { slide } from 'svelte/transition';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	let {
 		infos,
@@ -26,6 +28,20 @@
 	} = $props();
 
 	let git_status = $derived(getGitLog(store.git_log, sub_filter));
+
+	let expanded = new SvelteSet<string>();
+	let user_interacted = $state(false);
+	function toggleExpanded(oid: string) {
+		user_interacted = true;
+		if (expanded.has(oid)) expanded.delete(oid);
+		else expanded.add(oid);
+	}
+
+	$effect(() => {
+		if (lite_view && infos && infos.length > 0 && !user_interacted) {
+			expanded.add(infos[0].oid);
+		}
+	});
 
 	let waited = $state(false);
 	onMount(() => {
@@ -61,11 +77,10 @@
 
 {#snippet showItem(info: CommitInfo)}
 	{#if lite_view}
-		<div
-			class="border-base-400 bg-base-200 bg-base-100 flex items-start gap-3 border-x px-3 py-3 sm:flex-row sm:items-center sm:gap-4"
-			class:border-t={false}
-			class:rounded-lg={false}
-			role="group"
+		<button
+			class="border-base-400 bg-base-100 hover:bg-base-200 flex w-full cursor-pointer items-start gap-3 border-x px-3 py-3 text-left sm:flex-row sm:items-center sm:gap-4"
+			onclick={() => toggleExpanded(info.oid)}
+			aria-expanded={expanded.has(info.oid)}
 			aria-label="Commit summary"
 			title={info.message}
 		>
@@ -95,7 +110,7 @@
 				</div>
 			</div>
 
-			<!-- right: id + time -->
+			<!-- right: id + time + chevron -->
 			<div class="ml-auto flex shrink-0 items-center gap-3">
 				<div class="flex flex-col items-end text-right">
 					<div class="badge badge-sm">{info.oid.substring(0, 8)}</div>
@@ -103,8 +118,24 @@
 						<FromNow unix_seconds={info.committer.timestamp} />
 					</div>
 				</div>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					class="text-base-content/40 h-4 w-4 flex-none transition-transform"
+					class:rotate-180={expanded.has(info.oid)}
+				>
+					<path
+						fill="currentColor"
+						d="M11.646 15.146L5.854 9.354a.5.5 0 0 1 .353-.854h11.586a.5.5 0 0 1 .353.854l-5.793 5.792a.5.5 0 0 1-.707 0"
+					/>
+				</svg>
 			</div>
-		</div>
+		</button>
+		{#if expanded.has(info.oid)}
+			<div transition:slide={{ duration: 150 }}>
+				<CommitDetails {info} />
+			</div>
+		{/if}
 	{:else}
 		<CommitDetails {info} />
 	{/if}

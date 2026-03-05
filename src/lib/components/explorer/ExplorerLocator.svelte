@@ -275,13 +275,13 @@
 {/if}
 
 {#if selected_ref_info}
-	<div
-		class="border-base-400 bg-base-200/50 bg-base-100 ounded-b-lg flex items-start gap-3 rounded-b-lg border-x border-b px-3 py-3 sm:flex-row sm:items-center sm:gap-4"
+	<a
+		class="border-base-400 bg-base-200/50 bg-base-100 hover:bg-base-300 ounded-b-lg flex items-start gap-3 rounded-b-lg border-x border-b px-3 py-3 sm:flex-row sm:items-center sm:gap-4"
 		class:border-t={show_server_info}
 		class:rounded-lg={show_server_info}
-		role="group"
 		aria-label="Commit summary"
 		title={selected_ref_info.commit.message}
+		href={resolve(`${base_url_without_tree}/commit/${selected_ref_short}` as `/${string}`)}
 	>
 		<!-- left: icon + author -->
 		<div class="flex min-w-0 items-center gap-1 sm:gap-3">
@@ -318,7 +318,7 @@
 				</div>
 			</div>
 		</div>
-	</div>
+	</a>
 {/if}
 
 {#if git_warning}

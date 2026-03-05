@@ -19,11 +19,13 @@
 	let {
 		a_ref,
 		clone_urls,
-		ref_and_path
+		ref_and_path,
+		lite_view = false
 	}: {
 		a_ref: RepoRef;
 		clone_urls: string[];
 		ref_and_path?: string;
+		lite_view?: boolean;
 	} = $props();
 
 	let identifier = $derived(a_ref ? a_ref.split(':')[2] : '');
@@ -148,5 +150,6 @@
 		{clone_urls}
 		{sub_filter}
 		grouped_by_date
+		{lite_view}
 	/>
 {/if}

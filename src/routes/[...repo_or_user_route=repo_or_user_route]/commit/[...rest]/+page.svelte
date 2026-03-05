@@ -16,7 +16,7 @@
 {#if store.route && 'identifier' in store.route}
 	<Container>
 		{#if a_ref && repo && repo.clone && repo.clone.length > 0}
-			<ExplorerCommits {a_ref} ref_and_path={data.params.rest} clone_urls={repo.clone} />
+			<ExplorerCommits {a_ref} ref_and_path={data.params.rest} clone_urls={repo.clone} lite_view />
 		{:else}
 			<div>loading</div>
 		{/if}
