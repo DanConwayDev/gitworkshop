@@ -6,7 +6,7 @@ import {
 	isRelayUpdatePR,
 	isRelayUpdatePRFound
 } from '$lib/types';
-import { PatchKind, StatusOpenKind, RepoAnnKind, PrKind } from '$lib/kinds';
+import { LabelKind, PatchKind, StatusOpenKind, RepoAnnKind, PrKind } from '$lib/kinds';
 import type {
 	EventIdString,
 	HuristicsForRelay,
@@ -29,12 +29,21 @@ import {
 } from '$lib/types/processor';
 import type { NostrEvent } from 'nostr-tools';
 import {
+	eventToLabelHistoryItem,
 	eventToQualityChild,
 	eventToStatusHistoryItem,
+	eventToSubjectHistoryItem,
 	extractPatchDescription,
-	extractPatchTitle
+	extractPatchTitle,
+	getLabelEventTargetId
 } from '$lib/git-utils';
-import { processNewStatus, processQualityChild, updateRepoMetrics } from './Issue';
+import {
+	processNewLabel,
+	processNewStatus,
+	processNewSubject,
+	processQualityChild,
+	updateRepoMetrics
+} from './Issue';
 
 const processPrUpdates: UpdateProcessor = (items, updates) => {
 	return updates.filter((u) => {
@@ -56,6 +65,16 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 				return true;
 			}
 			processNewStatus(item, status_item);
+		}
+		const label_item = eventToLabelHistoryItem(u.event);
+		if (label_item) {
+			if (!item) return true;
+			processNewLabel(item, label_item);
+		}
+		const subject_item = eventToSubjectHistoryItem(u.event);
+		if (subject_item) {
+			if (!item) return true;
+			processNewSubject(item, subject_item);
 		}
 		if (!item && !base_pr) {
 			// shouldn't get here - are we processing an event kind we shouldnt?
@@ -93,6 +112,7 @@ const processPrUpdates: UpdateProcessor = (items, updates) => {
 const getPrId = (u: ProcessorPrUpdate): EventIdString | undefined => {
 	if (u.event) {
 		if (u.event && [PatchKind, PrKind].includes(u.event.kind)) return u.event.id;
+		if (u.event.kind === LabelKind) return getLabelEventTargetId(u.event);
 		// TODO get the root
 		else {
 			const uuid = getParentUuid(u.event);
@@ -180,6 +200,8 @@ const eventToPrBaseFields = (event: NostrEvent): IssueOrPrBase | undefined => {
 		description,
 		status: StatusOpenKind,
 		status_history: [],
+		label_history: [],
+		subject_history: [],
 		deleted_ids: [],
 		quality_children: [],
 		quality_children_count: 0,

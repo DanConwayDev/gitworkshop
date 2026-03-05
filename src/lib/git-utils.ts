@@ -8,12 +8,14 @@ import {
 	type ChildEventRef,
 	type EventIdString,
 	type IssueOrPRTableItem,
+	type LabelHistoryItem,
 	type RepoRef,
 	type RepoRoute,
 	type StatusHistoryItem,
+	type SubjectHistoryItem,
 	type WebSocketUrl
 } from './types';
-import { PrKind, QualityChildKinds } from './kinds';
+import { LabelKind, PrKind, QualityChildKinds } from './kinds';
 import {
 	isGitManagerLogEntryGlobal,
 	isGitManagerLogEntryServer,
@@ -203,6 +205,45 @@ export const eventToQualityChild = (event?: NostrEvent): ChildEventRef | undefin
 	return { id, kind, pubkey };
 };
 
+/**
+ * Extract the root event id that a kind 1985 label event targets.
+ * The event must have an `e` tag pointing to the issue/PR root.
+ */
+export const getLabelEventTargetId = (event: NostrEvent): EventIdString | undefined => {
+	if (event.kind !== LabelKind) return undefined;
+	const e_tag = event.tags.find((t) => t.length > 1 && t[0] === 'e');
+	if (e_tag && isEventIdString(e_tag[1])) return e_tag[1];
+	return undefined;
+};
+
+/**
+ * Parse a kind 1985 label event into a LabelHistoryItem if it contains `#t` labels.
+ */
+export const eventToLabelHistoryItem = (event?: NostrEvent): LabelHistoryItem | undefined => {
+	if (!event || event.kind !== LabelKind) return undefined;
+	const namespaces = event.tags.filter((t) => t.length > 1 && t[0] === 'L').map((t) => t[1]);
+	if (!namespaces.includes('#t')) return undefined;
+	const labels = event.tags
+		.filter((t) => t.length > 2 && t[0] === 'l' && t[2] === '#t')
+		.map((t) => t[1]);
+	if (labels.length === 0) return undefined;
+	const { id, pubkey, created_at } = event;
+	return { uuid: id, pubkey, created_at, labels };
+};
+
+/**
+ * Parse a kind 1985 label event into a SubjectHistoryItem if it contains a `#subject` label.
+ */
+export const eventToSubjectHistoryItem = (event?: NostrEvent): SubjectHistoryItem | undefined => {
+	if (!event || event.kind !== LabelKind) return undefined;
+	const namespaces = event.tags.filter((t) => t.length > 1 && t[0] === 'L').map((t) => t[1]);
+	if (!namespaces.includes('#subject')) return undefined;
+	const subject_tag = event.tags.find((t) => t.length > 2 && t[0] === 'l' && t[2] === '#subject');
+	if (!subject_tag) return undefined;
+	const { id, pubkey, created_at } = event;
+	return { uuid: id, pubkey, created_at, subject: subject_tag[1] };
+};
+
 export const deletionRelatedToIssueOrPrItem = (
 	deletion: NostrEvent,
 	item: IssueOrPRTableItem
@@ -215,7 +256,9 @@ export const deletionRelatedToIssueOrPrItem = (
 				id === item.uuid ||
 				item.deleted_ids.includes(id) ||
 				item.quality_children.some((c) => c.id === id) ||
-				item.status_history.some((h) => h.uuid === id)
+				item.status_history.some((h) => h.uuid === id) ||
+				(item.label_history ?? []).some((h) => h.uuid === id) ||
+				(item.subject_history ?? []).some((h) => h.uuid === id)
 		);
 };
 

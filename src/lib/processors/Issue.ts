@@ -6,7 +6,7 @@ import {
 	isRelayUpdateIssueFound,
 	IssueOrPrStatus
 } from '$lib/types';
-import { IssueKind, StatusKinds, StatusOpenKind, RepoAnnKind } from '$lib/kinds';
+import { IssueKind, LabelKind, StatusKinds, StatusOpenKind, RepoAnnKind } from '$lib/kinds';
 import type {
 	ChildEventRef,
 	EventIdString,
@@ -14,12 +14,14 @@ import type {
 	Issue,
 	IssueOrPrBase,
 	IssueOrPRTableItem,
+	LabelHistoryItem,
 	PubKeyString,
 	RelayCheck,
 	RelayCheckFound,
 	RelayUpdateIssue,
 	RepoRef,
 	StatusHistoryItem,
+	SubjectHistoryItem,
 	WithEvent
 } from '$lib/types';
 import { getValueOfEachTagOccurence } from '$lib/utils';
@@ -33,11 +35,14 @@ import {
 } from '$lib/types/processor';
 import type { NostrEvent } from 'nostr-tools';
 import {
+	eventToLabelHistoryItem,
 	eventToQualityChild,
 	eventToStatusHistoryItem,
+	eventToSubjectHistoryItem,
 	extractIssueDescription,
 	extractIssueTitle,
-	extractRootIdIfNonReplaceable
+	extractRootIdIfNonReplaceable,
+	getLabelEventTargetId
 } from '$lib/git-utils';
 
 const processIssueUpdates: UpdateProcessor = (items, updates) => {
@@ -60,6 +65,16 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 				return true;
 			}
 			processNewStatus(item, status_item);
+		}
+		const label_item = eventToLabelHistoryItem(u.event);
+		if (label_item) {
+			if (!item) return true;
+			processNewLabel(item, label_item);
+		}
+		const subject_item = eventToSubjectHistoryItem(u.event);
+		if (subject_item) {
+			if (!item) return true;
+			processNewSubject(item, subject_item);
 		}
 		const quality_child = eventToQualityChild(u.event);
 		if (quality_child) {
@@ -97,6 +112,7 @@ const processIssueUpdates: UpdateProcessor = (items, updates) => {
 const getIssueId = (u: ProcessorIssueUpdate): EventIdString | undefined => {
 	if (u.event) {
 		if (u.event.kind === IssueKind) return u.event.id;
+		if (u.event.kind === LabelKind) return getLabelEventTargetId(u.event);
 		return extractRootIdIfNonReplaceable(u.event);
 	} else if (!u.event && u.relay_updates[0]) {
 		return u.relay_updates[0].uuid;
@@ -205,6 +221,8 @@ const eventToIssueBaseFields = (event: NostrEvent): IssueOrPrBase | undefined =>
 		description,
 		status: StatusOpenKind,
 		status_history: [],
+		label_history: [],
+		subject_history: [],
 		deleted_ids: [],
 		quality_children: [],
 		quality_children_count: 0,
@@ -252,6 +270,63 @@ export const getCurrentStatusFromStatusHistory = (item: IssueOrPRTableItem) => {
 		.filter((h) => authorised.includes(h.pubkey))
 		.sort((a, b) => b.created_at - a.created_at);
 	return sorted[0] ? sorted[0].status : IssueOrPrStatus.Open;
+};
+
+export const isAuthorisedForItem = (item: IssueOrPRTableItem, pubkey: PubKeyString): boolean => {
+	const maintainers = item.repos.map((r) => r.split(':')[1]) as PubKeyString[];
+	return pubkey === item.author || maintainers.includes(pubkey);
+};
+
+export const processNewLabel = (item: IssueOrPRTableItem, label_item: LabelHistoryItem) => {
+	if (!item.label_history) item.label_history = [];
+	if (
+		item.label_history.some((h) => h.uuid === label_item.uuid) ||
+		item.deleted_ids.includes(label_item.uuid)
+	)
+		return;
+	item.label_history.push(label_item);
+	// Only authorised users (author + maintainers) can actually change the tags
+	if (isAuthorisedForItem(item, label_item.pubkey)) {
+		item.tags = getCurrentTagsFromLabelHistory(item);
+	}
+};
+
+export const getCurrentTagsFromLabelHistory = (item: IssueOrPRTableItem): string[] => {
+	const maintainers = item.repos.map((r) => r.split(':')[1]) as PubKeyString[];
+	const authorised = [item.author, ...maintainers];
+	// Collect all authorised label events
+	const authorised_labels = (item.label_history ?? []).filter((h) => authorised.includes(h.pubkey));
+	if (authorised_labels.length === 0) return item.tags;
+	// Accumulate all labels from authorised events (additive model)
+	const original_tags = item.event
+		? item.event.tags.filter((t) => t[0] === 't').map((t) => t[1])
+		: [];
+	const all_labels = new Set<string>([...original_tags]);
+	authorised_labels.forEach((h) => h.labels.forEach((l) => all_labels.add(l)));
+	return [...all_labels];
+};
+
+export const processNewSubject = (item: IssueOrPRTableItem, subject_item: SubjectHistoryItem) => {
+	if (!item.subject_history) item.subject_history = [];
+	if (
+		item.subject_history.some((h) => h.uuid === subject_item.uuid) ||
+		item.deleted_ids.includes(subject_item.uuid)
+	)
+		return;
+	item.subject_history.push(subject_item);
+	// Only authorised users (author + maintainers) can actually change the title
+	if (isAuthorisedForItem(item, subject_item.pubkey)) {
+		item.title = getCurrentTitleFromSubjectHistory(item);
+	}
+};
+
+export const getCurrentTitleFromSubjectHistory = (item: IssueOrPRTableItem): string => {
+	const maintainers = item.repos.map((r) => r.split(':')[1]) as PubKeyString[];
+	const authorised = [item.author, ...maintainers];
+	const sorted = (item.subject_history ?? [])
+		.filter((h) => authorised.includes(h.pubkey))
+		.sort((a, b) => b.created_at - a.created_at);
+	return sorted[0] ? sorted[0].subject : item.title;
 };
 
 export default processIssueUpdates;

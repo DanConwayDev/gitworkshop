@@ -1,6 +1,7 @@
 import { LegacyGiReply } from '$lib/kind_labels';
 import {
 	IssueKind,
+	LabelKind,
 	PatchKind,
 	StatusKinds,
 	RepoAnnKind,
@@ -194,11 +195,11 @@ export const createRepoChildrenStatusAndDeletionFilters = (
 	if (!repo_timestamps) {
 		return [
 			{
-				kinds: [...StatusKinds, DeletionKind],
+				kinds: [...StatusKinds, DeletionKind, LabelKind],
 				'#e': [...children]
 			},
 			{
-				kinds: [...StatusKinds, DeletionKind],
+				kinds: [...StatusKinds, DeletionKind, LabelKind],
 				'#E': [...children]
 			}
 		];
@@ -215,12 +216,12 @@ export const createRepoChildrenStatusAndDeletionFilters = (
 
 	return [
 		{
-			kinds: [...StatusKinds, DeletionKind],
+			kinds: [...StatusKinds, DeletionKind, LabelKind],
 			'#e': [...children],
 			since: earliest_since === 0 ? undefined : earliest_since
 		},
 		{
-			kinds: [...StatusKinds, DeletionKind],
+			kinds: [...StatusKinds, DeletionKind, LabelKind],
 			// needed as comments related to PR revisions will have a different root
 			'#E': [...children],
 			since: earliest_since === 0 ? undefined : earliest_since

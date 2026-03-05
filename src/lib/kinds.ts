@@ -92,5 +92,8 @@ export type QualityChildKinds = CommentKinds | typeof Zap;
 export const NostrLanguangeClassificationKind = 9978;
 export type NostrLanguangeClassificationKind = typeof NostrLanguangeClassificationKind;
 
+export const LabelKind = 1985;
+export type LabelKind = typeof LabelKind;
+
 export const IgnoreKinds = [NostrLanguangeClassificationKind, DraftEvent];
 export type IgnoreKinds = typeof NostrLanguangeClassificationKind;

@@ -17,6 +17,7 @@ import type { IssueOrPRTableItem, PubKeyTableItem, RepoTableItem } from './table
 import {
 	DeletionKind,
 	IssueKind,
+	LabelKind,
 	PatchKind,
 	PrKind,
 	QualityChildKinds,
@@ -68,7 +69,9 @@ export const isProcessorPubkeyUpdate = (u: ProcessorUpdate): u is ProcessorPubke
 
 export interface ProcessorIssueUpdate {
 	event:
-		| (NostrEvent & { kind: StatusKinds | IssueKind | QualityChildKinds | DeletionKind })
+		| (NostrEvent & {
+				kind: StatusKinds | IssueKind | QualityChildKinds | DeletionKind | LabelKind;
+		  })
 		| undefined;
 	relay_updates: RelayUpdateIssue[];
 }
@@ -79,18 +82,22 @@ export const isProcessorIssueUpdate = (u: ProcessorUpdate): u is ProcessorIssueU
 			IssueKind,
 			...StatusKinds,
 			...QualityChildKinds.filter((k) => k !== PrKind),
-			DeletionKind
+			DeletionKind,
+			LabelKind
 		].includes(u.event.kind)) ||
 	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdateIssue(ru)));
 
 export interface ProcessorPrUpdate {
 	event:
-		| (NostrEvent & { kind: StatusKinds | PatchKind | PrKind | QualityChildKinds | DeletionKind })
+		| (NostrEvent & {
+				kind: StatusKinds | PatchKind | PrKind | QualityChildKinds | DeletionKind | LabelKind;
+		  })
 		| undefined;
 	relay_updates: RelayUpdatePR[];
 }
 
 export const isProcessorPrUpdate = (u: ProcessorUpdate): u is ProcessorPrUpdate =>
-	(u.event && [...StatusKinds, ...QualityChildKinds, DeletionKind].includes(u.event.kind)) ||
+	(u.event &&
+		[...StatusKinds, ...QualityChildKinds, DeletionKind, LabelKind].includes(u.event.kind)) ||
 	(u.event && eventIsPrRoot(u.event)) ||
 	(u.relay_updates.length > 0 && u.relay_updates.every((ru) => isRelayUpdatePR(ru)));

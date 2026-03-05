@@ -64,6 +64,21 @@ export interface StatusHistoryItem {
 	created_at: number;
 }
 
+export interface LabelHistoryItem {
+	uuid: EventIdString;
+	pubkey: PubKeyString;
+	created_at: number;
+	/** labels added by this event */
+	labels: string[];
+}
+
+export interface SubjectHistoryItem {
+	uuid: EventIdString;
+	pubkey: PubKeyString;
+	created_at: number;
+	subject: string;
+}
+
 export type IssuesOrPrsByStatus = {
 	[K in IssueOrPrStatus]: EventIdString[];
 };
@@ -80,6 +95,8 @@ export interface IssueOrPrBase {
 	description: string;
 	status: IssueOrPrStatus;
 	status_history: StatusHistoryItem[];
+	label_history: LabelHistoryItem[];
+	subject_history: SubjectHistoryItem[];
 	deleted_ids: EventIdString[];
 	quality_children: ChildEventRef[];
 	quality_children_count: number;

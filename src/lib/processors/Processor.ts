@@ -17,6 +17,7 @@ import { getEventUID, isReplaceable, unixNow } from 'applesauce-core/helpers';
 import {
 	DeletionKind,
 	IssueKind,
+	LabelKind,
 	PatchKind,
 	PrKind,
 	QualityChildKinds,
@@ -34,10 +35,19 @@ import { aRefPToAddressPointer, getRepoRefs } from '$lib/utils';
 import db from '$lib/dbs/LocalDb';
 import { getRepoRef } from '$lib/type-helpers/repo';
 import processRepoUpdates from './Repo';
-import processIssueUpdates, { getCurrentStatusFromStatusHistory, updateRepoMetrics } from './Issue';
+import processIssueUpdates, {
+	getCurrentStatusFromStatusHistory,
+	getCurrentTagsFromLabelHistory,
+	getCurrentTitleFromSubjectHistory,
+	updateRepoMetrics
+} from './Issue';
 import processPrUpdates from './Pr';
 import { processOutboxUpdates } from './Outbox';
-import { deletionRelatedToIssueOrPrItem, extractRootIdIfNonReplaceable } from '$lib/git-utils';
+import {
+	deletionRelatedToIssueOrPrItem,
+	extractRootIdIfNonReplaceable,
+	getLabelEventTargetId
+} from '$lib/git-utils';
 
 class Processor {
 	/// Processes all new data points to update LocalDb or send events to the InMemoryDB
@@ -363,6 +373,15 @@ function identifyExistingItemsToUpdate(updates: ProcessorUpdate[]): DbItemsKeysC
 					getRepoRefs(u.event).forEach((r) => exiting_db_item_keys.repos.add(r));
 					break;
 				}
+				case LabelKind: {
+					const target_id = getLabelEventTargetId(u.event);
+					if (target_id) {
+						// label events can target either issues or PRs
+						exiting_db_item_keys.issues.add(target_id);
+						exiting_db_item_keys.prs.add(target_id);
+					}
+					break;
+				}
 				default:
 					if ([...StatusKinds, ...QualityChildKinds].includes(u.event.kind)) {
 						const root_id = extractRootIdIfNonReplaceable(u.event);
@@ -535,6 +554,28 @@ const processDeletionEventForTableItem = (item: IssueOrPRTableItem, deletion: No
 			return true;
 		});
 		item.status = getCurrentStatusFromStatusHistory(item);
+		// label history
+		if (item.label_history) {
+			item.label_history = item.label_history.filter((h) => {
+				if (events_for_deletion.includes(h.uuid) && authorised(h.pubkey)) {
+					item.deleted_ids.push(h.uuid);
+					return false;
+				}
+				return true;
+			});
+			item.tags = getCurrentTagsFromLabelHistory(item);
+		}
+		// subject history
+		if (item.subject_history) {
+			item.subject_history = item.subject_history.filter((h) => {
+				if (events_for_deletion.includes(h.uuid) && authorised(h.pubkey)) {
+					item.deleted_ids.push(h.uuid);
+					return false;
+				}
+				return true;
+			});
+			item.title = getCurrentTitleFromSubjectHistory(item);
+		}
 		// item itself
 		if (events_for_deletion.includes(item.uuid) && authorised(item.author)) {
 			item.deleted_ids.push(item.uuid);
