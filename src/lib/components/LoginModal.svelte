@@ -16,7 +16,6 @@
 	// @ts-expect-error
 	import QRCode from 'svelte-qrcode';
 	import { icons_misc } from '$lib/icons';
-	import CopyField from './CopyField.svelte';
 	import { nip19 } from 'nostr-tools';
 	import { isWebSocketUrl, type WebSocketUrl } from '$lib/types';
 	import accounts_manager from '$lib/accounts';
@@ -327,6 +326,7 @@
 		{:else if nostr_connect}
 			<div class="prose"><h4 class="text-center">Nostr Connect</h4></div>
 			<div class="mt-3 flex w-full justify-center">
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 				<a href={nostr_connect_url} target="_blank" rel="noopener noreferrer" class="block">
 					<div class="bg-white pt-4 pl-4 transition-opacity hover:opacity-80">
 						<QRCode value={nostr_connect_url} size={512} />
@@ -334,6 +334,7 @@
 				</a>
 			</div>
 			<div class="mt-3 flex w-full items-center gap-2">
+				<!-- eslint-disable svelte/no-navigation-without-resolve -->
 				<a
 					href={nostr_connect_url}
 					target="_blank"
@@ -345,6 +346,7 @@
 						? `${nostr_connect_url.substring(0, 100)}...${nostr_connect_url.substring(nostr_connect_url.length - 5)}`
 						: nostr_connect_url}
 				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 				<button
 					class="btn btn-sm btn-square"
 					class:btn-success={nostr_connect_url_copied}
