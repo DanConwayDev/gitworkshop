@@ -7,6 +7,7 @@
 	import Thread from '$lib/components/event/Thread.svelte';
 	import PrOrIssueDetails from '$lib/components/prs-or-issues/PrOrIssueDetails.svelte';
 	import store from '$lib/store.svelte';
+	import CoverNote from '$lib/components/prs-or-issues/CoverNote.svelte';
 
 	let {
 		data
@@ -33,6 +34,7 @@
 		<div class="mx-auto max-w-6xl lg:flex">
 			<div class="md:mr-2 lg:w-2/3">
 				<div class="max-w-4xl">
+					<CoverNote {table_item} {thread_events} />
 					<Thread
 						type="pr"
 						event={table_item.event}

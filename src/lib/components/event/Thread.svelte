@@ -3,6 +3,7 @@
 	import type { NostrEvent } from 'nostr-tools';
 	import ThreadTree from './ThreadTree.svelte';
 	import type { IssueOrPRTableItem } from '$lib/types';
+	import { CoverNoteKind } from '$lib/kinds';
 
 	let {
 		type,
@@ -18,7 +19,8 @@
 		show_compose: boolean;
 	} = $props();
 
-	let thread_trees = $derived(getThreadTrees(type, event, replies));
+	let filtered_replies = $derived(replies.filter((e) => e.kind !== CoverNoteKind));
+	let thread_trees = $derived(getThreadTrees(type, event, filtered_replies));
 </script>
 
 {#each thread_trees as tree, i (tree.event.id)}

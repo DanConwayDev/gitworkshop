@@ -73,6 +73,9 @@ export type ActionDvmRequestKind = typeof ActionDvmRequestKind;
 export const ActionDvmResponseKind = 6600;
 export type ActionDvmResponseKind = typeof ActionDvmResponseKind;
 
+export const CoverNoteKind = 1624;
+export type CoverNoteKind = typeof CoverNoteKind;
+
 export const LegacyGitReplyKind = 1622;
 export type LegacyGitReplyKind = typeof LegacyGitReplyKind;
 
