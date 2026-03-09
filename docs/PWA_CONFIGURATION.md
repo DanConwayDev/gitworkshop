@@ -76,13 +76,20 @@ navigateFallbackDenylist: [
 - The error appears on every soft reload, breaking the entire application
 - **This is the #1 cause of PWA white screen issues**
 
-### 4. `skipWaiting: false` and `registerType: 'prompt'` (CRITICAL!)
+### 4. `skipWaiting: false`, `registerType: 'prompt'`, and `controllerchange` listener (CRITICAL!)
 
 ```typescript
 // In vite.config.ts:
 registerType: 'prompt',  // Wait for user to click "Update" button
 skipWaiting: false,      // Don't auto-activate - prevents MIME errors!
 clientsClaim: true       // Claim clients after user-initiated update
+```
+
+```typescript
+// In PwaUpdateNotification.svelte — CRITICAL listener:
+navigator.serviceWorker.addEventListener('controllerchange', () => {
+	window.location.reload();
+});
 ```
 
 **Why skipWaiting MUST be false:**
@@ -98,6 +105,17 @@ clientsClaim: true       // Claim clients after user-initiated update
 - `'autoUpdate'` would auto-activate the new SW (same problem as skipWaiting)
 - `'prompt'` shows update notification and waits for user action
 - User controls when the update happens via the update button
+
+**Why the `controllerchange` listener is CRITICAL:**
+
+- `clientsClaim: true` means the new SW immediately claims all open tabs when it activates
+- Even with `skipWaiting: false`, the new SW can activate if all other tabs are closed
+- When the new SW claims a tab, that tab's HTML still references **old hashed JS filenames**
+- Any SvelteKit client-side navigation then tries to dynamically import those old chunks
+- The old files no longer exist on the server → server returns `index.html` (SPA fallback) → MIME error → white screen
+- The `controllerchange` event fires the instant the new SW takes control
+- Reloading immediately at that point fetches fresh HTML with correct new asset hashes
+- **This is the fix for the "white screen after deployment without pressing anything" bug**
 
 ### 5. `cleanupOutdatedCaches: true` (REQUIRED!)
 
@@ -155,6 +173,19 @@ cleanupOutdatedCaches: true;
 - First visit while offline will fail
 - Requires multiple visits to activate
 
+### ❌ DON'T Remove the `controllerchange` listener in `PwaUpdateNotification.svelte`
+
+- Without it: when new SW claims the page, old JS hashes are still in memory
+- SvelteKit navigation dynamically imports old chunk filenames → MIME errors → white screen
+- This is the root cause of the "white screen after deployment" bug
+
+### ❌ DON'T Clear All Caches in `handleUpdate`
+
+- The new SW's precache is installed during the waiting phase
+- Clearing all caches before `updateSW(true)` deletes the new SW's precache
+- After reload, everything must be re-fetched from network (slow, fragile)
+- `cleanupOutdatedCaches: true` in workbox config already removes old caches automatically
+
 ### ❌ DON'T Add Conflicting Manual Entries
 
 - Don't manually add files that glob patterns will find
@@ -180,6 +211,18 @@ cleanupOutdatedCaches: true;
 **Problem**: SW doesn't control pages on first visit  
 **Symptom**: Hard refresh offline shows `ERR_INTERNET_DISCONNECTED`  
 **Solution**: Add `skipWaiting: true` and `clientsClaim: true`
+
+### Mistake #5: Missing `controllerchange` reload listener
+
+**Problem**: New SW activates (via `clientsClaim`) while old page is open; old JS hashes become invalid  
+**Symptom**: White screen after deployment; MIME type errors for `/_app/immutable/...` JS files; happens without user pressing anything  
+**Solution**: Add `navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload())` in `PwaUpdateNotification.svelte`
+
+### Mistake #6: Clearing all caches in `handleUpdate` before `updateSW(true)`
+
+**Problem**: Deletes the new SW's precache before it activates  
+**Symptom**: After update, all assets must be re-fetched from network; slow first load  
+**Solution**: Remove manual cache clearing; rely on `cleanupOutdatedCaches: true` in workbox config
 
 ### Mistake #4: Adding Duplicate Entries
 

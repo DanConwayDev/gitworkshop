@@ -7,6 +7,16 @@
 	onMount(async () => {
 		// Only register service worker in production
 		if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+			// CRITICAL: Listen for controller changes. When a new SW takes over (via clientsClaim),
+			// the current page's HTML still references old hashed JS filenames. Any subsequent
+			// navigation or dynamic import will fail with MIME type errors (server returns index.html
+			// for missing old JS files). Force a full reload immediately to get fresh HTML with
+			// correct asset hashes before SvelteKit tries to load any stale chunks.
+			navigator.serviceWorker.addEventListener('controllerchange', () => {
+				console.log('PWA: Service worker controller changed, reloading for fresh assets...');
+				window.location.reload();
+			});
+
 			try {
 				// @ts-expect-error - virtual module from @vite-pwa/sveltekit
 				const pwaModule = await import('virtual:pwa-register');
@@ -51,28 +61,15 @@
 		if (updateSW) {
 			try {
 				console.log('PWA: Starting update process...');
-
-				// Clear all caches first to prevent stale content
-				if ('caches' in window) {
-					const cacheNames = await caches.keys();
-					console.log('PWA: Clearing', cacheNames.length, 'caches');
-					await Promise.all(cacheNames.map((name) => caches.delete(name)));
-				}
-
-				// Update the service worker (this triggers skipWaiting)
+				// Trigger skipWaiting on the waiting SW. This causes it to activate,
+				// which fires the 'controllerchange' event above, which reloads the page.
+				// cleanupOutdatedCaches:true in workbox config handles removing old caches.
+				// Do NOT manually clear caches here — that would delete the new SW's precache
+				// before the reload, forcing everything to be re-fetched from the network.
 				await updateSW(true);
-
-				console.log('PWA: Service worker updated, reloading...');
-
-				// Force a hard reload - this will fetch fresh content from the server
-				window.location.reload();
 			} catch (error) {
 				console.error('PWA update failed:', error);
-				// Even if update fails, clear caches and reload to recover
-				if ('caches' in window) {
-					const cacheNames = await caches.keys();
-					await Promise.all(cacheNames.map((name) => caches.delete(name)));
-				}
+				// Fallback: reload anyway so the user isn't stuck
 				window.location.reload();
 			}
 		}
