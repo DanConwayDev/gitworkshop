@@ -3,32 +3,24 @@
 
 	let showUpdate = $state(false);
 	let updateSW: ((reloadPage?: boolean) => Promise<void>) | undefined = $state(undefined);
-	// Set to true only when the user explicitly clicks "Update", so the controllerchange
-	// listener knows whether the SW activation was user-initiated or unexpected.
-	let userInitiatedUpdate = false;
 
 	onMount(async () => {
 		// Only register service worker in production
 		if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-			// CRITICAL: Listen for controller changes. When a new SW takes over (via clientsClaim),
-			// the current page's HTML still references old hashed JS filenames. Any subsequent
-			// navigation or dynamic import will fail with MIME type errors (server returns index.html
-			// for missing old JS files). Force a full reload immediately to get fresh HTML with
-			// correct asset hashes before SvelteKit tries to load any stale chunks.
+			// Safety net for unexpected SW activation. When the user clicks "Update",
+			// workbox-window's own "controlling" listener (event.isUpdate === true) handles
+			// the reload — but we can't easily distinguish that case here, so we reload in
+			// both cases. A double reload is harmless; the first one wins.
 			//
-			// If the user clicked "Update", updateSW(true) already triggers a reload — this listener
-			// is a safety net for the case where the SW activates unexpectedly (e.g. all other tabs
-			// were closed, causing the old SW to be discarded and the new one to activate without
-			// skipWaiting being called). In that scenario we must reload to avoid MIME errors.
+			// The critical case this covers: the new SW activates WITHOUT skipWaiting being
+			// called — specifically when all tabs are closed and the browser discards the old
+			// SW, activating the new one automatically. The page's HTML still references old
+			// hashed JS filenames; any SvelteKit navigation will try to dynamically import
+			// those stale chunks, get index.html back from the server (SPA fallback), and
+			// fail with a MIME type error → white screen → user can't recover without
+			// clearing all browser data.
 			navigator.serviceWorker.addEventListener('controllerchange', () => {
-				if (userInitiatedUpdate) {
-					// User clicked Update — updateSW(true) handles the reload, nothing to do here.
-					console.log('PWA: User-initiated SW update, reload handled by updateSW.');
-					return;
-				}
-				// Unexpected activation (e.g. last tab closed elsewhere). The page's asset hashes
-				// are now stale — reload immediately before any navigation breaks things.
-				console.log('PWA: Unexpected SW controller change, reloading for fresh assets...');
+				console.log('PWA: SW controller changed, reloading for fresh assets...');
 				window.location.reload();
 			});
 
@@ -76,9 +68,8 @@
 		if (updateSW) {
 			try {
 				console.log('PWA: Starting update process...');
-				userInitiatedUpdate = true;
-				// Trigger skipWaiting on the waiting SW. This causes it to activate,
-				// which fires the 'controllerchange' event above (ignored via flag),
+				// Calls messageSkipWaiting() on the waiting SW, which activates it.
+				// workbox-window's own "controlling" listener (event.isUpdate === true)
 				// then reloads the page with fresh HTML and asset hashes.
 				// cleanupOutdatedCaches:true in workbox config handles removing old caches.
 				// Do NOT manually clear caches here — that would delete the new SW's precache
@@ -86,7 +77,6 @@
 				await updateSW(true);
 			} catch (error) {
 				console.error('PWA update failed:', error);
-				userInitiatedUpdate = false;
 				// Fallback: reload anyway so the user isn't stuck
 				window.location.reload();
 			}

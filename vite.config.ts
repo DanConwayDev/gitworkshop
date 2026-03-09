@@ -51,9 +51,13 @@ export default defineConfig({
 				globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2,json}'],
 				// ⚠️ REQUIRED: These entries map '/' to index.html for navigation fallback
 				// Without these: offline navigation fails with 'non-precached-url' errors
+				// ⚠️ CRITICAL: revision MUST be set (not null) so workbox replaces the cached
+				// index.html on each deploy. With revision:null workbox never updates it, so
+				// after an update the SW serves stale HTML with old JS hashes while the old
+				// JS files have been cleaned up → MIME errors → permanent white screen.
 				additionalManifestEntries: [
-					{ url: '/', revision: null },
-					{ url: 'index.html', revision: null }
+					{ url: '/', revision: commitHash },
+					{ url: 'index.html', revision: commitHash }
 				],
 				navigateFallback: '/',
 				navigateFallbackDenylist: [
