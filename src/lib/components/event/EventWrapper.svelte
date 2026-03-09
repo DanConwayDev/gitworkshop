@@ -132,7 +132,6 @@
 			});
 			if (d_event) {
 				query_centre.publishEvent(d_event);
-				// TODO - enhance publishEvent to send to relays related to deleted event
 			}
 		} catch {
 			rejected_deletion = true;

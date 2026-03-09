@@ -126,6 +126,22 @@ class QueryCentreExternal {
 				const a_refs = event.tags
 					.filter((t) => t[1] && t[0] === 'a' && t[1].startsWith(`${RepoAnnKind}`))
 					.map((t) => t[1]) as RepoRef[];
+				// For deletion events, also look up repos via e-tagged PR/issue event IDs
+				const e_refs = event.tags
+					.filter((t) => t[1] && t[0] === 'e')
+					.map((t) => t[1] as EventIdString);
+				if (e_refs.length > 0) {
+					const [prs, issues] = await Promise.all([
+						db.prs.bulkGet(e_refs),
+						db.issues.bulkGet(e_refs)
+					]);
+					[...prs, ...issues].forEach((item) => {
+						if (item)
+							item.repos.forEach((r) => {
+								if (!a_refs.includes(r)) a_refs.push(r);
+							});
+					});
+				}
 				// Note: here we are just ignoring repos that we don't have a record for so we wont send to their relays
 				return (await db.repos.bulkGet(a_refs)).filter((a_ref) => !!a_ref);
 			})()
