@@ -1,4 +1,4 @@
-# Trusted Maintainer Model for Web Clients
+# Selected Maintainer Model for Web Clients
 
 **Purpose:** Reference document for web client developers displaying ngit repositories  
 **Audience:** Client developers who need to understand how to discover, validate, and display multi-maintainer repositories
@@ -104,9 +104,9 @@ NIP-32 labels (kind 1985) applied to repository content (commits, issues, PRs) b
 
 The ngit CLI's `RepoRef` struct (`src/lib/repo_ref.rs:34`) is the canonical in-memory representation of a resolved repository. Understanding how it is built is essential for client implementors.
 
-### The `trusted_maintainer` Field
+### The `selected_maintainer` Field
 
-`RepoRef` has a `trusted_maintainer: PublicKey` field — the single pubkey that was the starting point for resolution. This is the npub the user navigated to (e.g. from a nostr URL or a link). It anchors the coordinate used to reference the repository: `naddr` coordinates always point to the trusted maintainer's pubkey + identifier.
+`RepoRef` has a `selected_maintainer: PublicKey` field — the single pubkey that was the starting point for resolution. This is the npub the user navigated to (e.g. from a nostr URL or a link). It anchors the coordinate used to reference the repository: `naddr` coordinates always point to the selected maintainer's pubkey + identifier.
 This is distinct from the full `maintainers` list, which contains all pubkeys in the connected chain.
 
 ### Recursive Discovery in `get_repo_ref_from_cache`
@@ -114,7 +114,7 @@ This is distinct from the full `maintainers` list, which contains all pubkeys in
 The function `get_repo_ref_from_cache` (`src/lib/client.rs:1428`) shows exactly how a client should resolve a repository from a starting coordinate:
 
 ```
-1. Start with the trusted maintainer's pubkey in a set
+1. Start with the selected maintainer's pubkey in a set
 2. Fetch all kind 30617 events for (pubkey, identifier) for every pubkey in the set
 3. For each event found, add all listed maintainers to the set
 4. If any new pubkeys were added, loop back to step 2
@@ -137,12 +137,12 @@ Once all maintainer announcement events are collected, fields are merged with tw
 - `git_server` (clone URLs) — all clone URLs from all announcements, deduplicated
 - `blossoms` — all blossom server URLs, deduplicated
   These are "infrastructure" — each maintainer hosts their own copy, and clients should know about all of them.
-  **Fields taken from the trusted maintainer's own event:**
+  **Fields taken from the selected maintainer's own event:**
 - `identifier`
 - `root_commit` (earliest unique commit)
-- `trusted_maintainer` (always the starting pubkey)
+- `selected_maintainer` (always the starting pubkey)
   **The full maintainer set:**
-- `maintainers` — the complete set of all pubkeys discovered through the recursive chain, not just those listed in the trusted maintainer's own event
+- `maintainers` — the complete set of all pubkeys discovered through the recursive chain, not just those listed in the selected maintainer's own event
   The `maintainers_without_announcement` field tracks pubkeys that are listed as maintainers but have not yet published their own announcement event for this identifier.
 
 ---
@@ -161,32 +161,32 @@ This means every patch/PR/issue event contains `a` tags of the form:
 
 ### Why This Matters for Clients
 
-A client querying for issues/PRs/patches for a repository should **filter by any of the maintainer coordinates**, not just the trusted maintainer's coordinate. An issue tagged with Bob's coordinate is just as much a part of the repository as one tagged with Alice's coordinate, provided Alice and Bob are in the same maintainer chain.
+A client querying for issues/PRs/patches for a repository should **filter by any of the maintainer coordinates**, not just the selected maintainer's coordinate. An issue tagged with Bob's coordinate is just as much a part of the repository as one tagged with Alice's coordinate, provided Alice and Bob are in the same maintainer chain.
 Practically: to fetch all issues for a repository, query for kind 1621 events that have an `a` tag matching `30617:<any-maintainer-pubkey>:<identifier>`.
 Also note: maintainer pubkeys are also added as `p` tags on patches/PRs (for notification routing), but the `a` tags are the authoritative repository reference.
 
 ---
 
-## The Trusted Maintainer: A User's Trust Anchor
+## The Selected Maintainer: A User's Starting Anchor
 
 ### The Problem
 
-A web client cannot independently verify every repository on the network. Anyone can publish a kind 30617 announcement claiming to maintain any project. The client needs a starting point for trust.
+A web client cannot independently verify every repository on the network. Anyone can publish a kind 30617 announcement claiming to maintain any project. The client needs a starting point for resolution.
 
-### The Solution: One Trusted Maintainer Per User
+### The Solution: One Selected Maintainer Per User
 
-Each user configures **a single trusted maintainer** — one npub they personally trust (e.g. a developer whose identity they have verified out-of-band). This is the root of their trust graph.
-From that single anchor, the client discovers repositories and other maintainers by following the maintainer chain recursively. This mirrors how trust works in practice: you trust specific people, and through them you discover others.
-This is a deliberate design constraint. Multiple trust roots would complicate the model significantly and are not needed — the recursive chain handles the multi-maintainer case naturally.
+Each user configures **a single selected maintainer** — one npub they have chosen (e.g. a developer whose identity they have verified out-of-band). This is the root of their discovery graph.
+From that single anchor, the client discovers repositories and other maintainers by following the maintainer chain recursively. This mirrors how discovery works in practice: you select specific people, and through them you discover others.
+This is a deliberate design constraint. Multiple roots would complicate the model significantly and are not needed — the recursive chain handles the multi-maintainer case naturally.
 
 ### Discovery Flow
 
-Given a user's trusted maintainer T:
+Given a user's selected maintainer T:
 
 1. Fetch T's announcements (kind 30617 authored by T)
 2. For each announcement, resolve the full recursive maintainer chain (as above)
 3. The resulting interconnected set of pubkeys + identifier = one repository to display
-   Different users with different trusted maintainers may arrive at the same repository from different directions. User 1 trusts Alice, User 2 trusts Bob — if Alice and Bob are in the same maintainer chain for `my-project`, both users see the same repository. The `trusted_maintainer` field in each user's resolved `RepoRef` will differ (Alice vs Bob), but the underlying repository — its name, description, git data, issues, PRs — is the same.
+   Different users with different selected maintainers may arrive at the same repository from different directions. User 1 selects Alice, User 2 selects Bob — if Alice and Bob are in the same maintainer chain for `my-project`, both users see the same repository. The `selected_maintainer` field in each user's resolved `RepoRef` will differ (Alice vs Bob), but the underlying repository — its name, description, git data, issues, PRs — is the same.
 
 ---
 
@@ -213,8 +213,8 @@ A client that shows Alice as a maintainer of Eve's repo is misleading users. It 
 
 ### The Solution: Only Show Chain-Reachable Maintainers
 
-A client should only display a pubkey as a maintainer if they are **reachable from the user's trusted maintainer** via the recursive chain.
-If the user trusts Alice, and Alice does not list Eve (and Eve is not reachable from Alice's chain), then Eve's repository simply does not appear. If Eve lists Alice but Alice does not list Eve back, Alice should **not** be shown as a maintainer of Eve's repository — the relationship is unilateral and unacknowledged.
+A client should only display a pubkey as a maintainer if they are **reachable from the user's selected maintainer** via the recursive chain.
+If the user selects Alice, and Alice does not list Eve (and Eve is not reachable from Alice's chain), then Eve's repository simply does not appear. If Eve lists Alice but Alice does not list Eve back, Alice should **not** be shown as a maintainer of Eve's repository — the relationship is unilateral and unacknowledged.
 The chain must connect in both directions (transitively) for two pubkeys to be considered part of the same repository unit.
 
 ---
@@ -226,7 +226,7 @@ The chain must connect in both directions (transitively) for two pubkeys to be c
 A repository shown to the user is:
 
 - A single identifier string
-- Plus the full set of pubkeys connected through mutual maintainer listings, reachable from the user's trusted maintainer
+- Plus the full set of pubkeys connected through mutual maintainer listings, reachable from the user's selected maintainer
   All announcements in that connected set are part of the same repository. Show them unified, not as separate entries.
 
 ### Displaying Repository Metadata
@@ -258,14 +258,14 @@ kinds: [1621]  (issues)
 #a: ["30617:<alice-pubkey>:<identifier>", "30617:<bob-pubkey>:<identifier>", ...]
 ```
 
-Include all maintainer pubkeys in the filter, not just the trusted maintainer's.
+Include all maintainer pubkeys in the filter, not just the selected maintainer's.
 
 ### Handling Forks / Splits
 
 When two announcements share an identifier but are **not** connected through the maintainer chain:
 
 - Treat them as separate repositories
-- The user will see only the one(s) reachable from their trusted maintainer
+- The user will see only the one(s) reachable from their selected maintainer
 - If both are reachable (e.g. the user trusts someone in each chain), display them distinctly — they are different projects that share a name
 - Consider a "related repositories" note if they share git history (same `r` root commit tag)
 
@@ -273,7 +273,7 @@ When two announcements share an identifier but are **not** connected through the
 
 Without a trust anchor the client has no basis for filtering. Options:
 
-- Prompt the user to configure a trusted maintainer before showing repositories
+- Prompt the user to configure a selected maintainer before showing repositories
 - Show all repositories with a clear "unverified" warning
 - Default to showing only repositories where the logged-in user is in the maintainer chain
 
@@ -281,19 +281,19 @@ Without a trust anchor the client has no basis for filtering. Options:
 
 ## Summary
 
-| Concept                        | Definition                                                                                    |
-| ------------------------------ | --------------------------------------------------------------------------------------------- |
-| Repository identity            | An identifier + the interconnected set of mutually-listing pubkeys                            |
-| Maintainer chain               | Recursive: owner lists maintainers, who list their own maintainers, etc.                      |
-| Same repository                | Two pubkeys that connect transitively through mutual maintainer listings                      |
-| Split                          | The chain breaks — two formerly-connected pubkeys become separate repositories                |
-| Trusted maintainer             | The single user-chosen npub that anchors all trust and discovery                              |
-| `trusted_maintainer` field     | The starting pubkey for resolution; used in naddr coordinates                                 |
-| Name / description / web       | Taken from the latest announcement event across all maintainers                               |
-| Clone URLs / relays            | Unioned across all maintainer announcements                                                   |
-| Authoritative events           | State, issue/PR/patch status, and NIP-32 labels from any recursive maintainer                 |
-| Suggestive events              | NIP-32 labels from outside the maintainer set                                                 |
-| `a` tags on issues/PRs/patches | One per maintainer — all maintainer coordinates tagged, not just the trusted one              |
-| Scam prevention                | Only show maintainers reachable from the user's trusted root — never show unilateral listings |
+| Concept                        | Definition                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Repository identity            | An identifier + the interconnected set of mutually-listing pubkeys                             |
+| Maintainer chain               | Recursive: owner lists maintainers, who list their own maintainers, etc.                       |
+| Same repository                | Two pubkeys that connect transitively through mutual maintainer listings                       |
+| Split                          | The chain breaks — two formerly-connected pubkeys become separate repositories                 |
+| Selected maintainer            | The single user-chosen npub that anchors all discovery                                         |
+| `selected_maintainer` field    | The starting pubkey for resolution; used in naddr coordinates                                  |
+| Name / description / web       | Taken from the latest announcement event across all maintainers                                |
+| Clone URLs / relays            | Unioned across all maintainer announcements                                                    |
+| Authoritative events           | State, issue/PR/patch status, and NIP-32 labels from any recursive maintainer                  |
+| Suggestive events              | NIP-32 labels from outside the maintainer set                                                  |
+| `a` tags on issues/PRs/patches | One per maintainer — all maintainer coordinates tagged, not just the selected one              |
+| Scam prevention                | Only show maintainers reachable from the user's selected root — never show unilateral listings |
 
 ---

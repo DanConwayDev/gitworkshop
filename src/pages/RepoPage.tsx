@@ -161,9 +161,9 @@ export default function RepoPage() {
               )}
               <div className="flex items-center gap-3 ml-12 flex-wrap">
                 <div className="flex items-center gap-1.5">
-                  <UserAvatar pubkey={repo.trustedMaintainer} size="sm" />
+                  <UserAvatar pubkey={repo.selectedMaintainer} size="sm" />
                   <UserName
-                    pubkey={repo.trustedMaintainer}
+                    pubkey={repo.selectedMaintainer}
                     className="text-sm text-muted-foreground"
                   />
                   {repo.maintainerSet.length > 1 && (

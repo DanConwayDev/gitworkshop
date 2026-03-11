@@ -191,7 +191,7 @@ export default function UserPage({ pubkey }: UserPageProps) {
           <div className="grid gap-3">
             {repos.map((repo) => (
               <UserRepoCard
-                key={`${repo.trustedMaintainer}:${repo.dTag}`}
+                key={`${repo.selectedMaintainer}:${repo.dTag}`}
                 repo={repo}
               />
             ))}
@@ -203,14 +203,14 @@ export default function UserPage({ pubkey }: UserPageProps) {
 }
 
 function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
-  const npub = nip19.npubEncode(repo.trustedMaintainer);
+  const npub = nip19.npubEncode(repo.selectedMaintainer);
   const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
     addSuffix: true,
   });
 
-  // Co-maintainers (excluding the page owner who is the trustedMaintainer)
+  // Co-maintainers (excluding the page owner who is the selectedMaintainer)
   const coMaintainers = repo.maintainerSet.filter(
-    (pk) => pk !== repo.trustedMaintainer,
+    (pk) => pk !== repo.selectedMaintainer,
   );
 
   return (

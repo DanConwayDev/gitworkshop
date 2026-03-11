@@ -96,7 +96,7 @@ export default function RepositoriesPage() {
           <div className="grid gap-3">
             {filtered.map((repo) => (
               <RepoCard
-                key={`${repo.trustedMaintainer}:${repo.dTag}`}
+                key={`${repo.selectedMaintainer}:${repo.dTag}`}
                 repo={repo}
               />
             ))}
@@ -108,7 +108,7 @@ export default function RepositoriesPage() {
 }
 
 function RepoCard({ repo }: { repo: ResolvedRepo }) {
-  const npub = nip19.npubEncode(repo.trustedMaintainer);
+  const npub = nip19.npubEncode(repo.selectedMaintainer);
   const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
     addSuffix: true,
   });
@@ -136,9 +136,9 @@ function RepoCard({ repo }: { repo: ResolvedRepo }) {
 
               <div className="flex items-center gap-3 ml-9 flex-wrap">
                 <div className="flex items-center gap-1.5">
-                  <UserAvatar pubkey={repo.trustedMaintainer} size="sm" />
+                  <UserAvatar pubkey={repo.selectedMaintainer} size="sm" />
                   <UserName
-                    pubkey={repo.trustedMaintainer}
+                    pubkey={repo.selectedMaintainer}
                     className="text-xs text-muted-foreground"
                   />
                   {repo.maintainerSet.length > 1 && (

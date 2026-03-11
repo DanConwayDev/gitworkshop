@@ -83,7 +83,7 @@ export interface MaintainerEdge {
 export interface ResolvedRepo {
   // --- Identity ---
   /** The pubkey used as the starting point for resolution (route anchor) */
-  trustedMaintainer: string;
+  selectedMaintainer: string;
   /** The d-tag identifier shared by all announcements in this repo */
   dTag: string;
 
@@ -102,7 +102,7 @@ export interface ResolvedRepo {
   relays: string[];
 
   // --- Maintainer set ---
-  /** All pubkeys in the transitive closure reachable from trustedMaintainer */
+  /** All pubkeys in the transitive closure reachable from selectedMaintainer */
   maintainerSet: string[];
   /**
    * "30617:<pubkey>:<dTag>" for every maintainer — used for #a tag queries
@@ -135,8 +135,8 @@ export interface ResolvedRepo {
 
 /**
  * Given a set of 30617 announcement events already in memory, resolve the
- * transitive maintainer chain starting from `trustedMaintainer` for a given
- * `dTag`. Returns a `ResolvedRepo` or `undefined` if the trusted maintainer
+ * transitive maintainer chain starting from `selectedMaintainer` for a given
+ * `dTag`. Returns a `ResolvedRepo` or `undefined` if the selected maintainer
  * has no announcement for this dTag.
  *
  * This is a pure function — no side effects, no relay fetches. Both
@@ -144,7 +144,7 @@ export interface ResolvedRepo {
  */
 export function resolveChain(
   events: NostrEvent[],
-  trustedMaintainer: string,
+  selectedMaintainer: string,
   dTag: string,
 ): ResolvedRepo | undefined {
   // Index all announcements for this dTag by pubkey for O(1) lookup
@@ -161,12 +161,12 @@ export function resolveChain(
     }
   }
 
-  // The trusted maintainer must have an announcement to anchor the chain
-  if (!byPubkey.has(trustedMaintainer)) return undefined;
+  // The selected maintainer must have an announcement to anchor the chain
+  if (!byPubkey.has(selectedMaintainer)) return undefined;
 
   // BFS over the maintainer graph
   const visited = new Set<string>();
-  const queue: string[] = [trustedMaintainer];
+  const queue: string[] = [selectedMaintainer];
   const edges: MaintainerEdge[] = [];
   const pending: string[] = [];
 
@@ -281,7 +281,7 @@ export function resolveChain(
   const maintainerSet = Array.from(visited);
 
   return {
-    trustedMaintainer,
+    selectedMaintainer,
     dTag,
     name: nameSource.value || dTag,
     description: descriptionSource.value,
@@ -305,11 +305,11 @@ export function resolveChain(
 /**
  * Given all 30617 events in the store, group them into resolved repositories.
  * Each connected component (by mutual maintainer listing) becomes one entry.
- * Only repos reachable from `trustedMaintainer` are included.
+ * Only repos reachable from `selectedMaintainer` are included.
  *
- * For repos where the trusted maintainer is NOT in the chain, we pick a
+ * For repos where the selected maintainer is NOT in the chain, we pick a
  * random maintainer from the connected component as the route anchor
- * (trustedMaintainer field). This will be refined later (e.g. prefer followed
+ * (selectedMaintainer field). This will be refined later (e.g. prefer followed
  * users).
  */
 /**
@@ -319,7 +319,7 @@ export function resolveChain(
  * @param events - All 30617 events to consider
  * @param forPubkey - If provided, only return repos where this pubkey is
  *   involved — either as the event author or listed in a `maintainers` tag.
- *   The pubkey is used as the trustedMaintainer when they have their own
+ *   The pubkey is used as the selectedMaintainer when they have their own
  *   announcement; otherwise the event author who listed them is used.
  */
 export function groupIntoResolvedRepos(
@@ -340,7 +340,7 @@ export function groupIntoResolvedRepos(
   for (const dTag of dTags) {
     if (forPubkey) {
       // Scoped mode: find repos where forPubkey is involved as author or
-      // maintainer, then resolve the chain with forPubkey as trusted
+      // maintainer, then resolve the chain with forPubkey as selected
       // maintainer when possible.
 
       // First try: the user has their own announcement for this dTag

@@ -15,7 +15,7 @@ const repoFilter: Filter[] = [{ kinds: [REPO_KIND], limit: 200 }];
  * list of resolved repositories.
  *
  * Multi-maintainer repos (where pubkeys mutually list each other) are merged
- * into a single ResolvedRepo. The trustedMaintainer on each result is a
+ * into a single ResolvedRepo. The selectedMaintainer on each result is a
  * randomly-selected pubkey from the connected component — good enough for
  * routing to the repo page for now.
  *

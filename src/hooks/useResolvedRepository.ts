@@ -9,10 +9,10 @@ import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
 
 /**
- * Fetch and reactively resolve a single repository by trusted maintainer
+ * Fetch and reactively resolve a single repository by selected maintainer
  * pubkey + d-tag.
  *
- * Layer 1: fetch the trusted maintainer's announcement from the relay.
+ * Layer 1: fetch the selected maintainer's announcement from the relay.
  *          The EventStore's addressLoader (wired in nostr.ts) will
  *          automatically fetch any co-maintainer announcements that the
  *          RepositoryModel subscribes to but aren't in the store yet.
@@ -29,7 +29,7 @@ export function useResolvedRepository(
   const store = useEventStore();
   const key = `${pubkey}:${dTag}`;
 
-  // Layer 1: seed the store with the trusted maintainer's announcement.
+  // Layer 1: seed the store with the selected maintainer's announcement.
   // The RepositoryModel will subscribe to co-maintainer announcements via
   // store.addressable(), which triggers the addressLoader for missing ones.
   use$(() => {

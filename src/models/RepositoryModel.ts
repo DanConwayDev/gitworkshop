@@ -5,10 +5,10 @@ import type { NostrEvent } from "nostr-tools";
 
 /**
  * RepositoryModel — reactively resolves the full maintainer chain for a
- * single repository starting from a trusted maintainer pubkey + d-tag.
+ * single repository starting from a selected maintainer pubkey + d-tag.
  *
  * How it works:
- * 1. Subscribe to the trusted maintainer's announcement via store.addressable()
+ * 1. Subscribe to the selected maintainer's announcement via store.addressable()
  * 2. Read the maintainers tag and subscribe to each listed pubkey's announcement
  * 3. For each of those, read their maintainers tags and subscribe further
  * 4. Repeat until no new pubkeys are discovered (fixed point)
@@ -18,10 +18,10 @@ import type { NostrEvent } from "nostr-tools";
  * automatically fetch any co-maintainer announcements that aren't in the
  * store yet when we subscribe to them via store.addressable().
  *
- * Model cache key: (trustedMaintainer, dTag) — one instance per repo page.
+ * Model cache key: (selectedMaintainer, dTag) — one instance per repo page.
  */
 export function RepositoryModel(
-  trustedMaintainer: string,
+  selectedMaintainer: string,
   dTag: string,
 ): Model<ResolvedRepo | undefined> {
   return (store) =>
@@ -36,7 +36,7 @@ export function RepositoryModel(
         const events = Array.from(latestByPubkey.values()).filter(
           (ev): ev is NostrEvent => ev !== undefined,
         );
-        observer.next(resolveChain(events, trustedMaintainer, dTag));
+        observer.next(resolveChain(events, selectedMaintainer, dTag));
       }
 
       // Subscribe to a pubkey's announcement and recursively subscribe to
@@ -74,8 +74,8 @@ export function RepositoryModel(
         return sub;
       }
 
-      // Start from the trusted maintainer
-      subscribe(trustedMaintainer);
+      // Start from the selected maintainer
+      subscribe(selectedMaintainer);
 
       return () => {
         // Cleanup: unsubscribe all — RxJS handles this via the subscription
