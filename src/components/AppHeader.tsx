@@ -1,0 +1,50 @@
+import { Link, useLocation } from "react-router-dom";
+import { LoginArea } from "@/components/auth/LoginArea";
+import { GitBranch, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export function AppHeader() {
+  const location = useLocation();
+
+  return (
+    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
+      <div className="container flex h-14 max-w-screen-xl items-center justify-between px-4 md:px-8">
+        <Link
+          to="/"
+          className="flex items-center gap-2.5 group transition-all"
+        >
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-lg blur-sm opacity-50 group-hover:opacity-75 transition-opacity" />
+            <div className="relative bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-lg p-1.5">
+              <GitBranch className="h-4 w-4 text-white" />
+            </div>
+          </div>
+          <span className="font-semibold text-lg tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+            ngit
+          </span>
+          <span className="text-xs text-muted-foreground font-medium bg-muted px-1.5 py-0.5 rounded-md">
+            issues
+          </span>
+        </Link>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            asChild
+            className={cn(
+              "h-8 w-8",
+              location.pathname === "/settings" && "bg-accent",
+            )}
+          >
+            <Link to="/settings">
+              <Settings className="h-4 w-4" />
+            </Link>
+          </Button>
+          <LoginArea className="max-w-60" />
+        </div>
+      </div>
+    </header>
+  );
+}
