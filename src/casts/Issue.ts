@@ -1,7 +1,10 @@
+import { CastRefEventStore, EventCast } from "applesauce-common/casts/cast";
 import { getOrComputeCachedValue } from "applesauce-core/helpers";
-import { getTagValue } from "applesauce-core/helpers";
+import { getTagValue, KnownEvent } from "applesauce-core/helpers/event";
 import type { NostrEvent } from "nostr-tools";
 import { ISSUE_KIND } from "@/lib/nip34";
+
+type IssueEvent = KnownEvent<typeof ISSUE_KIND>;
 
 // Cache symbols
 const SubjectSymbol = Symbol.for("issue-subject");
@@ -9,48 +12,44 @@ const LabelsSymbol = Symbol.for("issue-labels");
 const RepoCoordSymbol = Symbol.for("issue-repo-coord");
 
 /** Validate that a raw event is a well-formed issue */
-export function isValidIssue(event: NostrEvent): boolean {
+export function isValidIssue(event: NostrEvent): event is IssueEvent {
   return event.kind === ISSUE_KIND;
 }
 
-export interface IssueData {
-  event: NostrEvent;
-  id: string;
-  pubkey: string;
-  subject: string;
-  content: string;
-  repoCoord: string | undefined;
-  labels: string[];
-  createdAt: number;
-}
+export class Issue extends EventCast<IssueEvent> {
+  constructor(event: NostrEvent, store: CastRefEventStore) {
+    if (!isValidIssue(event)) throw new Error("Invalid issue event");
+    super(event, store);
+  }
 
-export function parseIssue(event: NostrEvent): IssueData | null {
-  if (!isValidIssue(event)) return null;
+  /** Convenience accessor — same as author.pubkey */
+  get pubkey(): string {
+    return this.event.pubkey;
+  }
 
-  const subject = getOrComputeCachedValue(
-    event,
-    SubjectSymbol,
-    () => getTagValue(event, "subject") ?? "(untitled)",
-  );
+  get subject(): string {
+    return getOrComputeCachedValue(
+      this.event,
+      SubjectSymbol,
+      () => getTagValue(this.event, "subject") ?? "(untitled)",
+    );
+  }
 
-  const repoCoord = getOrComputeCachedValue(
-    event,
-    RepoCoordSymbol,
-    () => event.tags.find(([t]) => t === "a")?.[1],
-  );
+  get repoCoord(): string | undefined {
+    return getOrComputeCachedValue(
+      this.event,
+      RepoCoordSymbol,
+      () => this.event.tags.find(([t]) => t === "a")?.[1],
+    );
+  }
 
-  const labels = getOrComputeCachedValue(event, LabelsSymbol, () =>
-    event.tags.filter(([t]) => t === "t").map(([, v]) => v),
-  );
+  get content(): string {
+    return this.event.content;
+  }
 
-  return {
-    event,
-    id: event.id,
-    pubkey: event.pubkey,
-    subject,
-    content: event.content,
-    repoCoord,
-    labels,
-    createdAt: event.created_at,
-  };
+  get labels(): string[] {
+    return getOrComputeCachedValue(this.event, LabelsSymbol, () =>
+      this.event.tags.filter(([t]) => t === "t").map(([, v]) => v),
+    );
+  }
 }

@@ -1,7 +1,17 @@
+import { CastRefEventStore, EventCast } from "applesauce-common/casts/cast";
 import { getOrComputeCachedValue } from "applesauce-core/helpers";
-import { getTagValue } from "applesauce-core/helpers";
+import {
+  getAddressPointerForEvent,
+  addRelayHintsToPointer,
+  naddrEncode,
+} from "applesauce-core/helpers/pointers";
+import { withImmediateValueOrDefault } from "applesauce-core/observable/with-immediate-value";
+import { getTagValue, KnownEvent } from "applesauce-core/helpers/event";
 import type { NostrEvent } from "nostr-tools";
+import { map } from "rxjs";
 import { REPO_KIND } from "@/lib/nip34";
+
+type RepositoryEvent = KnownEvent<typeof REPO_KIND>;
 
 // Cache symbols
 const NameSymbol = Symbol.for("repo-name");
@@ -11,92 +21,99 @@ const CloneUrlsSymbol = Symbol.for("repo-clone-urls");
 const WebUrlsSymbol = Symbol.for("repo-web-urls");
 const MaintainersSymbol = Symbol.for("repo-maintainers");
 const LabelsSymbol = Symbol.for("repo-labels");
-const CoordinateSymbol = Symbol.for("repo-coordinate");
 
 /** Validate that a raw event is a well-formed repository announcement */
-export function isValidRepository(event: NostrEvent): boolean {
+export function isValidRepository(event: NostrEvent): event is RepositoryEvent {
   return event.kind === REPO_KIND && !!getTagValue(event, "d");
 }
 
-/**
- * Lightweight helper object for repository data.
- * We don't extend EventCast here since repos are addressable events
- * and we just need to extract tag data.
- */
-export interface RepositoryData {
-  event: NostrEvent;
-  id: string;
-  pubkey: string;
-  dTag: string;
-  name: string;
-  description: string;
-  cloneUrls: string[];
-  webUrls: string[];
-  maintainers: string[];
-  labels: string[];
-  coordinate: string;
-  createdAt: number;
-}
+export class Repository extends EventCast<RepositoryEvent> {
+  constructor(event: NostrEvent, store: CastRefEventStore) {
+    if (!isValidRepository(event)) throw new Error("Invalid repository event");
+    super(event, store);
+  }
 
-export function parseRepository(event: NostrEvent): RepositoryData | null {
-  if (!isValidRepository(event)) return null;
+  /** Convenience accessor — same as author.pubkey */
+  get pubkey(): string {
+    return this.event.pubkey;
+  }
 
-  const dTag = getOrComputeCachedValue(
-    event,
-    DTagSymbol,
-    () => getTagValue(event, "d") ?? "",
-  );
+  get dTag(): string {
+    return getOrComputeCachedValue(
+      this.event,
+      DTagSymbol,
+      () => getTagValue(this.event, "d")!,
+    );
+  }
 
-  const name = getOrComputeCachedValue(
-    event,
-    NameSymbol,
-    () => getTagValue(event, "name") ?? dTag,
-  );
+  get name(): string {
+    return getOrComputeCachedValue(
+      this.event,
+      NameSymbol,
+      () => getTagValue(this.event, "name") ?? this.dTag,
+    );
+  }
 
-  const description = getOrComputeCachedValue(
-    event,
-    DescriptionSymbol,
-    () => getTagValue(event, "description") ?? "",
-  );
+  get description(): string {
+    return getOrComputeCachedValue(
+      this.event,
+      DescriptionSymbol,
+      () => getTagValue(this.event, "description") ?? "",
+    );
+  }
 
-  const cloneUrls = getOrComputeCachedValue(event, CloneUrlsSymbol, () =>
-    event.tags.filter(([t]) => t === "clone").map(([, v]) => v),
-  );
+  get cloneUrls(): string[] {
+    return getOrComputeCachedValue(this.event, CloneUrlsSymbol, () =>
+      this.event.tags.filter(([t]) => t === "clone").map(([, v]) => v),
+    );
+  }
 
-  const webUrls = getOrComputeCachedValue(event, WebUrlsSymbol, () =>
-    event.tags.filter(([t]) => t === "web").map(([, v]) => v),
-  );
+  get webUrls(): string[] {
+    return getOrComputeCachedValue(this.event, WebUrlsSymbol, () =>
+      this.event.tags.filter(([t]) => t === "web").map(([, v]) => v),
+    );
+  }
 
-  const maintainers = getOrComputeCachedValue(event, MaintainersSymbol, () => {
-    const mTag = event.tags.find(([t]) => t === "maintainers");
-    return mTag ? mTag.slice(1) : [event.pubkey];
-  });
+  get maintainers(): string[] {
+    return getOrComputeCachedValue(this.event, MaintainersSymbol, () => {
+      const mTag = this.event.tags.find(([t]) => t === "maintainers");
+      return mTag ? mTag.slice(1) : [this.event.pubkey];
+    });
+  }
 
-  const labels = getOrComputeCachedValue(event, LabelsSymbol, () =>
-    event.tags
-      .filter(([t]) => t === "t")
-      .map(([, v]) => v)
-      .filter((v) => v !== "personal-fork"),
-  );
+  get labels(): string[] {
+    return getOrComputeCachedValue(this.event, LabelsSymbol, () =>
+      this.event.tags
+        .filter(([t]) => t === "t")
+        .map(([, v]) => v)
+        .filter((v) => v !== "personal-fork"),
+    );
+  }
 
-  const coordinate = getOrComputeCachedValue(
-    event,
-    CoordinateSymbol,
-    () => `${REPO_KIND}:${event.pubkey}:${dTag}`,
-  );
+  /** NIP-19 address pointer for this addressable event */
+  get pointer() {
+    return getAddressPointerForEvent(this.event)!;
+  }
 
-  return {
-    event,
-    id: event.id,
-    pubkey: event.pubkey,
-    dTag,
-    name,
-    description,
-    cloneUrls,
-    webUrls,
-    maintainers,
-    labels,
-    coordinate,
-    createdAt: event.created_at,
-  };
+  /** Observable pointer with relay hints from the author's outboxes */
+  get pointer$() {
+    return this.author.outboxes$.pipe(
+      withImmediateValueOrDefault(undefined),
+      map((outboxes) =>
+        outboxes
+          ? addRelayHintsToPointer(this.pointer, outboxes.slice(0, 3))
+          : this.pointer,
+      ),
+    );
+  }
+
+  /** naddr-encoded address string */
+  get address(): string {
+    return naddrEncode(this.pointer);
+  }
+
+  /** Observable naddr string with relay hints */
+  get address$() {
+    return this.pointer$.pipe(map((pointer) => naddrEncode(pointer)));
+  }
 }

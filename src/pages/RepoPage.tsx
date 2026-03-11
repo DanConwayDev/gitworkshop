@@ -33,7 +33,7 @@ import {
   X,
 } from "lucide-react";
 import { repoCoordinate, type IssueStatus } from "@/lib/nip34";
-import type { IssueData } from "@/casts/Issue";
+import type { Issue } from "@/casts/Issue";
 
 export default function RepoPage() {
   const { npub, repoId } = useParams<{ npub: string; repoId: string }>();
@@ -354,14 +354,12 @@ function IssueRow({
   npub,
   repoId,
 }: {
-  issue: IssueData;
+  issue: Issue;
   status: IssueStatus;
   npub: string;
   repoId: string;
 }) {
-  const timeAgo = formatDistanceToNow(new Date(issue.createdAt * 1000), {
-    addSuffix: true,
-  });
+  const timeAgo = formatDistanceToNow(issue.createdAt, { addSuffix: true });
 
   return (
     <Link to={`/${npub}/${repoId}/${issue.id}`} className="group block">

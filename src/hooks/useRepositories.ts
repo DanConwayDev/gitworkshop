@@ -1,26 +1,23 @@
-import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { castTimelineStream } from "applesauce-common/observable";
+import type { CastRefEventStore } from "applesauce-common/casts/cast";
 import { pool } from "@/services/nostr";
 import { REPO_KIND, NGIT_RELAYS } from "@/lib/nip34";
-import { parseRepository, type RepositoryData } from "@/casts/Repository";
+import { Repository } from "@/casts/Repository";
 import type { Filter } from "applesauce-core/helpers";
-import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
+
+const filters: Filter[] = [{ kinds: [REPO_KIND], limit: 200 }];
 
 /**
  * Fetch all repository announcements from the ngit relay.
  */
-export function useRepositories(): RepositoryData[] | undefined {
+export function useRepositories(): Repository[] | undefined {
   const store = useEventStore();
-
-  const filters: Filter[] = useMemo(
-    () => [{ kinds: [REPO_KIND], limit: 200 }],
-    [],
-  );
-  const filterKey = JSON.stringify(filters);
+  const castStore = store as unknown as CastRefEventStore;
 
   // Fetch from relay
   use$(
@@ -28,22 +25,19 @@ export function useRepositories(): RepositoryData[] | undefined {
       pool
         .req(NGIT_RELAYS, filters)
         .pipe(onlyEvents(), mapEventsToStore(store)),
-    [filterKey, store],
+    [store],
   );
 
-  // Subscribe to store timeline
-  const events = use$(
-    () => store.timeline(filters) as unknown as Observable<NostrEvent[]>,
-    [filterKey, store],
+  // Subscribe to store timeline, cast to Repository instances
+  return use$(
+    () =>
+      store
+        .timeline(filters)
+        .pipe(
+          castTimelineStream(Repository, castStore),
+        ) as unknown as Observable<Repository[]>,
+    [store],
   );
-
-  return useMemo(() => {
-    if (!events) return undefined;
-    return events
-      .map(parseRepository)
-      .filter((r): r is RepositoryData => r !== null)
-      .sort((a, b) => b.createdAt - a.createdAt);
-  }, [events]);
 }
 
 /**
@@ -52,32 +46,35 @@ export function useRepositories(): RepositoryData[] | undefined {
 export function useRepository(
   pubkey: string | undefined,
   dTag: string | undefined,
-): RepositoryData | undefined {
+): Repository | undefined {
   const store = useEventStore();
+  const castStore = store as unknown as CastRefEventStore;
 
-  const filters: Filter[] | undefined = useMemo(() => {
-    if (!pubkey || !dTag) return undefined;
-    return [{ kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter];
-  }, [pubkey, dTag]);
-
-  const filterKey = JSON.stringify(filters);
+  const repoFilterKey = JSON.stringify({ pubkey, dTag });
 
   // Fetch from relay
   use$(() => {
-    if (!filters) return undefined;
+    if (!pubkey || !dTag) return undefined;
+    const repoFilters: Filter[] = [
+      { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
+    ];
     return pool
-      .req(NGIT_RELAYS, filters)
+      .req(NGIT_RELAYS, repoFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [filterKey, store]);
+  }, [repoFilterKey, store]);
 
-  // Subscribe to store
-  const events = use$(() => {
-    if (!filters) return undefined;
-    return store.timeline(filters) as unknown as Observable<NostrEvent[]>;
-  }, [filterKey, store]);
+  // Subscribe to store, cast to Repository
+  const repos = use$(() => {
+    if (!pubkey || !dTag) return undefined;
+    const repoFilters: Filter[] = [
+      { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
+    ];
+    return store
+      .timeline(repoFilters)
+      .pipe(castTimelineStream(Repository, castStore)) as unknown as Observable<
+      Repository[]
+    >;
+  }, [repoFilterKey, store]);
 
-  return useMemo(() => {
-    if (!events || events.length === 0) return undefined;
-    return parseRepository(events[0]) ?? undefined;
-  }, [events]);
+  return repos?.[0];
 }

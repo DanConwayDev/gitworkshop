@@ -8,13 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  GitBranch,
-  Search,
-  ExternalLink,
-  Sparkles,
-} from "lucide-react";
-import type { RepositoryData } from "@/casts/Repository";
+import { GitBranch, Search, ExternalLink, Sparkles } from "lucide-react";
+import type { Repository } from "@/casts/Repository";
 import { formatDistanceToNow } from "date-fns";
 
 export default function RepositoriesPage() {
@@ -109,17 +104,12 @@ export default function RepositoriesPage() {
   );
 }
 
-function RepoCard({ repo }: { repo: RepositoryData }) {
+function RepoCard({ repo }: { repo: Repository }) {
   const npub = nip19.npubEncode(repo.pubkey);
-  const timeAgo = formatDistanceToNow(new Date(repo.createdAt * 1000), {
-    addSuffix: true,
-  });
+  const timeAgo = formatDistanceToNow(repo.createdAt, { addSuffix: true });
 
   return (
-    <Link
-      to={`/${npub}/${repo.dTag}`}
-      className="group block"
-    >
+    <Link to={`/${npub}/${repo.dTag}`} className="group block">
       <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20 group-hover:-translate-y-0.5">
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-4">

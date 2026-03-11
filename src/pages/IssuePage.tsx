@@ -26,11 +26,13 @@ import {
   Clock,
   Calendar,
 } from "lucide-react";
-import { parseIssue } from "@/casts/Issue";
+import { Issue } from "@/casts/Issue";
 import { ISSUE_KIND, NGIT_RELAYS } from "@/lib/nip34";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { castTimelineStream } from "applesauce-common/observable";
+import type { CastRefEventStore } from "applesauce-common/casts/cast";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
@@ -56,33 +58,31 @@ export default function IssuePage() {
 
   const repo = useRepository(pubkey, repoId);
   const store = useEventStore();
+  const castStore = store as unknown as CastRefEventStore;
 
-  // Fetch the issue event by ID
-  const issueFilters: Filter[] | undefined = useMemo(() => {
-    if (!issueId) return undefined;
-    return [{ kinds: [ISSUE_KIND], ids: [issueId] }];
-  }, [issueId]);
-
-  const issueFilterKey = JSON.stringify(issueFilters);
+  const issueFilterKey = JSON.stringify(issueId);
 
   // Fetch from relay
   use$(() => {
-    if (!issueFilters) return undefined;
+    if (!issueId) return undefined;
+    const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
     return pool
       .req(NGIT_RELAYS, issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [issueFilterKey, store]);
 
-  // Subscribe to store
-  const issueEvents = use$(() => {
-    if (!issueFilters) return undefined;
-    return store.timeline(issueFilters) as unknown as Observable<NostrEvent[]>;
+  // Subscribe to store, cast to Issue
+  const issues = use$(() => {
+    if (!issueId) return undefined;
+    const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
+    return store
+      .timeline(issueFilters)
+      .pipe(castTimelineStream(Issue, castStore)) as unknown as Observable<
+      Issue[]
+    >;
   }, [issueFilterKey, store]);
 
-  const issue = useMemo(() => {
-    if (!issueEvents || issueEvents.length === 0) return undefined;
-    return parseIssue(issueEvents[0]) ?? undefined;
-  }, [issueEvents]);
+  const issue = issues?.[0];
 
   const status = useIssueStatus(issueId);
   const comments = useIssueComments(issueId);
@@ -147,9 +147,7 @@ export default function IssuePage() {
                 <div className="flex items-center gap-1">
                   <Clock className="h-3.5 w-3.5" />
                   <span>
-                    {formatDistanceToNow(new Date(issue.createdAt * 1000), {
-                      addSuffix: true,
-                    })}
+                    {formatDistanceToNow(issue.createdAt, { addSuffix: true })}
                   </span>
                 </div>
                 {issue.labels.length > 0 && (
@@ -194,10 +192,7 @@ export default function IssuePage() {
                         className="text-sm font-medium"
                       />
                       <p className="text-xs text-muted-foreground">
-                        {format(
-                          new Date(issue.createdAt * 1000),
-                          "MMM d, yyyy 'at' h:mm a",
-                        )}
+                        {format(issue.createdAt, "MMM d, yyyy 'at' h:mm a")}
                       </p>
                     </div>
                   </div>
