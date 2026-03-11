@@ -25,9 +25,11 @@ export function UserAvatar({
   linkToProfile,
 }: UserAvatarProps) {
   const profile = useProfile(pubkey);
-  const npub = nip19.npubEncode(pubkey);
+  const npub = pubkey ? nip19.npubEncode(pubkey) : undefined;
   const initials =
-    profile?.name?.slice(0, 2).toUpperCase() ?? npub.slice(5, 7).toUpperCase();
+    profile?.name?.slice(0, 2).toUpperCase() ??
+    npub?.slice(5, 7).toUpperCase() ??
+    "??";
 
   const avatar = (
     <Avatar className={cn(sizeClasses[size], className)}>
@@ -40,7 +42,7 @@ export function UserAvatar({
     </Avatar>
   );
 
-  if (linkToProfile) {
+  if (linkToProfile && npub) {
     return (
       <Link
         to={`/${npub}`}
@@ -64,11 +66,13 @@ interface UserNameProps {
 
 export function UserName({ pubkey, className, linkToProfile }: UserNameProps) {
   const profile = useProfile(pubkey);
-  const npub = nip19.npubEncode(pubkey);
+  const npub = pubkey ? nip19.npubEncode(pubkey) : undefined;
   const displayName =
-    profile?.displayName ?? profile?.name ?? npub.slice(0, 12) + "...";
+    profile?.displayName ??
+    profile?.name ??
+    (npub ? npub.slice(0, 12) + "..." : "unknown");
 
-  if (linkToProfile) {
+  if (linkToProfile && npub) {
     return (
       <Link
         to={`/${npub}`}
@@ -101,15 +105,19 @@ export function UserLink({
   nameClassName,
 }: UserLinkProps) {
   const profile = useProfile(pubkey);
-  const npub = nip19.npubEncode(pubkey);
+  const npub = pubkey ? nip19.npubEncode(pubkey) : undefined;
   const displayName =
-    profile?.displayName ?? profile?.name ?? npub.slice(0, 12) + "...";
+    profile?.displayName ??
+    profile?.name ??
+    (npub ? npub.slice(0, 12) + "..." : "unknown");
   const initials =
-    profile?.name?.slice(0, 2).toUpperCase() ?? npub.slice(5, 7).toUpperCase();
+    profile?.name?.slice(0, 2).toUpperCase() ??
+    npub?.slice(5, 7).toUpperCase() ??
+    "??";
 
   return (
     <Link
-      to={`/${npub}`}
+      to={`/${npub ?? ""}`}
       onClick={(e) => e.stopPropagation()}
       className={cn(
         "flex items-center gap-1.5 hover:opacity-80 transition-opacity",
