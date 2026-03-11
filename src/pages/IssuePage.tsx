@@ -11,7 +11,7 @@ import {
   useIssueZaps,
 } from "@/hooks/useIssues";
 import { useRepository } from "@/hooks/useRepositories";
-import { UserAvatar, UserName } from "@/components/UserAvatar";
+import { UserAvatar, UserName, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -140,10 +140,11 @@ export default function IssuePage() {
               </div>
 
               <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground ml-[calc(theme(spacing.3)+4.5rem-3.5rem)]">
-                <div className="flex items-center gap-1.5">
-                  <UserAvatar pubkey={issue.pubkey} size="sm" />
-                  <UserName pubkey={issue.pubkey} className="text-sm" />
-                </div>
+                <UserLink
+                  pubkey={issue.pubkey}
+                  avatarSize="sm"
+                  nameClassName="text-sm"
+                />
                 <div className="flex items-center gap-1">
                   <Clock className="h-3.5 w-3.5" />
                   <span>
@@ -185,16 +186,14 @@ export default function IssuePage() {
               <Card>
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-2">
-                    <UserAvatar pubkey={issue.pubkey} size="md" />
-                    <div>
-                      <UserName
-                        pubkey={issue.pubkey}
-                        className="text-sm font-medium"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {format(issue.createdAt, "MMM d, yyyy 'at' h:mm a")}
-                      </p>
-                    </div>
+                    <UserLink
+                      pubkey={issue.pubkey}
+                      avatarSize="md"
+                      nameClassName="text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {format(issue.createdAt, "MMM d, yyyy 'at' h:mm a")}
+                    </p>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -306,7 +305,12 @@ export default function IssuePage() {
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {participants.map((pk) => (
-                      <UserAvatar key={pk} pubkey={pk} size="sm" />
+                      <UserAvatar
+                        key={pk}
+                        pubkey={pk}
+                        size="sm"
+                        linkToProfile
+                      />
                     ))}
                   </div>
                 </div>
@@ -354,12 +358,12 @@ function CommentCard({ comment }: { comment: NostrEvent }) {
     <Card className="transition-all duration-200 hover:shadow-sm">
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
-          <UserAvatar pubkey={comment.pubkey} size="md" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5">
-              <UserName
+              <UserLink
                 pubkey={comment.pubkey}
-                className="text-sm font-medium"
+                avatarSize="md"
+                nameClassName="text-sm"
               />
               <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
                 <Calendar className="h-3 w-3" />

@@ -9,7 +9,7 @@ import { useNip34Loaders } from "@/hooks/useNip34Loaders";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import { map } from "rxjs/operators";
-import { UserAvatar, UserName } from "@/components/UserAvatar";
+import { UserAvatar, UserName, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -161,10 +161,10 @@ export default function RepoPage() {
               )}
               <div className="flex items-center gap-3 ml-12 flex-wrap">
                 <div className="flex items-center gap-1.5">
-                  <UserAvatar pubkey={repo.selectedMaintainer} size="sm" />
-                  <UserName
+                  <UserLink
                     pubkey={repo.selectedMaintainer}
-                    className="text-sm text-muted-foreground"
+                    avatarSize="sm"
+                    nameClassName="text-sm text-muted-foreground"
                   />
                   {repo.maintainerSet.length > 1 && (
                     <span className="text-sm text-muted-foreground/60">

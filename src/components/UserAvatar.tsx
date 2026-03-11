@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useProfile } from "@/hooks/useProfile";
 import { cn } from "@/lib/utils";
@@ -7,6 +8,8 @@ interface UserAvatarProps {
   pubkey: string;
   className?: string;
   size?: "sm" | "md" | "lg";
+  /** When true, wraps the avatar in a link to the user's profile page */
+  linkToProfile?: boolean;
 }
 
 const sizeClasses = {
@@ -15,12 +18,18 @@ const sizeClasses = {
   lg: "h-10 w-10 text-sm",
 };
 
-export function UserAvatar({ pubkey, className, size = "md" }: UserAvatarProps) {
+export function UserAvatar({
+  pubkey,
+  className,
+  size = "md",
+  linkToProfile,
+}: UserAvatarProps) {
   const profile = useProfile(pubkey);
   const npub = nip19.npubEncode(pubkey);
-  const initials = profile?.name?.slice(0, 2).toUpperCase() ?? npub.slice(5, 7).toUpperCase();
+  const initials =
+    profile?.name?.slice(0, 2).toUpperCase() ?? npub.slice(5, 7).toUpperCase();
 
-  return (
+  const avatar = (
     <Avatar className={cn(sizeClasses[size], className)}>
       {profile?.picture && (
         <AvatarImage src={profile.picture} alt={profile?.name ?? npub} />
@@ -30,17 +39,94 @@ export function UserAvatar({ pubkey, className, size = "md" }: UserAvatarProps) 
       </AvatarFallback>
     </Avatar>
   );
+
+  if (linkToProfile) {
+    return (
+      <Link
+        to={`/${npub}`}
+        onClick={(e) => e.stopPropagation()}
+        className="shrink-0 hover:opacity-80 transition-opacity"
+      >
+        {avatar}
+      </Link>
+    );
+  }
+
+  return avatar;
 }
 
 interface UserNameProps {
   pubkey: string;
   className?: string;
+  /** When true, wraps the name in a link to the user's profile page */
+  linkToProfile?: boolean;
 }
 
-export function UserName({ pubkey, className }: UserNameProps) {
+export function UserName({ pubkey, className, linkToProfile }: UserNameProps) {
   const profile = useProfile(pubkey);
   const npub = nip19.npubEncode(pubkey);
-  const displayName = profile?.displayName ?? profile?.name ?? npub.slice(0, 12) + "...";
+  const displayName =
+    profile?.displayName ?? profile?.name ?? npub.slice(0, 12) + "...";
+
+  if (linkToProfile) {
+    return (
+      <Link
+        to={`/${npub}`}
+        onClick={(e) => e.stopPropagation()}
+        className={cn("font-medium hover:underline", className)}
+      >
+        {displayName}
+      </Link>
+    );
+  }
 
   return <span className={cn("font-medium", className)}>{displayName}</span>;
+}
+
+interface UserLinkProps {
+  pubkey: string;
+  className?: string;
+  avatarSize?: "sm" | "md" | "lg";
+  nameClassName?: string;
+}
+
+/**
+ * Renders a user's avatar and name as a single clickable link to their profile.
+ * Use this in standalone contexts (not inside another link).
+ */
+export function UserLink({
+  pubkey,
+  className,
+  avatarSize = "sm",
+  nameClassName,
+}: UserLinkProps) {
+  const profile = useProfile(pubkey);
+  const npub = nip19.npubEncode(pubkey);
+  const displayName =
+    profile?.displayName ?? profile?.name ?? npub.slice(0, 12) + "...";
+  const initials =
+    profile?.name?.slice(0, 2).toUpperCase() ?? npub.slice(5, 7).toUpperCase();
+
+  return (
+    <Link
+      to={`/${npub}`}
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "flex items-center gap-1.5 hover:opacity-80 transition-opacity",
+        className,
+      )}
+    >
+      <Avatar className={cn(sizeClasses[avatarSize], "shrink-0")}>
+        {profile?.picture && (
+          <AvatarImage src={profile.picture} alt={profile?.name ?? npub} />
+        )}
+        <AvatarFallback className="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 text-foreground font-medium">
+          {initials}
+        </AvatarFallback>
+      </Avatar>
+      <span className={cn("font-medium hover:underline", nameClassName)}>
+        {displayName}
+      </span>
+    </Link>
+  );
 }
