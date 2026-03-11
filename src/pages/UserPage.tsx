@@ -4,7 +4,7 @@ import { nip19 } from "nostr-tools";
 import { formatDistanceToNow } from "date-fns";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserRepositories } from "@/hooks/useUserRepositories";
-import { UserAvatar } from "@/components/UserAvatar";
+import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useState } from "react";
-import type { Repository } from "@/casts/Repository";
+import type { ResolvedRepo } from "@/lib/nip34";
 
 interface UserPageProps {
   pubkey: string;
@@ -190,7 +190,10 @@ export default function UserPage({ pubkey }: UserPageProps) {
         ) : (
           <div className="grid gap-3">
             {repos.map((repo) => (
-              <UserRepoCard key={repo.id} repo={repo} />
+              <UserRepoCard
+                key={`${repo.trustedMaintainer}:${repo.dTag}`}
+                repo={repo}
+              />
             ))}
           </div>
         )}
@@ -199,11 +202,16 @@ export default function UserPage({ pubkey }: UserPageProps) {
   );
 }
 
-function UserRepoCard({ repo }: { repo: Repository }) {
-  const npub = nip19.npubEncode(repo.pubkey);
-  const timeAgo = formatDistanceToNow(new Date(repo.event.created_at * 1000), {
+function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
+  const npub = nip19.npubEncode(repo.trustedMaintainer);
+  const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
     addSuffix: true,
   });
+
+  // Co-maintainers (excluding the page owner who is the trustedMaintainer)
+  const coMaintainers = repo.maintainerSet.filter(
+    (pk) => pk !== repo.trustedMaintainer,
+  );
 
   return (
     <Link to={`/${npub}/${repo.dTag}`} className="group block">
@@ -227,6 +235,18 @@ function UserRepoCard({ repo }: { repo: Repository }) {
               )}
 
               <div className="flex items-center gap-3 ml-9 flex-wrap">
+                {coMaintainers.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    {coMaintainers.slice(0, 2).map((pk) => (
+                      <UserAvatar key={pk} pubkey={pk} size="sm" />
+                    ))}
+                    <span className="text-xs text-muted-foreground">
+                      +{coMaintainers.length} co-maintainer
+                      {coMaintainers.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                )}
+
                 <span className="text-xs text-muted-foreground/60">
                   {timeAgo}
                 </span>

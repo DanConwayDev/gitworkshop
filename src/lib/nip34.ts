@@ -312,7 +312,19 @@ export function resolveChain(
  * (trustedMaintainer field). This will be refined later (e.g. prefer followed
  * users).
  */
-export function groupIntoResolvedRepos(events: NostrEvent[]): ResolvedRepo[] {
+/**
+ * Given all 30617 events in the store, group them into resolved repositories.
+ * Each connected component (by mutual maintainer listing) becomes one entry.
+ *
+ * @param events - All 30617 events to consider
+ * @param trustedMaintainer - If provided, only resolve repos where this pubkey
+ *   has an announcement, using them as the BFS starting point. This ensures
+ *   the resulting ResolvedRepo.trustedMaintainer is always this pubkey.
+ */
+export function groupIntoResolvedRepos(
+  events: NostrEvent[],
+  trustedMaintainer?: string,
+): ResolvedRepo[] {
   // Collect all distinct dTags
   const dTags = new Set<string>();
   for (const ev of events) {
@@ -325,27 +337,33 @@ export function groupIntoResolvedRepos(events: NostrEvent[]): ResolvedRepo[] {
   const processedComponents = new Set<string>(); // "pubkey:dTag" keys already in a result
 
   for (const dTag of dTags) {
-    // Collect all pubkeys that have an announcement for this dTag
-    const pubkeysForDTag: string[] = [];
-    for (const ev of events) {
-      if (ev.kind !== REPO_KIND) continue;
-      const d = ev.tags.find(([t]) => t === "d")?.[1];
-      if (d === dTag) pubkeysForDTag.push(ev.pubkey);
-    }
-
-    for (const startPubkey of pubkeysForDTag) {
-      const componentKey = `${startPubkey}:${dTag}`;
-      if (processedComponents.has(componentKey)) continue;
-
-      const resolved = resolveChain(events, startPubkey, dTag);
-      if (!resolved) continue;
-
-      // Mark all members of this component as processed
-      for (const pk of resolved.maintainerSet) {
-        processedComponents.add(`${pk}:${dTag}`);
+    if (trustedMaintainer) {
+      // Scoped mode: only resolve from this specific pubkey
+      const resolved = resolveChain(events, trustedMaintainer, dTag);
+      if (resolved) results.push(resolved);
+    } else {
+      // Global mode: resolve all connected components
+      const pubkeysForDTag: string[] = [];
+      for (const ev of events) {
+        if (ev.kind !== REPO_KIND) continue;
+        const d = ev.tags.find(([t]) => t === "d")?.[1];
+        if (d === dTag) pubkeysForDTag.push(ev.pubkey);
       }
 
-      results.push(resolved);
+      for (const startPubkey of pubkeysForDTag) {
+        const componentKey = `${startPubkey}:${dTag}`;
+        if (processedComponents.has(componentKey)) continue;
+
+        const resolved = resolveChain(events, startPubkey, dTag);
+        if (!resolved) continue;
+
+        // Mark all members of this component as processed
+        for (const pk of resolved.maintainerSet) {
+          processedComponents.add(`${pk}:${dTag}`);
+        }
+
+        results.push(resolved);
+      }
     }
   }
 
