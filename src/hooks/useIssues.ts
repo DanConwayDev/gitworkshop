@@ -20,23 +20,35 @@ import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
 /**
- * Fetch issues for a repository coordinate.
+ * Fetch issues for a repository.
+ *
+ * Accepts either a single coordinate string or an array of coordinate strings
+ * (one per maintainer in the chain). Passing all maintainer coordinates
+ * ensures issues tagged against any co-maintainer's announcement are included.
+ *
  * Also fetches status events so we can determine current status.
  */
-export function useIssues(repoCoord: string | undefined): {
+export function useIssues(repoCoords: string | string[] | undefined): {
   issues: Issue[] | undefined;
   statusMap: Map<string, { status: IssueStatus; event: NostrEvent }>;
 } {
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  const issueFilterKey = JSON.stringify(repoCoord);
+  // Normalise to array for consistent filter building
+  const coords = repoCoords
+    ? Array.isArray(repoCoords)
+      ? repoCoords
+      : [repoCoords]
+    : undefined;
 
-  // Fetch issues from relay
+  const issueFilterKey = JSON.stringify(coords);
+
+  // Fetch issues from relay — one subscription covers all maintainer coords
   use$(() => {
-    if (!repoCoord) return undefined;
+    if (!coords || coords.length === 0) return undefined;
     const issueFilters: Filter[] = [
-      { kinds: [ISSUE_KIND], "#a": [repoCoord] } as Filter,
+      { kinds: [ISSUE_KIND], "#a": coords } as Filter,
     ];
     return pool
       .req(NGIT_RELAYS, issueFilters)
@@ -45,9 +57,9 @@ export function useIssues(repoCoord: string | undefined): {
 
   // Subscribe to issues in store, cast to Issue instances
   const issues = use$(() => {
-    if (!repoCoord) return undefined;
+    if (!coords || coords.length === 0) return undefined;
     const issueFilters: Filter[] = [
-      { kinds: [ISSUE_KIND], "#a": [repoCoord] } as Filter,
+      { kinds: [ISSUE_KIND], "#a": coords } as Filter,
     ];
     return store
       .timeline(issueFilters)
@@ -56,13 +68,13 @@ export function useIssues(repoCoord: string | undefined): {
     >;
   }, [issueFilterKey, store]);
 
-  const statusFilterKey = JSON.stringify({ repoCoord, type: "status" });
+  const statusFilterKey = JSON.stringify({ coords, type: "status" });
 
   // Fetch statuses from relay
   use$(() => {
-    if (!repoCoord) return undefined;
+    if (!coords || coords.length === 0) return undefined;
     const statusFilters: Filter[] = [
-      { kinds: [...STATUS_KINDS], "#a": [repoCoord] } as Filter,
+      { kinds: [...STATUS_KINDS], "#a": coords } as Filter,
     ];
     return pool
       .req(NGIT_RELAYS, statusFilters)
@@ -71,9 +83,9 @@ export function useIssues(repoCoord: string | undefined): {
 
   // Subscribe to statuses in store
   const statusEvents = use$(() => {
-    if (!repoCoord) return undefined;
+    if (!coords || coords.length === 0) return undefined;
     const statusFilters: Filter[] = [
-      { kinds: [...STATUS_KINDS], "#a": [repoCoord] } as Filter,
+      { kinds: [...STATUS_KINDS], "#a": coords } as Filter,
     ];
     return store.timeline(statusFilters) as unknown as Observable<NostrEvent[]>;
   }, [statusFilterKey, store]);

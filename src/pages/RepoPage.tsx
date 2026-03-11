@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { nip19 } from "nostr-tools";
 import { formatDistanceToNow } from "date-fns";
-import { useRepository } from "@/hooks/useRepositories";
+import { useResolvedRepository } from "@/hooks/useResolvedRepository";
 import { useIssues } from "@/hooks/useIssues";
 import { useNip34Loaders } from "@/hooks/useNip34Loaders";
 import { use$ } from "@/hooks/use$";
@@ -36,12 +36,7 @@ import {
   Filter,
   X,
 } from "lucide-react";
-import {
-  repoCoordinate,
-  NGIT_RELAYS,
-  COMMENT_KIND,
-  type IssueStatus,
-} from "@/lib/nip34";
+import { NGIT_RELAYS, COMMENT_KIND, type IssueStatus } from "@/lib/nip34";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
 import type { Issue } from "@/casts/Issue";
@@ -61,12 +56,8 @@ export default function RepoPage() {
     }
   }, [npub]);
 
-  const repo = useRepository(pubkey, repoId);
-  const coord = useMemo(
-    () => (pubkey && repoId ? repoCoordinate(pubkey, repoId) : undefined),
-    [pubkey, repoId],
-  );
-  const { issues, statusMap } = useIssues(coord);
+  const repo = useResolvedRepository(pubkey, repoId);
+  const { issues, statusMap } = useIssues(repo?.allCoordinates);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<IssueStatus | "all">("all");
@@ -170,11 +161,16 @@ export default function RepoPage() {
               )}
               <div className="flex items-center gap-3 ml-12 flex-wrap">
                 <div className="flex items-center gap-1.5">
-                  <UserAvatar pubkey={repo.pubkey} size="sm" />
+                  <UserAvatar pubkey={repo.trustedMaintainer} size="sm" />
                   <UserName
-                    pubkey={repo.pubkey}
+                    pubkey={repo.trustedMaintainer}
                     className="text-sm text-muted-foreground"
                   />
+                  {repo.maintainerSet.length > 1 && (
+                    <span className="text-sm text-muted-foreground/60">
+                      +{repo.maintainerSet.length - 1} maintainers
+                    </span>
+                  )}
                 </div>
                 {repo.labels.length > 0 && (
                   <div className="flex gap-1.5 flex-wrap">

@@ -2,14 +2,14 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { nip19 } from "nostr-tools";
-import { useRepositories } from "@/hooks/useRepositories";
+import { useRepositoryList } from "@/hooks/useRepositoryList";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { GitBranch, Search, ExternalLink, Sparkles } from "lucide-react";
-import type { Repository } from "@/casts/Repository";
+import type { ResolvedRepo } from "@/lib/nip34";
 import { formatDistanceToNow } from "date-fns";
 
 export default function RepositoriesPage() {
@@ -18,7 +18,7 @@ export default function RepositoriesPage() {
     description: "Browse git repositories on Nostr",
   });
 
-  const repos = useRepositories();
+  const repos = useRepositoryList();
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
@@ -95,7 +95,10 @@ export default function RepositoriesPage() {
         ) : (
           <div className="grid gap-3">
             {filtered.map((repo) => (
-              <RepoCard key={repo.id} repo={repo} />
+              <RepoCard
+                key={`${repo.trustedMaintainer}:${repo.dTag}`}
+                repo={repo}
+              />
             ))}
           </div>
         )}
@@ -104,9 +107,11 @@ export default function RepositoriesPage() {
   );
 }
 
-function RepoCard({ repo }: { repo: Repository }) {
-  const npub = nip19.npubEncode(repo.pubkey);
-  const timeAgo = formatDistanceToNow(repo.createdAt, { addSuffix: true });
+function RepoCard({ repo }: { repo: ResolvedRepo }) {
+  const npub = nip19.npubEncode(repo.trustedMaintainer);
+  const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
+    addSuffix: true,
+  });
 
   return (
     <Link to={`/${npub}/${repo.dTag}`} className="group block">
@@ -131,11 +136,16 @@ function RepoCard({ repo }: { repo: Repository }) {
 
               <div className="flex items-center gap-3 ml-9 flex-wrap">
                 <div className="flex items-center gap-1.5">
-                  <UserAvatar pubkey={repo.pubkey} size="sm" />
+                  <UserAvatar pubkey={repo.trustedMaintainer} size="sm" />
                   <UserName
-                    pubkey={repo.pubkey}
+                    pubkey={repo.trustedMaintainer}
                     className="text-xs text-muted-foreground"
                   />
+                  {repo.maintainerSet.length > 1 && (
+                    <span className="text-xs text-muted-foreground/60">
+                      +{repo.maintainerSet.length - 1}
+                    </span>
+                  )}
                 </div>
 
                 <span className="text-xs text-muted-foreground/60">
