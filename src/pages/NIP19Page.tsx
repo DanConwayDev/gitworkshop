@@ -1,11 +1,12 @@
 import {
   normalizeToAddressPointer,
   normalizeToEventPointer,
-  normalizeToProfilePointer
+  normalizeToProfilePointer,
 } from "applesauce-core/helpers";
 import { use$ } from "applesauce-react/hooks";
 import { useParams } from "react-router-dom";
 import { eventStore } from "../services/nostr";
+import UserPage from "./UserPage";
 import NotFound from "./NotFound";
 
 export function NIP19Page() {
@@ -30,8 +31,7 @@ export function NIP19Page() {
   if (identifier.startsWith("npub1") || identifier.startsWith("nprofile1")) {
     if (!user) return <NotFound />;
 
-    // AI agent should implement profile view here
-    return <div>Profile placeholder</div>;
+    return <UserPage pubkey={user.pubkey} />;
   } else if (pointer) {
     // AI agent should implement event loading view here
     if (!event) return <div>Loading event...</div>;
