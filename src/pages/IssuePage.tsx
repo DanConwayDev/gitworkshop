@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { nip19 } from "nostr-tools";
 import { formatDistanceToNow, format } from "date-fns";
+import { MarkdownContent } from "@/components/MarkdownContent";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import {
@@ -197,13 +198,13 @@ export default function IssuePage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap break-words">
-                    {issue.content || (
-                      <span className="text-muted-foreground italic">
-                        No description provided.
-                      </span>
-                    )}
-                  </div>
+                  {issue.content ? (
+                    <MarkdownContent content={issue.content} />
+                  ) : (
+                    <span className="text-muted-foreground italic text-sm">
+                      No description provided.
+                    </span>
+                  )}
                 </CardContent>
               </Card>
             ) : (
@@ -370,9 +371,7 @@ function CommentCard({ comment }: { comment: NostrEvent }) {
                 {timeAgo}
               </span>
             </div>
-            <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap break-words text-sm">
-              {comment.content}
-            </div>
+            <MarkdownContent content={comment.content} />
           </div>
         </div>
       </CardContent>
