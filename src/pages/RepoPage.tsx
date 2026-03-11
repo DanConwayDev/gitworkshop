@@ -4,7 +4,11 @@ import { useSeoMeta } from "@unhead/react";
 import { nip19 } from "nostr-tools";
 import { formatDistanceToNow } from "date-fns";
 import { useRepository } from "@/hooks/useRepositories";
-import { useIssues, useIssueComments, useIssueZaps } from "@/hooks/useIssues";
+import { useIssues } from "@/hooks/useIssues";
+import { useNip34Loaders } from "@/hooks/useNip34Loaders";
+import { use$ } from "@/hooks/use$";
+import { useEventStore } from "@/hooks/useEventStore";
+import { map } from "rxjs/operators";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
@@ -32,7 +36,14 @@ import {
   Filter,
   X,
 } from "lucide-react";
-import { repoCoordinate, type IssueStatus } from "@/lib/nip34";
+import {
+  repoCoordinate,
+  NGIT_RELAYS,
+  COMMENT_KIND,
+  type IssueStatus,
+} from "@/lib/nip34";
+import type { Filter as NostrFilter } from "applesauce-core/helpers";
+import type { Observable } from "rxjs";
 import type { Issue } from "@/casts/Issue";
 
 export default function RepoPage() {
@@ -361,6 +372,11 @@ function IssueRow({
 }) {
   const timeAgo = formatDistanceToNow(issue.createdAt, { addSuffix: true });
 
+  // Trigger two-tier loading for this issue. All IssueRow calls within the
+  // same render cycle are batched by the loaders into a small number of relay
+  // subscriptions (one per kind group, not one per issue).
+  useNip34Loaders(issue.id, NGIT_RELAYS);
+
   return (
     <Link to={`/${npub}/${repoId}/${issue.id}`} className="group block">
       <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20">
@@ -409,21 +425,32 @@ function IssueRow({
 }
 
 /**
- * Shows comment count, zap count, and participant count for an issue.
+ * Reads comment count, zap count, and participant count for an issue from the
+ * store. Loading is triggered by useNip34Loaders in the parent IssueRow.
  */
 function IssueStats({ issueId }: { issueId: string }) {
-  const comments = useIssueComments(issueId);
-  const zaps = useIssueZaps(issueId);
+  const store = useEventStore();
+  const issueIdKey = issueId;
 
-  const commentCount = comments?.length ?? 0;
-  const zapCount = zaps?.length ?? 0;
+  const commentCount =
+    use$(() => {
+      const filter = { kinds: [COMMENT_KIND], "#E": [issueId] } as NostrFilter;
+      return store.timeline([filter]).pipe(map((events) => events.length));
+    }, [issueIdKey, store]) ?? 0;
 
-  // Participants = unique pubkeys from comments + issue author
-  const participantCount = useMemo(() => {
-    if (!comments) return 0;
-    const pubkeys = new Set(comments.map((c) => c.pubkey));
-    return pubkeys.size;
-  }, [comments]);
+  const zapCount =
+    use$(() => {
+      const filter = { kinds: [9735], "#e": [issueId] } as NostrFilter;
+      return store.timeline([filter]).pipe(map((events) => events.length));
+    }, [issueIdKey, store]) ?? 0;
+
+  const participantCount =
+    use$(() => {
+      const filter = { kinds: [COMMENT_KIND], "#E": [issueId] } as NostrFilter;
+      return store
+        .timeline([filter])
+        .pipe(map((events) => new Set(events.map((e) => e.pubkey)).size));
+    }, [issueIdKey, store]) ?? 0;
 
   return (
     <div className="flex items-center gap-2.5 text-muted-foreground/60">

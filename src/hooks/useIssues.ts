@@ -5,7 +5,7 @@ import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { castTimelineStream } from "applesauce-common/observable";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
-import { pool, commentsLoader, issueZapsLoader } from "@/services/nostr";
+import { pool, nip34CommentsLoader, nip34ThreadLoader } from "@/services/nostr";
 import {
   ISSUE_KIND,
   NGIT_RELAYS,
@@ -116,7 +116,7 @@ export function useIssueComments(
   // Trigger batched fetch via loader — events land in the store automatically
   use$(() => {
     if (!issueId) return undefined;
-    return commentsLoader({ value: issueId, relays: NGIT_RELAYS });
+    return nip34CommentsLoader({ value: issueId, relays: NGIT_RELAYS });
   }, [filterKey]);
 
   // Read reactively from the store
@@ -178,7 +178,7 @@ export function useIssueZaps(
   // Trigger batched fetch via loader — events land in the store automatically
   use$(() => {
     if (!issueId) return undefined;
-    return issueZapsLoader({ value: issueId, relays: NGIT_RELAYS });
+    return nip34ThreadLoader({ value: issueId, relays: NGIT_RELAYS });
   }, [filterKey]);
 
   // Read reactively from the store

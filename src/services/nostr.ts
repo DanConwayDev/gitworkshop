@@ -108,22 +108,58 @@ export const zapsLoader = createZapsLoader(pool, {
   eventStore,
 });
 
+// ---------------------------------------------------------------------------
+// NIP-34 two-tier loaders for Issues, Patches, and PRs
+//
+// Each tier is a SINGLE loader instance per tag name, so all per-item calls
+// within the buffer window are collapsed into one relay subscription.
+//
+// Tier 1 — essentials (#e tag, bufferTime: 100ms)
+//   One subscription covers status (1630-1633), labels (1985), and deletions
+//   (5) for every item on the page: { kinds: [...], "#e": ["id1","id2",...] }
+//
+// Tier 2 — thread (#E and #e tags, bufferTime: 500ms)
+//   Comments use the uppercase #E root tag (NIP-22), so they need their own
+//   loader. Reactions (7) and zaps (9735) share a single #e loader.
+//   The longer buffer ensures essentials always land first.
+// ---------------------------------------------------------------------------
+
+const NIP34_ESSENTIALS_BUFFER = 100;
+const NIP34_THREAD_BUFFER = 500;
+
 /**
- * Loader for NIP-22 comments (kind 1111) referencing an event via uppercase E tag.
- * Batches all per-issue comment requests into a single relay subscription.
+ * Tier 1 — essentials loader.
+ * Fetches status (1630-1633), NIP-32 labels (1985), and deletion requests (5)
+ * for issues/patches/PRs in a single batched relay subscription per buffer
+ * window.
  */
-export const commentsLoader = createTagValueLoader(pool, "E", {
+export const nip34EssentialsLoader = createTagValueLoader(pool, "e", {
   cacheRequest,
   eventStore,
-  kinds: [1111],
+  kinds: [1630, 1631, 1632, 1633, 1985, 5],
+  bufferTime: NIP34_ESSENTIALS_BUFFER,
 });
 
 /**
- * Loader for zap receipts (kind 9735) referencing an issue event via e tag.
- * Batches all per-issue zap requests into a single relay subscription.
+ * Tier 2 — thread loader for NIP-22 comments (kind 1111).
+ * Uses the uppercase `E` root tag, so it needs its own loader instance
+ * separate from the `#e` thread loader.
  */
-export const issueZapsLoader = createTagValueLoader(pool, "e", {
+export const nip34CommentsLoader = createTagValueLoader(pool, "E", {
   cacheRequest,
   eventStore,
-  kinds: [9735],
+  kinds: [1111],
+  bufferTime: NIP34_THREAD_BUFFER,
+});
+
+/**
+ * Tier 2 — thread loader for reactions (7) and zaps (9735).
+ * Both use the lowercase `#e` tag, so they share one loader and one
+ * batched relay subscription.
+ */
+export const nip34ThreadLoader = createTagValueLoader(pool, "e", {
+  cacheRequest,
+  eventStore,
+  kinds: [7, 9735],
+  bufferTime: NIP34_THREAD_BUFFER,
 });
