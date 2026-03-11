@@ -160,17 +160,22 @@ export default function RepoPage() {
                 </p>
               )}
               <div className="flex items-center gap-3 ml-12 flex-wrap">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
                   <UserLink
                     pubkey={repo.selectedMaintainer}
                     avatarSize="sm"
                     nameClassName="text-sm text-muted-foreground"
                   />
-                  {repo.maintainerSet.length > 1 && (
-                    <span className="text-sm text-muted-foreground/60">
-                      +{repo.maintainerSet.length - 1} maintainers
-                    </span>
-                  )}
+                  {repo.maintainerSet
+                    .filter((pk) => pk !== repo.selectedMaintainer)
+                    .map((pk) => (
+                      <UserLink
+                        key={pk}
+                        pubkey={pk}
+                        avatarSize="sm"
+                        nameClassName="text-sm text-muted-foreground"
+                      />
+                    ))}
                 </div>
                 {repo.labels.length > 0 && (
                   <div className="flex gap-1.5 flex-wrap">

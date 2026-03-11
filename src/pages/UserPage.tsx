@@ -1,10 +1,10 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { nip19 } from "nostr-tools";
 import { formatDistanceToNow } from "date-fns";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserRepositories } from "@/hooks/useUserRepositories";
-import { UserAvatar, UserName } from "@/components/UserAvatar";
+import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -203,18 +203,17 @@ export default function UserPage({ pubkey }: UserPageProps) {
 }
 
 function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
+  const navigate = useNavigate();
   const npub = nip19.npubEncode(repo.selectedMaintainer);
   const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
     addSuffix: true,
   });
 
-  // Co-maintainers (excluding the page owner who is the selectedMaintainer)
-  const coMaintainers = repo.maintainerSet.filter(
-    (pk) => pk !== repo.selectedMaintainer,
-  );
-
   return (
-    <Link to={`/${npub}/${repo.dTag}`} className="group block">
+    <div
+      className="group block cursor-pointer"
+      onClick={() => navigate(`/${npub}/${repo.dTag}`)}
+    >
       <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20 group-hover:-translate-y-0.5">
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-4">
@@ -235,17 +234,16 @@ function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
               )}
 
               <div className="flex items-center gap-3 ml-9 flex-wrap">
-                {coMaintainers.length > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    {coMaintainers.slice(0, 2).map((pk) => (
-                      <UserAvatar key={pk} pubkey={pk} size="sm" />
-                    ))}
-                    <span className="text-xs text-muted-foreground">
-                      +{coMaintainers.length} co-maintainer
-                      {coMaintainers.length !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {repo.maintainerSet.map((pk) => (
+                    <UserLink
+                      key={pk}
+                      pubkey={pk}
+                      avatarSize="sm"
+                      nameClassName="text-xs text-muted-foreground"
+                    />
+                  ))}
+                </div>
 
                 <span className="text-xs text-muted-foreground/60">
                   {timeAgo}
@@ -286,7 +284,7 @@ function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
           </div>
         </CardContent>
       </Card>
-    </Link>
+    </div>
   );
 }
 

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { nip19 } from "nostr-tools";
 import { useRepositoryList } from "@/hooks/useRepositoryList";
-import { UserAvatar, UserName } from "@/components/UserAvatar";
+import { UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -135,17 +135,15 @@ function RepoCard({ repo }: { repo: ResolvedRepo }) {
               )}
 
               <div className="flex items-center gap-3 ml-9 flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <UserAvatar pubkey={repo.selectedMaintainer} size="sm" />
-                  <UserName
-                    pubkey={repo.selectedMaintainer}
-                    className="text-xs text-muted-foreground"
-                  />
-                  {repo.maintainerSet.length > 1 && (
-                    <span className="text-xs text-muted-foreground/60">
-                      +{repo.maintainerSet.length - 1}
-                    </span>
-                  )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {repo.maintainerSet.map((pk) => (
+                    <UserLink
+                      key={pk}
+                      pubkey={pk}
+                      avatarSize="sm"
+                      nameClassName="text-xs text-muted-foreground"
+                    />
+                  ))}
                 </div>
 
                 <span className="text-xs text-muted-foreground/60">
