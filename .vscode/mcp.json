@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "nostr": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@nostrbook/mcp@latest"]
+    },
+    "applesauce": {
+      "type": "http",
+      "url": "https://mcp.applesauce.build/mcp"
+    }
+  }
+}
