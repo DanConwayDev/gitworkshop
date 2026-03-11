@@ -5,7 +5,7 @@ import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { castTimelineStream } from "applesauce-common/observable";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
-import { pool } from "@/services/nostr";
+import { pool, commentsLoader, issueZapsLoader } from "@/services/nostr";
 import {
   ISSUE_KIND,
   NGIT_RELAYS,
@@ -103,6 +103,8 @@ export function useIssues(repoCoord: string | undefined): {
 
 /**
  * Fetch comments (NIP-22 kind:1111) for a specific issue.
+ * Uses the batched commentsLoader so all per-issue calls are combined into
+ * a single relay subscription rather than one request per issue.
  */
 export function useIssueComments(
   issueId: string | undefined,
@@ -111,18 +113,13 @@ export function useIssueComments(
 
   const filterKey = JSON.stringify({ issueId, type: "comments" });
 
-  // Fetch from relay
+  // Trigger batched fetch via loader — events land in the store automatically
   use$(() => {
     if (!issueId) return undefined;
-    const filters: Filter[] = [
-      { kinds: [COMMENT_KIND], "#E": [issueId] } as Filter,
-    ];
-    return pool
-      .req(NGIT_RELAYS, filters)
-      .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [filterKey, store]);
+    return commentsLoader({ value: issueId, relays: NGIT_RELAYS });
+  }, [filterKey]);
 
-  // Subscribe to store
+  // Read reactively from the store
   return use$(() => {
     if (!issueId) return undefined;
     const filters: Filter[] = [
@@ -167,7 +164,9 @@ export function useIssueStatus(issueId: string | undefined): IssueStatus {
 }
 
 /**
- * Fetch zap events (kind 9735) for a specific issue.
+ * Fetch zap receipts (kind 9735) for a specific issue.
+ * Uses the batched issueZapsLoader so all per-issue calls are combined into
+ * a single relay subscription rather than one request per issue.
  */
 export function useIssueZaps(
   issueId: string | undefined,
@@ -176,16 +175,13 @@ export function useIssueZaps(
 
   const filterKey = JSON.stringify({ issueId, type: "zaps" });
 
-  // Fetch from relay
+  // Trigger batched fetch via loader — events land in the store automatically
   use$(() => {
     if (!issueId) return undefined;
-    const filters: Filter[] = [{ kinds: [9735], "#e": [issueId] } as Filter];
-    return pool
-      .req(NGIT_RELAYS, filters)
-      .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [filterKey, store]);
+    return issueZapsLoader({ value: issueId, relays: NGIT_RELAYS });
+  }, [filterKey]);
 
-  // Subscribe to store
+  // Read reactively from the store
   return use$(() => {
     if (!issueId) return undefined;
     const filters: Filter[] = [{ kinds: [9735], "#e": [issueId] } as Filter];

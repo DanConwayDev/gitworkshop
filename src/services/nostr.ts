@@ -4,6 +4,7 @@ import {
   createAddressLoader,
   createEventLoaderForStore,
   createReactionsLoader,
+  createTagValueLoader,
   createZapsLoader,
 } from "applesauce-loaders/loaders";
 import { RelayPool } from "applesauce-relay";
@@ -104,4 +105,25 @@ export const reactionsLoader = createReactionsLoader(pool, {
 export const zapsLoader = createZapsLoader(pool, {
   cacheRequest,
   extraRelays,
+  eventStore,
+});
+
+/**
+ * Loader for NIP-22 comments (kind 1111) referencing an event via uppercase E tag.
+ * Batches all per-issue comment requests into a single relay subscription.
+ */
+export const commentsLoader = createTagValueLoader(pool, "E", {
+  cacheRequest,
+  eventStore,
+  kinds: [1111],
+});
+
+/**
+ * Loader for zap receipts (kind 9735) referencing an issue event via e tag.
+ * Batches all per-issue zap requests into a single relay subscription.
+ */
+export const issueZapsLoader = createTagValueLoader(pool, "e", {
+  cacheRequest,
+  eventStore,
+  kinds: [9735],
 });
