@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { mapEventsToStore } from "applesauce-core";
@@ -78,11 +79,10 @@ export function useIssues(repoCoord: string | undefined): {
   }, [statusFilterKey, store]);
 
   // Build status map: issueId -> latest status
-  const statusMap = new Map<
-    string,
-    { status: IssueStatus; event: NostrEvent }
-  >();
-  if (statusEvents) {
+  // Memoized so it's only recomputed when statusEvents changes
+  const statusMap = useMemo(() => {
+    const map = new Map<string, { status: IssueStatus; event: NostrEvent }>();
+    if (!statusEvents) return map;
     for (const ev of statusEvents) {
       const rootTag = ev.tags.find(
         ([t, , , marker]) => t === "e" && marker === "root",
@@ -90,12 +90,13 @@ export function useIssues(repoCoord: string | undefined): {
       const issueId = rootTag?.[1];
       if (!issueId) continue;
 
-      const existing = statusMap.get(issueId);
+      const existing = map.get(issueId);
       if (!existing || ev.created_at > existing.event.created_at) {
-        statusMap.set(issueId, { status: kindToStatus(ev.kind), event: ev });
+        map.set(issueId, { status: kindToStatus(ev.kind), event: ev });
       }
     }
-  }
+    return map;
+  }, [statusEvents]);
 
   return { issues, statusMap };
 }
