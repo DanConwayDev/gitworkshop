@@ -317,13 +317,14 @@ export function resolveChain(
  * Each connected component (by mutual maintainer listing) becomes one entry.
  *
  * @param events - All 30617 events to consider
- * @param trustedMaintainer - If provided, only resolve repos where this pubkey
- *   has an announcement, using them as the BFS starting point. This ensures
- *   the resulting ResolvedRepo.trustedMaintainer is always this pubkey.
+ * @param forPubkey - If provided, only return repos where this pubkey is
+ *   involved — either as the event author or listed in a `maintainers` tag.
+ *   The pubkey is used as the trustedMaintainer when they have their own
+ *   announcement; otherwise the event author who listed them is used.
  */
 export function groupIntoResolvedRepos(
   events: NostrEvent[],
-  trustedMaintainer?: string,
+  forPubkey?: string,
 ): ResolvedRepo[] {
   // Collect all distinct dTags
   const dTags = new Set<string>();
@@ -337,10 +338,41 @@ export function groupIntoResolvedRepos(
   const processedComponents = new Set<string>(); // "pubkey:dTag" keys already in a result
 
   for (const dTag of dTags) {
-    if (trustedMaintainer) {
-      // Scoped mode: only resolve from this specific pubkey
-      const resolved = resolveChain(events, trustedMaintainer, dTag);
-      if (resolved) results.push(resolved);
+    if (forPubkey) {
+      // Scoped mode: find repos where forPubkey is involved as author or
+      // maintainer, then resolve the chain with forPubkey as trusted
+      // maintainer when possible.
+
+      // First try: the user has their own announcement for this dTag
+      const resolved = resolveChain(events, forPubkey, dTag);
+      if (resolved) {
+        results.push(resolved);
+        continue;
+      }
+
+      // Second try: the user is listed in someone else's maintainers tag
+      // for this dTag but hasn't published their own announcement.
+      // Find an event author who listed them and resolve from that author.
+      for (const ev of events) {
+        if (ev.kind !== REPO_KIND) continue;
+        const d = ev.tags.find(([t]) => t === "d")?.[1];
+        if (d !== dTag) continue;
+
+        // Check if forPubkey is the event author (already handled above)
+        if (ev.pubkey === forPubkey) continue;
+
+        // Check if forPubkey is listed in the maintainers tag
+        const maintainersTag = ev.tags.find(([t]) => t === "maintainers");
+        const listed = maintainersTag ? maintainersTag.slice(1) : [];
+        if (listed.includes(forPubkey)) {
+          // Resolve from the event author who listed us
+          const fromAuthor = resolveChain(events, ev.pubkey, dTag);
+          if (fromAuthor) {
+            results.push(fromAuthor);
+            break; // Only need one result per dTag
+          }
+        }
+      }
     } else {
       // Global mode: resolve all connected components
       const pubkeysForDTag: string[] = [];
