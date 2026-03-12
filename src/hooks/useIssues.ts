@@ -22,6 +22,46 @@ import {
 } from "@/lib/nip34";
 import { Issue } from "@/casts/Issue";
 import type { Filter } from "applesauce-core/helpers";
+
+/** Max healthy outbox relays to take per user when building NIP-65 relay lists. */
+const MAX_OUTBOX_RELAYS_PER_USER = 3;
+
+/**
+ * Flatten a liveness-filtered list of ProfilePointers into a deduplicated
+ * relay URL array, capped at MAX_OUTBOX_RELAYS_PER_USER per pointer.
+ *
+ * Already-connected relays (liveness.online) are sorted to the front of each
+ * pointer's relay list so we reuse open connections before opening new ones.
+ *
+ * @param enriched  - ProfilePointers with relays already filtered by liveness
+ * @param exclude   - Relay URLs to skip (e.g. repo relays already queried)
+ */
+function flattenOutboxRelays(
+  enriched: { pubkey: string; relays?: string[] }[],
+  exclude: ReadonlySet<string> = new Set(),
+): string[] {
+  const online = new Set(liveness.online);
+  const seen = new Set<string>(exclude);
+  const result: string[] = [];
+  for (const pointer of enriched) {
+    const relays = (pointer.relays ?? []).slice().sort((a, b) => {
+      // Online relays first, then unknown/offline-but-healthy
+      const aOnline = online.has(a) ? 0 : 1;
+      const bOnline = online.has(b) ? 0 : 1;
+      return aOnline - bOnline;
+    });
+    let count = 0;
+    for (const relay of relays) {
+      if (count >= MAX_OUTBOX_RELAYS_PER_USER) break;
+      if (!seen.has(relay)) {
+        seen.add(relay);
+        result.push(relay);
+      }
+      count++;
+    }
+  }
+  return result;
+}
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 import { of } from "rxjs";
@@ -80,19 +120,7 @@ function useNip65Outboxes(pubkeys: string[], enabled: boolean): string[] {
     return of(pointers).pipe(
       includeMailboxes(store),
       ignoreUnhealthyRelaysOnPointers(liveness),
-      map((enriched) => {
-        const seen = new Set<string>();
-        const result: string[] = [];
-        for (const pointer of enriched) {
-          for (const relay of pointer.relays ?? []) {
-            if (!seen.has(relay)) {
-              seen.add(relay);
-              result.push(relay);
-            }
-          }
-        }
-        return result;
-      }),
+      map((enriched) => flattenOutboxRelays(enriched)),
     );
   }, [pubkeyKey, enabled, store]);
 

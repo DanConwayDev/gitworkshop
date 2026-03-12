@@ -4,6 +4,9 @@ import { includeMailboxes, mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { pool, liveness } from "@/services/nostr";
+
+/** Max healthy outbox relays to take per maintainer when querying NIP-65 relays. */
+const MAX_OUTBOX_RELAYS_PER_USER = 3;
 import { REPO_KIND, NGIT_RELAYS, type ResolvedRepo } from "@/lib/nip34";
 import { RepositoryModel } from "@/models/RepositoryModel";
 import type { Filter } from "applesauce-core/helpers";
@@ -94,15 +97,25 @@ export function useResolvedRepository(
       // relay hints are not passed through here — only NIP-65 outbox relays.
       ignoreUnhealthyRelaysOnPointers(liveness),
       switchMap((enriched) => {
-        // Collect all outbox relay URLs, deduplicated
+        // Collect outbox relay URLs, deduplicated, capped per maintainer.
+        // Liveness filtering has already run so remaining relays are healthy.
+        // Already-connected relays are sorted first so we reuse open
+        // connections before opening new ones.
+        const online = new Set(liveness.online);
         const seen = new Set<string>([...repo.relays]); // skip already-queried relays
         const outboxRelays: string[] = [];
         for (const pointer of enriched) {
-          for (const relay of pointer.relays ?? []) {
+          const relays = (pointer.relays ?? [])
+            .slice()
+            .sort((a, b) => (online.has(a) ? 0 : 1) - (online.has(b) ? 0 : 1));
+          let count = 0;
+          for (const relay of relays) {
+            if (count >= MAX_OUTBOX_RELAYS_PER_USER) break;
             if (!seen.has(relay)) {
               seen.add(relay);
               outboxRelays.push(relay);
             }
+            count++;
           }
         }
         if (outboxRelays.length === 0) return of(null);
