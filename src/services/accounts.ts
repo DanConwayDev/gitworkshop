@@ -1,5 +1,11 @@
 import { AccountManager } from "applesauce-accounts";
-import { registerCommonAccountTypes } from "applesauce-accounts/accounts";
+import {
+  NostrConnectAccount,
+  registerCommonAccountTypes,
+} from "applesauce-accounts/accounts";
+// Import pool to ensure NostrConnectSigner.pool is set before fromJSON runs,
+// so restored NostrConnectAccount signers can be constructed successfully.
+import "@/services/nostr";
 
 /**
  * Global AccountManager instance for multi-account support.
@@ -17,7 +23,21 @@ registerCommonAccountTypes(accounts);
   try {
     const savedAccounts = localStorage.getItem("accounts");
     if (savedAccounts) {
-      await accounts.fromJSON(JSON.parse(savedAccounts));
+      await accounts.fromJSON(JSON.parse(savedAccounts), true);
+
+      // Re-open relay subscriptions for any restored NostrConnect accounts.
+      // fromJSON reconstructs the signer with all credentials but does not
+      // re-establish the NIP-46 relay subscription or mark the session as
+      // connected. We call open() + set isConnected so signing works
+      // immediately after a page refresh without a new connect handshake.
+      for (const account of accounts.accounts$.getValue()) {
+        if (account instanceof NostrConnectAccount) {
+          account.signer.open().catch((err) => {
+            console.warn("Failed to re-open NostrConnect session:", err);
+          });
+          account.signer.isConnected = true;
+        }
+      }
     }
   } catch (error) {
     console.error("Failed to restore accounts from localStorage:", error);
@@ -32,7 +52,11 @@ registerCommonAccountTypes(accounts);
 
   // Persist accounts whenever they change
   accounts.accounts$.subscribe(() => {
-    localStorage.setItem("accounts", JSON.stringify(accounts.toJSON()));
+    try {
+      localStorage.setItem("accounts", JSON.stringify(accounts.toJSON(true)));
+    } catch (error) {
+      console.error("Failed to persist accounts:", error);
+    }
   });
 
   // Persist active account id whenever it changes
