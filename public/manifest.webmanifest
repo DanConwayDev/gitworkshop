@@ -1,7 +1,7 @@
 {
-  "name": "Applestack",
-  "short_name": "Applestack",
-  "description": "A modern Nostr client application built with React, TailwindCSS, and Applesauce",
+  "name": "ngitstack",
+  "short_name": "ngitstack",
+  "description": "A React + Applesauce stack template for building Nostr git applications",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
