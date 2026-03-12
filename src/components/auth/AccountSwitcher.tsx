@@ -22,6 +22,8 @@ import {
   useActiveAccount,
 } from "applesauce-react/hooks";
 import { ChevronDown, LogOut, UserIcon, UserPlus } from "lucide-react";
+import { Link } from "react-router-dom";
+import { nip19 } from "nostr-tools";
 
 interface AccountSwitcherProps {
   onAddAccountClick: () => void;
@@ -92,7 +94,25 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56 p-2 animate-scale-in">
-        <div className="font-medium text-sm px-2 py-1.5">Switch Account</div>
+        <DropdownMenuItem
+          asChild
+          className="flex items-center gap-2 cursor-pointer p-2 rounded-md"
+        >
+          <Link to={`/${nip19.npubEncode(activeAccount.pubkey)}`}>
+            <Avatar className="w-8 h-8">
+              <AvatarImage src={activeProfile?.picture} alt={displayName} />
+              <AvatarFallback>{displayName.charAt(0)}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{displayName}</p>
+              <p className="text-xs text-muted-foreground">View profile</p>
+            </div>
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <div className="font-medium text-sm px-2 py-1.5 text-muted-foreground">
+          Switch Account
+        </div>
         {otherAccounts.map((account) => (
           <AccountItem
             key={account.pubkey}
