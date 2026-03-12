@@ -23,7 +23,7 @@ export function useRepositories(): Repository[] | undefined {
   use$(
     () =>
       pool
-        .req(NGIT_RELAYS, filters)
+        .subscription(NGIT_RELAYS, filters)
         .pipe(onlyEvents(), mapEventsToStore(store)),
     [store],
   );
@@ -59,7 +59,7 @@ export function useRepository(
       { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
     ];
     return pool
-      .req(NGIT_RELAYS, repoFilters)
+      .subscription(NGIT_RELAYS, repoFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [repoFilterKey, store]);
 

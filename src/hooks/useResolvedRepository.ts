@@ -45,7 +45,7 @@ export function useResolvedRepository(
       { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
     ];
     return pool
-      .req(NGIT_RELAYS, filter)
+      .subscription(NGIT_RELAYS, filter)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [key, store]);
 
@@ -73,7 +73,7 @@ export function useResolvedRepository(
       } as Filter,
     ];
     return pool
-      .req(repo.relays, filter)
+      .subscription(repo.relays, filter)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [dTag, repoRelayKey, maintainerKey, store]);
 
@@ -127,7 +127,7 @@ export function useResolvedRepository(
           } as Filter,
         ];
         return pool
-          .req(outboxRelays, filter)
+          .subscription(outboxRelays, filter)
           .pipe(onlyEvents(), mapEventsToStore(store));
       }),
     ) as unknown as Observable<null>;

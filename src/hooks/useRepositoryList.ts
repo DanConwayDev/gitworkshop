@@ -31,7 +31,7 @@ export function useRepositoryList(): ResolvedRepo[] | undefined {
   use$(
     () =>
       pool
-        .req(NGIT_RELAYS, repoFilter)
+        .subscription(NGIT_RELAYS, repoFilter)
         .pipe(onlyEvents(), mapEventsToStore(store)),
     [store],
   );

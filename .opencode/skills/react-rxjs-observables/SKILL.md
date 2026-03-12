@@ -170,7 +170,7 @@ const profile = use$(
 ```tsx
 // For arrays - use .join()
 const events = use$(
-  () => pool.req(relays, filters),
+  () => pool.subscription(relays, filters),
   [relays.join(","), JSON.stringify(filters)],
 );
 
@@ -186,7 +186,7 @@ const data = use$(
 ```tsx
 // WRONG - infinite re-subscriptions!
 const events = use$(
-  () => pool.req(relays, filters),
+  () => pool.subscription(relays, filters),
   [relays, filters], // References change every render
 );
 ```

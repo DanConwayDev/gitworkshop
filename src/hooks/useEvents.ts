@@ -59,7 +59,7 @@ export function useEvents(
   const events = use$(
     () =>
       pool
-        .req(relays, filters)
+        .subscription(relays, filters)
         .pipe(
           onlyEvents(),
           mapEventsToStore(store),

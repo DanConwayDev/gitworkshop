@@ -61,7 +61,7 @@ export function useTimeline<C extends EventCast<NostrEvent> = Note>(
 
   const notes = use$(
     () =>
-      pool.req(relays, filters).pipe(
+      pool.subscription(relays, filters).pipe(
         onlyEvents(), // Filter out EOSE and other relay messages
         mapEventsToStore(store), // Add events to store and deduplicate
         mapEventsToTimeline(), // Collect events into an array

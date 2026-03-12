@@ -198,7 +198,7 @@ export function useIssues(
       { kinds: [ISSUE_KIND], "#a": coords } as Filter,
     ];
     return pool
-      .req(relays, issueFilters)
+      .subscription(relays, issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [issueFilterKey, store]);
 
@@ -224,7 +224,7 @@ export function useIssues(
       { kinds: [...STATUS_KINDS], "#a": coords } as Filter,
     ];
     return pool
-      .req(relays, statusFilters)
+      .subscription(relays, statusFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [statusFilterKey, store]);
 
@@ -363,7 +363,7 @@ export function useIssueStatus(
       { kinds: [...STATUS_KINDS], "#e": [issueId] } as Filter,
     ];
     return pool
-      .req(relays, filters)
+      .subscription(relays, filters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [filterKey, store]);
 

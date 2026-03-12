@@ -232,7 +232,7 @@ When designing tags for Nostr events, follow these principles:
    );
 
    // ✅ Efficient: Filter at relay level
-   pool.req(relays, [{ kinds: [30402], "#t": ["electronics"] }]);
+   pool.subscription(relays, [{ kinds: [30402], "#t": ["electronics"] }]);
    ```
 
 #### `t` Tag Filtering for Community-Specific Content
@@ -668,7 +668,10 @@ function CustomFeed() {
   const events = use$(
     () =>
       pool
-        .req(["wss://relay.damus.io"], [{ kinds: [1], authors: [pubkey] }])
+        .subscription(
+          ["wss://relay.damus.io"],
+          [{ kinds: [1], authors: [pubkey] }],
+        )
         .pipe(
           onlyEvents(), // Filter out EOSE messages
           mapEventsToStore(store), // Add to store
@@ -726,7 +729,7 @@ import type { Observable } from "rxjs";
 const events = use$(
   () =>
     pool
-      .req(relays, filters)
+      .subscription(relays, filters)
       .pipe(
         onlyEvents(),
         mapEventsToStore(store),
@@ -746,7 +749,7 @@ When the observable factory depends on optional parameters, return `undefined` e
 const events = use$(
   () => {
     if (!repoCoord) return undefined; // use$ handles undefined gracefully
-    return pool.req(relays, [{ kinds: [1621], "#a": [repoCoord] } as Filter]).pipe(
+    return pool.subscription(relays, [{ kinds: [1621], "#a": [repoCoord] } as Filter]).pipe(
       onlyEvents(),
       mapEventsToStore(store),
       mapEventsToTimeline(),
@@ -757,7 +760,7 @@ const events = use$(
 
 // ❌ Wrong: conditional hook call causes React rules-of-hooks violation
 if (!repoCoord) return null;
-const events = use$(() => pool.req(...), [store]);
+const events = use$(() => pool.subscription(...), [store]);
 ```
 
 **Key rule**: always include every variable the factory closes over in the dependency array, even optional ones. Missing deps cause stale subscriptions; extra deps only cause harmless re-subscriptions.

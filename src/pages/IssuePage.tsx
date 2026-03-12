@@ -86,7 +86,7 @@ export default function IssuePage({
     if (!issueId) return undefined;
     const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
     return pool
-      .req(issueFetchRelays, issueFilters)
+      .subscription(issueFetchRelays, issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [issueFilterKey, store]);
 

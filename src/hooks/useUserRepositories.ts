@@ -34,7 +34,9 @@ export function useUserRepositories(
   use$(() => {
     if (!pubkey) return undefined;
     return pool
-      .req(NGIT_RELAYS, [{ kinds: [REPO_KIND], authors: [pubkey] } as Filter])
+      .subscription(NGIT_RELAYS, [
+        { kinds: [REPO_KIND], authors: [pubkey] } as Filter,
+      ])
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [pubkey, store]);
 
