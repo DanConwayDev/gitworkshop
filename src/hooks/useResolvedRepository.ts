@@ -143,8 +143,9 @@ export function useResolvedRepository(
 
   // Layer 3: once we know the repo's own relay list, add any relays not yet
   // in repoRelayGroup. Also subscribes to maintainer announcements on those relays.
-  // extraRelaysForMaintainerMailboxCoverage is NOT populated here — it only
-  // receives relays that are absent from repoRelayGroup (Layer 4).
+  // If a relay was previously added to extraRelaysForMaintainerMailboxCoverage
+  // (Layer 4) and is now declared by the repo itself, remove it from the delta
+  // group — repoRelayGroup now covers it and the delta subscription closes cleanly.
   const repoRelayKey = repo?.relays.join(",") ?? "";
   const maintainerKey = repo?.maintainerSet.join(",") ?? "";
   use$(() => {
@@ -154,6 +155,10 @@ export function useResolvedRepository(
     for (const url of repo.relays) {
       const relay = pool.relay(url);
       if (!repoRelayGroup.has(relay)) repoRelayGroup.add(relay);
+      // Evict from the delta group if it was added there before the announcement
+      // arrived — repoRelayGroup now provides coverage for this relay.
+      if (extraRelaysForMaintainerMailboxCoverage?.has(relay))
+        extraRelaysForMaintainerMailboxCoverage.remove(relay);
     }
 
     // Subscribe to all maintainer announcements on the repo's relays so
