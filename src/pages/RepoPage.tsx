@@ -91,7 +91,7 @@ export default function RepoPage({
   const queryOptions: RepoQueryOptions = useMemo(
     () => ({
       relayHints,
-      nip65: curationMode === "outbox",
+      useItemAuthorRelays: false,
       maintainerPubkeys: repo?.maintainerSet ?? [],
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps

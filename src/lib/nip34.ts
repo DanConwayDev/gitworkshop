@@ -59,19 +59,20 @@ export const NGIT_RELAY = "wss://relay.ngit.dev";
  *   settings. NGIT_RELAYS is NOT included by default — add it here explicitly
  *   if you want issues from the discovery relay.
  *
- * nip65: when true, also query NIP-65 outbox relays of repo maintainers for
- *   issues and status events, and NIP-65 outbox relays of the issue author for
- *   comments and zaps. Defaults to false — no existing behaviour changes when
- *   this is omitted or false.
+ * useItemAuthorRelays: when true, also query the NIP-65 outbox relays of the
+ *   issue author for comments and zaps. Defaults to false — no existing
+ *   behaviour changes when this is omitted or false. Leave off on list pages
+ *   (RepoPage) to avoid per-item relay churn; enable on detail pages
+ *   (IssuePage) where completeness matters.
  *
  * maintainerPubkeys: the full list of maintainer pubkeys from
- *   ResolvedRepo.maintainerSet. Required when nip65 is true so that outbox
- *   relays can be fetched for issues and status queries. Ignored when nip65 is
- *   false.
+ *   ResolvedRepo.maintainerSet. Required when useItemAuthorRelays is true so
+ *   that outbox relays can be fetched for issues and status queries. Ignored
+ *   when useItemAuthorRelays is false.
  */
 export interface RepoQueryOptions {
   relayHints: string[];
-  nip65?: boolean;
+  useItemAuthorRelays?: boolean;
   maintainerPubkeys?: string[];
 }
 

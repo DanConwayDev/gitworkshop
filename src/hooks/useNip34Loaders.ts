@@ -120,7 +120,7 @@ function useAuthorInboxDeltaRelays(
  * @param itemId         - The event ID of the issue / patch / PR
  * @param repoRelayGroup - The relay group for this repo (repoRelayGroup or
  *                         repoRelayAndMaintainerMailboxGroup from useResolvedRepository)
- * @param options        - Loader options (nip65)
+ * @param options        - Loader options (useItemAuthorRelays)
  */
 export function useNip34Loaders(
   itemId: string | undefined,

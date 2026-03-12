@@ -31,10 +31,10 @@ import type { Observable } from "rxjs";
  * Also fetches status events so we can determine current status.
  *
  * The caller is responsible for passing the right RelayGroup:
- *   - nip65 disabled → repoRelayGroup (repo-declared relays + hints)
- *   - nip65 enabled  → repoRelayAndMaintainerMailboxGroup (also includes
- *                       maintainer outbox + inbox relays, built by
- *                       useResolvedRepository)
+ *   - useItemAuthorRelays disabled → repoRelayGroup (repo-declared relays + hints)
+ *   - useItemAuthorRelays enabled  → repoRelayAndMaintainerMailboxGroup (also
+ *                                    includes maintainer outbox + inbox relays,
+ *                                    built by useResolvedRepository)
  *
  * @param repoCoords     - Coordinate string(s) for the repository
  * @param repoRelayGroup - RelayGroup to subscribe to (see above)
@@ -174,8 +174,8 @@ export function useIssues(
  * a single relay subscription rather than one request per issue.
  *
  * Fetching is handled by useNip34Loaders (called by IssuePage), which batches
- * { kinds: [1111], "#E": [issueId] } and, when nip65 is true, also queries
- * the inbox-only delta relays of the issue author.
+ * { kinds: [1111], "#E": [issueId] } and, when useItemAuthorRelays is true,
+ * also queries the inbox-only delta relays of the issue author.
  *
  * @param issueId - The event ID of the issue
  */
@@ -197,10 +197,10 @@ export function useIssueComments(
  * Fetch status events for a specific issue.
  * Returns the latest status.
  *
- * Status events (kinds 1630-1633) are written by maintainers, so when nip65
- * is true we query the NIP-65 outbox relays of all maintainers in addition to
- * the repo's declared relays. Kind:10002 events are fetched via indexer relays
- * (purplepag.es etc.) configured in lookupRelays.
+ * Status events (kinds 1630-1633) are written by maintainers, so when
+ * useItemAuthorRelays is true we query the NIP-65 outbox relays of all
+ * maintainers in addition to the repo's declared relays. Kind:10002 events are
+ * fetched via indexer relays (purplepag.es etc.) configured in lookupRelays.
  *
  * @param issueId    - The event ID of the issue
  * @param repoRelays - Relay URLs from ResolvedRepo.relays
@@ -262,8 +262,8 @@ export function useIssueLabels(issueId: string | undefined): string[] {
  * Return zap receipts (kind:9735) for a specific issue.
  *
  * Fetching is handled by useNip34Loaders (called by IssuePage), which batches
- * { kinds: [7, 9735], "#e": [issueId] } and, when nip65 is true, also queries
- * the inbox-only delta relays of the issue author.
+ * { kinds: [7, 9735], "#e": [issueId] } and, when useItemAuthorRelays is true,
+ * also queries the inbox-only delta relays of the issue author.
  *
  * @param issueId - The event ID of the issue
  */

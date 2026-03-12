@@ -22,12 +22,12 @@ const MAX_MAILBOX_RELAYS_PER_USER = 3;
 export interface ResolvedRepository {
   repo: ResolvedRepo;
   /** Base RelayGroup: repo-declared relays + relay hints only.
-   *  Pass to useIssues / useNip34Loaders when nip65 is disabled. */
+   *  Pass to useIssues / useNip34Loaders when useItemAuthorRelays is disabled. */
   repoRelayGroup: RelayGroupType;
   /** Extended RelayGroup: repoRelayGroup + maintainer outbox + maintainer inbox
    *  relays (up to MAX_MAILBOX_RELAYS_PER_USER each, prioritising connected).
    *  Always used for announcement discovery. Pass to useIssues /
-   *  useNip34Loaders when nip65 is enabled. */
+   *  useNip34Loaders when useItemAuthorRelays is enabled. */
   repoRelayAndMaintainerMailboxGroup: RelayGroupType;
 }
 
@@ -77,12 +77,12 @@ function addMailboxRelaysToGroup(
  *
  * Layer 4: resolve each maintainer's NIP-65 outbox AND inbox relays and add
  *          them to repoRelayAndMaintainerMailboxGroup only — repoRelayGroup
- *          stays as the pure base. Always runs (not gated on nip65) so
- *          announcement discovery is always thorough.
+ *          stays as the pure base. Always runs (not gated on useItemAuthorRelays)
+ *          so announcement discovery is always thorough.
  *
  * Returns both groups so callers choose the right one:
- *   - nip65 disabled → repoRelayGroup
- *   - nip65 enabled  → repoRelayAndMaintainerMailboxGroup
+ *   - useItemAuthorRelays disabled → repoRelayGroup
+ *   - useItemAuthorRelays enabled  → repoRelayAndMaintainerMailboxGroup
  */
 export function useResolvedRepository(
   pubkey: string | undefined,
