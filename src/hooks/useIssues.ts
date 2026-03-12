@@ -1,13 +1,11 @@
 import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
-import { includeMailboxes, mapEventsToStore } from "applesauce-core";
+import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import type { RelayGroup } from "applesauce-relay";
-import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { castTimelineStream } from "applesauce-common/observable";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
-import { pool, liveness } from "@/services/nostr";
 import {
   ISSUE_KIND,
   STATUS_KINDS,
@@ -20,103 +18,8 @@ import {
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 import { Issue } from "@/casts/Issue";
 import type { Filter } from "applesauce-core/helpers";
-
-/** Max healthy mailbox relays to take per user when building NIP-65 relay lists. */
-const MAX_MAILBOX_RELAYS_PER_USER = 3;
-
-/**
- * Flatten a liveness-filtered list of ProfilePointers into a deduplicated
- * relay URL array, capped at MAX_MAILBOX_RELAYS_PER_USER per pointer.
- *
- * Already-connected relays (liveness.online) are sorted to the front of each
- * pointer's relay list so we reuse open connections before opening new ones.
- *
- * @param enriched  - ProfilePointers with relays already filtered by liveness
- * @param exclude   - Relay URLs to skip (e.g. repo relays already queried)
- */
-function flattenMailboxRelays(
-  enriched: { pubkey: string; relays?: string[] }[],
-  exclude: ReadonlySet<string> = new Set(),
-): string[] {
-  const online = new Set(liveness.online);
-  const seen = new Set<string>(exclude);
-  const result: string[] = [];
-  for (const pointer of enriched) {
-    const relays = (pointer.relays ?? []).slice().sort((a, b) => {
-      // Online relays first, then unknown/offline-but-healthy
-      const aOnline = online.has(a) ? 0 : 1;
-      const bOnline = online.has(b) ? 0 : 1;
-      return aOnline - bOnline;
-    });
-    let count = 0;
-    for (const relay of relays) {
-      if (count >= MAX_MAILBOX_RELAYS_PER_USER) break;
-      if (!seen.has(relay)) {
-        seen.add(relay);
-        result.push(relay);
-      }
-      count++;
-    }
-  }
-  return result;
-}
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
-import { of } from "rxjs";
-import { map } from "rxjs/operators";
-
-/**
- * Fetch NIP-65 relay URLs for a set of pubkeys and return them as a flat
- * deduplicated array, filtered by liveness and capped per user.
- *
- * @param type - "outbox" for events the user *wrote* (issues, status, announcements)
- *               "inbox"  for events *directed at* the user (comments, zaps, reactions)
- *
- * Uses `includeMailboxes(eventStore, type)` — the canonical Applesauce operator
- * for mailbox discovery. Internally calls `store.replaceable({ kind: 10002, pubkey })`
- * for each pubkey via `ReplaceableModel`. When the event is not yet in the store,
- * `ReplaceableModel` implicitly triggers a fetch via `store.eventLoader` — a
- * unified loader (`createEventLoaderForStore`) that routes replaceable pointers
- * to `createAddressLoader`, which fetches via `lookupRelays` (purplepag.es,
- * index.hzrd149.com, indexer.coracle.social). The fetch only fires if
- * `store.eventLoader` is wired up (it is, in nostr.ts).
- *
- * Reactivity: `combineLatest` over N `store.replaceable()` subscriptions means
- * any arriving kind:10002 event causes a re-emission → `relays` updates →
- * `relayKey` changes → the issue/status fetch `use$` re-subscribes with the
- * expanded relay list. Scoped to the specific pubkeys passed in — no broad
- * subscription.
- *
- * New maintainers: `pubkeyKey` (joined pubkeys) is in the dep array, so when
- * `RepositoryModel` discovers a new co-maintainer and `maintainerSet` grows,
- * the observable is recreated with the full new set. Already-resolved kind:10002
- * events re-emit synchronously from the store; new ones trigger fresh fetches.
- * Full re-subscription on each growth step, but maintainer counts are small
- * (typically 1–5) so this is not a performance concern.
- *
- * When `enabled` is false (or pubkeys is empty) returns an empty array
- * immediately — existing behaviour is unchanged.
- */
-function useNip65Relays(
-  pubkeys: string[],
-  enabled: boolean,
-  type: "inbox" | "outbox" = "outbox",
-): string[] {
-  const store = useEventStore();
-  const pubkeyKey = pubkeys.join(",");
-
-  const relays = use$(() => {
-    if (!enabled || pubkeys.length === 0) return of([] as string[]);
-    const pointers = pubkeys.map((pubkey) => ({ pubkey }));
-    return of(pointers).pipe(
-      includeMailboxes(store, type),
-      ignoreUnhealthyRelaysOnPointers(liveness),
-      map((enriched) => flattenMailboxRelays(enriched)),
-    );
-  }, [pubkeyKey, enabled, type, store]);
-
-  return relays ?? [];
-}
 
 /**
  * Fetch issues for a repository.
@@ -127,18 +30,20 @@ function useNip65Relays(
  *
  * Also fetches status events so we can determine current status.
  *
- * When nip65 is true, also queries the NIP-65 outbox relays of all
- * maintainers. Kind:10002 events are fetched via indexer relays (purplepag.es
- * etc.) configured in lookupRelays — no manual relay hints needed.
+ * The caller is responsible for passing the right RelayGroup:
+ *   - nip65 disabled → repoRelayGroup (repo-declared relays + hints)
+ *   - nip65 enabled  → repoRelayAndMaintainerMailboxGroup (also includes
+ *                       maintainer outbox + inbox relays, built by
+ *                       useResolvedRepository)
  *
- * @param repoCoords - Coordinate string(s) for the repository
- * @param repoRelays - Relay URLs from ResolvedRepo.relays (the repo's declared relays)
- * @param options    - Query options including relay hints from the URL/settings
+ * @param repoCoords     - Coordinate string(s) for the repository
+ * @param repoRelayGroup - RelayGroup to subscribe to (see above)
+ * @param options        - Query options including relay hints from the URL/settings
  */
 export function useIssues(
   repoCoords: string | string[] | undefined,
-  group: RelayGroup | undefined,
-  options: RepoQueryOptions,
+  repoRelayGroup: RelayGroup | undefined,
+  _options: RepoQueryOptions,
 ): {
   issues: Issue[] | undefined;
   statusMap: Map<string, { status: IssueStatus; event: NostrEvent }>;
@@ -148,26 +53,6 @@ export function useIssues(
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  // NIP-65: fetch outbox relays for all maintainers when enabled and add them
-  // to the group. The group already contains repo-declared relays (added by
-  // useResolvedRepository). Outbox relays are additive — group.add() is
-  // idempotent so already-present relays are skipped.
-  const maintainerOutboxes = useNip65Relays(
-    options.nip65 ? (options.maintainerPubkeys ?? []) : [],
-    options.nip65 ?? false,
-    "outbox",
-  );
-
-  // Add newly-resolved outbox relays to the group without tearing down
-  // existing subscriptions.
-  useMemo(() => {
-    if (!group) return;
-    for (const url of maintainerOutboxes) {
-      const relay = pool.relay(url);
-      if (!group.has(relay)) group.add(relay);
-    }
-  }, [group, maintainerOutboxes.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Normalise to array for consistent filter building
   const coords = repoCoords
     ? Array.isArray(repoCoords)
@@ -175,7 +60,7 @@ export function useIssues(
       : [repoCoords]
     : undefined;
 
-  // The group instance is stable — use its identity as the dep key.
+  // The repoRelayGroup instance is stable — use its identity as the dep key.
   // coords changes when the maintainer set grows (new allCoordinates).
   const coordKey = coords?.join(",") ?? "";
 
@@ -183,14 +68,14 @@ export function useIssues(
   // When new relays are added to the group, reverseSwitchMap + WeakMap cache
   // opens a subscription only to the new relay — existing ones are untouched.
   use$(() => {
-    if (!coords || coords.length === 0 || !group) return undefined;
+    if (!coords || coords.length === 0 || !repoRelayGroup) return undefined;
     const issueFilters: Filter[] = [
       { kinds: [ISSUE_KIND], "#a": coords } as Filter,
     ];
-    return group
+    return repoRelayGroup
       .subscription(issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [coordKey, group, store]);
+  }, [coordKey, repoRelayGroup, store]);
 
   // Subscribe to issues in store, cast to Issue instances
   const issues = use$(() => {
@@ -207,14 +92,14 @@ export function useIssues(
 
   // Fetch statuses from relay via the same group
   use$(() => {
-    if (!coords || coords.length === 0 || !group) return undefined;
+    if (!coords || coords.length === 0 || !repoRelayGroup) return undefined;
     const statusFilters: Filter[] = [
       { kinds: [...STATUS_KINDS], "#a": coords } as Filter,
     ];
-    return group
+    return repoRelayGroup
       .subscription(statusFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [coordKey, group, store]);
+  }, [coordKey, repoRelayGroup, store]);
 
   // Subscribe to statuses in store
   const statusEvents = use$(() => {

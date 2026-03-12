@@ -1,28 +1,62 @@
+import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { includeMailboxes, mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
-import type { RelayGroup } from "applesauce-relay";
+import { RelayGroup } from "applesauce-relay";
+import type { RelayGroup as RelayGroupType } from "applesauce-relay";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { pool, liveness } from "@/services/nostr";
-
-/** Max healthy mailbox relays to take per maintainer when querying NIP-65 relays. */
-const MAX_MAILBOX_RELAYS_PER_USER = 3;
 import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
 import { gitIndexRelays } from "@/services/settings";
 import { RepositoryModel } from "@/models/RepositoryModel";
 import { RepositoryRelayGroup } from "@/models/RepositoryRelayGroup";
 import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
-import { of } from "rxjs";
+import { combineLatest, of } from "rxjs";
 import { switchMap } from "rxjs/operators";
+
+/** Max healthy mailbox relays to take per maintainer when querying NIP-65 relays. */
+const MAX_MAILBOX_RELAYS_PER_USER = 3;
 
 export interface ResolvedRepository {
   repo: ResolvedRepo;
-  /** Long-lived RelayGroup for this repository. Grows as relay discovery
-   *  progresses — new relays are added without tearing down existing
-   *  subscriptions. Pass this to useIssues, useNip34Loaders, etc. */
-  group: RelayGroup;
+  /** Base RelayGroup: repo-declared relays + relay hints only.
+   *  Pass to useIssues / useNip34Loaders when nip65 is disabled. */
+  repoRelayGroup: RelayGroupType;
+  /** Extended RelayGroup: repoRelayGroup + maintainer outbox + maintainer inbox
+   *  relays (up to MAX_MAILBOX_RELAYS_PER_USER each, prioritising connected).
+   *  Always used for announcement discovery. Pass to useIssues /
+   *  useNip34Loaders when nip65 is enabled. */
+  repoRelayAndMaintainerMailboxGroup: RelayGroupType;
+}
+
+/**
+ * Add relay URLs from an enriched pointer list to a RelayGroup, skipping any
+ * already present. Prioritises online relays and caps at
+ * MAX_MAILBOX_RELAYS_PER_USER per pointer.
+ */
+function addMailboxRelaysToGroup(
+  enriched: { pubkey: string; relays?: string[] }[],
+  group: RelayGroupType,
+): void {
+  const online = new Set(liveness.online);
+  const seen = new Set<string>(group.relays.map((r) => r.url));
+  for (const pointer of enriched) {
+    const relays = (pointer.relays ?? [])
+      .slice()
+      .sort((a, b) => (online.has(a) ? 0 : 1) - (online.has(b) ? 0 : 1));
+    let count = 0;
+    for (const relay of relays) {
+      if (count >= MAX_MAILBOX_RELAYS_PER_USER) break;
+      if (!seen.has(relay)) {
+        seen.add(relay);
+        const r = pool.relay(relay);
+        if (!group.has(r)) group.add(r);
+      }
+      count++;
+    }
+  }
 }
 
 /**
@@ -39,14 +73,16 @@ export interface ResolvedRepository {
  *          one model instance.
  *
  * Layer 3: once the ResolvedRepo is known, re-query the repo's own declared
- *          relays for ALL maintainer announcements. Uses group.add() to extend
- *          the shared RelayGroup rather than opening a new subscription.
+ *          relays for ALL maintainer announcements. Adds relays to both groups.
  *
- * Layer 4: query each maintainer's NIP-65 outbox relays for their
- *          announcement. Again uses group.add() for newly-discovered relays.
+ * Layer 4: resolve each maintainer's NIP-65 outbox AND inbox relays and add
+ *          them to repoRelayAndMaintainerMailboxGroup only — repoRelayGroup
+ *          stays as the pure base. Always runs (not gated on nip65) so
+ *          announcement discovery is always thorough.
  *
- * Returns both the resolved repo and the shared RelayGroup so callers can
- * pass the group directly to useIssues, useNip34Loaders, etc.
+ * Returns both groups so callers choose the right one:
+ *   - nip65 disabled → repoRelayGroup
+ *   - nip65 enabled  → repoRelayAndMaintainerMailboxGroup
  */
 export function useResolvedRepository(
   pubkey: string | undefined,
@@ -76,34 +112,48 @@ export function useResolvedRepository(
     >;
   }, [key, store]);
 
-  // Subscribe to the relay group model — same cache key as RepositoryModel.
-  // Emits the same RelayGroup instance every time a relay is added to it.
-  const group = use$(() => {
+  // Base RelayGroup: repo-declared relays + relay hints only.
+  // Backed by the RepositoryRelayGroup model so it's cached and shared.
+  const repoRelayGroup = use$(() => {
     if (!pubkey || !dTag) return undefined;
     return store.model(
       RepositoryRelayGroup,
       pubkey,
       dTag,
-    ) as unknown as Observable<RelayGroup>;
+    ) as unknown as Observable<RelayGroupType>;
   }, [key, store]);
 
+  // Extended group: base + maintainer outbox + inbox relays.
+  // Stable reference — created once per (pubkey, dTag) pair.
+  const repoRelayAndMaintainerMailboxGroup = useMemo(
+    () => (pubkey && dTag ? new RelayGroup([]) : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [key],
+  );
+
   // Layer 3: once we know the repo's own relay list, add any relays not yet
-  // in the group. group.add() is idempotent — already-present relays are
-  // skipped. The subscription on the group itself (opened by useIssues etc.)
-  // picks up the new relay automatically via reverseSwitchMap + WeakMap cache.
+  // in either group. Also subscribes to maintainer announcements on those relays.
   const repoRelayKey = repo?.relays.join(",") ?? "";
   const maintainerKey = repo?.maintainerSet.join(",") ?? "";
   use$(() => {
-    if (!dTag || !repo || !group || repo.relays.length === 0) return undefined;
+    if (
+      !dTag ||
+      !repo ||
+      !repoRelayGroup ||
+      !repoRelayAndMaintainerMailboxGroup ||
+      repo.relays.length === 0
+    )
+      return undefined;
 
-    // Add repo-declared relays to the group
     for (const url of repo.relays) {
       const relay = pool.relay(url);
-      if (!group.has(relay)) group.add(relay);
+      if (!repoRelayGroup.has(relay)) repoRelayGroup.add(relay);
+      if (!repoRelayAndMaintainerMailboxGroup.has(relay))
+        repoRelayAndMaintainerMailboxGroup.add(relay);
     }
 
-    // Also subscribe to all maintainer announcements on the repo's relays
-    // so newly-published announcements arrive in real time.
+    // Subscribe to all maintainer announcements on the repo's relays so
+    // newly-published announcements arrive in real time.
     const filter: Filter[] = [
       {
         kinds: [REPO_KIND],
@@ -111,50 +161,57 @@ export function useResolvedRepository(
         "#d": [dTag],
       } as Filter,
     ];
-    return group
+    return repoRelayGroup
       .subscription(filter)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [dTag, repoRelayKey, maintainerKey, store, group]);
+  }, [
+    dTag,
+    repoRelayKey,
+    maintainerKey,
+    store,
+    repoRelayGroup,
+    repoRelayAndMaintainerMailboxGroup,
+  ]);
 
-  // Layer 4: query each maintainer's NIP-65 outbox relays for their
-  // announcement. Add newly-discovered outbox relays to the group.
+  // Layer 4: resolve maintainer outbox + inbox relays and add them to the
+  // mailbox group only. repoRelayGroup is left as the pure base.
+  // combineLatest fires when either direction resolves, so we don't wait for
+  // both before adding the first batch.
   use$(() => {
-    if (!dTag || !repo || !group || repo.maintainerSet.length === 0)
+    if (
+      !dTag ||
+      !repo ||
+      !repoRelayAndMaintainerMailboxGroup ||
+      repo.maintainerSet.length === 0
+    )
       return undefined;
+
     const pointers = repo.maintainerSet.map((pk) => ({ pubkey: pk }));
-    return of(pointers).pipe(
-      includeMailboxes(store),
+    const outbox$ = of(pointers).pipe(
+      includeMailboxes(store, "outbox"),
       ignoreUnhealthyRelaysOnPointers(liveness),
-      switchMap((enriched) => {
-        const online = new Set(liveness.online);
-        // Skip relays already in the group
-        const seen = new Set<string>(group.relays.map((r) => r.url));
-        const outboxRelays: string[] = [];
-        for (const pointer of enriched) {
-          const relays = (pointer.relays ?? [])
-            .slice()
-            .sort((a, b) => (online.has(a) ? 0 : 1) - (online.has(b) ? 0 : 1));
-          let count = 0;
-          for (const relay of relays) {
-            if (count >= MAX_MAILBOX_RELAYS_PER_USER) break;
-            if (!seen.has(relay)) {
-              seen.add(relay);
-              outboxRelays.push(relay);
-            }
-            count++;
-          }
-        }
+    );
+    const inbox$ = of(pointers).pipe(
+      includeMailboxes(store, "inbox"),
+      ignoreUnhealthyRelaysOnPointers(liveness),
+    );
 
-        // Add new outbox relays to the group — existing subscriptions untouched
-        for (const url of outboxRelays) {
-          const relay = pool.relay(url);
-          if (!group.has(relay)) group.add(relay);
-        }
+    return combineLatest([outbox$, inbox$]).pipe(
+      switchMap(([outboxEnriched, inboxEnriched]) => {
+        addMailboxRelaysToGroup(
+          outboxEnriched,
+          repoRelayAndMaintainerMailboxGroup,
+        );
+        addMailboxRelaysToGroup(
+          inboxEnriched,
+          repoRelayAndMaintainerMailboxGroup,
+        );
 
-        if (outboxRelays.length === 0) return of(null);
+        if (repoRelayAndMaintainerMailboxGroup.relays.length === 0)
+          return of(null);
 
-        // Subscribe to maintainer announcements on the newly-added relays.
-        // group.subscription() will pick up the new relays via reverseSwitchMap.
+        // Subscribe to maintainer announcements on all mailbox relays so
+        // newly-published announcements arrive in real time.
         const filter: Filter[] = [
           {
             kinds: [REPO_KIND],
@@ -162,13 +219,14 @@ export function useResolvedRepository(
             "#d": [dTag],
           } as Filter,
         ];
-        return group
+        return repoRelayAndMaintainerMailboxGroup
           .subscription(filter)
           .pipe(onlyEvents(), mapEventsToStore(store));
       }),
     ) as unknown as Observable<null>;
-  }, [dTag, maintainerKey, store, group]);
+  }, [dTag, maintainerKey, store, repoRelayAndMaintainerMailboxGroup]);
 
-  if (!repo || !group) return undefined;
-  return { repo, group };
+  if (!repo || !repoRelayGroup || !repoRelayAndMaintainerMailboxGroup)
+    return undefined;
+  return { repo, repoRelayGroup, repoRelayAndMaintainerMailboxGroup };
 }

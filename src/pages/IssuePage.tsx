@@ -62,24 +62,26 @@ export default function IssuePage() {
 
   const resolved = useResolvedRepository(pubkey, repoId);
   const repo = resolved?.repo;
-  const group = resolved?.group;
+  const repoRelayAndMaintainerMailboxGroup =
+    resolved?.repoRelayAndMaintainerMailboxGroup;
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  // Fetch the issue event itself via the group when available; fall back to
-  // NGIT_RELAYS for initial discovery before the group is ready.
+  // Fetch the issue event itself via the mailbox group when available (best
+  // coverage); fall back to NGIT_RELAYS for initial discovery before the
+  // group is ready.
   use$(() => {
     if (!issueId) return undefined;
     const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
-    if (group) {
-      return group
+    if (repoRelayAndMaintainerMailboxGroup) {
+      return repoRelayAndMaintainerMailboxGroup
         .subscription(issueFilters)
         .pipe(onlyEvents(), mapEventsToStore(store));
     }
     return pool
       .subscription(gitIndexRelays.getValue(), issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [issueId, group, store]);
+  }, [issueId, repoRelayAndMaintainerMailboxGroup, store]);
 
   // Subscribe to store, cast to Issue
   const issues = use$(() => {
@@ -94,8 +96,9 @@ export default function IssuePage() {
 
   const issue = issues?.[0];
 
-  // Trigger two-tier loading for this issue.
-  useNip34Loaders(issueId, group);
+  // Trigger two-tier loading for this issue. Pass the mailbox group so the
+  // author inbox delta is computed relative to the full maintainer relay set.
+  useNip34Loaders(issueId, repoRelayAndMaintainerMailboxGroup, { nip65: true });
 
   const status = useIssueStatus(issueId);
   const nip32Labels = useIssueLabels(issueId);

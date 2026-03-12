@@ -76,7 +76,8 @@ export default function RepoPage({
   const account = useActiveAccount();
   const resolved = useResolvedRepository(pubkey, repoId);
   const repo = resolved?.repo;
-  const group = resolved?.group;
+  const repoRelayAndMaintainerMailboxGroup =
+    resolved?.repoRelayAndMaintainerMailboxGroup;
   const queryOptions: RepoQueryOptions = useMemo(
     () => ({
       relayHints,
@@ -86,9 +87,11 @@ export default function RepoPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [relayHints.join(","), repo?.maintainerSet?.join(",")],
   );
+  // nip65 is enabled — pass the mailbox group so issues are fetched from
+  // maintainer outbox + inbox relays in addition to repo-declared relays.
   const { issues, statusMap, labelsMap } = useIssues(
     repo?.allCoordinates,
-    group,
+    repoRelayAndMaintainerMailboxGroup,
     queryOptions,
   );
 
@@ -440,7 +443,7 @@ export default function RepoPage({
                 extraLabels={labelsMap.get(issue.id) ?? []}
                 npub={npub!}
                 repoId={repoId!}
-                group={group}
+                repoRelayGroup={repoRelayAndMaintainerMailboxGroup}
               />
             ))}
           </div>
@@ -465,7 +468,7 @@ function IssueRow({
   extraLabels,
   npub,
   repoId,
-  group,
+  repoRelayGroup,
 }: {
   issue: Issue;
   status: IssueStatus;
@@ -473,7 +476,7 @@ function IssueRow({
   extraLabels: string[];
   npub: string;
   repoId: string;
-  group: import("applesauce-relay").RelayGroup | undefined;
+  repoRelayGroup: import("applesauce-relay").RelayGroup | undefined;
 }) {
   const timeAgo = formatDistanceToNow(issue.createdAt, { addSuffix: true });
   const mergedLabels = Array.from(
@@ -483,7 +486,7 @@ function IssueRow({
   // Trigger two-tier loading for this issue. All IssueRow calls within the
   // same render cycle are batched by the loaders into a small number of relay
   // subscriptions (one per kind group, not one per issue).
-  useNip34Loaders(issue.id, group);
+  useNip34Loaders(issue.id, repoRelayGroup, { nip65: true });
 
   return (
     <Link to={`/${npub}/${repoId}/${issue.id}`} className="group block">

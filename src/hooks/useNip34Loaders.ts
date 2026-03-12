@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import type { RelayGroup } from "applesauce-relay";
@@ -7,7 +6,6 @@ import { includeMailboxes } from "applesauce-core";
 import { of } from "rxjs";
 import { map } from "rxjs/operators";
 import {
-  pool,
   liveness,
   nip34EssentialsLoader,
   nip34CommentsLoader,
@@ -17,81 +15,78 @@ import {
 /** Max healthy inbox relays to take for the issue author. */
 const MAX_INBOX_RELAYS = 3;
 
+/**
+ * Minimum number of the author's inbox relays that must already be present in
+ * the group before we consider coverage sufficient and skip adding more.
+ * If fewer than this many inbox relays overlap, we add the delta.
+ */
+const INBOX_COVERAGE_THRESHOLD = 2;
+
 export interface Nip34LoaderOptions {
   /** When true, also fetches from the NIP-65 inbox relays of the item author.
-   *  Only the relays not already present in repoRelayGroup are queried —
-   *  if all inbox relays overlap with the group, no extra requests are made.
-   *  The group's live subscription is extended reactively via group.add() so
-   *  late-arriving kind:10002 events are handled automatically. */
+   *  Only relays not already providing sufficient coverage (< INBOX_COVERAGE_THRESHOLD
+   *  overlap with the group) are queried. Loaders fire directly against those
+   *  relay URLs — the shared group is never mutated with per-author relays. */
   nip65?: boolean;
 }
 
 /**
- * Flatten a liveness-filtered list of ProfilePointers into a deduplicated
- * relay URL array, capped at MAX_INBOX_RELAYS per pointer.
- *
- * Already-connected relays (liveness.online) are sorted to the front so we
- * reuse open connections before opening new ones.
- *
- * @param enriched - ProfilePointers with relays already filtered by liveness
- * @param exclude  - Relay URLs already covered (e.g. repo relay group URLs)
- */
-function flattenInboxRelays(
-  enriched: { pubkey: string; relays?: string[] }[],
-  exclude: ReadonlySet<string>,
-): string[] {
-  const online = new Set(liveness.online);
-  const seen = new Set<string>(exclude);
-  const result: string[] = [];
-  for (const pointer of enriched) {
-    const relays = (pointer.relays ?? []).slice().sort((a, b) => {
-      return (online.has(a) ? 0 : 1) - (online.has(b) ? 0 : 1);
-    });
-    let count = 0;
-    for (const relay of relays) {
-      if (count >= MAX_INBOX_RELAYS) break;
-      if (!seen.has(relay)) {
-        seen.add(relay);
-        result.push(relay);
-      }
-      count++;
-    }
-  }
-  return result;
-}
-
-/**
  * Reactively resolve the NIP-65 inbox relays for a single pubkey that are
- * NOT already present in the repo relay group (the delta).
+ * NOT already sufficiently covered by the repo relay group.
  *
- * Returns [] when disabled or when all inbox relays overlap with the group.
+ * "Sufficient coverage" means at least INBOX_COVERAGE_THRESHOLD of the
+ * author's inbox relays are already in the group. If coverage is met, returns
+ * an empty array and no extra loaders fire.
+ *
  * Re-emits when the kind:10002 event arrives late — the dep on the store's
  * replaceable model means any arriving kind:10002 causes a re-emission.
  */
-function useInboxOnlyRelays(
+function useAuthorInboxDeltaRelays(
   pubkey: string | undefined,
   repoRelayGroup: RelayGroup | undefined,
   enabled: boolean,
 ): string[] {
   const store = useEventStore();
 
-  // Stable key for the group's current relay set — changes when group grows.
-  // We snapshot it here; the group may grow later (that's fine — the loader
-  // for repo relays already fired, and the group.subscription() in useIssues
-  // handles live events reactively via reverseSwitchMap + WeakMap cache).
+  // Snapshot the group's current relay set as a stable key.
   const groupRelaySet = new Set(repoRelayGroup?.relays.map((r) => r.url) ?? []);
   const groupRelayKey = [...groupRelaySet].sort().join(",");
 
-  const inboxOnlyRelays = use$(() => {
+  const inboxDeltaRelays = use$(() => {
     if (!enabled || !pubkey) return of([] as string[]);
     return of([{ pubkey }]).pipe(
       includeMailboxes(store, "inbox"),
       ignoreUnhealthyRelaysOnPointers(liveness),
-      map((enriched) => flattenInboxRelays(enriched, groupRelaySet)),
+      map((enriched) => {
+        const online = new Set(liveness.online);
+        const authorInboxRelays = (enriched[0]?.relays ?? [])
+          .slice()
+          .sort((a, b) => (online.has(a) ? 0 : 1) - (online.has(b) ? 0 : 1));
+
+        // Count how many of the author's inbox relays are already in the group.
+        const overlapCount = authorInboxRelays.filter((r) =>
+          groupRelaySet.has(r),
+        ).length;
+
+        // If coverage is sufficient, no extra relays needed.
+        if (overlapCount >= INBOX_COVERAGE_THRESHOLD) return [] as string[];
+
+        // Otherwise collect the delta: inbox relays not already in the group.
+        const seen = new Set<string>(groupRelaySet);
+        const delta: string[] = [];
+        for (const relay of authorInboxRelays) {
+          if (delta.length >= MAX_INBOX_RELAYS) break;
+          if (!seen.has(relay)) {
+            seen.add(relay);
+            delta.push(relay);
+          }
+        }
+        return delta;
+      }),
     );
   }, [pubkey, groupRelayKey, enabled, store]);
 
-  return inboxOnlyRelays ?? [];
+  return inboxDeltaRelays ?? [];
 }
 
 /**
@@ -113,18 +108,16 @@ function useInboxOnlyRelays(
  * Read them back reactively with store.timeline() / use$.
  *
  * NIP-65 mode (options.nip65 = true):
- *   Also fetches from the NIP-65 inbox relays of the item author. Only the
- *   relays NOT already in repoRelayGroup are queried — if all inbox relays
- *   overlap with the group, no extra requests are made. The inbox relay delta
- *   is computed reactively so a late-arriving kind:10002 triggers a second
- *   loader pass for only the new relays.
- *
- *   The repo relay loaders (tier 1 + tier 2) fire once keyed on repoRelayKey
- *   and do NOT re-fire when inbox relays arrive — they are separate use$
- *   blocks with separate dep keys.
+ *   Also fetches from the NIP-65 inbox relays of the item author when those
+ *   relays are not already sufficiently covered by the group
+ *   (< INBOX_COVERAGE_THRESHOLD overlap). Loaders fire directly against the
+ *   delta relay URLs — the shared group is never mutated with per-author relays,
+ *   since those are specific to this item's author and should not affect other
+ *   items in the repo.
  *
  * @param itemId         - The event ID of the issue / patch / PR
- * @param repoRelayGroup - The repo's long-lived RelayGroup (from useResolvedRepository)
+ * @param repoRelayGroup - The relay group for this repo (repoRelayGroup or
+ *                         repoRelayAndMaintainerMailboxGroup from useResolvedRepository)
  * @param options        - Loader options (nip65)
  */
 export function useNip34Loaders(
@@ -136,7 +129,7 @@ export function useNip34Loaders(
 
   // ── Repo relay loaders ────────────────────────────────────────────────────
   // Keyed on repoRelayKey — stable after initial group build. Does NOT
-  // re-fire when inbox relays arrive (separate dep key below).
+  // re-fire when author inbox relays are resolved (separate dep key below).
   const repoRelays = repoRelayGroup?.relays.map((r) => r.url) ?? [];
   const repoRelayKey = repoRelays.join(",");
 
@@ -158,7 +151,7 @@ export function useNip34Loaders(
     return nip34ThreadLoader({ value: itemId, relays: repoRelays });
   }, [itemId, repoRelayKey]);
 
-  // ── NIP-65 inbox relay loaders ────────────────────────────────────────────
+  // ── NIP-65 author inbox relay loaders ─────────────────────────────────────
   // Reactively resolve the item author pubkey from the store.
   // Available as soon as the item event lands in the store.
   const authorPubkey = use$(() => {
@@ -166,45 +159,35 @@ export function useNip34Loaders(
     return store.event(itemId).pipe(map((ev) => ev?.pubkey));
   }, [itemId, options?.nip65, store]);
 
-  // Delta: inbox relays not already covered by the repo relay group.
-  // Returns [] when nip65 is false, pubkey unknown, or full overlap.
-  const inboxOnlyRelays = useInboxOnlyRelays(
+  // Delta: author inbox relays not already sufficiently covered by the group.
+  // Returns [] when nip65 is false, pubkey unknown, or coverage is met.
+  // These relays are per-item-author and must NOT be added to the shared group.
+  const authorInboxDelta = useAuthorInboxDeltaRelays(
     authorPubkey,
     repoRelayGroup,
     options?.nip65 ?? false,
   );
 
-  // Add inbox-only relays to the group so the live group.subscription() in
-  // useIssues picks them up reactively (reverseSwitchMap + WeakMap cache
-  // opens a subscription only to the new relay, existing ones untouched).
-  useMemo(() => {
-    if (!repoRelayGroup) return;
-    for (const url of inboxOnlyRelays) {
-      const relay = pool.relay(url);
-      if (!repoRelayGroup.has(relay)) repoRelayGroup.add(relay);
-    }
-  }, [repoRelayGroup, inboxOnlyRelays.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps -- join() is the stable key for the array
+  // Fire loaders directly against the author's inbox delta relays.
+  // Separate dep key from repo relays so repo loaders are never re-triggered.
+  // Skipped entirely when the delta is empty (sufficient coverage case).
+  const inboxDeltaKey = authorInboxDelta.join(",");
 
-  // Fire loaders for inbox-only relays — separate dep key from repo relays
-  // so repo relay loaders are never re-triggered by inbox relay arrival.
-  // Skipped entirely when inboxOnlyRelays is empty (full overlap case).
-  const inboxOnlyKey = inboxOnlyRelays.join(",");
-
-  // Tier 1 — essentials on inbox-only relays
+  // Tier 1 — essentials on author inbox delta relays
   use$(() => {
-    if (!itemId || inboxOnlyRelays.length === 0) return undefined;
-    return nip34EssentialsLoader({ value: itemId, relays: inboxOnlyRelays });
-  }, [itemId, inboxOnlyKey]);
+    if (!itemId || authorInboxDelta.length === 0) return undefined;
+    return nip34EssentialsLoader({ value: itemId, relays: authorInboxDelta });
+  }, [itemId, inboxDeltaKey]);
 
-  // Tier 2 — comments on inbox-only relays
+  // Tier 2 — comments on author inbox delta relays
   use$(() => {
-    if (!itemId || inboxOnlyRelays.length === 0) return undefined;
-    return nip34CommentsLoader({ value: itemId, relays: inboxOnlyRelays });
-  }, [itemId, inboxOnlyKey]);
+    if (!itemId || authorInboxDelta.length === 0) return undefined;
+    return nip34CommentsLoader({ value: itemId, relays: authorInboxDelta });
+  }, [itemId, inboxDeltaKey]);
 
-  // Tier 2 — reactions + zaps on inbox-only relays
+  // Tier 2 — reactions + zaps on author inbox delta relays
   use$(() => {
-    if (!itemId || inboxOnlyRelays.length === 0) return undefined;
-    return nip34ThreadLoader({ value: itemId, relays: inboxOnlyRelays });
-  }, [itemId, inboxOnlyKey]);
+    if (!itemId || authorInboxDelta.length === 0) return undefined;
+    return nip34ThreadLoader({ value: itemId, relays: authorInboxDelta });
+  }, [itemId, inboxDeltaKey]);
 }
