@@ -7,7 +7,7 @@ import {
   createTagValueLoader,
   createZapsLoader,
 } from "applesauce-loaders/loaders";
-import { RelayPool } from "applesauce-relay";
+import { RelayLiveness, RelayPool } from "applesauce-relay";
 import { NostrConnectSigner } from "applesauce-signers";
 import type { NostrEvent } from "nostr-tools";
 import { verifyEvent } from "nostr-tools";
@@ -35,6 +35,18 @@ persistEventsToCache(eventStore, saveEvents);
  * Use this to query events and publish to relays.
  */
 export const pool = new RelayPool();
+
+/**
+ * Global relay liveness tracker.
+ * Monitors connection health for relays discovered via NIP-65 outbox model so
+ * that dead or repeatedly-failing relays are skipped automatically.
+ *
+ * Repo-declared relays and explicit relay hints bypass liveness filtering —
+ * they are authoritative and should always be tried. Only user-discovered
+ * outbox relays (kind:10002) are filtered through this tracker.
+ */
+export const liveness = new RelayLiveness();
+liveness.connectToPool(pool);
 
 /**
  * Setup NostrConnectSigner to use the global relay pool.

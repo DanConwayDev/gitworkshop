@@ -3,9 +3,15 @@ import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { includeMailboxes, mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { castTimelineStream } from "applesauce-common/observable";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
-import { pool, nip34CommentsLoader, nip34ThreadLoader } from "@/services/nostr";
+import {
+  pool,
+  liveness,
+  nip34CommentsLoader,
+  nip34ThreadLoader,
+} from "@/services/nostr";
 import {
   ISSUE_KIND,
   STATUS_KINDS,
@@ -66,11 +72,14 @@ function useNip65Outboxes(pubkeys: string[], enabled: boolean): string[] {
   // includeMailboxes enriches ProfilePointers with their kind:10002 outboxes.
   // The eventStore.eventLoader (addressLoader + lookupRelays) fetches missing
   // kind:10002 events automatically from indexer relays.
+  // ignoreUnhealthyRelays filters out dead/backoff relays before we connect —
+  // repo relays and relay hints bypass this and are always tried.
   const outboxes = use$(() => {
     if (!enabled || pubkeys.length === 0) return of([] as string[]);
     const pointers = pubkeys.map((pubkey) => ({ pubkey }));
     return of(pointers).pipe(
       includeMailboxes(store),
+      ignoreUnhealthyRelaysOnPointers(liveness),
       map((enriched) => {
         const seen = new Set<string>();
         const result: string[] = [];

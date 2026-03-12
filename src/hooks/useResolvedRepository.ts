@@ -2,7 +2,8 @@ import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { includeMailboxes, mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
-import { pool } from "@/services/nostr";
+import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
+import { pool, liveness } from "@/services/nostr";
 import { REPO_KIND, NGIT_RELAYS, type ResolvedRepo } from "@/lib/nip34";
 import { RepositoryModel } from "@/models/RepositoryModel";
 import type { Filter } from "applesauce-core/helpers";
@@ -89,6 +90,9 @@ export function useResolvedRepository(
       // includeMailboxes fetches kind:10002 via eventStore.eventLoader which
       // uses the configured lookupRelays (indexer relays).
       includeMailboxes(store),
+      // Filter dead/backoff relays before connecting. Repo-declared relays and
+      // relay hints are not passed through here — only NIP-65 outbox relays.
+      ignoreUnhealthyRelaysOnPointers(liveness),
       switchMap((enriched) => {
         // Collect all outbox relay URLs, deduplicated
         const seen = new Set<string>([...repo.relays]); // skip already-queried relays
