@@ -1,12 +1,14 @@
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
-import { mapEventsToStore } from "applesauce-core";
+import { includeMailboxes, mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { pool } from "@/services/nostr";
 import { REPO_KIND, NGIT_RELAYS, type ResolvedRepo } from "@/lib/nip34";
 import { RepositoryModel } from "@/models/RepositoryModel";
 import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
+import { of } from "rxjs";
+import { switchMap } from "rxjs/operators";
 
 /**
  * Fetch and reactively resolve a single repository by selected maintainer
@@ -70,6 +72,49 @@ export function useResolvedRepository(
       .req(repo.relays, filter)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [dTag, repoRelayKey, maintainerKey, store]);
+
+  // Layer 4: query each maintainer's NIP-65 outbox relays for their
+  // announcement. Kind:10002 events are fetched via the indexer relays
+  // configured in lookupRelays (purplepag.es, index.hzrd149.com, etc.) by
+  // the eventStore.eventLoader — no manual relay hints needed.
+  //
+  // This catches announcements that only exist on a maintainer's personal
+  // outbox relays and were never published to NGIT_RELAYS or the repo's
+  // declared relay list.
+  use$(() => {
+    if (!dTag || !repo || repo.maintainerSet.length === 0) return undefined;
+    const pointers = repo.maintainerSet.map((pk) => ({ pubkey: pk }));
+    return of(pointers).pipe(
+      // Enrich each pointer with the maintainer's outbox relays.
+      // includeMailboxes fetches kind:10002 via eventStore.eventLoader which
+      // uses the configured lookupRelays (indexer relays).
+      includeMailboxes(store),
+      switchMap((enriched) => {
+        // Collect all outbox relay URLs, deduplicated
+        const seen = new Set<string>([...repo.relays]); // skip already-queried relays
+        const outboxRelays: string[] = [];
+        for (const pointer of enriched) {
+          for (const relay of pointer.relays ?? []) {
+            if (!seen.has(relay)) {
+              seen.add(relay);
+              outboxRelays.push(relay);
+            }
+          }
+        }
+        if (outboxRelays.length === 0) return of(null);
+        const filter: Filter[] = [
+          {
+            kinds: [REPO_KIND],
+            authors: repo.maintainerSet,
+            "#d": [dTag],
+          } as Filter,
+        ];
+        return pool
+          .req(outboxRelays, filter)
+          .pipe(onlyEvents(), mapEventsToStore(store));
+      }),
+    ) as unknown as Observable<null>;
+  }, [dTag, maintainerKey, store]);
 
   return repo;
 }

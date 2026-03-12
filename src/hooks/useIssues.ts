@@ -1,16 +1,11 @@
 import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
-import { mapEventsToStore } from "applesauce-core";
+import { includeMailboxes, mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { castTimelineStream } from "applesauce-common/observable";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
-import {
-  pool,
-  nip34CommentsLoader,
-  nip34ThreadLoader,
-  addressLoader,
-} from "@/services/nostr";
+import { pool, nip34CommentsLoader, nip34ThreadLoader } from "@/services/nostr";
 import {
   ISSUE_KIND,
   STATUS_KINDS,
@@ -23,7 +18,7 @@ import { Issue } from "@/casts/Issue";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
-import { combineLatest, merge, of } from "rxjs";
+import { of } from "rxjs";
 import { map } from "rxjs/operators";
 
 /**
@@ -50,49 +45,37 @@ function buildRelays(
 }
 
 /**
- * Fetch NIP-65 kind:10002 mailbox events for a set of pubkeys and return
- * their combined outbox relay URLs.
+ * Fetch NIP-65 outbox relay URLs for a set of pubkeys and return them as a
+ * flat deduplicated array.
  *
- * When `enabled` is false (or pubkeys is empty) this is a no-op and returns
- * an empty array immediately — existing behaviour is unchanged.
+ * Uses `includeMailboxes(eventStore)` — the canonical Applesauce operator for
+ * outbox discovery. It enriches each ProfilePointer with the relays from their
+ * kind:10002 event, fetching via `eventStore.eventLoader` which is wired to
+ * `addressLoader` with `lookupRelays` (purplepag.es, index.hzrd149.com,
+ * indexer.coracle.social). This means kind:10002 events are looked up on the
+ * indexer relays that specialise in relay-list discovery — no manual relay
+ * hints needed.
  *
- * Implementation notes:
- * - addressLoader is used to fetch kind:10002 events; it batches requests and
- *   checks the local cache first, so repeated calls are cheap.
- * - eventStore.mailboxes() provides a reactive observable per pubkey; we
- *   combine them so the result updates if any mailbox event arrives later.
- * - The hook returns a stable empty array when disabled so callers can safely
- *   include it in dependency arrays via JSON.stringify.
+ * When `enabled` is false (or pubkeys is empty) returns an empty array
+ * immediately — existing behaviour is unchanged.
  */
 function useNip65Outboxes(pubkeys: string[], enabled: boolean): string[] {
   const store = useEventStore();
   const pubkeyKey = pubkeys.join(",");
 
-  // Trigger addressLoader for each pubkey's kind:10002 event.
-  // This is a side-effect subscription — events land in the store and the
-  // reactive mailboxes() observable below picks them up automatically.
-  use$(() => {
-    if (!enabled || pubkeys.length === 0) return undefined;
-    // addressLoader returns an observable per pointer; merge them all so
-    // a single subscription triggers fetches for every pubkey.
-    const observables = pubkeys.map((pubkey) =>
-      addressLoader({ kind: 10002, pubkey }),
-    );
-    return merge(...observables).pipe(mapEventsToStore(store));
-  }, [pubkeyKey, enabled, store]);
-
-  // Reactively read outbox relays from the store for all pubkeys.
+  // includeMailboxes enriches ProfilePointers with their kind:10002 outboxes.
+  // The eventStore.eventLoader (addressLoader + lookupRelays) fetches missing
+  // kind:10002 events automatically from indexer relays.
   const outboxes = use$(() => {
     if (!enabled || pubkeys.length === 0) return of([] as string[]);
-    // Combine mailbox observables for all pubkeys into a single array of
-    // all outbox URLs, deduplicated.
-    const mailboxObservables = pubkeys.map((pubkey) => store.mailboxes(pubkey));
-    return combineLatest(mailboxObservables).pipe(
-      map((mailboxList) => {
+    const pointers = pubkeys.map((pubkey) => ({ pubkey }));
+    return of(pointers).pipe(
+      includeMailboxes(store),
+      map((enriched) => {
         const seen = new Set<string>();
         const result: string[] = [];
-        for (const mailboxes of mailboxList) {
-          for (const relay of mailboxes?.outboxes ?? []) {
+        for (const pointer of enriched) {
+          for (const relay of pointer.relays ?? []) {
             if (!seen.has(relay)) {
               seen.add(relay);
               result.push(relay);
@@ -115,6 +98,10 @@ function useNip65Outboxes(pubkeys: string[], enabled: boolean): string[] {
  * ensures issues tagged against any co-maintainer's announcement are included.
  *
  * Also fetches status events so we can determine current status.
+ *
+ * When nip65 is true, also queries the NIP-65 outbox relays of all
+ * maintainers. Kind:10002 events are fetched via indexer relays (purplepag.es
+ * etc.) configured in lookupRelays — no manual relay hints needed.
  *
  * @param repoCoords - Coordinate string(s) for the repository
  * @param repoRelays - Relay URLs from ResolvedRepo.relays (the repo's declared relays)
@@ -233,6 +220,9 @@ export function useIssues(
  * is a reliable proxy: they are the most likely person to have commented and
  * their outbox is already needed for other queries on the same page.
  *
+ * Kind:10002 events are fetched via indexer relays (purplepag.es etc.)
+ * configured in lookupRelays — no manual relay hints needed.
+ *
  * @param issueId    - The event ID of the issue
  * @param repoRelays - Relay URLs from ResolvedRepo.relays
  * @param options    - Query options including relay hints
@@ -282,7 +272,8 @@ export function useIssueComments(
  *
  * Status events (kinds 1630-1633) are written by maintainers, so when nip65
  * is true we query the NIP-65 outbox relays of all maintainers in addition to
- * the repo's declared relays.
+ * the repo's declared relays. Kind:10002 events are fetched via indexer relays
+ * (purplepag.es etc.) configured in lookupRelays.
  *
  * @param issueId    - The event ID of the issue
  * @param repoRelays - Relay URLs from ResolvedRepo.relays
@@ -339,6 +330,9 @@ export function useIssueStatus(
  * often land on the recipient's outbox relays; the issue author is the most
  * likely zap recipient. See useIssueComments for the rationale on using the
  * issue author rather than individual zap senders.
+ *
+ * Kind:10002 events are fetched via indexer relays (purplepag.es etc.)
+ * configured in lookupRelays — no manual relay hints needed.
  *
  * @param issueId    - The event ID of the issue
  * @param repoRelays - Relay URLs from ResolvedRepo.relays
