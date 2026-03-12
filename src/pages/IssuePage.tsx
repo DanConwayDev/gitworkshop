@@ -8,6 +8,7 @@ import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import {
   useIssueComments,
+  useIssueLabels,
   useIssueStatus,
   useIssueZaps,
 } from "@/hooks/useIssues";
@@ -105,9 +106,17 @@ export default function IssuePage({
 
   const issue = issues?.[0];
 
-  const status = useIssueStatus(issueId, group, queryOptions);
+  const status = useIssueStatus(issueId);
+  const nip32Labels = useIssueLabels(issueId);
   const comments = useIssueComments(issueId, group, queryOptions);
   const zaps = useIssueZaps(issueId, group, queryOptions);
+
+  // Merge labels from the issue's own t-tags with any NIP-32 label events.
+  // Deduplicated and sorted for stable rendering.
+  const allLabels = useMemo(() => {
+    const merged = new Set([...(issue?.labels ?? []), ...nip32Labels]);
+    return Array.from(merged).sort();
+  }, [issue?.labels, nip32Labels]);
 
   // Participants
   const participants = useMemo(() => {
@@ -172,9 +181,9 @@ export default function IssuePage({
                     {formatDistanceToNow(issue.createdAt, { addSuffix: true })}
                   </span>
                 </div>
-                {issue.labels.length > 0 && (
+                {allLabels.length > 0 && (
                   <div className="flex gap-1.5 flex-wrap">
-                    {issue.labels.map((label) => (
+                    {allLabels.map((label) => (
                       <LabelBadge key={label} label={label} />
                     ))}
                   </div>
@@ -337,7 +346,7 @@ export default function IssuePage({
                 </div>
 
                 {/* Labels */}
-                {issue && issue.labels.length > 0 && (
+                {allLabels.length > 0 && (
                   <>
                     <Separator />
                     <div>
@@ -345,7 +354,7 @@ export default function IssuePage({
                         Labels
                       </p>
                       <div className="flex flex-wrap gap-1.5">
-                        {issue.labels.map((label) => (
+                        {allLabels.map((label) => (
                           <LabelBadge key={label} label={label} />
                         ))}
                       </div>

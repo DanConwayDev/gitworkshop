@@ -86,7 +86,7 @@ export default function RepoPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [relayHints.join(","), repo?.maintainerSet?.join(",")],
   );
-  const { issues, statusMap } = useIssues(
+  const { issues, statusMap, labelsMap } = useIssues(
     repo?.allCoordinates,
     group,
     queryOptions,
@@ -101,20 +101,23 @@ export default function RepoPage({
   const [authorFilter, setAuthorFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Collect all unique labels and authors from issues
+  // Collect all unique labels and authors from issues.
+  // Labels are merged from the issue's own t-tags and any NIP-32 label events.
   const { allLabels, allAuthors } = useMemo(() => {
     if (!issues) return { allLabels: [], allAuthors: [] };
     const labels = new Set<string>();
     const authors = new Set<string>();
     for (const issue of issues) {
       issue.labels.forEach((l) => labels.add(l));
+      // Also include labels from NIP-32 label events
+      labelsMap.get(issue.id)?.forEach((l) => labels.add(l));
       authors.add(issue.pubkey);
     }
     return {
       allLabels: Array.from(labels).sort(),
       allAuthors: Array.from(authors),
     };
-  }, [issues]);
+  }, [issues, labelsMap]);
 
   // Apply filters
   const filteredIssues = useMemo(() => {
@@ -126,8 +129,13 @@ export default function RepoPage({
         if (issueStatus !== statusFilter) return false;
       }
 
-      // Label filter
-      if (labelFilter && !issue.labels.includes(labelFilter)) return false;
+      // Label filter — check both the issue's own t-tags and NIP-32 label events
+      if (
+        labelFilter &&
+        !issue.labels.includes(labelFilter) &&
+        !(labelsMap.get(issue.id) ?? []).includes(labelFilter)
+      )
+        return false;
 
       // Author filter
       if (authorFilter && issue.pubkey !== authorFilter) return false;
@@ -144,7 +152,15 @@ export default function RepoPage({
 
       return true;
     });
-  }, [issues, statusFilter, labelFilter, authorFilter, searchQuery, statusMap]);
+  }, [
+    issues,
+    statusFilter,
+    labelFilter,
+    authorFilter,
+    searchQuery,
+    statusMap,
+    labelsMap,
+  ]);
 
   const hasActiveFilters =
     statusFilter !== "all" || labelFilter || authorFilter || searchQuery;
@@ -421,6 +437,7 @@ export default function RepoPage({
                 key={issue.id}
                 issue={issue}
                 status={statusMap.get(issue.id)?.status ?? "open"}
+                extraLabels={labelsMap.get(issue.id) ?? []}
                 npub={npub!}
                 repoId={repoId!}
                 group={group}
@@ -445,17 +462,23 @@ function AuthorSelectLabel({ pubkey }: { pubkey: string }) {
 function IssueRow({
   issue,
   status,
+  extraLabels,
   npub,
   repoId,
   group,
 }: {
   issue: Issue;
   status: IssueStatus;
+  /** Labels from NIP-32 kind:1985 events, merged with issue's own t-tags */
+  extraLabels: string[];
   npub: string;
   repoId: string;
   group: import("applesauce-relay").RelayGroup | undefined;
 }) {
   const timeAgo = formatDistanceToNow(issue.createdAt, { addSuffix: true });
+  const mergedLabels = Array.from(
+    new Set([...issue.labels, ...extraLabels]),
+  ).sort();
 
   // Trigger two-tier loading for this issue. All IssueRow calls within the
   // same render cycle are batched by the loaders into a small number of relay
@@ -489,9 +512,9 @@ function IssueRow({
                   {timeAgo}
                 </span>
 
-                {issue.labels.length > 0 && (
+                {mergedLabels.length > 0 && (
                   <div className="flex gap-1 flex-wrap">
-                    {issue.labels.map((label) => (
+                    {mergedLabels.map((label) => (
                       <LabelBadge key={label} label={label} />
                     ))}
                   </div>

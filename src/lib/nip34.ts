@@ -19,6 +19,9 @@ export const STATUS_RESOLVED = 1631;
 export const STATUS_CLOSED = 1632;
 export const STATUS_DRAFT = 1633;
 
+/** NIP-32 label event kind */
+export const LABEL_KIND = 1985;
+
 export const STATUS_KINDS = [
   STATUS_OPEN,
   STATUS_RESOLVED,
