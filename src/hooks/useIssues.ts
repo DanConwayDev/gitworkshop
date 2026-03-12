@@ -265,17 +265,20 @@ export function useIssues(
  * Uses the batched commentsLoader so all per-issue calls are combined into
  * a single relay subscription rather than one request per issue.
  *
- * When nip65 is true, also queries the NIP-65 outbox relays of the issue
- * author. The issue author is resolved reactively from the store (two-step):
- * the issue event must already be in the store (fetched by IssuePage) before
- * the outbox lookup can proceed. We query the issue author's outboxes rather
- * than individual comment authors because comment authors are not known until
- * comments are already fetched — a chicken-and-egg problem. The issue author
- * is a reliable proxy: they are the most likely person to have commented and
- * their outbox is already needed for other queries on the same page.
+ * When nip65 is true, also queries the NIP-65 inbox relays of the issue
+ * author. Comments are directed at the author so they land on their inbox
+ * relays. The issue author pubkey is resolved reactively from the store
+ * (two-step): store.event(issueId) emits once the issue event is in the
+ * store (fetched by IssuePage or via store.eventLoader fallback), then
+ * useNip65Relays fetches the author's kind:10002 via store.eventLoader →
+ * createAddressLoader → lookupRelays. We use the issue author rather than
+ * individual comment authors because comment authors are unknown until
+ * comments are already fetched — a chicken-and-egg problem.
  *
- * Kind:10002 events are fetched via indexer relays (purplepag.es etc.)
- * configured in lookupRelays — no manual relay hints needed.
+ * The fetch is two-phase: initial call uses repoRelays + relayHints; once
+ * the kind:10002 arrives, filterKey changes and the loader re-fires with
+ * the inbox relays added. Already-fetched events are deduplicated by the
+ * loader's eventStore filter so no duplicates land in the store.
  *
  * @param issueId    - The event ID of the issue
  * @param repoRelays - Relay URLs from ResolvedRepo.relays
@@ -383,14 +386,11 @@ export function useIssueStatus(
  * Uses the batched issueZapsLoader so all per-issue calls are combined into
  * a single relay subscription rather than one request per issue.
  *
- * When nip65 is true, also queries the NIP-65 outbox relays of the issue
+ * When nip65 is true, also queries the NIP-65 inbox relays of the issue
  * author. Zap receipts are published by the recipient's lightning node and
- * often land on the recipient's outbox relays; the issue author is the most
- * likely zap recipient. See useIssueComments for the rationale on using the
- * issue author rather than individual zap senders.
- *
- * Kind:10002 events are fetched via indexer relays (purplepag.es etc.)
- * configured in lookupRelays — no manual relay hints needed.
+ * land on the recipient's inbox relays; the issue author is the most likely
+ * zap recipient. See useIssueComments for the full two-phase fetch rationale
+ * and why the issue author is used rather than individual zap senders.
  *
  * @param issueId    - The event ID of the issue
  * @param repoRelays - Relay URLs from ResolvedRepo.relays
