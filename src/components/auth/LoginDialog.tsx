@@ -1,20 +1,30 @@
 // NOTE: This file is stable and usually should not be modified.
 // It is important that all functionality in this file is preserved, and should only be modified if explicitly requested.
 
-import React, { useRef, useState, useEffect } from "react";
-import { Upload, AlertTriangle, ChevronDown } from "lucide-react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
+import {
+  Upload,
+  AlertTriangle,
+  ChevronDown,
+  Loader2,
+  Copy,
+  Check,
+  ExternalLink,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { QRCodeCanvas } from "@/components/ui/qrcode";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { useLoginActions } from "@/hooks/useLoginActions";
+  useLoginActions,
+  createNostrConnectSession,
+  type NostrConnectSession,
+} from "@/hooks/useLoginActions";
 import { DialogTitle } from "@radix-ui/react-dialog";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 interface LoginDialogProps {
   isOpen: boolean;
@@ -39,6 +49,12 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
   const [isFileLoading, setIsFileLoading] = useState(false);
   const [nsec, setNsec] = useState("");
   const [bunkerUri, setBunkerUri] = useState("");
+  const [nostrConnectSession, setNostrConnectSession] =
+    useState<NostrConnectSession | null>(null);
+  const [isWaitingForConnect, setIsWaitingForConnect] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [showBunkerInput, setShowBunkerInput] = useState(false);
   const [errors, setErrors] = useState<{
     nsec?: string;
     bunker?: string;
@@ -46,23 +62,96 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
     extension?: string;
   }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const login = useLoginActions();
+  const isMobile = useIsMobile();
+  const hasExtension = "nostr" in window;
+  const [isMoreOptionsOpen, setIsMoreOptionsOpen] = useState(false);
 
-  // Reset all state when dialog opens/closes
+  // Generate a nostrconnect session (sync — just creates the ephemeral signer + URI)
+  const generateConnectSession = useCallback(() => {
+    const session = createNostrConnectSession("ngitstack");
+    setNostrConnectSession(session);
+    setConnectError(null);
+  }, []);
+
+  // Start listening for the remote signer to connect (async)
+  useEffect(() => {
+    if (!nostrConnectSession || isWaitingForConnect) return;
+
+    const startListening = async () => {
+      setIsWaitingForConnect(true);
+      abortControllerRef.current = new AbortController();
+
+      try {
+        await login.nostrconnect(
+          nostrConnectSession,
+          abortControllerRef.current.signal,
+        );
+        onLogin();
+        onClose();
+      } catch (error) {
+        // Don't show an error if the dialog was simply closed
+        if (error instanceof Error && error.name !== "AbortError") {
+          setConnectError(error.message);
+        }
+        setIsWaitingForConnect(false);
+      }
+    };
+
+    startListening();
+  }, [nostrConnectSession, login, onLogin, onClose, isWaitingForConnect]);
+
+  // Clean up when the dialog closes
+  useEffect(() => {
+    if (!isOpen) {
+      setNostrConnectSession(null);
+      setIsWaitingForConnect(false);
+      setConnectError(null);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    }
+  }, [isOpen]);
+
+  // Reset all state when dialog opens
   useEffect(() => {
     if (isOpen) {
-      // Reset state when dialog opens
       setIsLoading(false);
       setIsFileLoading(false);
       setNsec("");
       setBunkerUri("");
       setErrors({});
-      // Reset file input
+      setShowBunkerInput(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
     }
   }, [isOpen]);
+
+  const handleRetry = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setNostrConnectSession(null);
+    setIsWaitingForConnect(false);
+    setConnectError(null);
+    // Let state clear before generating a new session
+    setTimeout(() => generateConnectSession(), 0);
+  }, [generateConnectSession]);
+
+  const handleCopyUri = async () => {
+    if (!nostrConnectSession) return;
+    await navigator.clipboard.writeText(nostrConnectSession.uri);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // On mobile, open the nostrconnect:// URI directly — this launches signer apps like Amber
+  const handleOpenSignerApp = () => {
+    if (!nostrConnectSession) return;
+    window.location.href = nostrConnectSession.uri;
+  };
 
   const handleExtensionLogin = async () => {
     setIsLoading(true);
@@ -79,8 +168,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
       onClose();
     } catch (e: unknown) {
       const error = e as Error;
-      console.error("Bunker login failed:", error);
-      console.error("Nsec login failed:", error);
       console.error("Extension login failed:", error);
       setErrors((prev) => ({
         ...prev,
@@ -96,7 +183,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
     setIsLoading(true);
     setErrors({});
 
-    // Use a timeout to allow the UI to update before the synchronous login call
+    // Timeout lets the UI update before the synchronous login call
     setTimeout(() => {
       try {
         login.nsec(key);
@@ -148,7 +235,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
       await login.bunker(bunkerUri);
       onLogin();
       onClose();
-      // Clear the URI from memory
       setBunkerUri("");
     } catch {
       setErrors((prev) => ({
@@ -189,16 +275,21 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
     reader.readAsText(file);
   };
 
-  const hasExtension = "nostr" in window;
-  const [isMoreOptionsOpen, setIsMoreOptionsOpen] = useState(false);
-
   const renderTabs = () => (
-    <Tabs defaultValue="key" className="w-full">
+    <Tabs
+      defaultValue="key"
+      className="w-full"
+      onValueChange={(value) => {
+        if (value === "remote" && !nostrConnectSession && !connectError) {
+          generateConnectSession();
+        }
+      }}
+    >
       <TabsList className="grid w-full grid-cols-2 bg-muted/80 rounded-lg mb-4">
         <TabsTrigger value="key" className="flex items-center gap-2">
           <span>Secret Key</span>
         </TabsTrigger>
-        <TabsTrigger value="bunker" className="flex items-center gap-2">
+        <TabsTrigger value="remote" className="flex items-center gap-2">
           <span>Remote Signer</span>
         </TabsTrigger>
       </TabsList>
@@ -267,43 +358,128 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
         </form>
       </TabsContent>
 
-      <TabsContent value="bunker" className="space-y-4">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleBunkerLogin();
-          }}
-          className="space-y-4"
-        >
-          <div className="space-y-2">
-            <Input
-              id="bunkerUri"
-              value={bunkerUri}
-              onChange={(e) => {
-                setBunkerUri(e.target.value);
-                if (errors.bunker)
-                  setErrors((prev) => ({ ...prev, bunker: undefined }));
-              }}
-              className={`rounded-lg border-gray-300 dark:border-gray-700 focus-visible:ring-primary ${
-                errors.bunker ? "border-red-500" : ""
-              }`}
-              placeholder="bunker://"
-              autoComplete="off"
-            />
-            {errors.bunker && (
-              <p className="text-sm text-red-500">{errors.bunker}</p>
-            )}
-          </div>
+      <TabsContent value="remote" className="space-y-4">
+        {/* nostrconnect:// section */}
+        <div className="flex flex-col items-center space-y-4">
+          {connectError ? (
+            <div className="flex flex-col items-center space-y-4 py-4">
+              <p className="text-sm text-red-500 text-center">{connectError}</p>
+              <Button variant="outline" onClick={handleRetry}>
+                Retry
+              </Button>
+            </div>
+          ) : nostrConnectSession ? (
+            <>
+              {/* QR code — desktop only */}
+              {!isMobile && (
+                <div className="p-4 bg-white dark:bg-white rounded-xl">
+                  <QRCodeCanvas
+                    value={nostrConnectSession.uri}
+                    size={180}
+                    level="M"
+                  />
+                </div>
+              )}
 
-          <Button
-            type="submit"
-            size="lg"
-            className="w-full"
-            disabled={isLoading || !bunkerUri.trim()}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>
+                  {isMobile
+                    ? "Tap to open your signer app"
+                    : "Scan with your signer app"}
+                </span>
+              </div>
+
+              {/* Deep-link button — mobile only */}
+              {isMobile && (
+                <Button
+                  className="w-full gap-2 py-6 rounded-full"
+                  onClick={handleOpenSignerApp}
+                >
+                  <ExternalLink className="w-5 h-5" />
+                  Open Signer App
+                </Button>
+              )}
+
+              <Button
+                variant="outline"
+                size={isMobile ? "default" : "sm"}
+                className={isMobile ? "w-full gap-2 rounded-full" : "gap-2"}
+                onClick={handleCopyUri}
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    Copy URI
+                  </>
+                )}
+              </Button>
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-[100px]">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </div>
+
+        {/* Manual bunker:// input — collapsible */}
+        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+          <button
+            type="button"
+            onClick={() => setShowBunkerInput(!showBunkerInput)}
+            className="flex items-center justify-center gap-2 w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
           >
-            {isLoading ? "Connecting..." : "Log in"}
-          </Button>
-        </form>
+            <span>Enter bunker URI manually</span>
+            <ChevronDown
+              className={`w-4 h-4 transition-transform ${showBunkerInput ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {showBunkerInput && (
+            <div className="space-y-3 mt-3">
+              <div className="space-y-2">
+                <Input
+                  id="connectBunkerUri"
+                  value={bunkerUri}
+                  onChange={(e) => {
+                    setBunkerUri(e.target.value);
+                    if (errors.bunker)
+                      setErrors((prev) => ({ ...prev, bunker: undefined }));
+                  }}
+                  className="rounded-lg border-gray-300 dark:border-gray-700 focus-visible:ring-primary text-sm"
+                  placeholder="bunker://"
+                  autoComplete="off"
+                />
+                {bunkerUri && !validateBunkerUri(bunkerUri) && (
+                  <p className="text-red-500 text-xs">
+                    Invalid bunker URI format
+                  </p>
+                )}
+                {errors.bunker && (
+                  <p className="text-sm text-red-500">{errors.bunker}</p>
+                )}
+              </div>
+
+              <Button
+                className="w-full rounded-full py-4"
+                variant="outline"
+                onClick={handleBunkerLogin}
+                disabled={
+                  isLoading ||
+                  !bunkerUri.trim() ||
+                  !validateBunkerUri(bunkerUri)
+                }
+              >
+                {isLoading ? "Connecting..." : "Connect"}
+              </Button>
+            </div>
+          )}
+        </div>
       </TabsContent>
     </Tabs>
   );
@@ -322,9 +498,9 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
         </div>
 
         <div className="px-6 pb-6 space-y-4 overflow-y-auto">
-          {/* Extension Login Button - shown if extension is available */}
+          {/* Extension login — shown when a NIP-07 extension is detected */}
           {hasExtension && (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {errors.extension && (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
@@ -341,21 +517,23 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
             </div>
           )}
 
-          {/* Tabs - wrapped in collapsible if extension is available, otherwise shown directly */}
+          {/* Tabs — collapsed behind "More Options" when an extension is present */}
           {hasExtension ? (
             <Collapsible
               className="space-y-4"
               open={isMoreOptionsOpen}
               onOpenChange={setIsMoreOptionsOpen}
             >
-              <CollapsibleTrigger asChild>
-                <button className="w-full flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  <span>More Options</span>
-                  <ChevronDown
-                    className={`w-4 h-4 transition-transform ${isMoreOptionsOpen ? "rotate-180" : ""}`}
-                  />
-                </button>
-              </CollapsibleTrigger>
+              <button
+                type="button"
+                onClick={() => setIsMoreOptionsOpen(!isMoreOptionsOpen)}
+                className="w-full flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+              >
+                <span>More Options</span>
+                <ChevronDown
+                  className={`w-4 h-4 transition-transform ${isMoreOptionsOpen ? "rotate-180" : ""}`}
+                />
+              </button>
 
               <CollapsibleContent>{renderTabs()}</CollapsibleContent>
             </Collapsible>

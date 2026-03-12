@@ -1,4 +1,6 @@
 import { accounts } from "@/services/accounts";
+import { pool } from "@/services/nostr";
+import { extraRelays } from "@/services/settings";
 import { Accounts } from "applesauce-accounts";
 import {
   ExtensionSigner,
@@ -8,6 +10,52 @@ import {
 import { nip19 } from "nostr-tools";
 
 // NOTE: This file should not be edited except for adding new login methods.
+
+/** Check if running on an actual mobile device (not just a small screen) */
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+/** Parameters for a pending nostrconnect:// session */
+export interface NostrConnectSession {
+  /** The ephemeral signer created for this session */
+  signer: NostrConnectSigner;
+  /** The nostrconnect:// URI to display as a QR code / deep link */
+  uri: string;
+}
+
+/**
+ * Creates a new nostrconnect:// session.
+ * Generates an ephemeral signer, builds the URI, and returns both so the
+ * caller can display the QR code while separately awaiting the connection.
+ */
+export function createNostrConnectSession(
+  appName?: string,
+): NostrConnectSession {
+  const relays = extraRelays.getValue();
+  const fallback = ["wss://relay.damus.io", "wss://relay.primal.net"];
+  const sessionRelays = relays.length > 0 ? relays : fallback;
+
+  const signer = new NostrConnectSigner({ relays: sessionRelays, pool });
+
+  const metadata: Parameters<NostrConnectSigner["getNostrConnectURI"]>[0] = {
+    name: appName ?? "ngitstack",
+    url: typeof window !== "undefined" ? window.location.origin : undefined,
+    permissions: NostrConnectSigner.buildSigningPermissions([0, 1, 3, 10002]),
+  };
+
+  // On mobile, the signer app is on the same device — no QR needed, just a
+  // deep link. On desktop the user scans the QR with their phone.
+  if (typeof window !== "undefined" && isMobileDevice()) {
+    // nostrconnect:// URIs are handled by signer apps (e.g. Amber on Android)
+    // No callback needed — we poll via waitForSigner.
+  }
+
+  const uri = signer.getNostrConnectURI(metadata);
+
+  return { signer, uri };
+}
 
 /**
  * Provides actions for logging in with various Nostr signers.
@@ -21,21 +69,17 @@ export function useLoginActions() {
      */
     async nsec(nsec: string): Promise<void> {
       try {
-        // Decode nsec to get secret key
         const decoded = nip19.decode(nsec);
         if (decoded.type !== "nsec") {
           throw new Error("Invalid nsec format");
         }
 
-        // Create private key signer and account
         const secretKey = decoded.data; // Uint8Array
         const signer = new PrivateKeySigner(secretKey);
         const pubkey = await signer.getPublicKey();
         const account = new Accounts.PrivateKeyAccount(pubkey, signer);
 
-        // Add to account manager
         accounts.addAccount(account);
-
         accounts.setActive(account);
       } catch (error) {
         console.error("Failed to login with nsec:", error);
@@ -49,31 +93,53 @@ export function useLoginActions() {
      */
     async bunker(uri: string): Promise<void> {
       try {
-        // Use fromBunkerURI to create and connect the signer
-        // This handles parsing the URI and connecting to the remote signer
         const signer = await NostrConnectSigner.fromBunkerURI(uri);
-
-        // Get the user's pubkey from the connected signer
         const pubkey = await signer.getPublicKey();
 
-        // Check if this account is already logged in
         const existing = accounts.getAccountForPubkey(pubkey);
-
         if (existing) {
           accounts.setActive(existing);
           return;
         }
 
-        // Create NostrConnectAccount with the pubkey and signer
         const account = new Accounts.NostrConnectAccount(pubkey, signer);
-
-        // Add to account manager
         accounts.addAccount(account);
-
         accounts.setActive(account);
       } catch (error) {
         console.error("Failed to login with bunker:", error);
         throw new Error("Failed to connect to remote signer");
+      }
+    },
+
+    /**
+     * Login via nostrconnect:// (client-initiated NIP-46).
+     * The caller must first call createNostrConnectSession() to get the URI
+     * for display, then pass the session here to await the connection.
+     */
+    async nostrconnect(
+      session: NostrConnectSession,
+      abortSignal?: AbortSignal,
+    ): Promise<void> {
+      try {
+        await session.signer.waitForSigner(abortSignal);
+
+        const pubkey = await session.signer.getPublicKey();
+
+        const existing = accounts.getAccountForPubkey(pubkey);
+        if (existing) {
+          accounts.setActive(existing);
+          return;
+        }
+
+        const account = new Accounts.NostrConnectAccount(
+          pubkey,
+          session.signer,
+        );
+        accounts.addAccount(account);
+        accounts.setActive(account);
+      } catch (error) {
+        console.error("Failed to login with nostrconnect:", error);
+        throw error;
       }
     },
 
@@ -89,24 +155,18 @@ export function useLoginActions() {
           );
         }
 
-        // Get pubkey from extension first
         const pubkey = await window.nostr!.getPublicKey();
 
-        // Check if this account is already logged in
         const existing = accounts.getAccountForPubkey(pubkey);
-
         if (existing) {
           accounts.setActive(existing);
           return;
         }
 
-        // Create extension account
         const signer = new ExtensionSigner();
         const account = new Accounts.ExtensionAccount(pubkey, signer);
 
-        // Add to account manager
         accounts.addAccount(account);
-
         accounts.setActive(account);
       } catch (error) {
         console.error("Failed to login with extension:", error);
