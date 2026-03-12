@@ -8,7 +8,8 @@ import { pool, liveness } from "@/services/nostr";
 
 /** Max healthy mailbox relays to take per maintainer when querying NIP-65 relays. */
 const MAX_MAILBOX_RELAYS_PER_USER = 3;
-import { REPO_KIND, NGIT_RELAYS, type ResolvedRepo } from "@/lib/nip34";
+import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
+import { gitIndexRelays } from "@/services/settings";
 import { RepositoryModel } from "@/models/RepositoryModel";
 import { RepositoryRelayGroup } from "@/models/RepositoryRelayGroup";
 import type { Filter } from "applesauce-core/helpers";
@@ -63,7 +64,7 @@ export function useResolvedRepository(
       { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
     ];
     return pool
-      .subscription(NGIT_RELAYS, filter)
+      .subscription(gitIndexRelays.getValue(), filter)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [key, store]);
 

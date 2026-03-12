@@ -43,9 +43,8 @@ export function kindToStatus(kind: number): IssueStatus {
   }
 }
 
-/** The single relay we use for NIP-34 announcement discovery */
+/** Default git index relay URL. */
 export const NGIT_RELAY = "wss://relay.ngit.dev";
-export const NGIT_RELAYS = [NGIT_RELAY];
 
 /**
  * Options controlling which relays are queried for repo-specific events

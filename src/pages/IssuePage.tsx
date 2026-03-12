@@ -28,7 +28,8 @@ import {
   Calendar,
 } from "lucide-react";
 import { Issue } from "@/casts/Issue";
-import { ISSUE_KIND, NGIT_RELAYS, type RepoQueryOptions } from "@/lib/nip34";
+import { ISSUE_KIND, type RepoQueryOptions } from "@/lib/nip34";
+import { gitIndexRelays } from "@/services/settings";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
@@ -87,7 +88,7 @@ export default function IssuePage({
         .pipe(onlyEvents(), mapEventsToStore(store));
     }
     return pool
-      .subscription(NGIT_RELAYS, issueFilters)
+      .subscription(gitIndexRelays.getValue(), issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [issueId, group, store]);
 

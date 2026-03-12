@@ -3,7 +3,7 @@ import { useActiveAccount } from "applesauce-react/hooks";
 import { factory } from "@/services/actions";
 import { publish } from "@/services/nostr";
 import { IssueBlueprint } from "@/blueprints/issue";
-import { NGIT_RELAYS } from "@/lib/nip34";
+import { gitIndexRelays } from "@/services/settings";
 import { useToast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,10 +99,10 @@ export function CreateIssueForm({
         const signed = await factory.sign(template);
 
         // Publish to both the ngit relay and any user-configured relays
-        await publish(signed, NGIT_RELAYS);
+        await publish(signed, gitIndexRelays.getValue());
 
         // Also publish to the repo's own relay set if available
-        await pool.publish(NGIT_RELAYS, signed);
+        await pool.publish(gitIndexRelays.getValue(), signed);
 
         toast({
           title: "Issue created",

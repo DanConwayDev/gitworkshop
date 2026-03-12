@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/card";
 import { RelayItem } from "@/components/RelayItem";
 import { NewRelayForm } from "@/components/NewRelayForm";
-import { extraRelays, lookupRelays } from "@/services/settings";
+import { extraRelays, gitIndexRelays, lookupRelays } from "@/services/settings";
 import { use$ } from "@/hooks/use$";
 import { useAccount } from "@/hooks/useAccount";
 import { useUser } from "@/hooks/useUser";
@@ -19,8 +19,9 @@ import {
 } from "applesauce-actions/actions/mailboxes";
 import { runner } from "@/services/actions";
 
-function LookupRelaysSection() {
+function DiscoveryRelaysSection() {
   const lookupRelaysList = use$(lookupRelays);
+  const gitIndexRelaysList = use$(gitIndexRelays);
 
   const handleAddLookupRelay = (relay: string) => {
     const newRelays = [...new Set([...(lookupRelaysList || []), relay])];
@@ -32,25 +33,62 @@ function LookupRelaysSection() {
     lookupRelays.next(newRelays);
   };
 
+  const handleAddGitRelay = (relay: string) => {
+    const newRelays = [...new Set([...(gitIndexRelaysList || []), relay])];
+    gitIndexRelays.next(newRelays);
+  };
+
+  const handleRemoveGitRelay = (relay: string) => {
+    const newRelays = (gitIndexRelaysList || []).filter((r) => r !== relay);
+    gitIndexRelays.next(newRelays);
+  };
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Lookup Relays</CardTitle>
         <CardDescription>
-          Used for discovering user profiles and relay lists
+          Relays used to discover users and repositories across the network
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          {lookupRelaysList?.map((relay, index) => (
-            <RelayItem
-              key={index}
-              relay={relay}
-              onRemove={() => handleRemoveLookupRelay(relay)}
-            />
-          ))}
+      <CardContent className="space-y-6">
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">Users</h3>
+            <p className="text-xs text-muted-foreground">
+              Used for discovering user profiles and relay lists
+            </p>
+          </div>
+          <div className="space-y-2">
+            {lookupRelaysList?.map((relay, index) => (
+              <RelayItem
+                key={index}
+                relay={relay}
+                onRemove={() => handleRemoveLookupRelay(relay)}
+              />
+            ))}
+          </div>
+          <NewRelayForm onAdd={handleAddLookupRelay} />
         </div>
-        <NewRelayForm onAdd={handleAddLookupRelay} />
+
+        <div className="border-t pt-6 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">Repositories</h3>
+            <p className="text-xs text-muted-foreground">
+              Used for discovering repository announcements published via ngit
+            </p>
+          </div>
+          <div className="space-y-2">
+            {gitIndexRelaysList?.map((relay, index) => (
+              <RelayItem
+                key={index}
+                relay={relay}
+                onRemove={() => handleRemoveGitRelay(relay)}
+              />
+            ))}
+          </div>
+          <NewRelayForm onAdd={handleAddGitRelay} />
+        </div>
       </CardContent>
     </Card>
   );
@@ -165,7 +203,7 @@ export default function Settings() {
         </p>
       </div>
 
-      <LookupRelaysSection />
+      <DiscoveryRelaysSection />
       <OutboxRelaysSection />
       <InboxRelaysSection />
       <ExtraRelaysSection />

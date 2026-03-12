@@ -3,7 +3,8 @@ import { useEventStore } from "./useEventStore";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { pool } from "@/services/nostr";
-import { REPO_KIND, NGIT_RELAYS, type ResolvedRepo } from "@/lib/nip34";
+import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
+import { gitIndexRelays } from "@/services/settings";
 import { RepositoryListModel } from "@/models/RepositoryListModel";
 import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
@@ -31,7 +32,7 @@ export function useRepositoryList(): ResolvedRepo[] | undefined {
   use$(
     () =>
       pool
-        .subscription(NGIT_RELAYS, repoFilter)
+        .subscription(gitIndexRelays.getValue(), repoFilter)
         .pipe(onlyEvents(), mapEventsToStore(store)),
     [store],
   );

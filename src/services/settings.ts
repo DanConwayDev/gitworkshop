@@ -76,3 +76,14 @@ export const lookupRelays = new BehaviorSubject<string[]>(
 
 // Persist the lookup relays to localStorage
 persist(lookupRelays, "lookupRelays");
+
+/**
+ * Git index relays — store repository announcements (kind 30617) across the
+ * network. Used for discovering repositories published via ngit.
+ */
+export const gitIndexRelays = new BehaviorSubject<string[]>(
+  relaySet(["wss://relay.ngit.dev"]),
+);
+
+// Persist the git index relays to localStorage
+persist(gitIndexRelays, "gitIndexRelays");

@@ -3,7 +3,8 @@ import { useEventStore } from "./useEventStore";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { pool } from "@/services/nostr";
-import { REPO_KIND, NGIT_RELAYS, type ResolvedRepo } from "@/lib/nip34";
+import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
+import { gitIndexRelays } from "@/services/settings";
 import { RepositoryListModel } from "@/models/RepositoryListModel";
 import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
@@ -34,7 +35,7 @@ export function useUserRepositories(
   use$(() => {
     if (!pubkey) return undefined;
     return pool
-      .subscription(NGIT_RELAYS, [
+      .subscription(gitIndexRelays.getValue(), [
         { kinds: [REPO_KIND], authors: [pubkey] } as Filter,
       ])
       .pipe(onlyEvents(), mapEventsToStore(store));

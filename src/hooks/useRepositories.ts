@@ -5,7 +5,8 @@ import { onlyEvents } from "applesauce-relay";
 import { castTimelineStream } from "applesauce-common/observable";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
 import { pool } from "@/services/nostr";
-import { REPO_KIND, NGIT_RELAYS } from "@/lib/nip34";
+import { REPO_KIND } from "@/lib/nip34";
+import { gitIndexRelays } from "@/services/settings";
 import { Repository } from "@/casts/Repository";
 import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
@@ -23,7 +24,7 @@ export function useRepositories(): Repository[] | undefined {
   use$(
     () =>
       pool
-        .subscription(NGIT_RELAYS, filters)
+        .subscription(gitIndexRelays.getValue(), filters)
         .pipe(onlyEvents(), mapEventsToStore(store)),
     [store],
   );
@@ -59,7 +60,7 @@ export function useRepository(
       { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
     ];
     return pool
-      .subscription(NGIT_RELAYS, repoFilters)
+      .subscription(gitIndexRelays.getValue(), repoFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [repoFilterKey, store]);
 
