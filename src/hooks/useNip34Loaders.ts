@@ -23,11 +23,13 @@ const MAX_INBOX_RELAYS = 3;
 const INBOX_COVERAGE_THRESHOLD = 2;
 
 export interface Nip34LoaderOptions {
-  /** When true, also fetches from the NIP-65 inbox relays of the item author.
+  /** When true, also fetches from the NIP-65 inbox relays of the item's author.
    *  Only relays not already providing sufficient coverage (< INBOX_COVERAGE_THRESHOLD
    *  overlap with the group) are queried. Loaders fire directly against those
-   *  relay URLs — the shared group is never mutated with per-author relays. */
-  nip65?: boolean;
+   *  relay URLs — the shared group is never mutated with per-author relays.
+   *  Default: false. Enable on detail pages (IssuePage) where completeness
+   *  matters; leave off on list pages (RepoPage) to avoid per-item relay churn. */
+  includeAuthorNip65?: boolean;
 }
 
 /**
@@ -107,7 +109,7 @@ function useAuthorInboxDeltaRelays(
  * Events are written directly into the global EventStore by the loaders.
  * Read them back reactively with store.timeline() / use$.
  *
- * NIP-65 mode (options.nip65 = true):
+ * NIP-65 author inbox mode (options.includeAuthorNip65 = true):
  *   Also fetches from the NIP-65 inbox relays of the item author when those
  *   relays are not already sufficiently covered by the group
  *   (< INBOX_COVERAGE_THRESHOLD overlap). Loaders fire directly against the
@@ -155,17 +157,17 @@ export function useNip34Loaders(
   // Reactively resolve the item author pubkey from the store.
   // Available as soon as the item event lands in the store.
   const authorPubkey = use$(() => {
-    if (!itemId || !options?.nip65) return of(undefined);
+    if (!itemId || !options?.includeAuthorNip65) return of(undefined);
     return store.event(itemId).pipe(map((ev) => ev?.pubkey));
-  }, [itemId, options?.nip65, store]);
+  }, [itemId, options?.includeAuthorNip65, store]);
 
   // Delta: author inbox relays not already sufficiently covered by the group.
-  // Returns [] when nip65 is false, pubkey unknown, or coverage is met.
+  // Returns [] when includeAuthorNip65 is false, pubkey unknown, or coverage is met.
   // These relays are per-item-author and must NOT be added to the shared group.
   const authorInboxDelta = useAuthorInboxDeltaRelays(
     authorPubkey,
     repoRelayGroup,
-    options?.nip65 ?? false,
+    options?.includeAuthorNip65 ?? false,
   );
 
   // Fire loaders directly against the author's inbox delta relays.

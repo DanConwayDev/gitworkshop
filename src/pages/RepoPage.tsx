@@ -486,7 +486,7 @@ function IssueRow({
   // Trigger two-tier loading for this issue. All IssueRow calls within the
   // same render cycle are batched by the loaders into a small number of relay
   // subscriptions (one per kind group, not one per issue).
-  useNip34Loaders(issue.id, repoRelayGroup, { nip65: true });
+  useNip34Loaders(issue.id, repoRelayGroup);
 
   return (
     <Link to={`/${npub}/${repoId}/${issue.id}`} className="group block">

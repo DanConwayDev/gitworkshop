@@ -98,7 +98,9 @@ export default function IssuePage() {
 
   // Trigger two-tier loading for this issue. Pass the mailbox group so the
   // author inbox delta is computed relative to the full maintainer relay set.
-  useNip34Loaders(issueId, repoRelayAndMaintainerMailboxGroup, { nip65: true });
+  useNip34Loaders(issueId, repoRelayAndMaintainerMailboxGroup, {
+    includeAuthorNip65: true,
+  });
 
   const status = useIssueStatus(issueId);
   const nip32Labels = useIssueLabels(issueId);
