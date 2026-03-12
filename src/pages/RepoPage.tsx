@@ -46,11 +46,19 @@ import {
   X,
   Plus,
 } from "lucide-react";
-import { NGIT_RELAYS, COMMENT_KIND, type IssueStatus } from "@/lib/nip34";
+import {
+  COMMENT_KIND,
+  type IssueStatus,
+  type RepoQueryOptions,
+} from "@/lib/nip34";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
 import type { Issue } from "@/casts/Issue";
 
-export default function RepoPage() {
+export default function RepoPage({
+  relayHints = [],
+}: {
+  relayHints?: string[];
+}) {
   const { npub, repoId } = useParams<{ npub: string; repoId: string }>();
 
   // Decode npub to hex pubkey
@@ -67,8 +75,16 @@ export default function RepoPage() {
 
   const account = useActiveAccount();
   const repo = useResolvedRepository(pubkey, repoId);
-  const relays = repo?.relays.length ? repo.relays : NGIT_RELAYS;
-  const { issues, statusMap } = useIssues(repo?.allCoordinates, relays);
+  const queryOptions: RepoQueryOptions = useMemo(
+    () => ({ relayHints }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [relayHints.join(",")],
+  );
+  const { issues, statusMap } = useIssues(
+    repo?.allCoordinates,
+    repo?.relays ?? [],
+    queryOptions,
+  );
 
   // New issue dialog
   const [newIssueOpen, setNewIssueOpen] = useState(false);
@@ -401,7 +417,8 @@ export default function RepoPage() {
                 status={statusMap.get(issue.id)?.status ?? "open"}
                 npub={npub!}
                 repoId={repoId!}
-                relays={relays}
+                repoRelays={repo?.relays ?? []}
+                queryOptions={queryOptions}
               />
             ))}
           </div>
@@ -425,20 +442,23 @@ function IssueRow({
   status,
   npub,
   repoId,
-  relays,
+  repoRelays,
+  queryOptions,
 }: {
   issue: Issue;
   status: IssueStatus;
   npub: string;
   repoId: string;
-  relays: string[];
+  repoRelays: string[];
+  queryOptions: RepoQueryOptions;
 }) {
   const timeAgo = formatDistanceToNow(issue.createdAt, { addSuffix: true });
 
   // Trigger two-tier loading for this issue. All IssueRow calls within the
   // same render cycle are batched by the loaders into a small number of relay
   // subscriptions (one per kind group, not one per issue).
-  useNip34Loaders(issue.id, relays);
+  const loaderRelays = [...repoRelays, ...queryOptions.relayHints];
+  useNip34Loaders(issue.id, loaderRelays);
 
   return (
     <Link to={`/${npub}/${repoId}/${issue.id}`} className="group block">

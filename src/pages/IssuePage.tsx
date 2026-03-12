@@ -28,7 +28,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { Issue } from "@/casts/Issue";
-import { ISSUE_KIND, NGIT_RELAYS } from "@/lib/nip34";
+import { ISSUE_KIND, NGIT_RELAYS, type RepoQueryOptions } from "@/lib/nip34";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
@@ -38,7 +38,11 @@ import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
-export default function IssuePage() {
+export default function IssuePage({
+  relayHints = [],
+}: {
+  relayHints?: string[];
+}) {
   const { npub, repoId, issueId } = useParams<{
     npub: string;
     repoId: string;
@@ -58,18 +62,27 @@ export default function IssuePage() {
   }, [npub]);
 
   const repo = useResolvedRepository(pubkey, repoId);
-  const relays = repo?.relays.length ? repo.relays : NGIT_RELAYS;
+  const repoRelays = repo?.relays ?? [];
+  const queryOptions: RepoQueryOptions = useMemo(
+    () => ({ relayHints }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [relayHints.join(",")],
+  );
+  const effectiveRelays = [...repoRelays, ...relayHints];
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  const issueFilterKey = JSON.stringify({ issueId, relays });
+  const issueFilterKey = JSON.stringify({ issueId, effectiveRelays });
 
-  // Fetch from relay
+  // Fetch the issue event itself. Use effectiveRelays when known; fall back to
+  // NGIT_RELAYS for initial discovery (same pattern as announcement fetching).
+  const issueFetchRelays =
+    effectiveRelays.length > 0 ? effectiveRelays : NGIT_RELAYS;
   use$(() => {
     if (!issueId) return undefined;
     const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
     return pool
-      .req(relays, issueFilters)
+      .req(issueFetchRelays, issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [issueFilterKey, store]);
 
@@ -86,9 +99,9 @@ export default function IssuePage() {
 
   const issue = issues?.[0];
 
-  const status = useIssueStatus(issueId, relays);
-  const comments = useIssueComments(issueId, relays);
-  const zaps = useIssueZaps(issueId, relays);
+  const status = useIssueStatus(issueId, repoRelays, queryOptions);
+  const comments = useIssueComments(issueId, repoRelays, queryOptions);
+  const zaps = useIssueZaps(issueId, repoRelays, queryOptions);
 
   // Participants
   const participants = useMemo(() => {

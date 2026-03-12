@@ -8,20 +8,36 @@ import type { CastRefEventStore } from "applesauce-common/casts/cast";
 import { pool, nip34CommentsLoader, nip34ThreadLoader } from "@/services/nostr";
 import {
   ISSUE_KIND,
-  NGIT_RELAYS,
   STATUS_KINDS,
   COMMENT_KIND,
   kindToStatus,
   type IssueStatus,
+  type RepoQueryOptions,
 } from "@/lib/nip34";
 import { Issue } from "@/casts/Issue";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
-/** Resolve relay list: use repo relays when available, fall back to NGIT_RELAYS */
-function resolveRelays(relays: string[] | undefined): string[] {
-  return relays && relays.length > 0 ? relays : NGIT_RELAYS;
+/**
+ * Build the effective relay list for repo-specific event queries.
+ * Union of the repo's declared relays and any relay hints from the URL/settings.
+ * Returns an empty array (no query) if neither is available — announcement
+ * discovery via NGIT_RELAYS is handled separately in useResolvedRepository.
+ */
+function buildRelays(
+  repoRelays: string[],
+  options: RepoQueryOptions,
+): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const r of [...repoRelays, ...options.relayHints]) {
+    if (!seen.has(r)) {
+      seen.add(r);
+      result.push(r);
+    }
+  }
+  return result;
 }
 
 /**
@@ -34,11 +50,13 @@ function resolveRelays(relays: string[] | undefined): string[] {
  * Also fetches status events so we can determine current status.
  *
  * @param repoCoords - Coordinate string(s) for the repository
- * @param repoRelays - Relay URLs from the ResolvedRepo; falls back to NGIT_RELAYS
+ * @param repoRelays - Relay URLs from ResolvedRepo.relays (the repo's declared relays)
+ * @param options    - Query options including relay hints from the URL/settings
  */
 export function useIssues(
   repoCoords: string | string[] | undefined,
-  repoRelays?: string[],
+  repoRelays: string[],
+  options: RepoQueryOptions,
 ): {
   issues: Issue[] | undefined;
   statusMap: Map<string, { status: IssueStatus; event: NostrEvent }>;
@@ -46,7 +64,7 @@ export function useIssues(
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  const relays = resolveRelays(repoRelays);
+  const relays = buildRelays(repoRelays, options);
   const relayKey = relays.join(",");
 
   // Normalise to array for consistent filter building
@@ -132,16 +150,18 @@ export function useIssues(
  * Uses the batched commentsLoader so all per-issue calls are combined into
  * a single relay subscription rather than one request per issue.
  *
- * @param issueId  - The event ID of the issue
- * @param repoRelays - Relay URLs from the ResolvedRepo; falls back to NGIT_RELAYS
+ * @param issueId    - The event ID of the issue
+ * @param repoRelays - Relay URLs from ResolvedRepo.relays
+ * @param options    - Query options including relay hints
  */
 export function useIssueComments(
   issueId: string | undefined,
-  repoRelays?: string[],
+  repoRelays: string[],
+  options: RepoQueryOptions,
 ): NostrEvent[] | undefined {
   const store = useEventStore();
 
-  const relays = resolveRelays(repoRelays);
+  const relays = buildRelays(repoRelays, options);
   const filterKey = JSON.stringify({ issueId, relays, type: "comments" });
 
   // Trigger batched fetch via loader — events land in the store automatically
@@ -164,16 +184,18 @@ export function useIssueComments(
  * Fetch status events for a specific issue.
  * Returns the latest status.
  *
- * @param issueId  - The event ID of the issue
- * @param repoRelays - Relay URLs from the ResolvedRepo; falls back to NGIT_RELAYS
+ * @param issueId    - The event ID of the issue
+ * @param repoRelays - Relay URLs from ResolvedRepo.relays
+ * @param options    - Query options including relay hints
  */
 export function useIssueStatus(
   issueId: string | undefined,
-  repoRelays?: string[],
+  repoRelays: string[],
+  options: RepoQueryOptions,
 ): IssueStatus {
   const store = useEventStore();
 
-  const relays = resolveRelays(repoRelays);
+  const relays = buildRelays(repoRelays, options);
   const filterKey = JSON.stringify({ issueId, relays, type: "issueStatus" });
 
   // Fetch from relay
@@ -206,16 +228,18 @@ export function useIssueStatus(
  * Uses the batched issueZapsLoader so all per-issue calls are combined into
  * a single relay subscription rather than one request per issue.
  *
- * @param issueId  - The event ID of the issue
- * @param repoRelays - Relay URLs from the ResolvedRepo; falls back to NGIT_RELAYS
+ * @param issueId    - The event ID of the issue
+ * @param repoRelays - Relay URLs from ResolvedRepo.relays
+ * @param options    - Query options including relay hints
  */
 export function useIssueZaps(
   issueId: string | undefined,
-  repoRelays?: string[],
+  repoRelays: string[],
+  options: RepoQueryOptions,
 ): NostrEvent[] | undefined {
   const store = useEventStore();
 
-  const relays = resolveRelays(repoRelays);
+  const relays = buildRelays(repoRelays, options);
   const filterKey = JSON.stringify({ issueId, relays, type: "zaps" });
 
   // Trigger batched fetch via loader — events land in the store automatically

@@ -43,9 +43,27 @@ export function kindToStatus(kind: number): IssueStatus {
   }
 }
 
-/** The single relay we use for NIP-34 */
+/** The single relay we use for NIP-34 announcement discovery */
 export const NGIT_RELAY = "wss://relay.ngit.dev";
 export const NGIT_RELAYS = [NGIT_RELAY];
+
+/**
+ * Options controlling which relays are queried for repo-specific events
+ * (issues, comments, status, zaps). Announcement events (kind 30617) are
+ * always fetched from NGIT_RELAYS regardless of these options.
+ *
+ * relayHints: extra relays to query in addition to the repo's declared relays.
+ *   Defaults to [] (empty). Populated from naddr URL relay hints or per-repo
+ *   settings. NGIT_RELAYS is NOT included by default — add it here explicitly
+ *   if you want issues from the discovery relay.
+ *
+ * TODO: nip65 option (default false) — when true, also query NIP-65 outbox
+ *   relays of repo maintainers for issues, and NIP-65 outbox relays of issue
+ *   authors for comments/status/zaps.
+ */
+export interface RepoQueryOptions {
+  relayHints: string[];
+}
 
 /**
  * Build an naddr-style coordinate string for a repo.
