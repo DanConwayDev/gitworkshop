@@ -10,13 +10,14 @@ export const accounts = new AccountManager();
 // Register common account types (Extension, PrivateKey, NostrConnect, etc.)
 registerCommonAccountTypes(accounts);
 
-// Restore persisted accounts and active account from localStorage
+// Restore persisted accounts then wire up persistence subscriptions.
+// Subscriptions are set up AFTER restoration so the initial active$.emit
+// of undefined does not overwrite the stored active account id.
 (async () => {
   try {
     const savedAccounts = localStorage.getItem("accounts");
     if (savedAccounts) {
-      const json = JSON.parse(savedAccounts);
-      await accounts.fromJSON(json);
+      await accounts.fromJSON(JSON.parse(savedAccounts));
     }
   } catch (error) {
     console.error("Failed to restore accounts from localStorage:", error);
@@ -24,20 +25,18 @@ registerCommonAccountTypes(accounts);
 
   try {
     const lastActive = localStorage.getItem("active-account");
-    if (lastActive) {
-      accounts.setActive(lastActive);
-    }
+    if (lastActive) accounts.setActive(lastActive);
   } catch (error) {
     console.error("Failed to restore last active account:", error);
   }
+
+  // Persist accounts whenever they change
+  accounts.accounts$.subscribe(() => {
+    localStorage.setItem("accounts", JSON.stringify(accounts.toJSON()));
+  });
+
+  // Persist active account id whenever it changes
+  accounts.active$.subscribe((account) => {
+    localStorage.setItem("active-account", account?.id ?? "");
+  });
 })();
-
-// Persist accounts to localStorage whenever they change
-accounts.accounts$.subscribe(() => {
-  localStorage.setItem("accounts", JSON.stringify(accounts.toJSON()));
-});
-
-// Persist active account id to localStorage
-accounts.active$.subscribe((account) => {
-  localStorage.setItem("active-account", account?.id ?? "");
-});
