@@ -98,9 +98,26 @@ function buildRelays(
  *               "inbox"  for events *directed at* the user (comments, zaps, reactions)
  *
  * Uses `includeMailboxes(eventStore, type)` — the canonical Applesauce operator
- * for mailbox discovery. Kind:10002 events are fetched via `eventStore.eventLoader`
- * which is wired to `addressLoader` with `lookupRelays` (purplepag.es,
- * index.hzrd149.com, indexer.coracle.social).
+ * for mailbox discovery. Internally calls `store.replaceable({ kind: 10002, pubkey })`
+ * for each pubkey via `ReplaceableModel`. When the event is not yet in the store,
+ * `ReplaceableModel` implicitly triggers a fetch via `store.eventLoader` — a
+ * unified loader (`createEventLoaderForStore`) that routes replaceable pointers
+ * to `createAddressLoader`, which fetches via `lookupRelays` (purplepag.es,
+ * index.hzrd149.com, indexer.coracle.social). The fetch only fires if
+ * `store.eventLoader` is wired up (it is, in nostr.ts).
+ *
+ * Reactivity: `combineLatest` over N `store.replaceable()` subscriptions means
+ * any arriving kind:10002 event causes a re-emission → `relays` updates →
+ * `relayKey` changes → the issue/status fetch `use$` re-subscribes with the
+ * expanded relay list. Scoped to the specific pubkeys passed in — no broad
+ * subscription.
+ *
+ * New maintainers: `pubkeyKey` (joined pubkeys) is in the dep array, so when
+ * `RepositoryModel` discovers a new co-maintainer and `maintainerSet` grows,
+ * the observable is recreated with the full new set. Already-resolved kind:10002
+ * events re-emit synchronously from the store; new ones trigger fresh fetches.
+ * Full re-subscription on each growth step, but maintainer counts are small
+ * (typically 1–5) so this is not a performance concern.
  *
  * When `enabled` is false (or pubkeys is empty) returns an empty array
  * immediately — existing behaviour is unchanged.
