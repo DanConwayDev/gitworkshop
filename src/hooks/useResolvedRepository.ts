@@ -29,6 +29,8 @@ export interface ResolvedRepository {
  * pubkey + d-tag.
  *
  * Layer 1: fetch the selected maintainer's announcement from NGIT_RELAYS.
+ *          Skips the relay query if the announcement is already in the store,
+ *          proceeding directly to Layer 2.
  *
  * Layer 2: RepositoryModel — reactive BFS chain resolution. Emits a new
  *          ResolvedRepo whenever any announcement in the chain changes.
@@ -53,8 +55,10 @@ export function useResolvedRepository(
   const key = `${pubkey}:${dTag}`;
 
   // Layer 1: seed the store with the selected maintainer's announcement.
+  // Skip the relay query if the event is already in the store cache.
   use$(() => {
     if (!pubkey || !dTag) return undefined;
+    if (store.getReplaceable(REPO_KIND, pubkey, dTag)) return undefined;
     const filter: Filter[] = [
       { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
     ];
