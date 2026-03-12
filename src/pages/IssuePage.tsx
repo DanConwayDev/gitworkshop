@@ -64,9 +64,13 @@ export default function IssuePage({
   const repo = useResolvedRepository(pubkey, repoId);
   const repoRelays = repo?.relays ?? [];
   const queryOptions: RepoQueryOptions = useMemo(
-    () => ({ relayHints }),
+    () => ({
+      relayHints,
+      nip65: true,
+      maintainerPubkeys: repo?.maintainerSet ?? [],
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [relayHints.join(",")],
+    [relayHints.join(","), repo?.maintainerSet?.join(",")],
   );
   const effectiveRelays = [...repoRelays, ...relayHints];
   const store = useEventStore();

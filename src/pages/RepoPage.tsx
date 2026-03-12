@@ -76,9 +76,13 @@ export default function RepoPage({
   const account = useActiveAccount();
   const repo = useResolvedRepository(pubkey, repoId);
   const queryOptions: RepoQueryOptions = useMemo(
-    () => ({ relayHints }),
+    () => ({
+      relayHints,
+      nip65: true,
+      maintainerPubkeys: repo?.maintainerSet ?? [],
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [relayHints.join(",")],
+    [relayHints.join(","), repo?.maintainerSet?.join(",")],
   );
   const { issues, statusMap } = useIssues(
     repo?.allCoordinates,
