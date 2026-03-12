@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/constants";
 import { accounts } from "@/services/accounts";
 import { pool } from "@/services/nostr";
 import { extraRelays } from "@/services/settings";
@@ -40,7 +41,7 @@ export function createNostrConnectSession(
   const signer = new NostrConnectSigner({ relays: sessionRelays, pool });
 
   const metadata: Parameters<NostrConnectSigner["getNostrConnectURI"]>[0] = {
-    name: appName ?? "ngitstack",
+    name: appName ?? APP_NAME,
     url: typeof window !== "undefined" ? window.location.origin : undefined,
     permissions: NostrConnectSigner.buildSigningPermissions([0, 1, 3, 10002]),
   };

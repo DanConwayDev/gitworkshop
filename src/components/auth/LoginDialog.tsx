@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { QRCodeCanvas } from "@/components/ui/qrcode";
+import { APP_NAME } from "@/lib/constants";
 import {
   useLoginActions,
   createNostrConnectSession,
@@ -70,7 +71,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
 
   // Generate a nostrconnect session (sync — just creates the ephemeral signer + URI)
   const generateConnectSession = useCallback(() => {
-    const session = createNostrConnectSession("ngitstack");
+    const session = createNostrConnectSession(APP_NAME);
     setNostrConnectSession(session);
     setConnectError(null);
   }, []);
