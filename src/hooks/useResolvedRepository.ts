@@ -22,26 +22,36 @@ const MAX_MAILBOX_RELAYS_PER_USER = 3;
 export interface ResolvedRepository {
   repo: ResolvedRepo;
   /** Base RelayGroup: repo-declared relays + relay hints only.
-   *  Pass to useIssues / useNip34Loaders when useItemAuthorRelays is disabled. */
+   *  Always pass to useIssues / useNip34Loaders. */
   repoRelayGroup: RelayGroupType;
-  /** Extended RelayGroup: repoRelayGroup + maintainer outbox + maintainer inbox
-   *  relays (up to MAX_MAILBOX_RELAYS_PER_USER each, prioritising connected).
-   *  Always used for announcement discovery. Pass to useIssues /
-   *  useNip34Loaders when useItemAuthorRelays is enabled. */
-  repoRelayAndMaintainerMailboxGroup: RelayGroupType;
+  /** Delta RelayGroup: maintainer outbox + inbox relays that are NOT already
+   *  in repoRelayGroup (up to MAX_MAILBOX_RELAYS_PER_USER each, prioritising
+   *  connected relays). Empty until NIP-65 resolution completes.
+   *  When outbox curation mode is enabled, subscribe to this group IN ADDITION
+   *  to repoRelayGroup — do not swap one for the other. */
+  extraRelaysForMaintainerMailboxCoverage: RelayGroupType;
 }
 
 /**
- * Add relay URLs from an enriched pointer list to a RelayGroup, skipping any
- * already present. Prioritises online relays and caps at
- * MAX_MAILBOX_RELAYS_PER_USER per pointer.
+ * Add relay URLs from an enriched pointer list to a delta RelayGroup, skipping
+ * any relay already present in either the delta group or the base group.
+ * Prioritises online relays and caps at MAX_MAILBOX_RELAYS_PER_USER per pointer.
+ *
+ * @param enriched  - Pointers with resolved relay lists
+ * @param deltaGroup - The delta group to populate (only receives new relays)
+ * @param baseGroup  - The base group whose relays are excluded from the delta
  */
 function addMailboxRelaysToGroup(
   enriched: { pubkey: string; relays?: string[] }[],
-  group: RelayGroupType,
+  deltaGroup: RelayGroupType,
+  baseGroup: RelayGroupType,
 ): void {
   const online = new Set(liveness.online);
-  const seen = new Set<string>(group.relays.map((r) => r.url));
+  // Exclude relays already in either group so the delta stays truly additive.
+  const seen = new Set<string>([
+    ...baseGroup.relays.map((r) => r.url),
+    ...deltaGroup.relays.map((r) => r.url),
+  ]);
   for (const pointer of enriched) {
     const relays = (pointer.relays ?? [])
       .slice()
@@ -52,7 +62,7 @@ function addMailboxRelaysToGroup(
       if (!seen.has(relay)) {
         seen.add(relay);
         const r = pool.relay(relay);
-        if (!group.has(r)) group.add(r);
+        if (!deltaGroup.has(r)) deltaGroup.add(r);
       }
       count++;
     }
@@ -76,13 +86,13 @@ function addMailboxRelaysToGroup(
  *          relays for ALL maintainer announcements. Adds relays to both groups.
  *
  * Layer 4: resolve each maintainer's NIP-65 outbox AND inbox relays and add
- *          them to repoRelayAndMaintainerMailboxGroup only — repoRelayGroup
- *          stays as the pure base. Always runs (not gated on useItemAuthorRelays)
- *          so announcement discovery is always thorough.
+ *          any not already in repoRelayGroup to extraRelaysForMaintainerMailboxCoverage.
+ *          Always runs (not gated on useItemAuthorRelays) so announcement
+ *          discovery is always thorough.
  *
- * Returns both groups so callers choose the right one:
- *   - useItemAuthorRelays disabled → repoRelayGroup
- *   - useItemAuthorRelays enabled  → repoRelayAndMaintainerMailboxGroup
+ * Returns both groups. Callers always use repoRelayGroup and, when outbox
+ * curation mode is enabled, additionally subscribe to
+ * extraRelaysForMaintainerMailboxCoverage.
  */
 export function useResolvedRepository(
   pubkey: string | undefined,
@@ -123,33 +133,27 @@ export function useResolvedRepository(
     ) as unknown as Observable<RelayGroupType>;
   }, [key, store]);
 
-  // Extended group: base + maintainer outbox + inbox relays.
+  // Delta group: maintainer outbox + inbox relays not already in repoRelayGroup.
   // Stable reference — created once per (pubkey, dTag) pair.
-  const repoRelayAndMaintainerMailboxGroup = useMemo(
+  const extraRelaysForMaintainerMailboxCoverage = useMemo(
     () => (pubkey && dTag ? new RelayGroup([]) : undefined),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [key],
   );
 
   // Layer 3: once we know the repo's own relay list, add any relays not yet
-  // in either group. Also subscribes to maintainer announcements on those relays.
+  // in repoRelayGroup. Also subscribes to maintainer announcements on those relays.
+  // extraRelaysForMaintainerMailboxCoverage is NOT populated here — it only
+  // receives relays that are absent from repoRelayGroup (Layer 4).
   const repoRelayKey = repo?.relays.join(",") ?? "";
   const maintainerKey = repo?.maintainerSet.join(",") ?? "";
   use$(() => {
-    if (
-      !dTag ||
-      !repo ||
-      !repoRelayGroup ||
-      !repoRelayAndMaintainerMailboxGroup ||
-      repo.relays.length === 0
-    )
+    if (!dTag || !repo || !repoRelayGroup || repo.relays.length === 0)
       return undefined;
 
     for (const url of repo.relays) {
       const relay = pool.relay(url);
       if (!repoRelayGroup.has(relay)) repoRelayGroup.add(relay);
-      if (!repoRelayAndMaintainerMailboxGroup.has(relay))
-        repoRelayAndMaintainerMailboxGroup.add(relay);
     }
 
     // Subscribe to all maintainer announcements on the repo's relays so
@@ -164,24 +168,18 @@ export function useResolvedRepository(
     return repoRelayGroup
       .subscription(filter)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [
-    dTag,
-    repoRelayKey,
-    maintainerKey,
-    store,
-    repoRelayGroup,
-    repoRelayAndMaintainerMailboxGroup,
-  ]);
+  }, [dTag, repoRelayKey, maintainerKey, store, repoRelayGroup]);
 
-  // Layer 4: resolve maintainer outbox + inbox relays and add them to the
-  // mailbox group only. repoRelayGroup is left as the pure base.
+  // Layer 4: resolve maintainer outbox + inbox relays. Only relays not already
+  // in repoRelayGroup are added to extraRelaysForMaintainerMailboxCoverage.
   // combineLatest fires when either direction resolves, so we don't wait for
   // both before adding the first batch.
   use$(() => {
     if (
       !dTag ||
       !repo ||
-      !repoRelayAndMaintainerMailboxGroup ||
+      !repoRelayGroup ||
+      !extraRelaysForMaintainerMailboxCoverage ||
       repo.maintainerSet.length === 0
     )
       return undefined;
@@ -200,17 +198,19 @@ export function useResolvedRepository(
       switchMap(([outboxEnriched, inboxEnriched]) => {
         addMailboxRelaysToGroup(
           outboxEnriched,
-          repoRelayAndMaintainerMailboxGroup,
+          extraRelaysForMaintainerMailboxCoverage,
+          repoRelayGroup,
         );
         addMailboxRelaysToGroup(
           inboxEnriched,
-          repoRelayAndMaintainerMailboxGroup,
+          extraRelaysForMaintainerMailboxCoverage,
+          repoRelayGroup,
         );
 
-        if (repoRelayAndMaintainerMailboxGroup.relays.length === 0)
+        if (extraRelaysForMaintainerMailboxCoverage.relays.length === 0)
           return of(null);
 
-        // Subscribe to maintainer announcements on all mailbox relays so
+        // Subscribe to maintainer announcements on the extra mailbox relays so
         // newly-published announcements arrive in real time.
         const filter: Filter[] = [
           {
@@ -219,14 +219,20 @@ export function useResolvedRepository(
             "#d": [dTag],
           } as Filter,
         ];
-        return repoRelayAndMaintainerMailboxGroup
+        return extraRelaysForMaintainerMailboxCoverage
           .subscription(filter)
           .pipe(onlyEvents(), mapEventsToStore(store));
       }),
     ) as unknown as Observable<null>;
-  }, [dTag, maintainerKey, store, repoRelayAndMaintainerMailboxGroup]);
+  }, [
+    dTag,
+    maintainerKey,
+    store,
+    repoRelayGroup,
+    extraRelaysForMaintainerMailboxCoverage,
+  ]);
 
-  if (!repo || !repoRelayGroup || !repoRelayAndMaintainerMailboxGroup)
+  if (!repo || !repoRelayGroup || !extraRelaysForMaintainerMailboxCoverage)
     return undefined;
-  return { repo, repoRelayGroup, repoRelayAndMaintainerMailboxGroup };
+  return { repo, repoRelayGroup, extraRelaysForMaintainerMailboxCoverage };
 }

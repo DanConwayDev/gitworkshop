@@ -9,6 +9,8 @@ import { useIssues } from "@/hooks/useIssues";
 import { useNip34Loaders } from "@/hooks/useNip34Loaders";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
+import { mapEventsToStore } from "applesauce-core";
+import { onlyEvents } from "applesauce-relay";
 import { map } from "rxjs/operators";
 import { UserAvatar, UserName, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -75,18 +77,34 @@ export default function RepoPage({
   }, [npub]);
 
   const account = useActiveAccount();
+  const store = useEventStore();
   const resolved = useResolvedRepository(pubkey, repoId);
   const repo = resolved?.repo;
   const repoRelayGroup = resolved?.repoRelayGroup;
-  const repoRelayAndMaintainerMailboxGroup =
-    resolved?.repoRelayAndMaintainerMailboxGroup;
+  const extraRelaysForMaintainerMailboxCoverage =
+    resolved?.extraRelaysForMaintainerMailboxCoverage;
 
   // Respect the user's relay curation preference.
   const curationMode = use$(relayCurationMode);
-  const activeRelayGroup =
-    curationMode === "outbox"
-      ? repoRelayAndMaintainerMailboxGroup
-      : repoRelayGroup;
+
+  // In outbox mode, also subscribe to the extra maintainer mailbox relays so
+  // issues published only to those relays are discovered. repoRelayGroup is
+  // always used as the primary group — we never swap it out.
+  const coordKey = repo?.allCoordinates?.join(",") ?? "";
+  use$(() => {
+    if (
+      curationMode !== "outbox" ||
+      !extraRelaysForMaintainerMailboxCoverage ||
+      !repo?.allCoordinates?.length
+    )
+      return undefined;
+    const issueFilters = [
+      { kinds: [1621], "#a": repo.allCoordinates } as NostrFilter,
+    ];
+    return extraRelaysForMaintainerMailboxCoverage
+      .subscription(issueFilters)
+      .pipe(onlyEvents(), mapEventsToStore(store));
+  }, [curationMode, extraRelaysForMaintainerMailboxCoverage, coordKey, store]);
 
   const queryOptions: RepoQueryOptions = useMemo(
     () => ({
@@ -99,7 +117,7 @@ export default function RepoPage({
   );
   const { issues, statusMap, labelsMap } = useIssues(
     repo?.allCoordinates,
-    activeRelayGroup,
+    repoRelayGroup,
     queryOptions,
   );
 
@@ -451,7 +469,7 @@ export default function RepoPage({
                 extraLabels={labelsMap.get(issue.id) ?? []}
                 npub={npub!}
                 repoId={repoId!}
-                repoRelayGroup={activeRelayGroup}
+                repoRelayGroup={repoRelayGroup}
               />
             ))}
           </div>

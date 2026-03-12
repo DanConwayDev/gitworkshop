@@ -30,14 +30,14 @@ import type { Observable } from "rxjs";
  *
  * Also fetches status events so we can determine current status.
  *
- * The caller is responsible for passing the right RelayGroup:
- *   - useItemAuthorRelays disabled → repoRelayGroup (repo-declared relays + hints)
- *   - useItemAuthorRelays enabled  → repoRelayAndMaintainerMailboxGroup (also
- *                                    includes maintainer outbox + inbox relays,
- *                                    built by useResolvedRepository)
+ * Always pass repoRelayGroup from useResolvedRepository. When outbox curation
+ * mode is enabled, the caller is responsible for separately subscribing to
+ * extraRelaysForMaintainerMailboxCoverage so events from those relays land in
+ * the store; this hook reads from the store regardless of which group fetched
+ * the events.
  *
  * @param repoCoords     - Coordinate string(s) for the repository
- * @param repoRelayGroup - RelayGroup to subscribe to (see above)
+ * @param repoRelayGroup - Base RelayGroup from useResolvedRepository
  * @param options        - Query options including relay hints from the URL/settings
  */
 export function useIssues(

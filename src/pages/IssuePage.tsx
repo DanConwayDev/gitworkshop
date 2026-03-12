@@ -63,33 +63,44 @@ export default function IssuePage() {
   const resolved = useResolvedRepository(pubkey, repoId);
   const repo = resolved?.repo;
   const repoRelayGroup = resolved?.repoRelayGroup;
-  const repoRelayAndMaintainerMailboxGroup =
-    resolved?.repoRelayAndMaintainerMailboxGroup;
+  const extraRelaysForMaintainerMailboxCoverage =
+    resolved?.extraRelaysForMaintainerMailboxCoverage;
 
   // Respect the user's relay curation preference.
   const curationMode = use$(relayCurationMode);
-  const activeRelayGroup =
-    curationMode === "outbox"
-      ? repoRelayAndMaintainerMailboxGroup
-      : repoRelayGroup;
 
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  // Fetch the issue event itself via the active relay group when available;
+  // Fetch the issue event via the repo relay group when available;
   // fall back to NGIT_RELAYS for initial discovery before the group is ready.
   use$(() => {
     if (!issueId) return undefined;
     const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
-    if (activeRelayGroup) {
-      return activeRelayGroup
+    if (repoRelayGroup) {
+      return repoRelayGroup
         .subscription(issueFilters)
         .pipe(onlyEvents(), mapEventsToStore(store));
     }
     return pool
       .subscription(gitIndexRelays.getValue(), issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [issueId, activeRelayGroup, store]);
+  }, [issueId, repoRelayGroup, store]);
+
+  // In outbox mode, also fetch the issue from the extra maintainer mailbox
+  // relays in case it was published only there.
+  use$(() => {
+    if (
+      !issueId ||
+      curationMode !== "outbox" ||
+      !extraRelaysForMaintainerMailboxCoverage
+    )
+      return undefined;
+    const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
+    return extraRelaysForMaintainerMailboxCoverage
+      .subscription(issueFilters)
+      .pipe(onlyEvents(), mapEventsToStore(store));
+  }, [issueId, curationMode, extraRelaysForMaintainerMailboxCoverage, store]);
 
   // Subscribe to store, cast to Issue
   const issues = use$(() => {
@@ -104,11 +115,10 @@ export default function IssuePage() {
 
   const issue = issues?.[0];
 
-  // Trigger two-tier loading for this issue.
-  // In outbox mode, pass the mailbox group and enable author NIP-65 inbox
-  // fetching for maximum completeness. In repo mode, use the base relay group
-  // and skip per-author inbox queries.
-  useNip34Loaders(issueId, activeRelayGroup, {
+  // Trigger two-tier loading for this issue via the repo relay group.
+  // In outbox mode, also enable author NIP-65 inbox fetching for maximum
+  // completeness — the loader handles the delta internally.
+  useNip34Loaders(issueId, repoRelayGroup, {
     includeAuthorNip65: curationMode === "outbox",
   });
 
