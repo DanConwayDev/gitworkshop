@@ -53,6 +53,7 @@ import {
   type IssueStatus,
   type RepoQueryOptions,
 } from "@/lib/nip34";
+import { resolveCurrentSubject } from "@/hooks/useIssues";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
 import type { Issue } from "@/casts/Issue";
 import { relayCurationMode } from "@/services/settings";
@@ -115,7 +116,7 @@ export default function RepoPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [relayHints.join(","), repo?.maintainerSet?.join(","), curationMode],
   );
-  const { issues, statusMap, labelsMap } = useIssues(
+  const { issues, statusMap, labelsMap, subjectRenamesMap } = useIssues(
     repo?.allCoordinates,
     repoRelayGroup,
     queryOptions,
@@ -169,10 +170,19 @@ export default function RepoPage({
       // Author filter
       if (authorFilter && issue.pubkey !== authorFilter) return false;
 
-      // Search
+      // Search — check both original and current (renamed) subject
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
+        const maintainerSet = repo?.maintainerSet
+          ? new Set(repo.maintainerSet)
+          : undefined;
+        const currentSubject = resolveCurrentSubject(
+          issue.subject,
+          subjectRenamesMap.get(issue.id),
+          maintainerSet,
+        );
         if (
+          !currentSubject.toLowerCase().includes(q) &&
           !issue.subject.toLowerCase().includes(q) &&
           !issue.content.toLowerCase().includes(q)
         )
@@ -189,6 +199,8 @@ export default function RepoPage({
     searchQuery,
     statusMap,
     labelsMap,
+    subjectRenamesMap,
+    repo?.maintainerSet,
   ]);
 
   const hasActiveFilters =
@@ -467,6 +479,8 @@ export default function RepoPage({
                 issue={issue}
                 status={statusMap.get(issue.id)?.status ?? "open"}
                 extraLabels={labelsMap.get(issue.id) ?? []}
+                subjectRenames={subjectRenamesMap.get(issue.id)}
+                maintainerPubkeys={repo?.maintainerSet}
                 npub={npub!}
                 repoId={repoId!}
                 repoRelayGroup={repoRelayGroup}
@@ -492,6 +506,8 @@ function IssueRow({
   issue,
   status,
   extraLabels,
+  subjectRenames,
+  maintainerPubkeys,
   npub,
   repoId,
   repoRelayGroup,
@@ -500,6 +516,10 @@ function IssueRow({
   status: IssueStatus;
   /** Labels from NIP-32 kind:1985 events, merged with issue's own t-tags */
   extraLabels: string[];
+  /** Subject-rename events (kind:1985 with #subject namespace), sorted ascending */
+  subjectRenames: import("nostr-tools").NostrEvent[] | undefined;
+  /** Authoritative maintainer pubkeys for subject-rename resolution */
+  maintainerPubkeys: string[] | undefined;
   npub: string;
   repoId: string;
   repoRelayGroup: import("applesauce-relay").RelayGroup | undefined;
@@ -508,6 +528,15 @@ function IssueRow({
   const mergedLabels = Array.from(
     new Set([...issue.labels, ...extraLabels]),
   ).sort();
+
+  const maintainerSet = maintainerPubkeys
+    ? new Set(maintainerPubkeys)
+    : undefined;
+  const currentSubject = resolveCurrentSubject(
+    issue.subject,
+    subjectRenames,
+    maintainerSet,
+  );
 
   // Trigger two-tier loading for this issue. All IssueRow calls within the
   // same render cycle are batched by the loaders into a small number of relay
@@ -525,7 +554,7 @@ function IssueRow({
 
             <div className="flex-1 min-w-0">
               <h3 className="font-medium text-[15px] group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors mb-1.5 line-clamp-1">
-                {issue.subject}
+                {currentSubject}
               </h3>
 
               <div className="flex items-center gap-3 flex-wrap">

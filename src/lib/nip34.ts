@@ -22,6 +22,9 @@ export const STATUS_DRAFT = 1633;
 /** NIP-32 label event kind */
 export const LABEL_KIND = 1985;
 
+/** NIP-32 label namespace used for subject-rename events */
+export const SUBJECT_LABEL_NAMESPACE = "#subject";
+
 export const STATUS_KINDS = [
   STATUS_OPEN,
   STATUS_RESOLVED,

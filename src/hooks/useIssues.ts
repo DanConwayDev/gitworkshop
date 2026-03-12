@@ -11,6 +11,7 @@ import {
   STATUS_KINDS,
   LABEL_KIND,
   COMMENT_KIND,
+  SUBJECT_LABEL_NAMESPACE,
   kindToStatus,
   type IssueStatus,
   type RepoQueryOptions,
@@ -49,6 +50,8 @@ export function useIssues(
   statusMap: Map<string, { status: IssueStatus; event: NostrEvent }>;
   /** issueId → deduplicated labels from NIP-32 kind:1985 events */
   labelsMap: Map<string, string[]>;
+  /** issueId → subject-rename events sorted ascending (oldest first) */
+  subjectRenamesMap: Map<string, NostrEvent[]>;
 } {
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
@@ -165,7 +168,35 @@ export function useIssues(
     return map;
   }, [labelEvents]);
 
-  return { issues, statusMap, labelsMap };
+  // Build subject renames map: issueId -> sorted rename events (ascending)
+  // Only kind:1985 events that carry a #subject label are included.
+  const subjectRenamesMap = useMemo(() => {
+    const map = new Map<string, NostrEvent[]>();
+    if (!labelEvents) return map;
+    for (const ev of labelEvents) {
+      const hasSubjectLabel = ev.tags.some(
+        ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
+      );
+      if (!hasSubjectLabel) continue;
+      const issueId = ev.tags.find(([t]) => t === "e")?.[1];
+      if (!issueId) continue;
+      const existing = map.get(issueId) ?? [];
+      existing.push(ev);
+      map.set(issueId, existing);
+    }
+    // Sort each list ascending by created_at, tiebreak by id
+    for (const [id, evs] of map) {
+      map.set(
+        id,
+        evs.sort(
+          (a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id),
+        ),
+      );
+    }
+    return map;
+  }, [labelEvents]);
+
+  return { issues, statusMap, labelsMap, subjectRenamesMap };
 }
 
 /**
@@ -277,4 +308,85 @@ export function useIssueZaps(
     const filters: Filter[] = [{ kinds: [9735], "#e": [issueId] } as Filter];
     return store.timeline(filters) as unknown as Observable<NostrEvent[]>;
   }, [issueId, store]);
+}
+
+/**
+ * Return all kind:1985 subject-rename events for a specific issue, sorted by
+ * created_at ascending (oldest first), with id as a tiebreaker.
+ *
+ * These are events with:
+ *   ["e", issueId]
+ *   ["L", "#subject"]
+ *   ["l", "<new subject>", "#subject"]
+ *
+ * Fetching is handled by nip34EssentialsLoader (called by useNip34Loaders),
+ * which already batches { kinds: [1985], "#e": [issueId] }.
+ *
+ * @param issueId - The event ID of the issue
+ */
+export function useIssueSubjectRenames(
+  issueId: string | undefined,
+): NostrEvent[] | undefined {
+  const store = useEventStore();
+
+  const raw = use$(() => {
+    if (!issueId) return undefined;
+    const filters: Filter[] = [
+      { kinds: [LABEL_KIND], "#e": [issueId] } as Filter,
+    ];
+    return store.timeline(filters) as unknown as Observable<NostrEvent[]>;
+  }, [issueId, store]);
+
+  if (!raw) return undefined;
+
+  // Keep only events that carry a #subject label
+  const renames = raw.filter((ev) =>
+    ev.tags.some(([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE),
+  );
+
+  // Sort ascending by created_at, tiebreak by id (lexicographic)
+  return [...renames].sort(
+    (a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id),
+  );
+}
+
+/**
+ * Compute the current (effective) subject for an issue, taking into account
+ * any kind:1985 subject-rename events.
+ *
+ * Priority rules (per spec):
+ *   1. Maintainer-authored renames are authoritative; non-maintainer renames
+ *      are treated as suggestions. When maintainerPubkeys is provided, only
+ *      maintainer renames are considered. When it is omitted (e.g. on the list
+ *      page before the maintainer set is resolved), ALL renames are accepted.
+ *   2. Among qualifying renames, the latest by created_at wins; id is the
+ *      tiebreaker (lexicographic ascending — lower id wins, matching NIP-34
+ *      convention).
+ *
+ * @param originalSubject   - The subject from the issue event itself
+ * @param subjectRenames    - Sorted rename events from useIssueSubjectRenames
+ * @param maintainerPubkeys - Optional set of authoritative pubkeys
+ */
+export function resolveCurrentSubject(
+  originalSubject: string,
+  subjectRenames: NostrEvent[] | undefined,
+  maintainerPubkeys?: Set<string>,
+): string {
+  if (!subjectRenames || subjectRenames.length === 0) return originalSubject;
+
+  // Filter to authoritative renames when the maintainer set is known
+  const qualifying =
+    maintainerPubkeys && maintainerPubkeys.size > 0
+      ? subjectRenames.filter((ev) => maintainerPubkeys.has(ev.pubkey))
+      : subjectRenames;
+
+  if (qualifying.length === 0) return originalSubject;
+
+  // Already sorted ascending; the last entry is the winner
+  const winner = qualifying[qualifying.length - 1];
+  const newSubject = winner.tags.find(
+    ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
+  )?.[1];
+
+  return newSubject ?? originalSubject;
 }

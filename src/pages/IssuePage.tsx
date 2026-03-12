@@ -11,6 +11,8 @@ import {
   useIssueLabels,
   useIssueStatus,
   useIssueZaps,
+  useIssueSubjectRenames,
+  resolveCurrentSubject,
 } from "@/hooks/useIssues";
 import { useNip34Loaders } from "@/hooks/useNip34Loaders";
 import { useResolvedRepository } from "@/hooks/useResolvedRepository";
@@ -28,6 +30,7 @@ import {
   Users,
   Clock,
   Calendar,
+  Pencil,
 } from "lucide-react";
 import { Issue } from "@/casts/Issue";
 import { ISSUE_KIND } from "@/lib/nip34";
@@ -126,6 +129,18 @@ export default function IssuePage() {
   const nip32Labels = useIssueLabels(issueId);
   const comments = useIssueComments(issueId);
   const zaps = useIssueZaps(issueId);
+  const subjectRenames = useIssueSubjectRenames(issueId);
+
+  // Resolve the current (effective) subject, preferring maintainer-authored renames.
+  const maintainerSet = useMemo(
+    () => (repo?.maintainerSet ? new Set(repo.maintainerSet) : undefined),
+    [repo?.maintainerSet],
+  );
+  const currentSubject = resolveCurrentSubject(
+    issue?.subject ?? "",
+    subjectRenames,
+    maintainerSet,
+  );
 
   // Merge labels from the issue's own t-tags with any NIP-32 label events.
   // Deduplicated and sorted for stable rendering.
@@ -134,7 +149,7 @@ export default function IssuePage() {
     return Array.from(merged).sort();
   }, [issue?.labels, nip32Labels]);
 
-  // Participants
+  // Participants: issue author + comment authors
   const participants = useMemo(() => {
     const pubkeys = new Set<string>();
     if (issue) pubkeys.add(issue.pubkey);
@@ -144,8 +159,52 @@ export default function IssuePage() {
     return Array.from(pubkeys);
   }, [issue, comments]);
 
+  // Build the merged thread: comments + subject-rename events, sorted by
+  // created_at ascending (oldest first), tiebreak by id.
+  const threadItems = useMemo(() => {
+    type ThreadItem =
+      | { type: "comment"; event: NostrEvent }
+      | {
+          type: "rename";
+          event: NostrEvent;
+          newSubject: string;
+          oldSubject: string;
+        };
+
+    const items: ThreadItem[] = [];
+
+    if (comments) {
+      for (const c of comments) {
+        items.push({ type: "comment", event: c });
+      }
+    }
+
+    if (subjectRenames) {
+      // Walk renames in order to compute "before" for each rename
+      let prevSubject = issue?.subject ?? "";
+      for (const ev of subjectRenames) {
+        const newSubject =
+          ev.tags.find(([t, , ns]) => t === "l" && ns === "#subject")?.[1] ??
+          prevSubject;
+        items.push({
+          type: "rename",
+          event: ev,
+          newSubject,
+          oldSubject: prevSubject,
+        });
+        prevSubject = newSubject;
+      }
+    }
+
+    return items.sort(
+      (a, b) =>
+        a.event.created_at - b.event.created_at ||
+        a.event.id.localeCompare(b.event.id),
+    );
+  }, [comments, subjectRenames, issue?.subject]);
+
   useSeoMeta({
-    title: issue ? `${issue.subject} - ngit` : "Issue - ngit",
+    title: issue ? `${currentSubject || issue.subject} - ngit` : "Issue - ngit",
     description: issue?.content.slice(0, 160) ?? "Loading issue...",
   });
 
@@ -181,7 +240,7 @@ export default function IssuePage() {
               <div className="flex items-start gap-3 mb-3">
                 <StatusBadge status={status} className="mt-1" />
                 <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-                  {issue.subject}
+                  {currentSubject || issue.subject}
                 </h1>
               </div>
 
@@ -271,7 +330,7 @@ export default function IssuePage() {
               </Card>
             )}
 
-            {/* Comments */}
+            {/* Thread: comments + subject renames */}
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 <MessageCircle className="h-4 w-4" />
@@ -290,15 +349,24 @@ export default function IssuePage() {
                     <CommentSkeleton key={i} />
                   ))}
                 </div>
-              ) : comments.length === 0 ? (
+              ) : threadItems.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground/60 text-sm">
                   No comments yet. The conversation awaits its first voice.
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {comments.map((comment) => (
-                    <CommentCard key={comment.id} comment={comment} />
-                  ))}
+                  {threadItems.map((item) =>
+                    item.type === "comment" ? (
+                      <CommentCard key={item.event.id} comment={item.event} />
+                    ) : (
+                      <SubjectRenameCard
+                        key={item.event.id}
+                        event={item.event}
+                        oldSubject={item.oldSubject}
+                        newSubject={item.newSubject}
+                      />
+                    ),
+                  )}
                 </div>
               )}
             </div>
@@ -441,5 +509,60 @@ function CommentSkeleton() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Inline thread event showing a subject rename.
+ * Displays who renamed the issue, from what title to what, and when.
+ */
+function SubjectRenameCard({
+  event,
+  oldSubject,
+  newSubject,
+}: {
+  event: NostrEvent;
+  oldSubject: string;
+  newSubject: string;
+}) {
+  const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
+    addSuffix: true,
+  });
+
+  return (
+    <div className="flex items-center gap-3 py-2 px-1 text-sm text-muted-foreground">
+      <div className="flex items-center justify-center h-7 w-7 rounded-full bg-muted/50 shrink-0">
+        <Pencil className="h-3.5 w-3.5 text-muted-foreground/70" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <span>
+          <UserLink
+            pubkey={event.pubkey}
+            avatarSize="sm"
+            nameClassName="text-sm font-medium text-foreground"
+          />
+        </span>{" "}
+        renamed this issue{" "}
+        <span className="text-xs text-muted-foreground/60 flex items-center gap-1 inline-flex">
+          <Calendar className="h-3 w-3" />
+          {timeAgo}
+        </span>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+          <span
+            className="line-through text-muted-foreground/50 max-w-[200px] truncate"
+            title={oldSubject}
+          >
+            {oldSubject || "(untitled)"}
+          </span>
+          <span className="text-muted-foreground/40">→</span>
+          <span
+            className="font-medium text-foreground max-w-[200px] truncate"
+            title={newSubject}
+          >
+            {newSubject}
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
