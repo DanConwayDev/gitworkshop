@@ -23,12 +23,12 @@ import {
 import { Issue } from "@/casts/Issue";
 import type { Filter } from "applesauce-core/helpers";
 
-/** Max healthy outbox relays to take per user when building NIP-65 relay lists. */
-const MAX_OUTBOX_RELAYS_PER_USER = 3;
+/** Max healthy mailbox relays to take per user when building NIP-65 relay lists. */
+const MAX_MAILBOX_RELAYS_PER_USER = 3;
 
 /**
  * Flatten a liveness-filtered list of ProfilePointers into a deduplicated
- * relay URL array, capped at MAX_OUTBOX_RELAYS_PER_USER per pointer.
+ * relay URL array, capped at MAX_MAILBOX_RELAYS_PER_USER per pointer.
  *
  * Already-connected relays (liveness.online) are sorted to the front of each
  * pointer's relay list so we reuse open connections before opening new ones.
@@ -36,7 +36,7 @@ const MAX_OUTBOX_RELAYS_PER_USER = 3;
  * @param enriched  - ProfilePointers with relays already filtered by liveness
  * @param exclude   - Relay URLs to skip (e.g. repo relays already queried)
  */
-function flattenOutboxRelays(
+function flattenMailboxRelays(
   enriched: { pubkey: string; relays?: string[] }[],
   exclude: ReadonlySet<string> = new Set(),
 ): string[] {
@@ -52,7 +52,7 @@ function flattenOutboxRelays(
     });
     let count = 0;
     for (const relay of relays) {
-      if (count >= MAX_OUTBOX_RELAYS_PER_USER) break;
+      if (count >= MAX_MAILBOX_RELAYS_PER_USER) break;
       if (!seen.has(relay)) {
         seen.add(relay);
         result.push(relay);
@@ -91,40 +91,39 @@ function buildRelays(
 }
 
 /**
- * Fetch NIP-65 outbox relay URLs for a set of pubkeys and return them as a
- * flat deduplicated array.
+ * Fetch NIP-65 relay URLs for a set of pubkeys and return them as a flat
+ * deduplicated array, filtered by liveness and capped per user.
  *
- * Uses `includeMailboxes(eventStore)` — the canonical Applesauce operator for
- * outbox discovery. It enriches each ProfilePointer with the relays from their
- * kind:10002 event, fetching via `eventStore.eventLoader` which is wired to
- * `addressLoader` with `lookupRelays` (purplepag.es, index.hzrd149.com,
- * indexer.coracle.social). This means kind:10002 events are looked up on the
- * indexer relays that specialise in relay-list discovery — no manual relay
- * hints needed.
+ * @param type - "outbox" for events the user *wrote* (issues, status, announcements)
+ *               "inbox"  for events *directed at* the user (comments, zaps, reactions)
+ *
+ * Uses `includeMailboxes(eventStore, type)` — the canonical Applesauce operator
+ * for mailbox discovery. Kind:10002 events are fetched via `eventStore.eventLoader`
+ * which is wired to `addressLoader` with `lookupRelays` (purplepag.es,
+ * index.hzrd149.com, indexer.coracle.social).
  *
  * When `enabled` is false (or pubkeys is empty) returns an empty array
  * immediately — existing behaviour is unchanged.
  */
-function useNip65Outboxes(pubkeys: string[], enabled: boolean): string[] {
+function useNip65Relays(
+  pubkeys: string[],
+  enabled: boolean,
+  type: "inbox" | "outbox" = "outbox",
+): string[] {
   const store = useEventStore();
   const pubkeyKey = pubkeys.join(",");
 
-  // includeMailboxes enriches ProfilePointers with their kind:10002 outboxes.
-  // The eventStore.eventLoader (addressLoader + lookupRelays) fetches missing
-  // kind:10002 events automatically from indexer relays.
-  // ignoreUnhealthyRelays filters out dead/backoff relays before we connect —
-  // repo relays and relay hints bypass this and are always tried.
-  const outboxes = use$(() => {
+  const relays = use$(() => {
     if (!enabled || pubkeys.length === 0) return of([] as string[]);
     const pointers = pubkeys.map((pubkey) => ({ pubkey }));
     return of(pointers).pipe(
-      includeMailboxes(store),
+      includeMailboxes(store, type),
       ignoreUnhealthyRelaysOnPointers(liveness),
-      map((enriched) => flattenOutboxRelays(enriched)),
+      map((enriched) => flattenMailboxRelays(enriched)),
     );
-  }, [pubkeyKey, enabled, store]);
+  }, [pubkeyKey, enabled, type, store]);
 
-  return outboxes ?? [];
+  return relays ?? [];
 }
 
 /**
@@ -157,9 +156,10 @@ export function useIssues(
 
   // NIP-65: fetch outbox relays for all maintainers when enabled.
   // These are additive on top of repoRelays + relayHints.
-  const maintainerOutboxes = useNip65Outboxes(
+  const maintainerOutboxes = useNip65Relays(
     options.nip65 ? (options.maintainerPubkeys ?? []) : [],
     options.nip65 ?? false,
+    "outbox",
   );
 
   const relays = buildRelays(repoRelays, options, maintainerOutboxes);
@@ -278,13 +278,15 @@ export function useIssueComments(
     return store.event(issueId).pipe(map((ev) => ev?.pubkey));
   }, [issueId, options.nip65, store]);
 
-  // NIP-65: fetch outbox relays for the issue author when enabled.
-  const issueAuthorOutboxes = useNip65Outboxes(
+  // NIP-65: fetch inbox relays for the issue author when enabled.
+  // Comments are directed at the author so they land on their inbox relays.
+  const issueAuthorInboxes = useNip65Relays(
     issueAuthorPubkey ? [issueAuthorPubkey] : [],
     options.nip65 ?? false,
+    "inbox",
   );
 
-  const relays = buildRelays(repoRelays, options, issueAuthorOutboxes);
+  const relays = buildRelays(repoRelays, options, issueAuthorInboxes);
   const filterKey = JSON.stringify({ issueId, relays, type: "comments" });
 
   // Trigger batched fetch via loader — events land in the store automatically
@@ -324,9 +326,11 @@ export function useIssueStatus(
   const store = useEventStore();
 
   // NIP-65: fetch outbox relays for all maintainers when enabled.
-  const maintainerOutboxes = useNip65Outboxes(
+  // Status events are written by maintainers so their outbox relays are correct.
+  const maintainerOutboxes = useNip65Relays(
     options.nip65 ? (options.maintainerPubkeys ?? []) : [],
     options.nip65 ?? false,
+    "outbox",
   );
 
   const relays = buildRelays(repoRelays, options, maintainerOutboxes);
@@ -388,13 +392,15 @@ export function useIssueZaps(
     return store.event(issueId).pipe(map((ev) => ev?.pubkey));
   }, [issueId, options.nip65, store]);
 
-  // NIP-65: fetch outbox relays for the issue author when enabled.
-  const issueAuthorOutboxes = useNip65Outboxes(
+  // NIP-65: fetch inbox relays for the issue author when enabled.
+  // Zap receipts are sent to the recipient so they land on their inbox relays.
+  const issueAuthorInboxes = useNip65Relays(
     issueAuthorPubkey ? [issueAuthorPubkey] : [],
     options.nip65 ?? false,
+    "inbox",
   );
 
-  const relays = buildRelays(repoRelays, options, issueAuthorOutboxes);
+  const relays = buildRelays(repoRelays, options, issueAuthorInboxes);
   const filterKey = JSON.stringify({ issueId, relays, type: "zaps" });
 
   // Trigger batched fetch via loader — events land in the store automatically

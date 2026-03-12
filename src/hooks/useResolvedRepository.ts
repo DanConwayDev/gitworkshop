@@ -5,8 +5,8 @@ import { onlyEvents } from "applesauce-relay";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { pool, liveness } from "@/services/nostr";
 
-/** Max healthy outbox relays to take per maintainer when querying NIP-65 relays. */
-const MAX_OUTBOX_RELAYS_PER_USER = 3;
+/** Max healthy mailbox relays to take per maintainer when querying NIP-65 relays. */
+const MAX_MAILBOX_RELAYS_PER_USER = 3;
 import { REPO_KIND, NGIT_RELAYS, type ResolvedRepo } from "@/lib/nip34";
 import { RepositoryModel } from "@/models/RepositoryModel";
 import type { Filter } from "applesauce-core/helpers";
@@ -110,7 +110,7 @@ export function useResolvedRepository(
             .sort((a, b) => (online.has(a) ? 0 : 1) - (online.has(b) ? 0 : 1));
           let count = 0;
           for (const relay of relays) {
-            if (count >= MAX_OUTBOX_RELAYS_PER_USER) break;
+            if (count >= MAX_MAILBOX_RELAYS_PER_USER) break;
             if (!seen.has(relay)) {
               seen.add(relay);
               outboxRelays.push(relay);
