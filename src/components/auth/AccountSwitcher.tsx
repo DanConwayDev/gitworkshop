@@ -69,12 +69,12 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   );
   const displayName = activeProfile?.name ?? genUserName(activeAccount.pubkey);
 
-  const handleSetActive = (pubkey: string) => {
-    accountManager.setActive(pubkey);
+  const handleSetActive = (account: IAccount) => {
+    accountManager.setActive(account);
   };
 
-  const handleRemoveAccount = (pubkey: string) => {
-    accountManager.removeAccount(pubkey);
+  const handleRemoveAccount = (account: IAccount) => {
+    accountManager.removeAccount(account.id);
   };
 
   return (
@@ -98,7 +98,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
             key={account.pubkey}
             account={account}
             isActive={false}
-            onSelect={() => handleSetActive(account.pubkey)}
+            onSelect={() => handleSetActive(account)}
           />
         ))}
         <DropdownMenuSeparator />
@@ -110,7 +110,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
           <span>Add another account</span>
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => handleRemoveAccount(activeAccount.pubkey)}
+          onClick={() => handleRemoveAccount(activeAccount)}
           className="flex items-center gap-2 cursor-pointer p-2 rounded-md text-red-500"
         >
           <LogOut className="w-4 h-4" />

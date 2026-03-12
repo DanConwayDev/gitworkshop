@@ -1,4 +1,3 @@
-import { toast } from "@/hooks/useToast";
 import { accounts } from "@/services/accounts";
 import { Accounts } from "applesauce-accounts";
 import {
@@ -37,7 +36,7 @@ export function useLoginActions() {
         // Add to account manager
         accounts.addAccount(account);
 
-        accounts.setActive(account.pubkey);
+        accounts.setActive(account);
       } catch (error) {
         console.error("Failed to login with nsec:", error);
         throw new Error("Invalid secret key");
@@ -61,12 +60,7 @@ export function useLoginActions() {
         const existing = accounts.getAccountForPubkey(pubkey);
 
         if (existing) {
-          // Just switch to the existing account
-          accounts.setActive(existing.pubkey);
-          toast({
-            title: "Already logged in",
-            description: "Switched to existing account",
-          });
+          accounts.setActive(existing);
           return;
         }
 
@@ -76,7 +70,7 @@ export function useLoginActions() {
         // Add to account manager
         accounts.addAccount(account);
 
-        accounts.setActive(account.pubkey);
+        accounts.setActive(account);
       } catch (error) {
         console.error("Failed to login with bunker:", error);
         throw new Error("Failed to connect to remote signer");
@@ -102,12 +96,7 @@ export function useLoginActions() {
         const existing = accounts.getAccountForPubkey(pubkey);
 
         if (existing) {
-          // Just switch to the existing account
-          accounts.setActive(existing.pubkey);
-          toast({
-            title: "Already logged in",
-            description: "Switched to existing account",
-          });
+          accounts.setActive(existing);
           return;
         }
 
@@ -118,7 +107,7 @@ export function useLoginActions() {
         // Add to account manager
         accounts.addAccount(account);
 
-        accounts.setActive(account.pubkey);
+        accounts.setActive(account);
       } catch (error) {
         console.error("Failed to login with extension:", error);
         throw error;
@@ -132,7 +121,7 @@ export function useLoginActions() {
     logout(): void {
       const activeAccount = accounts.getActive();
       if (activeAccount) {
-        accounts.removeAccount(activeAccount.pubkey);
+        accounts.removeAccount(activeAccount.id);
       }
     },
   };
