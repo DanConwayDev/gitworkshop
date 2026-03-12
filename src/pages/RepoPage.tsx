@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { nip19 } from "nostr-tools";
 import { formatDistanceToNow } from "date-fns";
+import { useActiveAccount } from "applesauce-react/hooks";
 import { useResolvedRepository } from "@/hooks/useResolvedRepository";
 import { useIssues } from "@/hooks/useIssues";
 import { useNip34Loaders } from "@/hooks/useNip34Loaders";
@@ -12,11 +13,19 @@ import { map } from "rxjs/operators";
 import { UserAvatar, UserName, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
+import { CreateIssueForm } from "@/components/CreateIssueForm";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -35,6 +44,7 @@ import {
   ExternalLink,
   Filter,
   X,
+  Plus,
 } from "lucide-react";
 import { NGIT_RELAYS, COMMENT_KIND, type IssueStatus } from "@/lib/nip34";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
@@ -56,8 +66,12 @@ export default function RepoPage() {
     }
   }, [npub]);
 
+  const account = useActiveAccount();
   const repo = useResolvedRepository(pubkey, repoId);
   const { issues, statusMap } = useIssues(repo?.allCoordinates);
+
+  // New issue dialog
+  const [newIssueOpen, setNewIssueOpen] = useState(false);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<IssueStatus | "all">("all");
@@ -205,6 +219,31 @@ export default function RepoPage() {
         </div>
       </div>
 
+      {/* New Issue Dialog */}
+      {repo && (
+        <Dialog open={newIssueOpen} onOpenChange={setNewIssueOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CircleDot className="h-4 w-4 text-violet-500" />
+                New Issue
+              </DialogTitle>
+              <DialogDescription>
+                Submit a bug report, feature request, or question for{" "}
+                <span className="font-medium text-foreground">{repo.name}</span>
+                .
+              </DialogDescription>
+            </DialogHeader>
+            <CreateIssueForm
+              repoCoord={repo.allCoordinates[0]}
+              ownerPubkey={repo.selectedMaintainer}
+              onSuccess={() => setNewIssueOpen(false)}
+              onCancel={() => setNewIssueOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Filters + Issues */}
       <div className="container max-w-screen-xl px-4 md:px-8 py-6">
         {/* Filter bar */}
@@ -219,7 +258,17 @@ export default function RepoPage() {
             />
           </div>
 
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center ml-auto">
+            {account && repo && (
+              <Button
+                size="sm"
+                className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white h-9"
+                onClick={() => setNewIssueOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New Issue
+              </Button>
+            )}
             <Select
               value={statusFilter}
               onValueChange={(v) => setStatusFilter(v as IssueStatus | "all")}
@@ -329,8 +378,18 @@ export default function RepoPage() {
               <p className="text-muted-foreground/60 text-sm mt-1">
                 {hasActiveFilters
                   ? "Try adjusting your filters"
-                  : "This repository has no issues"}
+                  : "Be the first to open an issue"}
               </p>
+              {!hasActiveFilters && account && repo && (
+                <Button
+                  size="sm"
+                  className="mt-4 gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+                  onClick={() => setNewIssueOpen(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  New Issue
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (
