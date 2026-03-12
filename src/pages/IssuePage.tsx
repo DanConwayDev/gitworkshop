@@ -12,6 +12,7 @@ import {
   useIssueStatus,
   useIssueZaps,
 } from "@/hooks/useIssues";
+import { useNip34Loaders } from "@/hooks/useNip34Loaders";
 import { useResolvedRepository } from "@/hooks/useResolvedRepository";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -29,7 +30,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { Issue } from "@/casts/Issue";
-import { ISSUE_KIND, type RepoQueryOptions } from "@/lib/nip34";
+import { ISSUE_KIND } from "@/lib/nip34";
 import { gitIndexRelays } from "@/services/settings";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
@@ -40,11 +41,7 @@ import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
-export default function IssuePage({
-  relayHints = [],
-}: {
-  relayHints?: string[];
-}) {
+export default function IssuePage() {
   const { npub, repoId, issueId } = useParams<{
     npub: string;
     repoId: string;
@@ -66,15 +63,6 @@ export default function IssuePage({
   const resolved = useResolvedRepository(pubkey, repoId);
   const repo = resolved?.repo;
   const group = resolved?.group;
-  const queryOptions: RepoQueryOptions = useMemo(
-    () => ({
-      relayHints,
-      nip65: true,
-      maintainerPubkeys: repo?.maintainerSet ?? [],
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [relayHints.join(","), repo?.maintainerSet?.join(",")],
-  );
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
@@ -106,10 +94,13 @@ export default function IssuePage({
 
   const issue = issues?.[0];
 
+  // Trigger two-tier loading for this issue.
+  useNip34Loaders(issueId, group);
+
   const status = useIssueStatus(issueId);
   const nip32Labels = useIssueLabels(issueId);
-  const comments = useIssueComments(issueId, group, queryOptions);
-  const zaps = useIssueZaps(issueId, group, queryOptions);
+  const comments = useIssueComments(issueId);
+  const zaps = useIssueZaps(issueId);
 
   // Merge labels from the issue's own t-tags with any NIP-32 label events.
   // Deduplicated and sorted for stable rendering.

@@ -7,12 +7,7 @@ import type { RelayGroup } from "applesauce-relay";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { castTimelineStream } from "applesauce-common/observable";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
-import {
-  pool,
-  liveness,
-  nip34CommentsLoader,
-  nip34ThreadLoader,
-} from "@/services/nostr";
+import { pool, liveness } from "@/services/nostr";
 import {
   ISSUE_KIND,
   STATUS_KINDS,
@@ -293,74 +288,17 @@ export function useIssues(
  * Uses the batched commentsLoader so all per-issue calls are combined into
  * a single relay subscription rather than one request per issue.
  *
- * When nip65 is true, also queries the NIP-65 inbox relays of the issue
- * author. Comments are directed at the author so they land on their inbox
- * relays. The issue author pubkey is resolved reactively from the store
- * (two-step): store.event(issueId) emits once the issue event is in the
- * store (fetched by IssuePage or via store.eventLoader fallback), then
- * useNip65Relays fetches the author's kind:10002 via store.eventLoader →
- * createAddressLoader → lookupRelays. We use the issue author rather than
- * individual comment authors because comment authors are unknown until
- * comments are already fetched — a chicken-and-egg problem.
+ * Fetching is handled by useNip34Loaders (called by IssuePage), which batches
+ * { kinds: [1111], "#E": [issueId] } and, when nip65 is true, also queries
+ * the inbox-only delta relays of the issue author.
  *
- * The fetch is two-phase: initial call uses repoRelays + relayHints; once
- * the kind:10002 arrives, filterKey changes and the loader re-fires with
- * the inbox relays added. Already-fetched events are deduplicated by the
- * loader's eventStore filter so no duplicates land in the store.
- *
- * @param issueId    - The event ID of the issue
- * @param repoRelays - Relay URLs from ResolvedRepo.relays
- * @param options    - Query options including relay hints
+ * @param issueId - The event ID of the issue
  */
 export function useIssueComments(
   issueId: string | undefined,
-  group: RelayGroup | undefined,
-  options: RepoQueryOptions,
 ): NostrEvent[] | undefined {
   const store = useEventStore();
 
-  // Reactively resolve the issue author pubkey from the store.
-  // This is available as soon as the issue event lands (fetched by IssuePage).
-  const issueAuthorPubkey = use$(() => {
-    if (!issueId || !options.nip65) return of(undefined);
-    return store.event(issueId).pipe(map((ev) => ev?.pubkey));
-  }, [issueId, options.nip65, store]);
-
-  // NIP-65: fetch inbox relays for the issue author when enabled.
-  // Comments are directed at the author so they land on their inbox relays.
-  const issueAuthorInboxes = useNip65Relays(
-    issueAuthorPubkey ? [issueAuthorPubkey] : [],
-    options.nip65 ?? false,
-    "inbox",
-  );
-
-  // Add author inbox relays to the group — idempotent, no teardown.
-  useMemo(() => {
-    if (!group) return;
-    for (const url of issueAuthorInboxes) {
-      const relay = pool.relay(url);
-      if (!group.has(relay)) group.add(relay);
-    }
-  }, [group, issueAuthorInboxes.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Relay list for the loader: group's current relays + any inbox relays
-  // (group may not yet contain inbox relays if add() just fired this render)
-  const relays = group
-    ? [...new Set([...group.relays.map((r) => r.url), ...issueAuthorInboxes])]
-    : issueAuthorInboxes;
-  const filterKey = JSON.stringify({
-    issueId,
-    relays: relays.sort(),
-    type: "comments",
-  });
-
-  // Trigger batched fetch via loader — events land in the store automatically
-  use$(() => {
-    if (!issueId) return undefined;
-    return nip34CommentsLoader({ value: issueId, relays });
-  }, [filterKey]);
-
-  // Read reactively from the store
   return use$(() => {
     if (!issueId) return undefined;
     const filters: Filter[] = [
@@ -436,66 +374,19 @@ export function useIssueLabels(issueId: string | undefined): string[] {
 }
 
 /**
- * Fetch zap receipts (kind 9735) for a specific issue.
- * Uses the batched issueZapsLoader so all per-issue calls are combined into
- * a single relay subscription rather than one request per issue.
+ * Return zap receipts (kind:9735) for a specific issue.
  *
- * When nip65 is true, also queries the NIP-65 inbox relays of the issue
- * author. Zap receipts are published by the recipient's lightning node and
- * land on the recipient's inbox relays; the issue author is the most likely
- * zap recipient. See useIssueComments for the full two-phase fetch rationale
- * and why the issue author is used rather than individual zap senders.
+ * Fetching is handled by useNip34Loaders (called by IssuePage), which batches
+ * { kinds: [7, 9735], "#e": [issueId] } and, when nip65 is true, also queries
+ * the inbox-only delta relays of the issue author.
  *
- * @param issueId    - The event ID of the issue
- * @param repoRelays - Relay URLs from ResolvedRepo.relays
- * @param options    - Query options including relay hints
+ * @param issueId - The event ID of the issue
  */
 export function useIssueZaps(
   issueId: string | undefined,
-  group: RelayGroup | undefined,
-  options: RepoQueryOptions,
 ): NostrEvent[] | undefined {
   const store = useEventStore();
 
-  // Reactively resolve the issue author pubkey from the store (two-step fetch).
-  const issueAuthorPubkey = use$(() => {
-    if (!issueId || !options.nip65) return of(undefined);
-    return store.event(issueId).pipe(map((ev) => ev?.pubkey));
-  }, [issueId, options.nip65, store]);
-
-  // NIP-65: fetch inbox relays for the issue author when enabled.
-  // Zap receipts are sent to the recipient so they land on their inbox relays.
-  const issueAuthorInboxes = useNip65Relays(
-    issueAuthorPubkey ? [issueAuthorPubkey] : [],
-    options.nip65 ?? false,
-    "inbox",
-  );
-
-  // Add author inbox relays to the group — idempotent, no teardown.
-  useMemo(() => {
-    if (!group) return;
-    for (const url of issueAuthorInboxes) {
-      const relay = pool.relay(url);
-      if (!group.has(relay)) group.add(relay);
-    }
-  }, [group, issueAuthorInboxes.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const relays = group
-    ? [...new Set([...group.relays.map((r) => r.url), ...issueAuthorInboxes])]
-    : issueAuthorInboxes;
-  const filterKey = JSON.stringify({
-    issueId,
-    relays: relays.sort(),
-    type: "zaps",
-  });
-
-  // Trigger batched fetch via loader — events land in the store automatically
-  use$(() => {
-    if (!issueId) return undefined;
-    return nip34ThreadLoader({ value: issueId, relays });
-  }, [filterKey]);
-
-  // Read reactively from the store
   return use$(() => {
     if (!issueId) return undefined;
     const filters: Filter[] = [{ kinds: [9735], "#e": [issueId] } as Filter];
