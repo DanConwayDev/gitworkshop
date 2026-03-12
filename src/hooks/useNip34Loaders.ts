@@ -1,4 +1,5 @@
 import { use$ } from "./use$";
+import type { RelayGroup } from "applesauce-relay";
 import {
   nip34EssentialsLoader,
   nip34CommentsLoader,
@@ -25,12 +26,18 @@ import {
  * Read them back reactively with store.timeline() / use$.
  *
  * @param itemId  - The event ID of the issue / patch / PR
- * @param relays  - Relay URLs to query (typically the repo's relay list)
+ * @param group   - The repo's long-lived RelayGroup (from useResolvedRepository)
  */
 export function useNip34Loaders(
   itemId: string | undefined,
-  relays: string[],
+  group: RelayGroup | undefined,
 ): void {
+  // Extract relay URLs from the group for the loaders.
+  // The loaders accept a relay URL array; the group's relay list grows over
+  // time but the loaders are one-shot (complete on EOSE) so they only see
+  // the relays present at call time. This is acceptable — the group's
+  // subscription (opened by useIssues) handles live updates.
+  const relays = group?.relays.map((r) => r.url) ?? [];
   const relayKey = relays.join(",");
 
   // Tier 1 — one subscription for all essentials kinds

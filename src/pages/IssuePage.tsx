@@ -61,8 +61,9 @@ export default function IssuePage({
     }
   }, [npub]);
 
-  const repo = useResolvedRepository(pubkey, repoId);
-  const repoRelays = repo?.relays ?? [];
+  const resolved = useResolvedRepository(pubkey, repoId);
+  const repo = resolved?.repo;
+  const group = resolved?.group;
   const queryOptions: RepoQueryOptions = useMemo(
     () => ({
       relayHints,
@@ -72,23 +73,23 @@ export default function IssuePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [relayHints.join(","), repo?.maintainerSet?.join(",")],
   );
-  const effectiveRelays = [...repoRelays, ...relayHints];
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  const issueFilterKey = JSON.stringify({ issueId, effectiveRelays });
-
-  // Fetch the issue event itself. Use effectiveRelays when known; fall back to
-  // NGIT_RELAYS for initial discovery (same pattern as announcement fetching).
-  const issueFetchRelays =
-    effectiveRelays.length > 0 ? effectiveRelays : NGIT_RELAYS;
+  // Fetch the issue event itself via the group when available; fall back to
+  // NGIT_RELAYS for initial discovery before the group is ready.
   use$(() => {
     if (!issueId) return undefined;
     const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
+    if (group) {
+      return group
+        .subscription(issueFilters)
+        .pipe(onlyEvents(), mapEventsToStore(store));
+    }
     return pool
-      .subscription(issueFetchRelays, issueFilters)
+      .subscription(NGIT_RELAYS, issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [issueFilterKey, store]);
+  }, [issueId, group, store]);
 
   // Subscribe to store, cast to Issue
   const issues = use$(() => {
@@ -99,13 +100,13 @@ export default function IssuePage({
       .pipe(castTimelineStream(Issue, castStore)) as unknown as Observable<
       Issue[]
     >;
-  }, [issueFilterKey, store]);
+  }, [issueId, store]);
 
   const issue = issues?.[0];
 
-  const status = useIssueStatus(issueId, repoRelays, queryOptions);
-  const comments = useIssueComments(issueId, repoRelays, queryOptions);
-  const zaps = useIssueZaps(issueId, repoRelays, queryOptions);
+  const status = useIssueStatus(issueId, group, queryOptions);
+  const comments = useIssueComments(issueId, group, queryOptions);
+  const zaps = useIssueZaps(issueId, group, queryOptions);
 
   // Participants
   const participants = useMemo(() => {

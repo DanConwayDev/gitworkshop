@@ -74,7 +74,9 @@ export default function RepoPage({
   }, [npub]);
 
   const account = useActiveAccount();
-  const repo = useResolvedRepository(pubkey, repoId);
+  const resolved = useResolvedRepository(pubkey, repoId);
+  const repo = resolved?.repo;
+  const group = resolved?.group;
   const queryOptions: RepoQueryOptions = useMemo(
     () => ({
       relayHints,
@@ -86,7 +88,7 @@ export default function RepoPage({
   );
   const { issues, statusMap } = useIssues(
     repo?.allCoordinates,
-    repo?.relays ?? [],
+    group,
     queryOptions,
   );
 
@@ -421,8 +423,7 @@ export default function RepoPage({
                 status={statusMap.get(issue.id)?.status ?? "open"}
                 npub={npub!}
                 repoId={repoId!}
-                repoRelays={repo?.relays ?? []}
-                queryOptions={queryOptions}
+                group={group}
               />
             ))}
           </div>
@@ -446,23 +447,20 @@ function IssueRow({
   status,
   npub,
   repoId,
-  repoRelays,
-  queryOptions,
+  group,
 }: {
   issue: Issue;
   status: IssueStatus;
   npub: string;
   repoId: string;
-  repoRelays: string[];
-  queryOptions: RepoQueryOptions;
+  group: import("applesauce-relay").RelayGroup | undefined;
 }) {
   const timeAgo = formatDistanceToNow(issue.createdAt, { addSuffix: true });
 
   // Trigger two-tier loading for this issue. All IssueRow calls within the
   // same render cycle are batched by the loaders into a small number of relay
   // subscriptions (one per kind group, not one per issue).
-  const loaderRelays = [...repoRelays, ...queryOptions.relayHints];
-  useNip34Loaders(issue.id, loaderRelays);
+  useNip34Loaders(issue.id, group);
 
   return (
     <Link to={`/${npub}/${repoId}/${issue.id}`} className="group block">

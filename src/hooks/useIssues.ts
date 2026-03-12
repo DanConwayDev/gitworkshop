@@ -3,6 +3,7 @@ import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { includeMailboxes, mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import type { RelayGroup } from "applesauce-relay";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { castTimelineStream } from "applesauce-common/observable";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
@@ -66,29 +67,6 @@ import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 import { of } from "rxjs";
 import { map } from "rxjs/operators";
-
-/**
- * Build the effective relay list for repo-specific event queries.
- * Union of the repo's declared relays, relay hints from the URL/settings, and
- * any additional NIP-65 outbox relays (when nip65 is enabled).
- * Returns an empty array (no query) if neither is available — announcement
- * discovery via NGIT_RELAYS is handled separately in useResolvedRepository.
- */
-function buildRelays(
-  repoRelays: string[],
-  options: RepoQueryOptions,
-  extraRelays: string[] = [],
-): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const r of [...repoRelays, ...options.relayHints, ...extraRelays]) {
-    if (!seen.has(r)) {
-      seen.add(r);
-      result.push(r);
-    }
-  }
-  return result;
-}
 
 /**
  * Fetch NIP-65 relay URLs for a set of pubkeys and return them as a flat
@@ -162,7 +140,7 @@ function useNip65Relays(
  */
 export function useIssues(
   repoCoords: string | string[] | undefined,
-  repoRelays: string[],
+  group: RelayGroup | undefined,
   options: RepoQueryOptions,
 ): {
   issues: Issue[] | undefined;
@@ -171,16 +149,25 @@ export function useIssues(
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  // NIP-65: fetch outbox relays for all maintainers when enabled.
-  // These are additive on top of repoRelays + relayHints.
+  // NIP-65: fetch outbox relays for all maintainers when enabled and add them
+  // to the group. The group already contains repo-declared relays (added by
+  // useResolvedRepository). Outbox relays are additive — group.add() is
+  // idempotent so already-present relays are skipped.
   const maintainerOutboxes = useNip65Relays(
     options.nip65 ? (options.maintainerPubkeys ?? []) : [],
     options.nip65 ?? false,
     "outbox",
   );
 
-  const relays = buildRelays(repoRelays, options, maintainerOutboxes);
-  const relayKey = relays.join(",");
+  // Add newly-resolved outbox relays to the group without tearing down
+  // existing subscriptions.
+  useMemo(() => {
+    if (!group) return;
+    for (const url of maintainerOutboxes) {
+      const relay = pool.relay(url);
+      if (!group.has(relay)) group.add(relay);
+    }
+  }, [group, maintainerOutboxes.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Normalise to array for consistent filter building
   const coords = repoCoords
@@ -189,18 +176,22 @@ export function useIssues(
       : [repoCoords]
     : undefined;
 
-  const issueFilterKey = JSON.stringify({ coords, relayKey });
+  // The group instance is stable — use its identity as the dep key.
+  // coords changes when the maintainer set grows (new allCoordinates).
+  const coordKey = coords?.join(",") ?? "";
 
-  // Fetch issues from relay — one subscription covers all maintainer coords
+  // Fetch issues from relay via the long-lived group subscription.
+  // When new relays are added to the group, reverseSwitchMap + WeakMap cache
+  // opens a subscription only to the new relay — existing ones are untouched.
   use$(() => {
-    if (!coords || coords.length === 0) return undefined;
+    if (!coords || coords.length === 0 || !group) return undefined;
     const issueFilters: Filter[] = [
       { kinds: [ISSUE_KIND], "#a": coords } as Filter,
     ];
-    return pool
-      .subscription(relays, issueFilters)
+    return group
+      .subscription(issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [issueFilterKey, store]);
+  }, [coordKey, group, store]);
 
   // Subscribe to issues in store, cast to Issue instances
   const issues = use$(() => {
@@ -213,20 +204,18 @@ export function useIssues(
       .pipe(castTimelineStream(Issue, castStore)) as unknown as Observable<
       Issue[]
     >;
-  }, [issueFilterKey, store]);
+  }, [coordKey, store]);
 
-  const statusFilterKey = JSON.stringify({ coords, relayKey, type: "status" });
-
-  // Fetch statuses from relay
+  // Fetch statuses from relay via the same group
   use$(() => {
-    if (!coords || coords.length === 0) return undefined;
+    if (!coords || coords.length === 0 || !group) return undefined;
     const statusFilters: Filter[] = [
       { kinds: [...STATUS_KINDS], "#a": coords } as Filter,
     ];
-    return pool
-      .subscription(relays, statusFilters)
+    return group
+      .subscription(statusFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [statusFilterKey, store]);
+  }, [coordKey, group, store]);
 
   // Subscribe to statuses in store
   const statusEvents = use$(() => {
@@ -235,7 +224,7 @@ export function useIssues(
       { kinds: [...STATUS_KINDS], "#a": coords } as Filter,
     ];
     return store.timeline(statusFilters) as unknown as Observable<NostrEvent[]>;
-  }, [statusFilterKey, store]);
+  }, [coordKey, store]);
 
   // Build status map: issueId -> latest status
   // Memoized so it's only recomputed when statusEvents changes
@@ -286,7 +275,7 @@ export function useIssues(
  */
 export function useIssueComments(
   issueId: string | undefined,
-  repoRelays: string[],
+  group: RelayGroup | undefined,
   options: RepoQueryOptions,
 ): NostrEvent[] | undefined {
   const store = useEventStore();
@@ -306,8 +295,25 @@ export function useIssueComments(
     "inbox",
   );
 
-  const relays = buildRelays(repoRelays, options, issueAuthorInboxes);
-  const filterKey = JSON.stringify({ issueId, relays, type: "comments" });
+  // Add author inbox relays to the group — idempotent, no teardown.
+  useMemo(() => {
+    if (!group) return;
+    for (const url of issueAuthorInboxes) {
+      const relay = pool.relay(url);
+      if (!group.has(relay)) group.add(relay);
+    }
+  }, [group, issueAuthorInboxes.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Relay list for the loader: group's current relays + any inbox relays
+  // (group may not yet contain inbox relays if add() just fired this render)
+  const relays = group
+    ? [...new Set([...group.relays.map((r) => r.url), ...issueAuthorInboxes])]
+    : issueAuthorInboxes;
+  const filterKey = JSON.stringify({
+    issueId,
+    relays: relays.sort(),
+    type: "comments",
+  });
 
   // Trigger batched fetch via loader — events land in the store automatically
   use$(() => {
@@ -322,7 +328,7 @@ export function useIssueComments(
       { kinds: [COMMENT_KIND], "#E": [issueId] } as Filter,
     ];
     return store.timeline(filters) as unknown as Observable<NostrEvent[]>;
-  }, [filterKey, store]);
+  }, [issueId, store]);
 }
 
 /**
@@ -340,7 +346,7 @@ export function useIssueComments(
  */
 export function useIssueStatus(
   issueId: string | undefined,
-  repoRelays: string[],
+  group: RelayGroup | undefined,
   options: RepoQueryOptions,
 ): IssueStatus {
   const store = useEventStore();
@@ -353,19 +359,25 @@ export function useIssueStatus(
     "outbox",
   );
 
-  const relays = buildRelays(repoRelays, options, maintainerOutboxes);
-  const filterKey = JSON.stringify({ issueId, relays, type: "issueStatus" });
+  // Add outbox relays to the group — idempotent, no teardown.
+  useMemo(() => {
+    if (!group) return;
+    for (const url of maintainerOutboxes) {
+      const relay = pool.relay(url);
+      if (!group.has(relay)) group.add(relay);
+    }
+  }, [group, maintainerOutboxes.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch from relay
+  // Fetch from relay via the long-lived group
   use$(() => {
-    if (!issueId) return undefined;
+    if (!issueId || !group) return undefined;
     const filters: Filter[] = [
       { kinds: [...STATUS_KINDS], "#e": [issueId] } as Filter,
     ];
-    return pool
-      .subscription(relays, filters)
+    return group
+      .subscription(filters)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [filterKey, store]);
+  }, [issueId, group, store]);
 
   // Subscribe to store
   const events = use$(() => {
@@ -374,7 +386,7 @@ export function useIssueStatus(
       { kinds: [...STATUS_KINDS], "#e": [issueId] } as Filter,
     ];
     return store.timeline(filters) as unknown as Observable<NostrEvent[]>;
-  }, [filterKey, store]);
+  }, [issueId, store]);
 
   if (!events || events.length === 0) return "open";
   const sorted = [...events].sort((a, b) => b.created_at - a.created_at);
@@ -398,7 +410,7 @@ export function useIssueStatus(
  */
 export function useIssueZaps(
   issueId: string | undefined,
-  repoRelays: string[],
+  group: RelayGroup | undefined,
   options: RepoQueryOptions,
 ): NostrEvent[] | undefined {
   const store = useEventStore();
@@ -417,8 +429,23 @@ export function useIssueZaps(
     "inbox",
   );
 
-  const relays = buildRelays(repoRelays, options, issueAuthorInboxes);
-  const filterKey = JSON.stringify({ issueId, relays, type: "zaps" });
+  // Add author inbox relays to the group — idempotent, no teardown.
+  useMemo(() => {
+    if (!group) return;
+    for (const url of issueAuthorInboxes) {
+      const relay = pool.relay(url);
+      if (!group.has(relay)) group.add(relay);
+    }
+  }, [group, issueAuthorInboxes.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const relays = group
+    ? [...new Set([...group.relays.map((r) => r.url), ...issueAuthorInboxes])]
+    : issueAuthorInboxes;
+  const filterKey = JSON.stringify({
+    issueId,
+    relays: relays.sort(),
+    type: "zaps",
+  });
 
   // Trigger batched fetch via loader — events land in the store automatically
   use$(() => {
@@ -431,5 +458,5 @@ export function useIssueZaps(
     if (!issueId) return undefined;
     const filters: Filter[] = [{ kinds: [9735], "#e": [issueId] } as Filter];
     return store.timeline(filters) as unknown as Observable<NostrEvent[]>;
-  }, [filterKey, store]);
+  }, [issueId, store]);
 }
