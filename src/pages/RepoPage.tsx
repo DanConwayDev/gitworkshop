@@ -67,7 +67,8 @@ export default function RepoPage() {
 
   const account = useActiveAccount();
   const repo = useResolvedRepository(pubkey, repoId);
-  const { issues, statusMap } = useIssues(repo?.allCoordinates);
+  const relays = repo?.relays.length ? repo.relays : NGIT_RELAYS;
+  const { issues, statusMap } = useIssues(repo?.allCoordinates, relays);
 
   // New issue dialog
   const [newIssueOpen, setNewIssueOpen] = useState(false);
@@ -400,6 +401,7 @@ export default function RepoPage() {
                 status={statusMap.get(issue.id)?.status ?? "open"}
                 npub={npub!}
                 repoId={repoId!}
+                relays={relays}
               />
             ))}
           </div>
@@ -423,18 +425,20 @@ function IssueRow({
   status,
   npub,
   repoId,
+  relays,
 }: {
   issue: Issue;
   status: IssueStatus;
   npub: string;
   repoId: string;
+  relays: string[];
 }) {
   const timeAgo = formatDistanceToNow(issue.createdAt, { addSuffix: true });
 
   // Trigger two-tier loading for this issue. All IssueRow calls within the
   // same render cycle are batched by the loaders into a small number of relay
   // subscriptions (one per kind group, not one per issue).
-  useNip34Loaders(issue.id, NGIT_RELAYS);
+  useNip34Loaders(issue.id, relays);
 
   return (
     <Link to={`/${npub}/${repoId}/${issue.id}`} className="group block">

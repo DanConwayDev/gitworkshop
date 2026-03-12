@@ -19,6 +19,11 @@ import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
+/** Resolve relay list: use repo relays when available, fall back to NGIT_RELAYS */
+function resolveRelays(relays: string[] | undefined): string[] {
+  return relays && relays.length > 0 ? relays : NGIT_RELAYS;
+}
+
 /**
  * Fetch issues for a repository.
  *
@@ -27,13 +32,22 @@ import type { Observable } from "rxjs";
  * ensures issues tagged against any co-maintainer's announcement are included.
  *
  * Also fetches status events so we can determine current status.
+ *
+ * @param repoCoords - Coordinate string(s) for the repository
+ * @param repoRelays - Relay URLs from the ResolvedRepo; falls back to NGIT_RELAYS
  */
-export function useIssues(repoCoords: string | string[] | undefined): {
+export function useIssues(
+  repoCoords: string | string[] | undefined,
+  repoRelays?: string[],
+): {
   issues: Issue[] | undefined;
   statusMap: Map<string, { status: IssueStatus; event: NostrEvent }>;
 } {
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
+
+  const relays = resolveRelays(repoRelays);
+  const relayKey = relays.join(",");
 
   // Normalise to array for consistent filter building
   const coords = repoCoords
@@ -42,7 +56,7 @@ export function useIssues(repoCoords: string | string[] | undefined): {
       : [repoCoords]
     : undefined;
 
-  const issueFilterKey = JSON.stringify(coords);
+  const issueFilterKey = JSON.stringify({ coords, relayKey });
 
   // Fetch issues from relay — one subscription covers all maintainer coords
   use$(() => {
@@ -51,7 +65,7 @@ export function useIssues(repoCoords: string | string[] | undefined): {
       { kinds: [ISSUE_KIND], "#a": coords } as Filter,
     ];
     return pool
-      .req(NGIT_RELAYS, issueFilters)
+      .req(relays, issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [issueFilterKey, store]);
 
@@ -68,7 +82,7 @@ export function useIssues(repoCoords: string | string[] | undefined): {
     >;
   }, [issueFilterKey, store]);
 
-  const statusFilterKey = JSON.stringify({ coords, type: "status" });
+  const statusFilterKey = JSON.stringify({ coords, relayKey, type: "status" });
 
   // Fetch statuses from relay
   use$(() => {
@@ -77,7 +91,7 @@ export function useIssues(repoCoords: string | string[] | undefined): {
       { kinds: [...STATUS_KINDS], "#a": coords } as Filter,
     ];
     return pool
-      .req(NGIT_RELAYS, statusFilters)
+      .req(relays, statusFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [statusFilterKey, store]);
 
@@ -117,18 +131,23 @@ export function useIssues(repoCoords: string | string[] | undefined): {
  * Fetch comments (NIP-22 kind:1111) for a specific issue.
  * Uses the batched commentsLoader so all per-issue calls are combined into
  * a single relay subscription rather than one request per issue.
+ *
+ * @param issueId  - The event ID of the issue
+ * @param repoRelays - Relay URLs from the ResolvedRepo; falls back to NGIT_RELAYS
  */
 export function useIssueComments(
   issueId: string | undefined,
+  repoRelays?: string[],
 ): NostrEvent[] | undefined {
   const store = useEventStore();
 
-  const filterKey = JSON.stringify({ issueId, type: "comments" });
+  const relays = resolveRelays(repoRelays);
+  const filterKey = JSON.stringify({ issueId, relays, type: "comments" });
 
   // Trigger batched fetch via loader — events land in the store automatically
   use$(() => {
     if (!issueId) return undefined;
-    return nip34CommentsLoader({ value: issueId, relays: NGIT_RELAYS });
+    return nip34CommentsLoader({ value: issueId, relays });
   }, [filterKey]);
 
   // Read reactively from the store
@@ -144,11 +163,18 @@ export function useIssueComments(
 /**
  * Fetch status events for a specific issue.
  * Returns the latest status.
+ *
+ * @param issueId  - The event ID of the issue
+ * @param repoRelays - Relay URLs from the ResolvedRepo; falls back to NGIT_RELAYS
  */
-export function useIssueStatus(issueId: string | undefined): IssueStatus {
+export function useIssueStatus(
+  issueId: string | undefined,
+  repoRelays?: string[],
+): IssueStatus {
   const store = useEventStore();
 
-  const filterKey = JSON.stringify({ issueId, type: "issueStatus" });
+  const relays = resolveRelays(repoRelays);
+  const filterKey = JSON.stringify({ issueId, relays, type: "issueStatus" });
 
   // Fetch from relay
   use$(() => {
@@ -157,7 +183,7 @@ export function useIssueStatus(issueId: string | undefined): IssueStatus {
       { kinds: [...STATUS_KINDS], "#e": [issueId] } as Filter,
     ];
     return pool
-      .req(NGIT_RELAYS, filters)
+      .req(relays, filters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [filterKey, store]);
 
@@ -179,18 +205,23 @@ export function useIssueStatus(issueId: string | undefined): IssueStatus {
  * Fetch zap receipts (kind 9735) for a specific issue.
  * Uses the batched issueZapsLoader so all per-issue calls are combined into
  * a single relay subscription rather than one request per issue.
+ *
+ * @param issueId  - The event ID of the issue
+ * @param repoRelays - Relay URLs from the ResolvedRepo; falls back to NGIT_RELAYS
  */
 export function useIssueZaps(
   issueId: string | undefined,
+  repoRelays?: string[],
 ): NostrEvent[] | undefined {
   const store = useEventStore();
 
-  const filterKey = JSON.stringify({ issueId, type: "zaps" });
+  const relays = resolveRelays(repoRelays);
+  const filterKey = JSON.stringify({ issueId, relays, type: "zaps" });
 
   // Trigger batched fetch via loader — events land in the store automatically
   use$(() => {
     if (!issueId) return undefined;
-    return nip34ThreadLoader({ value: issueId, relays: NGIT_RELAYS });
+    return nip34ThreadLoader({ value: issueId, relays });
   }, [filterKey]);
 
   // Read reactively from the store

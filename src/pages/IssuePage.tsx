@@ -11,7 +11,7 @@ import {
   useIssueStatus,
   useIssueZaps,
 } from "@/hooks/useIssues";
-import { useRepository } from "@/hooks/useRepositories";
+import { useResolvedRepository } from "@/hooks/useResolvedRepository";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
@@ -57,18 +57,19 @@ export default function IssuePage() {
     }
   }, [npub]);
 
-  const repo = useRepository(pubkey, repoId);
+  const repo = useResolvedRepository(pubkey, repoId);
+  const relays = repo?.relays.length ? repo.relays : NGIT_RELAYS;
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  const issueFilterKey = JSON.stringify(issueId);
+  const issueFilterKey = JSON.stringify({ issueId, relays });
 
   // Fetch from relay
   use$(() => {
     if (!issueId) return undefined;
     const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
     return pool
-      .req(NGIT_RELAYS, issueFilters)
+      .req(relays, issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [issueFilterKey, store]);
 
@@ -85,9 +86,9 @@ export default function IssuePage() {
 
   const issue = issues?.[0];
 
-  const status = useIssueStatus(issueId);
-  const comments = useIssueComments(issueId);
-  const zaps = useIssueZaps(issueId);
+  const status = useIssueStatus(issueId, relays);
+  const comments = useIssueComments(issueId, relays);
+  const zaps = useIssueZaps(issueId, relays);
 
   // Participants
   const participants = useMemo(() => {

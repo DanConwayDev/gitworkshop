@@ -12,15 +12,18 @@ import type { Observable } from "rxjs";
  * Fetch and reactively resolve a single repository by selected maintainer
  * pubkey + d-tag.
  *
- * Layer 1: fetch the selected maintainer's announcement from the relay.
- *          The EventStore's addressLoader (wired in nostr.ts) will
- *          automatically fetch any co-maintainer announcements that the
- *          RepositoryModel subscribes to but aren't in the store yet.
+ * Layer 1: fetch the selected maintainer's announcement from NGIT_RELAYS.
  *
  * Layer 2: RepositoryModel — reactive BFS chain resolution. Emits a new
  *          ResolvedRepo whenever any announcement in the chain changes.
  *          Cached by the store — multiple components on the same page share
  *          one model instance.
+ *
+ * Layer 3: once the ResolvedRepo is known, re-query the repo's own declared
+ *          relays for ALL maintainer announcements. This ensures co-maintainer
+ *          announcements that only exist on repo-specific relays (not on
+ *          NGIT_RELAYS) are discovered and the chain fully resolves.
+ *          Re-runs whenever the relay list or maintainer set grows.
  */
 export function useResolvedRepository(
   pubkey: string | undefined,
@@ -30,8 +33,6 @@ export function useResolvedRepository(
   const key = `${pubkey}:${dTag}`;
 
   // Layer 1: seed the store with the selected maintainer's announcement.
-  // The RepositoryModel will subscribe to co-maintainer announcements via
-  // store.addressable(), which triggers the addressLoader for missing ones.
   use$(() => {
     if (!pubkey || !dTag) return undefined;
     const filter: Filter[] = [
@@ -43,10 +44,32 @@ export function useResolvedRepository(
   }, [key, store]);
 
   // Layer 2: subscribe to the model.
-  return use$(() => {
+  const repo = use$(() => {
     if (!pubkey || !dTag) return undefined;
     return store.model(RepositoryModel, pubkey, dTag) as unknown as Observable<
       ResolvedRepo | undefined
     >;
   }, [key, store]);
+
+  // Layer 3: once we know the repo's own relay list, query those relays for
+  // all maintainer announcements. The dep key includes both the relay list and
+  // the maintainer set so this re-fires whenever either grows (e.g. a newly
+  // discovered maintainer lists yet another relay).
+  const repoRelayKey = repo?.relays.join(",") ?? "";
+  const maintainerKey = repo?.maintainerSet.join(",") ?? "";
+  use$(() => {
+    if (!dTag || !repo || repo.relays.length === 0) return undefined;
+    const filter: Filter[] = [
+      {
+        kinds: [REPO_KIND],
+        authors: repo.maintainerSet,
+        "#d": [dTag],
+      } as Filter,
+    ];
+    return pool
+      .req(repo.relays, filter)
+      .pipe(onlyEvents(), mapEventsToStore(store));
+  }, [dTag, repoRelayKey, maintainerKey, store]);
+
+  return repo;
 }
