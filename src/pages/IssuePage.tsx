@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { Issue } from "@/casts/Issue";
 import { ISSUE_KIND } from "@/lib/nip34";
-import { gitIndexRelays } from "@/services/settings";
+import { gitIndexRelays, relayCurationMode } from "@/services/settings";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
@@ -62,26 +62,34 @@ export default function IssuePage() {
 
   const resolved = useResolvedRepository(pubkey, repoId);
   const repo = resolved?.repo;
+  const repoRelayGroup = resolved?.repoRelayGroup;
   const repoRelayAndMaintainerMailboxGroup =
     resolved?.repoRelayAndMaintainerMailboxGroup;
+
+  // Respect the user's relay curation preference.
+  const curationMode = use$(relayCurationMode);
+  const activeRelayGroup =
+    curationMode === "outbox"
+      ? repoRelayAndMaintainerMailboxGroup
+      : repoRelayGroup;
+
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  // Fetch the issue event itself via the mailbox group when available (best
-  // coverage); fall back to NGIT_RELAYS for initial discovery before the
-  // group is ready.
+  // Fetch the issue event itself via the active relay group when available;
+  // fall back to NGIT_RELAYS for initial discovery before the group is ready.
   use$(() => {
     if (!issueId) return undefined;
     const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
-    if (repoRelayAndMaintainerMailboxGroup) {
-      return repoRelayAndMaintainerMailboxGroup
+    if (activeRelayGroup) {
+      return activeRelayGroup
         .subscription(issueFilters)
         .pipe(onlyEvents(), mapEventsToStore(store));
     }
     return pool
       .subscription(gitIndexRelays.getValue(), issueFilters)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [issueId, repoRelayAndMaintainerMailboxGroup, store]);
+  }, [issueId, activeRelayGroup, store]);
 
   // Subscribe to store, cast to Issue
   const issues = use$(() => {
@@ -96,10 +104,12 @@ export default function IssuePage() {
 
   const issue = issues?.[0];
 
-  // Trigger two-tier loading for this issue. Pass the mailbox group so the
-  // author inbox delta is computed relative to the full maintainer relay set.
-  useNip34Loaders(issueId, repoRelayAndMaintainerMailboxGroup, {
-    includeAuthorNip65: true,
+  // Trigger two-tier loading for this issue.
+  // In outbox mode, pass the mailbox group and enable author NIP-65 inbox
+  // fetching for maximum completeness. In repo mode, use the base relay group
+  // and skip per-author inbox queries.
+  useNip34Loaders(issueId, activeRelayGroup, {
+    includeAuthorNip65: curationMode === "outbox",
   });
 
   const status = useIssueStatus(issueId);

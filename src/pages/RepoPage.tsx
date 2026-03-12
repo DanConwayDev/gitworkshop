@@ -53,6 +53,7 @@ import {
 } from "@/lib/nip34";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
 import type { Issue } from "@/casts/Issue";
+import { relayCurationMode } from "@/services/settings";
 
 export default function RepoPage({
   relayHints = [],
@@ -76,22 +77,29 @@ export default function RepoPage({
   const account = useActiveAccount();
   const resolved = useResolvedRepository(pubkey, repoId);
   const repo = resolved?.repo;
+  const repoRelayGroup = resolved?.repoRelayGroup;
   const repoRelayAndMaintainerMailboxGroup =
     resolved?.repoRelayAndMaintainerMailboxGroup;
+
+  // Respect the user's relay curation preference.
+  const curationMode = use$(relayCurationMode);
+  const activeRelayGroup =
+    curationMode === "outbox"
+      ? repoRelayAndMaintainerMailboxGroup
+      : repoRelayGroup;
+
   const queryOptions: RepoQueryOptions = useMemo(
     () => ({
       relayHints,
-      nip65: true,
+      nip65: curationMode === "outbox",
       maintainerPubkeys: repo?.maintainerSet ?? [],
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [relayHints.join(","), repo?.maintainerSet?.join(",")],
+    [relayHints.join(","), repo?.maintainerSet?.join(","), curationMode],
   );
-  // nip65 is enabled — pass the mailbox group so issues are fetched from
-  // maintainer outbox + inbox relays in addition to repo-declared relays.
   const { issues, statusMap, labelsMap } = useIssues(
     repo?.allCoordinates,
-    repoRelayAndMaintainerMailboxGroup,
+    activeRelayGroup,
     queryOptions,
   );
 
@@ -443,7 +451,7 @@ export default function RepoPage({
                 extraLabels={labelsMap.get(issue.id) ?? []}
                 npub={npub!}
                 repoId={repoId!}
-                repoRelayGroup={repoRelayAndMaintainerMailboxGroup}
+                repoRelayGroup={activeRelayGroup}
               />
             ))}
           </div>

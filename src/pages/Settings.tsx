@@ -1,3 +1,4 @@
+import type React from "react";
 import {
   Card,
   CardContent,
@@ -7,7 +8,13 @@ import {
 } from "@/components/ui/card";
 import { RelayItem } from "@/components/RelayItem";
 import { NewRelayForm } from "@/components/NewRelayForm";
-import { extraRelays, gitIndexRelays, lookupRelays } from "@/services/settings";
+import {
+  extraRelays,
+  gitIndexRelays,
+  lookupRelays,
+  relayCurationMode,
+  type RelayCurationMode,
+} from "@/services/settings";
 import { use$ } from "@/hooks/use$";
 import { useAccount } from "@/hooks/useAccount";
 import { useUser } from "@/hooks/useUser";
@@ -18,6 +25,84 @@ import {
   RemoveOutboxRelay,
 } from "applesauce-actions/actions/mailboxes";
 import { runner } from "@/services/actions";
+import { cn } from "@/lib/utils";
+import { Shield, Globe } from "lucide-react";
+
+const CURATION_OPTIONS: {
+  value: RelayCurationMode;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}[] = [
+  {
+    value: "repo",
+    icon: <Shield className="h-5 w-5" />,
+    title: "Curated",
+    description:
+      "Only events from relays declared in the repository announcement are shown. Maintainers control what appears — spam-resistant and predictable.",
+  },
+  {
+    value: "outbox",
+    icon: <Globe className="h-5 w-5" />,
+    title: "Uncensored",
+    description:
+      "Events are fetched from every maintainer's NIP-65 outbox and inbox relays in addition to the repo's declared relays. Nothing is filtered out by relay selection.",
+  },
+];
+
+function RelayCurationSection() {
+  const mode = use$(relayCurationMode);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Event Fetching Strategy</CardTitle>
+        <CardDescription>
+          Controls which relays are queried when loading issues, patches, and
+          comments for a repository.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {CURATION_OPTIONS.map((opt) => {
+            const selected = mode === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => relayCurationMode.next(opt.value)}
+                className={cn(
+                  "relative flex flex-col gap-2 rounded-lg border p-4 text-left transition-all duration-150",
+                  "hover:border-violet-500/50 hover:bg-violet-500/5",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500",
+                  selected
+                    ? "border-violet-500 bg-violet-500/5 shadow-sm shadow-violet-500/10"
+                    : "border-border bg-background",
+                )}
+              >
+                {selected && (
+                  <span className="absolute top-3 right-3 h-2 w-2 rounded-full bg-violet-500" />
+                )}
+                <span
+                  className={cn(
+                    "transition-colors",
+                    selected ? "text-violet-500" : "text-muted-foreground",
+                  )}
+                >
+                  {opt.icon}
+                </span>
+                <span className="font-semibold text-sm">{opt.title}</span>
+                <span className="text-xs text-muted-foreground leading-relaxed">
+                  {opt.description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function DiscoveryRelaysSection() {
   const lookupRelaysList = use$(lookupRelays);
@@ -203,6 +288,7 @@ export default function Settings() {
         </p>
       </div>
 
+      <RelayCurationSection />
       <DiscoveryRelaysSection />
       <OutboxRelaysSection />
       <InboxRelaysSection />

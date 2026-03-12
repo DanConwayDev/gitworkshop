@@ -87,3 +87,25 @@ export const gitIndexRelays = new BehaviorSubject<string[]>(
 
 // Persist the git index relays to localStorage
 persist(gitIndexRelays, "gitIndexRelays");
+
+/**
+ * Relay curation mode.
+ *
+ * - "repo"   (default): Repo Relay Event Curation — only query the relays
+ *   declared in the repository announcement plus maintainer mailbox relays
+ *   discovered via the repo's own relay list. Keeps traffic focused and
+ *   predictable.
+ *
+ * - "outbox": Full Nostr Outbox Model — additionally follows each maintainer's
+ *   NIP-65 outbox and inbox relays when fetching issues, patches, and comments.
+ *   More complete but generates more relay connections.
+ */
+export type RelayCurationMode = "repo" | "outbox";
+
+export const relayCurationMode = new BehaviorSubject<RelayCurationMode>("repo");
+
+// Persist the relay curation mode to localStorage
+persist(relayCurationMode, "relayCurationMode", {
+  serialize: (v) => v,
+  deserialize: (v) => (v === "outbox" ? "outbox" : "repo"),
+});
