@@ -34,32 +34,20 @@ export function useNip34Loaders(
   const relayKey = relays.join(",");
 
   // Tier 1 — one subscription for all essentials kinds
-  use$(
-    () => {
-      if (!itemId) return undefined;
-      return nip34EssentialsLoader({ value: itemId, relays });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [itemId, relayKey],
-  );
+  use$(() => {
+    if (!itemId) return undefined;
+    return nip34EssentialsLoader({ value: itemId, relays });
+  }, [itemId, relayKey]);
 
   // Tier 2 — comments (uppercase E tag, separate loader)
-  use$(
-    () => {
-      if (!itemId) return undefined;
-      return nip34CommentsLoader({ value: itemId, relays });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [itemId, relayKey],
-  );
+  use$(() => {
+    if (!itemId) return undefined;
+    return nip34CommentsLoader({ value: itemId, relays });
+  }, [itemId, relayKey]);
 
   // Tier 2 — reactions + zaps (lowercase e tag, shared loader)
-  use$(
-    () => {
-      if (!itemId) return undefined;
-      return nip34ThreadLoader({ value: itemId, relays });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [itemId, relayKey],
-  );
+  use$(() => {
+    if (!itemId) return undefined;
+    return nip34ThreadLoader({ value: itemId, relays });
+  }, [itemId, relayKey]);
 }

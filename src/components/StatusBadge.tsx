@@ -1,12 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { IssueStatus } from "@/lib/nip34";
-import {
-  CircleDot,
-  CheckCircle2,
-  XCircle,
-  FileEdit,
-} from "lucide-react";
+import { CircleDot, CheckCircle2, XCircle, FileEdit } from "lucide-react";
 
 const statusConfig: Record<
   IssueStatus,

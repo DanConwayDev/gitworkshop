@@ -38,3 +38,6 @@ global.ResizeObserver = vi.fn().mockImplementation((_callback) => ({
   unobserve: vi.fn(),
   disconnect: vi.fn(),
 }));
+
+// Polyfill IndexedDB for jsdom — required by nostr-idb / window.nostrdb.js
+import "fake-indexeddb/auto";

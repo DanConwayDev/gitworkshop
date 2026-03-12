@@ -48,7 +48,6 @@ import {
 } from "lucide-react";
 import { NGIT_RELAYS, COMMENT_KIND, type IssueStatus } from "@/lib/nip34";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
-import type { Observable } from "rxjs";
 import type { Issue } from "@/casts/Issue";
 
 export default function RepoPage() {

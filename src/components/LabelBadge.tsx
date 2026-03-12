@@ -31,7 +31,12 @@ interface LabelBadgeProps {
   active?: boolean;
 }
 
-export function LabelBadge({ label, className, onClick, active }: LabelBadgeProps) {
+export function LabelBadge({
+  label,
+  className,
+  onClick,
+  active,
+}: LabelBadgeProps) {
   return (
     <Badge
       variant="outline"

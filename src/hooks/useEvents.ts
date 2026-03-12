@@ -58,11 +58,13 @@ export function useEvents(
 
   const events = use$(
     () =>
-      pool.req(relays, filters).pipe(
-        onlyEvents(),
-        mapEventsToStore(store),
-        mapEventsToTimeline(),
-      ) as unknown as import("rxjs").Observable<NostrEvent[]>,
+      pool
+        .req(relays, filters)
+        .pipe(
+          onlyEvents(),
+          mapEventsToStore(store),
+          mapEventsToTimeline(),
+        ) as unknown as import("rxjs").Observable<NostrEvent[]>,
     [relayKey, filterKey, store],
   );
 

@@ -12,7 +12,7 @@ import {
   useIssueZaps,
 } from "@/hooks/useIssues";
 import { useRepository } from "@/hooks/useRepositories";
-import { UserAvatar, UserName, UserLink } from "@/components/UserAvatar";
+import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { Skeleton } from "@/components/ui/skeleton";

@@ -10,10 +10,7 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 max-w-screen-xl items-center justify-between px-4 md:px-8">
-        <Link
-          to="/"
-          className="flex items-center gap-2.5 group transition-all"
-        >
+        <Link to="/" className="flex items-center gap-2.5 group transition-all">
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-lg blur-sm opacity-50 group-hover:opacity-75 transition-opacity" />
             <div className="relative bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-lg p-1.5">
