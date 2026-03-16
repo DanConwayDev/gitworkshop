@@ -249,6 +249,14 @@ export interface ResolvedIssue {
    * fetched zap events into the store.
    */
   zapCount: number;
+  /**
+   * The set of pubkeys authorised to write status, label, and subject-rename
+   * events for this issue. Includes the issue author and all maintainers.
+   *
+   * Convenience property so consumers (e.g. edit buttons) can check
+   * authorisation without independently reconstructing the maintainer set.
+   */
+  authorisedUsers: Set<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -511,6 +519,10 @@ export function buildResolvedIssues(
     const comments = commentsByRoot.get(ev.id) ?? [];
     const participantPubkeys = new Set(comments.map((c) => c.pubkey));
 
+    // Build the authorised set: issue author + all maintainers.
+    const authorisedUsers = new Set(maintainerSet);
+    authorisedUsers.add(ev.pubkey);
+
     return {
       id: ev.id,
       pubkey: ev.pubkey,
@@ -528,6 +540,7 @@ export function buildResolvedIssues(
       commentCount: comments.length,
       participantCount: participantPubkeys.size,
       zapCount: zapsByRoot.get(ev.id) ?? 0,
+      authorisedUsers,
     };
   });
 }

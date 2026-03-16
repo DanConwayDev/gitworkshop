@@ -48,3 +48,33 @@ export function IssueLabelBlueprint(issueId: string, labels: string[]) {
     ]),
   );
 }
+
+/** The label namespace used for subject-rename events (NIP-32 `#subject`). */
+export const SUBJECT_RENAME_NAMESPACE = "#subject";
+
+/**
+ * Blueprint for renaming an issue's subject via NIP-32 (kind 1985).
+ *
+ * Publishes a label event with the `#subject` namespace. The latest such
+ * event from an authorised author becomes the issue's effective subject.
+ *
+ * @param issueId    - Hex event ID of the issue being renamed
+ * @param newSubject - The new subject/title string
+ */
+export function IssueSubjectRenameBlueprint(
+  issueId: string,
+  newSubject: string,
+) {
+  return blueprint(
+    LABEL_KIND,
+    modifyPublicTags((tags) => [
+      ...tags,
+      // Reference the target issue
+      ["e", issueId],
+      // Declare the namespace
+      ["L", SUBJECT_RENAME_NAMESPACE],
+      // The new subject as a label in the #subject namespace
+      ["l", newSubject, SUBJECT_RENAME_NAMESPACE],
+    ]),
+  );
+}

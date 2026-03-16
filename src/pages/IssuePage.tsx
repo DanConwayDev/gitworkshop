@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
+import { useActiveAccount } from "applesauce-react/hooks";
 import { nip19 } from "nostr-tools";
 import { formatDistanceToNow, format } from "date-fns";
 import { MarkdownContent } from "@/components/MarkdownContent";
+import { EditableSubject } from "@/components/EditSubjectInline";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import {
@@ -154,6 +156,17 @@ export default function IssuePage() {
     subjectRenames,
   );
 
+  // Authorisation: can the logged-in user edit the subject?
+  const activeAccount = useActiveAccount();
+  const canEditSubject = useMemo(() => {
+    if (!activeAccount || !issue) return false;
+    const pk = activeAccount.pubkey;
+    // Issue author is always authorised.
+    if (pk === issue.pubkey) return true;
+    // Maintainers are authorised.
+    return selectedMaintainers?.has(pk) ?? false;
+  }, [activeAccount, issue, selectedMaintainers]);
+
   // Merge labels from the issue's own t-tags with any NIP-32 label events.
   // Deduplicated and sorted for stable rendering.
   const allLabels = useMemo(() => {
@@ -251,9 +264,11 @@ export default function IssuePage() {
             <div>
               <div className="flex items-start gap-3 mb-3">
                 <StatusBadge status={status} className="mt-1" />
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-                  {currentSubject || issue.subject}
-                </h1>
+                <EditableSubject
+                  issueId={issue.id}
+                  currentSubject={currentSubject || issue.subject}
+                  canEdit={canEditSubject}
+                />
               </div>
 
               <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground ml-[calc(theme(spacing.3)+4.5rem-3.5rem)]">
