@@ -372,7 +372,7 @@ export default function IssuePage() {
                   <ChangeStatusDropdown
                     itemId={issue.id}
                     itemAuthorPubkey={issue.pubkey}
-                    repoCoord={issue.repoCoord ?? ""}
+                    repoCoords={issue.repoCoords}
                     currentStatus={status}
                     options={[
                       { value: "open", label: "Open" },

@@ -25,8 +25,9 @@ interface ChangeStatusDropdownProps {
   itemId: string;
   /** Pubkey of the issue/PR author (for p-tag notifications) */
   itemAuthorPubkey: string;
-  /** Repository coordinate "30617:<owner-pubkey>:<repo-id>" (for a-tag and p-tag) */
-  repoCoord: string;
+  /** All repository coordinates from the item's `a` tags ("30617:<owner-pubkey>:<repo-id>").
+   *  One `a` tag and one `p` tag (for the owner) will be emitted per coordinate. */
+  repoCoords: string[];
   /** The current status (used to exclude it from the options) */
   currentStatus: IssueStatus;
   /** Available status options to show */
@@ -42,7 +43,7 @@ interface ChangeStatusDropdownProps {
 export function ChangeStatusDropdown({
   itemId,
   itemAuthorPubkey,
-  repoCoord,
+  repoCoords,
   currentStatus,
   options,
   relays,
@@ -69,8 +70,9 @@ export function ChangeStatusDropdown({
           StatusChangeBlueprint,
           statusKind,
           itemId,
-          repoCoord,
+          repoCoords,
           itemAuthorPubkey,
+          account.pubkey,
         );
         const signed = await factory.sign(template);
         const publishRelays = [...gitIndexRelays.getValue(), ...(relays ?? [])];
@@ -92,7 +94,7 @@ export function ChangeStatusDropdown({
         setIsPending(false);
       }
     },
-    [account, itemId, itemAuthorPubkey, repoCoord, relays, toast],
+    [account, itemId, itemAuthorPubkey, repoCoords, relays, toast],
   );
 
   // Only show options that differ from the current status.

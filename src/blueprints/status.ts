@@ -3,8 +3,8 @@
  *
  * Per the NIP-34 spec, status events must include:
  *   - `e` tag referencing the issue/PR with a "root" marker
- *   - `a` tag referencing the repository (recommended for relay filter efficiency)
- *   - `p` tags for the repository owner and item author (for notifications)
+ *   - `a` tags referencing all repositories (one per coord, for relay filter efficiency)
+ *   - `p` tags for each repository owner and the item author (for notifications)
  *
  * Usage:
  * ```ts
@@ -16,8 +16,9 @@
  *   StatusChangeBlueprint,
  *   STATUS_CLOSED,
  *   "<issue-or-pr-event-id>",
- *   "30617:<owner-pubkey>:<repo-id>",
+ *   ["30617:<owner-pubkey>:<repo-id>"],
  *   "<item-author-pubkey>",
+ *   "<signer-pubkey>",
  * );
  * const signed = await factory.sign(template);
  * await publish(signed, relays);
@@ -48,20 +49,23 @@ export const STATUS_KIND_MAP: Record<
 /**
  * Blueprint for publishing a NIP-34 status change event.
  *
- * @param statusKind      - The kind number for the desired status (1630–1633)
- * @param itemId          - Hex event ID of the issue or PR being updated
- * @param repoCoord       - Repository coordinate: "30617:<owner-pubkey>:<repo-id>"
+ * @param statusKind       - The kind number for the desired status (1630–1633)
+ * @param itemId           - Hex event ID of the issue or PR being updated
+ * @param repoCoords       - All repository coordinates from the item's `a` tags
+ *                           ("30617:<owner-pubkey>:<repo-id>"). One `a` tag is
+ *                           emitted per coordinate so relay `#a` filters work for
+ *                           every referenced repo.
  * @param itemAuthorPubkey - Pubkey of the issue/PR author (for notifications)
+ * @param signerPubkey     - Pubkey of the user publishing the event; excluded
+ *                           from `p` notification tags (no need to notify yourself)
  */
 export function StatusChangeBlueprint(
   statusKind: number,
   itemId: string,
-  repoCoord: string,
+  repoCoords: string[],
   itemAuthorPubkey: string,
+  signerPubkey?: string,
 ) {
-  // Extract the repo owner pubkey from the coordinate ("30617:<pubkey>:<id>")
-  const repoOwnerPubkey = repoCoord.split(":")[1] ?? "";
-
   return blueprint(
     statusKind,
     modifyPublicTags((tags) => {
@@ -69,13 +73,18 @@ export function StatusChangeBlueprint(
         ...tags,
         // Reference the target item with the required "root" marker
         ["e", itemId, "", "root"],
-        // Repo coordinate for relay filter efficiency
-        ["a", repoCoord],
+        // One a-tag per repo coordinate for relay filter efficiency
+        ...repoCoords.map((coord) => ["a", coord]),
       ];
-      // p-tags for notifications — deduplicate in case author === owner
-      const notifyPubkeys = new Set(
-        [repoOwnerPubkey, itemAuthorPubkey].filter(Boolean),
-      );
+      // p-tags for notifications: item author + all repo owners (one per coord).
+      // Deduplicate and exclude the signer (no need to notify yourself).
+      const notifyPubkeys = new Set<string>();
+      if (itemAuthorPubkey) notifyPubkeys.add(itemAuthorPubkey);
+      for (const coord of repoCoords) {
+        const ownerPubkey = coord.split(":")[1];
+        if (ownerPubkey) notifyPubkeys.add(ownerPubkey);
+      }
+      if (signerPubkey) notifyPubkeys.delete(signerPubkey);
       for (const pk of notifyPubkeys) {
         next.push(["p", pk]);
       }

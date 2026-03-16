@@ -379,7 +379,9 @@ export default function PRPage() {
                   <ChangeStatusDropdown
                     itemId={prEvent.id}
                     itemAuthorPubkey={prEvent.pubkey}
-                    repoCoord={prEvent.tags.find(([t]) => t === "a")?.[1] ?? ""}
+                    repoCoords={prEvent.tags
+                      .filter(([t]) => t === "a")
+                      .map(([, v]) => v)}
                     currentStatus={status}
                     options={[
                       { value: "open", label: "Open" },
