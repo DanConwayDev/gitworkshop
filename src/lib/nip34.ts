@@ -6,6 +6,21 @@ import type { NostrEvent } from "nostr-tools";
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 
 // ---------------------------------------------------------------------------
+// Patch-chain identification tags — excluded from user-visible labels
+// ---------------------------------------------------------------------------
+
+/**
+ * `t` tag values that are used internally for patch chain identification
+ * (NIP-34) and must be excluded from user-visible label lists.
+ */
+export const PATCH_CHAIN_TAGS = new Set([
+  "revision-root",
+  "root-revision",
+  "root",
+  "cover-letter",
+]);
+
+// ---------------------------------------------------------------------------
 // Patch message parsing (ported from gitworkshop)
 // ---------------------------------------------------------------------------
 
@@ -465,7 +480,9 @@ export function resolveEssentials(
     subjectById.set(ev.id, extractSubject(ev));
     tLabelsById.set(
       ev.id,
-      ev.tags.filter(([t]) => t === "t").map(([, v]) => v),
+      ev.tags
+        .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
+        .map(([, v]) => v),
     );
   }
 
@@ -645,7 +662,7 @@ export function buildResolvedIssues(
     const meta = metaMap.get(ev.id) ?? {
       status: "open" as const,
       labels: ev.tags
-        .filter(([t]) => t === "t")
+        .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
         .map(([, v]) => v)
         .sort(),
       currentSubject: originalSubject,
@@ -783,7 +800,7 @@ export function buildResolvedPRs(
     const meta = metaMap.get(ev.id) ?? {
       status: "open" as const,
       labels: ev.tags
-        .filter(([t]) => t === "t")
+        .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
         .map(([, v]) => v)
         .sort(),
       currentSubject: originalSubject,

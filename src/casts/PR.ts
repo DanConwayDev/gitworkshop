@@ -2,7 +2,7 @@ import { CastRefEventStore, EventCast } from "applesauce-common/casts/cast";
 import { getOrComputeCachedValue } from "applesauce-core/helpers";
 import { getTagValue, KnownEvent } from "applesauce-core/helpers/event";
 import type { NostrEvent } from "nostr-tools";
-import { PR_KIND } from "@/lib/nip34";
+import { PR_KIND, PATCH_CHAIN_TAGS } from "@/lib/nip34";
 
 type PREvent = KnownEvent<typeof PR_KIND>;
 
@@ -57,7 +57,9 @@ export class PR extends EventCast<PREvent> {
 
   get labels(): string[] {
     return getOrComputeCachedValue(this.event, LabelsSymbol, () =>
-      this.event.tags.filter(([t]) => t === "t").map(([, v]) => v),
+      this.event.tags
+        .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
+        .map(([, v]) => v),
     );
   }
 }

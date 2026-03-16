@@ -2,7 +2,12 @@ import { CastRefEventStore, EventCast } from "applesauce-common/casts/cast";
 import { getOrComputeCachedValue } from "applesauce-core/helpers";
 import { KnownEvent } from "applesauce-core/helpers/event";
 import type { NostrEvent } from "nostr-tools";
-import { PATCH_KIND, extractPatchSubject, extractPatchBody } from "@/lib/nip34";
+import {
+  PATCH_KIND,
+  extractPatchSubject,
+  extractPatchBody,
+  PATCH_CHAIN_TAGS,
+} from "@/lib/nip34";
 
 type PatchEvent = KnownEvent<typeof PATCH_KIND>;
 
@@ -62,7 +67,9 @@ export class Patch extends EventCast<PatchEvent> {
 
   get labels(): string[] {
     return getOrComputeCachedValue(this.event, LabelsSymbol, () =>
-      this.event.tags.filter(([t]) => t === "t").map(([, v]) => v),
+      this.event.tags
+        .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
+        .map(([, v]) => v),
     );
   }
 
