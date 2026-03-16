@@ -1,7 +1,13 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { IssueStatus } from "@/lib/nip34";
-import { CircleDot, CheckCircle2, XCircle, FileEdit } from "lucide-react";
+import {
+  CircleDot,
+  CheckCircle2,
+  XCircle,
+  FileEdit,
+  Trash2,
+} from "lucide-react";
 
 const statusConfig: Record<
   IssueStatus,
@@ -30,6 +36,12 @@ const statusConfig: Record<
     className:
       "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 hover:bg-amber-500/20",
     icon: FileEdit,
+  },
+  deleted: {
+    label: "Deleted",
+    className:
+      "bg-muted/50 text-muted-foreground border-muted-foreground/20 hover:bg-muted/70",
+    icon: Trash2,
   },
 };
 

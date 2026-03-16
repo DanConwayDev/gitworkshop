@@ -11,7 +11,6 @@ import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
-import { map } from "rxjs/operators";
 import { UserAvatar, UserName, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
@@ -49,13 +48,11 @@ import {
   Plus,
 } from "lucide-react";
 import {
-  COMMENT_KIND,
   type IssueStatus,
   type RepoQueryOptions,
+  type ResolvedIssue,
 } from "@/lib/nip34";
-import { resolveCurrentSubject } from "@/hooks/useIssues";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
-import type { Issue } from "@/casts/Issue";
 import { relayCurationMode } from "@/services/settings";
 
 export default function RepoPage({
@@ -116,11 +113,8 @@ export default function RepoPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [relayHints.join(","), repo?.maintainerSet?.join(","), curationMode],
   );
-  const { issues, statusMap, labelsMap, subjectRenamesMap } = useIssues(
-    repo?.allCoordinates,
-    repoRelayGroup,
-    queryOptions,
-  );
+
+  const issues = useIssues(repo?.allCoordinates, repoRelayGroup, queryOptions);
 
   // New issue dialog
   const [newIssueOpen, setNewIssueOpen] = useState(false);
@@ -131,56 +125,40 @@ export default function RepoPage({
   const [authorFilter, setAuthorFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Collect all unique labels and authors from issues.
-  // Labels are merged from the issue's own t-tags and any NIP-32 label events.
+  // Collect all unique labels and authors from resolved issues.
   const { allLabels, allAuthors } = useMemo(() => {
     if (!issues) return { allLabels: [], allAuthors: [] };
     const labels = new Set<string>();
     const authors = new Set<string>();
     for (const issue of issues) {
       issue.labels.forEach((l) => labels.add(l));
-      // Also include labels from NIP-32 label events
-      labelsMap.get(issue.id)?.forEach((l) => labels.add(l));
       authors.add(issue.pubkey);
     }
     return {
       allLabels: Array.from(labels).sort(),
       allAuthors: Array.from(authors),
     };
-  }, [issues, labelsMap]);
+  }, [issues]);
 
-  // Apply filters
+  // Apply filters — all derived data lives on the ResolvedIssue directly.
   const filteredIssues = useMemo(() => {
     if (!issues) return undefined;
     return issues.filter((issue) => {
       // Status filter
-      if (statusFilter !== "all") {
-        const issueStatus = statusMap.get(issue.id)?.status ?? "open";
-        if (issueStatus !== statusFilter) return false;
-      }
+      if (statusFilter !== "all" && issue.status !== statusFilter) return false;
 
-      // Label filter — check both the issue's own t-tags and NIP-32 label events
-      if (
-        labelFilter &&
-        !issue.labels.includes(labelFilter) &&
-        !(labelsMap.get(issue.id) ?? []).includes(labelFilter)
-      )
-        return false;
+      // Label filter
+      if (labelFilter && !issue.labels.includes(labelFilter)) return false;
 
       // Author filter
       if (authorFilter && issue.pubkey !== authorFilter) return false;
 
-      // Search — check both original and current (renamed) subject.
-      // subjectRenamesMap is already filtered to trusted authors by useIssues.
+      // Search — check both current (renamed) and original subject, plus body.
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const currentSubject = resolveCurrentSubject(
-          issue.subject,
-          subjectRenamesMap.get(issue.id),
-        );
         if (
-          !currentSubject.toLowerCase().includes(q) &&
-          !issue.subject.toLowerCase().includes(q) &&
+          !issue.currentSubject.toLowerCase().includes(q) &&
+          !issue.originalSubject.toLowerCase().includes(q) &&
           !issue.content.toLowerCase().includes(q)
         )
           return false;
@@ -188,17 +166,7 @@ export default function RepoPage({
 
       return true;
     });
-  }, [
-    issues,
-    statusFilter,
-    labelFilter,
-    authorFilter,
-    searchQuery,
-    statusMap,
-    labelsMap,
-    subjectRenamesMap,
-    repo?.maintainerSet,
-  ]);
+  }, [issues, statusFilter, labelFilter, authorFilter, searchQuery]);
 
   const hasActiveFilters =
     statusFilter !== "all" || labelFilter || authorFilter || searchQuery;
@@ -359,6 +327,7 @@ export default function RepoPage({
                 <SelectItem value="resolved">Resolved</SelectItem>
                 <SelectItem value="closed">Closed</SelectItem>
                 <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="deleted">Deleted</SelectItem>
               </SelectContent>
             </Select>
 
@@ -395,9 +364,9 @@ export default function RepoPage({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">All Authors</SelectItem>
-                  {allAuthors.map((pubkey) => (
-                    <SelectItem key={pubkey} value={pubkey}>
-                      <AuthorSelectLabel pubkey={pubkey} />
+                  {allAuthors.map((pk) => (
+                    <SelectItem key={pk} value={pk}>
+                      <AuthorSelectLabel pubkey={pk} />
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -474,9 +443,6 @@ export default function RepoPage({
               <IssueRow
                 key={issue.id}
                 issue={issue}
-                status={statusMap.get(issue.id)?.status ?? "open"}
-                extraLabels={labelsMap.get(issue.id) ?? []}
-                subjectRenames={subjectRenamesMap.get(issue.id)}
                 npub={npub!}
                 repoId={repoId!}
                 repoRelayGroup={repoRelayGroup}
@@ -500,33 +466,18 @@ function AuthorSelectLabel({ pubkey }: { pubkey: string }) {
 
 function IssueRow({
   issue,
-  status,
-  extraLabels,
-  subjectRenames,
   npub,
   repoId,
   repoRelayGroup,
 }: {
-  issue: Issue;
-  status: IssueStatus;
-  /** Labels from NIP-32 kind:1985 events, merged with issue's own t-tags */
-  extraLabels: string[];
-  /**
-   * Subject-rename events (kind:1985 with #subject namespace), sorted
-   * ascending. Already filtered to trusted authors by useIssues.
-   */
-  subjectRenames: import("nostr-tools").NostrEvent[] | undefined;
+  issue: ResolvedIssue;
   npub: string;
   repoId: string;
   repoRelayGroup: import("applesauce-relay").RelayGroup | undefined;
 }) {
-  const timeAgo = formatDistanceToNow(issue.createdAt, { addSuffix: true });
-  const mergedLabels = Array.from(
-    new Set([...issue.labels, ...extraLabels]),
-  ).sort();
-
-  // subjectRenames is already filtered to trusted authors by useIssues.
-  const currentSubject = resolveCurrentSubject(issue.subject, subjectRenames);
+  const timeAgo = formatDistanceToNow(new Date(issue.createdAt * 1000), {
+    addSuffix: true,
+  });
 
   // Trigger two-tier loading for this issue. All IssueRow calls within the
   // same render cycle are batched by the loaders into a small number of relay
@@ -539,12 +490,12 @@ function IssueRow({
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <div className="mt-0.5">
-              <StatusBadge status={status} />
+              <StatusBadge status={issue.status} />
             </div>
 
             <div className="flex-1 min-w-0">
               <h3 className="font-medium text-[15px] group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors mb-1.5 line-clamp-1">
-                {currentSubject}
+                {issue.currentSubject}
               </h3>
 
               <div className="flex items-center gap-3 flex-wrap">
@@ -560,9 +511,9 @@ function IssueRow({
                   {timeAgo}
                 </span>
 
-                {mergedLabels.length > 0 && (
+                {issue.labels.length > 0 && (
                   <div className="flex gap-1 flex-wrap">
-                    {mergedLabels.map((label) => (
+                    {issue.labels.map((label) => (
                       <LabelBadge key={label} label={label} />
                     ))}
                   </div>
@@ -571,73 +522,40 @@ function IssueRow({
             </div>
 
             <div className="flex items-center gap-3 shrink-0">
-              <IssueStats issueId={issue.id} />
+              <div className="flex items-center gap-2.5 text-muted-foreground/60">
+                {issue.commentCount > 0 && (
+                  <div
+                    className="flex items-center gap-1 text-xs"
+                    title={`${issue.commentCount} comments`}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    <span>{issue.commentCount}</span>
+                  </div>
+                )}
+                {issue.zapCount > 0 && (
+                  <div
+                    className="flex items-center gap-1 text-xs text-amber-500/70"
+                    title={`${issue.zapCount} zaps`}
+                  >
+                    <Zap className="h-3.5 w-3.5" />
+                    <span>{issue.zapCount}</span>
+                  </div>
+                )}
+                {issue.participantCount > 0 && (
+                  <div
+                    className="flex items-center gap-1 text-xs"
+                    title={`${issue.participantCount} participants`}
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    <span>{issue.participantCount}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </CardContent>
       </Card>
     </Link>
-  );
-}
-
-/**
- * Reads comment count, zap count, and participant count for an issue from the
- * store. Loading is triggered by useNip34Loaders in the parent IssueRow.
- */
-function IssueStats({ issueId }: { issueId: string }) {
-  const store = useEventStore();
-  const issueIdKey = issueId;
-
-  const commentCount =
-    use$(() => {
-      const filter = { kinds: [COMMENT_KIND], "#E": [issueId] } as NostrFilter;
-      return store.timeline([filter]).pipe(map((events) => events.length));
-    }, [issueIdKey, store]) ?? 0;
-
-  const zapCount =
-    use$(() => {
-      const filter = { kinds: [9735], "#e": [issueId] } as NostrFilter;
-      return store.timeline([filter]).pipe(map((events) => events.length));
-    }, [issueIdKey, store]) ?? 0;
-
-  const participantCount =
-    use$(() => {
-      const filter = { kinds: [COMMENT_KIND], "#E": [issueId] } as NostrFilter;
-      return store
-        .timeline([filter])
-        .pipe(map((events) => new Set(events.map((e) => e.pubkey)).size));
-    }, [issueIdKey, store]) ?? 0;
-
-  return (
-    <div className="flex items-center gap-2.5 text-muted-foreground/60">
-      {commentCount > 0 && (
-        <div
-          className="flex items-center gap-1 text-xs"
-          title={`${commentCount} comments`}
-        >
-          <MessageCircle className="h-3.5 w-3.5" />
-          <span>{commentCount}</span>
-        </div>
-      )}
-      {zapCount > 0 && (
-        <div
-          className="flex items-center gap-1 text-xs text-amber-500/70"
-          title={`${zapCount} zaps`}
-        >
-          <Zap className="h-3.5 w-3.5" />
-          <span>{zapCount}</span>
-        </div>
-      )}
-      {participantCount > 0 && (
-        <div
-          className="flex items-center gap-1 text-xs"
-          title={`${participantCount} participants`}
-        >
-          <Users className="h-3.5 w-3.5" />
-          <span>{participantCount}</span>
-        </div>
-      )}
-    </div>
   );
 }
 

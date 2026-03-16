@@ -3,6 +3,7 @@
  */
 
 import type { NostrEvent } from "nostr-tools";
+import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 
 /** Repository announcement (addressable, kind 30617) */
 export const REPO_KIND = 30617;
@@ -22,6 +23,9 @@ export const STATUS_DRAFT = 1633;
 /** NIP-32 label event kind */
 export const LABEL_KIND = 1985;
 
+/** NIP-09 deletion request kind */
+export const DELETION_KIND = 5;
+
 /** NIP-32 label namespace used for subject-rename events */
 export const SUBJECT_LABEL_NAMESPACE = "#subject";
 
@@ -32,7 +36,7 @@ export const STATUS_KINDS = [
   STATUS_DRAFT,
 ] as const;
 
-export type IssueStatus = "open" | "resolved" | "closed" | "draft";
+export type IssueStatus = "open" | "resolved" | "closed" | "draft" | "deleted";
 
 export function kindToStatus(kind: number): IssueStatus {
   switch (kind) {
@@ -99,6 +103,15 @@ export function pubkeyFromCoordinate(coord: string): string | undefined {
   const pubkey = parts[1];
   // Pubkey must be a 64-char hex string
   return /^[0-9a-f]{64}$/.test(pubkey) ? pubkey : undefined;
+}
+
+/**
+ * Derive a stable, sorted cache key from an array of repo coordinate strings.
+ * Sorting ensures that the same set of coords in a different order produces
+ * the same key, avoiding duplicate model instances.
+ */
+export function coordsCacheKey(coords: string[]): string {
+  return [...coords].sort().join(",");
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +186,350 @@ export interface ResolvedRepo {
   nameSource: FieldProvenance;
   /** Which announcement's description won */
   descriptionSource: FieldProvenance;
+}
+
+// ---------------------------------------------------------------------------
+// ResolvedIssue — merged view of an issue + its essentials events
+// ---------------------------------------------------------------------------
+
+/**
+ * The fully-resolved view of an issue after merging the raw issue event with
+ * its status, label, and subject-rename events.
+ *
+ * Mirrors the ResolvedRepo pattern: a single entity combining information from
+ * multiple Nostr events so consumers can filter and display without holding
+ * separate maps.
+ *
+ * `status` is the single source of truth for deletion — a valid NIP-09
+ * deletion request sets status to "deleted", which takes precedence over any
+ * status event.
+ */
+export interface ResolvedIssue {
+  /** The raw issue event ID */
+  id: string;
+  /** The issue author's pubkey */
+  pubkey: string;
+  /** The raw issue event — for consumers that need fields not in the flat interface */
+  event: NostrEvent;
+  /** Original subject from the issue event itself */
+  originalSubject: string;
+  /**
+   * Current (effective) subject — the latest authorised rename, or
+   * originalSubject when no renames exist.
+   */
+  currentSubject: string;
+  /** Issue body */
+  content: string;
+  /** Unix timestamp (seconds) */
+  createdAt: number;
+  /**
+   * Current status. "deleted" takes precedence over all other status events
+   * when a valid NIP-09 deletion request exists.
+   */
+  status: IssueStatus;
+  /**
+   * Deduplicated labels from both the issue's own `t` tags and NIP-32
+   * kind:1985 label events, sorted alphabetically.
+   */
+  labels: string[];
+  /** All repository coordinates from `#a` tags, sorted */
+  repoCoords: string[];
+  /**
+   * Number of NIP-22 comments (kind:1111). Zero until useNip34Loaders has
+   * fetched comment events into the store.
+   */
+  commentCount: number;
+  /**
+   * Number of unique commenter pubkeys (including the issue author).
+   * Zero until useNip34Loaders has fetched comment events into the store.
+   */
+  participantCount: number;
+  /**
+   * Number of zap receipts (kind:9735). Zero until useNip34Loaders has
+   * fetched zap events into the store.
+   */
+  zapCount: number;
+}
+
+// ---------------------------------------------------------------------------
+// resolveEssentials — shared pure function for issue/patch/PR resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Options that vary between entity types when resolving essentials.
+ *
+ * mergeStatusRequiresMaintainer: when true, the merge-specific status kinds
+ *   (resolved/closed) require the author to be a maintainer — the item author
+ *   alone is not sufficient. Used for patches and PRs where only maintainers
+ *   can mark something as merged. Default: false (issue behaviour).
+ */
+export interface ResolveEssentialsOptions {
+  mergeStatusRequiresMaintainer?: boolean;
+}
+
+/**
+ * Intermediate resolved metadata for a single root event, produced by
+ * resolveEssentials before being merged with the raw event into a ResolvedIssue.
+ */
+interface ResolvedMeta {
+  status: IssueStatus;
+  labels: string[];
+  currentSubject: string;
+}
+
+/**
+ * Given a set of root events (issues, patches, or PRs) and their associated
+ * essentials events (status, labels, deletions), derive the resolved metadata
+ * for each root event.
+ *
+ * This is a pure function — no hooks, no subscriptions, no side effects.
+ * Both IssueListModel and future PatchListModel use this.
+ *
+ * Auth rules:
+ * - Deletion (kind:5): only the root event author is valid (NIP-09).
+ * - Status events: the root event author and all maintainers are authorised.
+ *   When mergeStatusRequiresMaintainer is true, only maintainers may set
+ *   resolved/closed status (for patches/PRs).
+ * - Label events: the root event author and all maintainers are authorised.
+ *
+ * Deletion takes precedence over all status events — once deleted, the status
+ * is "deleted" regardless of any status events.
+ *
+ * @param rootEvents      - The raw root events (e.g. all kind:1621 issues)
+ * @param essentialEvents - Status, label, and deletion events referencing roots
+ * @param maintainerSet   - Authorised maintainer pubkeys (derived from coords)
+ * @param options         - Per-entity-type auth tweaks
+ */
+export function resolveEssentials(
+  rootEvents: NostrEvent[],
+  essentialEvents: NostrEvent[],
+  maintainerSet: Set<string>,
+  options: ResolveEssentialsOptions = {},
+): Map<string, ResolvedMeta> {
+  const { mergeStatusRequiresMaintainer = false } = options;
+
+  // Index root events by ID for O(1) author lookup.
+  const authorById = new Map<string, string>();
+  const subjectById = new Map<string, string>();
+  const tLabelsById = new Map<string, string[]>();
+
+  for (const ev of rootEvents) {
+    authorById.set(ev.id, ev.pubkey);
+    subjectById.set(
+      ev.id,
+      ev.tags.find(([t]) => t === "subject")?.[1] ?? "(untitled)",
+    );
+    tLabelsById.set(
+      ev.id,
+      ev.tags.filter(([t]) => t === "t").map(([, v]) => v),
+    );
+  }
+
+  // Accumulators — one entry per root event ID.
+  const deletedIds = new Set<string>();
+  const latestStatusByRoot = new Map<
+    string,
+    { kind: number; createdAt: number }
+  >();
+  const labelsByRoot = new Map<string, Set<string>>();
+  const renamesByRoot = new Map<
+    string,
+    { createdAt: number; id: string; value: string }[]
+  >();
+
+  for (const ev of essentialEvents) {
+    // Find the referenced root event ID from the "e" tag.
+    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
+    if (!rootId || !authorById.has(rootId)) continue;
+
+    const issuePubkey = authorById.get(rootId)!;
+    const isMaintainer = maintainerSet.has(ev.pubkey);
+    const isAuthor = ev.pubkey === issuePubkey;
+
+    // ── Deletion (kind:5) ──────────────────────────────────────────────────
+    // NIP-09: only the original author's deletion is valid.
+    if (ev.kind === DELETION_KIND) {
+      if (isAuthor) deletedIds.add(rootId);
+      continue;
+    }
+
+    // ── Status events (kinds 1630–1633) ────────────────────────────────────
+    if ((STATUS_KINDS as readonly number[]).includes(ev.kind)) {
+      // Status events use an "e" tag with marker "root" to reference the issue.
+      const rootTag = ev.tags.find(
+        ([t, , , marker]) => t === "e" && marker === "root",
+      );
+      if (!rootTag) continue;
+      const statusRootId = rootTag[1];
+      if (!authorById.has(statusRootId)) continue;
+
+      // Auth check: for merge-status kinds, only maintainers are authorised.
+      const isMergeStatus =
+        ev.kind === STATUS_RESOLVED || ev.kind === STATUS_CLOSED;
+      if (mergeStatusRequiresMaintainer && isMergeStatus) {
+        if (!isMaintainer) continue;
+      } else {
+        if (!isAuthor && !isMaintainer) continue;
+      }
+
+      const existing = latestStatusByRoot.get(statusRootId);
+      if (!existing || ev.created_at > existing.createdAt) {
+        latestStatusByRoot.set(statusRootId, {
+          kind: ev.kind,
+          createdAt: ev.created_at,
+        });
+      }
+      continue;
+    }
+
+    // ── Label events (kind:1985) ───────────────────────────────────────────
+    if (ev.kind === LABEL_KIND) {
+      if (!isAuthor && !isMaintainer) continue;
+
+      // Subject renames: carry the #subject namespace.
+      const subjectLabel = ev.tags.find(
+        ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
+      );
+      if (subjectLabel) {
+        const existing = renamesByRoot.get(rootId) ?? [];
+        existing.push({
+          createdAt: ev.created_at,
+          id: ev.id,
+          value: subjectLabel[1],
+        });
+        renamesByRoot.set(rootId, existing);
+      }
+
+      // Regular labels: carry the issue label namespace.
+      for (const [t, label, ns] of ev.tags) {
+        if (t === "l" && ns === ISSUE_LABEL_NAMESPACE && label) {
+          const set = labelsByRoot.get(rootId) ?? new Set<string>();
+          set.add(label);
+          labelsByRoot.set(rootId, set);
+        }
+      }
+    }
+  }
+
+  // Build the result map.
+  const result = new Map<string, ResolvedMeta>();
+
+  for (const [id] of authorById) {
+    // Deletion takes precedence over all status events.
+    let status: IssueStatus;
+    if (deletedIds.has(id)) {
+      status = "deleted";
+    } else {
+      const latestStatus = latestStatusByRoot.get(id);
+      status = latestStatus ? kindToStatus(latestStatus.kind) : "open";
+    }
+
+    // Merge t-tag labels with NIP-32 label events, deduplicate and sort.
+    const tLabels = tLabelsById.get(id) ?? [];
+    const nip32Labels = Array.from(labelsByRoot.get(id) ?? []);
+    const labels = Array.from(new Set([...tLabels, ...nip32Labels])).sort();
+
+    // Current subject: latest rename wins (sort ascending, last entry wins).
+    const renames = (renamesByRoot.get(id) ?? []).sort(
+      (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
+    );
+    const originalSubject = subjectById.get(id)!;
+    const currentSubject =
+      renames.length > 0 ? renames[renames.length - 1].value : originalSubject;
+
+    result.set(id, { status, labels, currentSubject });
+  }
+
+  return result;
+}
+
+/**
+ * Build a list of ResolvedIssue objects from raw events.
+ *
+ * Combines resolveEssentials (status/labels/subject/deletion) with per-issue
+ * counts derived from comment and zap events. All inputs are plain arrays —
+ * this is a pure function with no side effects.
+ *
+ * Comment and zap arrays default to empty when the loader has not yet fetched
+ * them, so counts are 0 on the list page and populate live on the detail page
+ * as useNip34Loaders fetches deeper data into the store.
+ *
+ * @param rootEvents      - Raw issue events (kind:1621)
+ * @param essentialEvents - Status, label, and deletion events (#e root IDs)
+ * @param commentEvents   - NIP-22 comment events (kind:1111, #E root IDs)
+ * @param zapEvents       - Zap receipt events (kind:9735, #e root IDs)
+ * @param maintainerSet   - Authorised maintainer pubkeys
+ * @param options         - Per-entity-type auth tweaks for resolveEssentials
+ */
+export function buildResolvedIssues(
+  rootEvents: NostrEvent[],
+  essentialEvents: NostrEvent[],
+  commentEvents: NostrEvent[],
+  zapEvents: NostrEvent[],
+  maintainerSet: Set<string>,
+  options: ResolveEssentialsOptions = {},
+): ResolvedIssue[] {
+  const metaMap = resolveEssentials(
+    rootEvents,
+    essentialEvents,
+    maintainerSet,
+    options,
+  );
+
+  // Index comments and zaps by root ID for O(1) per-issue lookup.
+  const commentsByRoot = new Map<string, NostrEvent[]>();
+  for (const ev of commentEvents) {
+    // NIP-22 uses uppercase E for the root reference.
+    const rootId =
+      ev.tags.find(([t, , , marker]) => t === "E" && marker === "root")?.[1] ??
+      ev.tags.find(([t]) => t === "E")?.[1];
+    if (!rootId) continue;
+    const existing = commentsByRoot.get(rootId) ?? [];
+    existing.push(ev);
+    commentsByRoot.set(rootId, existing);
+  }
+
+  const zapsByRoot = new Map<string, number>();
+  for (const ev of zapEvents) {
+    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
+    if (!rootId) continue;
+    zapsByRoot.set(rootId, (zapsByRoot.get(rootId) ?? 0) + 1);
+  }
+
+  return rootEvents.map((ev): ResolvedIssue => {
+    const originalSubject =
+      ev.tags.find(([t]) => t === "subject")?.[1] ?? "(untitled)";
+    const meta = metaMap.get(ev.id) ?? {
+      status: "open" as const,
+      labels: ev.tags
+        .filter(([t]) => t === "t")
+        .map(([, v]) => v)
+        .sort(),
+      currentSubject: originalSubject,
+    };
+
+    const comments = commentsByRoot.get(ev.id) ?? [];
+    const participantPubkeys = new Set(comments.map((c) => c.pubkey));
+
+    return {
+      id: ev.id,
+      pubkey: ev.pubkey,
+      event: ev,
+      originalSubject,
+      currentSubject: meta.currentSubject,
+      content: ev.content,
+      createdAt: ev.created_at,
+      status: meta.status,
+      labels: meta.labels,
+      repoCoords: ev.tags
+        .filter(([t]) => t === "a")
+        .map(([, v]) => v)
+        .sort(),
+      commentCount: comments.length,
+      participantCount: participantPubkeys.size,
+      zapCount: zapsByRoot.get(ev.id) ?? 0,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
