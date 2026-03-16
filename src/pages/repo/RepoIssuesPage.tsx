@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
 import { formatDistanceToNow } from "date-fns";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -41,7 +42,7 @@ import type { IssueStatus, ResolvedIssue } from "@/lib/nip34";
 import type { RelayGroup } from "applesauce-relay";
 
 export default function RepoIssuesPage() {
-  const { npub, repoId, resolved, issues } = useRepoContext();
+  const { pubkey, repoId, resolved, issues } = useRepoContext();
   const repo = resolved?.repo;
   const repoRelayGroup = resolved?.repoRelayGroup;
   const account = useActiveAccount();
@@ -274,8 +275,7 @@ export default function RepoIssuesPage() {
             <IssueRow
               key={issue.id}
               issue={issue}
-              npub={npub}
-              repoId={repoId}
+              repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [])}
               repoRelayGroup={repoRelayGroup}
             />
           ))}
@@ -296,13 +296,11 @@ function AuthorSelectLabel({ pubkey }: { pubkey: string }) {
 
 function IssueRow({
   issue,
-  npub,
-  repoId,
+  repoPath,
   repoRelayGroup,
 }: {
   issue: ResolvedIssue;
-  npub: string;
-  repoId: string;
+  repoPath: string;
   repoRelayGroup: RelayGroup | undefined;
 }) {
   const timeAgo = formatDistanceToNow(new Date(issue.createdAt * 1000), {
@@ -312,7 +310,7 @@ function IssueRow({
   useNip34Loaders(issue.id, repoRelayGroup);
 
   return (
-    <Link to={`/${npub}/${repoId}/issues/${issue.id}`} className="group block">
+    <Link to={`${repoPath}/issues/${issue.id}`} className="group block">
       <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">

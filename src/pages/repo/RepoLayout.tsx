@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { Link, Outlet, useParams, useLocation } from "react-router-dom";
-import { nip19 } from "nostr-tools";
 import { useResolvedRepository } from "@/hooks/useResolvedRepository";
 import { useIssues } from "@/hooks/useIssues";
+import { useDnsIdentity } from "@/hooks/useDnsIdentity";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import { mapEventsToStore } from "applesauce-core";
@@ -10,39 +10,134 @@ import { onlyEvents } from "applesauce-relay";
 import { UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   GitBranch,
   ExternalLink,
   ArrowLeft,
   Info,
   CircleDot,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { RepoContext, type RepoContextValue } from "./RepoContext";
 import type { RepoQueryOptions } from "@/lib/nip34";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
 import { relayCurationMode } from "@/services/settings";
 import { cn } from "@/lib/utils";
+import { parseRepoRoute } from "@/lib/routeUtils";
 
-export default function RepoLayout({
-  relayHints = [],
-}: {
-  relayHints?: string[];
-}) {
-  const { npub, repoId } = useParams<{ npub: string; repoId: string }>();
+// ---------------------------------------------------------------------------
+// RepoLayout
+// ---------------------------------------------------------------------------
+
+export default function RepoLayout() {
+  // The splat param (*) captures everything after the leading /
+  const { "*": splat } = useParams<{ "*": string }>();
   const location = useLocation();
 
-  // Decode npub to hex pubkey
-  const pubkey = useMemo(() => {
-    if (!npub) return undefined;
-    try {
-      const decoded = nip19.decode(npub);
-      if (decoded.type === "npub") return decoded.data;
-      return undefined;
-    } catch {
-      return undefined;
-    }
-  }, [npub]);
+  const parsed = useMemo(
+    () => (splat ? parseRepoRoute(splat) : undefined),
+    [splat],
+  );
 
+  // If the path doesn't parse as a repo route at all, show not-found immediately
+  if (!parsed) {
+    return <RouteNotFound splat={splat ?? ""} />;
+  }
+
+  if (parsed.type === "npub") {
+    return (
+      <RepoLayoutResolved
+        pubkey={parsed.pubkey}
+        repoId={parsed.repoId}
+        relayHints={parsed.relayHints}
+        location={location}
+        splat={splat ?? ""}
+      />
+    );
+  }
+
+  // nip05 — needs async resolution
+  return (
+    <RepoLayoutNip05
+      nip05={parsed.nip05}
+      repoId={parsed.repoId}
+      relayHints={parsed.relayHints}
+      location={location}
+      splat={splat ?? ""}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NIP-05 resolver wrapper
+// ---------------------------------------------------------------------------
+
+function RepoLayoutNip05({
+  nip05,
+  repoId,
+  relayHints,
+  location,
+  splat,
+}: {
+  nip05: string;
+  repoId: string;
+  relayHints: string[];
+  location: ReturnType<typeof useLocation>;
+  splat: string;
+}) {
+  const identity = useDnsIdentity(nip05);
+
+  if (identity.status === "loading") {
+    return <Nip05LoadingState nip05={nip05} />;
+  }
+
+  if (identity.status === "not-found") {
+    return <Nip05NotFoundError nip05={nip05} />;
+  }
+
+  if (identity.status === "error") {
+    return <Nip05ResolveError nip05={nip05} message={identity.message} />;
+  }
+
+  // Merge relay hints: identity relays first (authoritative), then URL hints
+  const mergedRelays = [
+    ...identity.relays,
+    ...relayHints.filter((r) => !identity.relays.includes(r)),
+  ];
+
+  return (
+    <RepoLayoutResolved
+      pubkey={identity.pubkey}
+      repoId={repoId}
+      relayHints={mergedRelays}
+      location={location}
+      splat={splat}
+      nip05={nip05}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Core layout (pubkey already known)
+// ---------------------------------------------------------------------------
+
+function RepoLayoutResolved({
+  pubkey,
+  repoId,
+  relayHints,
+  location,
+  splat,
+  nip05,
+}: {
+  pubkey: string;
+  repoId: string;
+  relayHints: string[];
+  location: ReturnType<typeof useLocation>;
+  splat: string;
+  nip05?: string;
+}) {
   const store = useEventStore();
   const resolved = useResolvedRepository(pubkey, repoId);
   const repo = resolved?.repo;
@@ -89,14 +184,25 @@ export default function RepoLayout({
     return issues.filter((i) => i.status === "open").length;
   }, [issues]);
 
-  // Determine active tab from URL
-  const basePath = `/${npub}/${repoId}`;
+  // Build the base path from the splat so tab links stay consistent with
+  // whatever URL format the user arrived with (npub, nip05, relay hint, etc.)
+  // Strip any trailing sub-paths (issues, issues/:id) to get the repo root.
+  const basePath = useMemo(() => {
+    const full = `/${splat}`;
+    // Remove known sub-paths
+    for (const suffix of ["/issues", "/about"]) {
+      const idx = full.indexOf(suffix);
+      if (idx !== -1) return full.slice(0, idx);
+    }
+    return full;
+  }, [splat]);
+
   const isIssuesTab = location.pathname.startsWith(`${basePath}/issues`);
   const isAboutTab = !isIssuesTab;
 
   const ctxValue: RepoContextValue | null =
-    npub && repoId && pubkey
-      ? { npub, repoId, pubkey, resolved, issues, queryOptions }
+    pubkey && repoId
+      ? { pubkey, repoId, resolved, issues, queryOptions, nip05 }
       : null;
 
   return (
@@ -216,6 +322,125 @@ export default function RepoLayout({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Error / loading states
+// ---------------------------------------------------------------------------
+
+function Nip05LoadingState({ nip05 }: { nip05: string }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center space-y-4 max-w-md px-4">
+        <div className="flex justify-center">
+          <div className="p-4 rounded-full bg-violet-500/10">
+            <Loader2 className="h-8 w-8 text-violet-500 animate-spin" />
+          </div>
+        </div>
+        <h2 className="text-xl font-semibold">Resolving identity</h2>
+        <p className="text-muted-foreground text-sm">
+          Looking up <span className="font-mono text-foreground">{nip05}</span>…
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Nip05NotFoundError({ nip05 }: { nip05: string }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center space-y-6 max-w-md px-4">
+        <div className="flex justify-center">
+          <div className="p-4 rounded-full bg-destructive/10">
+            <AlertCircle className="h-8 w-8 text-destructive" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold">Identity not found</h2>
+          <p className="text-muted-foreground">
+            The NIP-05 address{" "}
+            <span className="font-mono text-foreground">{nip05}</span> could not
+            be found. Make sure the address is correct and the domain's{" "}
+            <span className="font-mono text-sm">/.well-known/nostr.json</span>{" "}
+            is reachable.
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link to="/">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to repositories
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function Nip05ResolveError({
+  nip05,
+  message,
+}: {
+  nip05: string;
+  message: string;
+}) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center space-y-6 max-w-md px-4">
+        <div className="flex justify-center">
+          <div className="p-4 rounded-full bg-destructive/10">
+            <AlertCircle className="h-8 w-8 text-destructive" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold">Failed to resolve identity</h2>
+          <p className="text-muted-foreground">
+            Could not look up{" "}
+            <span className="font-mono text-foreground">{nip05}</span>.
+          </p>
+          <p className="text-xs text-muted-foreground/60 font-mono bg-muted rounded px-3 py-2 text-left break-all">
+            {message}
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link to="/">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to repositories
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RouteNotFound({ splat }: { splat: string }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center space-y-6 max-w-md px-4">
+        <div className="flex justify-center">
+          <div className="p-4 rounded-full bg-muted">
+            <AlertCircle className="h-8 w-8 text-muted-foreground" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold">Page not found</h2>
+          <p className="text-muted-foreground">
+            <span className="font-mono text-foreground">/{splat}</span> doesn't
+            match a known repository URL format.
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link to="/">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to repositories
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab link
+// ---------------------------------------------------------------------------
 
 function TabLink({
   to,

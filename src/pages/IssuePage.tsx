@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
+import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { formatDistanceToNow, format } from "date-fns";
@@ -47,7 +48,7 @@ import type { Observable } from "rxjs";
 
 export default function IssuePage() {
   const { issueId } = useParams<{ issueId: string }>();
-  const { npub, repoId, resolved } = useRepoContext();
+  const { pubkey, repoId, resolved } = useRepoContext();
   const repo = resolved?.repo;
   const repoRelayGroup = resolved?.repoRelayGroup;
   const extraRelaysForMaintainerMailboxCoverage =
@@ -436,7 +437,7 @@ export default function IssuePage() {
 
             {/* Back link */}
             <Link
-              to={`/${npub}/${repoId}/issues`}
+              to={`${repoToPath(pubkey, repoId, repo?.relays ?? [])}/issues`}
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" />

@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
-import { nip19 } from "nostr-tools";
 import { useRepositoryList } from "@/hooks/useRepositoryList";
+import { repoToPath } from "@/lib/routeUtils";
 import { UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -108,13 +108,13 @@ export default function RepositoriesPage() {
 }
 
 function RepoCard({ repo }: { repo: ResolvedRepo }) {
-  const npub = nip19.npubEncode(repo.selectedMaintainer);
+  const repoPath = repoToPath(repo.selectedMaintainer, repo.dTag, repo.relays);
   const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
     addSuffix: true,
   });
 
   return (
-    <Link to={`/${npub}/${repo.dTag}`} className="group block">
+    <Link to={repoPath} className="group block">
       <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20 group-hover:-translate-y-0.5">
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-4">

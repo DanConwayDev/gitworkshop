@@ -6,6 +6,7 @@ import {
   createReactionsLoader,
   createTagValueLoader,
   createZapsLoader,
+  DnsIdentityLoader,
 } from "applesauce-loaders/loaders";
 import { RelayLiveness, RelayPool } from "applesauce-relay";
 import { NostrConnectSigner } from "applesauce-signers";
@@ -119,6 +120,12 @@ export const zapsLoader = createZapsLoader(pool, {
   extraRelays,
   eventStore,
 });
+
+/**
+ * Loader for NIP-05 DNS identity lookups.
+ * Caches results in memory for the session lifetime.
+ */
+export const dnsIdentityLoader = new DnsIdentityLoader();
 
 // ---------------------------------------------------------------------------
 // NIP-34 two-tier loaders for Issues, Patches, and PRs
