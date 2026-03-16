@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useActiveAccount } from "applesauce-react/hooks";
-import { nip19 } from "nostr-tools";
 import { formatDistanceToNow, format } from "date-fns";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import { EditableSubject } from "@/components/EditSubjectInline";
@@ -18,7 +17,7 @@ import {
   resolveCurrentSubject,
 } from "@/hooks/useIssues";
 import { useNip34Loaders } from "@/hooks/useNip34Loaders";
-import { useResolvedRepository } from "@/hooks/useResolvedRepository";
+import { useRepoContext } from "@/pages/repo/RepoContext";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
@@ -27,7 +26,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft,
-  GitBranch,
   MessageCircle,
   Zap,
   Users,
@@ -48,25 +46,8 @@ import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
 export default function IssuePage() {
-  const { npub, repoId, issueId } = useParams<{
-    npub: string;
-    repoId: string;
-    issueId: string;
-  }>();
-
-  // Decode npub
-  const pubkey = useMemo(() => {
-    if (!npub) return undefined;
-    try {
-      const decoded = nip19.decode(npub);
-      if (decoded.type === "npub") return decoded.data;
-      return undefined;
-    } catch {
-      return undefined;
-    }
-  }, [npub]);
-
-  const resolved = useResolvedRepository(pubkey, repoId);
+  const { issueId } = useParams<{ issueId: string }>();
+  const { npub, repoId, resolved } = useRepoContext();
   const repo = resolved?.repo;
   const repoRelayGroup = resolved?.repoRelayGroup;
   const extraRelaysForMaintainerMailboxCoverage =
@@ -234,32 +215,10 @@ export default function IssuePage() {
   });
 
   return (
-    <div className="min-h-screen">
-      {/* Header */}
-      <div className="relative isolate border-b border-border/40">
-        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-violet-500/5 via-transparent to-fuchsia-500/5" />
-
+    <>
+      {/* Issue header */}
+      <div className="border-b border-border/40">
         <div className="container max-w-screen-xl px-4 md:px-8 py-6">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-            <Link to="/" className="hover:text-foreground transition-colors">
-              Repositories
-            </Link>
-            <span>/</span>
-            {repo ? (
-              <Link
-                to={`/${npub}/${repoId}`}
-                className="hover:text-foreground transition-colors flex items-center gap-1.5"
-              >
-                <GitBranch className="h-3.5 w-3.5" />
-                {repo.name}
-              </Link>
-            ) : (
-              <Skeleton className="h-4 w-24 inline-block" />
-            )}
-            <span>/</span>
-            <span className="text-foreground">Issue</span>
-          </div>
-
           {issue ? (
             <div>
               <div className="flex items-start gap-3 mb-3">
@@ -477,7 +436,7 @@ export default function IssuePage() {
 
             {/* Back link */}
             <Link
-              to={`/${npub}/${repoId}`}
+              to={`/${npub}/${repoId}/issues`}
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -486,7 +445,7 @@ export default function IssuePage() {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -581,7 +540,7 @@ function SubjectRenameCard({
           </span>
         </p>
 
-        {/* Old → New title block */}
+        {/* Old -> New title block */}
         <p className="mt-1.5 text-sm leading-relaxed break-words">
           <span className="line-through text-muted-foreground/60 decoration-muted-foreground/30">
             {oldSubject || "(untitled)"}

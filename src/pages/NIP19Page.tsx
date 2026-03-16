@@ -9,7 +9,6 @@ import { nip19 } from "nostr-tools";
 import { eventStore } from "../services/nostr";
 import { REPO_KIND } from "../lib/nip34";
 import UserPage from "./UserPage";
-import RepoPage from "./RepoPage";
 import NotFound from "./NotFound";
 
 export function NIP19Page() {
@@ -22,16 +21,10 @@ export function NIP19Page() {
     try {
       const decoded = nip19.decode(identifier);
       if (decoded.type === "naddr") {
-        const { kind, pubkey, identifier: dTag, relays } = decoded.data;
+        const { kind, pubkey, identifier: dTag } = decoded.data;
         if (kind === REPO_KIND) {
           const npub = nip19.npubEncode(pubkey);
-          // If the URL has no relay hints just redirect to the plain route.
-          // If it does, render RepoPage directly so we can pass the hints as a
-          // prop without losing them in the redirect.
-          if (!relays || relays.length === 0) {
-            return <Navigate to={`/${npub}/${dTag}`} replace />;
-          }
-          return <RepoPage relayHints={relays} />;
+          return <Navigate to={`/${npub}/${dTag}`} replace />;
         }
       }
     } catch {
