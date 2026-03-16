@@ -7,6 +7,7 @@ import { useRepoContext } from "./RepoContext";
 import { useNip34Loaders } from "@/hooks/useNip34Loaders";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
+import { StatusTabs } from "@/components/StatusTabs";
 import { LabelBadge } from "@/components/LabelBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -28,19 +29,10 @@ import {
   Users,
   GitPullRequest,
   GitCommitHorizontal,
-  Filter,
   X,
 } from "lucide-react";
 import type { IssueStatus, ResolvedPR, PRItemType } from "@/lib/nip34";
 import type { RelayGroup } from "applesauce-relay";
-
-const STATUS_OPTIONS: MultiSelectOption[] = [
-  { value: "open", label: "Open" },
-  { value: "draft", label: "Draft" },
-  { value: "resolved", label: "Merged" },
-  { value: "closed", label: "Closed" },
-  { value: "deleted", label: "Deleted" },
-];
 
 const TYPE_OPTIONS: MultiSelectOption[] = [
   { value: "pr", label: "Pull Requests" },
@@ -62,6 +54,23 @@ export default function RepoPRsPage() {
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [authorFilter, setAuthorFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Compute per-status counts from the full (unfiltered) list.
+  const statusCounts = useMemo(() => {
+    const counts: Record<IssueStatus, number> = {
+      open: 0,
+      draft: 0,
+      resolved: 0,
+      closed: 0,
+      deleted: 0,
+    };
+    if (prs) {
+      for (const pr of prs) {
+        counts[pr.status]++;
+      }
+    }
+    return counts;
+  }, [prs]);
 
   // Collect all unique labels and authors from resolved PRs.
   const { allLabels, allAuthors } = useMemo(() => {
@@ -135,8 +144,8 @@ export default function RepoPRsPage() {
 
   return (
     <div className="container max-w-screen-xl px-4 md:px-8 py-6">
-      {/* Filter bar */}
-      <div className="flex flex-col md:flex-row gap-3 mb-6">
+      {/* Search + filters */}
+      <div className="flex flex-col md:flex-row gap-3 mb-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -148,15 +157,6 @@ export default function RepoPRsPage() {
         </div>
 
         <div className="flex gap-2 flex-wrap items-center ml-auto">
-          <MultiSelect
-            options={STATUS_OPTIONS}
-            selected={statusFilter}
-            onChange={(v) => setStatusFilter(v as IssueStatus[])}
-            placeholder="Status"
-            icon={<Filter className="h-3.5 w-3.5" />}
-            className="w-[150px]"
-          />
-
           <MultiSelect
             options={TYPE_OPTIONS}
             selected={typeFilter}
@@ -208,16 +208,14 @@ export default function RepoPRsPage() {
         </div>
       </div>
 
-      {/* PR count */}
-      {filteredPRs && (
-        <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
-          <GitPullRequest className="h-4 w-4" />
-          <span>
-            {filteredPRs.length} {filteredPRs.length === 1 ? "PR" : "PRs"}
-            {hasActiveFilters && " (filtered)"}
-          </span>
-        </div>
-      )}
+      {/* Status tabs */}
+      <StatusTabs
+        counts={statusCounts}
+        selected={statusFilter}
+        onChange={(v) => setStatusFilter(v as IssueStatus[])}
+        variant="pr"
+        className="mb-3"
+      />
 
       {/* PR list */}
       {!filteredPRs ? (

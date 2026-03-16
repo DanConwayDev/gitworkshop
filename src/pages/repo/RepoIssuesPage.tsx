@@ -8,6 +8,7 @@ import { useRepoContext } from "./RepoContext";
 import { useNip34Loaders } from "@/hooks/useNip34Loaders";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
+import { StatusTabs } from "@/components/StatusTabs";
 import { LabelBadge } from "@/components/LabelBadge";
 import { CreateIssueForm } from "@/components/CreateIssueForm";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,20 +37,11 @@ import {
   Zap,
   Users,
   CircleDot,
-  Filter,
   X,
   Plus,
 } from "lucide-react";
 import type { IssueStatus, ResolvedIssue } from "@/lib/nip34";
 import type { RelayGroup } from "applesauce-relay";
-
-const STATUS_OPTIONS: MultiSelectOption[] = [
-  { value: "open", label: "Open" },
-  { value: "draft", label: "Draft" },
-  { value: "resolved", label: "Resolved" },
-  { value: "closed", label: "Closed" },
-  { value: "deleted", label: "Deleted" },
-];
 
 const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open", "draft"];
 
@@ -69,6 +61,23 @@ export default function RepoIssuesPage() {
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [authorFilter, setAuthorFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Compute per-status counts from the full (unfiltered) list.
+  const statusCounts = useMemo(() => {
+    const counts: Record<IssueStatus, number> = {
+      open: 0,
+      draft: 0,
+      resolved: 0,
+      closed: 0,
+      deleted: 0,
+    };
+    if (issues) {
+      for (const issue of issues) {
+        counts[issue.status]++;
+      }
+    }
+    return counts;
+  }, [issues]);
 
   // Collect all unique labels and authors from resolved issues.
   const { allLabels, allAuthors } = useMemo(() => {
@@ -162,8 +171,8 @@ export default function RepoIssuesPage() {
         </Dialog>
       )}
 
-      {/* Filter bar */}
-      <div className="flex flex-col md:flex-row gap-3 mb-6">
+      {/* Search + filters */}
+      <div className="flex flex-col md:flex-row gap-3 mb-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -185,15 +194,6 @@ export default function RepoIssuesPage() {
               New Issue
             </Button>
           )}
-
-          <MultiSelect
-            options={STATUS_OPTIONS}
-            selected={statusFilter}
-            onChange={(v) => setStatusFilter(v as IssueStatus[])}
-            placeholder="Status"
-            icon={<Filter className="h-3.5 w-3.5" />}
-            className="w-[150px]"
-          />
 
           {allLabels.length > 0 && (
             <MultiSelect
@@ -238,17 +238,13 @@ export default function RepoIssuesPage() {
         </div>
       </div>
 
-      {/* Issue count */}
-      {filteredIssues && (
-        <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
-          <CircleDot className="h-4 w-4" />
-          <span>
-            {filteredIssues.length}{" "}
-            {filteredIssues.length === 1 ? "issue" : "issues"}
-            {hasActiveFilters && " (filtered)"}
-          </span>
-        </div>
-      )}
+      {/* Status tabs */}
+      <StatusTabs
+        counts={statusCounts}
+        selected={statusFilter}
+        onChange={(v) => setStatusFilter(v as IssueStatus[])}
+        className="mb-3"
+      />
 
       {/* Issue list */}
       {!filteredIssues ? (
