@@ -21,6 +21,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { MultiSelect } from "@/components/ui/multi-select";
+import type { MultiSelectOption } from "@/components/ui/multi-select";
 import {
   Select,
   SelectContent,
@@ -41,6 +43,16 @@ import {
 import type { IssueStatus, ResolvedIssue } from "@/lib/nip34";
 import type { RelayGroup } from "applesauce-relay";
 
+const STATUS_OPTIONS: MultiSelectOption[] = [
+  { value: "open", label: "Open" },
+  { value: "draft", label: "Draft" },
+  { value: "resolved", label: "Resolved" },
+  { value: "closed", label: "Closed" },
+  { value: "deleted", label: "Deleted" },
+];
+
+const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open", "draft"];
+
 export default function RepoIssuesPage() {
   const { pubkey, repoId, resolved, issues } = useRepoContext();
   const repo = resolved?.repo;
@@ -50,9 +62,11 @@ export default function RepoIssuesPage() {
   // New issue dialog
   const [newIssueOpen, setNewIssueOpen] = useState(false);
 
-  // Filters
-  const [statusFilter, setStatusFilter] = useState<IssueStatus | "all">("all");
-  const [labelFilter, setLabelFilter] = useState<string | null>(null);
+  // Filters — all multi-select; status defaults to open+draft
+  const [statusFilter, setStatusFilter] = useState<IssueStatus[]>(
+    DEFAULT_STATUS_FILTER,
+  );
+  const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [authorFilter, setAuthorFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -71,12 +85,22 @@ export default function RepoIssuesPage() {
     };
   }, [issues]);
 
+  const labelOptions: MultiSelectOption[] = allLabels.map((l) => ({
+    value: l,
+    label: l,
+  }));
+
   // Apply filters
   const filteredIssues = useMemo(() => {
     if (!issues) return undefined;
     return issues.filter((issue) => {
-      if (statusFilter !== "all" && issue.status !== statusFilter) return false;
-      if (labelFilter && !issue.labels.includes(labelFilter)) return false;
+      if (statusFilter.length > 0 && !statusFilter.includes(issue.status))
+        return false;
+      if (
+        labelFilter.length > 0 &&
+        !labelFilter.some((l) => issue.labels.includes(l))
+      )
+        return false;
       if (authorFilter && issue.pubkey !== authorFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -91,8 +115,20 @@ export default function RepoIssuesPage() {
     });
   }, [issues, statusFilter, labelFilter, authorFilter, searchQuery]);
 
+  // "Active" means filters differ from the default state
   const hasActiveFilters =
-    statusFilter !== "all" || labelFilter || authorFilter || searchQuery;
+    statusFilter.length !== DEFAULT_STATUS_FILTER.length ||
+    !DEFAULT_STATUS_FILTER.every((s) => statusFilter.includes(s)) ||
+    labelFilter.length > 0 ||
+    !!authorFilter ||
+    searchQuery.trim().length > 0;
+
+  const clearFilters = () => {
+    setStatusFilter(DEFAULT_STATUS_FILTER);
+    setLabelFilter([]);
+    setAuthorFilter(null);
+    setSearchQuery("");
+  };
 
   useSeoMeta({
     title: repo ? `Issues - ${repo.name} - ngit` : "Repository Issues - ngit",
@@ -149,40 +185,24 @@ export default function RepoIssuesPage() {
               New Issue
             </Button>
           )}
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v as IssueStatus | "all")}
-          >
-            <SelectTrigger className="w-[130px] h-9 text-sm">
-              <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="open">Open</SelectItem>
-              <SelectItem value="resolved">Resolved</SelectItem>
-              <SelectItem value="closed">Closed</SelectItem>
-              <SelectItem value="deleted">Deleted</SelectItem>
-            </SelectContent>
-          </Select>
+
+          <MultiSelect
+            options={STATUS_OPTIONS}
+            selected={statusFilter}
+            onChange={(v) => setStatusFilter(v as IssueStatus[])}
+            placeholder="Status"
+            icon={<Filter className="h-3.5 w-3.5" />}
+            className="w-[150px]"
+          />
 
           {allLabels.length > 0 && (
-            <Select
-              value={labelFilter ?? "__all__"}
-              onValueChange={(v) => setLabelFilter(v === "__all__" ? null : v)}
-            >
-              <SelectTrigger className="w-[140px] h-9 text-sm">
-                <SelectValue placeholder="Label" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All Labels</SelectItem>
-                {allLabels.map((label) => (
-                  <SelectItem key={label} value={label}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              options={labelOptions}
+              selected={labelFilter}
+              onChange={setLabelFilter}
+              placeholder="Label"
+              className="w-[150px]"
+            />
           )}
 
           {allAuthors.length > 1 && (
@@ -209,15 +229,10 @@ export default function RepoIssuesPage() {
               variant="ghost"
               size="sm"
               className="h-9 text-sm text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setStatusFilter("all");
-                setLabelFilter(null);
-                setAuthorFilter(null);
-                setSearchQuery("");
-              }}
+              onClick={clearFilters}
             >
               <X className="h-3.5 w-3.5 mr-1" />
-              Clear
+              Reset
             </Button>
           )}
         </div>
