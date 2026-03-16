@@ -92,17 +92,20 @@ interface UserLinkProps {
   className?: string;
   avatarSize?: "sm" | "md" | "lg";
   nameClassName?: string;
+  /** Set to true when UserLink is already inside an <a> element to avoid invalid nested anchors. */
+  noLink?: boolean;
 }
 
 /**
  * Renders a user's avatar and name as a single clickable link to their profile.
- * Use this in standalone contexts (not inside another link).
+ * Use `noLink` when rendering inside another link/anchor to avoid invalid nested <a> elements.
  */
 export function UserLink({
   pubkey,
   className,
   avatarSize = "sm",
   nameClassName,
+  noLink = false,
 }: UserLinkProps) {
   const profile = useProfile(pubkey);
   const npub = pubkey ? nip19.npubEncode(pubkey) : undefined;
@@ -115,6 +118,36 @@ export function UserLink({
     npub?.slice(5, 7).toUpperCase() ??
     "??";
 
+  const inner = (
+    <>
+      <Avatar className={cn(sizeClasses[avatarSize], "shrink-0")}>
+        {profile?.picture && (
+          <AvatarImage src={profile.picture} alt={profile?.name ?? npub} />
+        )}
+        <AvatarFallback className="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 text-foreground font-medium">
+          {initials}
+        </AvatarFallback>
+      </Avatar>
+      <span
+        className={cn(
+          "font-medium",
+          !noLink && "hover:underline",
+          nameClassName,
+        )}
+      >
+        {displayName}
+      </span>
+    </>
+  );
+
+  if (noLink) {
+    return (
+      <span className={cn("flex items-center gap-1.5", className)}>
+        {inner}
+      </span>
+    );
+  }
+
   return (
     <Link
       to={`/${npub ?? ""}`}
@@ -124,17 +157,7 @@ export function UserLink({
         className,
       )}
     >
-      <Avatar className={cn(sizeClasses[avatarSize], "shrink-0")}>
-        {profile?.picture && (
-          <AvatarImage src={profile.picture} alt={profile?.name ?? npub} />
-        )}
-        <AvatarFallback className="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 text-foreground font-medium">
-          {initials}
-        </AvatarFallback>
-      </Avatar>
-      <span className={cn("font-medium hover:underline", nameClassName)}>
-        {displayName}
-      </span>
+      {inner}
     </Link>
   );
 }

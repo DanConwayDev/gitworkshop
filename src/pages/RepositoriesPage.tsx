@@ -142,6 +142,7 @@ function RepoCard({ repo }: { repo: ResolvedRepo }) {
                       pubkey={pk}
                       avatarSize="sm"
                       nameClassName="text-xs text-muted-foreground"
+                      noLink
                     />
                   ))}
                 </div>
