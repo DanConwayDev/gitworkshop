@@ -139,7 +139,7 @@ function RepoLayoutResolved({
   nip05?: string;
 }) {
   const store = useEventStore();
-  const resolved = useResolvedRepository(pubkey, repoId);
+  const resolved = useResolvedRepository(pubkey, repoId, relayHints);
   const repo = resolved?.repo;
   const repoRelayGroup = resolved?.repoRelayGroup;
   const extraRelaysForMaintainerMailboxCoverage =

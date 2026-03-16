@@ -97,22 +97,30 @@ function addMailboxRelaysToGroup(
 export function useResolvedRepository(
   pubkey: string | undefined,
   dTag: string | undefined,
+  relayHints: string[] = [],
 ): ResolvedRepository | undefined {
   const store = useEventStore();
   const key = `${pubkey}:${dTag}`;
+  const hintsKey = relayHints.join(",");
 
   // Layer 1: seed the store with the selected maintainer's announcement.
   // Skip the relay query if the event is already in the store cache.
+  // Include any URL relay hints so we can find the repo even if it isn't
+  // indexed on the default git index relays.
   use$(() => {
     if (!pubkey || !dTag) return undefined;
     if (store.getReplaceable(REPO_KIND, pubkey, dTag)) return undefined;
     const filter: Filter[] = [
       { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
     ];
+    const relays = [
+      ...gitIndexRelays.getValue(),
+      ...relayHints.filter((r) => !gitIndexRelays.getValue().includes(r)),
+    ];
     return pool
-      .subscription(gitIndexRelays.getValue(), filter)
+      .subscription(relays, filter)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [key, store]);
+  }, [key, hintsKey, store]);
 
   // Layer 2: subscribe to the model.
   const repo = use$(() => {
@@ -132,6 +140,17 @@ export function useResolvedRepository(
       dTag,
     ) as unknown as Observable<RelayGroupType>;
   }, [key, store]);
+
+  // Seed the relay group with URL relay hints immediately so subscriptions
+  // can start before the announcement event arrives.
+  useMemo(() => {
+    if (!repoRelayGroup || relayHints.length === 0) return;
+    for (const url of relayHints) {
+      const relay = pool.relay(url);
+      if (!repoRelayGroup.has(relay)) repoRelayGroup.add(relay);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repoRelayGroup, hintsKey]);
 
   // Delta group: maintainer outbox + inbox relays not already in repoRelayGroup.
   // Stable reference — created once per (pubkey, dTag) pair.
