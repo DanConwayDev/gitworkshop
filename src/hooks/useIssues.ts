@@ -12,7 +12,10 @@ import {
   LABEL_KIND,
   COMMENT_KIND,
   SUBJECT_LABEL_NAMESPACE,
+  REPO_KIND,
   kindToStatus,
+  pubkeyFromCoordinate,
+  resolveChain,
   type IssueStatus,
   type RepoQueryOptions,
 } from "@/lib/nip34";
@@ -21,6 +24,81 @@ import { Issue } from "@/casts/Issue";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
+
+/** kind:5 deletion request */
+const DELETION_KIND = 5;
+
+/**
+ * The combined set of kinds fetched per-issue by nip34EssentialsLoader and
+ * read back from the store in the per-issue hooks. Keeping this in one place
+ * ensures the store subscription and the loader stay in sync.
+ */
+const ESSENTIALS_KINDS = [...STATUS_KINDS, LABEL_KIND, DELETION_KIND] as const;
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when a pubkey is authorised to write status, label, or
+ * deletion events for a given issue.
+ *
+ * - `undefined` maintainers means the set is still loading — accept everyone
+ *   so the UI doesn't stay blank while resolution is in progress.
+ * - Otherwise, only the issue author and known maintainers are authorised.
+ */
+function isPubkeyAuthorised(
+  pubkey: string,
+  issuePubkey: string | undefined,
+  maintainers: Set<string> | undefined,
+): boolean {
+  if (maintainers === undefined) return true;
+  return pubkey === issuePubkey || maintainers.has(pubkey);
+}
+
+/**
+ * Derive the effective maintainer set for an issue from its first #a tag.
+ *
+ * Uses the first coordinate only — multiple tagged repos are a genuine edge
+ * case and a single anchor keeps the trust model simple and consistent with
+ * the URL-context case (which also has one selected maintainer).
+ *
+ * The pubkey is always extractable from the coordinate string itself
+ * (`30617:<pubkey>:<dTag>`), so at least one maintainer is known before any
+ * 30617 announcement events have been received. BFS resolution via
+ * `resolveChain` adds co-maintainers once their announcements are in the store.
+ *
+ * This is a pure function — no hooks, no subscriptions.
+ *
+ * @param issue              - The raw issue event
+ * @param announcementEvents - All kind:30617 events currently in the store
+ */
+export function resolveMaintainersFromIssue(
+  issue: NostrEvent,
+  announcementEvents: NostrEvent[],
+): Set<string> {
+  const coord = issue.tags.find(([t]) => t === "a")?.[1];
+  if (!coord) return new Set();
+
+  const coordPubkey = pubkeyFromCoordinate(coord);
+  if (!coordPubkey) return new Set();
+
+  // Always include the pubkey from the coordinate — known before announcements.
+  const maintainers = new Set<string>([coordPubkey]);
+
+  // BFS to include co-maintainers declared in announcements.
+  const dTag = coord.split(":").slice(2).join(":");
+  const resolved = resolveChain(announcementEvents, coordPubkey, dTag);
+  if (resolved) {
+    for (const pk of resolved.maintainerSet) maintainers.add(pk);
+  }
+
+  return maintainers;
+}
+
+// ---------------------------------------------------------------------------
+// Bulk hook (repo issue list)
+// ---------------------------------------------------------------------------
 
 /**
  * Fetch issues for a repository.
@@ -44,7 +122,7 @@ import type { Observable } from "rxjs";
 export function useIssues(
   repoCoords: string | string[] | undefined,
   repoRelayGroup: RelayGroup | undefined,
-  _options: RepoQueryOptions,
+  options: RepoQueryOptions,
 ): {
   issues: Issue[] | undefined;
   statusMap: Map<string, { status: IssueStatus; event: NostrEvent }>;
@@ -52,241 +130,209 @@ export function useIssues(
   labelsMap: Map<string, string[]>;
   /** issueId → subject-rename events sorted ascending (oldest first) */
   subjectRenamesMap: Map<string, NostrEvent[]>;
+  /** Set of issue IDs that have been deleted by an authorised author */
+  deletedIds: Set<string>;
 } {
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  // Normalise to array for consistent filter building
-  const coords = repoCoords
-    ? Array.isArray(repoCoords)
-      ? repoCoords
-      : [repoCoords]
-    : undefined;
-
-  // The repoRelayGroup instance is stable — use its identity as the dep key.
-  // coords changes when the maintainer set grows (new allCoordinates).
+  // Normalise to array for consistent filter building.
+  const coords = useMemo(
+    () =>
+      repoCoords
+        ? Array.isArray(repoCoords)
+          ? repoCoords
+          : [repoCoords]
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [Array.isArray(repoCoords) ? repoCoords.join(",") : repoCoords],
+  );
   const coordKey = coords?.join(",") ?? "";
 
+  // Effective maintainer set from options. When non-empty, only events from
+  // those pubkeys (or the issue author) are considered authoritative.
+  const maintainerSet = useMemo(
+    () =>
+      options.maintainerPubkeys && options.maintainerPubkeys.length > 0
+        ? new Set(options.maintainerPubkeys)
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [options.maintainerPubkeys?.join(",")],
+  );
+
   // Fetch issues from relay via the long-lived group subscription.
-  // When new relays are added to the group, reverseSwitchMap + WeakMap cache
-  // opens a subscription only to the new relay — existing ones are untouched.
   use$(() => {
     if (!coords || coords.length === 0 || !repoRelayGroup) return undefined;
-    const issueFilters: Filter[] = [
-      { kinds: [ISSUE_KIND], "#a": coords } as Filter,
-    ];
     return repoRelayGroup
-      .subscription(issueFilters)
+      .subscription([{ kinds: [ISSUE_KIND], "#a": coords } as Filter])
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [coordKey, repoRelayGroup, store]);
 
-  // Subscribe to issues in store, cast to Issue instances
+  // Subscribe to issues in store, cast to Issue instances.
   const issues = use$(() => {
     if (!coords || coords.length === 0) return undefined;
-    const issueFilters: Filter[] = [
-      { kinds: [ISSUE_KIND], "#a": coords } as Filter,
-    ];
     return store
-      .timeline(issueFilters)
+      .timeline([{ kinds: [ISSUE_KIND], "#a": coords } as Filter])
       .pipe(castTimelineStream(Issue, castStore)) as unknown as Observable<
       Issue[]
     >;
   }, [coordKey, store]);
 
-  // Fetch statuses from relay via the same group
+  // Fetch status + label + deletion events from relay (single subscription).
   use$(() => {
     if (!coords || coords.length === 0 || !repoRelayGroup) return undefined;
-    const statusFilters: Filter[] = [
-      { kinds: [...STATUS_KINDS], "#a": coords } as Filter,
-    ];
     return repoRelayGroup
-      .subscription(statusFilters)
+      .subscription([{ kinds: [...ESSENTIALS_KINDS], "#a": coords } as Filter])
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [coordKey, repoRelayGroup, store]);
 
-  // Subscribe to statuses in store
-  const statusEvents = use$(() => {
-    if (!coords || coords.length === 0) return undefined;
-    const statusFilters: Filter[] = [
-      { kinds: [...STATUS_KINDS], "#a": coords } as Filter,
-    ];
-    return store.timeline(statusFilters) as unknown as Observable<NostrEvent[]>;
-  }, [coordKey, store]);
-
-  // Build status map: issueId -> latest status
-  // Memoized so it's only recomputed when statusEvents changes
-  const statusMap = useMemo(() => {
-    const map = new Map<string, { status: IssueStatus; event: NostrEvent }>();
-    if (!statusEvents) return map;
-    for (const ev of statusEvents) {
-      const rootTag = ev.tags.find(
-        ([t, , , marker]) => t === "e" && marker === "root",
-      );
-      const issueId = rootTag?.[1];
-      if (!issueId) continue;
-
-      const existing = map.get(issueId);
-      if (!existing || ev.created_at > existing.event.created_at) {
-        map.set(issueId, { status: kindToStatus(ev.kind), event: ev });
-      }
-    }
-    return map;
-  }, [statusEvents]);
-
-  // Build labels map: issueId -> deduplicated labels from kind:1985 events.
-  //
-  // No relay fetch here — nip34EssentialsLoader (called by useNip34Loaders in
-  // each IssueRow) already batches { kinds: [1985], "#e": [all ids] } across
-  // all rendered issues. We just read reactively from the store.
-  //
-  // The store is queried by the issue ids we already have. The issueIdKey dep
-  // means the subscription re-fires when the issue list grows.
+  // Subscribe to essentials in store (single timeline for all three maps).
+  // Keyed on issueIdKey so the subscription updates as the issue list grows.
   const issueIdKey = issues?.map((i) => i.id).join(",") ?? "";
-  const labelEvents = use$(() => {
+  const essentialEvents = use$(() => {
     if (!issues || issues.length === 0) return undefined;
-    const ids = issues.map((i) => i.id);
-    const labelFilters: Filter[] = [
-      { kinds: [LABEL_KIND], "#e": ids } as Filter,
-    ];
-    return store.timeline(labelFilters) as unknown as Observable<NostrEvent[]>;
+    return store.timeline([
+      {
+        kinds: [...ESSENTIALS_KINDS],
+        "#e": issues.map((i) => i.id),
+      } as Filter,
+    ]) as unknown as Observable<NostrEvent[]>;
   }, [issueIdKey, store]);
 
-  // Build labels map: issueId -> deduplicated labels from kind:1985 events
-  const labelsMap = useMemo(() => {
-    const map = new Map<string, string[]>();
-    if (!labelEvents) return map;
-    for (const ev of labelEvents) {
-      const issueId = ev.tags.find(([t]) => t === "e")?.[1];
-      if (!issueId) continue;
-      const newLabels = ev.tags
-        .filter(([t, , ns]) => t === "l" && ns === ISSUE_LABEL_NAMESPACE)
-        .map(([, label]) => label);
-      if (newLabels.length === 0) continue;
-      const existing = map.get(issueId) ?? [];
-      map.set(issueId, Array.from(new Set([...existing, ...newLabels])));
-    }
-    return map;
-  }, [labelEvents]);
+  // issueId → author pubkey, for authorisation checks in the maps below.
+  const issueAuthorById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const issue of issues ?? []) m.set(issue.id, issue.pubkey);
+    return m;
+  }, [issues]);
 
-  // Build subject renames map: issueId -> sorted rename events (ascending)
-  // Only kind:1985 events that carry a #subject label are included.
-  const subjectRenamesMap = useMemo(() => {
-    const map = new Map<string, NostrEvent[]>();
-    if (!labelEvents) return map;
-    for (const ev of labelEvents) {
-      const hasSubjectLabel = ev.tags.some(
-        ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
-      );
-      if (!hasSubjectLabel) continue;
-      const issueId = ev.tags.find(([t]) => t === "e")?.[1];
-      if (!issueId) continue;
-      const existing = map.get(issueId) ?? [];
-      existing.push(ev);
-      map.set(issueId, existing);
-    }
-    // Sort each list ascending by created_at, tiebreak by id
-    for (const [id, evs] of map) {
-      map.set(
-        id,
-        evs.sort(
-          (a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id),
-        ),
-      );
-    }
-    return map;
-  }, [labelEvents]);
+  // Derive all four maps from the single essentialEvents array.
+  const { statusMap, labelsMap, subjectRenamesMap, deletedIds } =
+    useMemo(() => {
+      const statusMap = new Map<
+        string,
+        { status: IssueStatus; event: NostrEvent }
+      >();
+      const labelsMap = new Map<string, string[]>();
+      const subjectRenamesMap = new Map<string, NostrEvent[]>();
+      const deletedIds = new Set<string>();
 
-  return { issues, statusMap, labelsMap, subjectRenamesMap };
+      for (const ev of essentialEvents ?? []) {
+        const issueId = ev.tags.find(([t]) => t === "e")?.[1];
+        if (!issueId) continue;
+
+        const issuePubkey = issueAuthorById.get(issueId);
+        if (!isPubkeyAuthorised(ev.pubkey, issuePubkey, maintainerSet))
+          continue;
+
+        // Status events (kinds 1630-1633)
+        if ((STATUS_KINDS as readonly number[]).includes(ev.kind)) {
+          // Status events use an "e" tag with marker "root" to reference the issue.
+          const rootIssueId = ev.tags.find(
+            ([t, , , marker]) => t === "e" && marker === "root",
+          )?.[1];
+          if (!rootIssueId) continue;
+          const existing = statusMap.get(rootIssueId);
+          if (!existing || ev.created_at > existing.event.created_at)
+            statusMap.set(rootIssueId, {
+              status: kindToStatus(ev.kind),
+              event: ev,
+            });
+          continue;
+        }
+
+        // Deletion requests (kind 5)
+        if (ev.kind === DELETION_KIND) {
+          // NIP-09: only the original author's deletion is valid.
+          if (ev.pubkey !== issuePubkey) continue;
+          deletedIds.add(issueId);
+          continue;
+        }
+
+        // Label events (kind 1985)
+        if (ev.kind === LABEL_KIND) {
+          // Subject renames carry a #subject namespace label.
+          if (
+            ev.tags.some(
+              ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
+            )
+          ) {
+            const existing = subjectRenamesMap.get(issueId) ?? [];
+            existing.push(ev);
+            subjectRenamesMap.set(issueId, existing);
+          }
+
+          // Regular labels carry the issue label namespace.
+          const newLabels = ev.tags
+            .filter(([t, , ns]) => t === "l" && ns === ISSUE_LABEL_NAMESPACE)
+            .map(([, label]) => label);
+          if (newLabels.length > 0) {
+            const existing = labelsMap.get(issueId) ?? [];
+            labelsMap.set(
+              issueId,
+              Array.from(new Set([...existing, ...newLabels])),
+            );
+          }
+        }
+      }
+
+      // Sort rename lists ascending by created_at, tiebreak by id.
+      for (const [id, evs] of subjectRenamesMap) {
+        subjectRenamesMap.set(
+          id,
+          evs.sort(
+            (a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id),
+          ),
+        );
+      }
+
+      return { statusMap, labelsMap, subjectRenamesMap, deletedIds };
+    }, [essentialEvents, issueAuthorById, maintainerSet]);
+
+  return { issues, statusMap, labelsMap, subjectRenamesMap, deletedIds };
+}
+
+// ---------------------------------------------------------------------------
+// Per-issue hooks (issue detail page)
+// ---------------------------------------------------------------------------
+
+/**
+ * Subscribe to all essentials events (status, labels, deletions) for a single
+ * issue from the store in one timeline subscription. Shared by the per-issue
+ * hooks below to avoid duplicate subscriptions on the same filter.
+ *
+ * No relay fetch — nip34EssentialsLoader (called by useNip34Loaders) already
+ * batches { kinds: [1630-1633,1985,5], "#e": [issueId] }.
+ */
+function useIssueEssentialEvents(
+  issueId: string | undefined,
+): NostrEvent[] | undefined {
+  const store = useEventStore();
+  return use$(() => {
+    if (!issueId) return undefined;
+    return store.timeline([
+      { kinds: [...ESSENTIALS_KINDS], "#e": [issueId] } as Filter,
+    ]) as unknown as Observable<NostrEvent[]>;
+  }, [issueId, store]);
 }
 
 /**
  * Fetch comments (NIP-22 kind:1111) for a specific issue.
- * Uses the batched commentsLoader so all per-issue calls are combined into
- * a single relay subscription rather than one request per issue.
  *
  * Fetching is handled by useNip34Loaders (called by IssuePage), which batches
  * { kinds: [1111], "#E": [issueId] } and, when useItemAuthorRelays is true,
  * also queries the inbox-only delta relays of the issue author.
- *
- * @param issueId - The event ID of the issue
  */
 export function useIssueComments(
   issueId: string | undefined,
 ): NostrEvent[] | undefined {
   const store = useEventStore();
-
   return use$(() => {
     if (!issueId) return undefined;
-    const filters: Filter[] = [
+    return store.timeline([
       { kinds: [COMMENT_KIND], "#E": [issueId] } as Filter,
-    ];
-    return store.timeline(filters) as unknown as Observable<NostrEvent[]>;
+    ]) as unknown as Observable<NostrEvent[]>;
   }, [issueId, store]);
-}
-
-/**
- * Fetch status events for a specific issue.
- * Returns the latest status.
- *
- * Status events (kinds 1630-1633) are written by maintainers, so when
- * useItemAuthorRelays is true we query the NIP-65 outbox relays of all
- * maintainers in addition to the repo's declared relays. Kind:10002 events are
- * fetched via indexer relays (purplepag.es etc.) configured in lookupRelays.
- *
- * @param issueId    - The event ID of the issue
- * @param repoRelays - Relay URLs from ResolvedRepo.relays
- * @param options    - Query options including relay hints
- */
-export function useIssueStatus(issueId: string | undefined): IssueStatus {
-  const store = useEventStore();
-
-  // No relay fetch — nip34EssentialsLoader (called by useNip34Loaders in
-  // IssuePage) already batches { kinds: [1630-1633], "#e": [issueId] }.
-  // Just read reactively from the store.
-  const events = use$(() => {
-    if (!issueId) return undefined;
-    const filters: Filter[] = [
-      { kinds: [...STATUS_KINDS], "#e": [issueId] } as Filter,
-    ];
-    return store.timeline(filters) as unknown as Observable<NostrEvent[]>;
-  }, [issueId, store]);
-
-  if (!events || events.length === 0) return "open";
-  const sorted = [...events].sort((a, b) => b.created_at - a.created_at);
-  return kindToStatus(sorted[0].kind);
-}
-
-/**
- * Return NIP-32 labels (kind:1985, `#t` namespace) for a specific issue.
- *
- * No relay fetch — nip34EssentialsLoader (called by useNip34Loaders in
- * IssueRow / IssuePage) already batches { kinds: [1985], "#e": [issueId] }.
- * We just read reactively from the store.
- *
- * @param issueId - The event ID of the issue
- */
-export function useIssueLabels(issueId: string | undefined): string[] {
-  const store = useEventStore();
-
-  const events = use$(() => {
-    if (!issueId) return undefined;
-    const filters: Filter[] = [
-      { kinds: [LABEL_KIND], "#e": [issueId] } as Filter,
-    ];
-    return store.timeline(filters) as unknown as Observable<NostrEvent[]>;
-  }, [issueId, store]);
-
-  if (!events || events.length === 0) return [];
-
-  const seen = new Set<string>();
-  for (const ev of events) {
-    for (const [t, label, ns] of ev.tags) {
-      if (t === "l" && ns === ISSUE_LABEL_NAMESPACE && label) {
-        seen.add(label);
-      }
-    }
-  }
-  return Array.from(seen).sort();
 }
 
 /**
@@ -295,98 +341,204 @@ export function useIssueLabels(issueId: string | undefined): string[] {
  * Fetching is handled by useNip34Loaders (called by IssuePage), which batches
  * { kinds: [7, 9735], "#e": [issueId] } and, when useItemAuthorRelays is true,
  * also queries the inbox-only delta relays of the issue author.
- *
- * @param issueId - The event ID of the issue
  */
 export function useIssueZaps(
   issueId: string | undefined,
 ): NostrEvent[] | undefined {
   const store = useEventStore();
-
   return use$(() => {
     if (!issueId) return undefined;
-    const filters: Filter[] = [{ kinds: [9735], "#e": [issueId] } as Filter];
-    return store.timeline(filters) as unknown as Observable<NostrEvent[]>;
+    return store.timeline([
+      { kinds: [9735], "#e": [issueId] } as Filter,
+    ]) as unknown as Observable<NostrEvent[]>;
   }, [issueId, store]);
+}
+
+/**
+ * Fetch status events for a specific issue and return the latest valid status.
+ *
+ * Only status events authored by a maintainer or the issue author are
+ * considered authoritative. When `selectedMaintainers` is `undefined`
+ * (still loading), all events are accepted so the UI doesn't stay blank.
+ *
+ * No relay fetch — nip34EssentialsLoader (called by useNip34Loaders in
+ * IssuePage) already batches { kinds: [1630-1633,1985,5], "#e": [issueId] }.
+ *
+ * @param issueId             - The event ID of the issue
+ * @param issuePubkey         - The pubkey of the issue author (always authorised)
+ * @param selectedMaintainers - Effective maintainer set; undefined = loading
+ */
+export function useIssueStatus(
+  issueId: string | undefined,
+  issuePubkey: string | undefined,
+  selectedMaintainers: Set<string> | undefined,
+): IssueStatus {
+  const events = useIssueEssentialEvents(issueId);
+
+  const latest = events
+    ?.filter(
+      (ev) =>
+        (STATUS_KINDS as readonly number[]).includes(ev.kind) &&
+        isPubkeyAuthorised(ev.pubkey, issuePubkey, selectedMaintainers),
+    )
+    .reduce<
+      NostrEvent | undefined
+    >((best, ev) => (!best || ev.created_at > best.created_at ? ev : best), undefined);
+
+  return latest ? kindToStatus(latest.kind) : "open";
+}
+
+/**
+ * Return NIP-32 labels (kind:1985, `#t` namespace) for a specific issue.
+ *
+ * Only label events from authorised authors are accepted. When
+ * `selectedMaintainers` is `undefined` (loading), all events are accepted.
+ *
+ * @param issueId             - The event ID of the issue
+ * @param issuePubkey         - The pubkey of the issue author (always authorised)
+ * @param selectedMaintainers - Effective maintainer set; undefined = loading
+ */
+export function useIssueLabels(
+  issueId: string | undefined,
+  issuePubkey: string | undefined,
+  selectedMaintainers: Set<string> | undefined,
+): string[] {
+  const events = useIssueEssentialEvents(issueId);
+  if (!events || events.length === 0) return [];
+
+  const seen = new Set<string>();
+  for (const ev of events) {
+    if (ev.kind !== LABEL_KIND) continue;
+    if (!isPubkeyAuthorised(ev.pubkey, issuePubkey, selectedMaintainers))
+      continue;
+    for (const [t, label, ns] of ev.tags) {
+      if (t === "l" && ns === ISSUE_LABEL_NAMESPACE && label) seen.add(label);
+    }
+  }
+  return Array.from(seen).sort();
 }
 
 /**
  * Return all kind:1985 subject-rename events for a specific issue, sorted by
  * created_at ascending (oldest first), with id as a tiebreaker.
  *
+ * Only rename events from authorised authors are accepted. When
+ * `selectedMaintainers` is `undefined` (loading), all events are accepted.
+ *
  * These are events with:
  *   ["e", issueId]
  *   ["L", "#subject"]
  *   ["l", "<new subject>", "#subject"]
  *
- * Fetching is handled by nip34EssentialsLoader (called by useNip34Loaders),
- * which already batches { kinds: [1985], "#e": [issueId] }.
- *
- * @param issueId - The event ID of the issue
+ * @param issueId             - The event ID of the issue
+ * @param issuePubkey         - The pubkey of the issue author (always authorised)
+ * @param selectedMaintainers - Effective maintainer set; undefined = loading
  */
 export function useIssueSubjectRenames(
   issueId: string | undefined,
+  issuePubkey: string | undefined,
+  selectedMaintainers: Set<string> | undefined,
 ): NostrEvent[] | undefined {
-  const store = useEventStore();
-
-  const raw = use$(() => {
-    if (!issueId) return undefined;
-    const filters: Filter[] = [
-      { kinds: [LABEL_KIND], "#e": [issueId] } as Filter,
-    ];
-    return store.timeline(filters) as unknown as Observable<NostrEvent[]>;
-  }, [issueId, store]);
-
+  const raw = useIssueEssentialEvents(issueId);
   if (!raw) return undefined;
 
-  // Keep only events that carry a #subject label
-  const renames = raw.filter((ev) =>
-    ev.tags.some(([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE),
-  );
-
-  // Sort ascending by created_at, tiebreak by id (lexicographic)
-  return [...renames].sort(
-    (a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id),
-  );
+  return raw
+    .filter(
+      (ev) =>
+        ev.kind === LABEL_KIND &&
+        ev.tags.some(
+          ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
+        ) &&
+        isPubkeyAuthorised(ev.pubkey, issuePubkey, selectedMaintainers),
+    )
+    .sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id));
 }
 
 /**
- * Compute the current (effective) subject for an issue, taking into account
- * any kind:1985 subject-rename events.
+ * Returns true if an authorised deletion request (kind:5) exists for the
+ * given issue. Only the issue author's own deletion is valid per NIP-09.
  *
- * Priority rules (per spec):
- *   1. Maintainer-authored renames are authoritative; non-maintainer renames
- *      are treated as suggestions. When maintainerPubkeys is provided, only
- *      maintainer renames are considered. When it is omitted (e.g. on the list
- *      page before the maintainer set is resolved), ALL renames are accepted.
- *   2. Among qualifying renames, the latest by created_at wins; id is the
- *      tiebreaker (lexicographic ascending — lower id wins, matching NIP-34
- *      convention).
+ * @param issueId     - The event ID of the issue
+ * @param issuePubkey - The pubkey of the issue author
+ */
+export function useIssueIsDeleted(
+  issueId: string | undefined,
+  issuePubkey: string | undefined,
+): boolean {
+  const events = useIssueEssentialEvents(issueId);
+  if (!events || !issuePubkey) return false;
+  // NIP-09: only the original author's deletion is valid.
+  return events.some(
+    (ev) => ev.kind === DELETION_KIND && ev.pubkey === issuePubkey,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Maintainer resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the effective maintainer set for a specific issue.
  *
- * @param originalSubject   - The subject from the issue event itself
- * @param subjectRenames    - Sorted rename events from useIssueSubjectRenames
- * @param maintainerPubkeys - Optional set of authoritative pubkeys
+ * When `selectedMaintainers` is a `Set<string>` (URL context known — e.g. the
+ * selected maintainer's resolved repository chain), it is returned directly.
+ *
+ * When `selectedMaintainers` is `undefined` (context unknown — e.g. a global
+ * issue feed), the maintainer set is derived from the issue's first #a tag
+ * using `resolveMaintainersFromIssue`. The pubkey is always extractable from
+ * the coordinate string itself, so at least one maintainer is known before any
+ * 30617 announcement events have been received.
+ *
+ * Note: the issue author is NOT included — pass `issue.pubkey` separately as
+ * `issuePubkey` to the consumer hooks.
+ *
+ * @param issueId             - The event ID of the issue
+ * @param selectedMaintainers - Known maintainer set, or undefined when unknown
+ */
+export function useIssueMaintainers(
+  issueId: string | undefined,
+  selectedMaintainers: Set<string> | undefined,
+): Set<string> | undefined {
+  const store = useEventStore();
+
+  // Subscribe to the issue event only when auto-resolution is needed.
+  const issueEvents = use$(() => {
+    if (selectedMaintainers !== undefined || !issueId) return undefined;
+    return store.timeline([
+      { kinds: [ISSUE_KIND], ids: [issueId] },
+    ]) as unknown as Observable<NostrEvent[]>;
+  }, [issueId, selectedMaintainers, store]);
+
+  if (selectedMaintainers !== undefined) return selectedMaintainers;
+  if (!issueEvents || issueEvents.length === 0) return undefined;
+
+  return resolveMaintainersFromIssue(
+    issueEvents[0],
+    store.getByFilters([{ kinds: [REPO_KIND] }]),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Subject resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the current (effective) subject for an issue from pre-filtered,
+ * pre-sorted rename events. The last entry (latest by created_at, then id)
+ * wins.
+ *
+ * @param originalSubject - The subject from the issue event itself
+ * @param subjectRenames  - Authorised, sorted rename events from useIssueSubjectRenames
  */
 export function resolveCurrentSubject(
   originalSubject: string,
   subjectRenames: NostrEvent[] | undefined,
-  maintainerPubkeys?: Set<string>,
 ): string {
   if (!subjectRenames || subjectRenames.length === 0) return originalSubject;
-
-  // Filter to authoritative renames when the maintainer set is known
-  const qualifying =
-    maintainerPubkeys && maintainerPubkeys.size > 0
-      ? subjectRenames.filter((ev) => maintainerPubkeys.has(ev.pubkey))
-      : subjectRenames;
-
-  if (qualifying.length === 0) return originalSubject;
-
-  // Already sorted ascending; the last entry is the winner
-  const winner = qualifying[qualifying.length - 1];
-  const newSubject = winner.tags.find(
-    ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
-  )?.[1];
-
-  return newSubject ?? originalSubject;
+  const winner = subjectRenames[subjectRenames.length - 1];
+  return (
+    winner.tags.find(
+      ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
+    )?.[1] ?? originalSubject
+  );
 }

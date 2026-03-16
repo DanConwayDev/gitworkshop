@@ -10,6 +10,7 @@ type IssueEvent = KnownEvent<typeof ISSUE_KIND>;
 const SubjectSymbol = Symbol.for("issue-subject");
 const LabelsSymbol = Symbol.for("issue-labels");
 const RepoCoordSymbol = Symbol.for("issue-repo-coord");
+const RepoCoordsSymbol = Symbol.for("issue-repo-coords");
 
 /** Validate that a raw event is a well-formed issue */
 export function isValidIssue(event: NostrEvent): event is IssueEvent {
@@ -40,6 +41,13 @@ export class Issue extends EventCast<IssueEvent> {
       this.event,
       RepoCoordSymbol,
       () => this.event.tags.find(([t]) => t === "a")?.[1],
+    );
+  }
+
+  /** All repository coordinates from #a tags (an issue may tag multiple repos). */
+  get repoCoords(): string[] {
+    return getOrComputeCachedValue(this.event, RepoCoordsSymbol, () =>
+      this.event.tags.filter(([t]) => t === "a").map(([, v]) => v),
     );
   }
 

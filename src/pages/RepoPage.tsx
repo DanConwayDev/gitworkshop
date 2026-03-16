@@ -170,16 +170,13 @@ export default function RepoPage({
       // Author filter
       if (authorFilter && issue.pubkey !== authorFilter) return false;
 
-      // Search — check both original and current (renamed) subject
+      // Search — check both original and current (renamed) subject.
+      // subjectRenamesMap is already filtered to trusted authors by useIssues.
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const maintainerSet = repo?.maintainerSet
-          ? new Set(repo.maintainerSet)
-          : undefined;
         const currentSubject = resolveCurrentSubject(
           issue.subject,
           subjectRenamesMap.get(issue.id),
-          maintainerSet,
         );
         if (
           !currentSubject.toLowerCase().includes(q) &&
@@ -480,7 +477,6 @@ export default function RepoPage({
                 status={statusMap.get(issue.id)?.status ?? "open"}
                 extraLabels={labelsMap.get(issue.id) ?? []}
                 subjectRenames={subjectRenamesMap.get(issue.id)}
-                maintainerPubkeys={repo?.maintainerSet}
                 npub={npub!}
                 repoId={repoId!}
                 repoRelayGroup={repoRelayGroup}
@@ -507,7 +503,6 @@ function IssueRow({
   status,
   extraLabels,
   subjectRenames,
-  maintainerPubkeys,
   npub,
   repoId,
   repoRelayGroup,
@@ -516,10 +511,11 @@ function IssueRow({
   status: IssueStatus;
   /** Labels from NIP-32 kind:1985 events, merged with issue's own t-tags */
   extraLabels: string[];
-  /** Subject-rename events (kind:1985 with #subject namespace), sorted ascending */
+  /**
+   * Subject-rename events (kind:1985 with #subject namespace), sorted
+   * ascending. Already filtered to trusted authors by useIssues.
+   */
   subjectRenames: import("nostr-tools").NostrEvent[] | undefined;
-  /** Authoritative maintainer pubkeys for subject-rename resolution */
-  maintainerPubkeys: string[] | undefined;
   npub: string;
   repoId: string;
   repoRelayGroup: import("applesauce-relay").RelayGroup | undefined;
@@ -529,14 +525,8 @@ function IssueRow({
     new Set([...issue.labels, ...extraLabels]),
   ).sort();
 
-  const maintainerSet = maintainerPubkeys
-    ? new Set(maintainerPubkeys)
-    : undefined;
-  const currentSubject = resolveCurrentSubject(
-    issue.subject,
-    subjectRenames,
-    maintainerSet,
-  );
+  // subjectRenames is already filtered to trusted authors by useIssues.
+  const currentSubject = resolveCurrentSubject(issue.subject, subjectRenames);
 
   // Trigger two-tier loading for this issue. All IssueRow calls within the
   // same render cycle are batched by the loaders into a small number of relay

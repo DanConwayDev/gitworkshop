@@ -87,6 +87,20 @@ export function repoCoordinate(pubkey: string, dTag: string): string {
   return `${REPO_KIND}:${pubkey}:${dTag}`;
 }
 
+/**
+ * Extract the pubkey from a NIP-34 coordinate string.
+ * Format: "<kind>:<pubkey>:<d-tag>"
+ * Returns undefined if the coordinate is malformed.
+ */
+export function pubkeyFromCoordinate(coord: string): string | undefined {
+  const parts = coord.split(":");
+  // Minimum: kind + pubkey + d-tag (d-tag may itself contain colons)
+  if (parts.length < 3) return undefined;
+  const pubkey = parts[1];
+  // Pubkey must be a 64-char hex string
+  return /^[0-9a-f]{64}$/.test(pubkey) ? pubkey : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // ResolvedRepo — the merged view of a multi-maintainer repository
 // ---------------------------------------------------------------------------

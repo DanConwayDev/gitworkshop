@@ -12,6 +12,7 @@ import {
   useIssueStatus,
   useIssueZaps,
   useIssueSubjectRenames,
+  useIssueMaintainers,
   resolveCurrentSubject,
 } from "@/hooks/useIssues";
 import { useNip34Loaders } from "@/hooks/useNip34Loaders";
@@ -125,21 +126,32 @@ export default function IssuePage() {
     includeAuthorNip65: curationMode === "outbox",
   });
 
-  const status = useIssueStatus(issueId);
-  const nip32Labels = useIssueLabels(issueId);
-  const comments = useIssueComments(issueId);
-  const zaps = useIssueZaps(issueId);
-  const subjectRenames = useIssueSubjectRenames(issueId);
-
-  // Resolve the current (effective) subject, preferring maintainer-authored renames.
-  const maintainerSet = useMemo(
+  // Compute the effective maintainer set for this issue.
+  // On IssuePage we always have the selected maintainer from the URL, so pass
+  // the resolved maintainerSet directly (or undefined while it's loading).
+  const selectedMaintainers = useMemo(
     () => (repo?.maintainerSet ? new Set(repo.maintainerSet) : undefined),
     [repo?.maintainerSet],
   );
+  // useIssueMaintainers is called here to satisfy the rules of hooks even
+  // though we pass selectedMaintainers directly — it short-circuits internally.
+  useIssueMaintainers(issueId, selectedMaintainers);
+
+  const issuePubkey = issue?.pubkey;
+  const status = useIssueStatus(issueId, issuePubkey, selectedMaintainers);
+  const nip32Labels = useIssueLabels(issueId, issuePubkey, selectedMaintainers);
+  const comments = useIssueComments(issueId);
+  const zaps = useIssueZaps(issueId);
+  const subjectRenames = useIssueSubjectRenames(
+    issueId,
+    issuePubkey,
+    selectedMaintainers,
+  );
+
+  // Resolve the current (effective) subject from pre-filtered rename events.
   const currentSubject = resolveCurrentSubject(
     issue?.subject ?? "",
     subjectRenames,
-    maintainerSet,
   );
 
   // Merge labels from the issue's own t-tags with any NIP-32 label events.
