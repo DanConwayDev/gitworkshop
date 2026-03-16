@@ -22,6 +22,7 @@ import { useRepoContext } from "@/pages/repo/RepoContext";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
+import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -129,14 +130,15 @@ export default function PRPage() {
     subjectRenames,
   );
 
-  // Authorisation: can the logged-in user edit the subject?
+  // Authorisation: can the logged-in user edit the subject / status?
   const activeAccount = useActiveAccount();
-  const canEditSubject = useMemo(() => {
+  const canEdit = useMemo(() => {
     if (!activeAccount || !prEvent) return false;
     const pk = activeAccount.pubkey;
     if (pk === prEvent.pubkey) return true;
     return selectedMaintainers?.has(pk) ?? false;
   }, [activeAccount, prEvent, selectedMaintainers]);
+  const canEditSubject = canEdit;
 
   // Merge labels from the event's own t-tags with NIP-32 label events.
   const eventLabels = useMemo(() => {
@@ -372,6 +374,22 @@ export default function PRPage() {
                   <span className="text-sm text-muted-foreground">Status</span>
                   <StatusBadge status={status} variant="pr" />
                 </div>
+
+                {canEdit && prEvent && status !== "deleted" && (
+                  <ChangeStatusDropdown
+                    itemId={prEvent.id}
+                    itemAuthorPubkey={prEvent.pubkey}
+                    repoCoord={prEvent.tags.find(([t]) => t === "a")?.[1] ?? ""}
+                    currentStatus={status}
+                    options={[
+                      { value: "open", label: "Open" },
+                      { value: "resolved", label: "Merged" },
+                      { value: "closed", label: "Closed" },
+                      { value: "draft", label: "Draft" },
+                    ]}
+                    relays={repo?.relays}
+                  />
+                )}
 
                 <Separator />
 

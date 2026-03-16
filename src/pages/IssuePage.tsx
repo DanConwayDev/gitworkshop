@@ -22,6 +22,7 @@ import { useRepoContext } from "@/pages/repo/RepoContext";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
+import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -137,16 +138,15 @@ export default function IssuePage() {
     subjectRenames,
   );
 
-  // Authorisation: can the logged-in user edit the subject?
+  // Authorisation: can the logged-in user edit the subject / status?
   const activeAccount = useActiveAccount();
-  const canEditSubject = useMemo(() => {
+  const canEdit = useMemo(() => {
     if (!activeAccount || !issue) return false;
     const pk = activeAccount.pubkey;
-    // Issue author is always authorised.
     if (pk === issue.pubkey) return true;
-    // Maintainers are authorised.
     return selectedMaintainers?.has(pk) ?? false;
   }, [activeAccount, issue, selectedMaintainers]);
+  const canEditSubject = canEdit;
 
   // Merge labels from the issue's own t-tags with any NIP-32 label events.
   // Deduplicated and sorted for stable rendering.
@@ -367,6 +367,21 @@ export default function IssuePage() {
                   <span className="text-sm text-muted-foreground">Status</span>
                   <StatusBadge status={status} />
                 </div>
+
+                {canEdit && issue && status !== "deleted" && (
+                  <ChangeStatusDropdown
+                    itemId={issue.id}
+                    itemAuthorPubkey={issue.pubkey}
+                    repoCoord={issue.repoCoord ?? ""}
+                    currentStatus={status}
+                    options={[
+                      { value: "open", label: "Open" },
+                      { value: "resolved", label: "Resolved" },
+                      { value: "closed", label: "Closed" },
+                    ]}
+                    relays={repo?.relays}
+                  />
+                )}
 
                 <Separator />
 

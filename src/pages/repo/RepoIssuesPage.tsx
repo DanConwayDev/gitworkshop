@@ -162,7 +162,6 @@ export default function RepoIssuesPage() {
               <SelectItem value="open">Open</SelectItem>
               <SelectItem value="resolved">Resolved</SelectItem>
               <SelectItem value="closed">Closed</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
               <SelectItem value="deleted">Deleted</SelectItem>
             </SelectContent>
           </Select>
