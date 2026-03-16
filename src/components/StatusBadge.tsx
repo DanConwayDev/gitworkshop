@@ -7,6 +7,7 @@ import {
   XCircle,
   FileEdit,
   Trash2,
+  GitMerge,
 } from "lucide-react";
 
 const statusConfig: Record<
@@ -45,14 +46,35 @@ const statusConfig: Record<
   },
 };
 
+/** PR/patch variant overrides for status labels and icons. */
+const prStatusOverrides: Partial<
+  Record<IssueStatus, { label: string; icon: React.ElementType }>
+> = {
+  resolved: {
+    label: "Merged",
+    icon: GitMerge,
+  },
+};
+
 interface StatusBadgeProps {
   status: IssueStatus;
   className?: string;
+  /**
+   * When "pr", uses PR-specific labels (e.g. "Merged" instead of "Resolved").
+   * Default: "issue".
+   */
+  variant?: "issue" | "pr";
 }
 
-export function StatusBadge({ status, className }: StatusBadgeProps) {
+export function StatusBadge({
+  status,
+  className,
+  variant = "issue",
+}: StatusBadgeProps) {
   const config = statusConfig[status];
-  const Icon = config.icon;
+  const override = variant === "pr" ? prStatusOverrides[status] : undefined;
+  const Icon = override?.icon ?? config.icon;
+  const label = override?.label ?? config.label;
 
   return (
     <Badge
@@ -64,7 +86,7 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
       )}
     >
       <Icon className="h-3 w-3" />
-      {config.label}
+      {label}
     </Badge>
   );
 }

@@ -3,8 +3,11 @@ import { Link, useParams, useLocation } from "react-router-dom";
 import { useResolvedRepository } from "@/hooks/useResolvedRepository";
 import RepoAboutPage from "./RepoAboutPage";
 import RepoIssuesPage from "./RepoIssuesPage";
+import RepoPRsPage from "./RepoPRsPage";
 import IssuePage from "@/pages/IssuePage";
+import PRPage from "@/pages/PRPage";
 import { useIssues } from "@/hooks/useIssues";
+import { usePRs } from "@/hooks/usePRs";
 import { useDnsIdentity } from "@/hooks/useDnsIdentity";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
@@ -20,11 +23,12 @@ import {
   ArrowLeft,
   Info,
   CircleDot,
+  GitPullRequest,
   AlertCircle,
   Loader2,
 } from "lucide-react";
 import { RepoContext, type RepoContextValue } from "./RepoContext";
-import type { RepoQueryOptions } from "@/lib/nip34";
+import { PATCH_KIND, PR_KIND, type RepoQueryOptions } from "@/lib/nip34";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
 import { relayCurationMode } from "@/services/settings";
 import { cn } from "@/lib/utils";
@@ -152,7 +156,7 @@ function RepoLayoutResolved({
   const curationMode = use$(relayCurationMode);
 
   // In outbox mode, also subscribe to the extra maintainer mailbox relays so
-  // issues published only to those relays are discovered.
+  // issues and PRs published only to those relays are discovered.
   const coordKey = repo?.allCoordinates?.join(",") ?? "";
   use$(() => {
     if (
@@ -161,11 +165,14 @@ function RepoLayoutResolved({
       !repo?.allCoordinates?.length
     )
       return undefined;
-    const issueFilters = [
-      { kinds: [1621], "#a": repo.allCoordinates } as NostrFilter,
+    const filters = [
+      {
+        kinds: [1621, PATCH_KIND, PR_KIND],
+        "#a": repo.allCoordinates,
+      } as NostrFilter,
     ];
     return extraRelaysForMaintainerMailboxCoverage
-      .subscription(issueFilters)
+      .subscription(filters)
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [curationMode, extraRelaysForMaintainerMailboxCoverage, coordKey, store]);
 
@@ -180,6 +187,7 @@ function RepoLayoutResolved({
   );
 
   const issues = useIssues(repo?.allCoordinates, repoRelayGroup, queryOptions);
+  const prs = usePRs(repo?.allCoordinates, repoRelayGroup, queryOptions);
 
   // Count open issues for the tab badge
   const openIssueCount = useMemo(() => {
@@ -187,13 +195,19 @@ function RepoLayoutResolved({
     return issues.filter((i) => i.status === "open").length;
   }, [issues]);
 
+  // Count open PRs for the tab badge
+  const openPRCount = useMemo(() => {
+    if (!prs) return undefined;
+    return prs.filter((p) => p.status === "open").length;
+  }, [prs]);
+
   // Build the base path from the splat so tab links stay consistent with
   // whatever URL format the user arrived with (npub, nip05, relay hint, etc.)
-  // Strip any trailing sub-paths (issues, issues/:id) to get the repo root.
+  // Strip any trailing sub-paths (issues, prs, about) to get the repo root.
   const basePath = useMemo(() => {
     const full = `/${splat}`;
     // Remove known sub-paths
-    for (const suffix of ["/issues", "/about"]) {
+    for (const suffix of ["/issues", "/prs", "/about"]) {
       const idx = full.indexOf(suffix);
       if (idx !== -1) return full.slice(0, idx);
     }
@@ -201,30 +215,49 @@ function RepoLayoutResolved({
   }, [splat]);
 
   const isIssuesTab = location.pathname.startsWith(`${basePath}/issues`);
-  const isAboutTab = !isIssuesTab;
+  const isPRsTab = location.pathname.startsWith(`${basePath}/prs`);
+  const isAboutTab = !isIssuesTab && !isPRsTab;
 
-  // Determine which sub-page to render from the splat segments after the repo prefix.
-  // e.g. "npub/repoId/issues"          → "issues"
-  //      "npub/repoId/issues/<id>"      → "issue"
-  //      "npub/relay/repoId/issues"     → "issues"
-  //      "npub/relay/repoId/issues/<id>"→ "issue"
-  //      anything else                  → "about"
-  const { subPage, issueId } = useMemo((): {
-    subPage: "about" | "issues" | "issue";
+  // Determine which sub-page to render from the splat segments.
+  const { subPage, issueId, prId } = useMemo((): {
+    subPage: "about" | "issues" | "issue" | "prs" | "pr";
     issueId?: string;
+    prId?: string;
   } => {
     const segments = splat.split("/").filter(Boolean);
-    const issuesIdx = segments.indexOf("issues");
-    if (issuesIdx === -1) return { subPage: "about" };
-    if (segments.length > issuesIdx + 1) {
-      return { subPage: "issue", issueId: segments[issuesIdx + 1] };
+
+    const prsIdx = segments.indexOf("prs");
+    if (prsIdx !== -1) {
+      if (segments.length > prsIdx + 1) {
+        return { subPage: "pr", prId: segments[prsIdx + 1] };
+      }
+      return { subPage: "prs" };
     }
-    return { subPage: "issues" };
+
+    const issuesIdx = segments.indexOf("issues");
+    if (issuesIdx !== -1) {
+      if (segments.length > issuesIdx + 1) {
+        return { subPage: "issue", issueId: segments[issuesIdx + 1] };
+      }
+      return { subPage: "issues" };
+    }
+
+    return { subPage: "about" };
   }, [splat]);
 
   const ctxValue: RepoContextValue | null =
     pubkey && repoId
-      ? { pubkey, repoId, resolved, issues, queryOptions, nip05, issueId }
+      ? {
+          pubkey,
+          repoId,
+          resolved,
+          issues,
+          prs,
+          queryOptions,
+          nip05,
+          issueId,
+          prId,
+        }
       : null;
 
   return (
@@ -327,18 +360,28 @@ function RepoLayoutResolved({
               label="Issues"
               count={openIssueCount}
             />
+            <TabLink
+              to={`${basePath}/prs`}
+              active={isPRsTab}
+              icon={<GitPullRequest className="h-4 w-4" />}
+              label="PRs"
+              count={openPRCount}
+            />
           </nav>
         </div>
       </div>
 
-      {/* Page content — rendered directly from splat to avoid nested-route
-          matching issues with the variable-length /*  parent path. */}
+      {/* Page content */}
       {ctxValue ? (
         <RepoContext.Provider value={ctxValue}>
           {subPage === "issue" ? (
             <IssuePage />
           ) : subPage === "issues" ? (
             <RepoIssuesPage />
+          ) : subPage === "pr" ? (
+            <PRPage />
+          ) : subPage === "prs" ? (
+            <RepoPRsPage />
           ) : (
             <RepoAboutPage />
           )}

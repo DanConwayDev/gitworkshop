@@ -83,7 +83,7 @@ export type ParsedRepoRoute = RepoRouteNpub | RepoRouteNip05;
 // ---------------------------------------------------------------------------
 
 /** Sub-paths that appear after the repo identifier in the URL. */
-const REPO_SUB_PATHS = ["issues", "about"];
+const REPO_SUB_PATHS = ["issues", "prs", "about"];
 
 /**
  * Strip known sub-paths from the end of a splat so the parser only sees the

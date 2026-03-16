@@ -11,6 +11,15 @@ export const REPO_KIND = 30617;
 /** Git issue (kind 1621) */
 export const ISSUE_KIND = 1621;
 
+/** Git patch — root patch of a patch set (kind 1617) */
+export const PATCH_KIND = 1617;
+
+/** Git pull request (kind 1618) */
+export const PR_KIND = 1618;
+
+/** Root kinds that appear in the PRs list (patches + PRs). */
+export const PR_ROOT_KINDS = [PATCH_KIND, PR_KIND] as const;
+
 /** NIP-22 comment (kind 1111) */
 export const COMMENT_KIND = 1111;
 
@@ -264,6 +273,36 @@ export interface ResolvedIssue {
 // ---------------------------------------------------------------------------
 
 /**
+ * Extract the original subject from a root event.
+ *
+ * Different NIP-34 kinds store the subject in different tags:
+ * - Issues (1621) and PRs (1618): `subject` tag
+ * - Patches (1617): `title` tag (undocumented convention)
+ *
+ * This function is the single source of truth for subject extraction from
+ * raw events. The cast classes (Issue, PR, Patch) mirror this logic.
+ */
+export function extractSubject(ev: NostrEvent): string {
+  if (ev.kind === PATCH_KIND) {
+    return ev.tags.find(([t]) => t === "title")?.[1] ?? "(untitled)";
+  }
+  return ev.tags.find(([t]) => t === "subject")?.[1] ?? "(untitled)";
+}
+
+/**
+ * Extract the body/description from a root event.
+ *
+ * - Issues (1621) and PRs (1618): `content` field
+ * - Patches (1617): `description` tag (undocumented convention; content holds the diff)
+ */
+export function extractBody(ev: NostrEvent): string {
+  if (ev.kind === PATCH_KIND) {
+    return ev.tags.find(([t]) => t === "description")?.[1] ?? "";
+  }
+  return ev.content;
+}
+
+/**
  * Options that vary between entity types when resolving essentials.
  *
  * mergeStatusRequiresMaintainer: when true, the merge-specific status kinds
@@ -291,7 +330,7 @@ interface ResolvedMeta {
  * for each root event.
  *
  * This is a pure function — no hooks, no subscriptions, no side effects.
- * Both IssueListModel and future PatchListModel use this.
+ * Both IssueListModel and PRListModel use this.
  *
  * Auth rules:
  * - Deletion (kind:5): only the root event author is valid (NIP-09).
@@ -323,10 +362,7 @@ export function resolveEssentials(
 
   for (const ev of rootEvents) {
     authorById.set(ev.id, ev.pubkey);
-    subjectById.set(
-      ev.id,
-      ev.tags.find(([t]) => t === "subject")?.[1] ?? "(untitled)",
-    );
+    subjectById.set(ev.id, extractSubject(ev));
     tLabelsById.set(
       ev.id,
       ev.tags.filter(([t]) => t === "t").map(([, v]) => v),
@@ -505,8 +541,7 @@ export function buildResolvedIssues(
   }
 
   return rootEvents.map((ev): ResolvedIssue => {
-    const originalSubject =
-      ev.tags.find(([t]) => t === "subject")?.[1] ?? "(untitled)";
+    const originalSubject = extractSubject(ev);
     const meta = metaMap.get(ev.id) ?? {
       status: "open" as const,
       labels: ev.tags
@@ -529,7 +564,145 @@ export function buildResolvedIssues(
       event: ev,
       originalSubject,
       currentSubject: meta.currentSubject,
-      content: ev.content,
+      content: extractBody(ev),
+      createdAt: ev.created_at,
+      status: meta.status,
+      labels: meta.labels,
+      repoCoords: ev.tags
+        .filter(([t]) => t === "a")
+        .map(([, v]) => v)
+        .sort(),
+      commentCount: comments.length,
+      participantCount: participantPubkeys.size,
+      zapCount: zapsByRoot.get(ev.id) ?? 0,
+      authorisedUsers,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// ResolvedPR — merged view of a PR or root patch + its essentials events
+// ---------------------------------------------------------------------------
+
+/** Discriminator for whether a resolved PR item is a patch or a pull request. */
+export type PRItemType = "patch" | "pr";
+
+/**
+ * The fully-resolved view of a PR or root patch after merging the raw event
+ * with its status, label, and subject-rename events.
+ *
+ * Structurally identical to ResolvedIssue but with an `itemType` discriminator
+ * and `mergeStatusRequiresMaintainer` semantics (the item author cannot issue
+ * merge/resolved statuses — only maintainers can).
+ */
+export interface ResolvedPR {
+  /** The raw event ID */
+  id: string;
+  /** The author's pubkey */
+  pubkey: string;
+  /** The raw event — for consumers that need fields not in the flat interface */
+  event: NostrEvent;
+  /** Whether this is a root patch (kind 1617) or a pull request (kind 1618) */
+  itemType: PRItemType;
+  /** Original subject from the event itself */
+  originalSubject: string;
+  /** Current (effective) subject — latest authorised rename, or originalSubject */
+  currentSubject: string;
+  /** Body text (description tag for patches, content for PRs) */
+  content: string;
+  /** Unix timestamp (seconds) */
+  createdAt: number;
+  /** Current status — "deleted" takes precedence over all status events */
+  status: IssueStatus;
+  /** Deduplicated labels from t-tags and NIP-32 label events, sorted */
+  labels: string[];
+  /** All repository coordinates from #a tags, sorted */
+  repoCoords: string[];
+  /** Number of NIP-22 comments (kind:1111) */
+  commentCount: number;
+  /** Number of unique commenter pubkeys */
+  participantCount: number;
+  /** Number of zap receipts (kind:9735) */
+  zapCount: number;
+  /** Pubkeys authorised to write status/label/rename events */
+  authorisedUsers: Set<string>;
+}
+
+/**
+ * Build a list of ResolvedPR objects from raw patch and PR events.
+ *
+ * Structurally parallel to buildResolvedIssues but:
+ * - Accepts both kind:1617 (root patches) and kind:1618 (PRs)
+ * - Passes mergeStatusRequiresMaintainer=true to resolveEssentials
+ * - Uses extractSubject/extractBody for kind-aware field extraction
+ * - Adds an itemType discriminator
+ *
+ * @param rootEvents      - Raw patch/PR events (kinds 1617, 1618)
+ * @param essentialEvents - Status, label, and deletion events (#e root IDs)
+ * @param commentEvents   - NIP-22 comment events (kind:1111, #E root IDs)
+ * @param zapEvents       - Zap receipt events (kind:9735, #e root IDs)
+ * @param maintainerSet   - Authorised maintainer pubkeys
+ */
+export function buildResolvedPRs(
+  rootEvents: NostrEvent[],
+  essentialEvents: NostrEvent[],
+  commentEvents: NostrEvent[],
+  zapEvents: NostrEvent[],
+  maintainerSet: Set<string>,
+): ResolvedPR[] {
+  const metaMap = resolveEssentials(
+    rootEvents,
+    essentialEvents,
+    maintainerSet,
+    {
+      mergeStatusRequiresMaintainer: true,
+    },
+  );
+
+  // Index comments and zaps by root ID for O(1) per-item lookup.
+  const commentsByRoot = new Map<string, NostrEvent[]>();
+  for (const ev of commentEvents) {
+    const rootId =
+      ev.tags.find(([t, , , marker]) => t === "E" && marker === "root")?.[1] ??
+      ev.tags.find(([t]) => t === "E")?.[1];
+    if (!rootId) continue;
+    const existing = commentsByRoot.get(rootId) ?? [];
+    existing.push(ev);
+    commentsByRoot.set(rootId, existing);
+  }
+
+  const zapsByRoot = new Map<string, number>();
+  for (const ev of zapEvents) {
+    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
+    if (!rootId) continue;
+    zapsByRoot.set(rootId, (zapsByRoot.get(rootId) ?? 0) + 1);
+  }
+
+  return rootEvents.map((ev): ResolvedPR => {
+    const originalSubject = extractSubject(ev);
+    const meta = metaMap.get(ev.id) ?? {
+      status: "open" as const,
+      labels: ev.tags
+        .filter(([t]) => t === "t")
+        .map(([, v]) => v)
+        .sort(),
+      currentSubject: originalSubject,
+    };
+
+    const comments = commentsByRoot.get(ev.id) ?? [];
+    const participantPubkeys = new Set(comments.map((c) => c.pubkey));
+
+    const authorisedUsers = new Set(maintainerSet);
+    authorisedUsers.add(ev.pubkey);
+
+    return {
+      id: ev.id,
+      pubkey: ev.pubkey,
+      event: ev,
+      itemType: ev.kind === PATCH_KIND ? "patch" : "pr",
+      originalSubject,
+      currentSubject: meta.currentSubject,
+      content: extractBody(ev),
       createdAt: ev.created_at,
       status: meta.status,
       labels: meta.labels,
