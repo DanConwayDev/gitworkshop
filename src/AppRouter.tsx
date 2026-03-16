@@ -4,9 +4,6 @@ import { AppHeader } from "./components/AppHeader";
 
 import RepositoriesPage from "./pages/RepositoriesPage";
 import RepoLayout from "./pages/repo/RepoLayout";
-import RepoAboutPage from "./pages/repo/RepoAboutPage";
-import RepoIssuesPage from "./pages/repo/RepoIssuesPage";
-import IssuePage from "./pages/IssuePage";
 import Settings from "./pages/Settings";
 import { NIP19Page } from "./pages/NIP19Page";
 import NotFound from "./pages/NotFound";
@@ -28,11 +25,7 @@ export function AppRouter() {
               /:nip05/:repoId
               /:nip05/:relayHint/:repoId
             RepoLayout parses the splat and renders an error if it doesn't match. */}
-        <Route path="/*" element={<RepoLayout />}>
-          <Route index element={<RepoAboutPage />} />
-          <Route path="issues" element={<RepoIssuesPage />} />
-          <Route path="issues/:issueId" element={<IssuePage />} />
-        </Route>
+        <Route path="/*" element={<RepoLayout />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

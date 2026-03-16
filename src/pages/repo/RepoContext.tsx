@@ -12,6 +12,8 @@ export interface RepoContextValue {
   queryOptions: RepoQueryOptions;
   /** Set when the route was a NIP-05 address (e.g. "user@domain.com"). */
   nip05?: string;
+  /** Set when viewing a specific issue (replaces useParams issueId). */
+  issueId?: string;
 }
 
 export const RepoContext = createContext<RepoContextValue | null>(null);

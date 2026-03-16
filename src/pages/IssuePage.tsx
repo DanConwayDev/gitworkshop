@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -47,8 +47,7 @@ import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
 export default function IssuePage() {
-  const { issueId } = useParams<{ issueId: string }>();
-  const { pubkey, repoId, resolved } = useRepoContext();
+  const { pubkey, repoId, resolved, issueId } = useRepoContext();
   const repo = resolved?.repo;
   const repoRelayGroup = resolved?.repoRelayGroup;
   const extraRelaysForMaintainerMailboxCoverage =

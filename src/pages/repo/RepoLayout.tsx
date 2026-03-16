@@ -1,6 +1,9 @@
 import { useMemo } from "react";
-import { Link, Outlet, useParams, useLocation } from "react-router-dom";
+import { Link, useParams, useLocation } from "react-router-dom";
 import { useResolvedRepository } from "@/hooks/useResolvedRepository";
+import RepoAboutPage from "./RepoAboutPage";
+import RepoIssuesPage from "./RepoIssuesPage";
+import IssuePage from "@/pages/IssuePage";
 import { useIssues } from "@/hooks/useIssues";
 import { useDnsIdentity } from "@/hooks/useDnsIdentity";
 import { use$ } from "@/hooks/use$";
@@ -200,9 +203,28 @@ function RepoLayoutResolved({
   const isIssuesTab = location.pathname.startsWith(`${basePath}/issues`);
   const isAboutTab = !isIssuesTab;
 
+  // Determine which sub-page to render from the splat segments after the repo prefix.
+  // e.g. "npub/repoId/issues"          → "issues"
+  //      "npub/repoId/issues/<id>"      → "issue"
+  //      "npub/relay/repoId/issues"     → "issues"
+  //      "npub/relay/repoId/issues/<id>"→ "issue"
+  //      anything else                  → "about"
+  const { subPage, issueId } = useMemo((): {
+    subPage: "about" | "issues" | "issue";
+    issueId?: string;
+  } => {
+    const segments = splat.split("/").filter(Boolean);
+    const issuesIdx = segments.indexOf("issues");
+    if (issuesIdx === -1) return { subPage: "about" };
+    if (segments.length > issuesIdx + 1) {
+      return { subPage: "issue", issueId: segments[issuesIdx + 1] };
+    }
+    return { subPage: "issues" };
+  }, [splat]);
+
   const ctxValue: RepoContextValue | null =
     pubkey && repoId
-      ? { pubkey, repoId, resolved, issues, queryOptions, nip05 }
+      ? { pubkey, repoId, resolved, issues, queryOptions, nip05, issueId }
       : null;
 
   return (
@@ -309,10 +331,17 @@ function RepoLayoutResolved({
         </div>
       </div>
 
-      {/* Page content via nested route */}
+      {/* Page content — rendered directly from splat to avoid nested-route
+          matching issues with the variable-length /*  parent path. */}
       {ctxValue ? (
         <RepoContext.Provider value={ctxValue}>
-          <Outlet />
+          {subPage === "issue" ? (
+            <IssuePage />
+          ) : subPage === "issues" ? (
+            <RepoIssuesPage />
+          ) : (
+            <RepoAboutPage />
+          )}
         </RepoContext.Provider>
       ) : (
         <div className="container max-w-screen-xl px-4 md:px-8 py-6">
