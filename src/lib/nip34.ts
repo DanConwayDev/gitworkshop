@@ -5,6 +5,110 @@
 import type { NostrEvent } from "nostr-tools";
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 
+// ---------------------------------------------------------------------------
+// Patch message parsing (ported from gitworkshop)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the commit message from a git format-patch string.
+ * Returns subject + optional body separated by a blank line.
+ */
+export function extractPatchMessage(s: string): string | undefined {
+  try {
+    const subjectMatch = s.match(/^Subject: \[PATCH[^\]]*\] (.*)$/m);
+    if (!subjectMatch) return undefined;
+
+    const subjectLineEnd = (subjectMatch.index ?? 0) + subjectMatch[0].length;
+    const remaining = s.substring(subjectLineEnd);
+
+    let subject = subjectMatch[1];
+    const lines = remaining.split("\n");
+    let bodyStartIndex = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      if (i === 0 && lines[i] === "") {
+        bodyStartIndex = i + 1;
+        break;
+      } else if (lines[i].startsWith(" ")) {
+        subject += "\n" + lines[i].substring(1);
+        bodyStartIndex = i + 1;
+      } else if (lines[i] === "") {
+        bodyStartIndex = i + 1;
+        break;
+      } else {
+        bodyStartIndex = i;
+        break;
+      }
+    }
+
+    const bodyLines = lines.slice(bodyStartIndex);
+    let message = subject;
+    let messageEndIndex = bodyLines.length;
+
+    for (let i = 0; i < bodyLines.length; i++) {
+      const line = bodyLines[i];
+      if (line.match(/^ .+ \| \d+/)) {
+        messageEndIndex = i;
+        break;
+      }
+      if (line.startsWith("diff --git ")) {
+        messageEndIndex = i;
+        break;
+      }
+    }
+
+    if (messageEndIndex > 0) {
+      let bodyText = bodyLines.slice(0, messageEndIndex).join("\n").trim();
+      if (bodyText === "---" || bodyText.endsWith("\n---")) {
+        bodyText = bodyText.replace(/\n?---$/, "").trim();
+      }
+      if (bodyText) message += "\n\n" + bodyText;
+    }
+
+    return message;
+  } catch {
+    return undefined;
+  }
+}
+
+/** First line of a string. */
+export function firstLine(s: string): string {
+  return s.split(/\r?\n/)[0];
+}
+
+/** Everything after the first line of a string, trimmed. */
+export function remainingLines(s: string): string {
+  const idx = s.indexOf("\n");
+  if (idx === -1) return "";
+  return s.substring(idx).trim();
+}
+
+/**
+ * Extract the subject (title) for a patch event.
+ * Uses the first line of the `description` tag, falling back to
+ * parsing the patch content via extractPatchMessage.
+ */
+export function extractPatchSubject(ev: NostrEvent): string {
+  const desc = ev.tags.find(([t]) => t === "description")?.[1];
+  if (desc) return firstLine(desc);
+  const fromContent = extractPatchMessage(ev.content);
+  if (fromContent) return firstLine(fromContent);
+  return "(untitled)";
+}
+
+/**
+ * Extract the body for a patch event.
+ * Uses lines 2+ of the `description` tag, falling back to parsing
+ * the patch content via extractPatchMessage.
+ */
+export function extractPatchBody(ev: NostrEvent): string {
+  const desc = ev.tags.find(([t]) => t === "description")?.[1];
+  if (desc) return remainingLines(desc);
+  const fromContent = extractPatchMessage(ev.content);
+  if (fromContent) return remainingLines(fromContent);
+  return "";
+}
+
 /** Repository announcement (addressable, kind 30617) */
 export const REPO_KIND = 30617;
 
@@ -277,15 +381,13 @@ export interface ResolvedIssue {
  *
  * Different NIP-34 kinds store the subject in different tags:
  * - Issues (1621) and PRs (1618): `subject` tag
- * - Patches (1617): `title` tag (undocumented convention)
+ * - Patches (1617): first line of `description` tag, falling back to content parsing
  *
  * This function is the single source of truth for subject extraction from
  * raw events. The cast classes (Issue, PR, Patch) mirror this logic.
  */
 export function extractSubject(ev: NostrEvent): string {
-  if (ev.kind === PATCH_KIND) {
-    return ev.tags.find(([t]) => t === "title")?.[1] ?? "(untitled)";
-  }
+  if (ev.kind === PATCH_KIND) return extractPatchSubject(ev);
   return ev.tags.find(([t]) => t === "subject")?.[1] ?? "(untitled)";
 }
 
@@ -293,12 +395,10 @@ export function extractSubject(ev: NostrEvent): string {
  * Extract the body/description from a root event.
  *
  * - Issues (1621) and PRs (1618): `content` field
- * - Patches (1617): `description` tag (undocumented convention; content holds the diff)
+ * - Patches (1617): lines 2+ of `description` tag, falling back to content parsing
  */
 export function extractBody(ev: NostrEvent): string {
-  if (ev.kind === PATCH_KIND) {
-    return ev.tags.find(([t]) => t === "description")?.[1] ?? "";
-  }
+  if (ev.kind === PATCH_KIND) return extractPatchBody(ev);
   return ev.content;
 }
 

@@ -1,8 +1,8 @@
 import { CastRefEventStore, EventCast } from "applesauce-common/casts/cast";
 import { getOrComputeCachedValue } from "applesauce-core/helpers";
-import { getTagValue, KnownEvent } from "applesauce-core/helpers/event";
+import { KnownEvent } from "applesauce-core/helpers/event";
 import type { NostrEvent } from "nostr-tools";
-import { PATCH_KIND } from "@/lib/nip34";
+import { PATCH_KIND, extractPatchSubject, extractPatchBody } from "@/lib/nip34";
 
 type PatchEvent = KnownEvent<typeof PATCH_KIND>;
 
@@ -30,18 +30,14 @@ export class Patch extends EventCast<PatchEvent> {
   }
 
   get subject(): string {
-    return getOrComputeCachedValue(
-      this.event,
-      SubjectSymbol,
-      () => getTagValue(this.event, "title") ?? "(untitled)",
+    return getOrComputeCachedValue(this.event, SubjectSymbol, () =>
+      extractPatchSubject(this.event),
     );
   }
 
   get body(): string {
-    return getOrComputeCachedValue(
-      this.event,
-      BodySymbol,
-      () => getTagValue(this.event, "description") ?? "",
+    return getOrComputeCachedValue(this.event, BodySymbol, () =>
+      extractPatchBody(this.event),
     );
   }
 
