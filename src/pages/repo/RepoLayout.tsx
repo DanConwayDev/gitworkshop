@@ -98,7 +98,7 @@ function RepoLayoutNip05({
   }
 
   if (identity.status === "error") {
-    return <Nip05ResolveError nip05={nip05} message={identity.message} />;
+    return <Nip05ResolveError nip05={nip05} reason={identity.reason} />;
   }
 
   // Merge relay hints: identity relays first (authoritative), then URL hints
@@ -377,11 +377,18 @@ function Nip05NotFoundError({ nip05 }: { nip05: string }) {
 
 function Nip05ResolveError({
   nip05,
-  message,
+  reason,
 }: {
   nip05: string;
-  message: string;
+  reason: "timeout" | "network" | "unknown";
 }) {
+  const detail =
+    reason === "timeout"
+      ? "The lookup timed out. The domain may be slow or unreachable."
+      : reason === "network"
+        ? "A network error occurred. Check your connection and that the domain's /.well-known/nostr.json is accessible."
+        : "An unexpected error occurred while looking up the NIP-05 address.";
+
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center space-y-6 max-w-md px-4">
@@ -396,9 +403,7 @@ function Nip05ResolveError({
             Could not look up{" "}
             <span className="font-mono text-foreground">{nip05}</span>.
           </p>
-          <p className="text-xs text-muted-foreground/60 font-mono bg-muted rounded px-3 py-2 text-left break-all">
-            {message}
-          </p>
+          <p className="text-sm text-muted-foreground">{detail}</p>
         </div>
         <Button asChild variant="outline">
           <Link to="/">
