@@ -540,8 +540,9 @@ function CommentSkeleton() {
 }
 
 /**
- * Inline thread event showing a subject rename.
- * Displays who renamed the issue, from what title to what, and when.
+ * Inline timeline event showing a subject rename.
+ * Styled as a lightweight activity marker (like GitHub's title-change events)
+ * rather than a full card, so it doesn't compete with comment cards.
  */
 function SubjectRenameCard({
   event,
@@ -557,38 +558,37 @@ function SubjectRenameCard({
   });
 
   return (
-    <div className="flex items-center gap-3 py-2 px-1 text-sm text-muted-foreground">
-      <div className="flex items-center justify-center h-7 w-7 rounded-full bg-muted/50 shrink-0">
-        <Pencil className="h-3.5 w-3.5 text-muted-foreground/70" />
+    <div className="relative flex gap-3 py-1.5 pl-1">
+      {/* Timeline icon */}
+      <div className="relative flex items-start pt-0.5">
+        <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-muted/40 shrink-0">
+          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+        </div>
       </div>
-      <div className="flex-1 min-w-0">
-        <span>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 pt-1">
+        <p className="text-sm text-muted-foreground">
           <UserLink
             pubkey={event.pubkey}
             avatarSize="sm"
             nameClassName="text-sm font-medium text-foreground"
-          />
-        </span>{" "}
-        renamed this issue{" "}
-        <span className="text-xs text-muted-foreground/60 flex items-center gap-1 inline-flex">
-          <Calendar className="h-3 w-3" />
-          {timeAgo}
-        </span>
-        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-          <span
-            className="line-through text-muted-foreground/50 max-w-[200px] truncate"
-            title={oldSubject}
-          >
+          />{" "}
+          changed the title{" "}
+          <span className="text-xs text-muted-foreground/60 inline-flex items-center gap-1 align-middle">
+            <Clock className="h-3 w-3" />
+            {timeAgo}
+          </span>
+        </p>
+
+        {/* Old → New title block */}
+        <p className="mt-1.5 text-sm leading-relaxed break-words">
+          <span className="line-through text-muted-foreground/60 decoration-muted-foreground/30">
             {oldSubject || "(untitled)"}
           </span>
-          <span className="text-muted-foreground/40">→</span>
-          <span
-            className="font-medium text-foreground max-w-[200px] truncate"
-            title={newSubject}
-          >
-            {newSubject}
-          </span>
-        </div>
+          <span className="mx-1.5 text-muted-foreground/40 select-none">→</span>
+          <span className="font-medium text-foreground">{newSubject}</span>
+        </p>
       </div>
     </div>
   );
