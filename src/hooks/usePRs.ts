@@ -22,7 +22,7 @@ import {
 } from "@/lib/nip34";
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 import { PRListModel } from "@/models/PRListModel";
-import type { Filter } from "applesauce-core/helpers";
+import { getTagValue, type Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
@@ -54,7 +54,7 @@ export function resolveMaintainersFromPR(
   prEvent: NostrEvent,
   announcementEvents: NostrEvent[],
 ): Set<string> {
-  const coord = prEvent.tags.find(([t]) => t === "a")?.[1];
+  const coord = getTagValue(prEvent, "a");
   if (!coord) return new Set();
 
   const coordPubkey = pubkeyFromCoordinate(coord);

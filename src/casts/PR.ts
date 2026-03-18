@@ -37,10 +37,8 @@ export class PR extends EventCast<PREvent> {
   }
 
   get repoCoord(): string | undefined {
-    return getOrComputeCachedValue(
-      this.event,
-      RepoCoordSymbol,
-      () => this.event.tags.find(([t]) => t === "a")?.[1],
+    return getOrComputeCachedValue(this.event, RepoCoordSymbol, () =>
+      getTagValue(this.event, "a"),
     );
   }
 

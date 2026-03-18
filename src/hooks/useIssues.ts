@@ -22,7 +22,7 @@ import {
 } from "@/lib/nip34";
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 import { IssueListModel } from "@/models/IssueListModel";
-import type { Filter } from "applesauce-core/helpers";
+import { getTagValue, type Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
@@ -71,7 +71,7 @@ export function resolveMaintainersFromIssue(
   issue: NostrEvent,
   announcementEvents: NostrEvent[],
 ): Set<string> {
-  const coord = issue.tags.find(([t]) => t === "a")?.[1];
+  const coord = getTagValue(issue, "a");
   if (!coord) return new Set();
 
   const coordPubkey = pubkeyFromCoordinate(coord);

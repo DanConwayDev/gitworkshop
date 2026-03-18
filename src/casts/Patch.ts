@@ -1,6 +1,9 @@
 import { CastRefEventStore, EventCast } from "applesauce-common/casts/cast";
-import { getOrComputeCachedValue } from "applesauce-core/helpers";
-import { KnownEvent } from "applesauce-core/helpers/event";
+import {
+  getOrComputeCachedValue,
+  hasNameValueTag,
+} from "applesauce-core/helpers";
+import { getTagValue, KnownEvent } from "applesauce-core/helpers/event";
 import type { NostrEvent } from "nostr-tools";
 import {
   PATCH_KIND,
@@ -14,6 +17,7 @@ type PatchEvent = KnownEvent<typeof PATCH_KIND>;
 // Cache symbols
 const SubjectSymbol = Symbol.for("patch-subject");
 const BodySymbol = Symbol.for("patch-body");
+const IsRootSymbol = Symbol.for("patch-is-root");
 const LabelsSymbol = Symbol.for("patch-labels");
 const RepoCoordSymbol = Symbol.for("patch-repo-coord");
 const RepoCoordsSymbol = Symbol.for("patch-repo-coords");
@@ -47,10 +51,8 @@ export class Patch extends EventCast<PatchEvent> {
   }
 
   get repoCoord(): string | undefined {
-    return getOrComputeCachedValue(
-      this.event,
-      RepoCoordSymbol,
-      () => this.event.tags.find(([t]) => t === "a")?.[1],
+    return getOrComputeCachedValue(this.event, RepoCoordSymbol, () =>
+      getTagValue(this.event, "a"),
     );
   }
 
@@ -74,6 +76,8 @@ export class Patch extends EventCast<PatchEvent> {
   }
 
   get isRoot(): boolean {
-    return this.event.tags.some(([t, v]) => t === "t" && v === "root");
+    return getOrComputeCachedValue(this.event, IsRootSymbol, () =>
+      hasNameValueTag(this.event, "t", "root"),
+    );
   }
 }

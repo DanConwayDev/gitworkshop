@@ -3,6 +3,11 @@
  */
 
 import type { NostrEvent } from "nostr-tools";
+import {
+  getNip10References,
+  getCommentRootPointer,
+} from "applesauce-common/helpers";
+import { getReplaceableIdentifier } from "applesauce-core/helpers";
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 
 // ---------------------------------------------------------------------------
@@ -490,7 +495,7 @@ function buildResolvedList(
   const latestEssentialAt = new Map<string, number>();
 
   for (const ev of essentialEvents) {
-    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
+    const rootId = getNip10References(ev).root?.e?.id;
     if (!rootId || !authorById.has(rootId)) continue;
 
     // Track latest essential timestamp for lastActivityAt.
@@ -509,11 +514,8 @@ function buildResolvedList(
 
     // ── Status events (kinds 1630–1633)
     if ((STATUS_KINDS as readonly number[]).includes(ev.kind)) {
-      const rootTag = ev.tags.find(
-        ([t, , , marker]) => t === "e" && marker === "root",
-      );
-      if (!rootTag || !authorById.has(rootTag[1])) continue;
-      const statusRootId = rootTag[1];
+      const statusRootId = getNip10References(ev).root?.e?.id;
+      if (!statusRootId || !authorById.has(statusRootId)) continue;
 
       const isMergeStatus =
         ev.kind === STATUS_RESOLVED || ev.kind === STATUS_CLOSED;
@@ -563,9 +565,9 @@ function buildResolvedList(
   // ── Index comments and zaps ──────────────────────────────────────────────
   const commentsByRoot = new Map<string, NostrEvent[]>();
   for (const ev of commentEvents) {
+    const rootPointer = getCommentRootPointer(ev);
     const rootId =
-      ev.tags.find(([t, , , marker]) => t === "E" && marker === "root")?.[1] ??
-      ev.tags.find(([t]) => t === "E")?.[1];
+      rootPointer && "id" in rootPointer ? rootPointer.id : undefined;
     if (!rootId) continue;
     const existing = commentsByRoot.get(rootId) ?? [];
     existing.push(ev);
@@ -574,7 +576,7 @@ function buildResolvedList(
 
   const zapsByRoot = new Map<string, number>();
   for (const ev of zapEvents) {
-    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
+    const rootId = getNip10References(ev).root?.e?.id;
     if (!rootId) continue;
     zapsByRoot.set(rootId, (zapsByRoot.get(rootId) ?? 0) + 1);
   }
@@ -770,7 +772,7 @@ export function resolveChain(
   const byPubkey = new Map<string, NostrEvent>();
   for (const ev of events) {
     if (ev.kind !== REPO_KIND) continue;
-    const d = ev.tags.find(([t]) => t === "d")?.[1];
+    const d = getReplaceableIdentifier(ev);
     if (d !== dTag) continue;
     const existing = byPubkey.get(ev.pubkey);
     // Keep only the latest announcement per pubkey (store handles this but
@@ -949,7 +951,7 @@ export function groupIntoResolvedRepos(
   const dTags = new Set<string>();
   for (const ev of events) {
     if (ev.kind !== REPO_KIND) continue;
-    const d = ev.tags.find(([t]) => t === "d")?.[1];
+    const d = getReplaceableIdentifier(ev);
     if (d) dTags.add(d);
   }
 
@@ -974,7 +976,7 @@ export function groupIntoResolvedRepos(
       // Find an event author who listed them and resolve from that author.
       for (const ev of events) {
         if (ev.kind !== REPO_KIND) continue;
-        const d = ev.tags.find(([t]) => t === "d")?.[1];
+        const d = getReplaceableIdentifier(ev);
         if (d !== dTag) continue;
 
         // Check if forPubkey is the event author (already handled above)
@@ -997,7 +999,7 @@ export function groupIntoResolvedRepos(
       const pubkeysForDTag: string[] = [];
       for (const ev of events) {
         if (ev.kind !== REPO_KIND) continue;
-        const d = ev.tags.find(([t]) => t === "d")?.[1];
+        const d = getReplaceableIdentifier(ev);
         if (d === dTag) pubkeysForDTag.push(ev.pubkey);
       }
 

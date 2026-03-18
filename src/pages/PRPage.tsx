@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import {
   PATCH_KIND,
+  PATCH_CHAIN_TAGS,
   PR_ROOT_KINDS,
   extractSubject,
   extractBody,
@@ -141,9 +142,13 @@ export default function PRPage() {
   const canEditSubject = canEdit;
 
   // Merge labels from the event's own t-tags with NIP-32 label events.
+  // Exclude internal patch-chain tags (root, revision-root, etc.) so they
+  // don't appear as user-visible labels.
   const eventLabels = useMemo(() => {
     if (!prEvent) return [];
-    return prEvent.tags.filter(([t]) => t === "t").map(([, v]) => v);
+    return prEvent.tags
+      .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
+      .map(([, v]) => v);
   }, [prEvent]);
 
   const allLabels = useMemo(() => {

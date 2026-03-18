@@ -12,7 +12,7 @@ import {
   buildResolvedPRs,
   type ResolvedPR,
 } from "@/lib/nip34";
-import type { Filter } from "applesauce-core/helpers";
+import { hasNameValueTag, type Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 
 /** All essential kinds fetched alongside PRs/patches. */
@@ -54,8 +54,7 @@ export function PRListModel(coordsCacheKey: string): Model<ResolvedPR[]> {
         const events = (prEvents as NostrEvent[]).filter(
           (ev) =>
             ev.kind === PR_KIND ||
-            (ev.kind === PATCH_KIND &&
-              ev.tags.some(([t, v]) => t === "t" && v === "root")),
+            (ev.kind === PATCH_KIND && hasNameValueTag(ev, "t", "root")),
         );
         if (events.length === 0) return of([] as ResolvedPR[]);
 
