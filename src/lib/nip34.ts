@@ -610,6 +610,144 @@ export function resolveEssentials(
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Shared indexing helpers used by both buildResolvedIssues and buildResolvedPRs
+// ---------------------------------------------------------------------------
+
+/**
+ * Index NIP-22 comment events (kind:1111) by their root event ID.
+ * NIP-22 uses an uppercase "E" tag for the thread root.
+ */
+function indexCommentsByRoot(
+  commentEvents: NostrEvent[],
+): Map<string, NostrEvent[]> {
+  const map = new Map<string, NostrEvent[]>();
+  for (const ev of commentEvents) {
+    const rootId =
+      ev.tags.find(([t, , , marker]) => t === "E" && marker === "root")?.[1] ??
+      ev.tags.find(([t]) => t === "E")?.[1];
+    if (!rootId) continue;
+    const existing = map.get(rootId) ?? [];
+    existing.push(ev);
+    map.set(rootId, existing);
+  }
+  return map;
+}
+
+/** Index zap receipt events (kind:9735) count by their root event ID. */
+function indexZapsByRoot(zapEvents: NostrEvent[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const ev of zapEvents) {
+    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
+    if (!rootId) continue;
+    map.set(rootId, (map.get(rootId) ?? 0) + 1);
+  }
+  return map;
+}
+
+/**
+ * Index the latest essential event (status/label/deletion) timestamp per root
+ * ID. Used to compute lastActivityAt without re-scanning essentialEvents per
+ * root event.
+ */
+function indexLatestEssentialAt(
+  essentialEvents: NostrEvent[],
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const ev of essentialEvents) {
+    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
+    if (!rootId) continue;
+    const prev = map.get(rootId) ?? 0;
+    if (ev.created_at > prev) map.set(rootId, ev.created_at);
+  }
+  return map;
+}
+
+/**
+ * The fields shared by both ResolvedIssue and ResolvedPR. Computed once by
+ * buildResolvedItemFields and spread into each concrete type.
+ */
+interface ResolvedItemFields {
+  id: string;
+  pubkey: string;
+  event: NostrEvent;
+  originalSubject: string;
+  currentSubject: string;
+  content: string;
+  createdAt: number;
+  lastActivityAt: number;
+  status: IssueStatus;
+  labels: string[];
+  repoCoords: string[];
+  commentCount: number;
+  participantCount: number;
+  zapCount: number;
+  authorisedUsers: Set<string>;
+}
+
+/**
+ * Compute the shared fields for a single root event given the pre-built index
+ * maps. Called by both buildResolvedIssues and buildResolvedPRs.
+ */
+function buildResolvedItemFields(
+  ev: NostrEvent,
+  metaMap: Map<
+    string,
+    { status: IssueStatus; labels: string[]; currentSubject: string }
+  >,
+  commentsByRoot: Map<string, NostrEvent[]>,
+  zapsByRoot: Map<string, number>,
+  latestEssentialAt: Map<string, number>,
+  maintainerSet: Set<string>,
+): ResolvedItemFields {
+  const originalSubject = extractSubject(ev);
+  const meta = metaMap.get(ev.id) ?? {
+    status: "open" as const,
+    labels: ev.tags
+      .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
+      .map(([, v]) => v)
+      .sort(),
+    currentSubject: originalSubject,
+  };
+
+  const comments = commentsByRoot.get(ev.id) ?? [];
+  const participantPubkeys = new Set(comments.map((c) => c.pubkey));
+
+  const authorisedUsers = new Set(maintainerSet);
+  authorisedUsers.add(ev.pubkey);
+
+  const latestCommentAt = comments.reduce(
+    (max, c) => Math.max(max, c.created_at),
+    0,
+  );
+  const lastActivityAt = Math.max(
+    ev.created_at,
+    latestCommentAt,
+    latestEssentialAt.get(ev.id) ?? 0,
+  );
+
+  return {
+    id: ev.id,
+    pubkey: ev.pubkey,
+    event: ev,
+    originalSubject,
+    currentSubject: meta.currentSubject,
+    content: extractBody(ev),
+    createdAt: ev.created_at,
+    lastActivityAt,
+    status: meta.status,
+    labels: meta.labels,
+    repoCoords: ev.tags
+      .filter(([t]) => t === "a")
+      .map(([, v]) => v)
+      .sort(),
+    commentCount: comments.length,
+    participantCount: participantPubkeys.size,
+    zapCount: zapsByRoot.get(ev.id) ?? 0,
+    authorisedUsers,
+  };
+}
+
 /**
  * Build a list of ResolvedIssue objects from raw events.
  *
@@ -642,86 +780,22 @@ export function buildResolvedIssues(
     maintainerSet,
     options,
   );
-
-  // Index comments and zaps by root ID for O(1) per-issue lookup.
-  const commentsByRoot = new Map<string, NostrEvent[]>();
-  for (const ev of commentEvents) {
-    // NIP-22 uses uppercase E for the root reference.
-    const rootId =
-      ev.tags.find(([t, , , marker]) => t === "E" && marker === "root")?.[1] ??
-      ev.tags.find(([t]) => t === "E")?.[1];
-    if (!rootId) continue;
-    const existing = commentsByRoot.get(rootId) ?? [];
-    existing.push(ev);
-    commentsByRoot.set(rootId, existing);
-  }
-
-  const zapsByRoot = new Map<string, number>();
-  for (const ev of zapEvents) {
-    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
-    if (!rootId) continue;
-    zapsByRoot.set(rootId, (zapsByRoot.get(rootId) ?? 0) + 1);
-  }
-
-  // Index latest essential event timestamp per root ID for lastActivityAt.
-  const latestEssentialAt = new Map<string, number>();
-  for (const ev of essentialEvents) {
-    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
-    if (!rootId) continue;
-    const prev = latestEssentialAt.get(rootId) ?? 0;
-    if (ev.created_at > prev) latestEssentialAt.set(rootId, ev.created_at);
-  }
+  const commentsByRoot = indexCommentsByRoot(commentEvents);
+  const zapsByRoot = indexZapsByRoot(zapEvents);
+  const latestEssentialAt = indexLatestEssentialAt(essentialEvents);
 
   return rootEvents
-    .map((ev): ResolvedIssue => {
-      const originalSubject = extractSubject(ev);
-      const meta = metaMap.get(ev.id) ?? {
-        status: "open" as const,
-        labels: ev.tags
-          .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
-          .map(([, v]) => v)
-          .sort(),
-        currentSubject: originalSubject,
-      };
-
-      const comments = commentsByRoot.get(ev.id) ?? [];
-      const participantPubkeys = new Set(comments.map((c) => c.pubkey));
-
-      // Build the authorised set: issue author + all maintainers.
-      const authorisedUsers = new Set(maintainerSet);
-      authorisedUsers.add(ev.pubkey);
-
-      const latestCommentAt = comments.reduce(
-        (max, c) => Math.max(max, c.created_at),
-        0,
-      );
-      const lastActivityAt = Math.max(
-        ev.created_at,
-        latestCommentAt,
-        latestEssentialAt.get(ev.id) ?? 0,
-      );
-
-      return {
-        id: ev.id,
-        pubkey: ev.pubkey,
-        event: ev,
-        originalSubject,
-        currentSubject: meta.currentSubject,
-        content: extractBody(ev),
-        createdAt: ev.created_at,
-        lastActivityAt,
-        status: meta.status,
-        labels: meta.labels,
-        repoCoords: ev.tags
-          .filter(([t]) => t === "a")
-          .map(([, v]) => v)
-          .sort(),
-        commentCount: comments.length,
-        participantCount: participantPubkeys.size,
-        zapCount: zapsByRoot.get(ev.id) ?? 0,
-        authorisedUsers,
-      };
-    })
+    .map(
+      (ev): ResolvedIssue =>
+        buildResolvedItemFields(
+          ev,
+          metaMap,
+          commentsByRoot,
+          zapsByRoot,
+          latestEssentialAt,
+          maintainerSet,
+        ),
+    )
     .sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
 
@@ -782,11 +856,10 @@ export interface ResolvedPR {
 /**
  * Build a list of ResolvedPR objects from raw patch and PR events.
  *
- * Structurally parallel to buildResolvedIssues but:
+ * Parallel to buildResolvedIssues but:
  * - Accepts both kind:1617 (root patches) and kind:1618 (PRs)
  * - Passes mergeStatusRequiresMaintainer=true to resolveEssentials
- * - Uses extractSubject/extractBody for kind-aware field extraction
- * - Adds an itemType discriminator
+ * - Adds an itemType discriminator ("patch" | "pr")
  *
  * @param rootEvents      - Raw patch/PR events (kinds 1617, 1618)
  * @param essentialEvents - Status, label, and deletion events (#e root IDs)
@@ -809,85 +882,24 @@ export function buildResolvedPRs(
       mergeStatusRequiresMaintainer: true,
     },
   );
-
-  // Index comments and zaps by root ID for O(1) per-item lookup.
-  const commentsByRoot = new Map<string, NostrEvent[]>();
-  for (const ev of commentEvents) {
-    const rootId =
-      ev.tags.find(([t, , , marker]) => t === "E" && marker === "root")?.[1] ??
-      ev.tags.find(([t]) => t === "E")?.[1];
-    if (!rootId) continue;
-    const existing = commentsByRoot.get(rootId) ?? [];
-    existing.push(ev);
-    commentsByRoot.set(rootId, existing);
-  }
-
-  const zapsByRoot = new Map<string, number>();
-  for (const ev of zapEvents) {
-    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
-    if (!rootId) continue;
-    zapsByRoot.set(rootId, (zapsByRoot.get(rootId) ?? 0) + 1);
-  }
-
-  // Index latest essential event timestamp per root ID for lastActivityAt.
-  const latestEssentialAt = new Map<string, number>();
-  for (const ev of essentialEvents) {
-    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
-    if (!rootId) continue;
-    const prev = latestEssentialAt.get(rootId) ?? 0;
-    if (ev.created_at > prev) latestEssentialAt.set(rootId, ev.created_at);
-  }
+  const commentsByRoot = indexCommentsByRoot(commentEvents);
+  const zapsByRoot = indexZapsByRoot(zapEvents);
+  const latestEssentialAt = indexLatestEssentialAt(essentialEvents);
 
   return rootEvents
-    .map((ev): ResolvedPR => {
-      const originalSubject = extractSubject(ev);
-      const meta = metaMap.get(ev.id) ?? {
-        status: "open" as const,
-        labels: ev.tags
-          .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
-          .map(([, v]) => v)
-          .sort(),
-        currentSubject: originalSubject,
-      };
-
-      const comments = commentsByRoot.get(ev.id) ?? [];
-      const participantPubkeys = new Set(comments.map((c) => c.pubkey));
-
-      const authorisedUsers = new Set(maintainerSet);
-      authorisedUsers.add(ev.pubkey);
-
-      const latestCommentAt = comments.reduce(
-        (max, c) => Math.max(max, c.created_at),
-        0,
-      );
-      const lastActivityAt = Math.max(
-        ev.created_at,
-        latestCommentAt,
-        latestEssentialAt.get(ev.id) ?? 0,
-      );
-
-      return {
-        id: ev.id,
-        pubkey: ev.pubkey,
-        event: ev,
+    .map(
+      (ev): ResolvedPR => ({
+        ...buildResolvedItemFields(
+          ev,
+          metaMap,
+          commentsByRoot,
+          zapsByRoot,
+          latestEssentialAt,
+          maintainerSet,
+        ),
         itemType: ev.kind === PATCH_KIND ? "patch" : "pr",
-        originalSubject,
-        currentSubject: meta.currentSubject,
-        content: extractBody(ev),
-        createdAt: ev.created_at,
-        lastActivityAt,
-        status: meta.status,
-        labels: meta.labels,
-        repoCoords: ev.tags
-          .filter(([t]) => t === "a")
-          .map(([, v]) => v)
-          .sort(),
-        commentCount: comments.length,
-        participantCount: participantPubkeys.size,
-        zapCount: zapsByRoot.get(ev.id) ?? 0,
-        authorisedUsers,
-      };
-    })
+      }),
+    )
     .sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
 
