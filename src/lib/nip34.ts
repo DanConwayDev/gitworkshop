@@ -394,7 +394,7 @@ export interface ResolvedIssue {
 }
 
 // ---------------------------------------------------------------------------
-// resolveEssentials — shared pure function for issue/patch/PR resolution
+// Subject / body extraction
 // ---------------------------------------------------------------------------
 
 /**
@@ -424,7 +424,7 @@ export function extractBody(ev: NostrEvent): string {
 }
 
 /**
- * Options that vary between entity types when resolving essentials.
+ * Options that vary between entity types when building resolved lists.
  *
  * mergeStatusRequiresMaintainer: when true, the merge-specific status kinds
  *   (resolved/closed) require the author to be a maintainer — the item author
@@ -436,51 +436,35 @@ export interface ResolveEssentialsOptions {
 }
 
 /**
- * Intermediate resolved metadata for a single root event, produced by
- * resolveEssentials before being merged with the raw event into a ResolvedIssue.
- */
-interface ResolvedMeta {
-  status: IssueStatus;
-  labels: string[];
-  currentSubject: string;
-}
-
-/**
- * Given a set of root events (issues, patches, or PRs) and their associated
- * essentials events (status, labels, deletions), derive the resolved metadata
- * for each root event.
- *
- * This is a pure function — no hooks, no subscriptions, no side effects.
- * Both IssueListModel and PRListModel use this.
+ * Build a fully-resolved list of items from raw root events and their
+ * associated essentials, comments, and zaps. Single pass over each input
+ * array — no intermediate Maps escape this function.
  *
  * Auth rules:
  * - Deletion (kind:5): only the root event author is valid (NIP-09).
- * - Status events: the root event author and all maintainers are authorised.
+ * - Status events: root author and maintainers are authorised.
  *   When mergeStatusRequiresMaintainer is true, only maintainers may set
  *   resolved/closed status (for patches/PRs).
- * - Label events: the root event author and all maintainers are authorised.
+ * - Label events: root author and maintainers are authorised.
+ * Deletion takes precedence over all status events.
  *
- * Deletion takes precedence over all status events — once deleted, the status
- * is "deleted" regardless of any status events.
- *
- * @param rootEvents      - The raw root events (e.g. all kind:1621 issues)
- * @param essentialEvents - Status, label, and deletion events referencing roots
- * @param maintainerSet   - Authorised maintainer pubkeys (derived from coords)
- * @param options         - Per-entity-type auth tweaks
+ * The returned list is sorted descending by lastActivityAt (max of root
+ * created_at, latest comment, latest essential event).
  */
-export function resolveEssentials(
+function buildResolvedList(
   rootEvents: NostrEvent[],
   essentialEvents: NostrEvent[],
+  commentEvents: NostrEvent[],
+  zapEvents: NostrEvent[],
   maintainerSet: Set<string>,
   options: ResolveEssentialsOptions = {},
-): Map<string, ResolvedMeta> {
+): (ResolvedIssue & { itemType?: PRItemType })[] {
   const { mergeStatusRequiresMaintainer = false } = options;
 
-  // Index root events by ID for O(1) author lookup.
+  // ── Index root events ────────────────────────────────────────────────────
   const authorById = new Map<string, string>();
   const subjectById = new Map<string, string>();
   const tLabelsById = new Map<string, string[]>();
-
   for (const ev of rootEvents) {
     authorById.set(ev.id, ev.pubkey);
     subjectById.set(ev.id, extractSubject(ev));
@@ -492,7 +476,7 @@ export function resolveEssentials(
     );
   }
 
-  // Accumulators — one entry per root event ID.
+  // ── Process essentials (single pass) ────────────────────────────────────
   const deletedIds = new Set<string>();
   const latestStatusByRoot = new Map<
     string,
@@ -503,34 +487,34 @@ export function resolveEssentials(
     string,
     { createdAt: number; id: string; value: string }[]
   >();
+  const latestEssentialAt = new Map<string, number>();
 
   for (const ev of essentialEvents) {
-    // Find the referenced root event ID from the "e" tag.
     const rootId = ev.tags.find(([t]) => t === "e")?.[1];
     if (!rootId || !authorById.has(rootId)) continue;
+
+    // Track latest essential timestamp for lastActivityAt.
+    const prev = latestEssentialAt.get(rootId) ?? 0;
+    if (ev.created_at > prev) latestEssentialAt.set(rootId, ev.created_at);
 
     const issuePubkey = authorById.get(rootId)!;
     const isMaintainer = maintainerSet.has(ev.pubkey);
     const isAuthor = ev.pubkey === issuePubkey;
 
-    // ── Deletion (kind:5) ──────────────────────────────────────────────────
-    // NIP-09: only the original author's deletion is valid.
+    // ── Deletion (kind:5) — NIP-09: only the original author's deletion is valid.
     if (ev.kind === DELETION_KIND) {
       if (isAuthor) deletedIds.add(rootId);
       continue;
     }
 
-    // ── Status events (kinds 1630–1633) ────────────────────────────────────
+    // ── Status events (kinds 1630–1633)
     if ((STATUS_KINDS as readonly number[]).includes(ev.kind)) {
-      // Status events use an "e" tag with marker "root" to reference the issue.
       const rootTag = ev.tags.find(
         ([t, , , marker]) => t === "e" && marker === "root",
       );
-      if (!rootTag) continue;
+      if (!rootTag || !authorById.has(rootTag[1])) continue;
       const statusRootId = rootTag[1];
-      if (!authorById.has(statusRootId)) continue;
 
-      // Auth check: for merge-status kinds, only maintainers are authorised.
       const isMergeStatus =
         ev.kind === STATUS_RESOLVED || ev.kind === STATUS_CLOSED;
       if (mergeStatusRequiresMaintainer && isMergeStatus) {
@@ -549,11 +533,10 @@ export function resolveEssentials(
       continue;
     }
 
-    // ── Label events (kind:1985) ───────────────────────────────────────────
+    // ── Label events (kind:1985)
     if (ev.kind === LABEL_KIND) {
       if (!isAuthor && !isMaintainer) continue;
 
-      // Subject renames: carry the #subject namespace.
       const subjectLabel = ev.tags.find(
         ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
       );
@@ -567,7 +550,6 @@ export function resolveEssentials(
         renamesByRoot.set(rootId, existing);
       }
 
-      // Regular labels: carry the issue label namespace.
       for (const [t, label, ns] of ev.tags) {
         if (t === "l" && ns === ISSUE_LABEL_NAMESPACE && label) {
           const set = labelsByRoot.get(rootId) ?? new Set<string>();
@@ -578,193 +560,94 @@ export function resolveEssentials(
     }
   }
 
-  // Build the result map.
-  const result = new Map<string, ResolvedMeta>();
-
-  for (const [id] of authorById) {
-    // Deletion takes precedence over all status events.
-    let status: IssueStatus;
-    if (deletedIds.has(id)) {
-      status = "deleted";
-    } else {
-      const latestStatus = latestStatusByRoot.get(id);
-      status = latestStatus ? kindToStatus(latestStatus.kind) : "open";
-    }
-
-    // Merge t-tag labels with NIP-32 label events, deduplicate and sort.
-    const tLabels = tLabelsById.get(id) ?? [];
-    const nip32Labels = Array.from(labelsByRoot.get(id) ?? []);
-    const labels = Array.from(new Set([...tLabels, ...nip32Labels])).sort();
-
-    // Current subject: latest rename wins (sort ascending, last entry wins).
-    const renames = (renamesByRoot.get(id) ?? []).sort(
-      (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
-    );
-    const originalSubject = subjectById.get(id)!;
-    const currentSubject =
-      renames.length > 0 ? renames[renames.length - 1].value : originalSubject;
-
-    result.set(id, { status, labels, currentSubject });
-  }
-
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// Shared indexing helpers used by both buildResolvedIssues and buildResolvedPRs
-// ---------------------------------------------------------------------------
-
-/**
- * Index NIP-22 comment events (kind:1111) by their root event ID.
- * NIP-22 uses an uppercase "E" tag for the thread root.
- */
-function indexCommentsByRoot(
-  commentEvents: NostrEvent[],
-): Map<string, NostrEvent[]> {
-  const map = new Map<string, NostrEvent[]>();
+  // ── Index comments and zaps ──────────────────────────────────────────────
+  const commentsByRoot = new Map<string, NostrEvent[]>();
   for (const ev of commentEvents) {
     const rootId =
       ev.tags.find(([t, , , marker]) => t === "E" && marker === "root")?.[1] ??
       ev.tags.find(([t]) => t === "E")?.[1];
     if (!rootId) continue;
-    const existing = map.get(rootId) ?? [];
+    const existing = commentsByRoot.get(rootId) ?? [];
     existing.push(ev);
-    map.set(rootId, existing);
+    commentsByRoot.set(rootId, existing);
   }
-  return map;
-}
 
-/** Index zap receipt events (kind:9735) count by their root event ID. */
-function indexZapsByRoot(zapEvents: NostrEvent[]): Map<string, number> {
-  const map = new Map<string, number>();
+  const zapsByRoot = new Map<string, number>();
   for (const ev of zapEvents) {
     const rootId = ev.tags.find(([t]) => t === "e")?.[1];
     if (!rootId) continue;
-    map.set(rootId, (map.get(rootId) ?? 0) + 1);
+    zapsByRoot.set(rootId, (zapsByRoot.get(rootId) ?? 0) + 1);
   }
-  return map;
+
+  // ── Build resolved items ─────────────────────────────────────────────────
+  return rootEvents
+    .map((ev) => {
+      const originalSubject = extractSubject(ev);
+
+      // Derive status, labels, currentSubject from accumulated data.
+      let status: IssueStatus;
+      if (deletedIds.has(ev.id)) {
+        status = "deleted";
+      } else {
+        const latestStatus = latestStatusByRoot.get(ev.id);
+        status = latestStatus ? kindToStatus(latestStatus.kind) : "open";
+      }
+
+      const tLabels = tLabelsById.get(ev.id) ?? [];
+      const nip32Labels = Array.from(labelsByRoot.get(ev.id) ?? []);
+      const labels = Array.from(new Set([...tLabels, ...nip32Labels])).sort();
+
+      const renames = (renamesByRoot.get(ev.id) ?? []).sort(
+        (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
+      );
+      const currentSubject =
+        renames.length > 0
+          ? renames[renames.length - 1].value
+          : originalSubject;
+
+      const comments = commentsByRoot.get(ev.id) ?? [];
+      const participantPubkeys = new Set(comments.map((c) => c.pubkey));
+
+      const authorisedUsers = new Set(maintainerSet);
+      authorisedUsers.add(ev.pubkey);
+
+      const latestCommentAt = comments.reduce(
+        (max, c) => Math.max(max, c.created_at),
+        0,
+      );
+      const lastActivityAt = Math.max(
+        ev.created_at,
+        latestCommentAt,
+        latestEssentialAt.get(ev.id) ?? 0,
+      );
+
+      return {
+        id: ev.id,
+        pubkey: ev.pubkey,
+        event: ev,
+        originalSubject,
+        currentSubject,
+        content: extractBody(ev),
+        createdAt: ev.created_at,
+        lastActivityAt,
+        status,
+        labels,
+        repoCoords: ev.tags
+          .filter(([t]) => t === "a")
+          .map(([, v]) => v)
+          .sort(),
+        commentCount: comments.length,
+        participantCount: participantPubkeys.size,
+        zapCount: zapsByRoot.get(ev.id) ?? 0,
+        authorisedUsers,
+      };
+    })
+    .sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
 
 /**
- * Index the latest essential event (status/label/deletion) timestamp per root
- * ID. Used to compute lastActivityAt without re-scanning essentialEvents per
- * root event.
- */
-function indexLatestEssentialAt(
-  essentialEvents: NostrEvent[],
-): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const ev of essentialEvents) {
-    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
-    if (!rootId) continue;
-    const prev = map.get(rootId) ?? 0;
-    if (ev.created_at > prev) map.set(rootId, ev.created_at);
-  }
-  return map;
-}
-
-/**
- * The fields shared by both ResolvedIssue and ResolvedPR. Computed once by
- * buildResolvedItemFields and spread into each concrete type.
- */
-interface ResolvedItemFields {
-  id: string;
-  pubkey: string;
-  event: NostrEvent;
-  originalSubject: string;
-  currentSubject: string;
-  content: string;
-  createdAt: number;
-  lastActivityAt: number;
-  status: IssueStatus;
-  labels: string[];
-  repoCoords: string[];
-  commentCount: number;
-  participantCount: number;
-  zapCount: number;
-  authorisedUsers: Set<string>;
-}
-
-/**
- * Compute the shared fields for a single root event given the pre-built index
- * maps. Called by both buildResolvedIssues and buildResolvedPRs.
- */
-function buildResolvedItemFields(
-  ev: NostrEvent,
-  metaMap: Map<
-    string,
-    { status: IssueStatus; labels: string[]; currentSubject: string }
-  >,
-  commentsByRoot: Map<string, NostrEvent[]>,
-  zapsByRoot: Map<string, number>,
-  latestEssentialAt: Map<string, number>,
-  maintainerSet: Set<string>,
-): ResolvedItemFields {
-  const originalSubject = extractSubject(ev);
-  const meta = metaMap.get(ev.id) ?? {
-    status: "open" as const,
-    labels: ev.tags
-      .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
-      .map(([, v]) => v)
-      .sort(),
-    currentSubject: originalSubject,
-  };
-
-  const comments = commentsByRoot.get(ev.id) ?? [];
-  const participantPubkeys = new Set(comments.map((c) => c.pubkey));
-
-  const authorisedUsers = new Set(maintainerSet);
-  authorisedUsers.add(ev.pubkey);
-
-  const latestCommentAt = comments.reduce(
-    (max, c) => Math.max(max, c.created_at),
-    0,
-  );
-  const lastActivityAt = Math.max(
-    ev.created_at,
-    latestCommentAt,
-    latestEssentialAt.get(ev.id) ?? 0,
-  );
-
-  return {
-    id: ev.id,
-    pubkey: ev.pubkey,
-    event: ev,
-    originalSubject,
-    currentSubject: meta.currentSubject,
-    content: extractBody(ev),
-    createdAt: ev.created_at,
-    lastActivityAt,
-    status: meta.status,
-    labels: meta.labels,
-    repoCoords: ev.tags
-      .filter(([t]) => t === "a")
-      .map(([, v]) => v)
-      .sort(),
-    commentCount: comments.length,
-    participantCount: participantPubkeys.size,
-    zapCount: zapsByRoot.get(ev.id) ?? 0,
-    authorisedUsers,
-  };
-}
-
-/**
- * Build a list of ResolvedIssue objects from raw events.
- *
- * Combines resolveEssentials (status/labels/subject/deletion) with per-issue
- * counts derived from comment and zap events. All inputs are plain arrays —
- * this is a pure function with no side effects.
- *
- * Comment and zap arrays default to empty when the loader has not yet fetched
- * them, so counts are 0 on the list page and populate live on the detail page
- * as useNip34Loaders fetches deeper data into the store.
- *
- * @param rootEvents      - Raw issue events (kind:1621)
- * @param essentialEvents - Status, label, and deletion events (#e root IDs)
- * @param commentEvents   - NIP-22 comment events (kind:1111, #E root IDs)
- * @param zapEvents       - Zap receipt events (kind:9735, #e root IDs)
- * @param maintainerSet   - Authorised maintainer pubkeys
- * @param options         - Per-entity-type auth tweaks for resolveEssentials
+ * Build a sorted list of ResolvedIssue objects from raw events. Pure function,
+ * no side effects. Comment/zap counts are 0 until useNip34Loaders fetches them.
  */
 export function buildResolvedIssues(
   rootEvents: NostrEvent[],
@@ -774,29 +657,14 @@ export function buildResolvedIssues(
   maintainerSet: Set<string>,
   options: ResolveEssentialsOptions = {},
 ): ResolvedIssue[] {
-  const metaMap = resolveEssentials(
+  return buildResolvedList(
     rootEvents,
     essentialEvents,
+    commentEvents,
+    zapEvents,
     maintainerSet,
     options,
   );
-  const commentsByRoot = indexCommentsByRoot(commentEvents);
-  const zapsByRoot = indexZapsByRoot(zapEvents);
-  const latestEssentialAt = indexLatestEssentialAt(essentialEvents);
-
-  return rootEvents
-    .map(
-      (ev): ResolvedIssue =>
-        buildResolvedItemFields(
-          ev,
-          metaMap,
-          commentsByRoot,
-          zapsByRoot,
-          latestEssentialAt,
-          maintainerSet,
-        ),
-    )
-    .sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
 
 // ---------------------------------------------------------------------------
@@ -854,18 +722,9 @@ export interface ResolvedPR {
 }
 
 /**
- * Build a list of ResolvedPR objects from raw patch and PR events.
- *
- * Parallel to buildResolvedIssues but:
- * - Accepts both kind:1617 (root patches) and kind:1618 (PRs)
- * - Passes mergeStatusRequiresMaintainer=true to resolveEssentials
- * - Adds an itemType discriminator ("patch" | "pr")
- *
- * @param rootEvents      - Raw patch/PR events (kinds 1617, 1618)
- * @param essentialEvents - Status, label, and deletion events (#e root IDs)
- * @param commentEvents   - NIP-22 comment events (kind:1111, #E root IDs)
- * @param zapEvents       - Zap receipt events (kind:9735, #e root IDs)
- * @param maintainerSet   - Authorised maintainer pubkeys
+ * Build a sorted list of ResolvedPR objects from raw patch and PR events.
+ * Identical to buildResolvedIssues but mergeStatusRequiresMaintainer=true and
+ * each item gets an itemType discriminator ("patch" | "pr").
  */
 export function buildResolvedPRs(
   rootEvents: NostrEvent[],
@@ -874,33 +733,19 @@ export function buildResolvedPRs(
   zapEvents: NostrEvent[],
   maintainerSet: Set<string>,
 ): ResolvedPR[] {
-  const metaMap = resolveEssentials(
+  return buildResolvedList(
     rootEvents,
     essentialEvents,
+    commentEvents,
+    zapEvents,
     maintainerSet,
     {
       mergeStatusRequiresMaintainer: true,
     },
-  );
-  const commentsByRoot = indexCommentsByRoot(commentEvents);
-  const zapsByRoot = indexZapsByRoot(zapEvents);
-  const latestEssentialAt = indexLatestEssentialAt(essentialEvents);
-
-  return rootEvents
-    .map(
-      (ev): ResolvedPR => ({
-        ...buildResolvedItemFields(
-          ev,
-          metaMap,
-          commentsByRoot,
-          zapsByRoot,
-          latestEssentialAt,
-          maintainerSet,
-        ),
-        itemType: ev.kind === PATCH_KIND ? "patch" : "pr",
-      }),
-    )
-    .sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+  ).map((item) => ({
+    ...item,
+    itemType: (item.event.kind === PATCH_KIND ? "patch" : "pr") as PRItemType,
+  }));
 }
 
 // ---------------------------------------------------------------------------
