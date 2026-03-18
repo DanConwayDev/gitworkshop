@@ -7,7 +7,10 @@ import {
   getNip10References,
   getCommentRootPointer,
 } from "applesauce-common/helpers";
-import { getReplaceableIdentifier } from "applesauce-core/helpers";
+import {
+  getReplaceableIdentifier,
+  getOrComputeCachedValue,
+} from "applesauce-core/helpers";
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 
 // ---------------------------------------------------------------------------
@@ -184,6 +187,94 @@ export function kindToStatus(kind: number): IssueStatus {
     default:
       return "open";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cached per-event tag extractors for kind:30617 announcement events
+//
+// Each function uses getOrComputeCachedValue to attach the result to the raw
+// NostrEvent object via a symbol key. Because the EventStore reuses the same
+// event object reference across reactive updates, the parse runs at most once
+// per event version regardless of how many times resolveChain, cast classes,
+// or models call these helpers.
+// ---------------------------------------------------------------------------
+
+const RepoNameSymbol = Symbol.for("repo-ev-name");
+const RepoDescriptionSymbol = Symbol.for("repo-ev-description");
+const RepoCloneUrlsSymbol = Symbol.for("repo-ev-clone-urls");
+const RepoWebUrlsSymbol = Symbol.for("repo-ev-web-urls");
+const RepoRelaysSymbol = Symbol.for("repo-ev-relays");
+const RepoMaintainersSymbol = Symbol.for("repo-ev-maintainers");
+
+/** Extract the human-readable name from a kind:30617 event. Falls back to the d-tag. */
+export function getRepoName(ev: NostrEvent): string {
+  return getOrComputeCachedValue(
+    ev,
+    RepoNameSymbol,
+    () =>
+      ev.tags.find(([t]) => t === "name")?.[1] ??
+      ev.tags.find(([t]) => t === "d")?.[1] ??
+      "",
+  );
+}
+
+/** Extract the description from a kind:30617 event. Falls back to content. */
+export function getRepoDescription(ev: NostrEvent): string {
+  return getOrComputeCachedValue(
+    ev,
+    RepoDescriptionSymbol,
+    () => ev.tags.find(([t]) => t === "description")?.[1] ?? ev.content ?? "",
+  );
+}
+
+/**
+ * Extract all clone URLs from a kind:30617 event.
+ * NIP-34 packs multiple URLs as extra elements of a single tag:
+ *   ["clone", "url1", "url2", ...]
+ */
+export function getRepoCloneUrls(ev: NostrEvent): string[] {
+  return getOrComputeCachedValue(ev, RepoCloneUrlsSymbol, () =>
+    ev.tags
+      .filter(([t]) => t === "clone")
+      .flatMap(([, ...urls]) => urls.filter(Boolean)),
+  );
+}
+
+/**
+ * Extract all web URLs from a kind:30617 event.
+ * Same multi-value tag format as clone: ["web", "url1", "url2", ...]
+ */
+export function getRepoWebUrls(ev: NostrEvent): string[] {
+  return getOrComputeCachedValue(ev, RepoWebUrlsSymbol, () =>
+    ev.tags
+      .filter(([t]) => t === "web")
+      .flatMap(([, ...urls]) => urls.filter(Boolean)),
+  );
+}
+
+/**
+ * Extract all relay URLs from a kind:30617 event.
+ * NIP-34 packs multiple relay URLs as extra elements of a single tag:
+ *   ["relays", "wss://relay1", "wss://relay2", ...]
+ */
+export function getRepoRelays(ev: NostrEvent): string[] {
+  return getOrComputeCachedValue(ev, RepoRelaysSymbol, () =>
+    ev.tags
+      .filter(([t]) => t === "relays")
+      .flatMap(([, ...urls]) => urls.filter(Boolean)),
+  );
+}
+
+/**
+ * Extract the list of co-maintainer pubkeys from a kind:30617 event.
+ * Format: ["maintainers", "pubkey1", "pubkey2", ...]
+ * Returns an empty array when the tag is absent.
+ */
+export function getRepoMaintainers(ev: NostrEvent): string[] {
+  return getOrComputeCachedValue(ev, RepoMaintainersSymbol, () => {
+    const tag = ev.tags.find(([t]) => t === "maintainers");
+    return tag ? tag.slice(1).filter(Boolean) : [];
+  });
 }
 
 /** Default git index relay URL. */
@@ -804,8 +895,7 @@ export function resolveChain(
     }
 
     // Read maintainers tag — format: ["maintainers", pubkey1, pubkey2, ...]
-    const maintainersTag = ev.tags.find(([t]) => t === "maintainers");
-    const listed = maintainersTag ? maintainersTag.slice(1) : [];
+    const listed = getRepoMaintainers(ev);
 
     for (const listed_pubkey of listed) {
       edges.push({ from: pubkey, to: listed_pubkey });
@@ -830,31 +920,22 @@ export function resolveChain(
     if (ev.created_at > latestEv.created_at) latestEv = ev;
   }
 
-  const getName = (ev: NostrEvent) =>
-    ev.tags.find(([t]) => t === "name")?.[1] ??
-    ev.tags.find(([t]) => t === "d")?.[1] ??
-    "";
-  const getDescription = (ev: NostrEvent) =>
-    ev.tags.find(([t]) => t === "description")?.[1] ?? ev.content ?? "";
-  const getWebUrls = (ev: NostrEvent) =>
-    ev.tags.filter(([t]) => t === "web").map(([, v]) => v);
-
   // Find the latest announcement that actually has a name/description
   // (fall back to overall latest if none have it)
   const nameSource = announcements.reduce(
     (best, ev) => {
-      const val = getName(ev);
+      const val = getRepoName(ev);
       if (!val) return best;
       return ev.created_at > best.createdAt
         ? { pubkey: ev.pubkey, createdAt: ev.created_at, value: val }
         : best;
     },
-    { pubkey: latestEv.pubkey, createdAt: 0, value: getName(latestEv) },
+    { pubkey: latestEv.pubkey, createdAt: 0, value: getRepoName(latestEv) },
   );
 
   const descriptionSource = announcements.reduce(
     (best, ev) => {
-      const val = getDescription(ev);
+      const val = getRepoDescription(ev);
       return ev.created_at > best.createdAt
         ? { pubkey: ev.pubkey, createdAt: ev.created_at, value: val }
         : best;
@@ -862,7 +943,7 @@ export function resolveChain(
     {
       pubkey: latestEv.pubkey,
       createdAt: 0,
-      value: getDescription(latestEv),
+      value: getRepoDescription(latestEv),
     },
   );
 
@@ -875,8 +956,8 @@ export function resolveChain(
   const labels: string[] = [];
 
   for (const ev of announcements) {
-    for (const [t, v] of ev.tags) {
-      if (t === "clone" && v && !seenClone.has(v)) {
+    for (const v of getRepoCloneUrls(ev)) {
+      if (!seenClone.has(v)) {
         seenClone.add(v);
         cloneUrlProvenance.push({
           pubkey: ev.pubkey,
@@ -884,7 +965,9 @@ export function resolveChain(
           value: v,
         });
       }
-      if (t === "relays" && v && !seenRelay.has(v)) {
+    }
+    for (const v of getRepoRelays(ev)) {
+      if (!seenRelay.has(v)) {
         seenRelay.add(v);
         relayProvenance.push({
           pubkey: ev.pubkey,
@@ -892,6 +975,8 @@ export function resolveChain(
           value: v,
         });
       }
+    }
+    for (const [t, v] of ev.tags) {
       if (t === "t" && v && v !== "personal-fork" && !seenLabel.has(v)) {
         seenLabel.add(v);
         labels.push(v);
@@ -906,7 +991,7 @@ export function resolveChain(
     dTag,
     name: nameSource.value || dTag,
     description: descriptionSource.value,
-    webUrls: getWebUrls(latestEv),
+    webUrls: getRepoWebUrls(latestEv),
     updatedAt: latestEv.created_at,
     cloneUrls: cloneUrlProvenance.map((p) => p.value),
     relays: relayProvenance.map((p) => p.value),
@@ -983,9 +1068,7 @@ export function groupIntoResolvedRepos(
         if (ev.pubkey === forPubkey) continue;
 
         // Check if forPubkey is listed in the maintainers tag
-        const maintainersTag = ev.tags.find(([t]) => t === "maintainers");
-        const listed = maintainersTag ? maintainersTag.slice(1) : [];
-        if (listed.includes(forPubkey)) {
+        if (getRepoMaintainers(ev).includes(forPubkey)) {
           // Resolve from the event author who listed us
           const fromAuthor = resolveChain(events, ev.pubkey, dTag);
           if (fromAuthor) {

@@ -9,17 +9,19 @@ import { withImmediateValueOrDefault } from "applesauce-core/observable/with-imm
 import { getTagValue, KnownEvent } from "applesauce-core/helpers/event";
 import type { NostrEvent } from "nostr-tools";
 import { map } from "rxjs";
-import { REPO_KIND } from "@/lib/nip34";
+import {
+  REPO_KIND,
+  getRepoName,
+  getRepoDescription,
+  getRepoCloneUrls,
+  getRepoWebUrls,
+  getRepoMaintainers,
+} from "@/lib/nip34";
 
 type RepositoryEvent = KnownEvent<typeof REPO_KIND>;
 
-// Cache symbols
-const NameSymbol = Symbol.for("repo-name");
-const DescriptionSymbol = Symbol.for("repo-description");
+// Cache symbols for cast-specific computed values not covered by nip34 extractors
 const DTagSymbol = Symbol.for("repo-d-tag");
-const CloneUrlsSymbol = Symbol.for("repo-clone-urls");
-const WebUrlsSymbol = Symbol.for("repo-web-urls");
-const MaintainersSymbol = Symbol.for("repo-maintainers");
 const LabelsSymbol = Symbol.for("repo-labels");
 
 /** Validate that a raw event is a well-formed repository announcement */
@@ -47,38 +49,24 @@ export class Repository extends EventCast<RepositoryEvent> {
   }
 
   get name(): string {
-    return getOrComputeCachedValue(
-      this.event,
-      NameSymbol,
-      () => getTagValue(this.event, "name") ?? this.dTag,
-    );
+    return getRepoName(this.event) || this.dTag;
   }
 
   get description(): string {
-    return getOrComputeCachedValue(
-      this.event,
-      DescriptionSymbol,
-      () => getTagValue(this.event, "description") ?? "",
-    );
+    return getRepoDescription(this.event);
   }
 
   get cloneUrls(): string[] {
-    return getOrComputeCachedValue(this.event, CloneUrlsSymbol, () =>
-      this.event.tags.filter(([t]) => t === "clone").map(([, v]) => v),
-    );
+    return getRepoCloneUrls(this.event);
   }
 
   get webUrls(): string[] {
-    return getOrComputeCachedValue(this.event, WebUrlsSymbol, () =>
-      this.event.tags.filter(([t]) => t === "web").map(([, v]) => v),
-    );
+    return getRepoWebUrls(this.event);
   }
 
   get maintainers(): string[] {
-    return getOrComputeCachedValue(this.event, MaintainersSymbol, () => {
-      const mTag = this.event.tags.find(([t]) => t === "maintainers");
-      return mTag ? mTag.slice(1) : [this.event.pubkey];
-    });
+    const listed = getRepoMaintainers(this.event);
+    return listed.length > 0 ? listed : [this.event.pubkey];
   }
 
   get labels(): string[] {

@@ -1,7 +1,7 @@
 import { Observable, Subscription } from "rxjs";
 import type { Model } from "applesauce-core/event-store";
 import { RelayGroup } from "applesauce-relay";
-import { REPO_KIND } from "@/lib/nip34";
+import { REPO_KIND, getRepoRelays, getRepoMaintainers } from "@/lib/nip34";
 import { pool } from "@/services/nostr";
 
 /**
@@ -50,17 +50,13 @@ export function RepositoryRelayGroup(
               if (!ev) return;
 
               // Add any relay URLs declared in this announcement
-              for (const [t, v] of ev.tags) {
-                if (t === "relays" && v) {
-                  const relay = pool.relay(v);
-                  if (!group.has(relay)) group.add(relay);
-                }
+              for (const url of getRepoRelays(ev)) {
+                const relay = pool.relay(url);
+                if (!group.has(relay)) group.add(relay);
               }
 
               // Follow the maintainers tag to discover co-maintainer relays
-              const maintainersTag = ev.tags.find(([t]) => t === "maintainers");
-              const listed = maintainersTag ? maintainersTag.slice(1) : [];
-              for (const mp of listed) {
+              for (const mp of getRepoMaintainers(ev)) {
                 subscribe(mp);
               }
 

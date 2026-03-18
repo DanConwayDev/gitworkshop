@@ -1,6 +1,11 @@
 import { Observable, Subscription } from "rxjs";
 import type { Model } from "applesauce-core/event-store";
-import { REPO_KIND, resolveChain, type ResolvedRepo } from "@/lib/nip34";
+import {
+  REPO_KIND,
+  resolveChain,
+  getRepoMaintainers,
+  type ResolvedRepo,
+} from "@/lib/nip34";
 import type { NostrEvent } from "nostr-tools";
 
 /**
@@ -56,10 +61,7 @@ export function RepositoryModel(
 
               if (ev) {
                 // Read maintainers tag and subscribe to any new pubkeys
-                const maintainersTag = ev.tags.find(
-                  ([t]) => t === "maintainers",
-                );
-                const listed = maintainersTag ? maintainersTag.slice(1) : [];
+                const listed = getRepoMaintainers(ev);
                 let newDiscoveries = false;
                 for (const mp of listed) {
                   if (!subscribed.has(mp)) {
