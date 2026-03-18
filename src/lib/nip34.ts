@@ -348,8 +348,14 @@ export interface ResolvedIssue {
   currentSubject: string;
   /** Issue body */
   content: string;
-  /** Unix timestamp (seconds) */
+  /** Unix timestamp (seconds) of the root issue event */
   createdAt: number;
+  /**
+   * Unix timestamp (seconds) of the most recent activity — the latest of the
+   * root event, any comment, or any status/label event. Used for sorting lists
+   * by "most recently active".
+   */
+  lastActivityAt: number;
   /**
    * Current status. "deleted" takes precedence over all other status events
    * when a valid NIP-09 deletion request exists.
@@ -657,44 +663,66 @@ export function buildResolvedIssues(
     zapsByRoot.set(rootId, (zapsByRoot.get(rootId) ?? 0) + 1);
   }
 
-  return rootEvents.map((ev): ResolvedIssue => {
-    const originalSubject = extractSubject(ev);
-    const meta = metaMap.get(ev.id) ?? {
-      status: "open" as const,
-      labels: ev.tags
-        .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
-        .map(([, v]) => v)
-        .sort(),
-      currentSubject: originalSubject,
-    };
+  // Index latest essential event timestamp per root ID for lastActivityAt.
+  const latestEssentialAt = new Map<string, number>();
+  for (const ev of essentialEvents) {
+    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
+    if (!rootId) continue;
+    const prev = latestEssentialAt.get(rootId) ?? 0;
+    if (ev.created_at > prev) latestEssentialAt.set(rootId, ev.created_at);
+  }
 
-    const comments = commentsByRoot.get(ev.id) ?? [];
-    const participantPubkeys = new Set(comments.map((c) => c.pubkey));
+  return rootEvents
+    .map((ev): ResolvedIssue => {
+      const originalSubject = extractSubject(ev);
+      const meta = metaMap.get(ev.id) ?? {
+        status: "open" as const,
+        labels: ev.tags
+          .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
+          .map(([, v]) => v)
+          .sort(),
+        currentSubject: originalSubject,
+      };
 
-    // Build the authorised set: issue author + all maintainers.
-    const authorisedUsers = new Set(maintainerSet);
-    authorisedUsers.add(ev.pubkey);
+      const comments = commentsByRoot.get(ev.id) ?? [];
+      const participantPubkeys = new Set(comments.map((c) => c.pubkey));
 
-    return {
-      id: ev.id,
-      pubkey: ev.pubkey,
-      event: ev,
-      originalSubject,
-      currentSubject: meta.currentSubject,
-      content: extractBody(ev),
-      createdAt: ev.created_at,
-      status: meta.status,
-      labels: meta.labels,
-      repoCoords: ev.tags
-        .filter(([t]) => t === "a")
-        .map(([, v]) => v)
-        .sort(),
-      commentCount: comments.length,
-      participantCount: participantPubkeys.size,
-      zapCount: zapsByRoot.get(ev.id) ?? 0,
-      authorisedUsers,
-    };
-  });
+      // Build the authorised set: issue author + all maintainers.
+      const authorisedUsers = new Set(maintainerSet);
+      authorisedUsers.add(ev.pubkey);
+
+      const latestCommentAt = comments.reduce(
+        (max, c) => Math.max(max, c.created_at),
+        0,
+      );
+      const lastActivityAt = Math.max(
+        ev.created_at,
+        latestCommentAt,
+        latestEssentialAt.get(ev.id) ?? 0,
+      );
+
+      return {
+        id: ev.id,
+        pubkey: ev.pubkey,
+        event: ev,
+        originalSubject,
+        currentSubject: meta.currentSubject,
+        content: extractBody(ev),
+        createdAt: ev.created_at,
+        lastActivityAt,
+        status: meta.status,
+        labels: meta.labels,
+        repoCoords: ev.tags
+          .filter(([t]) => t === "a")
+          .map(([, v]) => v)
+          .sort(),
+        commentCount: comments.length,
+        participantCount: participantPubkeys.size,
+        zapCount: zapsByRoot.get(ev.id) ?? 0,
+        authorisedUsers,
+      };
+    })
+    .sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
 
 // ---------------------------------------------------------------------------
@@ -727,8 +755,14 @@ export interface ResolvedPR {
   currentSubject: string;
   /** Body text (description tag for patches, content for PRs) */
   content: string;
-  /** Unix timestamp (seconds) */
+  /** Unix timestamp (seconds) of the root event */
   createdAt: number;
+  /**
+   * Unix timestamp (seconds) of the most recent activity — the latest of the
+   * root event, any comment, or any status/label event. Used for sorting lists
+   * by "most recently active".
+   */
+  lastActivityAt: number;
   /** Current status — "deleted" takes precedence over all status events */
   status: IssueStatus;
   /** Deduplicated labels from t-tags and NIP-32 label events, sorted */
@@ -795,44 +829,66 @@ export function buildResolvedPRs(
     zapsByRoot.set(rootId, (zapsByRoot.get(rootId) ?? 0) + 1);
   }
 
-  return rootEvents.map((ev): ResolvedPR => {
-    const originalSubject = extractSubject(ev);
-    const meta = metaMap.get(ev.id) ?? {
-      status: "open" as const,
-      labels: ev.tags
-        .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
-        .map(([, v]) => v)
-        .sort(),
-      currentSubject: originalSubject,
-    };
+  // Index latest essential event timestamp per root ID for lastActivityAt.
+  const latestEssentialAt = new Map<string, number>();
+  for (const ev of essentialEvents) {
+    const rootId = ev.tags.find(([t]) => t === "e")?.[1];
+    if (!rootId) continue;
+    const prev = latestEssentialAt.get(rootId) ?? 0;
+    if (ev.created_at > prev) latestEssentialAt.set(rootId, ev.created_at);
+  }
 
-    const comments = commentsByRoot.get(ev.id) ?? [];
-    const participantPubkeys = new Set(comments.map((c) => c.pubkey));
+  return rootEvents
+    .map((ev): ResolvedPR => {
+      const originalSubject = extractSubject(ev);
+      const meta = metaMap.get(ev.id) ?? {
+        status: "open" as const,
+        labels: ev.tags
+          .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
+          .map(([, v]) => v)
+          .sort(),
+        currentSubject: originalSubject,
+      };
 
-    const authorisedUsers = new Set(maintainerSet);
-    authorisedUsers.add(ev.pubkey);
+      const comments = commentsByRoot.get(ev.id) ?? [];
+      const participantPubkeys = new Set(comments.map((c) => c.pubkey));
 
-    return {
-      id: ev.id,
-      pubkey: ev.pubkey,
-      event: ev,
-      itemType: ev.kind === PATCH_KIND ? "patch" : "pr",
-      originalSubject,
-      currentSubject: meta.currentSubject,
-      content: extractBody(ev),
-      createdAt: ev.created_at,
-      status: meta.status,
-      labels: meta.labels,
-      repoCoords: ev.tags
-        .filter(([t]) => t === "a")
-        .map(([, v]) => v)
-        .sort(),
-      commentCount: comments.length,
-      participantCount: participantPubkeys.size,
-      zapCount: zapsByRoot.get(ev.id) ?? 0,
-      authorisedUsers,
-    };
-  });
+      const authorisedUsers = new Set(maintainerSet);
+      authorisedUsers.add(ev.pubkey);
+
+      const latestCommentAt = comments.reduce(
+        (max, c) => Math.max(max, c.created_at),
+        0,
+      );
+      const lastActivityAt = Math.max(
+        ev.created_at,
+        latestCommentAt,
+        latestEssentialAt.get(ev.id) ?? 0,
+      );
+
+      return {
+        id: ev.id,
+        pubkey: ev.pubkey,
+        event: ev,
+        itemType: ev.kind === PATCH_KIND ? "patch" : "pr",
+        originalSubject,
+        currentSubject: meta.currentSubject,
+        content: extractBody(ev),
+        createdAt: ev.created_at,
+        lastActivityAt,
+        status: meta.status,
+        labels: meta.labels,
+        repoCoords: ev.tags
+          .filter(([t]) => t === "a")
+          .map(([, v]) => v)
+          .sort(),
+        commentCount: comments.length,
+        participantCount: participantPubkeys.size,
+        zapCount: zapsByRoot.get(ev.id) ?? 0,
+        authorisedUsers,
+      };
+    })
+    .sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
 
 // ---------------------------------------------------------------------------
