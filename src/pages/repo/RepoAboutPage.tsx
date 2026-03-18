@@ -14,13 +14,23 @@ import {
   Tag,
   Radio,
   ExternalLink,
+  GitCommit,
+  BookOpen,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { useGitRepoData } from "@/hooks/useGitRepoData";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { formatDistanceToNow } from "date-fns";
 
 export default function RepoAboutPage() {
   const { resolved } = useRepoContext();
   const repo = resolved?.repo;
+
+  const gitData = useGitRepoData(repo?.cloneUrls ?? []);
 
   useSeoMeta({
     title: repo ? `${repo.name} - ngit` : "Repository - ngit",
@@ -49,8 +59,14 @@ export default function RepoAboutPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         {/* Main content */}
         <div className="space-y-6">
-          {/* Description */}
-          {repo.description && (
+          {/* Latest commit */}
+          {repo.cloneUrls.length > 0 && <LatestCommitCard gitData={gitData} />}
+
+          {/* README */}
+          {repo.cloneUrls.length > 0 && <ReadmeCard gitData={gitData} />}
+
+          {/* Description (shown when no README) */}
+          {!gitData.readmeContent && repo.description && (
             <Card>
               <CardContent className="p-6">
                 <p className="text-base leading-relaxed text-foreground/90">
@@ -192,6 +208,147 @@ export default function RepoAboutPage() {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Latest commit card
+// ---------------------------------------------------------------------------
+
+function LatestCommitCard({
+  gitData,
+}: {
+  gitData: ReturnType<typeof useGitRepoData>;
+}) {
+  if (gitData.loading) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-4 w-4 text-muted-foreground animate-spin shrink-0" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (gitData.error || !gitData.latestCommit) {
+    return null;
+  }
+
+  const commit = gitData.latestCommit;
+  const shortHash = commit.hash.slice(0, 8);
+  const subject = commit.message.split("\n")[0];
+  const authorDate = new Date(commit.author.timestamp * 1000);
+  const relativeTime = formatDistanceToNow(authorDate, { addSuffix: true });
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <GitCommit className="h-4 w-4 text-muted-foreground" />
+          Latest commit
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="flex items-start gap-3">
+          <code className="shrink-0 text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground mt-0.5">
+            {shortHash}
+          </code>
+          <div className="min-w-0">
+            <p
+              className="text-sm font-medium leading-snug truncate"
+              title={subject}
+            >
+              {subject}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {commit.author.name} &middot; {relativeTime}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// README card
+// ---------------------------------------------------------------------------
+
+function ReadmeCard({
+  gitData,
+}: {
+  gitData: ReturnType<typeof useGitRepoData>;
+}) {
+  if (gitData.loading) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <BookOpen className="h-4 w-4 text-muted-foreground" />
+            <Skeleton className="h-4 w-24" />
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+          <Skeleton className="h-4 w-4/6" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (gitData.error) {
+    return (
+      <Card className="border-destructive/30">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>Could not load repository data: {gitData.error}</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!gitData.readmeContent) {
+    return null;
+  }
+
+  const isMarkdown =
+    gitData.readmeFilename?.toLowerCase().endsWith(".md") ||
+    gitData.readmeFilename?.toLowerCase().endsWith(".markdown");
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <BookOpen className="h-4 w-4 text-muted-foreground" />
+          {gitData.readmeFilename ?? "README"}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {isMarkdown ? (
+          <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-violet-600 dark:prose-a:text-violet-400 prose-code:text-sm prose-pre:bg-muted prose-pre:text-foreground">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {gitData.readmeContent}
+            </ReactMarkdown>
+          </div>
+        ) : (
+          <pre className="text-sm whitespace-pre-wrap font-mono text-foreground/80 leading-relaxed">
+            {gitData.readmeContent}
+          </pre>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Clone URL row
+// ---------------------------------------------------------------------------
 
 function CloneUrlRow({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
