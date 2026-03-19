@@ -28,6 +28,8 @@ export interface RepoContextValue {
   treePath?: string;
   /** The commit ID from the URL (for single-commit view). */
   commitId?: string;
+  /** The ref segment from a /commits/:ref URL (branch, tag, or commit hash). */
+  commitsRef?: string;
 }
 
 export const RepoContext = createContext<RepoContextValue | null>(null);

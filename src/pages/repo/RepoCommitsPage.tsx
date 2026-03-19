@@ -1,32 +1,57 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useRepoContext } from "./RepoContext";
 import { useCommitHistory } from "@/hooks/useGitExplorer";
 import { useGitExplorer } from "@/hooks/useGitExplorer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle, GitCommit, User, Clock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertCircle,
+  GitCommit,
+  GitBranch,
+  Tag,
+  User,
+  Clock,
+} from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import type { Commit } from "@fiatjaf/git-natural-api";
 
 export default function RepoCommitsPage() {
-  const { cloneUrls, repoState } = useRepoContext();
+  const { cloneUrls, repoState, commitsRef } = useRepoContext();
+  const navigate = useNavigate();
 
-  // First resolve the default ref via getInfoRefs
+  // Always fetch refs so we can populate the selector.
+  // Pass commitsRef so the explorer resolves to the right commit hash.
   const explorer = useGitExplorer(cloneUrls, {
+    ref: commitsRef,
     knownHeadCommit: repoState?.headCommitId,
   });
 
-  const defaultRef = explorer.resolvedRef ?? undefined;
+  const resolvedRef = explorer.resolvedRef ?? undefined;
 
-  const history = useCommitHistory(cloneUrls, defaultRef, 50);
+  const history = useCommitHistory(cloneUrls, resolvedRef, 50);
 
-  // Build base path for commit links
+  // Build base path for commit links (strip /commits/... suffix)
   const basePath = useMemo(() => {
     const pathname = window.location.pathname;
     const idx = pathname.indexOf("/commits");
     return idx !== -1 ? pathname.slice(0, idx) : pathname;
   }, []);
+
+  const branches = explorer.refs.filter((r) => r.isBranch);
+  const tags = explorer.refs.filter((r) => r.isTag);
+
+  const handleRefChange = (newRef: string) => {
+    navigate(`${basePath}/commits/${encodeURIComponent(newRef)}`);
+  };
 
   if (cloneUrls.length === 0) {
     return (
@@ -45,21 +70,60 @@ export default function RepoCommitsPage() {
 
   return (
     <div className="container max-w-screen-xl px-4 md:px-8 py-6 space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <GitCommit className="h-5 w-5 text-muted-foreground" />
-        <h2 className="text-lg font-semibold">
-          {defaultRef ? (
-            <>
-              Commits on{" "}
-              <code className="font-mono text-violet-600 dark:text-violet-400">
-                {defaultRef}
-              </code>
-            </>
-          ) : (
-            "Commits"
-          )}
-        </h2>
+      {/* Header: ref selector + label */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <GitCommit className="h-5 w-5 text-muted-foreground shrink-0" />
+        <h2 className="text-lg font-semibold shrink-0">Commits on</h2>
+        {explorer.refs.length > 0 ? (
+          <Select value={resolvedRef ?? ""} onValueChange={handleRefChange}>
+            <SelectTrigger className="h-8 w-auto min-w-[120px] max-w-[220px] text-xs gap-1.5">
+              <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <SelectValue placeholder="Select ref" />
+            </SelectTrigger>
+            <SelectContent>
+              {branches.length > 0 && (
+                <>
+                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                    <GitBranch className="h-3 w-3" />
+                    Branches
+                  </div>
+                  {branches.map((b) => (
+                    <SelectItem key={b.name} value={b.name} className="text-xs">
+                      {b.name}
+                      {b.isDefault && (
+                        <Badge
+                          variant="secondary"
+                          className="ml-2 text-[10px] h-4 px-1"
+                        >
+                          default
+                        </Badge>
+                      )}
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+              {tags.length > 0 && (
+                <>
+                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5 mt-1">
+                    <Tag className="h-3 w-3" />
+                    Tags
+                  </div>
+                  {tags.map((t) => (
+                    <SelectItem key={t.name} value={t.name} className="text-xs">
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+            </SelectContent>
+          </Select>
+        ) : explorer.loading ? (
+          <Skeleton className="h-8 w-28" />
+        ) : resolvedRef ? (
+          <code className="font-mono text-violet-600 dark:text-violet-400 text-sm">
+            {resolvedRef}
+          </code>
+        ) : null}
       </div>
 
       {/* Error */}

@@ -243,65 +243,68 @@ function RepoLayoutResolved({
   const isAboutTab = !isCodeTab && !isCommitsTab && !isIssuesTab && !isPRsTab;
 
   // Determine which sub-page to render from the splat segments.
-  const { subPage, issueId, prId, treeRef, treePath, commitId } = useMemo((): {
-    subPage:
-      | "code"
-      | "about"
-      | "issues"
-      | "issue"
-      | "prs"
-      | "pr"
-      | "commits"
-      | "commit";
-    issueId?: string;
-    prId?: string;
-    treeRef?: string;
-    treePath?: string;
-    commitId?: string;
-  } => {
-    const segments = splat.split("/").filter(Boolean);
+  const { subPage, issueId, prId, treeRef, treePath, commitId, commitsRef } =
+    useMemo((): {
+      subPage:
+        | "code"
+        | "about"
+        | "issues"
+        | "issue"
+        | "prs"
+        | "pr"
+        | "commits"
+        | "commit";
+      issueId?: string;
+      prId?: string;
+      treeRef?: string;
+      treePath?: string;
+      commitId?: string;
+      commitsRef?: string;
+    } => {
+      const segments = splat.split("/").filter(Boolean);
 
-    // Find the index of the first known sub-path keyword
-    const treeIdx = segments.indexOf("tree");
-    if (treeIdx !== -1) {
-      // tree/:ref/:path*
-      const ref = segments[treeIdx + 1];
-      const pathParts = segments.slice(treeIdx + 2);
-      return {
-        subPage: "code",
-        treeRef: ref,
-        treePath: pathParts.join("/"),
-      };
-    }
-
-    const commitIdx = segments.indexOf("commit");
-    if (commitIdx !== -1) {
-      return { subPage: "commit", commitId: segments[commitIdx + 1] };
-    }
-
-    const commitsIdx = segments.indexOf("commits");
-    if (commitsIdx !== -1) {
-      return { subPage: "commits" };
-    }
-
-    const prsIdx = segments.indexOf("prs");
-    if (prsIdx !== -1) {
-      if (segments.length > prsIdx + 1) {
-        return { subPage: "pr", prId: segments[prsIdx + 1] };
+      // Find the index of the first known sub-path keyword
+      const treeIdx = segments.indexOf("tree");
+      if (treeIdx !== -1) {
+        // tree/:ref/:path*
+        const ref = segments[treeIdx + 1];
+        const pathParts = segments.slice(treeIdx + 2);
+        return {
+          subPage: "code",
+          treeRef: ref,
+          treePath: pathParts.join("/"),
+        };
       }
-      return { subPage: "prs" };
-    }
 
-    const issuesIdx = segments.indexOf("issues");
-    if (issuesIdx !== -1) {
-      if (segments.length > issuesIdx + 1) {
-        return { subPage: "issue", issueId: segments[issuesIdx + 1] };
+      const commitIdx = segments.indexOf("commit");
+      if (commitIdx !== -1) {
+        return { subPage: "commit", commitId: segments[commitIdx + 1] };
       }
-      return { subPage: "issues" };
-    }
 
-    return { subPage: "about" };
-  }, [splat]);
+      const commitsIdx = segments.indexOf("commits");
+      if (commitsIdx !== -1) {
+        const commitsRef = segments[commitsIdx + 1];
+        return { subPage: "commits", commitsRef };
+      }
+
+      const prsIdx = segments.indexOf("prs");
+      if (prsIdx !== -1) {
+        if (segments.length > prsIdx + 1) {
+          return { subPage: "pr", prId: segments[prsIdx + 1] };
+        }
+        return { subPage: "prs" };
+      }
+
+      const issuesIdx = segments.indexOf("issues");
+      if (issuesIdx !== -1) {
+        if (segments.length > issuesIdx + 1) {
+          return { subPage: "issue", issueId: segments[issuesIdx + 1] };
+        }
+        return { subPage: "issues" };
+      }
+
+      return { subPage: "about" };
+    }, [splat]);
 
   const cloneUrls = repo?.cloneUrls ?? [];
 
@@ -322,6 +325,7 @@ function RepoLayoutResolved({
           treeRef,
           treePath,
           commitId,
+          commitsRef,
         }
       : null;
 
@@ -419,7 +423,13 @@ function RepoLayoutResolved({
               label="Code"
             />
             <TabLink
-              to={`${basePath}/commits`}
+              to={
+                commitsRef
+                  ? `${basePath}/commits/${encodeURIComponent(commitsRef)}`
+                  : treeRef
+                    ? `${basePath}/commits/${encodeURIComponent(treeRef)}`
+                    : `${basePath}/commits`
+              }
               active={isCommitsTab}
               icon={<GitCommit className="h-4 w-4" />}
               label="Commits"
