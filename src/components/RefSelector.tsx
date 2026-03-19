@@ -23,11 +23,15 @@ import {
   ShieldQuestion,
   AlertTriangle,
   Info,
+  CheckCircle2,
+  XCircle,
+  HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GraspLogo } from "@/components/GraspLogo";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
+import type { UrlInfoRefsResult } from "@/services/gitRepoDataService";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,22 +47,161 @@ export interface RefSelectorProps {
   repoRelayEose: boolean;
   /** True while data is still being fetched */
   loading?: boolean;
+  /** Per-URL infoRefs results from the git data service */
+  urlInfoRefs?: Record<string, UrlInfoRefsResult>;
+  /** All clone URLs for this repo */
+  cloneUrls?: string[];
 }
 
 /**
  * Status of a ref's verification against the signed state event.
  *
- * - "verified"   : state event exists and this ref's commit matches
- * - "mismatch"   : state event exists but declares a different commit for this ref
- * - "untracked"  : state event exists but doesn't include this ref
- * - "no-state"   : no state event was found (after EOSE)
- * - "loading"    : still waiting for state event data
+ * - "verified"        : state event exists and this ref's commit matches
+ * - "mismatch"        : state event exists but declares a different commit for this ref
+ * - "git-server-only" : state event exists but doesn't include this ref
+ * - "no-state"        : no state event was found (after EOSE)
+ * - "loading"         : still waiting for state event data
  */
-type RefStatus = "verified" | "mismatch" | "untracked" | "no-state" | "loading";
+type RefStatus =
+  | "verified"
+  | "mismatch"
+  | "git-server-only"
+  | "no-state"
+  | "loading";
 
 interface RefWithStatus extends GitRef {
   status: RefStatus;
   stateCommit?: string; // commit declared by state event (if different)
+}
+
+// ---------------------------------------------------------------------------
+// Per-server status helpers
+// ---------------------------------------------------------------------------
+
+/** Status of a single git server for a given ref */
+type ServerRefStatus = "match" | "ahead" | "behind" | "unknown" | "error";
+
+interface ServerStatus {
+  url: string;
+  /** Short display label derived from the URL */
+  label: string;
+  status: ServerRefStatus;
+  /** The commit this server has for the ref (if known) */
+  serverCommit?: string;
+  /** The commit the state event declares (if known) */
+  stateCommit?: string;
+}
+
+function shortLabel(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.hostname + (u.pathname !== "/" ? u.pathname : "");
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Compute per-server status for the currently selected ref.
+ *
+ * When a state event exists: compare each server's commit to the state commit.
+ * When no state event: compare each server's commit to the majority/first.
+ */
+function computeServerStatuses(
+  currentRef: string,
+  currentRefObj: GitRef | undefined,
+  repoState: RepositoryState | null | undefined,
+  repoRelayEose: boolean,
+  urlInfoRefs: Record<string, UrlInfoRefsResult>,
+  cloneUrls: string[],
+): ServerStatus[] {
+  if (cloneUrls.length === 0) return [];
+
+  const prefix = currentRefObj?.isBranch ? "refs/heads/" : "refs/tags/";
+  const fullRefName = currentRefObj
+    ? `${prefix}${currentRefObj.name}`
+    : undefined;
+
+  // Get the state commit for this ref (if state event exists)
+  let stateCommit: string | undefined;
+  if (repoState && fullRefName) {
+    const stateRef = repoState.refs.find((r) => r.name === fullRefName);
+    stateCommit = stateRef?.commitId;
+  }
+
+  return cloneUrls.map((url) => {
+    const result = urlInfoRefs[url];
+    const label = shortLabel(url);
+
+    if (!result) {
+      return { url, label, status: "unknown" };
+    }
+
+    if (result.status === "error") {
+      return { url, label, status: "error" };
+    }
+
+    // Get this server's commit for the ref
+    let serverCommit: string | undefined;
+    if (fullRefName) {
+      serverCommit = result.info.refs[fullRefName];
+    }
+
+    if (!serverCommit) {
+      return { url, label, status: "unknown" };
+    }
+
+    if (repoState !== undefined && repoRelayEose) {
+      // We have a definitive state event answer
+      if (!stateCommit) {
+        // Ref not in state event — server has it but state doesn't
+        return { url, label, status: "unknown", serverCommit };
+      }
+
+      const matches =
+        serverCommit === stateCommit ||
+        serverCommit.startsWith(stateCommit) ||
+        stateCommit.startsWith(serverCommit);
+
+      return {
+        url,
+        label,
+        status: matches ? "match" : "behind",
+        serverCommit,
+        stateCommit,
+      };
+    }
+
+    // No state event — compare servers to each other
+    // Use the first server's commit as the reference
+    const firstResult = urlInfoRefs[cloneUrls[0]];
+    const firstCommit =
+      firstResult?.status === "ok" && fullRefName
+        ? firstResult.info.refs[fullRefName]
+        : undefined;
+
+    if (!firstCommit || url === cloneUrls[0]) {
+      return { url, label, status: "match", serverCommit };
+    }
+
+    const matches =
+      serverCommit === firstCommit ||
+      serverCommit.startsWith(firstCommit) ||
+      firstCommit.startsWith(serverCommit);
+
+    return {
+      url,
+      label,
+      status: matches ? "match" : "behind",
+      serverCommit,
+      stateCommit: firstCommit,
+    };
+  });
+}
+
+/** How many servers are serving the correct (state-matching) commit */
+function countMatchingServers(statuses: ServerStatus[]): number {
+  return statuses.filter((s) => s.status === "match").length;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +229,7 @@ function getRefStatus(
   const stateRef = repoState.refs.find((r) => r.name === fullRefName);
 
   if (!stateRef) {
-    return { status: "untracked" };
+    return { status: "git-server-only" };
   }
 
   // Compare commits (handle both full and abbreviated hashes)
@@ -103,6 +246,276 @@ function getRefStatus(
 
 function countMismatches(refsWithStatus: RefWithStatus[]): number {
   return refsWithStatus.filter((r) => r.status === "mismatch").length;
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic git-server icon (inspired by gitworkshop's ExplorerServerStatusIcon)
+// ---------------------------------------------------------------------------
+
+type LightState = "success" | "warning" | "error" | undefined;
+
+/**
+ * Stacked-server SVG with up to 3 status lights.
+ * Each light corresponds to one git server (sorted: success → warning → error).
+ */
+function GitServerIcon({
+  statuses,
+  className,
+}: {
+  statuses: ServerStatus[];
+  className?: string;
+}) {
+  // Map server statuses to light states
+  const lights: LightState[] = statuses.map((s) => {
+    if (s.status === "match") return "success";
+    if (s.status === "unknown") return "warning";
+    if (s.status === "error") return "error";
+    if (s.status === "behind" || s.status === "ahead") return "warning";
+    return undefined;
+  });
+
+  // Sort: success first, then warning, then error
+  lights.sort((a, b) => {
+    const rank = (v: LightState) =>
+      v === "success" ? 0 : v === "warning" ? 1 : v === "error" ? 2 : 3;
+    return rank(a) - rank(b);
+  });
+
+  // Trim to at most 3, removing duplicates of the least-important first
+  while (lights.length > 3) {
+    const lastError = lights.lastIndexOf("error");
+    if (lastError !== -1 && lights.filter((l) => l === "error").length > 1) {
+      lights.splice(lastError, 1);
+      continue;
+    }
+    const lastWarning = lights.lastIndexOf("warning");
+    if (
+      lastWarning !== -1 &&
+      lights.filter((l) => l === "warning").length > 1
+    ) {
+      lights.splice(lastWarning, 1);
+      continue;
+    }
+    lights.splice(lights.lastIndexOf("success"), 1);
+  }
+
+  // Pad to 3
+  while (lights.length < 3) lights.push(undefined);
+
+  const colorClass = (state: LightState) => {
+    if (state === "success") return "fill-emerald-500";
+    if (state === "warning") return "fill-amber-500";
+    if (state === "error") return "fill-red-500";
+    return "";
+  };
+
+  const renderLights = (state: LightState, y: number) => {
+    if (!state) return null;
+    return (
+      <>
+        <rect x="12" y={y} width="2" height="2" className={colorClass(state)} />
+        <rect x="16" y={y} width="2" height="2" className={colorClass(state)} />
+      </>
+    );
+  };
+
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 20 20"
+      className={cn("inline", className)}
+      aria-hidden="true"
+    >
+      {/* Stacked server chassis */}
+      <path
+        className="fill-current opacity-40"
+        d="M0 2C0 .9.9 0 2 0h16a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm0 7c0-1.1.9-2 2-2h16a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm0 7c0-1.1.9-2 2-2h16a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zM12 2v2h2V2zm4 0v2h2V2zm-4 7v2h2V9zm4 0v2h2V9zm-4 7v2h2v-2zm4 0v2h2v-2z"
+      />
+      {/* Status lights */}
+      {renderLights(lights[0], 2)}
+      {renderLights(lights[1], 9)}
+      {renderLights(lights[2], 16)}
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Git server popover panel
+// ---------------------------------------------------------------------------
+
+function GitServerPanel({
+  serverStatuses,
+  repoState,
+  repoRelayEose,
+  currentRef,
+  matchingCount,
+  totalCount,
+}: {
+  serverStatuses: ServerStatus[];
+  repoState: RepositoryState | null | undefined;
+  repoRelayEose: boolean;
+  currentRef: string;
+  matchingCount: number;
+  totalCount: number;
+}) {
+  const hasState =
+    repoState !== null && repoState !== undefined && repoRelayEose;
+  const noState = repoRelayEose && repoState === null;
+
+  return (
+    <div className="w-[300px] p-0">
+      {/* Header */}
+      <div className="px-3 py-2.5 border-b border-border/40">
+        <p className="text-xs font-semibold text-foreground">Git Servers</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          {hasState ? (
+            <>
+              <span className="font-medium text-foreground">
+                {matchingCount}/{totalCount}
+              </span>{" "}
+              serving the signed state for{" "}
+              <code className="font-mono bg-muted px-1 rounded">
+                {currentRef}
+              </code>
+            </>
+          ) : noState ? (
+            <>
+              Comparing {totalCount} git server{totalCount !== 1 ? "s" : ""}
+            </>
+          ) : (
+            <>
+              Checking {totalCount} git server{totalCount !== 1 ? "s" : ""}…
+            </>
+          )}
+        </p>
+      </div>
+
+      {/* Per-server rows */}
+      <div className="py-1">
+        {serverStatuses.map((s) => (
+          <div
+            key={s.url}
+            className="flex items-start gap-2.5 px-3 py-2 text-xs"
+          >
+            <ServerStatusDot status={s.status} />
+            <div className="min-w-0 flex-1">
+              <p
+                className="font-mono truncate text-foreground/80"
+                title={s.url}
+              >
+                {s.label}
+              </p>
+              {s.status === "behind" && s.serverCommit && s.stateCommit && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  has{" "}
+                  <code className="bg-muted px-1 rounded">
+                    {s.serverCommit.slice(0, 8)}
+                  </code>
+                  {hasState && (
+                    <>
+                      {" "}
+                      · signed{" "}
+                      <code className="bg-muted px-1 rounded">
+                        {s.stateCommit.slice(0, 8)}
+                      </code>
+                    </>
+                  )}
+                </p>
+              )}
+              {s.status === "match" && s.serverCommit && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  <code className="bg-muted px-1 rounded">
+                    {s.serverCommit.slice(0, 8)}
+                  </code>
+                </p>
+              )}
+              {s.status === "error" && (
+                <p className="text-[11px] text-red-500/80 mt-0.5">
+                  unreachable
+                </p>
+              )}
+              {s.status === "unknown" && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  fetching…
+                </p>
+              )}
+            </div>
+            <ServerStatusLabel status={s.status} hasState={hasState} />
+          </div>
+        ))}
+      </div>
+
+      {/* Footer note */}
+      {noState && (
+        <>
+          <Separator />
+          <div className="px-3 py-2 text-[11px] text-muted-foreground/70 leading-relaxed">
+            No signed state — comparing git servers to each other
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ServerStatusDot({ status }: { status: ServerRefStatus }) {
+  switch (status) {
+    case "match":
+      return (
+        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+      );
+    case "behind":
+      return <XCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />;
+    case "ahead":
+      return (
+        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+      );
+    case "error":
+      return <XCircle className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />;
+    case "unknown":
+      return (
+        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/50 mt-0.5 shrink-0" />
+      );
+  }
+}
+
+function ServerStatusLabel({
+  status,
+  hasState,
+}: {
+  status: ServerRefStatus;
+  hasState: boolean;
+}) {
+  switch (status) {
+    case "match":
+      return (
+        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">
+          {hasState ? "signed" : "in sync"}
+        </span>
+      );
+    case "behind":
+      return (
+        <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+          {hasState ? "out of sync" : "differs"}
+        </span>
+      );
+    case "ahead":
+      return (
+        <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+          ahead
+        </span>
+      );
+    case "error":
+      return (
+        <span className="text-[10px] text-red-500 shrink-0 mt-0.5">error</span>
+      );
+    case "unknown":
+      return (
+        <span className="text-[10px] text-muted-foreground/50 shrink-0 mt-0.5">
+          …
+        </span>
+      );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +540,7 @@ function StatusIcon({
       return (
         <ShieldAlert className={cn("h-3.5 w-3.5 text-amber-500", className)} />
       );
-    case "untracked":
+    case "git-server-only":
       return (
         <ShieldQuestion
           className={cn("h-3.5 w-3.5 text-muted-foreground/50", className)}
@@ -149,7 +562,7 @@ function StatusTooltipText({
     case "verified":
       return (
         <span>
-          Signed and verified -- the maintainer's published state matches this
+          Signed and verified — the maintainer's published state matches this
           git server
         </span>
       );
@@ -173,7 +586,7 @@ function StatusTooltipText({
           </p>
         </div>
       );
-    case "untracked":
+    case "git-server-only":
       return (
         <span>
           This ref exists on the git server but isn't tracked in the
@@ -183,7 +596,7 @@ function StatusTooltipText({
     case "no-state":
       return null;
     case "loading":
-      return <span>Checking verification status...</span>;
+      return <span>Checking verification status…</span>;
   }
 }
 
@@ -313,8 +726,11 @@ export function RefSelector({
   repoState,
   repoRelayEose,
   loading,
+  urlInfoRefs = {},
+  cloneUrls = [],
 }: RefSelectorProps) {
   const [open, setOpen] = useState(false);
+  const [serverPanelOpen, setServerPanelOpen] = useState(false);
   const [search, setSearch] = useState("");
 
   // Compute status for each ref
@@ -369,6 +785,30 @@ export function RefSelector({
   const showGraspStatus =
     usesGrasp && currentStatus !== "loading" && currentStatus !== "no-state";
 
+  // Per-server statuses for the current ref
+  const serverStatuses = useMemo(
+    () =>
+      computeServerStatuses(
+        currentRef,
+        currentRefObj,
+        repoState,
+        repoRelayEose,
+        urlInfoRefs,
+        cloneUrls,
+      ),
+    [
+      currentRef,
+      currentRefObj,
+      repoState,
+      repoRelayEose,
+      urlInfoRefs,
+      cloneUrls,
+    ],
+  );
+
+  const matchingServerCount = countMatchingServers(serverStatuses);
+  const totalServerCount = cloneUrls.length;
+
   const handleSelect = (refName: string) => {
     onRefChange(refName);
     setOpen(false);
@@ -380,167 +820,227 @@ export function RefSelector({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          className={cn(
-            "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs transition-all duration-200",
-            "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-            "max-w-[320px]",
-            showGraspStatus && currentStatus === "verified"
-              ? "border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10"
-              : showGraspStatus && currentStatus === "mismatch"
-                ? "border-red-500/40 bg-red-500/5 hover:bg-red-500/10 ref-selector-warning"
-                : mismatchCount > 0
-                  ? "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 ref-selector-warning"
-                  : "border-border/60 bg-background",
-          )}
-        >
-          {currentIsTag ? (
-            <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          ) : (
-            <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          )}
-          <span className="truncate font-medium">{currentRef}</span>
-          {showGraspStatus ? (
-            <span className="flex items-center gap-0.5 shrink-0 ml-0.5">
-              <GraspLogo
-                className={cn(
-                  "h-3.5 w-3.5",
-                  currentStatus === "verified" && "text-emerald-500",
-                  currentStatus === "mismatch" && "text-red-500",
-                  currentStatus === "untracked" && "text-muted-foreground/50",
+    <div className="flex items-center gap-1">
+      {/* ------------------------------------------------------------------ */}
+      {/* Ref selector trigger                                                 */}
+      {/* ------------------------------------------------------------------ */}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            className={cn(
+              "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs transition-all duration-200",
+              "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "max-w-[280px]",
+              // Neutral border always — status colour lives on the shield icon only
+              mismatchCount > 0
+                ? "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10"
+                : "border-border/60 bg-background",
+            )}
+          >
+            {currentIsTag ? (
+              <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            ) : (
+              <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            )}
+            <span className="truncate font-medium">{currentRef}</span>
+            {showGraspStatus ? (
+              // Shield icon only — coloured to reflect status
+              <span className="shrink-0 ml-0.5">
+                {currentStatus === "verified" && (
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
                 )}
+                {currentStatus === "mismatch" && (
+                  <ShieldAlert className="h-3.5 w-3.5 text-red-500" />
+                )}
+                {currentStatus === "git-server-only" && (
+                  <ShieldQuestion className="h-3.5 w-3.5 text-muted-foreground/50" />
+                )}
+              </span>
+            ) : mismatchCount > 0 ? (
+              <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0 ml-0.5" />
+            ) : null}
+            <ChevronsUpDown className="h-3 w-3 shrink-0 text-muted-foreground/60 ml-0.5" />
+          </button>
+        </PopoverTrigger>
+
+        <PopoverContent
+          className="w-[320px] p-0 overflow-hidden"
+          align="start"
+          sideOffset={6}
+        >
+          {/* Search input — hidden when all refs fit in the dropdown */}
+          {showSearch && (
+            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40">
+              <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Find a branch or tag…"
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+                autoFocus
               />
-              {currentStatus === "verified" && (
-                <ShieldCheck className="h-3 w-3 text-emerald-500" />
+            </div>
+          )}
+
+          {/* Mismatch banner */}
+          {mismatchCount > 0 && (
+            <MismatchBanner mismatchCount={mismatchCount} />
+          )}
+
+          {/* No state banner */}
+          {isNoState && <NoStateBanner />}
+
+          <ScrollArea className="max-h-[360px]">
+            <div className="py-1">
+              {/* Branches section */}
+              {filteredBranches.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    <GitBranch className="h-3 w-3" />
+                    Branches
+                    <span className="text-muted-foreground/40 font-normal normal-case tracking-normal">
+                      ({filteredBranches.length})
+                    </span>
+                  </div>
+                  <div className="px-1">
+                    {filteredBranches.map((branch) => (
+                      <RefRow
+                        key={branch.name}
+                        refWithStatus={branch}
+                        isSelected={branch.name === currentRef}
+                        onSelect={() => handleSelect(branch.name)}
+                      />
+                    ))}
+                  </div>
+                </div>
               )}
-              {currentStatus === "mismatch" && (
-                <ShieldAlert className="h-3 w-3 text-red-500" />
-              )}
-              {currentStatus === "untracked" && (
-                <ShieldQuestion className="h-3 w-3 text-muted-foreground/50" />
-              )}
-            </span>
-          ) : mismatchCount > 0 ? (
-            <span className="flex items-center gap-1 shrink-0 ml-0.5">
-              <AlertTriangle className="h-3 w-3 text-amber-500" />
-            </span>
-          ) : null}
-          <ChevronsUpDown className="h-3 w-3 shrink-0 text-muted-foreground/60 ml-0.5" />
-        </button>
-      </PopoverTrigger>
 
-      <PopoverContent
-        className="w-[320px] p-0 overflow-hidden"
-        align="start"
-        sideOffset={6}
-      >
-        {/* Search input — hidden when all refs fit in the dropdown */}
-        {showSearch && (
-          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40">
-            <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Find a branch or tag..."
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-              autoFocus
-            />
-          </div>
-        )}
+              {/* Separator between branches and tags */}
+              {filteredBranches.length > 0 && <Separator className="my-2" />}
 
-        {/* Mismatch banner */}
-        {mismatchCount > 0 && <MismatchBanner mismatchCount={mismatchCount} />}
-
-        {/* No state banner */}
-        {isNoState && <NoStateBanner />}
-
-        <ScrollArea className="max-h-[360px]">
-          <div className="py-1">
-            {/* Branches section */}
-            {filteredBranches.length > 0 && (
+              {/* Tags section — always shown so the count is visible */}
               <div>
                 <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  <GitBranch className="h-3 w-3" />
-                  Branches
+                  <Tag className="h-3 w-3" />
+                  Tags
                   <span className="text-muted-foreground/40 font-normal normal-case tracking-normal">
-                    ({filteredBranches.length})
+                    ({filteredTags.length})
                   </span>
                 </div>
-                <div className="px-1">
-                  {filteredBranches.map((branch) => (
-                    <RefRow
-                      key={branch.name}
-                      refWithStatus={branch}
-                      isSelected={branch.name === currentRef}
-                      onSelect={() => handleSelect(branch.name)}
-                    />
-                  ))}
-                </div>
+                {filteredTags.length > 0 && (
+                  <div className="px-1">
+                    {filteredTags.map((tag) => (
+                      <RefRow
+                        key={tag.name}
+                        refWithStatus={tag}
+                        isSelected={tag.name === currentRef}
+                        onSelect={() => handleSelect(tag.name)}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
 
-            {/* Separator between branches and tags */}
-            {filteredBranches.length > 0 && <Separator className="my-2" />}
+              {/* Empty search state */}
+              {filteredBranches.length === 0 &&
+                filteredTags.length === 0 &&
+                search && (
+                  <div className="py-4 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      No refs matching "{search}"
+                    </p>
+                  </div>
+                )}
+            </div>
+          </ScrollArea>
 
-            {/* Tags section — always shown so the count is visible */}
-            <div>
-              <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                <Tag className="h-3 w-3" />
-                Tags
-                <span className="text-muted-foreground/40 font-normal normal-case tracking-normal">
-                  ({filteredTags.length})
+          {/* Footer with legend */}
+          {repoState !== null && repoState !== undefined && (
+            <>
+              <Separator />
+              <div className="px-3 py-2 flex items-center gap-3 text-[11px] text-muted-foreground/60">
+                <span className="flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3 text-emerald-500/70" />
+                  signed
+                </span>
+                <span className="flex items-center gap-1">
+                  <ShieldAlert className="h-3 w-3 text-amber-500/70" />
+                  out of sync
+                </span>
+                <span className="flex items-center gap-1">
+                  <ShieldQuestion className="h-3 w-3 text-muted-foreground/40" />
+                  git server only
                 </span>
               </div>
-              {filteredTags.length > 0 && (
-                <div className="px-1">
-                  {filteredTags.map((tag) => (
-                    <RefRow
-                      key={tag.name}
-                      refWithStatus={tag}
-                      isSelected={tag.name === currentRef}
-                      onSelect={() => handleSelect(tag.name)}
+            </>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Grasp / git-server status button                                    */}
+      {/* ------------------------------------------------------------------ */}
+      {cloneUrls.length > 0 && (
+        <Popover open={serverPanelOpen} onOpenChange={setServerPanelOpen}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <button
+                  className={cn(
+                    "inline-flex items-center justify-center h-8 w-8 rounded-md border text-xs transition-all duration-200",
+                    "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    // Colour the button border/bg based on overall server health
+                    matchingServerCount === totalServerCount &&
+                      totalServerCount > 0
+                      ? "border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                      : matchingServerCount > 0
+                        ? "border-amber-500/30 text-amber-600 dark:text-amber-400"
+                        : "border-border/60 text-muted-foreground",
+                  )}
+                  aria-label="Git server status"
+                >
+                  {usesGrasp ? (
+                    <GraspLogo className="h-4 w-4" />
+                  ) : (
+                    <GitServerIcon
+                      statuses={serverStatuses}
+                      className="h-4 w-4"
                     />
-                  ))}
-                </div>
+                  )}
+                </button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs" sideOffset={6}>
+              {usesGrasp ? (
+                <span>
+                  Grasp — {matchingServerCount}/{totalServerCount} git server
+                  {totalServerCount !== 1 ? "s" : ""} verified
+                </span>
+              ) : (
+                <span>
+                  {matchingServerCount}/{totalServerCount} git server
+                  {totalServerCount !== 1 ? "s" : ""} in sync
+                </span>
               )}
-            </div>
+            </TooltipContent>
+          </Tooltip>
 
-            {/* Empty search state */}
-            {filteredBranches.length === 0 &&
-              filteredTags.length === 0 &&
-              search && (
-                <div className="py-4 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    No refs matching "{search}"
-                  </p>
-                </div>
-              )}
-          </div>
-        </ScrollArea>
-
-        {/* Footer with legend */}
-        {repoState !== null && repoState !== undefined && (
-          <>
-            <Separator />
-            <div className="px-3 py-2 flex items-center gap-3 text-[11px] text-muted-foreground/60">
-              <span className="flex items-center gap-1">
-                <ShieldCheck className="h-3 w-3 text-emerald-500/70" />
-                signed
-              </span>
-              <span className="flex items-center gap-1">
-                <ShieldAlert className="h-3 w-3 text-amber-500/70" />
-                out of sync
-              </span>
-              <span className="flex items-center gap-1">
-                <ShieldQuestion className="h-3 w-3 text-muted-foreground/40" />
-                untracked
-              </span>
-            </div>
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
+          <PopoverContent
+            className="p-0 overflow-hidden"
+            align="start"
+            sideOffset={6}
+          >
+            <GitServerPanel
+              serverStatuses={serverStatuses}
+              repoState={repoState}
+              repoRelayEose={repoRelayEose}
+              currentRef={currentRef}
+              matchingCount={matchingServerCount}
+              totalCount={totalServerCount}
+            />
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
   );
 }

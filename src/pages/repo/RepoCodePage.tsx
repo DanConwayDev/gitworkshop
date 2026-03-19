@@ -6,6 +6,7 @@ import { useGitRepoData } from "@/hooks/useGitRepoData";
 import { UserLink } from "@/components/UserAvatar";
 import { RefSelector } from "@/components/RefSelector";
 import type { RepositoryState } from "@/casts/RepositoryState";
+import type { UrlInfoRefsResult } from "@/services/gitRepoDataService";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -192,6 +193,8 @@ export default function RepoCodePage() {
             lastCheckedAt={gitData.lastCheckedAt}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
+            urlInfoRefs={gitData.urlInfoRefs}
+            cloneUrls={cloneUrls}
           />
 
           {/* Error state */}
@@ -312,6 +315,8 @@ function LocatorBar({
   lastCheckedAt,
   repoState,
   repoRelayEose,
+  urlInfoRefs,
+  cloneUrls,
 }: {
   loading: boolean;
   refs: ReturnType<typeof useGitExplorer>["refs"];
@@ -327,6 +332,8 @@ function LocatorBar({
   lastCheckedAt: number | null;
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
+  urlInfoRefs: Record<string, UrlInfoRefsResult>;
+  cloneUrls: string[];
 }) {
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
@@ -346,6 +353,8 @@ function LocatorBar({
             repoState={repoState}
             repoRelayEose={repoRelayEose}
             loading={loading}
+            urlInfoRefs={urlInfoRefs}
+            cloneUrls={cloneUrls}
           />
         ) : loading ? (
           <Skeleton className="h-8 w-28" />
