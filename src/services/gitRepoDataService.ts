@@ -526,6 +526,14 @@ class GitRepoDataEntry {
     let displayResult: CommitResult | null = null;
     let displayCommitterDate = 0;
     let stateCommitFetched = false;
+    /**
+     * True while the Phase 1 shortcut fetch of the known state commit is still
+     * in flight. recomputeWarning() must not fire "state-commit-unavailable"
+     * while this is true — the commit may still arrive and resolve the mismatch.
+     */
+    let stateCommitFetchPending = !!knownHeadCommit;
+    /** True once all infoRefs fetches have settled (success or error). */
+    let allInfoRefsSettled = false;
     let infoRefsSettled = 0;
     const urlInfoRefs: Record<string, UrlInfoRefsResult> = {};
     const fetchingCommits = new Set<string>();
@@ -594,7 +602,8 @@ class GitRepoDataEntry {
       if (
         knownHeadCommit &&
         !stateCommitFetched &&
-        anyGitHeadDiffersFromState
+        anyGitHeadDiffersFromState &&
+        !stateCommitFetchPending
       ) {
         this.setState((prev) => ({
           ...prev,
@@ -693,10 +702,17 @@ class GitRepoDataEntry {
       )
         .then((result) => {
           if (signal.aborted) return;
+          stateCommitFetchPending = false;
           maybeUpdateDisplay(result, true);
+          // If infoRefs already settled while we were fetching the state commit,
+          // recomputeWarning() fired too early (with stateCommitFetchPending=true
+          // suppressing it). Now that we have the result, run it again.
+          if (allInfoRefsSettled) recomputeWarning();
         })
         .catch(() => {
-          // State commit not found — surfaced as warning once infoRefs settle
+          // State commit not found — surfaced as warning once infoRefs settle.
+          stateCommitFetchPending = false;
+          if (allInfoRefsSettled) recomputeWarning();
         });
     }
 
@@ -765,6 +781,7 @@ class GitRepoDataEntry {
           if (signal.aborted) return;
           infoRefsSettled++;
           if (infoRefsSettled === totalUrls) {
+            allInfoRefsSettled = true;
             recomputeWarning();
 
             if (!displayResult) {
