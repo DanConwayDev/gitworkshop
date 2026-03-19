@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import {
   getInfoRefs,
-  getDirectoryTreeAt,
+  getObject,
+  getObjectByPath,
   fetchCommitsOnly,
   shallowCloneRepositoryAt,
-  getObject,
   type Commit,
-  type Tree,
 } from "@fiatjaf/git-natural-api";
 
 export interface GitRepoData {
@@ -28,19 +27,99 @@ const README_NAMES = [
   "readme.txt",
 ];
 
-/** Find a README file entry in the root of a tree */
-function findReadme(tree: Tree): { name: string; hash: string } | undefined {
-  for (const name of README_NAMES) {
-    const file = tree.files.find((f) => f.name === name);
-    if (file) return { name: file.name, hash: file.hash };
+/**
+ * Race all clone URLs in parallel: whichever responds to getInfoRefs first
+ * wins, and all subsequent fetches use that URL.
+ *
+ * On filter-capable servers the README and commit are fetched in parallel:
+ * - README: race all candidate filenames via getObjectByPath + getObject
+ *   (first hit wins, all candidates run simultaneously)
+ * - Commit: fetchCommitsOnly with tree:0 filter
+ *
+ * On non-filter servers we fall back to shallowCloneRepositoryAt which
+ * returns both in one round-trip.
+ */
+async function fetchFromFastestUrl(
+  cloneUrls: string[],
+  signal: AbortSignal,
+): Promise<{
+  latestCommit: Commit;
+  readmeContent: string | null;
+  readmeFilename: string | null;
+}> {
+  // Race getInfoRefs across all URLs simultaneously.
+  // Promise.any rejects only when every promise rejects (AggregateError).
+  const { url, info } = await Promise.any(
+    cloneUrls.map(async (url) => {
+      const info = await getInfoRefs(url);
+      return { url, info };
+    }),
+  );
+
+  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+  const headRef = info.symrefs["HEAD"];
+  const headCommit = headRef ? info.refs[headRef] : Object.values(info.refs)[0];
+
+  if (!headCommit) {
+    throw new Error(`No HEAD commit found at ${url}`);
   }
-  return undefined;
+
+  const supportsFilter = info.capabilities.includes("filter");
+
+  if (supportsFilter) {
+    // Optimistic path: fetch commit metadata and README blob in parallel.
+    // For the README we race all candidate filenames simultaneously — each
+    // candidate resolves the path to a blob hash then fetches the blob.
+    // Promise.any takes the first hit; if none exist we get null.
+    const [commits, readmeResult] = await Promise.all([
+      fetchCommitsOnly(url, headCommit, 1),
+      Promise.any(
+        README_NAMES.map(async (name) => {
+          const entry = await getObjectByPath(url, headCommit, name);
+          if (!entry || entry.isDir) throw new Error(`${name} not found`);
+          const obj = await getObject(url, entry.hash);
+          if (!obj) throw new Error(`${name} blob missing`);
+          return { name, content: new TextDecoder("utf-8").decode(obj.data) };
+        }),
+      ).catch(() => null), // all candidates missing → null
+    ]);
+
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+    return {
+      latestCommit: commits[0],
+      readmeContent: readmeResult?.content ?? null,
+      readmeFilename: readmeResult?.name ?? null,
+    };
+  } else {
+    // Fallback: shallow clone returns commit + blobs in one round-trip
+    const result = await shallowCloneRepositoryAt(url, headCommit);
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+    let readmeContent: string | null = null;
+    let readmeFilename: string | null = null;
+
+    for (const name of README_NAMES) {
+      const file = result.tree.files.find((f) => f.name === name);
+      if (file?.content) {
+        readmeFilename = file.name;
+        readmeContent = new TextDecoder("utf-8").decode(file.content);
+        break;
+      }
+    }
+
+    return {
+      latestCommit: result.commit,
+      readmeContent,
+      readmeFilename,
+    };
+  }
 }
 
 /**
- * Fetches the directory tree, latest commit, and README content from the
- * first reachable clone URL. Tries filter-capable servers first (more
- * efficient), falling back to shallowCloneRepositoryAt.
+ * Fetches the directory tree, latest commit, and README content by racing
+ * all clone URLs in parallel and using whichever responds first.
  */
 export function useGitRepoData(cloneUrls: string[]): GitRepoData {
   const [state, setState] = useState<GitRepoData>({
@@ -74,102 +153,34 @@ export function useGitRepoData(cloneUrls: string[]): GitRepoData {
       readmeFilename: null,
     });
 
-    (async () => {
-      let lastError: string | null = null;
-
-      for (const url of cloneUrls) {
-        if (abort.signal.aborted) return;
-
-        try {
-          // Probe the server to find HEAD and check capabilities
-          const info = await getInfoRefs(url);
-          if (abort.signal.aborted) return;
-
-          const headRef = info.symrefs["HEAD"];
-          const headCommit = headRef
-            ? info.refs[headRef]
-            : Object.values(info.refs)[0];
-
-          if (!headCommit) {
-            lastError = `No HEAD commit found at ${url}`;
-            continue;
-          }
-
-          const supportsFilter = info.capabilities.includes("filter");
-
-          let tree: Tree;
-          let latestCommit: Commit;
-
-          if (supportsFilter) {
-            // Efficient path: fetch tree and commits separately
-            const [treeResult, commits] = await Promise.all([
-              getDirectoryTreeAt(url, headCommit),
-              fetchCommitsOnly(url, headCommit, 1),
-            ]);
-            if (abort.signal.aborted) return;
-            tree = treeResult;
-            latestCommit = commits[0];
-          } else {
-            // Fallback: shallow clone (fetches blobs too, less efficient)
-            const result = await shallowCloneRepositoryAt(url, headCommit);
-            if (abort.signal.aborted) return;
-            tree = result.tree;
-            latestCommit = result.commit;
-          }
-
-          // Find and fetch README
-          let readmeContent: string | null = null;
-          let readmeFilename: string | null = null;
-          const readme = findReadme(tree);
-
-          if (readme) {
-            readmeFilename = readme.name;
-            // If the content is already in the tree (shallow clone path), use it
-            const treeFile = tree.files.find((f) => f.name === readme.name);
-            if (treeFile?.content) {
-              readmeContent = new TextDecoder("utf-8").decode(treeFile.content);
-            } else {
-              // Fetch the blob separately (filter path)
-              try {
-                const obj = await getObject(url, readme.hash);
-                if (abort.signal.aborted) return;
-                if (obj) {
-                  readmeContent = new TextDecoder("utf-8").decode(obj.data);
-                }
-              } catch {
-                // README fetch failed — show tree without README
-              }
-            }
-          }
-
-          if (!abort.signal.aborted) {
-            setState({
-              loading: false,
-              error: null,
-              latestCommit,
-              readmeContent,
-              readmeFilename,
-            });
-          }
-          return;
-        } catch (err) {
-          if (abort.signal.aborted) return;
-          lastError = err instanceof Error ? err.message : String(err);
-          // Try next URL
+    fetchFromFastestUrl(cloneUrls, abort.signal)
+      .then(({ latestCommit, readmeContent, readmeFilename }) => {
+        if (!abort.signal.aborted) {
+          setState({
+            loading: false,
+            error: null,
+            latestCommit,
+            readmeContent,
+            readmeFilename,
+          });
         }
-      }
-
-      // All URLs failed
-      if (!abort.signal.aborted) {
+      })
+      .catch((err: unknown) => {
+        if (abort.signal.aborted) return;
+        const message =
+          err instanceof AggregateError
+            ? "Could not reach any clone URL"
+            : err instanceof Error
+              ? err.message
+              : String(err);
         setState({
           loading: false,
-          error: lastError ?? "Could not reach any clone URL",
+          error: message,
           latestCommit: null,
           readmeContent: null,
           readmeFilename: null,
         });
-      }
-    })();
+      });
 
     return () => {
       abort.abort();
