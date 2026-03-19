@@ -360,7 +360,14 @@ function LocatorBar({
     const ro = new ResizeObserver(check);
     ro.observe(bar);
     return () => ro.disconnect();
-  }, [lastCheckedAt, pulling, pathSegments.join("/"), currentRef, refs.length]);
+  }, [
+    lastCheckedAt,
+    pulling,
+    !!repoState,
+    pathSegments.join("/"),
+    currentRef,
+    refs.length,
+  ]);
 
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
@@ -422,6 +429,15 @@ function LocatorBar({
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
             <Loader2 className="h-3 w-3 animate-spin" />
             Checking…
+          </span>
+        ) : repoState ? (
+          // We have a live Nostr state event subscription — always "just now"
+          // because we're still listening for updates via that subscription.
+          <span
+            ref={checkedRef}
+            className="text-xs text-muted-foreground/60 shrink-0 whitespace-nowrap"
+          >
+            checked just now
           </span>
         ) : lastCheckedAt ? (
           <span
