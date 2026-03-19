@@ -822,8 +822,7 @@ class GitRepoDataEntry {
             this.fetchedOnce = true;
 
             if (!signal.aborted && displayResult) {
-              // Success — record the timestamp and full ref snapshot we fetched,
-              // and reset backoff.
+              // Success — record the timestamp and full ref snapshot we fetched.
               const checkedAt = Math.floor(Date.now() / 1000);
               this.setState((prev) => ({ ...prev, lastCheckedAt: checkedAt }));
 
@@ -843,7 +842,6 @@ class GitRepoDataEntry {
                 }
               }
               this.lastFetchedRefs = fetchedRefs;
-              this.backoffDelay = BACKOFF_INITIAL_MS;
 
               // If a newer state event arrived while we were fetching, check
               // whether its refs still differ from what we just fetched.
@@ -851,17 +849,31 @@ class GitRepoDataEntry {
                 this.pendingHead &&
                 !this.refsMatchLastFetched(this.pendingHead.refs)
               ) {
+                // Refs still don't match — keep the backoff growing, don't
+                // reset to BACKOFF_INITIAL_MS, so we don't hammer the server.
+                this.backoffDelay = Math.min(
+                  this.backoffDelay * 2,
+                  BACKOFF_MAX_MS,
+                );
                 this.scheduleBackoffFetch();
+              } else {
+                // Refs match (or no pending state event) — reset backoff for
+                // the next time a new state event triggers a re-fetch.
+                this.backoffDelay = BACKOFF_INITIAL_MS;
               }
             } else if (!signal.aborted) {
-              // Failed — double the backoff and retry.
-              // fetchedOnce is already true above, so new subscribers won't
-              // re-trigger a fetch; they'll wait for the backoff retry instead.
-              this.backoffDelay = Math.min(
-                this.backoffDelay * 2,
-                BACKOFF_MAX_MS,
-              );
-              this.scheduleBackoffFetch();
+              // Failed — only retry if a state event says the server should
+              // have data we haven't seen yet. If there's no pendingHead there
+              // is no reason to expect a retry will succeed (e.g. CORS-blocked
+              // servers like GitHub/Codeberg), so give up and wait for
+              // onNewStateEvent to trigger a fresh attempt if needed.
+              if (this.pendingHead) {
+                this.backoffDelay = Math.min(
+                  this.backoffDelay * 2,
+                  BACKOFF_MAX_MS,
+                );
+                this.scheduleBackoffFetch();
+              }
             }
           }
         });
