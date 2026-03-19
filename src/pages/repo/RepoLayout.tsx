@@ -195,7 +195,7 @@ function RepoLayoutResolved({
   const issues = useIssues(repo?.allCoordinates, repoRelayGroup, queryOptions);
   const prs = usePRs(repo?.allCoordinates, repoRelayGroup, queryOptions);
 
-  const repoState = useRepositoryState(
+  const [repoState, repoRelayEose] = useRepositoryState(
     repo?.dTag,
     repo?.maintainerSet,
     repoRelayGroup,
@@ -320,6 +320,7 @@ function RepoLayoutResolved({
           prId,
           cloneUrls,
           repoState,
+          repoRelayEose,
           treeRefAndPath,
           commitId,
           commitsRef,

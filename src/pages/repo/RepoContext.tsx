@@ -22,6 +22,12 @@ export interface RepoContextValue {
   cloneUrls: string[];
   /** The winning Nostr state event (kind:30618), or null if none found. */
   repoState: RepositoryState | null | undefined;
+  /**
+   * True once the repo relay group has sent EOSE for the state query (all
+   * relays responded, timed out, or errored). False while the initial query
+   * is still in flight. Always true when there is no repo relay group.
+   */
+  repoRelayEose: boolean;
   /** Everything after /tree/ in the URL (e.g. "main", "feat/foo/.gitignore").
    *  Ref resolution via longest-prefix matching happens inside useGitExplorer. */
   treeRefAndPath?: string;

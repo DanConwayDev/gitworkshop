@@ -24,27 +24,33 @@ import {
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useGitRepoData, type GitRepoWarning } from "@/hooks/useGitRepoData";
-import { useRepositoryState } from "@/hooks/useRepositoryState";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import { formatDistanceToNow } from "date-fns";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
 export default function RepoAboutPage() {
-  const { resolved } = useRepoContext();
+  const { resolved, repoState, repoRelayEose } = useRepoContext();
   const repo = resolved?.repo;
-
-  const repoState = useRepositoryState(
-    repo?.dTag,
-    repo?.maintainerSet,
-    resolved?.repoRelayGroup,
-  );
 
   const gitData = useGitRepoData(repo?.cloneUrls ?? [], {
     knownHeadCommit: repoState?.headCommitId,
     stateRefs: repoState?.refs,
     stateCreatedAt: repoState ? repoState.event.created_at : undefined,
   });
+
+  // Combined "pull in progress" signal: true while either Nostr hasn't EOSEd
+  // yet (we may still receive a newer state event) or the git server fetch is
+  // in flight with stale data already shown. Only meaningful when we have
+  // clone URLs to check against.
+  const pulling =
+    repo && repo.cloneUrls.length > 0
+      ? !repoRelayEose || gitData.pulling
+      : false;
+
+  // Staleness: the state event's created_at tells us when the last `ngit push`
+  // was published. Use it as the "last updated" timestamp.
+  const lastUpdatedAt = repoState?.event.created_at ?? null;
 
   useSeoMeta({
     title: repo ? `${repo.name} - ngit` : "Repository - ngit",
@@ -80,7 +86,12 @@ export default function RepoAboutPage() {
 
           {/* Latest commit */}
           {repo.cloneUrls.length > 0 && (
-            <LatestCommitCard gitData={gitData} repoState={repoState} />
+            <LatestCommitCard
+              gitData={gitData}
+              repoState={repoState}
+              pulling={pulling}
+              lastUpdatedAt={lastUpdatedAt}
+            />
           )}
 
           {/* README */}
@@ -286,12 +297,25 @@ function StateSyncWarning({ warning }: { warning: GitRepoWarning | null }) {
 // Latest commit card
 // ---------------------------------------------------------------------------
 
+/**
+ * How old a state event must be (in seconds) before we show the staleness
+ * label at full opacity. Under this threshold it's dimmed — very recent
+ * pushes don't need a prominent "updated X seconds ago" label.
+ */
+const STALENESS_PROMINENT_THRESHOLD_S = 60 * 60; // 1 hour
+
 function LatestCommitCard({
   gitData,
   repoState,
+  pulling,
+  lastUpdatedAt,
 }: {
   gitData: ReturnType<typeof useGitRepoData>;
   repoState: RepositoryState | null | undefined;
+  /** True while Nostr EOSE is pending or a git server re-fetch is in flight. */
+  pulling: boolean;
+  /** Unix timestamp (seconds) of the last state event, or null if unknown. */
+  lastUpdatedAt: number | null;
   // repoState is used only for the "confirmed by state event" badge.
   // The branch name comes from gitData.defaultBranch (git server's HEAD ref),
   // not from repoState.headBranch, to avoid showing a feature branch when the
@@ -331,18 +355,61 @@ function LatestCommitCard({
   // while on a non-default branch).
   const defaultBranch = gitData.defaultBranch;
 
+  // Staleness label: how long ago the last `ngit push` was published.
+  const nowS = Math.floor(Date.now() / 1000);
+  const ageS = lastUpdatedAt !== null ? nowS - lastUpdatedAt : null;
+  const stalenessLabel =
+    lastUpdatedAt !== null
+      ? `Updated ${formatDistanceToNow(new Date(lastUpdatedAt * 1000), { addSuffix: true })}`
+      : null;
+  // Dim the label when the push was very recent — it's not interesting yet.
+  const stalenessProminent =
+    ageS !== null && ageS > STALENESS_PROMINENT_THRESHOLD_S;
+
   return (
-    <Card>
+    <Card className="overflow-hidden">
+      {/* Indeterminate progress bar — visible only while pulling */}
+      <div className="relative h-0.5 w-full overflow-hidden bg-transparent">
+        {pulling && (
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="h-full w-full bg-primary/30 absolute inset-0" />
+            <div className="h-full w-1/2 bg-primary absolute animate-indeterminate-bar" />
+          </div>
+        )}
+      </div>
+
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <GitCommit className="h-4 w-4 text-muted-foreground" />
           Latest commit
-          {defaultBranch && (
-            <span className="ml-auto text-xs font-normal text-muted-foreground flex items-center gap-1">
-              <GitBranch className="h-3 w-3" />
-              {defaultBranch}
-            </span>
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            {/* Pulling badge */}
+            {pulling && (
+              <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Pulling…
+              </span>
+            )}
+            {/* Staleness label */}
+            {stalenessLabel && (
+              <span
+                className={`text-xs font-normal transition-opacity ${
+                  stalenessProminent
+                    ? "text-muted-foreground"
+                    : "text-muted-foreground/50"
+                }`}
+              >
+                {stalenessLabel}
+              </span>
+            )}
+            {/* Branch name */}
+            {defaultBranch && (
+              <span className="text-xs font-normal text-muted-foreground flex items-center gap-1">
+                <GitBranch className="h-3 w-3" />
+                {defaultBranch}
+              </span>
+            )}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">

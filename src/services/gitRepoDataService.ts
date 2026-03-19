@@ -86,6 +86,12 @@ export type GitRepoWarning =
 
 export interface GitRepoData {
   loading: boolean;
+  /**
+   * True when stale data is being shown while a fresh git-server fetch is
+   * still in flight (analogous to `git pull` in progress). Distinct from
+   * `loading` which is true only when there is no data to show yet.
+   */
+  pulling: boolean;
   error: string | null;
   latestCommit: Commit | null;
   readmeContent: string | null;
@@ -283,6 +289,7 @@ async function fetchCommitCached(
 
 const INITIAL_STATE: GitRepoData = {
   loading: false,
+  pulling: false,
   error: null,
   latestCommit: null,
   readmeContent: null,
@@ -471,7 +478,8 @@ class GitRepoDataEntry {
         const cachedText = getCachedText(knownHeadCommit, "README.md");
         this.setState((prev) => ({
           ...prev,
-          loading: true, // still fetching fresh data, but show stale content
+          loading: true,
+          pulling: true, // stale data shown while fresh fetch is in flight
           error: null,
           latestCommit: cachedCommit,
           readmeContent: cachedText ?? prev.readmeContent,
@@ -488,6 +496,7 @@ class GitRepoDataEntry {
           this.setState((prev) => ({
             ...prev,
             loading: true,
+            pulling: true, // stale data shown while fresh fetch is in flight
             error: null,
             latestCommit: idbCommit,
             readmeContent: cachedText ?? prev.readmeContent,
@@ -501,10 +510,11 @@ class GitRepoDataEntry {
     }
 
     if (!hasCachedData) {
-      // Nothing cached — show a loading state (first visit or unknown head)
+      // Nothing cached — show a blank loading state (first visit or unknown head)
       this.setState((prev) => ({
         ...prev,
         loading: true,
+        pulling: false,
         error: null,
         latestCommit: null,
         readmeContent: null,
@@ -569,6 +579,7 @@ class GitRepoDataEntry {
         this.setState((prev) => ({
           ...prev,
           loading: false,
+          pulling: false,
           latestCommit: result.commit,
           readmeContent: result.readmeContent,
           readmeFilename: result.readmeFilename,
@@ -583,6 +594,7 @@ class GitRepoDataEntry {
         this.setState((prev) => ({
           ...prev,
           loading: false,
+          pulling: false,
           latestCommit: result.commit,
           readmeContent: result.readmeContent ?? prev.readmeContent,
           readmeFilename: result.readmeFilename ?? prev.readmeFilename,
@@ -788,10 +800,15 @@ class GitRepoDataEntry {
               this.setState((prev) => ({
                 ...prev,
                 loading: false,
+                pulling: false,
                 error: "Could not reach any clone URL",
               }));
             } else {
-              this.setState((prev) => ({ ...prev, loading: false }));
+              this.setState((prev) => ({
+                ...prev,
+                loading: false,
+                pulling: false,
+              }));
             }
 
             // Fetch complete

@@ -56,6 +56,7 @@ export function useGitRepoData(
 
   const [state, setState] = useState<GitRepoData>(() => ({
     loading: cloneUrls.length > 0,
+    pulling: false,
     error: null,
     latestCommit: null,
     readmeContent: null,
@@ -70,6 +71,7 @@ export function useGitRepoData(
     if (cloneUrls.length === 0) {
       setState({
         loading: false,
+        pulling: false,
         error: null,
         latestCommit: null,
         readmeContent: null,

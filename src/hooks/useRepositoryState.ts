@@ -11,7 +11,7 @@ import {
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
 import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
-import { map } from "rxjs/operators";
+import { map, filter, startWith } from "rxjs/operators";
 import type { RelayGroup } from "applesauce-relay";
 
 /**
@@ -39,8 +39,12 @@ function pickWinningStateEvent(
  * maintainers, with the event ID as a tiebreaker (lexicographically larger
  * ID wins). This matches the NIP-34 spec.
  *
- * Returns `undefined` while loading, `null` when no state event exists for
- * any maintainer, or a `RepositoryState` cast when one is found.
+ * Returns a tuple of:
+ *   - The winning `RepositoryState` cast, `null` when none exists, or
+ *     `undefined` while the initial Nostr query is still in flight.
+ *   - `repoRelayEose`: `true` once the repo relay group has sent EOSE for the
+ *     state query (all relays responded or timed out — max 10 s per relay),
+ *     `false` while pending. Always `true` when `repoRelayGroup` is undefined.
  *
  * @param dTag           - The repository d-tag identifier
  * @param maintainerSet  - All maintainer pubkeys (from ResolvedRepo.maintainerSet)
@@ -50,15 +54,15 @@ export function useRepositoryState(
   dTag: string | undefined,
   maintainerSet: string[] | undefined,
   repoRelayGroup: RelayGroup | undefined,
-): RepositoryState | null | undefined {
+): [RepositoryState | null | undefined, boolean] {
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
   const maintainerKey = maintainerSet?.join(",") ?? "";
   const relayKey = repoRelayGroup?.relays.map((r) => r.url).join(",") ?? "";
 
-  // Fetch state events from the repo relay group for all maintainers.
-  // kind:30618 is addressable — one per pubkey+d-tag combination.
+  // Fetch state events from the repo relay group for all maintainers and pipe
+  // them into the EventStore. kind:30618 is addressable — one per pubkey+d-tag.
   use$(() => {
     if (
       !dTag ||
@@ -68,47 +72,77 @@ export function useRepositoryState(
     )
       return undefined;
 
-    const filter: Filter = {
+    const stateFilter: Filter = {
       kinds: [REPO_STATE_KIND],
       authors: maintainerSet,
       "#d": [dTag],
     } as Filter;
 
     return repoRelayGroup
-      .subscription([filter])
+      .subscription([stateFilter])
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [dTag, maintainerKey, relayKey, store]);
+
+  // Track whether the repo relay group has sent EOSE for the state query.
+  // The relay group emits "EOSE" once all relays have responded (or timed out /
+  // errored — each relay has a 10 s synthetic EOSE fallback). Starts false,
+  // flips to true on the first "EOSE" message from the group.
+  // When repoRelayGroup is undefined there is nothing to wait for → default true.
+  const repoRelayEose =
+    use$((): Observable<boolean> | undefined => {
+      if (
+        !dTag ||
+        !maintainerSet ||
+        maintainerSet.length === 0 ||
+        !repoRelayGroup
+      )
+        return undefined;
+
+      const stateFilter: Filter = {
+        kinds: [REPO_STATE_KIND],
+        authors: maintainerSet,
+        "#d": [dTag],
+      } as Filter;
+
+      // applesauce RelayGroup.subscription() multicasts internally via share(),
+      // so this second subscription reuses the same underlying WebSocket REQ.
+      return repoRelayGroup.subscription([stateFilter]).pipe(
+        filter((msg): msg is "EOSE" => msg === "EOSE"),
+        map(() => true as boolean),
+        startWith(false),
+      );
+    }, [dTag, maintainerKey, relayKey, store]) ?? repoRelayGroup === undefined;
 
   // Also query git index relays in case the repo relays don't have the state events.
   use$(() => {
     if (!dTag || !maintainerSet || maintainerSet.length === 0) return undefined;
 
-    const filter: Filter = {
+    const indexFilter: Filter = {
       kinds: [REPO_STATE_KIND],
       authors: maintainerSet,
       "#d": [dTag],
     } as Filter;
 
     return pool
-      .subscription(["wss://relay.ngit.dev"], [filter])
+      .subscription(["wss://relay.ngit.dev"], [indexFilter])
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [dTag, maintainerKey, store]);
 
   // Read back from the store and pick the winner.
   // store.getReplaceable returns the latest event per pubkey+kind+d-tag,
   // so we collect one per maintainer and apply the tiebreaker ourselves.
-  return use$(() => {
+  const repoState = use$(() => {
     if (!dTag || !maintainerSet || maintainerSet.length === 0) return undefined;
 
     // Subscribe to the timeline for all maintainer state events so we react
     // to new arrivals.
-    const filter: Filter = {
+    const storeFilter: Filter = {
       kinds: [REPO_STATE_KIND],
       authors: maintainerSet,
       "#d": [dTag],
     } as Filter;
 
-    return store.timeline([filter]).pipe(
+    return store.timeline([storeFilter]).pipe(
       map((events) => {
         const valid = events.filter(isValidRepositoryState);
         if (valid.length === 0) return null;
@@ -124,4 +158,6 @@ export function useRepositoryState(
       }),
     ) as unknown as Observable<RepositoryState | null>;
   }, [dTag, maintainerKey, store]);
+
+  return [repoState, repoRelayEose];
 }
