@@ -349,6 +349,9 @@ function LocatorBar({
   const barRef = useRef<HTMLDivElement>(null);
   const checkedRef = useRef<HTMLSpanElement>(null);
 
+  const hasRepoState = !!repoState;
+  const pathKey = pathSegments.join("/");
+
   useEffect(() => {
     const bar = barRef.current;
     const checked = checkedRef.current;
@@ -367,14 +370,7 @@ function LocatorBar({
     const ro = new ResizeObserver(check);
     ro.observe(bar);
     return () => ro.disconnect();
-  }, [
-    lastCheckedAt,
-    pulling,
-    !!repoState,
-    pathSegments.join("/"),
-    currentRef,
-    refs.length,
-  ]);
+  }, [lastCheckedAt, pulling, hasRepoState, pathKey, currentRef, refs.length]);
 
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
