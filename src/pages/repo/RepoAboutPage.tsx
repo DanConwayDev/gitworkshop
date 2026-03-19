@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
 import { UserLink } from "@/components/UserAvatar";
@@ -22,8 +23,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useGitRepoData } from "@/hooks/useGitRepoData";
-import { MarkdownContent } from "@/components/MarkdownContent";
 import { formatDistanceToNow } from "date-fns";
+
+const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
 export default function RepoAboutPage() {
   const { resolved } = useRepoContext();
@@ -330,7 +332,17 @@ function ReadmeCard({
       </CardHeader>
       <CardContent className="pt-0">
         {isMarkdown ? (
-          <MarkdownContent content={gitData.readmeContent} />
+          <Suspense
+            fallback={
+              <div className="space-y-2">
+                <div className="h-4 animate-pulse bg-muted rounded w-full" />
+                <div className="h-4 animate-pulse bg-muted rounded w-5/6" />
+                <div className="h-4 animate-pulse bg-muted rounded w-4/6" />
+              </div>
+            }
+          >
+            <MarkdownContent content={gitData.readmeContent} />
+          </Suspense>
         ) : (
           <pre className="text-sm whitespace-pre-wrap font-mono text-foreground/80 leading-relaxed">
             {gitData.readmeContent}

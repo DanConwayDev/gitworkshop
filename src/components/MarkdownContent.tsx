@@ -1,3 +1,14 @@
+/**
+ * MarkdownContent — lazy-loadable markdown renderer with GitHub-style
+ * component overrides and syntax highlighting.
+ *
+ * This module is intentionally NOT re-exported from a barrel file so that
+ * React.lazy() can split it (and react-markdown + highlight.js languages)
+ * into a separate chunk that doesn't affect initial load.
+ *
+ * Usage:
+ *   const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
+ */
 import { Link } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import ReactMarkdown from "react-markdown";
@@ -10,8 +21,67 @@ import {
   decodeEventPointer,
 } from "applesauce-core/helpers";
 
+// Explicit language imports — only what's needed for a git client.
+// This replaces rehype-highlight's default "all languages" bundle (~1.5 MB).
+import bash from "highlight.js/lib/languages/bash";
+import c from "highlight.js/lib/languages/c";
+import cpp from "highlight.js/lib/languages/cpp";
+import css from "highlight.js/lib/languages/css";
+import diff from "highlight.js/lib/languages/diff";
+import dockerfile from "highlight.js/lib/languages/dockerfile";
+import go from "highlight.js/lib/languages/go";
+import ini from "highlight.js/lib/languages/ini";
+import java from "highlight.js/lib/languages/java";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import kotlin from "highlight.js/lib/languages/kotlin";
+import makefile from "highlight.js/lib/languages/makefile";
+import markdown from "highlight.js/lib/languages/markdown";
+import nix from "highlight.js/lib/languages/nix";
+import php from "highlight.js/lib/languages/php";
+import python from "highlight.js/lib/languages/python";
+import ruby from "highlight.js/lib/languages/ruby";
+import rust from "highlight.js/lib/languages/rust";
+import shell from "highlight.js/lib/languages/shell";
+import sql from "highlight.js/lib/languages/sql";
+import swift from "highlight.js/lib/languages/swift";
+import typescript from "highlight.js/lib/languages/typescript";
+import xml from "highlight.js/lib/languages/xml";
+import yaml from "highlight.js/lib/languages/yaml";
+
+const highlightLanguages = {
+  bash,
+  c,
+  cpp,
+  css,
+  diff,
+  dockerfile,
+  go,
+  ini,
+  java,
+  javascript,
+  json,
+  kotlin,
+  makefile,
+  markdown,
+  nix,
+  php,
+  python,
+  ruby,
+  rust,
+  shell,
+  sql,
+  swift,
+  typescript,
+  xml,
+  yaml,
+};
+
 const remarkPlugins = [remarkGfm, remarkNostrMentions];
-const rehypePlugins = [rehypeHighlight];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const rehypePlugins: any[] = [
+  [rehypeHighlight, { languages: highlightLanguages, detect: false }],
+];
 
 const markdownComponents: Components = {
   // Nostr-aware links + external link handling
@@ -49,9 +119,8 @@ const markdownComponents: Components = {
     );
   },
 
-  // Inline code — styled like GitHub
+  // Inline code
   code: ({ children, className, ...props }) => {
-    // Block code (inside <pre>) gets className from rehype-highlight; inline doesn't
     const isInline = !className;
     if (isInline) {
       return (
@@ -80,7 +149,7 @@ const markdownComponents: Components = {
     </pre>
   ),
 
-  // Blockquote — GitHub-style left border
+  // Blockquote
   blockquote: ({ children, ...props }) => (
     <blockquote
       className="border-l-4 border-border pl-4 text-muted-foreground italic my-4"
@@ -127,7 +196,7 @@ const markdownComponents: Components = {
     </td>
   ),
 
-  // Headings with anchor-friendly styling
+  // Headings
   h1: ({ children, ...props }) => (
     <h1
       className="text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border text-foreground"
@@ -201,7 +270,7 @@ const markdownComponents: Components = {
   // Horizontal rule
   hr: (props) => <hr className="my-6 border-border" {...props} />,
 
-  // Images — responsive
+  // Images
   img: ({ src, alt, ...props }) => (
     <img
       src={src}
@@ -212,7 +281,6 @@ const markdownComponents: Components = {
     />
   ),
 
-  // Strong / em
   strong: ({ children, ...props }) => (
     <strong className="font-semibold text-foreground" {...props}>
       {children}
@@ -243,3 +311,6 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
     </div>
   );
 }
+
+// Default export required for React.lazy()
+export default MarkdownContent;

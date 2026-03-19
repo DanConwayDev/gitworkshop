@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { formatDistanceToNow, format } from "date-fns";
-import { MarkdownContent } from "@/components/MarkdownContent";
+
+const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 import { EditableSubject } from "@/components/EditSubjectInline";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
@@ -289,7 +290,13 @@ export default function IssuePage() {
                 </CardHeader>
                 <CardContent>
                   {issue.content ? (
-                    <MarkdownContent content={issue.content} />
+                    <Suspense
+                      fallback={
+                        <div className="h-16 animate-pulse bg-muted rounded" />
+                      }
+                    >
+                      <MarkdownContent content={issue.content} />
+                    </Suspense>
                   ) : (
                     <span className="text-muted-foreground italic text-sm">
                       No description provided.
@@ -485,7 +492,11 @@ function CommentCard({ comment }: { comment: NostrEvent }) {
                 {timeAgo}
               </span>
             </div>
-            <MarkdownContent content={comment.content} />
+            <Suspense
+              fallback={<div className="h-8 animate-pulse bg-muted rounded" />}
+            >
+              <MarkdownContent content={comment.content} />
+            </Suspense>
           </div>
         </div>
       </CardContent>

@@ -1,9 +1,9 @@
+/* highlight.js — github light theme (default) */
+@import "highlight.js/styles/github.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* highlight.js — github light theme (default) */
-@import "highlight.js/styles/github.css";
 
 @layer base {
   :root {
