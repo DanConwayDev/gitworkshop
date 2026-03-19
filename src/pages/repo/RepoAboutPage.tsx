@@ -19,10 +19,13 @@ import {
   BookOpen,
   AlertCircle,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useGitRepoData } from "@/hooks/useGitRepoData";
+import { useRepositoryState } from "@/hooks/useRepositoryState";
+import type { RepositoryState } from "@/casts/RepositoryState";
 import { formatDistanceToNow } from "date-fns";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
@@ -30,6 +33,12 @@ const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 export default function RepoAboutPage() {
   const { resolved } = useRepoContext();
   const repo = resolved?.repo;
+
+  const repoState = useRepositoryState(
+    repo?.dTag,
+    repo?.maintainerSet,
+    resolved?.repoRelayGroup,
+  );
 
   const gitData = useGitRepoData(repo?.cloneUrls ?? []);
 
@@ -60,8 +69,15 @@ export default function RepoAboutPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         {/* Main content */}
         <div className="space-y-6">
+          {/* State sync warning banner */}
+          {repo.cloneUrls.length > 0 && (
+            <StateSyncWarning gitData={gitData} repoState={repoState} />
+          )}
+
           {/* Latest commit */}
-          {repo.cloneUrls.length > 0 && <LatestCommitCard gitData={gitData} />}
+          {repo.cloneUrls.length > 0 && (
+            <LatestCommitCard gitData={gitData} repoState={repoState} />
+          )}
 
           {/* README */}
           {repo.cloneUrls.length > 0 && <ReadmeCard gitData={gitData} />}
@@ -211,13 +227,63 @@ export default function RepoAboutPage() {
 }
 
 // ---------------------------------------------------------------------------
+// State sync warning banner
+// ---------------------------------------------------------------------------
+
+function StateSyncWarning({
+  gitData,
+  repoState,
+}: {
+  gitData: ReturnType<typeof useGitRepoData>;
+  repoState: RepositoryState | null | undefined;
+}) {
+  // No state event exists — nothing to compare against
+  if (repoState === null || repoState === undefined) return null;
+  // Still loading git data or state — don't show a false warning
+  if (gitData.loading || !gitData.latestCommit) return null;
+  // No HEAD commit declared in the state event
+  const stateHeadCommit = repoState.headCommitId;
+  if (!stateHeadCommit) return null;
+
+  const gitHeadCommit = gitData.latestCommit.hash;
+  // Commits match — in sync
+  if (
+    gitHeadCommit.startsWith(stateHeadCommit) ||
+    stateHeadCommit.startsWith(gitHeadCommit)
+  )
+    return null;
+
+  const branch = repoState.headBranch ?? repoState.headRef ?? "HEAD";
+  const shortState = stateHeadCommit.slice(0, 8);
+  const shortGit = gitHeadCommit.slice(0, 8);
+
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="space-y-0.5">
+        <p className="font-medium">Repository out of sync with state event</p>
+        <p className="text-xs text-amber-600/80 dark:text-amber-400/70">
+          The state event declares <code className="font-mono">{branch}</code>{" "}
+          at <code className="font-mono">{shortState}</code>, but the git server
+          reports HEAD at <code className="font-mono">{shortGit}</code>. The
+          README and latest commit shown below reflect the git server&apos;s
+          current state.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Latest commit card
 // ---------------------------------------------------------------------------
 
 function LatestCommitCard({
   gitData,
+  repoState,
 }: {
   gitData: ReturnType<typeof useGitRepoData>;
+  repoState: RepositoryState | null | undefined;
 }) {
   if (gitData.loading) {
     return (
@@ -242,12 +308,26 @@ function LatestCommitCard({
   const authorDate = new Date(commit.author.timestamp * 1000);
   const relativeTime = formatDistanceToNow(authorDate, { addSuffix: true });
 
+  // Determine whether the state event confirms this commit as HEAD
+  const stateHeadCommit = repoState?.headCommitId;
+  const isConfirmedByState =
+    stateHeadCommit !== undefined &&
+    (commit.hash.startsWith(stateHeadCommit) ||
+      stateHeadCommit.startsWith(commit.hash));
+  const stateBranch = repoState?.headBranch;
+
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <GitCommit className="h-4 w-4 text-muted-foreground" />
           Latest commit
+          {stateBranch && (
+            <span className="ml-auto text-xs font-normal text-muted-foreground flex items-center gap-1">
+              <GitBranch className="h-3 w-3" />
+              {stateBranch}
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
@@ -255,7 +335,7 @@ function LatestCommitCard({
           <code className="shrink-0 text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground mt-0.5">
             {shortHash}
           </code>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p
               className="text-sm font-medium leading-snug truncate"
               title={subject}
@@ -264,6 +344,11 @@ function LatestCommitCard({
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               {commit.author.name} &middot; {relativeTime}
+              {isConfirmedByState && (
+                <span className="ml-2 text-green-600 dark:text-green-400">
+                  &middot; confirmed by state event
+                </span>
+              )}
             </p>
           </div>
         </div>

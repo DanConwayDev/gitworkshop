@@ -135,6 +135,9 @@ export function extractPatchBody(ev: NostrEvent): string {
 /** Repository announcement (addressable, kind 30617) */
 export const REPO_KIND = 30617;
 
+/** Repository state announcement (addressable, kind 30618) */
+export const REPO_STATE_KIND = 30618;
+
 /** Git issue (kind 1621) */
 export const ISSUE_KIND = 1621;
 
@@ -275,6 +278,70 @@ export function getRepoMaintainers(ev: NostrEvent): string[] {
     const tag = ev.tags.find(([t]) => t === "maintainers");
     return tag ? tag.slice(1).filter(Boolean) : [];
   });
+}
+
+// ---------------------------------------------------------------------------
+// Cached per-event tag extractors for kind:30618 state events
+// ---------------------------------------------------------------------------
+
+const StateRefsSymbol = Symbol.for("repo-state-ev-refs");
+const StateHeadSymbol = Symbol.for("repo-state-ev-head");
+
+/**
+ * A single ref entry from a kind:30618 state event.
+ * `name` is the full ref path, e.g. "refs/heads/main".
+ * `commitId` is the full commit hash.
+ * `parentCommitIds` are the optional shorthand parent/grandparent commit IDs
+ * used to identify how many commits ahead a ref is.
+ */
+export interface RepoStateRef {
+  name: string;
+  commitId: string;
+  parentCommitIds: string[];
+}
+
+/**
+ * Extract all refs from a kind:30618 state event.
+ * Format: ["refs/<heads|tags>/<name>", "<commit-id>", "<parent>", ...]
+ */
+export function getStateRefs(ev: NostrEvent): RepoStateRef[] {
+  return getOrComputeCachedValue(ev, StateRefsSymbol, () =>
+    ev.tags
+      .filter(([t]) => t?.startsWith("refs/"))
+      .map(([name, commitId, ...parents]) => ({
+        name,
+        commitId: commitId ?? "",
+        parentCommitIds: parents.filter(Boolean),
+      }))
+      .filter((r) => r.commitId),
+  );
+}
+
+/**
+ * Extract the HEAD ref from a kind:30618 state event.
+ * Format: ["HEAD", "ref: refs/heads/<branch-name>"]
+ * Returns the full ref path (e.g. "refs/heads/main") or undefined.
+ */
+export function getStateHead(ev: NostrEvent): string | undefined {
+  return getOrComputeCachedValue(ev, StateHeadSymbol, () => {
+    const tag = ev.tags.find(([t]) => t === "HEAD");
+    if (!tag) return undefined;
+    const val = tag[1] ?? "";
+    // Format: "ref: refs/heads/<branch>"
+    const match = val.match(/^ref:\s*(.+)$/);
+    return match ? match[1] : undefined;
+  });
+}
+
+/**
+ * Get the commit ID for the HEAD branch from a kind:30618 state event.
+ * Returns undefined if HEAD or the target ref is missing.
+ */
+export function getStateHeadCommit(ev: NostrEvent): string | undefined {
+  const headRef = getStateHead(ev);
+  if (!headRef) return undefined;
+  const refs = getStateRefs(ev);
+  return refs.find((r) => r.name === headRef)?.commitId;
 }
 
 /** Default git index relay URL. */
