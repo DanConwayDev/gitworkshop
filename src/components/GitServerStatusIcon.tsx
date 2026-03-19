@@ -11,16 +11,16 @@
  *   "behind"  → amber (warning)
  *   "ahead"   → amber (warning)
  *   "error"   → red
- *   "unknown" → pulsing amber (fetching)
+ *   "unknown" → pulsing grey (fetching — not yet a problem)
  */
 
 import { cn } from "@/lib/utils";
 
-type ServerState = "success" | "warning" | "error" | undefined;
+type ServerState = "success" | "warning" | "error" | "loading" | undefined;
 
 function mapStatus(
   status: string | undefined,
-): "success" | "warning" | "error" {
+): "success" | "warning" | "error" | "loading" {
   switch (status) {
     case "match":
       return "success";
@@ -31,14 +31,15 @@ function mapStatus(
       return "error";
     case "unknown":
     default:
-      return "warning";
+      return "loading";
   }
 }
 
-const stateColors: Record<ServerState & string, string> = {
+const stateColors: Record<string, string> = {
   success: "fill-emerald-500",
   warning: "fill-amber-500",
   error: "fill-red-500",
+  loading: "fill-muted-foreground/50",
 };
 
 interface GitServerStatusIconProps {
@@ -51,10 +52,10 @@ export function GitServerStatusIcon({
   statuses,
   className,
 }: GitServerStatusIconProps) {
-  // Map to success/warning/error, sort best-first, trim/pad to 3
+  // Map to success/warning/error/loading, sort best-first, trim/pad to 3
   const mapped: ServerState[] = statuses.map(mapStatus).sort((a, b) => {
     const rank = (s: ServerState) =>
-      s === "success" ? 0 : s === "warning" ? 1 : 2;
+      s === "success" ? 0 : s === "warning" ? 1 : s === "error" ? 2 : 3;
     return rank(a) - rank(b);
   });
 
@@ -109,7 +110,7 @@ export function GitServerStatusIcon({
         {rows.map((state, i) => {
           if (!state) return null;
           const y = i === 0 ? 2 : i === 1 ? 9 : 16;
-          const isFlashing = state === "warning";
+          const isFlashing = state === "loading";
           return (
             <g key={i}>
               <rect

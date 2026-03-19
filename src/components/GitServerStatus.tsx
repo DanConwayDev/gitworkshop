@@ -744,6 +744,10 @@ export function GitServerStatus({
   const matchingUniqueCount = serverStatuses.filter(
     (s) => s.status === "match",
   ).length;
+  const hasConfirmedProblem = serverStatuses.some(
+    (s) =>
+      s.status === "behind" || s.status === "ahead" || s.status === "error",
+  );
 
   // Build statuses array for the icon — one entry per URL
   const iconStatuses = useMemo(
@@ -755,7 +759,10 @@ export function GitServerStatus({
 
   const allMatch =
     matchingUniqueCount === uniqueServerCount && uniqueServerCount > 0;
-  const someMatch = matchingUniqueCount > 0;
+  // Only go amber when there is a confirmed problem (behind/ahead/error),
+  // not merely because some servers are still fetching ("unknown").
+  const someMatch = matchingUniqueCount > 0 && !hasConfirmedProblem;
+  const hasProblems = hasConfirmedProblem;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -764,9 +771,9 @@ export function GitServerStatus({
           className={cn(
             "inline-flex items-center gap-1.5 h-8 px-2 rounded-md border text-[11px] transition-all duration-200",
             "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-            allMatch
+            allMatch || someMatch
               ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
-              : someMatch
+              : hasProblems
                 ? "border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400"
                 : "border-border/60 text-muted-foreground",
           )}
