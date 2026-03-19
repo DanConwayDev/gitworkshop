@@ -290,6 +290,21 @@ export function graspCloneUrlDomain(url: string): string | undefined {
 }
 
 /**
+ * Extract the npub from a Grasp clone URL.
+ * Grasp URLs have the form: https://<domain>/<npub1...>/<repo-name>.git
+ * Returns undefined if the URL is not a valid Grasp clone URL.
+ */
+export function graspCloneUrlNpub(url: string): string | undefined {
+  if (!isGraspCloneUrl(url)) return undefined;
+  const npubStart = url.indexOf("npub1");
+  if (npubStart === -1) return undefined;
+  let npubEnd = npubStart + 5;
+  while (npubEnd < url.length && /[0-9a-z]/.test(url[npubEnd])) npubEnd++;
+  const npub = url.slice(npubStart, npubEnd);
+  return npub.length >= 10 ? npub : undefined;
+}
+
+/**
  * Extract all web URLs from a kind:30617 event.
  * Same multi-value tag format as clone: ["web", "url1", "url2", ...]
  */

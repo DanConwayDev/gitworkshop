@@ -26,9 +26,15 @@ import {
   CheckCircle2,
   XCircle,
   HelpCircle,
+  ChevronDown,
+  Server,
+  Copy,
 } from "lucide-react";
+import { nip19 } from "nostr-tools";
 import { cn } from "@/lib/utils";
 import { GraspLogo } from "@/components/GraspLogo";
+import { UserAvatar, UserName } from "@/components/UserAvatar";
+import { graspCloneUrlDomain, graspCloneUrlNpub } from "@/lib/nip34";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import type { UrlInfoRefsResult } from "@/services/gitRepoDataService";
@@ -254,94 +260,70 @@ function countMismatches(refsWithStatus: RefWithStatus[]): number {
 }
 
 // ---------------------------------------------------------------------------
-// Dynamic git-server icon (inspired by gitworkshop's ExplorerServerStatusIcon)
+// Grasp URL grouping helpers
 // ---------------------------------------------------------------------------
 
-type LightState = "success" | "warning" | "error" | undefined;
+/** A single clone URL endpoint on a Grasp server, associated with an npub */
+interface GraspEndpoint {
+  url: string;
+  npub: string;
+  pubkey: string | undefined;
+  status: ServerStatus | undefined;
+}
 
-/**
- * Stacked-server SVG with up to 3 status lights.
- * Each light corresponds to one git server (sorted: success → warning → error).
- */
-function GitServerIcon({
-  statuses,
-  className,
-}: {
-  statuses: ServerStatus[];
-  className?: string;
-}) {
-  // Map server statuses to light states
-  const lights: LightState[] = statuses.map((s) => {
-    if (s.status === "match") return "success";
-    if (s.status === "unknown") return "warning";
-    if (s.status === "error") return "error";
-    if (s.status === "behind" || s.status === "ahead") return "warning";
+/** A Grasp server domain with its clone URL endpoints grouped */
+interface GraspServerGroup {
+  domain: string;
+  endpoints: GraspEndpoint[];
+  /** Aggregate status: best status across all endpoints */
+  bestStatus: ServerRefStatus;
+}
+
+/** Decode an npub to hex pubkey, returning undefined on failure */
+function npubToPubkey(npub: string): string | undefined {
+  try {
+    const decoded = nip19.decode(npub);
+    if (decoded.type === "npub") return decoded.data;
     return undefined;
-  });
+  } catch {
+    return undefined;
+  }
+}
 
-  // Sort: success first, then warning, then error
-  lights.sort((a, b) => {
-    const rank = (v: LightState) =>
-      v === "success" ? 0 : v === "warning" ? 1 : v === "error" ? 2 : 3;
-    return rank(a) - rank(b);
-  });
+/** Group grasp clone URLs by server domain */
+function groupGraspByDomain(
+  graspCloneUrls: string[],
+  serverStatuses: ServerStatus[],
+): GraspServerGroup[] {
+  const domainMap = new Map<string, GraspEndpoint[]>();
 
-  // Trim to at most 3, removing duplicates of the least-important first
-  while (lights.length > 3) {
-    const lastError = lights.lastIndexOf("error");
-    if (lastError !== -1 && lights.filter((l) => l === "error").length > 1) {
-      lights.splice(lastError, 1);
-      continue;
-    }
-    const lastWarning = lights.lastIndexOf("warning");
-    if (
-      lastWarning !== -1 &&
-      lights.filter((l) => l === "warning").length > 1
-    ) {
-      lights.splice(lastWarning, 1);
-      continue;
-    }
-    lights.splice(lights.lastIndexOf("success"), 1);
+  for (const url of graspCloneUrls) {
+    const domain = graspCloneUrlDomain(url) ?? "unknown";
+    const npub = graspCloneUrlNpub(url) ?? "unknown";
+    const pubkey = npub !== "unknown" ? npubToPubkey(npub) : undefined;
+    const status = serverStatuses.find((s) => s.url === url);
+
+    if (!domainMap.has(domain)) domainMap.set(domain, []);
+    domainMap.get(domain)!.push({ url, npub, pubkey, status });
   }
 
-  // Pad to 3
-  while (lights.length < 3) lights.push(undefined);
+  const groups: GraspServerGroup[] = [];
+  for (const [domain, endpoints] of domainMap) {
+    const statusRank = (s: ServerRefStatus | undefined) => {
+      if (s === "match") return 0;
+      if (s === "unknown") return 1;
+      if (s === "ahead" || s === "behind") return 2;
+      if (s === "error") return 3;
+      return 4;
+    };
+    const best = endpoints.reduce<ServerRefStatus>((acc, ep) => {
+      const epStatus = ep.status?.status ?? "unknown";
+      return statusRank(epStatus) < statusRank(acc) ? epStatus : acc;
+    }, "unknown" as ServerRefStatus);
+    groups.push({ domain, endpoints, bestStatus: best });
+  }
 
-  const colorClass = (state: LightState) => {
-    if (state === "success") return "fill-emerald-500";
-    if (state === "warning") return "fill-amber-500";
-    if (state === "error") return "fill-red-500";
-    return "";
-  };
-
-  const renderLights = (state: LightState, y: number) => {
-    if (!state) return null;
-    return (
-      <>
-        <rect x="12" y={y} width="2" height="2" className={colorClass(state)} />
-        <rect x="16" y={y} width="2" height="2" className={colorClass(state)} />
-      </>
-    );
-  };
-
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      className={cn("inline", className)}
-      aria-hidden="true"
-    >
-      {/* Stacked server chassis */}
-      <path
-        className="fill-current opacity-40"
-        d="M0 2C0 .9.9 0 2 0h16a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm0 7c0-1.1.9-2 2-2h16a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm0 7c0-1.1.9-2 2-2h16a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zM12 2v2h2V2zm4 0v2h2V2zm-4 7v2h2V9zm4 0v2h2V9zm-4 7v2h2v-2zm4 0v2h2v-2z"
-      />
-      {/* Status lights */}
-      {renderLights(lights[0], 2)}
-      {renderLights(lights[1], 9)}
-      {renderLights(lights[2], 16)}
-    </svg>
-  );
+  return groups;
 }
 
 // ---------------------------------------------------------------------------
@@ -353,8 +335,6 @@ function GitServerPanel({
   repoState,
   repoRelayEose,
   currentRef,
-  matchingCount,
-  totalCount,
   graspCloneUrls,
   additionalGitServerUrls,
 }: {
@@ -362,8 +342,6 @@ function GitServerPanel({
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
   currentRef: string;
-  matchingCount: number;
-  totalCount: number;
   graspCloneUrls: string[];
   additionalGitServerUrls: string[];
 }) {
@@ -372,152 +350,381 @@ function GitServerPanel({
   const noState = repoRelayEose && repoState === null;
   const usesGrasp = graspCloneUrls.length > 0;
 
-  // Build a human-readable header title
-  const headerTitle = (() => {
-    if (!usesGrasp) return "Git Servers";
-    if (additionalGitServerUrls.length === 0) return "Grasp Servers";
-    return "Grasp & Git Servers";
+  const graspGroups = useMemo(
+    () => groupGraspByDomain(graspCloneUrls, serverStatuses),
+    [graspCloneUrls, serverStatuses],
+  );
+
+  const additionalStatuses = useMemo(
+    () => serverStatuses.filter((s) => additionalGitServerUrls.includes(s.url)),
+    [serverStatuses, additionalGitServerUrls],
+  );
+
+  // Count unique servers (domains for grasp, individual URLs for others)
+  const uniqueServerCount = graspGroups.length + additionalGitServerUrls.length;
+  const matchingServerCount = (() => {
+    let count = 0;
+    for (const g of graspGroups) {
+      if (g.bestStatus === "match") count++;
+    }
+    for (const s of additionalStatuses) {
+      if (s.status === "match") count++;
+    }
+    return count;
   })();
 
   return (
-    <div className="w-[300px] p-0">
+    <div className="w-[440px] p-0">
       {/* Header */}
-      <div className="px-3 py-2.5 border-b border-border/40">
-        <div className="flex items-center gap-1.5">
-          {usesGrasp && <GraspLogo className="h-3.5 w-3.5 shrink-0" />}
-          <p className="text-xs font-semibold text-foreground">{headerTitle}</p>
+      <div className="px-4 py-3 border-b border-border/40">
+        <div className="flex items-center gap-2">
+          {usesGrasp && (
+            <GraspLogo className="h-4 w-4 shrink-0 text-violet-500" />
+          )}
+          <p className="text-sm font-semibold text-foreground">
+            {!usesGrasp
+              ? "Git Servers"
+              : additionalGitServerUrls.length === 0
+                ? "Grasp Servers"
+                : "Grasp & Git Servers"}
+          </p>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <p className="text-xs text-muted-foreground mt-1">
           {hasState ? (
             <>
               <span className="font-medium text-foreground">
-                {matchingCount}/{totalCount}
+                {matchingServerCount}/{uniqueServerCount}
               </span>{" "}
-              serving the signed state for{" "}
-              <code className="font-mono bg-muted px-1 rounded">
+              {uniqueServerCount === 1 ? "server" : "servers"} serving the
+              signed state for{" "}
+              <code className="font-mono bg-muted px-1 py-0.5 rounded text-[11px]">
                 {currentRef}
               </code>
             </>
           ) : noState ? (
             <>
-              Comparing {totalCount} git server{totalCount !== 1 ? "s" : ""}
+              Comparing {uniqueServerCount} server
+              {uniqueServerCount !== 1 ? "s" : ""}
             </>
           ) : (
             <>
-              Checking {totalCount} git server{totalCount !== 1 ? "s" : ""}…
+              Checking {uniqueServerCount} server
+              {uniqueServerCount !== 1 ? "s" : ""}…
             </>
           )}
         </p>
       </div>
 
-      {/* Per-server rows */}
-      <div className="py-1">
-        {serverStatuses.map((s) => {
-          const viaProxy = urlUsesProxy(s.url);
-          const isGrasp = graspCloneUrls.includes(s.url);
-          return (
-            <div
-              key={s.url}
-              className="flex items-start gap-2.5 px-3 py-2 text-xs"
-            >
-              <ServerStatusDot status={s.status} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <p
-                    className="font-mono truncate text-foreground/80"
-                    title={s.url}
-                  >
-                    {s.label}
-                  </p>
-                  {isGrasp &&
-                    usesGrasp &&
-                    additionalGitServerUrls.length > 0 && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="shrink-0 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 cursor-default leading-none">
-                            <GraspLogo className="h-2.5 w-2.5" />
-                            grasp
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="right"
-                          className="text-xs max-w-[220px]"
-                          sideOffset={6}
-                        >
-                          Hosted on a Grasp server
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                  {viaProxy && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="shrink-0 inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 cursor-default leading-none">
-                          proxy
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="right"
-                        className="text-xs max-w-[220px]"
-                        sideOffset={6}
-                      >
-                        Fetched via cors.isomorphic-git.org — this server does
-                        not support cross-origin requests
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                </div>
-                {s.status === "behind" && s.serverCommit && s.stateCommit && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    has{" "}
-                    <code className="bg-muted px-1 rounded">
-                      {s.serverCommit.slice(0, 8)}
-                    </code>
-                    {hasState && (
-                      <>
-                        {" "}
-                        · signed{" "}
-                        <code className="bg-muted px-1 rounded">
-                          {s.stateCommit.slice(0, 8)}
-                        </code>
-                      </>
-                    )}
-                  </p>
-                )}
-                {s.status === "match" && s.serverCommit && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    <code className="bg-muted px-1 rounded">
-                      {s.serverCommit.slice(0, 8)}
-                    </code>
-                  </p>
-                )}
-                {s.status === "error" && (
-                  <p className="text-[11px] text-red-500/80 mt-0.5">
-                    unreachable
-                  </p>
-                )}
-                {s.status === "unknown" && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    fetching…
-                  </p>
-                )}
+      <ScrollArea className="max-h-[400px]">
+        {/* Grasp server groups */}
+        {graspGroups.map((group) => (
+          <GraspServerGroupRow
+            key={group.domain}
+            group={group}
+            hasState={hasState}
+          />
+        ))}
+
+        {/* Separator between grasp and additional servers */}
+        {graspGroups.length > 0 && additionalStatuses.length > 0 && (
+          <Separator />
+        )}
+
+        {/* Additional (non-grasp) git servers */}
+        {additionalStatuses.length > 0 && (
+          <div className="py-1">
+            {graspGroups.length > 0 && (
+              <div className="flex items-center gap-1.5 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                <Server className="h-3 w-3" />
+                Other Git Servers
               </div>
-              <ServerStatusLabel status={s.status} hasState={hasState} />
-            </div>
-          );
-        })}
-      </div>
+            )}
+            {additionalStatuses.map((s) => (
+              <AdditionalServerRow
+                key={s.url}
+                serverStatus={s}
+                hasState={hasState}
+              />
+            ))}
+          </div>
+        )}
+      </ScrollArea>
 
       {/* Footer note */}
       {noState && (
         <>
           <Separator />
-          <div className="px-3 py-2 text-[11px] text-muted-foreground/70 leading-relaxed">
+          <div className="px-4 py-2.5 text-[11px] text-muted-foreground/70 leading-relaxed">
             No signed state — comparing git servers to each other
           </div>
         </>
       )}
     </div>
   );
+}
+
+/** A single Grasp server domain with its maintainer endpoints */
+function GraspServerGroupRow({
+  group,
+  hasState,
+}: {
+  group: GraspServerGroup;
+  hasState: boolean;
+}) {
+  return (
+    <div className="py-2">
+      {/* Server domain header */}
+      <div className="flex items-center gap-2 px-4 py-1.5">
+        <GraspLogo className="h-3.5 w-3.5 shrink-0 text-violet-500" />
+        <span className="text-xs font-medium text-foreground">
+          {group.domain}
+        </span>
+        <ServerStatusBadge status={group.bestStatus} hasState={hasState} />
+      </div>
+
+      {/* Maintainer endpoints */}
+      <div className="space-y-0.5">
+        {group.endpoints.map((ep) => (
+          <GraspEndpointRow key={ep.url} endpoint={ep} hasState={hasState} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A single clone URL endpoint within a Grasp server group */
+function GraspEndpointRow({
+  endpoint,
+  hasState,
+}: {
+  endpoint: GraspEndpoint;
+  hasState: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const viaProxy = urlUsesProxy(endpoint.url);
+  const status = endpoint.status;
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(endpoint.url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div className="flex items-center gap-2.5 px-4 pl-10 py-1.5 text-xs group hover:bg-accent/30 transition-colors">
+      <ServerStatusDot status={status?.status ?? "unknown"} />
+
+      {/* Avatar + name for the npub */}
+      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+        {endpoint.pubkey ? (
+          <>
+            <UserAvatar
+              pubkey={endpoint.pubkey}
+              size="sm"
+              className="h-5 w-5 text-[8px]"
+            />
+            <UserName
+              pubkey={endpoint.pubkey}
+              className="text-xs text-foreground/80 truncate"
+            />
+          </>
+        ) : (
+          <span className="font-mono text-foreground/60 truncate">
+            {endpoint.npub.slice(0, 12)}…
+          </span>
+        )}
+      </div>
+
+      {/* Commit info */}
+      {status?.status === "match" && status.serverCommit && (
+        <code className="text-[10px] font-mono text-muted-foreground bg-muted px-1 py-0.5 rounded shrink-0">
+          {status.serverCommit.slice(0, 7)}
+        </code>
+      )}
+      {status?.status === "behind" && status.serverCommit && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <code className="text-[10px] font-mono text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1 py-0.5 rounded shrink-0 cursor-default">
+              {status.serverCommit.slice(0, 7)}
+            </code>
+          </TooltipTrigger>
+          <TooltipContent
+            side="left"
+            className="text-xs max-w-[240px]"
+            sideOffset={6}
+          >
+            Server has{" "}
+            <code className="font-mono bg-muted px-1 rounded">
+              {status.serverCommit.slice(0, 8)}
+            </code>
+            {hasState && status.stateCommit && (
+              <>
+                {" "}
+                but signed state is{" "}
+                <code className="font-mono bg-muted px-1 rounded">
+                  {status.stateCommit.slice(0, 8)}
+                </code>
+              </>
+            )}
+          </TooltipContent>
+        </Tooltip>
+      )}
+
+      {/* Proxy badge */}
+      {viaProxy && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="shrink-0 inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 cursor-default leading-none">
+              proxy
+            </span>
+          </TooltipTrigger>
+          <TooltipContent
+            side="left"
+            className="text-xs max-w-[220px]"
+            sideOffset={6}
+          >
+            Fetched via cors.isomorphic-git.org — this server does not support
+            cross-origin requests
+          </TooltipContent>
+        </Tooltip>
+      )}
+
+      {/* Copy URL button */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={handleCopy}
+            className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+          >
+            {copied ? (
+              <Check className="h-3 w-3 text-emerald-500" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="text-xs" sideOffset={6}>
+          {copied ? "Copied!" : "Copy clone URL"}
+        </TooltipContent>
+      </Tooltip>
+
+      <ServerStatusLabel
+        status={status?.status ?? "unknown"}
+        hasState={hasState}
+      />
+    </div>
+  );
+}
+
+/** A non-grasp git server row */
+function AdditionalServerRow({
+  serverStatus,
+  hasState,
+}: {
+  serverStatus: ServerStatus;
+  hasState: boolean;
+}) {
+  const viaProxy = urlUsesProxy(serverStatus.url);
+
+  return (
+    <div className="flex items-center gap-2.5 px-4 py-2 text-xs">
+      <ServerStatusDot status={serverStatus.status} />
+      <div className="min-w-0 flex-1">
+        <p
+          className="font-mono text-foreground/80 truncate"
+          title={serverStatus.url}
+        >
+          {serverStatus.label}
+        </p>
+        {serverStatus.status === "match" && serverStatus.serverCommit && (
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            <code className="bg-muted px-1 rounded">
+              {serverStatus.serverCommit.slice(0, 7)}
+            </code>
+          </p>
+        )}
+        {serverStatus.status === "behind" &&
+          serverStatus.serverCommit &&
+          serverStatus.stateCommit && (
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              has{" "}
+              <code className="bg-muted px-1 rounded">
+                {serverStatus.serverCommit.slice(0, 8)}
+              </code>
+              {hasState && (
+                <>
+                  {" "}
+                  · signed{" "}
+                  <code className="bg-muted px-1 rounded">
+                    {serverStatus.stateCommit.slice(0, 8)}
+                  </code>
+                </>
+              )}
+            </p>
+          )}
+        {serverStatus.status === "error" && (
+          <p className="text-[11px] text-red-500/80 mt-0.5">unreachable</p>
+        )}
+        {serverStatus.status === "unknown" && (
+          <p className="text-[11px] text-muted-foreground mt-0.5">fetching…</p>
+        )}
+      </div>
+      {viaProxy && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="shrink-0 inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 cursor-default leading-none">
+              proxy
+            </span>
+          </TooltipTrigger>
+          <TooltipContent
+            side="left"
+            className="text-xs max-w-[220px]"
+            sideOffset={6}
+          >
+            Fetched via cors.isomorphic-git.org — this server does not support
+            cross-origin requests
+          </TooltipContent>
+        </Tooltip>
+      )}
+      <ServerStatusLabel status={serverStatus.status} hasState={hasState} />
+    </div>
+  );
+}
+
+/** Small coloured badge for aggregate server status */
+function ServerStatusBadge({
+  status,
+  hasState,
+}: {
+  status: ServerRefStatus;
+  hasState: boolean;
+}) {
+  switch (status) {
+    case "match":
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 leading-none">
+          <CheckCircle2 className="h-2.5 w-2.5" />
+          {hasState ? "signed" : "in sync"}
+        </span>
+      );
+    case "behind":
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 leading-none">
+          <AlertTriangle className="h-2.5 w-2.5" />
+          {hasState ? "out of sync" : "differs"}
+        </span>
+      );
+    case "error":
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-red-500/10 text-red-500 border border-red-500/20 leading-none">
+          <XCircle className="h-2.5 w-2.5" />
+          error
+        </span>
+      );
+    default:
+      return null;
+  }
 }
 
 function ServerStatusDot({ status }: { status: ServerRefStatus }) {
@@ -939,20 +1146,29 @@ export function RefSelector({
     ],
   );
 
-  const matchingServerCount = countMatchingServers(serverStatuses);
-  const totalServerCount = cloneUrls.length;
-
-  // Counts for the tooltip: how many Grasp servers and additional git servers
-  // are in sync vs total.
-  const graspServerStatuses = useMemo(
-    () => serverStatuses.filter((s) => graspCloneUrls.includes(s.url)),
-    [serverStatuses, graspCloneUrls],
+  // Group grasp URLs by domain for unique server counting
+  const graspGroups = useMemo(
+    () => groupGraspByDomain(graspCloneUrls, serverStatuses),
+    [graspCloneUrls, serverStatuses],
   );
+
   const additionalServerStatuses = useMemo(
     () => serverStatuses.filter((s) => additionalGitServerUrls.includes(s.url)),
     [serverStatuses, additionalGitServerUrls],
   );
-  const graspMatchCount = countMatchingServers(graspServerStatuses);
+
+  // Count unique servers (domains for grasp, individual URLs for others)
+  const uniqueServerCount = graspGroups.length + additionalGitServerUrls.length;
+  const matchingUniqueCount = (() => {
+    let count = 0;
+    for (const g of graspGroups) {
+      if (g.bestStatus === "match") count++;
+    }
+    for (const s of additionalServerStatuses) {
+      if (s.status === "match") count++;
+    }
+    return count;
+  })();
   const additionalMatchCount = countMatchingServers(additionalServerStatuses);
 
   const handleSelect = (refName: string) => {
@@ -966,7 +1182,69 @@ export function RefSelector({
   }
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
+      {/* ------------------------------------------------------------------ */}
+      {/* Grasp / git-server status indicator (integrated into the bar)       */}
+      {/* ------------------------------------------------------------------ */}
+      {cloneUrls.length > 0 && (
+        <Popover open={serverPanelOpen} onOpenChange={setServerPanelOpen}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <button
+                  className={cn(
+                    "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-[11px] transition-all duration-200",
+                    "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    matchingUniqueCount === uniqueServerCount &&
+                      uniqueServerCount > 0
+                      ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
+                      : matchingUniqueCount > 0
+                        ? "border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400"
+                        : "border-border/60 text-muted-foreground",
+                  )}
+                  aria-label="Git server status"
+                >
+                  <Server className="h-3.5 w-3.5" />
+                  <span className="font-medium tabular-nums">
+                    {matchingUniqueCount}/{uniqueServerCount}
+                  </span>
+                  <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
+                </button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              className="text-xs max-w-[260px]"
+              sideOffset={6}
+            >
+              <ServerStatusTooltip
+                graspTotal={graspGroups.length}
+                graspMatch={
+                  graspGroups.filter((g) => g.bestStatus === "match").length
+                }
+                additionalTotal={additionalGitServerUrls.length}
+                additionalMatch={additionalMatchCount}
+              />
+            </TooltipContent>
+          </Tooltip>
+
+          <PopoverContent
+            className="p-0 overflow-hidden"
+            align="start"
+            sideOffset={6}
+          >
+            <GitServerPanel
+              serverStatuses={serverStatuses}
+              repoState={repoState}
+              repoRelayEose={repoRelayEose}
+              currentRef={currentRef}
+              graspCloneUrls={graspCloneUrls}
+              additionalGitServerUrls={additionalGitServerUrls}
+            />
+          </PopoverContent>
+        </Popover>
+      )}
+
       {/* ------------------------------------------------------------------ */}
       {/* Ref selector trigger                                                 */}
       {/* ------------------------------------------------------------------ */}
@@ -1122,72 +1400,6 @@ export function RefSelector({
           )}
         </PopoverContent>
       </Popover>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Grasp / git-server status button                                    */}
-      {/* ------------------------------------------------------------------ */}
-      {cloneUrls.length > 0 && (
-        <Popover open={serverPanelOpen} onOpenChange={setServerPanelOpen}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <PopoverTrigger asChild>
-                <button
-                  className={cn(
-                    "inline-flex items-center justify-center h-8 w-8 rounded-md border text-xs transition-all duration-200",
-                    "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                    // Colour the button border/bg based on overall server health
-                    matchingServerCount === totalServerCount &&
-                      totalServerCount > 0
-                      ? "border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
-                      : matchingServerCount > 0
-                        ? "border-amber-500/30 text-amber-600 dark:text-amber-400"
-                        : "border-border/60 text-muted-foreground",
-                  )}
-                  aria-label="Git server status"
-                >
-                  {usesGrasp ? (
-                    <GraspLogo className="h-4 w-4" />
-                  ) : (
-                    <GitServerIcon
-                      statuses={serverStatuses}
-                      className="h-4 w-4"
-                    />
-                  )}
-                </button>
-              </PopoverTrigger>
-            </TooltipTrigger>
-            <TooltipContent
-              side="bottom"
-              className="text-xs max-w-[260px]"
-              sideOffset={6}
-            >
-              <ServerStatusTooltip
-                graspTotal={graspCloneUrls.length}
-                graspMatch={graspMatchCount}
-                additionalTotal={additionalGitServerUrls.length}
-                additionalMatch={additionalMatchCount}
-              />
-            </TooltipContent>
-          </Tooltip>
-
-          <PopoverContent
-            className="p-0 overflow-hidden"
-            align="start"
-            sideOffset={6}
-          >
-            <GitServerPanel
-              serverStatuses={serverStatuses}
-              repoState={repoState}
-              repoRelayEose={repoRelayEose}
-              currentRef={currentRef}
-              matchingCount={matchingServerCount}
-              totalCount={totalServerCount}
-              graspCloneUrls={graspCloneUrls}
-              additionalGitServerUrls={additionalGitServerUrls}
-            />
-          </PopoverContent>
-        </Popover>
-      )}
     </div>
   );
 }
