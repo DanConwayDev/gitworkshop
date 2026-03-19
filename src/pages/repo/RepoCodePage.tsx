@@ -5,6 +5,7 @@ import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
 import { useGitRepoData } from "@/hooks/useGitRepoData";
 import { UserLink } from "@/components/UserAvatar";
 import { RefSelector } from "@/components/RefSelector";
+import { GitServerStatus } from "@/components/GitServerStatus";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import type { UrlInfoRefsResult } from "@/services/gitRepoDataService";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -394,10 +395,6 @@ function LocatorBar({
             repoState={repoState}
             repoRelayEose={repoRelayEose}
             loading={loading}
-            urlInfoRefs={urlInfoRefs}
-            cloneUrls={cloneUrls}
-            graspCloneUrls={graspCloneUrls}
-            additionalGitServerUrls={additionalGitServerUrls}
           />
         ) : loading ? (
           <Skeleton className="h-8 w-28" />
@@ -432,7 +429,7 @@ function LocatorBar({
           })}
         </div>
 
-        {/* Pulling / last-checked indicator — right side */}
+        {/* Right side: pulling indicator + server status */}
         {pulling ? (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -458,6 +455,20 @@ function LocatorBar({
             })}
           </span>
         ) : null}
+
+        {/* Git server status indicator — right-most element */}
+        {cloneUrls.length > 0 && (
+          <GitServerStatus
+            currentRef={currentRef}
+            refs={refs}
+            repoState={repoState}
+            repoRelayEose={repoRelayEose}
+            urlInfoRefs={urlInfoRefs}
+            cloneUrls={cloneUrls}
+            graspCloneUrls={graspCloneUrls}
+            additionalGitServerUrls={additionalGitServerUrls}
+          />
+        )}
       </div>
 
       {/* Commit summary row */}
