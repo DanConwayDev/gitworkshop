@@ -42,6 +42,7 @@ export default function RepoAboutPage() {
 
   const gitData = useGitRepoData(repo?.cloneUrls ?? [], {
     knownHeadCommit: repoState?.headCommitId,
+    stateRefs: repoState?.refs,
     stateCreatedAt: repoState ? repoState.event.created_at : undefined,
   });
 
@@ -291,8 +292,10 @@ function LatestCommitCard({
 }: {
   gitData: ReturnType<typeof useGitRepoData>;
   repoState: RepositoryState | null | undefined;
-  // repoState is used only for branch name and "confirmed" badge — warning
-  // logic has moved into useGitRepoData and is surfaced via gitData.warning.
+  // repoState is used only for the "confirmed by state event" badge.
+  // The branch name comes from gitData.defaultBranch (git server's HEAD ref),
+  // not from repoState.headBranch, to avoid showing a feature branch when the
+  // maintainer ran `ngit sync` while not on the default branch.
 }) {
   if (gitData.loading) {
     return (
@@ -323,7 +326,10 @@ function LatestCommitCard({
     stateHeadCommit !== undefined &&
     (commit.hash.startsWith(stateHeadCommit) ||
       stateHeadCommit.startsWith(commit.hash));
-  const stateBranch = repoState?.headBranch;
+  // Use the default branch from the git server, not the state event's HEAD
+  // branch (which may be a feature branch if the maintainer ran `ngit sync`
+  // while on a non-default branch).
+  const defaultBranch = gitData.defaultBranch;
 
   return (
     <Card>
@@ -331,10 +337,10 @@ function LatestCommitCard({
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <GitCommit className="h-4 w-4 text-muted-foreground" />
           Latest commit
-          {stateBranch && (
+          {defaultBranch && (
             <span className="ml-auto text-xs font-normal text-muted-foreground flex items-center gap-1">
               <GitBranch className="h-3 w-3" />
-              {stateBranch}
+              {defaultBranch}
             </span>
           )}
         </CardTitle>

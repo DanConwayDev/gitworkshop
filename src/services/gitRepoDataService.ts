@@ -30,9 +30,14 @@
  *
  * Nostr state event integration
  *   Callers notify the entry of new state events via entry.onNewStateEvent().
- *   If the declared head commit differs from what was last fetched, a re-fetch
- *   is scheduled with exponential backoff (starting at 2 s, doubling up to
- *   5 min). The backoff resets on a successful fetch.
+ *   If any ref declared in the state event differs from what was last fetched,
+ *   AND the state event was published recently (within RECENT_STATE_EVENT_MAX_AGE_S),
+ *   a re-fetch is scheduled with exponential backoff (starting at 2 s, doubling
+ *   up to 5 min). The backoff resets on a successful fetch.
+ *
+ *   The recency guard prevents initial page-load from triggering backoff polling
+ *   for historical state events that arrived before EOSE — we only want to poll
+ *   when we believe a push just happened.
  */
 
 import {
@@ -110,6 +115,13 @@ const SUBSCRIBER_TTL_MS = 60_000; // 1 minute
 /** Backoff schedule (ms): 2s, 4s, 8s, … capped at 5 min */
 const BACKOFF_INITIAL_MS = 2_000;
 const BACKOFF_MAX_MS = 5 * 60_000;
+
+/**
+ * A state event is considered "recent" (i.e. likely just pushed) if its
+ * created_at is within this many seconds of now. Events older than this
+ * arriving on initial page load (before EOSE) will not trigger backoff polling.
+ */
+const RECENT_STATE_EVENT_MAX_AGE_S = 5 * 60; // 5 minutes
 
 // ---------------------------------------------------------------------------
 // Internal commit result type
@@ -289,11 +301,17 @@ class GitRepoDataEntry {
   private evictTimer: ReturnType<typeof setTimeout> | null = null;
   private backoffTimer: ReturnType<typeof setTimeout> | null = null;
   private backoffDelay = BACKOFF_INITIAL_MS;
-  /** The knownHeadCommit + stateCreatedAt from the latest onNewStateEvent call */
-  private pendingHead: { commitId: string; stateCreatedAt: number } | null =
-    null;
-  /** The head commit that was used for the most recent completed fetch */
-  private lastFetchedHead: string | undefined = undefined;
+  /** The refs + stateCreatedAt from the latest onNewStateEvent call */
+  private pendingHead: {
+    commitId: string;
+    refs: Record<string, string>;
+    stateCreatedAt: number;
+  } | null = null;
+  /**
+   * Snapshot of the ref map (refName → commitId) from the most recent
+   * completed fetch. Used to detect when any ref changes, not just HEAD.
+   */
+  private lastFetchedRefs: Record<string, string> | undefined = undefined;
   /** Whether a fetch is currently in progress */
   private fetching = false;
   /** Whether at least one fetch has completed (successfully or not) */
@@ -351,15 +369,33 @@ class GitRepoDataEntry {
 
   /**
    * Called when a new kind:30618 state event is observed.
-   * If the declared head commit differs from what we last fetched, schedule
-   * a re-fetch with exponential backoff (the git server may not have the new
-   * commit yet immediately after a push).
+   *
+   * Schedules a re-fetch with exponential backoff if:
+   *   1. Any ref in the state event differs from what we last fetched, AND
+   *   2. The state event was published recently (within RECENT_STATE_EVENT_MAX_AGE_S).
+   *
+   * The recency guard prevents initial page-load from triggering backoff
+   * polling for historical state events that arrive before EOSE.
+   *
+   * @param headCommitId  - The HEAD commit declared by the state event
+   * @param refs          - All refs declared by the state event (refName → commitId)
+   * @param stateCreatedAt - Unix timestamp (seconds) of the state event
    */
-  onNewStateEvent(headCommitId: string, stateCreatedAt: number) {
-    this.pendingHead = { commitId: headCommitId, stateCreatedAt };
+  onNewStateEvent(
+    headCommitId: string,
+    refs: Record<string, string>,
+    stateCreatedAt: number,
+  ) {
+    this.pendingHead = { commitId: headCommitId, refs, stateCreatedAt };
 
-    // If this is the same commit we already fetched successfully, nothing to do
-    if (this.lastFetchedHead === headCommitId) return;
+    // Only trigger backoff polling for recently-published state events.
+    // Historical events arriving on initial load (before EOSE) should not
+    // cause polling — the git server already has those commits.
+    const nowS = Math.floor(Date.now() / 1000);
+    if (nowS - stateCreatedAt > RECENT_STATE_EVENT_MAX_AGE_S) return;
+
+    // If all refs match what we last fetched successfully, nothing to do
+    if (this.refsMatchLastFetched(refs)) return;
 
     // If a fetch is already in progress, it will pick up pendingHead when done
     if (this.fetching) return;
@@ -367,6 +403,20 @@ class GitRepoDataEntry {
     // Cancel any existing backoff timer and start a fresh one
     this.cancelBackoff();
     this.scheduleBackoffFetch();
+  }
+
+  /**
+   * Returns true if every ref in `refs` matches the corresponding entry in
+   * `lastFetchedRefs` (and no new refs have appeared). A missing
+   * `lastFetchedRefs` means we haven't fetched yet — treat as not matching.
+   */
+  private refsMatchLastFetched(refs: Record<string, string>): boolean {
+    if (!this.lastFetchedRefs) return false;
+    const fetched = this.lastFetchedRefs;
+    const incomingKeys = Object.keys(refs);
+    const fetchedKeys = Object.keys(fetched);
+    if (incomingKeys.length !== fetchedKeys.length) return false;
+    return incomingKeys.every((k) => fetched[k] === refs[k]);
   }
 
   // -------------------------------------------------------------------------
@@ -679,15 +729,30 @@ class GitRepoDataEntry {
             this.fetchedOnce = true;
 
             if (!signal.aborted && displayResult) {
-              // Success — record what we fetched and reset backoff
-              this.lastFetchedHead = knownHeadCommit;
+              // Success — record the full ref snapshot we fetched and reset backoff.
+              // Build lastFetchedRefs from the infoRefs results so any ref change
+              // (not just HEAD) will be detected on the next state event.
+              const fetchedRefs: Record<string, string> = {};
+              for (const result of Object.values(urlInfoRefs)) {
+                if (result.status === "ok") {
+                  for (const [refName, commitId] of Object.entries(
+                    result.info.refs,
+                  )) {
+                    // Later URLs don't overwrite earlier ones — first-seen wins
+                    if (!(refName in fetchedRefs)) {
+                      fetchedRefs[refName] = commitId;
+                    }
+                  }
+                }
+              }
+              this.lastFetchedRefs = fetchedRefs;
               this.backoffDelay = BACKOFF_INITIAL_MS;
 
-              // If a newer state event arrived while we were fetching, schedule
-              // a backoff re-fetch for it
+              // If a newer state event arrived while we were fetching, check
+              // whether its refs still differ from what we just fetched.
               if (
                 this.pendingHead &&
-                this.pendingHead.commitId !== this.lastFetchedHead
+                !this.refsMatchLastFetched(this.pendingHead.refs)
               ) {
                 this.scheduleBackoffFetch();
               }
@@ -788,20 +853,27 @@ export function subscribeToGitRepoData(
 
 /**
  * Notify the service that a new Nostr state event has been observed for a
- * repository. If the declared head commit differs from what was last fetched,
- * a re-fetch will be scheduled with exponential backoff.
+ * repository. If any ref declared in the state event differs from what was
+ * last fetched AND the event is recent, a re-fetch will be scheduled with
+ * exponential backoff.
  *
  * Safe to call even if no subscribers are currently active — the entry will
  * be created if needed (and will self-evict after TTL if nobody subscribes).
+ *
+ * @param cloneUrls     - Clone URLs identifying the repository entry
+ * @param headCommitId  - The HEAD commit declared by the state event
+ * @param refs          - All refs declared by the state event (refName → commitId)
+ * @param stateCreatedAt - Unix timestamp (seconds) of the state event
  */
 export function notifyNewStateEvent(
   cloneUrls: string[],
   headCommitId: string,
+  refs: Record<string, string>,
   stateCreatedAt: number,
 ): void {
   if (cloneUrls.length === 0) return;
   const entry = getOrCreateEntry(cloneUrls);
-  entry.onNewStateEvent(headCommitId, stateCreatedAt);
+  entry.onNewStateEvent(headCommitId, refs, stateCreatedAt);
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   type GitRepoWarning,
   type UrlInfoRefsResult,
 } from "@/services/gitRepoDataService";
+import type { RepoStateRef } from "@/lib/nip34";
 
 // Re-export types so existing import sites don't need to change
 export type { GitRepoData, GitRepoWarning, UrlInfoRefsResult };
@@ -26,8 +27,15 @@ export interface UseGitRepoDataOptions {
    */
   knownHeadCommit?: string;
   /**
+   * All refs declared by the authoritative state event (kind:30618).
+   * Used to detect changes to any ref (not just HEAD) so that non-default
+   * branch pushes also trigger a backoff re-fetch of infoRefs.
+   */
+  stateRefs?: RepoStateRef[];
+  /**
    * The created_at timestamp (seconds) of the state event that declared
-   * knownHeadCommit. Used in the heuristic to decide which commit to display.
+   * knownHeadCommit. Used in the heuristic to decide which commit to display,
+   * and as a recency guard — only recent state events trigger backoff polling.
    */
   stateCreatedAt?: number;
 }
@@ -42,7 +50,7 @@ export function useGitRepoData(
   cloneUrls: string[],
   options: UseGitRepoDataOptions = {},
 ): GitRepoData {
-  const { knownHeadCommit, stateCreatedAt } = options;
+  const { knownHeadCommit, stateRefs, stateCreatedAt } = options;
 
   const urlsKey = cloneUrls.join(",");
 
@@ -81,15 +89,36 @@ export function useGitRepoData(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlsKey]);
 
-  // Notify the service when the Nostr state event changes
-  const prevHead = useRef<string | undefined>(undefined);
+  // Notify the service when the Nostr state event changes.
+  // Build a stable key from all ref commit IDs so the effect fires whenever
+  // any ref changes, not just HEAD.
+  const refsKey = stateRefs
+    ? stateRefs
+        .map((r) => `${r.name}:${r.commitId}`)
+        .sort()
+        .join(",")
+    : "";
+
+  const prevRefsKey = useRef<string>("");
   useEffect(() => {
     if (!knownHeadCommit || cloneUrls.length === 0) return;
-    if (knownHeadCommit === prevHead.current) return;
-    prevHead.current = knownHeadCommit;
-    notifyNewStateEvent(cloneUrls, knownHeadCommit, stateCreatedAt ?? 0);
+    if (refsKey === prevRefsKey.current) return;
+    prevRefsKey.current = refsKey;
+
+    // Convert RepoStateRef[] to the Record<refName, commitId> the service expects
+    const refsMap: Record<string, string> = {};
+    for (const r of stateRefs ?? []) {
+      refsMap[r.name] = r.commitId;
+    }
+
+    notifyNewStateEvent(
+      cloneUrls,
+      knownHeadCommit,
+      refsMap,
+      stateCreatedAt ?? 0,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [knownHeadCommit, stateCreatedAt, urlsKey]);
+  }, [refsKey, stateCreatedAt, urlsKey]);
 
   return state;
 }
