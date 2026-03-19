@@ -83,25 +83,32 @@ export type ParsedRepoRoute = RepoRouteNpub | RepoRouteNip05;
 // ---------------------------------------------------------------------------
 
 /** Sub-paths that appear after the repo identifier in the URL. */
-const REPO_SUB_PATHS = ["issues", "prs", "about"];
+const REPO_SUB_PATHS = ["issues", "prs", "about", "commits", "commit", "tree"];
 
 /**
  * Strip known sub-paths from the end of a splat so the parser only sees the
  * repo-identifying prefix.
  *
  * Examples:
- *   "npub1abc/relay/repo/issues/abc123" → "npub1abc/relay/repo"
- *   "npub1abc/relay/repo/issues"        → "npub1abc/relay/repo"
- *   "npub1abc/relay/repo"               → "npub1abc/relay/repo"
+ *   "npub1abc/relay/repo/issues/abc123"          → "npub1abc/relay/repo"
+ *   "npub1abc/relay/repo/issues"                 → "npub1abc/relay/repo"
+ *   "npub1abc/relay/repo/tree/main/src/foo.ts"   → "npub1abc/relay/repo"
+ *   "npub1abc/relay/repo/commit/abc123"          → "npub1abc/relay/repo"
+ *   "npub1abc/relay/repo/commits"                → "npub1abc/relay/repo"
+ *   "npub1abc/relay/repo"                        → "npub1abc/relay/repo"
  */
 function stripSubPaths(splat: string): string {
   const segments = splat.split("/").filter(Boolean);
-  // Walk backwards and drop known sub-path segments
+  // Find the index of the first known sub-path keyword and truncate there.
+  // This handles deep paths like tree/:ref/:path* correctly.
+  for (let i = 0; i < segments.length; i++) {
+    if (REPO_SUB_PATHS.includes(segments[i])) {
+      return segments.slice(0, i).join("/");
+    }
+  }
+  // No sub-path keyword found — also strip a trailing 64-char hex ID (issue/PR id)
   let end = segments.length;
-  // Drop issue ID (hex, 64 chars) if present
   if (end > 0 && /^[0-9a-f]{64}$/i.test(segments[end - 1])) end--;
-  // Drop "issues" or "about"
-  if (end > 0 && REPO_SUB_PATHS.includes(segments[end - 1])) end--;
   return segments.slice(0, end).join("/");
 }
 

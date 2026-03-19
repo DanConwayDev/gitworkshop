@@ -4,11 +4,15 @@ import { useResolvedRepository } from "@/hooks/useResolvedRepository";
 import RepoAboutPage from "./RepoAboutPage";
 import RepoIssuesPage from "./RepoIssuesPage";
 import RepoPRsPage from "./RepoPRsPage";
+import RepoCodePage from "./RepoCodePage";
+import RepoCommitsPage from "./RepoCommitsPage";
+import RepoCommitPage from "./RepoCommitPage";
 import IssuePage from "@/pages/IssuePage";
 import PRPage from "@/pages/PRPage";
 import { useIssues } from "@/hooks/useIssues";
 import { usePRs } from "@/hooks/usePRs";
 import { useDnsIdentity } from "@/hooks/useDnsIdentity";
+import { useRepositoryState } from "@/hooks/useRepositoryState";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import { mapEventsToStore } from "applesauce-core";
@@ -26,6 +30,8 @@ import {
   GitPullRequest,
   AlertCircle,
   Loader2,
+  Code2,
+  GitCommit,
 } from "lucide-react";
 import { RepoContext, type RepoContextValue } from "./RepoContext";
 import { PATCH_KIND, PR_KIND, type RepoQueryOptions } from "@/lib/nip34";
@@ -189,6 +195,12 @@ function RepoLayoutResolved({
   const issues = useIssues(repo?.allCoordinates, repoRelayGroup, queryOptions);
   const prs = usePRs(repo?.allCoordinates, repoRelayGroup, queryOptions);
 
+  const repoState = useRepositoryState(
+    repo?.dTag,
+    repo?.maintainerSet,
+    repoRelayGroup,
+  );
+
   // Count open issues for the tab badge
   const openIssueCount = useMemo(() => {
     if (!issues) return undefined;
@@ -203,28 +215,74 @@ function RepoLayoutResolved({
 
   // Build the base path from the splat so tab links stay consistent with
   // whatever URL format the user arrived with (npub, nip05, relay hint, etc.)
-  // Strip any trailing sub-paths (issues, prs, about) to get the repo root.
+  // Strip any trailing sub-paths (issues, prs, about, tree, commit, commits)
+  // to get the repo root.
   const basePath = useMemo(() => {
     const full = `/${splat}`;
-    // Remove known sub-paths
-    for (const suffix of ["/issues", "/prs", "/about"]) {
-      const idx = full.indexOf(suffix);
+    // Remove known sub-paths — find the first occurrence of any keyword
+    for (const keyword of [
+      "/issues",
+      "/prs",
+      "/about",
+      "/tree",
+      "/commit",
+      "/commits",
+    ]) {
+      const idx = full.indexOf(keyword);
       if (idx !== -1) return full.slice(0, idx);
     }
     return full;
   }, [splat]);
 
+  const isCodeTab = location.pathname.startsWith(`${basePath}/tree`);
+  const isCommitsTab =
+    location.pathname.startsWith(`${basePath}/commits`) ||
+    location.pathname.startsWith(`${basePath}/commit`);
   const isIssuesTab = location.pathname.startsWith(`${basePath}/issues`);
   const isPRsTab = location.pathname.startsWith(`${basePath}/prs`);
-  const isAboutTab = !isIssuesTab && !isPRsTab;
+  const isAboutTab = !isCodeTab && !isCommitsTab && !isIssuesTab && !isPRsTab;
 
   // Determine which sub-page to render from the splat segments.
-  const { subPage, issueId, prId } = useMemo((): {
-    subPage: "about" | "issues" | "issue" | "prs" | "pr";
+  const { subPage, issueId, prId, treeRef, treePath, commitId } = useMemo((): {
+    subPage:
+      | "code"
+      | "about"
+      | "issues"
+      | "issue"
+      | "prs"
+      | "pr"
+      | "commits"
+      | "commit";
     issueId?: string;
     prId?: string;
+    treeRef?: string;
+    treePath?: string;
+    commitId?: string;
   } => {
     const segments = splat.split("/").filter(Boolean);
+
+    // Find the index of the first known sub-path keyword
+    const treeIdx = segments.indexOf("tree");
+    if (treeIdx !== -1) {
+      // tree/:ref/:path*
+      const ref = segments[treeIdx + 1];
+      const pathParts = segments.slice(treeIdx + 2);
+      return {
+        subPage: "code",
+        treeRef: ref,
+        treePath: pathParts.join("/"),
+      };
+    }
+
+    const commitIdx = segments.indexOf("commit");
+    if (commitIdx !== -1) {
+      return { subPage: "commit", commitId: segments[commitIdx + 1] };
+    }
+
+    const commitsIdx = segments.indexOf("commits");
+    if (commitsIdx !== -1) {
+      return { subPage: "commits" };
+    }
 
     const prsIdx = segments.indexOf("prs");
     if (prsIdx !== -1) {
@@ -245,6 +303,8 @@ function RepoLayoutResolved({
     return { subPage: "about" };
   }, [splat]);
 
+  const cloneUrls = repo?.cloneUrls ?? [];
+
   const ctxValue: RepoContextValue | null =
     pubkey && repoId
       ? {
@@ -257,6 +317,11 @@ function RepoLayoutResolved({
           nip05,
           issueId,
           prId,
+          cloneUrls,
+          repoState,
+          treeRef,
+          treePath,
+          commitId,
         }
       : null;
 
@@ -348,10 +413,16 @@ function RepoLayoutResolved({
           {/* Tab navigation */}
           <nav className="flex gap-1 -mb-px">
             <TabLink
-              to={basePath}
-              active={isAboutTab}
-              icon={<Info className="h-4 w-4" />}
-              label="About"
+              to={`${basePath}/tree`}
+              active={isCodeTab}
+              icon={<Code2 className="h-4 w-4" />}
+              label="Code"
+            />
+            <TabLink
+              to={`${basePath}/commits`}
+              active={isCommitsTab}
+              icon={<GitCommit className="h-4 w-4" />}
+              label="Commits"
             />
             <TabLink
               to={`${basePath}/issues`}
@@ -367,6 +438,12 @@ function RepoLayoutResolved({
               label="PRs"
               count={openPRCount}
             />
+            <TabLink
+              to={basePath}
+              active={isAboutTab}
+              icon={<Info className="h-4 w-4" />}
+              label="About"
+            />
           </nav>
         </div>
       </div>
@@ -374,7 +451,13 @@ function RepoLayoutResolved({
       {/* Page content */}
       {ctxValue ? (
         <RepoContext.Provider value={ctxValue}>
-          {subPage === "issue" ? (
+          {subPage === "code" ? (
+            <RepoCodePage />
+          ) : subPage === "commits" ? (
+            <RepoCommitsPage />
+          ) : subPage === "commit" ? (
+            <RepoCommitPage />
+          ) : subPage === "issue" ? (
             <IssuePage />
           ) : subPage === "issues" ? (
             <RepoIssuesPage />
