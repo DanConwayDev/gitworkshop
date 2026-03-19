@@ -55,8 +55,13 @@ export interface GitExplorerState {
   commitHash: string | null;
   /** The latest commit on the current ref */
   headCommit: Commit | null;
-  /** File/directory entries for the current path */
+  /** File/directory entries for the current path (directory view) */
   fileTree: FileEntry[] | null;
+  /**
+   * File/directory entries for the parent directory when viewing a file.
+   * Null when viewing a directory or when the file is at the repo root.
+   */
+  parentFileTree: FileEntry[] | null;
   /** Content of the currently viewed file (if path is a file) */
   fileContent: string | null;
   /** Whether the current path is a directory */
@@ -286,6 +291,7 @@ export function useGitExplorer(
     commitHash: null,
     headCommit: null,
     fileTree: null,
+    parentFileTree: null,
     fileContent: null,
     isDirectory: true,
     pathExists: true,
@@ -373,6 +379,7 @@ export function useGitExplorer(
               commitHash: fastCommitHash,
               headCommit: fastHeadCommit,
               fileTree: treeToEntries(fastTree, ""),
+              parentFileTree: null,
               fileContent: null,
               isDirectory: true,
               pathExists: true,
@@ -390,6 +397,7 @@ export function useGitExplorer(
                 commitHash: fastCommitHash,
                 headCommit: fastHeadCommit,
                 fileTree: treeToEntries(subTree, fastResolvedPath),
+                parentFileTree: null,
                 fileContent: null,
                 isDirectory: true,
                 pathExists: true,
@@ -403,6 +411,12 @@ export function useGitExplorer(
                   const content = new TextDecoder("utf-8", {
                     fatal: false,
                   }).decode(cachedBlob);
+                  const parentSegments = fastPathSegments.slice(0, -1);
+                  const parentPath = parentSegments.join("/");
+                  const parentTree =
+                    parentSegments.length === 0
+                      ? fastTree
+                      : navigateTree(fastTree, parentSegments);
                   setState({
                     loading: false,
                     error: null,
@@ -412,6 +426,9 @@ export function useGitExplorer(
                     commitHash: fastCommitHash,
                     headCommit: fastHeadCommit,
                     fileTree: null,
+                    parentFileTree: parentTree
+                      ? treeToEntries(parentTree, parentPath)
+                      : null,
                     fileContent: content,
                     isDirectory: false,
                     pathExists: true,
@@ -437,6 +454,7 @@ export function useGitExplorer(
       commitHash: null,
       headCommit: null,
       fileTree: null,
+      parentFileTree: null,
       fileContent: null,
       isDirectory: true,
       pathExists: true,
@@ -577,6 +595,7 @@ export function useGitExplorer(
         ...prev,
         loading: false,
         fileTree: entries,
+        parentFileTree: null,
         isDirectory: true,
         pathExists: true,
       }));
@@ -592,12 +611,22 @@ export function useGitExplorer(
         ...prev,
         loading: false,
         fileTree: entries,
+        parentFileTree: null,
         isDirectory: true,
         pathExists: true,
       }));
       fetchHeadCommit(cloneUrls, commitHash, signal, setState);
       return;
     }
+
+    // Compute parent directory entries for file views
+    const parentSegments = pathSegments.slice(0, -1);
+    const parentPath = parentSegments.join("/");
+    const parentTree =
+      parentSegments.length === 0 ? tree : navigateTree(tree, parentSegments);
+    const parentEntries = parentTree
+      ? treeToEntries(parentTree, parentPath)
+      : null;
 
     // Check if path is a file
     const fileHash = findFileInTree(tree, pathSegments);
@@ -613,6 +642,7 @@ export function useGitExplorer(
           ...prev,
           loading: false,
           fileTree: null,
+          parentFileTree: parentEntries,
           fileContent: content,
           isDirectory: false,
           pathExists: true,
@@ -636,6 +666,7 @@ export function useGitExplorer(
             ...prev,
             loading: false,
             fileTree: null,
+            parentFileTree: parentEntries,
             fileContent: content,
             isDirectory: false,
             pathExists: true,
@@ -644,6 +675,8 @@ export function useGitExplorer(
           setState((prev) => ({
             ...prev,
             loading: false,
+            fileTree: null,
+            parentFileTree: parentEntries,
             fileContent: null,
             isDirectory: false,
             pathExists: true,

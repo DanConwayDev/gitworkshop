@@ -220,14 +220,26 @@ export default function RepoCodePage() {
             />
           )}
 
-          {/* File content viewer */}
+          {/* Parent directory listing + file content viewer (file view) */}
           {!explorer.loading &&
             !explorer.isDirectory &&
             explorer.pathExists && (
-              <FileContentViewer
-                filename={pathSegments[pathSegments.length - 1] ?? ""}
-                content={explorer.fileContent}
-              />
+              <>
+                {explorer.parentFileTree && (
+                  <FileTreeTable
+                    loading={false}
+                    entries={explorer.parentFileTree}
+                    currentPath={pathSegments.slice(0, -1).join("/")}
+                    currentRef={currentRef}
+                    treeUrl={treeUrl}
+                    activeFile={pathSegments[pathSegments.length - 1]}
+                  />
+                )}
+                <FileContentViewer
+                  filename={pathSegments[pathSegments.length - 1] ?? ""}
+                  content={explorer.fileContent}
+                />
+              </>
             )}
 
           {/* README below file tree */}
@@ -411,12 +423,14 @@ function FileTreeTable({
   currentPath,
   currentRef,
   treeUrl,
+  activeFile,
 }: {
   loading: boolean;
   entries: FileEntry[] | null;
   currentPath: string;
   currentRef: string;
   treeUrl: (ref: string, path?: string) => string;
+  activeFile?: string;
 }) {
   const parentPath = currentPath
     ? currentPath.split("/").slice(0, -1).join("/")
@@ -468,6 +482,7 @@ function FileTreeTable({
               entry={entry}
               currentRef={currentRef}
               treeUrl={treeUrl}
+              isActive={activeFile === entry.name && entry.type === "file"}
             />
           ))}
         </div>
@@ -480,10 +495,12 @@ function FileTreeRow({
   entry,
   currentRef,
   treeUrl,
+  isActive,
 }: {
   entry: FileEntry;
   currentRef: string;
   treeUrl: (ref: string, path?: string) => string;
+  isActive?: boolean;
 }) {
   const isDir = entry.type === "directory";
   const isReadme = entry.name.toLowerCase().startsWith("readme");
@@ -491,17 +508,29 @@ function FileTreeRow({
   return (
     <Link
       to={treeUrl(currentRef, entry.path)}
-      className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors group"
+      className={cn(
+        "flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors group",
+        isActive && "bg-muted/50",
+      )}
     >
       {isDir ? (
         <Folder className="h-4 w-4 text-blue-500 shrink-0" />
       ) : (
-        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+        <FileText
+          className={cn(
+            "h-4 w-4 shrink-0",
+            isActive ? "text-violet-500" : "text-muted-foreground",
+          )}
+        />
       )}
       <span
         className={cn(
           "text-sm flex-1 truncate",
-          isDir ? "text-foreground font-medium" : "text-foreground/90",
+          isDir
+            ? "text-foreground font-medium"
+            : isActive
+              ? "text-foreground font-medium"
+              : "text-foreground/90",
         )}
       >
         {entry.name}
