@@ -22,8 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useGitRepoData } from "@/hooks/useGitRepoData";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownContent } from "@/components/MarkdownContent";
 import { formatDistanceToNow } from "date-fns";
 
 export default function RepoAboutPage() {
@@ -331,11 +330,7 @@ function ReadmeCard({
       </CardHeader>
       <CardContent className="pt-0">
         {isMarkdown ? (
-          <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-violet-600 dark:prose-a:text-violet-400 prose-code:text-sm prose-pre:bg-muted prose-pre:text-foreground">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {gitData.readmeContent}
-            </ReactMarkdown>
-          </div>
+          <MarkdownContent content={gitData.readmeContent} />
         ) : (
           <pre className="text-sm whitespace-pre-wrap font-mono text-foreground/80 leading-relaxed">
             {gitData.readmeContent}
