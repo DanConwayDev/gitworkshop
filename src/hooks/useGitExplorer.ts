@@ -8,6 +8,15 @@ import {
   type Tree,
   type InfoRefsUploadPackResponse,
 } from "@fiatjaf/git-natural-api";
+import {
+  getCachedInfoRefs,
+  cacheInfoRefs,
+  getCachedBlob,
+  cacheBlob,
+  getCachedCommit,
+  cacheCommit,
+} from "@/services/gitObjectCache";
+import { subscribeToGitRepoData } from "@/services/gitRepoDataService";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -178,6 +187,22 @@ function resolveRefString(
   return undefined;
 }
 
+/**
+ * Fetch infoRefs for a URL, checking the object cache first.
+ */
+async function fetchInfoRefsCached(
+  url: string,
+  signal: AbortSignal,
+): Promise<InfoRefsUploadPackResponse> {
+  const cached = await getCachedInfoRefs(url);
+  if (cached) return cached;
+  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+  const info = await getInfoRefs(url);
+  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+  cacheInfoRefs(url, info);
+  return info;
+}
+
 // ---------------------------------------------------------------------------
 // Main hook
 // ---------------------------------------------------------------------------
@@ -205,6 +230,8 @@ export interface UseGitExplorerOptions {
  * racing all clone URLs in parallel and using the first successful response.
  *
  * Uses git-natural-api (HTTP-based, no local clone required).
+ * Leverages gitObjectCache for content-addressed caching of commits and blobs.
+ * Shares infoRefs results with gitRepoDataService via the same cache layer.
  */
 export function useGitExplorer(
   cloneUrls: string[],
@@ -229,6 +256,19 @@ export function useGitExplorer(
   const abortRef = useRef<AbortController | null>(null);
   const reloadCounterRef = useRef(0);
 
+  // Subscribe to the repo data service so that when infoRefs are fetched by
+  // the About page (or any other consumer), the Code page can reuse the cached
+  // result immediately without waiting for its own getInfoRefs round-trip.
+  // We only need this for the side-effect of warming the cache; the explorer
+  // manages its own display state independently.
+  useEffect(() => {
+    if (cloneUrls.length === 0) return;
+    // Subscribe with a no-op — we just want the service to keep the cache warm
+    const unsub = subscribeToGitRepoData(cloneUrls, () => {});
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlsKey]);
+
   const run = useCallback(async () => {
     if (cloneUrls.length === 0) return;
 
@@ -251,7 +291,7 @@ export function useGitExplorer(
     });
 
     // -----------------------------------------------------------------------
-    // Phase 1: Race getInfoRefs across all URLs to discover refs
+    // Phase 1: Race getInfoRefs across all URLs (cache-aware)
     // -----------------------------------------------------------------------
     let info: InfoRefsUploadPackResponse | undefined;
     let winningUrl: string | undefined;
@@ -259,7 +299,7 @@ export function useGitExplorer(
     try {
       const result = await Promise.any(
         cloneUrls.map(async (url) => {
-          const i = await getInfoRefs(url);
+          const i = await fetchInfoRefsCached(url, signal);
           return { url, info: i };
         }),
       );
@@ -334,13 +374,10 @@ export function useGitExplorer(
     // Phase 2: Fetch the directory tree (depth = path depth + 1 for listing)
     // -----------------------------------------------------------------------
     const pathSegments = path ? path.split("/").filter(Boolean) : [];
-    // We need depth = pathSegments.length + 1 to list the target directory's
-    // immediate children. nestLimit=0 in git-natural-api means unlimited.
     const nestLimit = pathSegments.length + 1;
 
     let tree: Tree;
     try {
-      // Race all URLs — use the winning URL first, fall back to others
       const urlsToTry = [
         winningUrl,
         ...cloneUrls.filter((u) => u !== winningUrl),
@@ -366,7 +403,6 @@ export function useGitExplorer(
     // Navigate to the requested path
     // -----------------------------------------------------------------------
     if (pathSegments.length === 0) {
-      // Root directory
       const entries = treeToEntries(tree, "");
       setState((prev) => ({
         ...prev,
@@ -375,7 +411,6 @@ export function useGitExplorer(
         isDirectory: true,
         pathExists: true,
       }));
-      // Fetch head commit metadata async
       fetchHeadCommit(cloneUrls, commitHash, signal, setState);
       return;
     }
@@ -398,13 +433,33 @@ export function useGitExplorer(
     // Check if path is a file
     const fileHash = findFileInTree(tree, pathSegments);
     if (fileHash) {
-      // Fetch the file content
+      // Check blob cache first
+      const cachedData = await getCachedBlob(fileHash);
+      if (cachedData) {
+        if (signal.aborted) return;
+        const content = new TextDecoder("utf-8", { fatal: false }).decode(
+          cachedData,
+        );
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          fileTree: null,
+          fileContent: content,
+          isDirectory: false,
+          pathExists: true,
+        }));
+        fetchHeadCommit(cloneUrls, commitHash, signal, setState);
+        return;
+      }
+
+      // Fetch the file content from git servers
       try {
         const obj = await Promise.any(
           cloneUrls.map((url) => getObject(url, fileHash)),
         );
         if (signal.aborted) return;
         if (obj) {
+          cacheBlob(fileHash, obj.data);
           const content = new TextDecoder("utf-8", { fatal: false }).decode(
             obj.data,
           );
@@ -464,7 +519,7 @@ export function useGitExplorer(
 }
 
 // ---------------------------------------------------------------------------
-// Async helper: fetch head commit metadata (non-blocking)
+// Async helper: fetch head commit metadata (cache-aware, non-blocking)
 // ---------------------------------------------------------------------------
 
 async function fetchHeadCommit(
@@ -473,12 +528,22 @@ async function fetchHeadCommit(
   signal: AbortSignal,
   setState: React.Dispatch<React.SetStateAction<GitExplorerState>>,
 ) {
+  // Check commit cache first
+  const cached = await getCachedCommit(commitHash);
+  if (cached) {
+    if (!signal.aborted) {
+      setState((prev) => ({ ...prev, headCommit: cached }));
+    }
+    return;
+  }
+
   try {
     const commits = await Promise.any(
       cloneUrls.map((url) => fetchCommitsOnly(url, commitHash, 1)),
     );
     if (signal.aborted) return;
     if (commits.length > 0) {
+      cacheCommit(commits[0]);
       setState((prev) => ({ ...prev, headCommit: commits[0] }));
     }
   } catch {
@@ -520,8 +585,8 @@ export function useCommitHistory(
 
     setState({ loading: true, error: null, commits: [] });
 
-    // First resolve the ref to a commit hash via getInfoRefs
-    Promise.any(cloneUrls.map((url) => getInfoRefs(url)))
+    // First resolve the ref to a commit hash via getInfoRefs (cache-aware)
+    Promise.any(cloneUrls.map((url) => fetchInfoRefsCached(url, signal)))
       .then(async (info) => {
         if (signal.aborted) return;
 
@@ -550,6 +615,11 @@ export function useCommitHistory(
         );
 
         if (signal.aborted) return;
+
+        // Cache each commit
+        for (const commit of commits) {
+          cacheCommit(commit);
+        }
 
         // Sort newest first
         const sorted = [...commits].sort(
