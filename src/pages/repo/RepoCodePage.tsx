@@ -9,26 +9,29 @@ import { GitServerStatus } from "@/components/GitServerStatus";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import type { UrlInfoRefsResult } from "@/services/gitRepoDataService";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Folder,
   FileText,
   ChevronRight,
   GitBranch,
-  Tag,
   GitCommit,
   AlertCircle,
   Loader2,
   ArrowLeft,
-  Users,
-  Radio,
   Globe,
   ExternalLink,
   Copy,
   Check,
+  ChevronDown,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -644,138 +647,241 @@ function FileTreeRow({
 // ---------------------------------------------------------------------------
 
 import type { ResolvedRepo } from "@/lib/nip34";
-
+import { nip19 } from "nostr-tools";
 function RepoSidebar({ repo }: { repo: ResolvedRepo }) {
+  // Build the nostr:// clone URL for ngit
+  let npub: string | undefined;
+  try {
+    npub = nip19.npubEncode(repo.selectedMaintainer);
+  } catch {
+    npub = undefined;
+  }
+  const nostrCloneUrl = npub ? `nostr://${npub}/${repo.dTag}` : undefined;
+  const nostrCloneCommand = nostrCloneUrl
+    ? `git clone ${nostrCloneUrl}`
+    : undefined;
+
+  const hasAnyCloneUrl =
+    repo.graspCloneUrls.length > 0 || repo.additionalGitServerUrls.length > 0;
+
   return (
-    <div className="space-y-4">
-      {/* Maintainers */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Users className="h-4 w-4 text-muted-foreground" />
-            Maintainers
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {repo.maintainerSet.map((pk) => (
-            <UserLink
-              key={pk}
-              pubkey={pk}
-              avatarSize="md"
-              nameClassName="text-sm"
-            />
-          ))}
-          {repo.pendingMaintainers.length > 0 && (
-            <>
-              <Separator />
-              <p className="text-xs text-muted-foreground">
-                Pending (no announcement)
+    <div className="space-y-3 min-w-0">
+      {/* Clone button — always shown if we have a nostr URL or any clone URLs */}
+      {(nostrCloneCommand || hasAnyCloneUrl) && (
+        <CloneDropdown
+          nostrCloneCommand={nostrCloneCommand}
+          nostrCloneUrl={nostrCloneUrl}
+          graspCloneUrls={repo.graspCloneUrls}
+          additionalGitServerUrls={repo.additionalGitServerUrls}
+        />
+      )}
+
+      {/* About card: description + web + maintainers + topics */}
+      <Card className="overflow-hidden">
+        <CardContent className="pt-4 pb-4 space-y-4">
+          {/* About heading + description */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              About
+            </p>
+            {repo.description && (
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {repo.description}
               </p>
-              {repo.pendingMaintainers.map((pk) => (
+            )}
+          </div>
+
+          {/* Web URLs */}
+          {repo.webUrls.length > 0 && (
+            <div className="space-y-1">
+              {repo.webUrls.map((url) => (
+                <a
+                  key={url}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:underline min-w-0"
+                  title={url}
+                >
+                  <Globe className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{url}</span>
+                </a>
+              ))}
+            </div>
+          )}
+
+          {/* Maintainers */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Maintainers
+            </p>
+            <div className="space-y-2">
+              {repo.maintainerSet.map((pk) => (
                 <UserLink
                   key={pk}
                   pubkey={pk}
                   avatarSize="sm"
-                  nameClassName="text-xs text-muted-foreground"
+                  nameClassName="text-sm"
                 />
               ))}
-            </>
+            </div>
+            {repo.pendingMaintainers.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <p className="text-xs text-muted-foreground/70">
+                  Pending (no announcement)
+                </p>
+                {repo.pendingMaintainers.map((pk) => (
+                  <UserLink
+                    key={pk}
+                    pubkey={pk}
+                    avatarSize="sm"
+                    nameClassName="text-xs text-muted-foreground"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Topics */}
+          {repo.labels.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Topics
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {repo.labels.map((label) => (
+                  <Badge key={label} variant="secondary" className="text-xs">
+                    {label}
+                  </Badge>
+                ))}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
-
-      {/* Topics */}
-      {repo.labels.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Tag className="h-4 w-4 text-muted-foreground" />
-              Topics
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-1.5">
-              {repo.labels.map((label) => (
-                <Badge key={label} variant="secondary" className="text-xs">
-                  {label}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Clone URLs */}
-      {repo.cloneUrls.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <GitBranch className="h-4 w-4 text-muted-foreground" />
-              Clone
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {repo.cloneUrls.map((url) => (
-              <CloneUrlRow key={url} url={url} />
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Web URLs */}
-      {repo.webUrls.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Globe className="h-4 w-4 text-muted-foreground" />
-              Web
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {repo.webUrls.map((url) => (
-              <a
-                key={url}
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:underline"
-              >
-                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                {url}
-              </a>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Relays */}
-      {repo.relays.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Radio className="h-4 w-4 text-muted-foreground" />
-              Relays
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1.5">
-              {repo.relays.map((relay) => (
-                <p
-                  key={relay}
-                  className="text-xs text-muted-foreground font-mono truncate"
-                  title={relay}
-                >
-                  {relay}
-                </p>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Clone dropdown — prominent button that opens a popover
+// ---------------------------------------------------------------------------
+
+function CloneDropdown({
+  nostrCloneCommand,
+  nostrCloneUrl,
+  graspCloneUrls,
+  additionalGitServerUrls,
+}: {
+  nostrCloneCommand: string | undefined;
+  nostrCloneUrl: string | undefined;
+  graspCloneUrls: string[];
+  additionalGitServerUrls: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState(false);
+
+  const handleCopyCommand = async () => {
+    if (!nostrCloneCommand) return;
+    await navigator.clipboard.writeText(nostrCloneCommand);
+    setCopiedCommand(true);
+    setTimeout(() => setCopiedCommand(false), 2000);
+  };
+
+  const hasRawUrls =
+    graspCloneUrls.length > 0 || additionalGitServerUrls.length > 0;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="default"
+          size="sm"
+          className="w-full justify-between gap-2 bg-violet-600 hover:bg-violet-700 text-white border-0"
+        >
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-4 w-4 shrink-0" />
+            <span>Clone</span>
+          </div>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 transition-transform duration-150",
+              open && "rotate-180",
+            )}
+          />
+        </Button>
+      </PopoverTrigger>
+
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] p-0 overflow-hidden"
+        align="start"
+        sideOffset={4}
+      >
+        {/* ngit section */}
+        {nostrCloneCommand && nostrCloneUrl && (
+          <div className="p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-foreground">
+                Clone with ngit
+              </p>
+              <a
+                href="https://ngit.dev/install"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1"
+              >
+                Install ngit
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+            {/* Command block */}
+            <div className="flex items-center gap-1.5 rounded-md border bg-muted/50 px-3 py-2 min-w-0">
+              <code
+                className="flex-1 text-xs font-mono text-foreground/90 truncate min-w-0 select-all"
+                title={nostrCloneCommand}
+              >
+                {nostrCloneCommand}
+              </code>
+              <button
+                onClick={handleCopyCommand}
+                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
+                title="Copy command"
+              >
+                {copiedCommand ? (
+                  <Check className="h-3.5 w-3.5 text-green-500" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Raw git URLs */}
+        {hasRawUrls && (
+          <>
+            {nostrCloneCommand && <Separator />}
+            <div className="p-3 space-y-2">
+              <p className="text-xs font-semibold text-foreground">
+                Raw git URLs
+              </p>
+              <div className="space-y-1.5">
+                {graspCloneUrls.map((url) => (
+                  <CloneUrlRow key={url} url={url} />
+                ))}
+                {additionalGitServerUrls.map((url) => (
+                  <CloneUrlRow key={url} url={url} />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ---------------------------------------------------------------------------
 function CloneUrlRow({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -786,8 +892,11 @@ function CloneUrlRow({ url }: { url: string }) {
   };
 
   return (
-    <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
-      <code className="flex-1 text-xs font-mono truncate text-foreground/80">
+    <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 min-w-0">
+      <code
+        className="flex-1 text-xs font-mono truncate text-foreground/80 min-w-0"
+        title={url}
+      >
         {url}
       </code>
       <Button
@@ -795,6 +904,7 @@ function CloneUrlRow({ url }: { url: string }) {
         size="icon"
         className="h-7 w-7 shrink-0"
         onClick={handleCopy}
+        title="Copy URL"
       >
         {copied ? (
           <Check className="h-3.5 w-3.5 text-green-500" />
