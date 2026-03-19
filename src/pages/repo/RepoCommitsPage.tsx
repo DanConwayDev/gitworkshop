@@ -9,7 +9,7 @@ import { GitServerStatus } from "@/components/GitServerStatus";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, GitCommit, User, Clock, Loader2 } from "lucide-react";
-import { formatDistanceToNow, format } from "date-fns";
+import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import type { Commit } from "@fiatjaf/git-natural-api";
 
 export default function RepoCommitsPage() {
@@ -104,7 +104,7 @@ export default function RepoCommitsPage() {
         ) : gitData.lastCheckedAt ? (
           <span className="text-xs text-muted-foreground/60 shrink-0 whitespace-nowrap">
             checked{" "}
-            {formatDistanceToNow(new Date(gitData.lastCheckedAt * 1000), {
+            {safeFormatDistanceToNow(gitData.lastCheckedAt, {
               addSuffix: true,
             })}
           </span>
@@ -181,9 +181,11 @@ function CommitList({
     let currentDate = "";
 
     for (const commit of commits) {
-      const ts =
-        (commit.committer?.timestamp ?? commit.author.timestamp) * 1000;
-      const dateStr = format(new Date(ts), "MMMM d, yyyy");
+      const dateStr =
+        safeFormat(
+          commit.committer?.timestamp ?? commit.author.timestamp,
+          "MMMM d, yyyy",
+        ) ?? "Unknown date";
       if (dateStr !== currentDate) {
         currentDate = dateStr;
         groups.push({ date: dateStr, commits: [] });
@@ -223,11 +225,13 @@ function CommitList({
 }
 
 function CommitRow({ commit, basePath }: { commit: Commit; basePath: string }) {
-  const ts = (commit.committer?.timestamp ?? commit.author.timestamp) * 1000;
   const subject = commit.message.split("\n")[0];
   const body = commit.message.split("\n").slice(1).join("\n").trim();
   const shortHash = commit.hash.slice(0, 8);
-  const relativeTime = formatDistanceToNow(new Date(ts), { addSuffix: true });
+  const relativeTime = safeFormatDistanceToNow(
+    commit.committer?.timestamp ?? commit.author.timestamp,
+    { addSuffix: true },
+  );
 
   return (
     <div className="px-4 py-3 hover:bg-muted/20 transition-colors group">
@@ -248,7 +252,16 @@ function CommitRow({ commit, basePath }: { commit: Commit; basePath: string }) {
             <User className="h-3 w-3 shrink-0" />
             <span>{commit.author.name}</span>
             <span>&middot;</span>
-            <span title={format(new Date(ts), "PPpp")}>{relativeTime}</span>
+            <span
+              title={
+                safeFormat(
+                  commit.committer?.timestamp ?? commit.author.timestamp,
+                  "PPpp",
+                ) ?? undefined
+              }
+            >
+              {relativeTime}
+            </span>
           </div>
         </div>
         <Link

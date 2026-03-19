@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useGitRepoData, type GitRepoWarning } from "@/hooks/useGitRepoData";
 import type { RepositoryState } from "@/casts/RepositoryState";
-import { formatDistanceToNow } from "date-fns";
+import { safeFormatDistanceToNow } from "@/lib/utils";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -271,10 +271,9 @@ function StateSyncWarning({
   if (warning.kind === "state-behind-git") {
     const shortState = warning.stateCommitId.slice(0, 8);
     const shortGit = warning.gitCommitId.slice(0, 8);
-    const stateAge = formatDistanceToNow(
-      new Date(warning.stateCreatedAt * 1000),
-      { addSuffix: true },
-    );
+    const stateAge = safeFormatDistanceToNow(warning.stateCreatedAt, {
+      addSuffix: true,
+    });
     return (
       <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -351,8 +350,9 @@ function LatestCommitCard({
   const commit = gitData.latestCommit;
   const shortHash = commit.hash.slice(0, 8);
   const subject = commit.message.split("\n")[0];
-  const authorDate = new Date(commit.author.timestamp * 1000);
-  const relativeTime = formatDistanceToNow(authorDate, { addSuffix: true });
+  const relativeTime = safeFormatDistanceToNow(commit.author.timestamp, {
+    addSuffix: true,
+  });
 
   // Determine whether the state event confirms this commit as HEAD
   const stateHeadCommit = repoState?.headCommitId;

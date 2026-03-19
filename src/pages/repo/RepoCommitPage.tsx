@@ -14,7 +14,7 @@ import {
   Check,
   Hash,
 } from "lucide-react";
-import { formatDistanceToNow, format } from "date-fns";
+import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { getSingleCommit } from "@fiatjaf/git-natural-api";
 import type { Commit } from "@fiatjaf/git-natural-api";
 
@@ -164,9 +164,11 @@ function CommitDetail({
                 </p>
                 <p
                   className="text-xs text-muted-foreground"
-                  title={format(new Date(authorTs), "PPpp")}
+                  title={safeFormat(authorTs / 1000, "PPpp") ?? undefined}
                 >
-                  {formatDistanceToNow(new Date(authorTs), { addSuffix: true })}
+                  {safeFormatDistanceToNow(commit.author.timestamp, {
+                    addSuffix: true,
+                  })}
                 </p>
               </div>
             </div>
@@ -188,11 +190,14 @@ function CommitDetail({
                     </p>
                     <p
                       className="text-xs text-muted-foreground"
-                      title={format(new Date(committerTs), "PPpp")}
+                      title={
+                        safeFormat(committerTs / 1000, "PPpp") ?? undefined
+                      }
                     >
-                      {formatDistanceToNow(new Date(committerTs), {
-                        addSuffix: true,
-                      })}
+                      {safeFormatDistanceToNow(
+                        commit.committer?.timestamp ?? commit.author.timestamp,
+                        { addSuffix: true },
+                      )}
                     </p>
                   </div>
                 </div>

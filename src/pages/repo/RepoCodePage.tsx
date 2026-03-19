@@ -33,8 +33,7 @@ import {
   Check,
   ChevronDown,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { cn } from "@/lib/utils";
+import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -449,9 +448,7 @@ function LocatorBar({
             className="text-xs text-muted-foreground/60 shrink-0 whitespace-nowrap"
           >
             checked{" "}
-            {formatDistanceToNow(new Date(lastCheckedAt * 1000), {
-              addSuffix: true,
-            })}
+            {safeFormatDistanceToNow(lastCheckedAt, { addSuffix: true })}
           </span>
         ) : null}
 
@@ -485,11 +482,8 @@ function LocatorBar({
             </p>
             <p className="text-xs text-muted-foreground">
               {headCommit.author.name} &middot;{" "}
-              {formatDistanceToNow(
-                new Date(
-                  (headCommit.committer?.timestamp ??
-                    headCommit.author.timestamp) * 1000,
-                ),
+              {safeFormatDistanceToNow(
+                headCommit.committer?.timestamp ?? headCommit.author.timestamp,
                 { addSuffix: true },
               )}
             </p>
