@@ -27,11 +27,13 @@ import type {
 // ---------------------------------------------------------------------------
 
 const DB_NAME = "ngitstack-git-cache";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORE_COMMITS = "commits";
 const STORE_BLOBS = "blobs";
 const STORE_INFO_REFS = "infoRefs";
+const STORE_TREES = "trees";
+const STORE_COMMIT_HISTORY = "commitHistory";
 
 /** How long (ms) an infoRefs entry is considered fresh before re-fetching. */
 export const INFO_REFS_TTL_MS = 60_000; // 1 minute
@@ -53,6 +55,18 @@ interface InfoRefsRecord {
   fetchedAt: number; // Date.now()
 }
 
+interface TreeRecord {
+  /** `${commitHash}:${nestLimit}` */
+  key: string;
+  tree: Tree;
+}
+
+interface CommitHistoryRecord {
+  /** `${commitHash}:${maxCommits}` */
+  key: string;
+  commits: Commit[];
+}
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDB(): Promise<IDBDatabase> {
@@ -69,6 +83,12 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_INFO_REFS)) {
         db.createObjectStore(STORE_INFO_REFS, { keyPath: "url" });
+      }
+      if (!db.objectStoreNames.contains(STORE_TREES)) {
+        db.createObjectStore(STORE_TREES, { keyPath: "key" });
+      }
+      if (!db.objectStoreNames.contains(STORE_COMMIT_HISTORY)) {
+        db.createObjectStore(STORE_COMMIT_HISTORY, { keyPath: "key" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -307,12 +327,30 @@ export function invalidateInfoRefs(url: string): void {
  * Get a cached directory tree for a commit + nest depth combination.
  *
  * Trees are content-addressed: commitHash + nestLimit fully determines the
- * result, so no TTL or invalidation is needed. Memory-only (trees can be
- * large and are cheap to re-fetch if the tab is closed).
+ * result, so no TTL or invalidation is needed.
+ * Checks memory first, then IndexedDB.
  *
  * Key: `${commitHash}:${nestLimit}`
  */
-export function getCachedTree(
+export async function getCachedTree(
+  commitHash: string,
+  nestLimit: number,
+): Promise<Tree | undefined> {
+  const k = `${commitHash}:${nestLimit}`;
+  const mem = memTrees.get(k);
+  if (mem) return mem;
+  const record = await idbGet<TreeRecord>(STORE_TREES, k);
+  if (record) {
+    memTrees.set(k, record.tree);
+    return record.tree;
+  }
+  return undefined;
+}
+
+/**
+ * Synchronous memory-only peek for a tree.
+ */
+export function peekCachedTree(
   commitHash: string,
   nestLimit: number,
 ): Tree | undefined {
@@ -320,14 +358,18 @@ export function getCachedTree(
 }
 
 /**
- * Store a directory tree for a commit + nest depth combination.
+ * Store a directory tree for a commit + nest depth combination in memory and IDB.
  */
 export function cacheTree(
   commitHash: string,
   nestLimit: number,
   tree: Tree,
 ): void {
-  memTrees.set(`${commitHash}:${nestLimit}`, tree);
+  const k = `${commitHash}:${nestLimit}`;
+  memTrees.set(k, tree);
+  idbPut(STORE_TREES, { key: k, tree }).catch(() => {
+    // Non-critical
+  });
 }
 
 /**
@@ -335,11 +377,29 @@ export function cacheTree(
  *
  * Commit history is content-addressed: the same tip commitHash + maxCommits
  * always yields the same list, so no TTL or invalidation is needed.
- * Memory-only.
+ * Checks memory first, then IndexedDB.
  *
  * Key: `${commitHash}:${maxCommits}`
  */
-export function getCachedCommitHistory(
+export async function getCachedCommitHistory(
+  commitHash: string,
+  maxCommits: number,
+): Promise<Commit[] | undefined> {
+  const k = `${commitHash}:${maxCommits}`;
+  const mem = memCommitHistory.get(k);
+  if (mem) return mem;
+  const record = await idbGet<CommitHistoryRecord>(STORE_COMMIT_HISTORY, k);
+  if (record) {
+    memCommitHistory.set(k, record.commits);
+    return record.commits;
+  }
+  return undefined;
+}
+
+/**
+ * Synchronous memory-only peek for a commit history list.
+ */
+export function peekCachedCommitHistory(
   commitHash: string,
   maxCommits: number,
 ): Commit[] | undefined {
@@ -347,12 +407,16 @@ export function getCachedCommitHistory(
 }
 
 /**
- * Store a commit history list for a tip commit + depth combination.
+ * Store a commit history list for a tip commit + depth combination in memory and IDB.
  */
 export function cacheCommitHistory(
   commitHash: string,
   maxCommits: number,
   commits: Commit[],
 ): void {
-  memCommitHistory.set(`${commitHash}:${maxCommits}`, commits);
+  const k = `${commitHash}:${maxCommits}`;
+  memCommitHistory.set(k, commits);
+  idbPut(STORE_COMMIT_HISTORY, { key: k, commits }).catch(() => {
+    // Non-critical
+  });
 }

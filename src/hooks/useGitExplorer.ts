@@ -19,8 +19,10 @@ import {
   cacheCommit,
   peekCachedCommit,
   getCachedTree,
+  peekCachedTree,
   cacheTree,
   getCachedCommitHistory,
+  peekCachedCommitHistory,
   cacheCommitHistory,
 } from "@/services/gitObjectCache";
 
@@ -363,7 +365,7 @@ export function useGitExplorer(
           ? fastResolvedPath.split("/").filter(Boolean)
           : [];
         const fastNestLimit = fastPathSegments.length + 1;
-        const fastTree = getCachedTree(fastCommitHash, fastNestLimit);
+        const fastTree = peekCachedTree(fastCommitHash, fastNestLimit);
         if (fastTree) {
           // Tree is in memory — attempt a fully-synchronous render.
           const fastHeadCommit = peekCachedCommit(fastCommitHash) ?? null;
@@ -556,7 +558,7 @@ export function useGitExplorer(
 
     let tree: Tree;
 
-    const cachedTree = getCachedTree(commitHash, nestLimit);
+    const cachedTree = await getCachedTree(commitHash, nestLimit);
     if (cachedTree) {
       tree = cachedTree;
     } else {
@@ -784,7 +786,7 @@ export function useCommitHistory(
             fastInfo.refs[`refs/tags/${ref}`] ??
             ref);
         if (commitHash) {
-          const cached = getCachedCommitHistory(commitHash, maxCommits);
+          const cached = peekCachedCommitHistory(commitHash, maxCommits);
           if (cached) return { loading: false, error: null, commits: cached };
         }
       }
@@ -826,7 +828,10 @@ export function useCommitHistory(
         }
 
         // Check history cache before hitting the network
-        const cachedHistory = getCachedCommitHistory(commitHash, maxCommits);
+        const cachedHistory = await getCachedCommitHistory(
+          commitHash,
+          maxCommits,
+        );
         if (cachedHistory) {
           setState({ loading: false, error: null, commits: cachedHistory });
           return;

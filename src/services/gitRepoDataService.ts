@@ -58,6 +58,7 @@ import {
   cacheText,
   getCachedInfoRefs,
   cacheInfoRefs,
+  peekCachedCommit,
 } from "./gitObjectCache";
 
 // ---------------------------------------------------------------------------
@@ -456,16 +457,68 @@ class GitRepoDataEntry {
     const knownHeadCommit = this.pendingHead?.commitId;
     const stateCreatedAt = this.pendingHead?.stateCreatedAt;
 
-    this.setState(() => ({
-      loading: true,
-      error: null,
-      latestCommit: null,
-      readmeContent: null,
-      readmeFilename: null,
-      defaultBranch: null,
-      urlInfoRefs: {},
-      warning: null,
-    }));
+    // -----------------------------------------------------------------------
+    // Stale-while-revalidate: pre-populate from IDB cache before going to the
+    // network. If we already have a cached commit for the known head, show it
+    // immediately so the UI never blanks on refresh.
+    // -----------------------------------------------------------------------
+    let hasCachedData = false;
+    if (knownHeadCommit) {
+      const cachedCommit = peekCachedCommit(knownHeadCommit);
+      if (cachedCommit) {
+        // Commit is in the L1 memory cache — populate state immediately
+        // without waiting for IDB or the network.
+        const cachedText = getCachedText(knownHeadCommit, "README.md");
+        this.setState((prev) => ({
+          ...prev,
+          loading: true, // still fetching fresh data, but show stale content
+          error: null,
+          latestCommit: cachedCommit,
+          readmeContent: cachedText ?? prev.readmeContent,
+          readmeFilename: cachedText ? "README.md" : prev.readmeFilename,
+          urlInfoRefs: {},
+          warning: null,
+        }));
+        hasCachedData = true;
+      } else {
+        // Try IDB asynchronously — this is a one-time cost per session
+        const idbCommit = await getCachedCommit(knownHeadCommit);
+        if (idbCommit && !signal.aborted) {
+          const cachedText = getCachedText(knownHeadCommit, "README.md");
+          this.setState((prev) => ({
+            ...prev,
+            loading: true,
+            error: null,
+            latestCommit: idbCommit,
+            readmeContent: cachedText ?? prev.readmeContent,
+            readmeFilename: cachedText ? "README.md" : prev.readmeFilename,
+            urlInfoRefs: {},
+            warning: null,
+          }));
+          hasCachedData = true;
+        }
+      }
+    }
+
+    if (!hasCachedData) {
+      // Nothing cached — show a loading state (first visit or unknown head)
+      this.setState((prev) => ({
+        ...prev,
+        loading: true,
+        error: null,
+        latestCommit: null,
+        readmeContent: null,
+        readmeFilename: null,
+        defaultBranch: null,
+        urlInfoRefs: {},
+        warning: null,
+      }));
+    }
+
+    if (signal.aborted) {
+      this.fetching = false;
+      return;
+    }
 
     // -----------------------------------------------------------------------
     // Mutable display state
