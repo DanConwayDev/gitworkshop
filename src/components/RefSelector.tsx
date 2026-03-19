@@ -25,6 +25,7 @@ import {
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { GraspLogo } from "@/components/GraspLogo";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
 
@@ -348,9 +349,25 @@ export function RefSelector({
   const mismatchCount = countMismatches(refsWithStatus);
   const isNoState = repoRelayEose && repoState === null;
 
-  // Determine if the current ref is a tag
+  // Hide search when all refs fit comfortably in the dropdown
+  const totalRefs = branches.length + tags.length;
+  const showSearch = totalRefs > 8;
+
+  // Determine if the current ref is a tag and its verification status
   const currentRefObj = refs.find((r) => r.name === currentRef);
   const currentIsTag = currentRefObj?.isTag ?? false;
+  const currentRefWithStatus = refsWithStatus.find(
+    (r) => r.name === currentRef,
+  );
+  const currentStatus = currentRefWithStatus?.status ?? "loading";
+
+  // Placeholder: whether this repo uses grasp. Will be wired to ResolvedRepo.
+  const usesGrasp = true;
+
+  // Show the grasp status indicator in the trigger when grasp is in use and
+  // we have a definitive status for the selected ref.
+  const showGraspStatus =
+    usesGrasp && currentStatus !== "loading" && currentStatus !== "no-state";
 
   const handleSelect = (refName: string) => {
     onRefChange(refName);
@@ -369,10 +386,14 @@ export function RefSelector({
           className={cn(
             "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs transition-all duration-200",
             "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-            "max-w-[280px]",
-            mismatchCount > 0
-              ? "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 ref-selector-warning"
-              : "border-border/60 bg-background",
+            "max-w-[320px]",
+            showGraspStatus && currentStatus === "verified"
+              ? "border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10"
+              : showGraspStatus && currentStatus === "mismatch"
+                ? "border-red-500/40 bg-red-500/5 hover:bg-red-500/10 ref-selector-warning"
+                : mismatchCount > 0
+                  ? "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 ref-selector-warning"
+                  : "border-border/60 bg-background",
           )}
         >
           {currentIsTag ? (
@@ -381,11 +402,31 @@ export function RefSelector({
             <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           )}
           <span className="truncate font-medium">{currentRef}</span>
-          {mismatchCount > 0 && (
+          {showGraspStatus ? (
+            <span className="flex items-center gap-0.5 shrink-0 ml-0.5">
+              <GraspLogo
+                className={cn(
+                  "h-3.5 w-3.5",
+                  currentStatus === "verified" && "text-emerald-500",
+                  currentStatus === "mismatch" && "text-red-500",
+                  currentStatus === "untracked" && "text-muted-foreground/50",
+                )}
+              />
+              {currentStatus === "verified" && (
+                <ShieldCheck className="h-3 w-3 text-emerald-500" />
+              )}
+              {currentStatus === "mismatch" && (
+                <ShieldAlert className="h-3 w-3 text-red-500" />
+              )}
+              {currentStatus === "untracked" && (
+                <ShieldQuestion className="h-3 w-3 text-muted-foreground/50" />
+              )}
+            </span>
+          ) : mismatchCount > 0 ? (
             <span className="flex items-center gap-1 shrink-0 ml-0.5">
               <AlertTriangle className="h-3 w-3 text-amber-500" />
             </span>
-          )}
+          ) : null}
           <ChevronsUpDown className="h-3 w-3 shrink-0 text-muted-foreground/60 ml-0.5" />
         </button>
       </PopoverTrigger>
@@ -395,17 +436,19 @@ export function RefSelector({
         align="start"
         sideOffset={6}
       >
-        {/* Search input */}
-        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40">
-          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Find a branch or tag..."
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-            autoFocus
-          />
-        </div>
+        {/* Search input — hidden when all refs fit in the dropdown */}
+        {showSearch && (
+          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40">
+            <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Find a branch or tag..."
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+              autoFocus
+            />
+          </div>
+        )}
 
         {/* Mismatch banner */}
         {mismatchCount > 0 && <MismatchBanner mismatchCount={mismatchCount} />}
@@ -439,20 +482,18 @@ export function RefSelector({
             )}
 
             {/* Separator between branches and tags */}
-            {filteredBranches.length > 0 && filteredTags.length > 0 && (
-              <Separator className="my-2" />
-            )}
+            {filteredBranches.length > 0 && <Separator className="my-2" />}
 
-            {/* Tags section */}
-            {filteredTags.length > 0 && (
-              <div>
-                <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  <Tag className="h-3 w-3" />
-                  Tags
-                  <span className="text-muted-foreground/40 font-normal normal-case tracking-normal">
-                    ({filteredTags.length})
-                  </span>
-                </div>
+            {/* Tags section — always shown so the count is visible */}
+            <div>
+              <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                <Tag className="h-3 w-3" />
+                Tags
+                <span className="text-muted-foreground/40 font-normal normal-case tracking-normal">
+                  ({filteredTags.length})
+                </span>
+              </div>
+              {filteredTags.length > 0 && (
                 <div className="px-1">
                   {filteredTags.map((tag) => (
                     <RefRow
@@ -463,19 +504,19 @@ export function RefSelector({
                     />
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* Empty state */}
-            {filteredBranches.length === 0 && filteredTags.length === 0 && (
-              <div className="py-8 text-center">
-                <p className="text-sm text-muted-foreground">
-                  {search
-                    ? `No refs matching "${search}"`
-                    : "No branches or tags found"}
-                </p>
-              </div>
-            )}
+            {/* Empty search state */}
+            {filteredBranches.length === 0 &&
+              filteredTags.length === 0 &&
+              search && (
+                <div className="py-4 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No refs matching "{search}"
+                  </p>
+                </div>
+              )}
           </div>
         </ScrollArea>
 
