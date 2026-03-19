@@ -296,6 +296,8 @@ class GitRepoDataEntry {
   private lastFetchedHead: string | undefined = undefined;
   /** Whether a fetch is currently in progress */
   private fetching = false;
+  /** Whether at least one fetch has completed (successfully or not) */
+  private fetchedOnce = false;
 
   constructor(cloneUrls: string[]) {
     this.cloneUrls = cloneUrls;
@@ -317,8 +319,10 @@ class GitRepoDataEntry {
     // Deliver current state immediately
     cb(this.state);
 
-    // Start fetching if not already
-    if (!this.fetching && !this.backoffTimer) {
+    // Start fetching only if we haven't fetched yet and nothing is in flight.
+    // If we already have a result (fetchedOnce), the subscriber gets the
+    // current state above and we leave it alone — no re-fetch on tab switch.
+    if (!this.fetchedOnce && !this.fetching && !this.backoffTimer) {
       this.startFetch();
     }
 
@@ -672,6 +676,7 @@ class GitRepoDataEntry {
 
             // Fetch complete
             this.fetching = false;
+            this.fetchedOnce = true;
 
             if (!signal.aborted && displayResult) {
               // Success — record what we fetched and reset backoff
