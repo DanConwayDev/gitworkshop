@@ -25,6 +25,13 @@ import {
   peekCachedCommitHistory,
   cacheCommitHistory,
 } from "@/services/gitObjectCache";
+import {
+  isCorsLikeError,
+  toProxyUrl,
+  markOriginDirect,
+  markOriginNeedsProxy,
+  resolveGitUrl,
+} from "@/lib/corsProxy";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -237,6 +244,8 @@ function resolveRefAndPath(
 
 /**
  * Fetch infoRefs for a URL, checking the object cache first.
+ * Automatically falls back to the CORS proxy on CORS-like errors.
+ * The cache key is always the original URL so callers stay unaware of the proxy.
  */
 async function fetchInfoRefsCached(
   url: string,
@@ -245,10 +254,28 @@ async function fetchInfoRefsCached(
   const cached = await getCachedInfoRefs(url);
   if (cached) return cached;
   if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-  const info = await getInfoRefs(url);
-  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-  cacheInfoRefs(url, info);
-  return info;
+
+  const effectiveUrl = resolveGitUrl(url);
+  try {
+    const info = await getInfoRefs(effectiveUrl);
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    if (effectiveUrl === url) markOriginDirect(url);
+    cacheInfoRefs(url, info);
+    return info;
+  } catch (err) {
+    // If we already tried via proxy (effectiveUrl !== url), propagate the error
+    if (effectiveUrl !== url) throw err;
+    // Only attempt proxy fallback for CORS-like errors
+    if (!isCorsLikeError(err)) throw err;
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+    const proxyUrl = toProxyUrl(url);
+    const info = await getInfoRefs(proxyUrl);
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    markOriginNeedsProxy(url);
+    cacheInfoRefs(url, info);
+    return info;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -570,7 +597,7 @@ export function useGitExplorer(
 
         tree = await Promise.any(
           urlsToTry.map((url) =>
-            getDirectoryTreeAt(url, commitHash, nestLimit),
+            getDirectoryTreeAt(resolveGitUrl(url), commitHash, nestLimit),
           ),
         );
         cacheTree(commitHash, nestLimit, tree);
@@ -656,7 +683,7 @@ export function useGitExplorer(
       // Fetch the file content from git servers
       try {
         const obj = await Promise.any(
-          cloneUrls.map((url) => getObject(url, fileHash)),
+          cloneUrls.map((url) => getObject(resolveGitUrl(url), fileHash)),
         );
         if (signal.aborted) return;
         if (obj) {
@@ -743,7 +770,9 @@ async function fetchHeadCommit(
 
   try {
     const commits = await Promise.any(
-      cloneUrls.map((url) => fetchCommitsOnly(url, commitHash, 1)),
+      cloneUrls.map((url) =>
+        fetchCommitsOnly(resolveGitUrl(url), commitHash, 1),
+      ),
     );
     if (signal.aborted) return;
     if (commits.length > 0) {
@@ -840,7 +869,9 @@ export function useCommitHistory(
         setState({ loading: true, error: null, commits: [] });
 
         const commits = await Promise.any(
-          cloneUrls.map((url) => fetchCommitsOnly(url, commitHash, maxCommits)),
+          cloneUrls.map((url) =>
+            fetchCommitsOnly(resolveGitUrl(url), commitHash, maxCommits),
+          ),
         );
 
         if (signal.aborted) return;

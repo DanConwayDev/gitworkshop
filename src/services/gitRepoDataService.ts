@@ -60,6 +60,13 @@ import {
   cacheInfoRefs,
   peekCachedCommit,
 } from "./gitObjectCache";
+import {
+  isCorsLikeError,
+  toProxyUrl,
+  markOriginDirect,
+  markOriginNeedsProxy,
+  resolveGitUrl,
+} from "@/lib/corsProxy";
 
 // ---------------------------------------------------------------------------
 // Public types (re-exported for hook consumers)
@@ -152,6 +159,8 @@ interface CommitResult {
 
 /**
  * Fetch infoRefs for a URL, checking the object cache first.
+ * Automatically falls back to the CORS proxy on CORS-like errors.
+ * The cache key is always the original URL so callers stay unaware of the proxy.
  */
 async function fetchInfoRefs(
   url: string,
@@ -160,15 +169,34 @@ async function fetchInfoRefs(
   const cached = await getCachedInfoRefs(url);
   if (cached) return cached;
   if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-  const info = await getInfoRefs(url);
-  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-  cacheInfoRefs(url, info);
-  return info;
+
+  const effectiveUrl = resolveGitUrl(url);
+  try {
+    const info = await getInfoRefs(effectiveUrl);
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    if (effectiveUrl === url) markOriginDirect(url);
+    cacheInfoRefs(url, info);
+    return info;
+  } catch (err) {
+    // If we already tried via proxy (effectiveUrl !== url), propagate the error
+    if (effectiveUrl !== url) throw err;
+    // Only attempt proxy fallback for CORS-like errors
+    if (!isCorsLikeError(err)) throw err;
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+    const proxyUrl = toProxyUrl(url);
+    const info = await getInfoRefs(proxyUrl);
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    markOriginNeedsProxy(url);
+    cacheInfoRefs(url, info);
+    return info;
+  }
 }
 
 /**
  * Fetch commit metadata for a hash, checking the object cache first.
  * Falls back to shallowClone when the server lacks the filter capability.
+ * Uses the CORS proxy automatically when the origin requires it.
  */
 async function fetchCommitCached(
   url: string,
@@ -176,6 +204,9 @@ async function fetchCommitCached(
   supportsFilter: boolean,
   signal: AbortSignal,
 ): Promise<CommitResult | null> {
+  // Resolve the effective URL (may be proxy-prefixed)
+  const effectiveUrl = resolveGitUrl(url);
+
   // Check commit cache first
   const cachedCommit = await getCachedCommit(commitHash);
   let commit: Commit | null = cachedCommit ?? null;
@@ -197,7 +228,7 @@ async function fetchCommitCached(
     if (!readmeContent) {
       for (const name of README_NAMES) {
         try {
-          const entry = await getObjectByPath(url, commitHash, name);
+          const entry = await getObjectByPath(effectiveUrl, commitHash, name);
           if (signal.aborted) return null;
           if (!entry || entry.isDir) continue;
           const cached = await getCachedBlob(entry.hash);
@@ -209,7 +240,7 @@ async function fetchCommitCached(
             break;
           }
           // Not in blob cache — fetch it
-          const obj = await getObject(url, entry.hash);
+          const obj = await getObject(effectiveUrl, entry.hash);
           if (signal.aborted) return null;
           if (obj) {
             cacheBlob(entry.hash, obj.data);
@@ -231,10 +262,10 @@ async function fetchCommitCached(
   try {
     if (supportsFilter) {
       const [commits, readmeResult] = await Promise.all([
-        fetchCommitsOnly(url, commitHash, 1),
+        fetchCommitsOnly(effectiveUrl, commitHash, 1),
         Promise.any(
           README_NAMES.map(async (name) => {
-            const entry = await getObjectByPath(url, commitHash, name);
+            const entry = await getObjectByPath(effectiveUrl, commitHash, name);
             if (!entry || entry.isDir) throw new Error(`${name} not found`);
 
             // Check blob cache first
@@ -245,7 +276,7 @@ async function fetchCommitCached(
               return { name, content: text };
             }
 
-            const obj = await getObject(url, entry.hash);
+            const obj = await getObject(effectiveUrl, entry.hash);
             if (!obj) throw new Error(`${name} blob missing`);
             cacheBlob(entry.hash, obj.data);
             const text = new TextDecoder("utf-8").decode(obj.data);
@@ -263,7 +294,7 @@ async function fetchCommitCached(
       readmeContent = readmeResult?.content ?? null;
       readmeFilename = readmeResult?.name ?? null;
     } else {
-      const result = await shallowCloneRepositoryAt(url, commitHash);
+      const result = await shallowCloneRepositoryAt(effectiveUrl, commitHash);
       if (signal.aborted) return null;
 
       commit = result.commit;

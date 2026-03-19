@@ -32,6 +32,7 @@ import { GraspLogo } from "@/components/GraspLogo";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import type { UrlInfoRefsResult } from "@/services/gitRepoDataService";
+import { urlUsesProxy } from "@/lib/corsProxy";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -396,57 +397,79 @@ function GitServerPanel({
 
       {/* Per-server rows */}
       <div className="py-1">
-        {serverStatuses.map((s) => (
-          <div
-            key={s.url}
-            className="flex items-start gap-2.5 px-3 py-2 text-xs"
-          >
-            <ServerStatusDot status={s.status} />
-            <div className="min-w-0 flex-1">
-              <p
-                className="font-mono truncate text-foreground/80"
-                title={s.url}
-              >
-                {s.label}
-              </p>
-              {s.status === "behind" && s.serverCommit && s.stateCommit && (
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  has{" "}
-                  <code className="bg-muted px-1 rounded">
-                    {s.serverCommit.slice(0, 8)}
-                  </code>
-                  {hasState && (
-                    <>
-                      {" "}
-                      · signed{" "}
-                      <code className="bg-muted px-1 rounded">
-                        {s.stateCommit.slice(0, 8)}
-                      </code>
-                    </>
+        {serverStatuses.map((s) => {
+          const viaProxy = urlUsesProxy(s.url);
+          return (
+            <div
+              key={s.url}
+              className="flex items-start gap-2.5 px-3 py-2 text-xs"
+            >
+              <ServerStatusDot status={s.status} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <p
+                    className="font-mono truncate text-foreground/80"
+                    title={s.url}
+                  >
+                    {s.label}
+                  </p>
+                  {viaProxy && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="shrink-0 inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 cursor-default leading-none">
+                          proxy
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="right"
+                        className="text-xs max-w-[220px]"
+                        sideOffset={6}
+                      >
+                        Fetched via cors.isomorphic-git.org — this server does
+                        not support cross-origin requests
+                      </TooltipContent>
+                    </Tooltip>
                   )}
-                </p>
-              )}
-              {s.status === "match" && s.serverCommit && (
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  <code className="bg-muted px-1 rounded">
-                    {s.serverCommit.slice(0, 8)}
-                  </code>
-                </p>
-              )}
-              {s.status === "error" && (
-                <p className="text-[11px] text-red-500/80 mt-0.5">
-                  unreachable
-                </p>
-              )}
-              {s.status === "unknown" && (
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  fetching…
-                </p>
-              )}
+                </div>
+                {s.status === "behind" && s.serverCommit && s.stateCommit && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    has{" "}
+                    <code className="bg-muted px-1 rounded">
+                      {s.serverCommit.slice(0, 8)}
+                    </code>
+                    {hasState && (
+                      <>
+                        {" "}
+                        · signed{" "}
+                        <code className="bg-muted px-1 rounded">
+                          {s.stateCommit.slice(0, 8)}
+                        </code>
+                      </>
+                    )}
+                  </p>
+                )}
+                {s.status === "match" && s.serverCommit && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    <code className="bg-muted px-1 rounded">
+                      {s.serverCommit.slice(0, 8)}
+                    </code>
+                  </p>
+                )}
+                {s.status === "error" && (
+                  <p className="text-[11px] text-red-500/80 mt-0.5">
+                    unreachable
+                  </p>
+                )}
+                {s.status === "unknown" && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    fetching…
+                  </p>
+                )}
+              </div>
+              <ServerStatusLabel status={s.status} hasState={hasState} />
             </div>
-            <ServerStatusLabel status={s.status} hasState={hasState} />
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Footer note */}

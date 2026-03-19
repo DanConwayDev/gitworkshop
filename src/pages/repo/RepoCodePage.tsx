@@ -873,6 +873,7 @@ import {
   getCachedBlob,
   cacheBlob,
 } from "@/services/gitObjectCache";
+import { resolveGitUrl } from "@/lib/corsProxy";
 import { BookOpen } from "lucide-react";
 
 function ReadmeViewer({
@@ -906,12 +907,17 @@ function ReadmeViewer({
 
     Promise.any(
       cloneUrls.map(async (url) => {
-        const entry = await getObjectByPath(url, commitHash, readmePath);
+        const effectiveUrl = resolveGitUrl(url);
+        const entry = await getObjectByPath(
+          effectiveUrl,
+          commitHash,
+          readmePath,
+        );
         if (!entry || entry.isDir) throw new Error("not a file");
         // Check blob cache before hitting the network
         let bytes = await getCachedBlob(entry.hash);
         if (!bytes) {
-          const obj = await getObject(url, entry.hash);
+          const obj = await getObject(effectiveUrl, entry.hash);
           if (!obj) throw new Error("blob missing");
           cacheBlob(entry.hash, obj.data);
           bytes = obj.data;
