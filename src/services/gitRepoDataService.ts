@@ -692,7 +692,9 @@ class GitRepoDataEntry {
                 this.scheduleBackoffFetch();
               }
             } else if (!signal.aborted) {
-              // Failed — double the backoff and retry
+              // Failed — double the backoff and retry.
+              // fetchedOnce is already true above, so new subscribers won't
+              // re-trigger a fetch; they'll wait for the backoff retry instead.
               this.backoffDelay = Math.min(
                 this.backoffDelay * 2,
                 BACKOFF_MAX_MS,
