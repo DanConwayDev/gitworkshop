@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState, useEffect } from "react";
+import { lazy, Suspense, useMemo, useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useRepoContext } from "./RepoContext";
 import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
@@ -335,10 +335,38 @@ function LocatorBar({
   urlInfoRefs: Record<string, UrlInfoRefsResult>;
   cloneUrls: string[];
 }) {
+  // Hide "checked" text if showing it would cause the bar to wrap onto
+  // multiple lines. We directly manipulate the DOM via refs to avoid a
+  // render cycle — measure height without it, then with it, and show/hide
+  // accordingly.
+  const barRef = useRef<HTMLDivElement>(null);
+  const checkedRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const bar = barRef.current;
+    const checked = checkedRef.current;
+    if (!bar || !checked) return;
+    const check = () => {
+      // Measure without
+      checked.style.display = "none";
+      const heightWithout = bar.scrollHeight;
+      // Measure with
+      checked.style.display = "";
+      const heightWith = bar.scrollHeight;
+      // Hide if it causes wrapping
+      checked.style.display = heightWith <= heightWithout ? "" : "none";
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, [lastCheckedAt, pulling, pathSegments.join("/"), currentRef, refs.length]);
+
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
       {/* Top bar: branch selector + breadcrumb + pulling status */}
       <div
+        ref={barRef}
         className={cn(
           "flex items-center gap-2 px-3 py-2 flex-wrap relative",
           pulling ? "fetching-gradient" : "bg-muted/30",
@@ -375,11 +403,11 @@ function LocatorBar({
               <span key={i} className="flex items-center gap-1 min-w-0">
                 <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 {isLast ? (
-                  <span className="font-medium truncate">{seg}</span>
+                  <span className="font-medium">{seg}</span>
                 ) : (
                   <Link
                     to={treeUrl(currentRef, segPath)}
-                    className="text-violet-600 dark:text-violet-400 hover:underline truncate"
+                    className="text-violet-600 dark:text-violet-400 hover:underline"
                   >
                     {seg}
                   </Link>
@@ -396,7 +424,10 @@ function LocatorBar({
             Checking…
           </span>
         ) : lastCheckedAt ? (
-          <span className="text-xs text-muted-foreground/60 shrink-0">
+          <span
+            ref={checkedRef}
+            className="text-xs text-muted-foreground/60 shrink-0 whitespace-nowrap"
+          >
             checked{" "}
             {formatDistanceToNow(new Date(lastCheckedAt * 1000), {
               addSuffix: true,
