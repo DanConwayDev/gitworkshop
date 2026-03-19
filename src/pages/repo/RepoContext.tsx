@@ -22,10 +22,9 @@ export interface RepoContextValue {
   cloneUrls: string[];
   /** The winning Nostr state event (kind:30618), or null if none found. */
   repoState: RepositoryState | null | undefined;
-  /** The ref segment from the URL (e.g. "main", "refs/tags/v1.0"). */
-  treeRef?: string;
-  /** The file/directory path segment from the URL (within a tree view). */
-  treePath?: string;
+  /** Everything after /tree/ in the URL (e.g. "main", "feat/foo/.gitignore").
+   *  Ref resolution via longest-prefix matching happens inside useGitExplorer. */
+  treeRefAndPath?: string;
   /** The commit ID from the URL (for single-commit view). */
   commitId?: string;
   /** The ref segment from a /commits/:ref URL (branch, tag, or commit hash). */

@@ -31,7 +31,7 @@ export default function RepoCommitsPage() {
   // Always fetch refs so we can populate the selector.
   // Pass commitsRef so the explorer resolves to the right commit hash.
   const explorer = useGitExplorer(cloneUrls, {
-    ref: commitsRef,
+    refAndPath: commitsRef,
     knownHeadCommit: repoState?.headCommitId,
   });
 
@@ -50,7 +50,7 @@ export default function RepoCommitsPage() {
   const tags = explorer.refs.filter((r) => r.isTag);
 
   const handleRefChange = (newRef: string) => {
-    navigate(`${basePath}/commits/${encodeURIComponent(newRef)}`);
+    navigate(`${basePath}/commits/${newRef}`);
   };
 
   if (cloneUrls.length === 0) {

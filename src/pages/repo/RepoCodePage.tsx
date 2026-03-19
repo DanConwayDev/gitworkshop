@@ -94,26 +94,26 @@ function isMarkdownFile(filename: string): boolean {
 // ---------------------------------------------------------------------------
 
 export default function RepoCodePage() {
-  const { cloneUrls, repoState, treeRef, treePath, repoId } = useRepoContext();
+  const { cloneUrls, repoState, treeRefAndPath, repoId } = useRepoContext();
   const navigate = useNavigate();
 
   const explorer = useGitExplorer(cloneUrls, {
-    ref: treeRef,
-    path: treePath,
+    refAndPath: treeRefAndPath,
     knownHeadCommit: repoState?.headCommitId,
   });
 
   // Build the base URL for this repo (without /tree/...)
   const basePath = useMemo(() => {
-    // Reconstruct from context — use the current URL minus the /tree/... suffix
     const pathname = window.location.pathname;
     const treeIdx = pathname.indexOf("/tree");
     return treeIdx !== -1 ? pathname.slice(0, treeIdx) : pathname;
   }, []);
 
-  // URL for a given ref + path
+  // URL for a given ref + path. Branch names may contain "/" so we do NOT
+  // encode them — the router receives the literal string and the explorer
+  // resolves the ref via longest-prefix matching.
   const treeUrl = (ref: string, path?: string) => {
-    const base = `${basePath}/tree/${encodeURIComponent(ref)}`;
+    const base = `${basePath}/tree/${ref}`;
     return path ? `${base}/${path}` : base;
   };
 
@@ -122,8 +122,8 @@ export default function RepoCodePage() {
     navigate(treeUrl(newRef));
   };
 
-  const currentRef = explorer.resolvedRef ?? treeRef ?? "";
-  const currentPath = treePath ?? "";
+  const currentRef = explorer.resolvedRef ?? "";
+  const currentPath = explorer.resolvedPath ?? "";
   const pathSegments = currentPath
     ? currentPath.split("/").filter(Boolean)
     : [];

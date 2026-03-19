@@ -47,8 +47,10 @@ export interface GitExplorerState {
   error: string | null;
   /** Available refs (branches + tags) from getInfoRefs */
   refs: GitRef[];
-  /** The resolved ref name being viewed (e.g. "main") */
+  /** The resolved ref name being viewed (e.g. "main", "feat/foo") */
   resolvedRef: string | null;
+  /** The resolved file/directory path within the repo (e.g. "src/index.ts") */
+  resolvedPath: string | null;
   /** The commit hash for the current ref */
   commitHash: string | null;
   /** The latest commit on the current ref */
@@ -159,38 +161,71 @@ function parseRefs(info: InfoRefsUploadPackResponse): GitRef[] {
 }
 
 /**
- * Resolve a user-supplied ref string to a full refs/ path.
- * Accepts: bare branch name, "refs/heads/...", "refs/tags/...", commit hash.
+ * Resolve a combined "ref/path" string against known refs using longest-prefix
+ * matching. This handles branch names that contain "/" (e.g. "feat/foo").
+ *
+ * The input string is everything after /tree/ in the URL, e.g.:
+ *   "main"                              → ref=main, path=""
+ *   "main/src/index.ts"                 → ref=main, path="src/index.ts"
+ *   "feat/foo/src/index.ts"             → ref=feat/foo, path="src/index.ts"
+ *   "refs/tags/v1.0/README.md"          → ref=refs/tags/v1.0, path="README.md"
+ *
+ * Returns undefined if no known ref matches.
  */
-function resolveRefString(
-  ref: string,
+function resolveRefAndPath(
+  refAndPath: string,
   info: InfoRefsUploadPackResponse,
-): { refPath: string; hash: string } | undefined {
-  // Already a full ref path
-  if (ref.startsWith("refs/")) {
-    const hash = info.refs[ref];
-    if (hash) return { refPath: ref, hash };
-    return undefined;
+): { refPath: string; hash: string; path: string } | undefined {
+  // Build candidate full ref paths from the refAndPath string by trying each
+  // prefix (split on "/") as a branch or tag name.
+  const parts = refAndPath.split("/");
+
+  let best:
+    | { refPath: string; hash: string; path: string; prefixLen: number }
+    | undefined;
+
+  for (let i = 1; i <= parts.length; i++) {
+    const candidate = parts.slice(0, i).join("/");
+    const path = parts.slice(i).join("/");
+
+    // Try as full refs/ path first
+    if (candidate.startsWith("refs/")) {
+      const hash = info.refs[candidate];
+      if (hash && (!best || i > best.prefixLen)) {
+        best = { refPath: candidate, hash, path, prefixLen: i };
+      }
+      continue;
+    }
+
+    // Try as branch name
+    const branchPath = `refs/heads/${candidate}`;
+    if (info.refs[branchPath] && (!best || i > best.prefixLen)) {
+      best = {
+        refPath: branchPath,
+        hash: info.refs[branchPath],
+        path,
+        prefixLen: i,
+      };
+    }
+
+    // Try as tag name
+    const tagPath = `refs/tags/${candidate}`;
+    if (info.refs[tagPath] && (!best || i > best.prefixLen)) {
+      best = {
+        refPath: tagPath,
+        hash: info.refs[tagPath],
+        path,
+        prefixLen: i,
+      };
+    }
+
+    // Try as commit hash (40-char hex) — only valid as the entire ref portion
+    if (i === 1 && /^[0-9a-f]{40}$/i.test(candidate)) {
+      best = { refPath: candidate, hash: candidate, path, prefixLen: i };
+    }
   }
 
-  // Try as branch name
-  const branchPath = `refs/heads/${ref}`;
-  if (info.refs[branchPath]) {
-    return { refPath: branchPath, hash: info.refs[branchPath] };
-  }
-
-  // Try as tag name
-  const tagPath = `refs/tags/${ref}`;
-  if (info.refs[tagPath]) {
-    return { refPath: tagPath, hash: info.refs[tagPath] };
-  }
-
-  // Try as commit hash (40-char hex)
-  if (/^[0-9a-f]{40}$/i.test(ref)) {
-    return { refPath: ref, hash: ref };
-  }
-
-  return undefined;
+  return best;
 }
 
 /**
@@ -215,15 +250,12 @@ async function fetchInfoRefsCached(
 
 export interface UseGitExplorerOptions {
   /**
-   * The ref to view (branch name, tag name, or commit hash).
-   * If undefined, uses the default branch from getInfoRefs.
+   * Combined "ref/path" string — everything after /tree/ in the URL.
+   * The ref is resolved via longest-prefix matching against known git refs,
+   * which correctly handles branch names that contain "/" (e.g. "feat/foo").
+   * If undefined, uses the default branch and repo root.
    */
-  ref?: string;
-  /**
-   * The file/directory path within the repo to view.
-   * Empty string or undefined = repo root.
-   */
-  path?: string;
+  refAndPath?: string;
   /**
    * Known HEAD commit from the Nostr state event (kind:30618).
    * When provided, used as the preferred commit to display.
@@ -243,13 +275,14 @@ export function useGitExplorer(
   cloneUrls: string[],
   options: UseGitExplorerOptions = {},
 ): GitExplorerState & { reload: () => void } {
-  const { ref, path = "", knownHeadCommit } = options;
+  const { refAndPath, knownHeadCommit } = options;
 
   const [state, setState] = useState<GitExplorerState>({
     loading: false,
     error: null,
     refs: [],
     resolvedRef: null,
+    resolvedPath: null,
     commitHash: null,
     headCommit: null,
     fileTree: null,
@@ -275,9 +308,6 @@ export function useGitExplorer(
     // render immediately without a loading flash.  This is the common case on
     // remount (tab switch, navigation back).
     // -----------------------------------------------------------------------
-    const pathSegments = path ? path.split("/").filter(Boolean) : [];
-    const nestLimit = pathSegments.length + 1;
-
     const fastInfo = cloneUrls
       .map((u) => ({ url: u, info: peekCachedInfoRefsStale(u) }))
       .find((r) => r.info !== undefined) as
@@ -288,9 +318,10 @@ export function useGitExplorer(
       const fastParsedRefs = parseRefs(fastInfo.info);
       let fastCommitHash: string | undefined;
       let fastResolvedRef: string | undefined;
+      let fastResolvedPath: string | undefined;
 
-      if (ref) {
-        const resolved = resolveRefString(ref, fastInfo.info);
+      if (refAndPath) {
+        const resolved = resolveRefAndPath(refAndPath, fastInfo.info);
         if (resolved) {
           fastCommitHash = resolved.hash;
           fastResolvedRef = resolved.refPath.startsWith("refs/heads/")
@@ -298,6 +329,7 @@ export function useGitExplorer(
             : resolved.refPath.startsWith("refs/tags/")
               ? resolved.refPath.replace("refs/tags/", "")
               : resolved.refPath;
+          fastResolvedPath = resolved.path;
         }
       } else if (knownHeadCommit) {
         fastCommitHash = knownHeadCommit;
@@ -305,6 +337,7 @@ export function useGitExplorer(
           (r) => r.hash === knownHeadCommit && r.isBranch,
         );
         fastResolvedRef = matchingRef?.name ?? knownHeadCommit.slice(0, 8);
+        fastResolvedPath = "";
       } else {
         const headRef = fastInfo.info.symrefs["HEAD"];
         const defaultRef = fastParsedRefs.find(
@@ -315,22 +348,28 @@ export function useGitExplorer(
             ? fastInfo.info.refs[headRef]
             : defaultRef.hash;
           fastResolvedRef = defaultRef.name;
+          fastResolvedPath = "";
         }
       }
 
-      if (fastCommitHash && fastResolvedRef) {
-        const fastTree = getCachedTree(fastCommitHash, nestLimit);
+      if (fastCommitHash && fastResolvedRef && fastResolvedPath !== undefined) {
+        const fastPathSegments = fastResolvedPath
+          ? fastResolvedPath.split("/").filter(Boolean)
+          : [];
+        const fastNestLimit = fastPathSegments.length + 1;
+        const fastTree = getCachedTree(fastCommitHash, fastNestLimit);
         if (fastTree) {
           // Tree is in memory — attempt a fully-synchronous render.
           const fastHeadCommit = peekCachedCommit(fastCommitHash) ?? null;
           let fastHandled = false;
 
-          if (pathSegments.length === 0) {
+          if (fastPathSegments.length === 0) {
             setState({
               loading: false,
               error: null,
               refs: fastParsedRefs,
               resolvedRef: fastResolvedRef,
+              resolvedPath: fastResolvedPath,
               commitHash: fastCommitHash,
               headCommit: fastHeadCommit,
               fileTree: treeToEntries(fastTree, ""),
@@ -340,23 +379,24 @@ export function useGitExplorer(
             });
             fastHandled = true;
           } else {
-            const subTree = navigateTree(fastTree, pathSegments);
+            const subTree = navigateTree(fastTree, fastPathSegments);
             if (subTree) {
               setState({
                 loading: false,
                 error: null,
                 refs: fastParsedRefs,
                 resolvedRef: fastResolvedRef,
+                resolvedPath: fastResolvedPath,
                 commitHash: fastCommitHash,
                 headCommit: fastHeadCommit,
-                fileTree: treeToEntries(subTree, path),
+                fileTree: treeToEntries(subTree, fastResolvedPath),
                 fileContent: null,
                 isDirectory: true,
                 pathExists: true,
               });
               fastHandled = true;
             } else {
-              const fileHash = findFileInTree(fastTree, pathSegments);
+              const fileHash = findFileInTree(fastTree, fastPathSegments);
               if (fileHash) {
                 const cachedBlob = peekCachedBlob(fileHash);
                 if (cachedBlob !== undefined) {
@@ -368,6 +408,7 @@ export function useGitExplorer(
                     error: null,
                     refs: fastParsedRefs,
                     resolvedRef: fastResolvedRef,
+                    resolvedPath: fastResolvedPath,
                     commitHash: fastCommitHash,
                     headCommit: fastHeadCommit,
                     fileTree: null,
@@ -392,6 +433,7 @@ export function useGitExplorer(
       error: null,
       refs: [],
       resolvedRef: null,
+      resolvedPath: null,
       commitHash: null,
       headCommit: null,
       fileTree: null,
@@ -430,19 +472,20 @@ export function useGitExplorer(
     setState((prev) => ({ ...prev, refs: parsedRefs }));
 
     // -----------------------------------------------------------------------
-    // Resolve which ref/commit to use
+    // Resolve which ref/commit to use, and the path within the repo
     // -----------------------------------------------------------------------
     let commitHash: string;
     let resolvedRef: string;
+    let path: string;
 
-    if (ref) {
-      const resolved = resolveRefString(ref, info);
+    if (refAndPath) {
+      const resolved = resolveRefAndPath(refAndPath, info);
       if (!resolved) {
         if (signal.aborted) return;
         setState((prev) => ({
           ...prev,
           loading: false,
-          error: `Ref "${ref}" not found`,
+          error: `No ref found matching "${refAndPath}"`,
         }));
         return;
       }
@@ -452,14 +495,15 @@ export function useGitExplorer(
         : resolved.refPath.startsWith("refs/tags/")
           ? resolved.refPath.replace("refs/tags/", "")
           : resolved.refPath;
+      path = resolved.path;
     } else if (knownHeadCommit) {
       // Use the Nostr state commit as the preferred starting point
       commitHash = knownHeadCommit;
-      // Find the branch name for this commit
       const matchingRef = parsedRefs.find(
         (r) => r.hash === knownHeadCommit && r.isBranch,
       );
       resolvedRef = matchingRef?.name ?? knownHeadCommit.slice(0, 8);
+      path = "";
     } else {
       // Use the default branch
       const headRef = info.symrefs["HEAD"]; // e.g. "refs/heads/main"
@@ -475,15 +519,22 @@ export function useGitExplorer(
       }
       commitHash = headRef ? info.refs[headRef] : defaultRef.hash;
       resolvedRef = defaultRef.name;
+      path = "";
     }
 
     if (signal.aborted) return;
-    setState((prev) => ({ ...prev, resolvedRef, commitHash }));
+    setState((prev) => ({
+      ...prev,
+      resolvedRef,
+      resolvedPath: path,
+      commitHash,
+    }));
 
     // -----------------------------------------------------------------------
     // Phase 2: Fetch the directory tree (depth = path depth + 1 for listing)
-    // pathSegments / nestLimit already declared in the fast-path block above.
     // -----------------------------------------------------------------------
+    const pathSegments = path ? path.split("/").filter(Boolean) : [];
+    const nestLimit = pathSegments.length + 1;
 
     let tree: Tree;
 
@@ -619,7 +670,7 @@ export function useGitExplorer(
       loading: false,
       pathExists: false,
     }));
-  }, [urlsKey, ref, path, knownHeadCommit]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [urlsKey, refAndPath, knownHeadCommit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     run();

@@ -243,7 +243,7 @@ function RepoLayoutResolved({
   const isAboutTab = !isCodeTab && !isCommitsTab && !isIssuesTab && !isPRsTab;
 
   // Determine which sub-page to render from the splat segments.
-  const { subPage, issueId, prId, treeRef, treePath, commitId, commitsRef } =
+  const { subPage, issueId, prId, treeRefAndPath, commitId, commitsRef } =
     useMemo((): {
       subPage:
         | "code"
@@ -256,8 +256,8 @@ function RepoLayoutResolved({
         | "commit";
       issueId?: string;
       prId?: string;
-      treeRef?: string;
-      treePath?: string;
+      /** Everything after /tree/ — ref resolution happens inside useGitExplorer */
+      treeRefAndPath?: string;
       commitId?: string;
       commitsRef?: string;
     } => {
@@ -266,14 +266,10 @@ function RepoLayoutResolved({
       // Find the index of the first known sub-path keyword
       const treeIdx = segments.indexOf("tree");
       if (treeIdx !== -1) {
-        // tree/:ref/:path*
-        const ref = segments[treeIdx + 1];
-        const pathParts = segments.slice(treeIdx + 2);
-        return {
-          subPage: "code",
-          treeRef: ref,
-          treePath: pathParts.join("/"),
-        };
+        // Pass everything after "tree" as a single string; useGitExplorer will
+        // resolve the ref via longest-prefix matching against known git refs.
+        const refAndPath = segments.slice(treeIdx + 1).join("/");
+        return { subPage: "code", treeRefAndPath: refAndPath || undefined };
       }
 
       const commitIdx = segments.indexOf("commit");
@@ -283,8 +279,10 @@ function RepoLayoutResolved({
 
       const commitsIdx = segments.indexOf("commits");
       if (commitsIdx !== -1) {
-        const commitsRef = segments[commitsIdx + 1];
-        return { subPage: "commits", commitsRef };
+        return {
+          subPage: "commits",
+          commitsRef: segments.slice(commitsIdx + 1).join("/") || undefined,
+        };
       }
 
       const prsIdx = segments.indexOf("prs");
@@ -322,8 +320,7 @@ function RepoLayoutResolved({
           prId,
           cloneUrls,
           repoState,
-          treeRef,
-          treePath,
+          treeRefAndPath,
           commitId,
           commitsRef,
         }
@@ -425,10 +422,8 @@ function RepoLayoutResolved({
             <TabLink
               to={
                 commitsRef
-                  ? `${basePath}/commits/${encodeURIComponent(commitsRef)}`
-                  : treeRef
-                    ? `${basePath}/commits/${encodeURIComponent(treeRef)}`
-                    : `${basePath}/commits`
+                  ? `${basePath}/commits/${commitsRef}`
+                  : `${basePath}/commits`
               }
               active={isCommitsTab}
               icon={<GitCommit className="h-4 w-4" />}
