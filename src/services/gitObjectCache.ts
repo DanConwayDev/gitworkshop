@@ -124,6 +124,14 @@ const memInfoRefs = new Map<
   string,
   { info: InfoRefsUploadPackResponse; fetchedAt: number }
 >();
+/**
+ * key: `${commitHash}:${maxCommits}` → Commit[]
+ *
+ * Commit history is content-addressed by the tip commit hash + depth limit.
+ * Memory-only — the list can be large and is cheap to re-fetch if the tab
+ * is closed.
+ */
+const memCommitHistory = new Map<string, Commit[]>();
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -208,8 +216,8 @@ export function cacheText(
 }
 
 /**
- * Synchronous memory-only peek for infoRefs.
- * Returns the cached value if present and within TTL, without touching IDB.
+ * Synchronous memory-only peek for infoRefs, respecting TTL.
+ * Returns the cached value only if present and still fresh.
  * Use this for zero-latency checks (e.g. avoiding a loading flash on remount).
  */
 export function peekCachedInfoRefs(
@@ -218,6 +226,20 @@ export function peekCachedInfoRefs(
   const mem = memInfoRefs.get(url);
   if (mem && Date.now() - mem.fetchedAt < INFO_REFS_TTL_MS) return mem.info;
   return undefined;
+}
+
+/**
+ * Synchronous memory-only peek for infoRefs, ignoring TTL.
+ * Returns any cached value regardless of age.
+ *
+ * Safe to use for resolving a commit hash when the tree is already cached:
+ * the tree is content-addressed so it never goes stale even if infoRefs is
+ * old. The slow path will still re-fetch infoRefs from the network.
+ */
+export function peekCachedInfoRefsStale(
+  url: string,
+): InfoRefsUploadPackResponse | undefined {
+  return memInfoRefs.get(url)?.info;
 }
 
 /**
@@ -306,4 +328,31 @@ export function cacheTree(
   tree: Tree,
 ): void {
   memTrees.set(`${commitHash}:${nestLimit}`, tree);
+}
+
+/**
+ * Get a cached commit history list for a tip commit + depth combination.
+ *
+ * Commit history is content-addressed: the same tip commitHash + maxCommits
+ * always yields the same list, so no TTL or invalidation is needed.
+ * Memory-only.
+ *
+ * Key: `${commitHash}:${maxCommits}`
+ */
+export function getCachedCommitHistory(
+  commitHash: string,
+  maxCommits: number,
+): Commit[] | undefined {
+  return memCommitHistory.get(`${commitHash}:${maxCommits}`);
+}
+
+/**
+ * Store a commit history list for a tip commit + depth combination.
+ */
+export function cacheCommitHistory(
+  commitHash: string,
+  maxCommits: number,
+  commits: Commit[],
+): void {
+  memCommitHistory.set(`${commitHash}:${maxCommits}`, commits);
 }

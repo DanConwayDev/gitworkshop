@@ -11,7 +11,7 @@ import {
 import {
   getCachedInfoRefs,
   cacheInfoRefs,
-  peekCachedInfoRefs,
+  peekCachedInfoRefsStale,
   getCachedBlob,
   cacheBlob,
   peekCachedBlob,
@@ -20,6 +20,8 @@ import {
   peekCachedCommit,
   getCachedTree,
   cacheTree,
+  getCachedCommitHistory,
+  cacheCommitHistory,
 } from "@/services/gitObjectCache";
 
 // ---------------------------------------------------------------------------
@@ -277,7 +279,7 @@ export function useGitExplorer(
     const nestLimit = pathSegments.length + 1;
 
     const fastInfo = cloneUrls
-      .map((u) => ({ url: u, info: peekCachedInfoRefs(u) }))
+      .map((u) => ({ url: u, info: peekCachedInfoRefsStale(u) }))
       .find((r) => r.info !== undefined) as
       | { url: string; info: InfoRefsUploadPackResponse }
       | undefined;
@@ -685,10 +687,25 @@ export function useCommitHistory(
   ref: string | undefined,
   maxCommits: number = 50,
 ): CommitHistoryState {
-  const [state, setState] = useState<CommitHistoryState>({
-    loading: false,
-    error: null,
-    commits: [],
+  const [state, setState] = useState<CommitHistoryState>(() => {
+    // Fast path: resolve commitHash from stale infoRefs and check history cache
+    if (ref && cloneUrls.length > 0) {
+      const fastInfo = cloneUrls
+        .map((u) => peekCachedInfoRefsStale(u))
+        .find((i) => i !== undefined);
+      if (fastInfo) {
+        const commitHash = ref.startsWith("refs/")
+          ? fastInfo.refs[ref]
+          : (fastInfo.refs[`refs/heads/${ref}`] ??
+            fastInfo.refs[`refs/tags/${ref}`] ??
+            ref);
+        if (commitHash) {
+          const cached = getCachedCommitHistory(commitHash, maxCommits);
+          if (cached) return { loading: false, error: null, commits: cached };
+        }
+      }
+    }
+    return { loading: false, error: null, commits: [] };
   });
 
   const urlsKey = cloneUrls.join(",");
@@ -698,8 +715,6 @@ export function useCommitHistory(
 
     const abort = new AbortController();
     const signal = abort.signal;
-
-    setState({ loading: true, error: null, commits: [] });
 
     // First resolve the ref to a commit hash via getInfoRefs (cache-aware)
     Promise.any(cloneUrls.map((url) => fetchInfoRefsCached(url, signal)))
@@ -726,13 +741,22 @@ export function useCommitHistory(
           return;
         }
 
+        // Check history cache before hitting the network
+        const cachedHistory = getCachedCommitHistory(commitHash, maxCommits);
+        if (cachedHistory) {
+          setState({ loading: false, error: null, commits: cachedHistory });
+          return;
+        }
+
+        setState({ loading: true, error: null, commits: [] });
+
         const commits = await Promise.any(
           cloneUrls.map((url) => fetchCommitsOnly(url, commitHash, maxCommits)),
         );
 
         if (signal.aborted) return;
 
-        // Cache each commit
+        // Cache each individual commit and the full history list
         for (const commit of commits) {
           cacheCommit(commit);
         }
@@ -744,6 +768,7 @@ export function useCommitHistory(
             (a.committer?.timestamp ?? a.author.timestamp),
         );
 
+        cacheCommitHistory(commitHash, maxCommits, sorted);
         setState({ loading: false, error: null, commits: sorted });
       })
       .catch((err: unknown) => {
