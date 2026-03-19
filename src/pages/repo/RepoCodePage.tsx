@@ -4,18 +4,13 @@ import { useRepoContext } from "./RepoContext";
 import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
 import { useGitRepoData } from "@/hooks/useGitRepoData";
 import { UserLink } from "@/components/UserAvatar";
+import { RefSelector } from "@/components/RefSelector";
+import type { RepositoryState } from "@/casts/RepositoryState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Folder,
   FileText,
@@ -23,7 +18,6 @@ import {
   GitBranch,
   Tag,
   GitCommit,
-  AlertTriangle,
   AlertCircle,
   Loader2,
   ArrowLeft,
@@ -168,17 +162,6 @@ export default function RepoCodePage() {
 
   const mainContent = (
     <div className="space-y-4">
-      {/* State sync warning */}
-      {repoState === null && cloneUrls.length > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>
-            No Nostr state event found. Displaying git server state. Ask the
-            maintainer to run <code className="font-mono">ngit sync</code>.
-          </p>
-        </div>
-      )}
-
       {/* No clone URLs */}
       {cloneUrls.length === 0 && (
         <Card className="border-dashed">
@@ -207,6 +190,8 @@ export default function RepoCodePage() {
             repoId={repoId}
             pulling={pulling}
             lastCheckedAt={gitData.lastCheckedAt}
+            repoState={repoState}
+            repoRelayEose={repoRelayEose}
           />
 
           {/* Error state */}
@@ -325,6 +310,8 @@ function LocatorBar({
   repoId,
   pulling,
   lastCheckedAt,
+  repoState,
+  repoRelayEose,
 }: {
   loading: boolean;
   refs: ReturnType<typeof useGitExplorer>["refs"];
@@ -338,10 +325,9 @@ function LocatorBar({
   repoId: string;
   pulling: boolean;
   lastCheckedAt: number | null;
+  repoState: RepositoryState | null | undefined;
+  repoRelayEose: boolean;
 }) {
-  const branches = refs.filter((r) => r.isBranch);
-  const tags = refs.filter((r) => r.isTag);
-
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
       {/* Top bar: branch selector + breadcrumb + pulling status */}
@@ -353,48 +339,14 @@ function LocatorBar({
       >
         {/* Branch/tag selector */}
         {refs.length > 0 ? (
-          <Select value={currentRef} onValueChange={onRefChange}>
-            <SelectTrigger className="h-8 w-auto min-w-[120px] max-w-[200px] text-xs gap-1.5">
-              <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <SelectValue placeholder="Select ref" />
-            </SelectTrigger>
-            <SelectContent>
-              {branches.length > 0 && (
-                <>
-                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                    <GitBranch className="h-3 w-3" />
-                    Branches
-                  </div>
-                  {branches.map((b) => (
-                    <SelectItem key={b.name} value={b.name} className="text-xs">
-                      {b.name}
-                      {b.isDefault && (
-                        <Badge
-                          variant="secondary"
-                          className="ml-2 text-[10px] h-4 px-1"
-                        >
-                          default
-                        </Badge>
-                      )}
-                    </SelectItem>
-                  ))}
-                </>
-              )}
-              {tags.length > 0 && (
-                <>
-                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5 mt-1">
-                    <Tag className="h-3 w-3" />
-                    Tags
-                  </div>
-                  {tags.map((t) => (
-                    <SelectItem key={t.name} value={t.name} className="text-xs">
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </>
-              )}
-            </SelectContent>
-          </Select>
+          <RefSelector
+            refs={refs}
+            currentRef={currentRef}
+            onRefChange={onRefChange}
+            repoState={repoState}
+            repoRelayEose={repoRelayEose}
+            loading={loading}
+          />
         ) : loading ? (
           <Skeleton className="h-8 w-28" />
         ) : null}

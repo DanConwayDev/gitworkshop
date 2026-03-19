@@ -76,7 +76,7 @@ export default function RepoAboutPage() {
         <div className="space-y-6">
           {/* State sync warning banner */}
           {repo.cloneUrls.length > 0 && (
-            <StateSyncWarning warning={gitData.warning} />
+            <StateSyncWarning warning={gitData.warning} pulling={pulling} />
           )}
 
           {/* Latest commit */}
@@ -239,8 +239,16 @@ export default function RepoAboutPage() {
 // State sync warning banner
 // ---------------------------------------------------------------------------
 
-function StateSyncWarning({ warning }: { warning: GitRepoWarning | null }) {
-  if (!warning) return null;
+function StateSyncWarning({
+  warning,
+  pulling,
+}: {
+  warning: GitRepoWarning | null;
+  /** Suppress warnings while data is still loading */
+  pulling: boolean;
+}) {
+  // Never show warnings while we're still fetching — the mismatch may resolve
+  if (!warning || pulling) return null;
 
   if (warning.kind === "state-commit-unavailable") {
     const shortState = warning.stateCommitId.slice(0, 8);
@@ -248,11 +256,11 @@ function StateSyncWarning({ warning }: { warning: GitRepoWarning | null }) {
       <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="space-y-0.5">
-          <p className="font-medium">State event commit unavailable</p>
+          <p className="font-medium">Signed commit not found on git server</p>
           <p className="text-xs text-amber-600/80 dark:text-amber-400/70">
-            The state event declares HEAD at{" "}
-            <code className="font-mono">{shortState}</code>, but this commit
-            could not be found on any git server. Showing the latest available
+            The maintainer signed commit{" "}
+            <code className="font-mono">{shortState}</code> as HEAD, but it
+            couldn't be found on any git server. Showing the latest available
             commit instead.
           </p>
         </div>
@@ -271,13 +279,13 @@ function StateSyncWarning({ warning }: { warning: GitRepoWarning | null }) {
       <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="space-y-0.5">
-          <p className="font-medium">State event is behind git server</p>
+          <p className="font-medium">Git server is ahead of signed state</p>
           <p className="text-xs text-amber-600/80 dark:text-amber-400/70">
-            The state event (published {stateAge}) declares HEAD at{" "}
-            <code className="font-mono">{shortState}</code>, but the git server
-            reports a newer HEAD at{" "}
-            <code className="font-mono">{shortGit}</code>. Showing the latest
-            commit from the git server.
+            The maintainer signed{" "}
+            <code className="font-mono">{shortState}</code> as HEAD ({stateAge}
+            ), but the git server has a newer commit{" "}
+            <code className="font-mono">{shortGit}</code>. This usually means a
+            push hasn't been signed yet.
           </p>
         </div>
       </div>
@@ -407,7 +415,7 @@ function LatestCommitCard({
               {commit.author.name} &middot; {relativeTime}
               {isConfirmedByState && (
                 <span className="ml-2 text-green-600 dark:text-green-400">
-                  &middot; confirmed by state event
+                  &middot; signed by maintainer
                 </span>
               )}
             </p>
