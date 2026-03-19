@@ -312,20 +312,6 @@ export default function RepoCodePage() {
 // Locator bar
 // ---------------------------------------------------------------------------
 
-/**
- * Compute the opacity of the staleness indicator based on how long ago we
- * last checked the git server. Returns a value between 0 and 1.
- */
-function stalenessOpacity(lastCheckedAt: number | null): number {
-  if (lastCheckedAt === null) return 0.35;
-  const ageS = Math.max(0, Math.floor(Date.now() / 1000) - lastCheckedAt);
-  if (ageS < 60) return 0;
-  if (ageS < 600) return 0.08 + (ageS - 60) * (0.12 / 540);
-  if (ageS < 3600) return 0.2 + (ageS - 600) * (0.2 / 3000);
-  if (ageS < 86400) return 0.4 + (ageS - 3600) * (0.3 / 82800);
-  return 0.7;
-}
-
 function LocatorBar({
   loading,
   refs,
@@ -356,28 +342,15 @@ function LocatorBar({
   const branches = refs.filter((r) => r.isBranch);
   const tags = refs.filter((r) => r.isTag);
 
-  const barOpacity = pulling ? 0.5 : stalenessOpacity(lastCheckedAt);
-  const showBar = pulling || barOpacity > 0;
-
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
-      {/* Staleness bar — thin line along the top edge */}
-      <div
-        className="h-0.5 w-full transition-opacity duration-700"
-        style={
-          showBar
-            ? {
-                backgroundColor: `hsl(var(--primary) / ${barOpacity})`,
-                ...(pulling
-                  ? { animation: "staleness-pulse 2s ease-in-out infinite" }
-                  : {}),
-              }
-            : { backgroundColor: "transparent" }
-        }
-      />
-
       {/* Top bar: branch selector + breadcrumb + pulling status */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 flex-wrap">
+      <div
+        className={cn(
+          "flex items-center gap-2 px-3 py-2 flex-wrap relative",
+          pulling ? "fetching-gradient" : "bg-muted/30",
+        )}
+      >
         {/* Branch/tag selector */}
         {refs.length > 0 ? (
           <Select value={currentRef} onValueChange={onRefChange}>
@@ -455,13 +428,20 @@ function LocatorBar({
           })}
         </div>
 
-        {/* Pulling indicator — right side */}
-        {pulling && (
+        {/* Pulling / last-checked indicator — right side */}
+        {pulling ? (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
             <Loader2 className="h-3 w-3 animate-spin" />
             Checking…
           </span>
-        )}
+        ) : lastCheckedAt ? (
+          <span className="text-xs text-muted-foreground/60 shrink-0">
+            checked{" "}
+            {formatDistanceToNow(new Date(lastCheckedAt * 1000), {
+              addSuffix: true,
+            })}
+          </span>
+        ) : null}
       </div>
 
       {/* Commit summary row */}

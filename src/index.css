@@ -186,6 +186,31 @@
   @apply text-sm leading-relaxed break-words;
 }
 
+/* -------------------------------------------------------------------------
+   fetching-gradient — animated shimmer for the locator bar while fetching
+   ------------------------------------------------------------------------- */
+.fetching-gradient {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted) / 0.3) 0%,
+    hsl(var(--primary) / 0.08) 30%,
+    hsl(var(--primary) / 0.15) 50%,
+    hsl(var(--primary) / 0.08) 70%,
+    hsl(var(--muted) / 0.3) 100%
+  );
+  background-size: 200% 100%;
+  animation: fetching-shimmer 2s ease-in-out infinite;
+}
+
+@keyframes fetching-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
 /* Ensure hljs code blocks respect our border-radius */
 .markdown-content pre code.hljs {
   @apply rounded-lg text-sm;
