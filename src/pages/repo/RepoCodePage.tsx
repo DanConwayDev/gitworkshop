@@ -2,9 +2,12 @@ import { lazy, Suspense, useMemo, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useRepoContext } from "./RepoContext";
 import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
+import { useGitRepoData } from "@/hooks/useGitRepoData";
+import { UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -24,6 +27,12 @@ import {
   AlertCircle,
   Loader2,
   ArrowLeft,
+  Users,
+  Radio,
+  Globe,
+  ExternalLink,
+  Copy,
+  Check,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -94,13 +103,34 @@ function isMarkdownFile(filename: string): boolean {
 // ---------------------------------------------------------------------------
 
 export default function RepoCodePage() {
-  const { cloneUrls, repoState, treeRefAndPath, repoId } = useRepoContext();
+  const {
+    cloneUrls,
+    repoState,
+    repoRelayEose,
+    treeRefAndPath,
+    repoId,
+    resolved,
+  } = useRepoContext();
   const navigate = useNavigate();
+  const repo = resolved?.repo;
 
   const explorer = useGitExplorer(cloneUrls, {
     refAndPath: treeRefAndPath,
     knownHeadCommit: repoState?.headCommitId,
   });
+
+  // Git repo data for the pulling signal (shares the same underlying service
+  // entry as useGitExplorer via clone URLs — no duplicate fetches).
+  const gitData = useGitRepoData(cloneUrls, {
+    knownHeadCommit: repoState?.headCommitId,
+    stateRefs: repoState?.refs,
+    stateCreatedAt: repoState ? repoState.event.created_at : undefined,
+  });
+
+  // Combined "pulling" signal: true while either Nostr relay EOSE is pending
+  // or the git server fetch is in flight with stale data already shown.
+  const pulling =
+    cloneUrls.length > 0 ? !repoRelayEose || gitData.pulling : false;
 
   // Build the base URL for this repo (without /tree/...)
   const basePath = useMemo(() => {
@@ -128,13 +158,16 @@ export default function RepoCodePage() {
     ? currentPath.split("/").filter(Boolean)
     : [];
 
+  // Show the sidebar when at the repo root (no sub-path within the tree)
+  const isAtRoot = !treeRefAndPath || pathSegments.length === 0;
+
   // Determine if we should show a README below the file tree
   const readmeEntry = explorer.fileTree?.find(
     (f) => f.type === "file" && f.name.toLowerCase().startsWith("readme"),
   );
 
-  return (
-    <div className="container max-w-screen-xl px-4 md:px-8 py-6 space-y-4">
+  const mainContent = (
+    <div className="space-y-4">
       {/* State sync warning */}
       {repoState === null && cloneUrls.length > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
@@ -172,6 +205,8 @@ export default function RepoCodePage() {
             headCommit={explorer.headCommit}
             commitHash={explorer.commitHash}
             repoId={repoId}
+            pulling={pulling}
+            lastCheckedAt={gitData.lastCheckedAt}
           />
 
           {/* Error state */}
@@ -258,11 +293,38 @@ export default function RepoCodePage() {
       )}
     </div>
   );
+
+  return (
+    <div className="container max-w-screen-xl px-4 md:px-8 py-6">
+      {isAtRoot && repo ? (
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+          {mainContent}
+          <RepoSidebar repo={repo} />
+        </div>
+      ) : (
+        mainContent
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Locator bar
 // ---------------------------------------------------------------------------
+
+/**
+ * Compute the opacity of the staleness indicator based on how long ago we
+ * last checked the git server. Returns a value between 0 and 1.
+ */
+function stalenessOpacity(lastCheckedAt: number | null): number {
+  if (lastCheckedAt === null) return 0.35;
+  const ageS = Math.max(0, Math.floor(Date.now() / 1000) - lastCheckedAt);
+  if (ageS < 60) return 0;
+  if (ageS < 600) return 0.08 + (ageS - 60) * (0.12 / 540);
+  if (ageS < 3600) return 0.2 + (ageS - 600) * (0.2 / 3000);
+  if (ageS < 86400) return 0.4 + (ageS - 3600) * (0.3 / 82800);
+  return 0.7;
+}
 
 function LocatorBar({
   loading,
@@ -275,6 +337,8 @@ function LocatorBar({
   headCommit,
   commitHash,
   repoId,
+  pulling,
+  lastCheckedAt,
 }: {
   loading: boolean;
   refs: ReturnType<typeof useGitExplorer>["refs"];
@@ -286,13 +350,33 @@ function LocatorBar({
   headCommit: ReturnType<typeof useGitExplorer>["headCommit"];
   commitHash: string | null;
   repoId: string;
+  pulling: boolean;
+  lastCheckedAt: number | null;
 }) {
   const branches = refs.filter((r) => r.isBranch);
   const tags = refs.filter((r) => r.isTag);
 
+  const barOpacity = pulling ? 0.5 : stalenessOpacity(lastCheckedAt);
+  const showBar = pulling || barOpacity > 0;
+
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
-      {/* Top bar: branch selector + breadcrumb */}
+      {/* Staleness bar — thin line along the top edge */}
+      <div
+        className="h-0.5 w-full transition-opacity duration-700"
+        style={
+          showBar
+            ? {
+                backgroundColor: `hsl(var(--primary) / ${barOpacity})`,
+                ...(pulling
+                  ? { animation: "staleness-pulse 2s ease-in-out infinite" }
+                  : {}),
+              }
+            : { backgroundColor: "transparent" }
+        }
+      />
+
+      {/* Top bar: branch selector + breadcrumb + pulling status */}
       <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 flex-wrap">
         {/* Branch/tag selector */}
         {refs.length > 0 ? (
@@ -370,6 +454,14 @@ function LocatorBar({
             );
           })}
         </div>
+
+        {/* Pulling indicator — right side */}
+        {pulling && (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Checking…
+          </span>
+        )}
       </div>
 
       {/* Commit summary row */}
@@ -541,6 +633,173 @@ function FileTreeRow({
         </Badge>
       )}
     </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Repo sidebar (shown at root alongside file tree, GitHub-style)
+// ---------------------------------------------------------------------------
+
+import type { ResolvedRepo } from "@/lib/nip34";
+
+function RepoSidebar({ repo }: { repo: ResolvedRepo }) {
+  return (
+    <div className="space-y-4">
+      {/* Maintainers */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            Maintainers
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {repo.maintainerSet.map((pk) => (
+            <UserLink
+              key={pk}
+              pubkey={pk}
+              avatarSize="md"
+              nameClassName="text-sm"
+            />
+          ))}
+          {repo.pendingMaintainers.length > 0 && (
+            <>
+              <Separator />
+              <p className="text-xs text-muted-foreground">
+                Pending (no announcement)
+              </p>
+              {repo.pendingMaintainers.map((pk) => (
+                <UserLink
+                  key={pk}
+                  pubkey={pk}
+                  avatarSize="sm"
+                  nameClassName="text-xs text-muted-foreground"
+                />
+              ))}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Topics */}
+      {repo.labels.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              Topics
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-1.5">
+              {repo.labels.map((label) => (
+                <Badge key={label} variant="secondary" className="text-xs">
+                  {label}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Clone URLs */}
+      {repo.cloneUrls.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-muted-foreground" />
+              Clone
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {repo.cloneUrls.map((url) => (
+              <CloneUrlRow key={url} url={url} />
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Web URLs */}
+      {repo.webUrls.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              Web
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {repo.webUrls.map((url) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                {url}
+              </a>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Relays */}
+      {repo.relays.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Radio className="h-4 w-4 text-muted-foreground" />
+              Relays
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1.5">
+              {repo.relays.map((relay) => (
+                <p
+                  key={relay}
+                  className="text-xs text-muted-foreground font-mono truncate"
+                  title={relay}
+                >
+                  {relay}
+                </p>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function CloneUrlRow({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+      <code className="flex-1 text-xs font-mono truncate text-foreground/80">
+        {url}
+      </code>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 shrink-0"
+        onClick={handleCopy}
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-green-500" />
+        ) : (
+          <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </Button>
+    </div>
   );
 }
 

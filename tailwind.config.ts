@@ -87,16 +87,15 @@ export default {
             height: "0",
           },
         },
-        "indeterminate-bar": {
-          "0%": { transform: "translateX(-100%) scaleX(0.3)" },
-          "50%": { transform: "translateX(50%) scaleX(0.6)" },
-          "100%": { transform: "translateX(200%) scaleX(0.3)" },
+        "staleness-pulse": {
+          "0%, 100%": { opacity: "0.4" },
+          "50%": { opacity: "1" },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "indeterminate-bar": "indeterminate-bar 1.6s ease-in-out infinite",
+        "staleness-pulse": "staleness-pulse 2s ease-in-out infinite",
       },
     },
   },

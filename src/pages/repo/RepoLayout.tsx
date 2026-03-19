@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
 import { useResolvedRepository } from "@/hooks/useResolvedRepository";
-import RepoAboutPage from "./RepoAboutPage";
 import RepoIssuesPage from "./RepoIssuesPage";
 import RepoPRsPage from "./RepoPRsPage";
 import RepoCodePage from "./RepoCodePage";
@@ -25,7 +24,6 @@ import {
   GitBranch,
   ExternalLink,
   ArrowLeft,
-  Info,
   CircleDot,
   GitPullRequest,
   AlertCircle,
@@ -234,20 +232,21 @@ function RepoLayoutResolved({
     return full;
   }, [splat]);
 
-  const isCodeTab = location.pathname.startsWith(`${basePath}/tree`);
+  const isCodeTab =
+    location.pathname.startsWith(`${basePath}/tree`) ||
+    location.pathname === basePath ||
+    location.pathname === `${basePath}/`;
   const isCommitsTab =
     location.pathname.startsWith(`${basePath}/commits`) ||
     location.pathname.startsWith(`${basePath}/commit`);
   const isIssuesTab = location.pathname.startsWith(`${basePath}/issues`);
   const isPRsTab = location.pathname.startsWith(`${basePath}/prs`);
-  const isAboutTab = !isCodeTab && !isCommitsTab && !isIssuesTab && !isPRsTab;
 
   // Determine which sub-page to render from the splat segments.
   const { subPage, issueId, prId, treeRefAndPath, commitId, commitsRef } =
     useMemo((): {
       subPage:
         | "code"
-        | "about"
         | "issues"
         | "issue"
         | "prs"
@@ -301,7 +300,7 @@ function RepoLayoutResolved({
         return { subPage: "issues" };
       }
 
-      return { subPage: "about" };
+      return { subPage: "code" };
     }, [splat]);
 
   const cloneUrls = repo?.cloneUrls ?? [];
@@ -415,7 +414,7 @@ function RepoLayoutResolved({
           {/* Tab navigation */}
           <nav className="flex gap-1 -mb-px">
             <TabLink
-              to={`${basePath}/tree`}
+              to={basePath}
               active={isCodeTab}
               icon={<Code2 className="h-4 w-4" />}
               label="Code"
@@ -444,12 +443,6 @@ function RepoLayoutResolved({
               label="PRs"
               count={openPRCount}
             />
-            <TabLink
-              to={basePath}
-              active={isAboutTab}
-              icon={<Info className="h-4 w-4" />}
-              label="About"
-            />
           </nav>
         </div>
       </div>
@@ -471,9 +464,7 @@ function RepoLayoutResolved({
             <PRPage />
           ) : subPage === "prs" ? (
             <RepoPRsPage />
-          ) : (
-            <RepoAboutPage />
-          )}
+          ) : null}
         </RepoContext.Provider>
       ) : (
         <div className="container max-w-screen-xl px-4 md:px-8 py-6">

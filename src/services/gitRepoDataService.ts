@@ -100,6 +100,11 @@ export interface GitRepoData {
   defaultBranch: string | null;
   urlInfoRefs: Record<string, UrlInfoRefsResult>;
   warning: GitRepoWarning | null;
+  /**
+   * Unix timestamp (seconds) of the last time a git-server fetch completed
+   * successfully. `null` if no fetch has completed yet.
+   */
+  lastCheckedAt: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +302,7 @@ const INITIAL_STATE: GitRepoData = {
   defaultBranch: null,
   urlInfoRefs: {},
   warning: null,
+  lastCheckedAt: null,
 };
 
 type Subscriber = (state: GitRepoData) => void;
@@ -816,7 +822,11 @@ class GitRepoDataEntry {
             this.fetchedOnce = true;
 
             if (!signal.aborted && displayResult) {
-              // Success — record the full ref snapshot we fetched and reset backoff.
+              // Success — record the timestamp and full ref snapshot we fetched,
+              // and reset backoff.
+              const checkedAt = Math.floor(Date.now() / 1000);
+              this.setState((prev) => ({ ...prev, lastCheckedAt: checkedAt }));
+
               // Build lastFetchedRefs from the infoRefs results so any ref change
               // (not just HEAD) will be detected on the next state event.
               const fetchedRefs: Record<string, string> = {};

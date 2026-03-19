@@ -64,6 +64,7 @@ export function useGitRepoData(
     defaultBranch: null,
     urlInfoRefs: {},
     warning: null,
+    lastCheckedAt: null,
   }));
 
   // Subscribe to the service — re-subscribe when clone URLs change
@@ -79,6 +80,7 @@ export function useGitRepoData(
         defaultBranch: null,
         urlInfoRefs: {},
         warning: null,
+        lastCheckedAt: null,
       });
       return;
     }

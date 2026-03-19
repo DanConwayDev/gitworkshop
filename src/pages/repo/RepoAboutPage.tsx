@@ -18,7 +18,6 @@ import {
   GitCommit,
   BookOpen,
   AlertCircle,
-  Loader2,
   AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -47,10 +46,6 @@ export default function RepoAboutPage() {
     repo && repo.cloneUrls.length > 0
       ? !repoRelayEose || gitData.pulling
       : false;
-
-  // Staleness: the state event's created_at tells us when the last `ngit push`
-  // was published. Use it as the "last updated" timestamp.
-  const lastUpdatedAt = repoState?.event.created_at ?? null;
 
   useSeoMeta({
     title: repo ? `${repo.name} - ngit` : "Repository - ngit",
@@ -90,7 +85,6 @@ export default function RepoAboutPage() {
               gitData={gitData}
               repoState={repoState}
               pulling={pulling}
-              lastUpdatedAt={lastUpdatedAt}
             />
           )}
 
@@ -298,35 +292,43 @@ function StateSyncWarning({ warning }: { warning: GitRepoWarning | null }) {
 // ---------------------------------------------------------------------------
 
 /**
- * How old a state event must be (in seconds) before we show the staleness
- * label at full opacity. Under this threshold it's dimmed — very recent
- * pushes don't need a prominent "updated X seconds ago" label.
+ * Compute the opacity of the staleness top-bar based on how long ago we last
+ * checked the git server. Returns a value between 0 and 1.
+ *
+ * - Just checked (< 1 min): 0 (invisible)
+ * - 1 min – 10 min: 0.08 – 0.2 (barely visible)
+ * - 10 min – 1 hour: 0.2 – 0.4
+ * - 1 hour – 1 day: 0.4 – 0.7
+ * - > 1 day: 0.7
  */
-const STALENESS_PROMINENT_THRESHOLD_S = 60 * 60; // 1 hour
+function stalenessOpacity(lastCheckedAt: number | null): number {
+  if (lastCheckedAt === null) return 0.35; // never checked — moderate
+  const ageS = Math.max(0, Math.floor(Date.now() / 1000) - lastCheckedAt);
+  if (ageS < 60) return 0;
+  if (ageS < 600) return 0.08 + (ageS - 60) * (0.12 / 540);
+  if (ageS < 3600) return 0.2 + (ageS - 600) * (0.2 / 3000);
+  if (ageS < 86400) return 0.4 + (ageS - 3600) * (0.3 / 82800);
+  return 0.7;
+}
 
 function LatestCommitCard({
   gitData,
   repoState,
   pulling,
-  lastUpdatedAt,
 }: {
   gitData: ReturnType<typeof useGitRepoData>;
   repoState: RepositoryState | null | undefined;
   /** True while Nostr EOSE is pending or a git server re-fetch is in flight. */
   pulling: boolean;
-  /** Unix timestamp (seconds) of the last state event, or null if unknown. */
-  lastUpdatedAt: number | null;
-  // repoState is used only for the "confirmed by state event" badge.
-  // The branch name comes from gitData.defaultBranch (git server's HEAD ref),
-  // not from repoState.headBranch, to avoid showing a feature branch when the
-  // maintainer ran `ngit sync` while not on the default branch.
 }) {
-  if (gitData.loading) {
+  // Only show the skeleton when we have no commit data at all.
+  // When stale cached data is available (pulling=true, loading=true) we skip
+  // the skeleton and show the cached commit with the staleness bar instead.
+  if (!gitData.latestCommit && gitData.loading) {
     return (
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center gap-3">
-            <Loader2 className="h-4 w-4 text-muted-foreground animate-spin shrink-0" />
             <Skeleton className="h-4 w-64" />
           </div>
         </CardContent>
@@ -350,58 +352,35 @@ function LatestCommitCard({
     stateHeadCommit !== undefined &&
     (commit.hash.startsWith(stateHeadCommit) ||
       stateHeadCommit.startsWith(commit.hash));
-  // Use the default branch from the git server, not the state event's HEAD
-  // branch (which may be a feature branch if the maintainer ran `ngit sync`
-  // while on a non-default branch).
   const defaultBranch = gitData.defaultBranch;
 
-  // Staleness label: how long ago the last `ngit push` was published.
-  const nowS = Math.floor(Date.now() / 1000);
-  const ageS = lastUpdatedAt !== null ? nowS - lastUpdatedAt : null;
-  const stalenessLabel =
-    lastUpdatedAt !== null
-      ? `Updated ${formatDistanceToNow(new Date(lastUpdatedAt * 1000), { addSuffix: true })}`
-      : null;
-  // Dim the label when the push was very recent — it's not interesting yet.
-  const stalenessProminent =
-    ageS !== null && ageS > STALENESS_PROMINENT_THRESHOLD_S;
+  // Top-edge staleness bar: opacity correlates to how long ago we last checked.
+  // While actively pulling, the bar pulses at moderate opacity.
+  const barOpacity = pulling ? 0.5 : stalenessOpacity(gitData.lastCheckedAt);
+  const showBar = pulling || barOpacity > 0;
 
   return (
     <Card className="overflow-hidden">
-      {/* Indeterminate progress bar — visible only while pulling */}
-      <div className="relative h-0.5 w-full overflow-hidden bg-transparent">
-        {pulling && (
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="h-full w-full bg-primary/30 absolute inset-0" />
-            <div className="h-full w-1/2 bg-primary absolute animate-indeterminate-bar" />
-          </div>
-        )}
-      </div>
+      {/* Thin top-edge bar — opacity fades with staleness, pulses while pulling */}
+      <div
+        className="h-0.5 w-full transition-opacity duration-700"
+        style={
+          showBar
+            ? {
+                backgroundColor: `hsl(var(--primary) / ${barOpacity})`,
+                ...(pulling
+                  ? { animation: "staleness-pulse 2s ease-in-out infinite" }
+                  : {}),
+              }
+            : { backgroundColor: "transparent" }
+        }
+      />
 
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <GitCommit className="h-4 w-4 text-muted-foreground" />
           Latest commit
           <div className="ml-auto flex items-center gap-2">
-            {/* Pulling badge */}
-            {pulling && (
-              <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Pulling…
-              </span>
-            )}
-            {/* Staleness label */}
-            {stalenessLabel && (
-              <span
-                className={`text-xs font-normal transition-opacity ${
-                  stalenessProminent
-                    ? "text-muted-foreground"
-                    : "text-muted-foreground/50"
-                }`}
-              >
-                {stalenessLabel}
-              </span>
-            )}
             {/* Branch name */}
             {defaultBranch && (
               <span className="text-xs font-normal text-muted-foreground flex items-center gap-1">
