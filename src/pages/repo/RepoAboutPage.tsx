@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { useGitRepoData } from "@/hooks/useGitRepoData";
+import { useGitRepoData, type GitRepoWarning } from "@/hooks/useGitRepoData";
 import { useRepositoryState } from "@/hooks/useRepositoryState";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import { formatDistanceToNow } from "date-fns";
@@ -40,7 +40,10 @@ export default function RepoAboutPage() {
     resolved?.repoRelayGroup,
   );
 
-  const gitData = useGitRepoData(repo?.cloneUrls ?? []);
+  const gitData = useGitRepoData(repo?.cloneUrls ?? [], {
+    knownHeadCommit: repoState?.headCommitId,
+    stateCreatedAt: repoState ? repoState.event.created_at : undefined,
+  });
 
   useSeoMeta({
     title: repo ? `${repo.name} - ngit` : "Repository - ngit",
@@ -71,7 +74,7 @@ export default function RepoAboutPage() {
         <div className="space-y-6">
           {/* State sync warning banner */}
           {repo.cloneUrls.length > 0 && (
-            <StateSyncWarning gitData={gitData} repoState={repoState} />
+            <StateSyncWarning warning={gitData.warning} />
           )}
 
           {/* Latest commit */}
@@ -230,48 +233,52 @@ export default function RepoAboutPage() {
 // State sync warning banner
 // ---------------------------------------------------------------------------
 
-function StateSyncWarning({
-  gitData,
-  repoState,
-}: {
-  gitData: ReturnType<typeof useGitRepoData>;
-  repoState: RepositoryState | null | undefined;
-}) {
-  // No state event exists — nothing to compare against
-  if (repoState === null || repoState === undefined) return null;
-  // Still loading git data or state — don't show a false warning
-  if (gitData.loading || !gitData.latestCommit) return null;
-  // No HEAD commit declared in the state event
-  const stateHeadCommit = repoState.headCommitId;
-  if (!stateHeadCommit) return null;
+function StateSyncWarning({ warning }: { warning: GitRepoWarning | null }) {
+  if (!warning) return null;
 
-  const gitHeadCommit = gitData.latestCommit.hash;
-  // Commits match — in sync
-  if (
-    gitHeadCommit.startsWith(stateHeadCommit) ||
-    stateHeadCommit.startsWith(gitHeadCommit)
-  )
-    return null;
-
-  const branch = repoState.headBranch ?? repoState.headRef ?? "HEAD";
-  const shortState = stateHeadCommit.slice(0, 8);
-  const shortGit = gitHeadCommit.slice(0, 8);
-
-  return (
-    <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-      <div className="space-y-0.5">
-        <p className="font-medium">Repository out of sync with state event</p>
-        <p className="text-xs text-amber-600/80 dark:text-amber-400/70">
-          The state event declares <code className="font-mono">{branch}</code>{" "}
-          at <code className="font-mono">{shortState}</code>, but the git server
-          reports HEAD at <code className="font-mono">{shortGit}</code>. The
-          README and latest commit shown below reflect the git server&apos;s
-          current state.
-        </p>
+  if (warning.kind === "state-commit-unavailable") {
+    const shortState = warning.stateCommitId.slice(0, 8);
+    return (
+      <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="space-y-0.5">
+          <p className="font-medium">State event commit unavailable</p>
+          <p className="text-xs text-amber-600/80 dark:text-amber-400/70">
+            The state event declares HEAD at{" "}
+            <code className="font-mono">{shortState}</code>, but this commit
+            could not be found on any git server. Showing the latest available
+            commit instead.
+          </p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (warning.kind === "state-behind-git") {
+    const shortState = warning.stateCommitId.slice(0, 8);
+    const shortGit = warning.gitCommitId.slice(0, 8);
+    const stateAge = formatDistanceToNow(
+      new Date(warning.stateCreatedAt * 1000),
+      { addSuffix: true },
+    );
+    return (
+      <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="space-y-0.5">
+          <p className="font-medium">State event is behind git server</p>
+          <p className="text-xs text-amber-600/80 dark:text-amber-400/70">
+            The state event (published {stateAge}) declares HEAD at{" "}
+            <code className="font-mono">{shortState}</code>, but the git server
+            reports a newer HEAD at{" "}
+            <code className="font-mono">{shortGit}</code>. Showing the latest
+            commit from the git server.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +291,8 @@ function LatestCommitCard({
 }: {
   gitData: ReturnType<typeof useGitRepoData>;
   repoState: RepositoryState | null | undefined;
+  // repoState is used only for branch name and "confirmed" badge — warning
+  // logic has moved into useGitRepoData and is surfaced via gitData.warning.
 }) {
   if (gitData.loading) {
     return (
