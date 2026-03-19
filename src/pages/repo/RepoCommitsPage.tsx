@@ -3,30 +3,20 @@ import { Link, useNavigate } from "react-router-dom";
 import { useRepoContext } from "./RepoContext";
 import { useCommitHistory } from "@/hooks/useGitExplorer";
 import { useGitExplorer } from "@/hooks/useGitExplorer";
+import { useGitRepoData } from "@/hooks/useGitRepoData";
+import { RefSelector } from "@/components/RefSelector";
+import { GitServerStatus } from "@/components/GitServerStatus";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  AlertCircle,
-  GitCommit,
-  GitBranch,
-  Tag,
-  User,
-  Clock,
-} from "lucide-react";
+import { AlertCircle, GitCommit, User, Clock, Loader2 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import type { Commit } from "@fiatjaf/git-natural-api";
 
 export default function RepoCommitsPage() {
-  const { cloneUrls, repoState, commitsRef } = useRepoContext();
+  const { cloneUrls, repoState, repoRelayEose, commitsRef, resolved } =
+    useRepoContext();
   const navigate = useNavigate();
+  const repo = resolved?.repo;
 
   // Always fetch refs so we can populate the selector.
   // Pass commitsRef so the explorer resolves to the right commit hash.
@@ -34,6 +24,16 @@ export default function RepoCommitsPage() {
     refAndPath: commitsRef,
     knownHeadCommit: repoState?.headCommitId,
   });
+
+  // Git repo data for pulling signal + server status
+  const gitData = useGitRepoData(cloneUrls, {
+    knownHeadCommit: repoState?.headCommitId,
+    stateRefs: repoState?.refs,
+    stateCreatedAt: repoState ? repoState.event.created_at : undefined,
+  });
+
+  const pulling =
+    cloneUrls.length > 0 ? !repoRelayEose || gitData.pulling : false;
 
   const resolvedRef = explorer.resolvedRef ?? undefined;
 
@@ -45,9 +45,6 @@ export default function RepoCommitsPage() {
     const idx = pathname.indexOf("/commits");
     return idx !== -1 ? pathname.slice(0, idx) : pathname;
   }, []);
-
-  const branches = explorer.refs.filter((r) => r.isBranch);
-  const tags = explorer.refs.filter((r) => r.isTag);
 
   const handleRefChange = (newRef: string) => {
     navigate(`${basePath}/commits/${newRef}`);
@@ -70,53 +67,19 @@ export default function RepoCommitsPage() {
 
   return (
     <div className="container max-w-screen-xl px-4 md:px-8 py-6 space-y-4">
-      {/* Header: ref selector + label */}
+      {/* Header: "Commits on" + ref selector + checked status + server status */}
       <div className="flex items-center gap-3 flex-wrap">
         <GitCommit className="h-5 w-5 text-muted-foreground shrink-0" />
         <h2 className="text-lg font-semibold shrink-0">Commits on</h2>
         {explorer.refs.length > 0 ? (
-          <Select value={resolvedRef ?? ""} onValueChange={handleRefChange}>
-            <SelectTrigger className="h-8 w-auto min-w-[120px] max-w-[220px] text-xs gap-1.5">
-              <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <SelectValue placeholder="Select ref" />
-            </SelectTrigger>
-            <SelectContent>
-              {branches.length > 0 && (
-                <>
-                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                    <GitBranch className="h-3 w-3" />
-                    Branches
-                  </div>
-                  {branches.map((b) => (
-                    <SelectItem key={b.name} value={b.name} className="text-xs">
-                      {b.name}
-                      {b.isDefault && (
-                        <Badge
-                          variant="secondary"
-                          className="ml-2 text-[10px] h-4 px-1"
-                        >
-                          default
-                        </Badge>
-                      )}
-                    </SelectItem>
-                  ))}
-                </>
-              )}
-              {tags.length > 0 && (
-                <>
-                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5 mt-1">
-                    <Tag className="h-3 w-3" />
-                    Tags
-                  </div>
-                  {tags.map((t) => (
-                    <SelectItem key={t.name} value={t.name} className="text-xs">
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </>
-              )}
-            </SelectContent>
-          </Select>
+          <RefSelector
+            refs={explorer.refs}
+            currentRef={resolvedRef ?? ""}
+            onRefChange={handleRefChange}
+            repoState={repoState}
+            repoRelayEose={repoRelayEose}
+            loading={explorer.loading}
+          />
         ) : explorer.loading ? (
           <Skeleton className="h-8 w-28" />
         ) : resolvedRef ? (
@@ -124,6 +87,42 @@ export default function RepoCommitsPage() {
             {resolvedRef}
           </code>
         ) : null}
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Checked status */}
+        {pulling ? (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Checking…
+          </span>
+        ) : repoState ? (
+          <span className="text-xs text-muted-foreground/60 shrink-0 whitespace-nowrap">
+            checked just now
+          </span>
+        ) : gitData.lastCheckedAt ? (
+          <span className="text-xs text-muted-foreground/60 shrink-0 whitespace-nowrap">
+            checked{" "}
+            {formatDistanceToNow(new Date(gitData.lastCheckedAt * 1000), {
+              addSuffix: true,
+            })}
+          </span>
+        ) : null}
+
+        {/* Git server status */}
+        {cloneUrls.length > 0 && (
+          <GitServerStatus
+            currentRef={resolvedRef ?? ""}
+            refs={explorer.refs}
+            repoState={repoState}
+            repoRelayEose={repoRelayEose}
+            urlInfoRefs={gitData.urlInfoRefs}
+            cloneUrls={cloneUrls}
+            graspCloneUrls={repo?.graspCloneUrls ?? []}
+            additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
+          />
+        )}
       </div>
 
       {/* Error */}
