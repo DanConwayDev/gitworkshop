@@ -583,6 +583,12 @@ function FileContentViewer({
 // ---------------------------------------------------------------------------
 
 import { getObject, getObjectByPath } from "@fiatjaf/git-natural-api";
+import {
+  getCachedText,
+  cacheText,
+  getCachedBlob,
+  cacheBlob,
+} from "@/services/gitObjectCache";
 import { BookOpen } from "lucide-react";
 
 function ReadmeViewer({
@@ -602,6 +608,14 @@ function ReadmeViewer({
   useEffect(() => {
     if (!commitHash || cloneUrls.length === 0) return;
 
+    // Check text cache first (synchronous, no loading flash on remount)
+    const cachedText = getCachedText(commitHash, readmeName);
+    if (cachedText !== undefined) {
+      setContent(cachedText);
+      setLoading(false);
+      return;
+    }
+
     const abort = new AbortController();
     setLoading(true);
     setContent(null);
@@ -610,9 +624,17 @@ function ReadmeViewer({
       cloneUrls.map(async (url) => {
         const entry = await getObjectByPath(url, commitHash, readmePath);
         if (!entry || entry.isDir) throw new Error("not a file");
-        const obj = await getObject(url, entry.hash);
-        if (!obj) throw new Error("blob missing");
-        return new TextDecoder("utf-8", { fatal: false }).decode(obj.data);
+        // Check blob cache before hitting the network
+        let bytes = await getCachedBlob(entry.hash);
+        if (!bytes) {
+          const obj = await getObject(url, entry.hash);
+          if (!obj) throw new Error("blob missing");
+          cacheBlob(entry.hash, obj.data);
+          bytes = obj.data;
+        }
+        const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+        cacheText(commitHash, readmeName, text);
+        return text;
       }),
     )
       .then((text) => {
@@ -626,7 +648,7 @@ function ReadmeViewer({
       });
 
     return () => abort.abort();
-  }, [cloneUrls.join(","), commitHash, readmePath]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cloneUrls.join(","), commitHash, readmePath, readmeName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (

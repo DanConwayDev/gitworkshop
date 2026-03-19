@@ -208,6 +208,35 @@ export function cacheText(
 }
 
 /**
+ * Synchronous memory-only peek for infoRefs.
+ * Returns the cached value if present and within TTL, without touching IDB.
+ * Use this for zero-latency checks (e.g. avoiding a loading flash on remount).
+ */
+export function peekCachedInfoRefs(
+  url: string,
+): InfoRefsUploadPackResponse | undefined {
+  const mem = memInfoRefs.get(url);
+  if (mem && Date.now() - mem.fetchedAt < INFO_REFS_TTL_MS) return mem.info;
+  return undefined;
+}
+
+/**
+ * Synchronous memory-only peek for a commit.
+ * Returns the cached commit if present in the L1 cache, without touching IDB.
+ */
+export function peekCachedCommit(hash: string): Commit | undefined {
+  return memCommits.get(hash);
+}
+
+/**
+ * Synchronous memory-only peek for a blob.
+ * Returns the raw bytes if present in the L1 cache, without touching IDB.
+ */
+export function peekCachedBlob(hash: string): Uint8Array | undefined {
+  return memBlobs.get(hash);
+}
+
+/**
  * Get cached infoRefs for a clone URL, if still within TTL.
  * Returns undefined if missing or stale.
  */

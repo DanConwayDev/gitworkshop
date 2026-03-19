@@ -11,10 +11,13 @@ import {
 import {
   getCachedInfoRefs,
   cacheInfoRefs,
+  peekCachedInfoRefs,
   getCachedBlob,
   cacheBlob,
+  peekCachedBlob,
   getCachedCommit,
   cacheCommit,
+  peekCachedCommit,
   getCachedTree,
   cacheTree,
 } from "@/services/gitObjectCache";
@@ -265,6 +268,123 @@ export function useGitExplorer(
     abortRef.current = abort;
     const signal = abort.signal;
 
+    // -----------------------------------------------------------------------
+    // Fast path: if infoRefs + tree are already in the L1 memory cache we can
+    // render immediately without a loading flash.  This is the common case on
+    // remount (tab switch, navigation back).
+    // -----------------------------------------------------------------------
+    const pathSegments = path ? path.split("/").filter(Boolean) : [];
+    const nestLimit = pathSegments.length + 1;
+
+    const fastInfo = cloneUrls
+      .map((u) => ({ url: u, info: peekCachedInfoRefs(u) }))
+      .find((r) => r.info !== undefined) as
+      | { url: string; info: InfoRefsUploadPackResponse }
+      | undefined;
+
+    if (fastInfo) {
+      const fastParsedRefs = parseRefs(fastInfo.info);
+      let fastCommitHash: string | undefined;
+      let fastResolvedRef: string | undefined;
+
+      if (ref) {
+        const resolved = resolveRefString(ref, fastInfo.info);
+        if (resolved) {
+          fastCommitHash = resolved.hash;
+          fastResolvedRef = resolved.refPath.startsWith("refs/heads/")
+            ? resolved.refPath.replace("refs/heads/", "")
+            : resolved.refPath.startsWith("refs/tags/")
+              ? resolved.refPath.replace("refs/tags/", "")
+              : resolved.refPath;
+        }
+      } else if (knownHeadCommit) {
+        fastCommitHash = knownHeadCommit;
+        const matchingRef = fastParsedRefs.find(
+          (r) => r.hash === knownHeadCommit && r.isBranch,
+        );
+        fastResolvedRef = matchingRef?.name ?? knownHeadCommit.slice(0, 8);
+      } else {
+        const headRef = fastInfo.info.symrefs["HEAD"];
+        const defaultRef = fastParsedRefs.find(
+          (r) => r.isDefault && r.isBranch,
+        );
+        if (defaultRef) {
+          fastCommitHash = headRef
+            ? fastInfo.info.refs[headRef]
+            : defaultRef.hash;
+          fastResolvedRef = defaultRef.name;
+        }
+      }
+
+      if (fastCommitHash && fastResolvedRef) {
+        const fastTree = getCachedTree(fastCommitHash, nestLimit);
+        if (fastTree) {
+          // Tree is in memory — attempt a fully-synchronous render.
+          const fastHeadCommit = peekCachedCommit(fastCommitHash) ?? null;
+          let fastHandled = false;
+
+          if (pathSegments.length === 0) {
+            setState({
+              loading: false,
+              error: null,
+              refs: fastParsedRefs,
+              resolvedRef: fastResolvedRef,
+              commitHash: fastCommitHash,
+              headCommit: fastHeadCommit,
+              fileTree: treeToEntries(fastTree, ""),
+              fileContent: null,
+              isDirectory: true,
+              pathExists: true,
+            });
+            fastHandled = true;
+          } else {
+            const subTree = navigateTree(fastTree, pathSegments);
+            if (subTree) {
+              setState({
+                loading: false,
+                error: null,
+                refs: fastParsedRefs,
+                resolvedRef: fastResolvedRef,
+                commitHash: fastCommitHash,
+                headCommit: fastHeadCommit,
+                fileTree: treeToEntries(subTree, path),
+                fileContent: null,
+                isDirectory: true,
+                pathExists: true,
+              });
+              fastHandled = true;
+            } else {
+              const fileHash = findFileInTree(fastTree, pathSegments);
+              if (fileHash) {
+                const cachedBlob = peekCachedBlob(fileHash);
+                if (cachedBlob !== undefined) {
+                  const content = new TextDecoder("utf-8", {
+                    fatal: false,
+                  }).decode(cachedBlob);
+                  setState({
+                    loading: false,
+                    error: null,
+                    refs: fastParsedRefs,
+                    resolvedRef: fastResolvedRef,
+                    commitHash: fastCommitHash,
+                    headCommit: fastHeadCommit,
+                    fileTree: null,
+                    fileContent: content,
+                    isDirectory: false,
+                    pathExists: true,
+                  });
+                  fastHandled = true;
+                }
+              }
+            }
+          }
+
+          // Fast path succeeded — skip the slow path entirely.
+          if (fastHandled) return;
+        }
+      }
+    }
+
     setState({
       loading: true,
       error: null,
@@ -360,9 +480,8 @@ export function useGitExplorer(
 
     // -----------------------------------------------------------------------
     // Phase 2: Fetch the directory tree (depth = path depth + 1 for listing)
+    // pathSegments / nestLimit already declared in the fast-path block above.
     // -----------------------------------------------------------------------
-    const pathSegments = path ? path.split("/").filter(Boolean) : [];
-    const nestLimit = pathSegments.length + 1;
 
     let tree: Tree;
 
