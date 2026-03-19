@@ -355,6 +355,8 @@ function GitServerPanel({
   currentRef,
   matchingCount,
   totalCount,
+  graspCloneUrls,
+  additionalGitServerUrls,
 }: {
   serverStatuses: ServerStatus[];
   repoState: RepositoryState | null | undefined;
@@ -362,16 +364,29 @@ function GitServerPanel({
   currentRef: string;
   matchingCount: number;
   totalCount: number;
+  graspCloneUrls: string[];
+  additionalGitServerUrls: string[];
 }) {
   const hasState =
     repoState !== null && repoState !== undefined && repoRelayEose;
   const noState = repoRelayEose && repoState === null;
+  const usesGrasp = graspCloneUrls.length > 0;
+
+  // Build a human-readable header title
+  const headerTitle = (() => {
+    if (!usesGrasp) return "Git Servers";
+    if (additionalGitServerUrls.length === 0) return "Grasp Servers";
+    return "Grasp & Git Servers";
+  })();
 
   return (
     <div className="w-[300px] p-0">
       {/* Header */}
       <div className="px-3 py-2.5 border-b border-border/40">
-        <p className="text-xs font-semibold text-foreground">Git Servers</p>
+        <div className="flex items-center gap-1.5">
+          {usesGrasp && <GraspLogo className="h-3.5 w-3.5 shrink-0" />}
+          <p className="text-xs font-semibold text-foreground">{headerTitle}</p>
+        </div>
         <p className="text-[11px] text-muted-foreground mt-0.5">
           {hasState ? (
             <>
@@ -399,6 +414,7 @@ function GitServerPanel({
       <div className="py-1">
         {serverStatuses.map((s) => {
           const viaProxy = urlUsesProxy(s.url);
+          const isGrasp = graspCloneUrls.includes(s.url);
           return (
             <div
               key={s.url}
@@ -413,6 +429,25 @@ function GitServerPanel({
                   >
                     {s.label}
                   </p>
+                  {isGrasp &&
+                    usesGrasp &&
+                    additionalGitServerUrls.length > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="shrink-0 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 cursor-default leading-none">
+                            <GraspLogo className="h-2.5 w-2.5" />
+                            grasp
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="right"
+                          className="text-xs max-w-[220px]"
+                          sideOffset={6}
+                        >
+                          Hosted on a Grasp server
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   {viaProxy && (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -1147,6 +1182,8 @@ export function RefSelector({
               currentRef={currentRef}
               matchingCount={matchingServerCount}
               totalCount={totalServerCount}
+              graspCloneUrls={graspCloneUrls}
+              additionalGitServerUrls={additionalGitServerUrls}
             />
           </PopoverContent>
         </Popover>
