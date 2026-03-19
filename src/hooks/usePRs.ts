@@ -6,6 +6,7 @@ import { onlyEvents } from "applesauce-relay";
 import type { RelayGroup } from "applesauce-relay";
 import {
   PR_ROOT_KINDS,
+  PATCH_KIND,
   STATUS_KINDS,
   LABEL_KIND,
   DELETION_KIND,
@@ -22,8 +23,14 @@ import {
 } from "@/lib/nip34";
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 import { PRListModel } from "@/models/PRListModel";
-import { getTagValue, type Filter } from "applesauce-core/helpers";
+import {
+  getTagValue,
+  hasNameValueTag,
+  type Filter,
+} from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
+import { mergeMap } from "rxjs/operators";
+import { EMPTY } from "rxjs";
 import type { Observable } from "rxjs";
 
 /** All essential kinds fetched per-PR by nip34EssentialsLoader. */
@@ -104,12 +111,34 @@ export function usePRs(
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [cacheKey, repoRelayGroup, store]);
 
-  // Fetch status + label + deletion events from relay.
+  // Fetch status + label + deletion events from relay, keyed by PR/patch ID.
+  // Status/label/deletion events reference the PR/patch via "#e" (not "#a"),
+  // so we pipe the PRs relay stream and, for each newly discovered root ID,
+  // open an essentials subscription for just that ID.
+  // mergeMap keeps existing subscriptions alive; seenIds ensures each ID is
+  // only subscribed once. Non-root patches are skipped (no essentials needed).
   use$(() => {
     if (!coords || coords.length === 0 || !repoRelayGroup) return undefined;
+    const seenIds = new Set<string>();
     return repoRelayGroup
-      .subscription([{ kinds: [...ESSENTIALS_KINDS], "#a": coords } as Filter])
-      .pipe(onlyEvents(), mapEventsToStore(store));
+      .subscription([{ kinds: [...PR_ROOT_KINDS], "#a": coords } as Filter])
+      .pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+        mergeMap((ev) => {
+          const event = ev as NostrEvent;
+          // Skip non-root patches — they don't appear in the list.
+          if (event.kind === PATCH_KIND && !hasNameValueTag(event, "t", "root"))
+            return EMPTY;
+          if (seenIds.has(event.id)) return EMPTY;
+          seenIds.add(event.id);
+          return repoRelayGroup
+            .subscription([
+              { kinds: [...ESSENTIALS_KINDS], "#e": [event.id] } as Filter,
+            ])
+            .pipe(onlyEvents(), mapEventsToStore(store));
+        }),
+      );
   }, [cacheKey, repoRelayGroup, store]);
 
   // Subscribe to the model — cached by the store, shared across components.

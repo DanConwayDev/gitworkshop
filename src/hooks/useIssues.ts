@@ -24,6 +24,8 @@ import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 import { IssueListModel } from "@/models/IssueListModel";
 import { getTagValue, type Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
+import { mergeMap } from "rxjs/operators";
+import { EMPTY } from "rxjs";
 import type { Observable } from "rxjs";
 
 /** All essential kinds fetched per-issue by nip34EssentialsLoader. */
@@ -144,12 +146,31 @@ export function useIssues(
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [cacheKey, repoRelayGroup, store]);
 
-  // Fetch status + label + deletion events from relay (single subscription).
+  // Fetch status + label + deletion events from relay, keyed by issue ID.
+  // Status/label/deletion events reference the issue via "#e" (not "#a"), so
+  // we pipe the issues relay stream and, for each newly discovered issue ID,
+  // open a single batched essentials subscription for just the new IDs.
+  // mergeMap (not switchMap) keeps existing subscriptions alive; the seenIds
+  // set inside the factory closure ensures each ID is only subscribed once.
   use$(() => {
     if (!coords || coords.length === 0 || !repoRelayGroup) return undefined;
+    const seenIds = new Set<string>();
     return repoRelayGroup
-      .subscription([{ kinds: [...ESSENTIALS_KINDS], "#a": coords } as Filter])
-      .pipe(onlyEvents(), mapEventsToStore(store));
+      .subscription([{ kinds: [ISSUE_KIND], "#a": coords } as Filter])
+      .pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+        mergeMap((ev) => {
+          const event = ev as NostrEvent;
+          if (seenIds.has(event.id)) return EMPTY;
+          seenIds.add(event.id);
+          return repoRelayGroup
+            .subscription([
+              { kinds: [...ESSENTIALS_KINDS], "#e": [event.id] } as Filter,
+            ])
+            .pipe(onlyEvents(), mapEventsToStore(store));
+        }),
+      );
   }, [cacheKey, repoRelayGroup, store]);
 
   // Subscribe to the model — cached by the store, shared across components.
