@@ -15,8 +15,9 @@ import {
   cacheBlob,
   getCachedCommit,
   cacheCommit,
+  getCachedTree,
+  cacheTree,
 } from "@/services/gitObjectCache";
-import { subscribeToGitRepoData } from "@/services/gitRepoDataService";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -256,19 +257,6 @@ export function useGitExplorer(
   const abortRef = useRef<AbortController | null>(null);
   const reloadCounterRef = useRef(0);
 
-  // Subscribe to the repo data service so that when infoRefs are fetched by
-  // the About page (or any other consumer), the Code page can reuse the cached
-  // result immediately without waiting for its own getInfoRefs round-trip.
-  // We only need this for the side-effect of warming the cache; the explorer
-  // manages its own display state independently.
-  useEffect(() => {
-    if (cloneUrls.length === 0) return;
-    // Subscribe with a no-op — we just want the service to keep the cache warm
-    const unsub = subscribeToGitRepoData(cloneUrls, () => {});
-    return unsub;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlsKey]);
-
   const run = useCallback(async () => {
     if (cloneUrls.length === 0) return;
 
@@ -377,24 +365,33 @@ export function useGitExplorer(
     const nestLimit = pathSegments.length + 1;
 
     let tree: Tree;
-    try {
-      const urlsToTry = [
-        winningUrl,
-        ...cloneUrls.filter((u) => u !== winningUrl),
-      ];
 
-      tree = await Promise.any(
-        urlsToTry.map((url) => getDirectoryTreeAt(url, commitHash, nestLimit)),
-      );
-    } catch (err) {
-      if (signal.aborted) return;
-      const msg = err instanceof Error ? err.message : String(err);
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        error: `Failed to load file tree: ${msg}`,
-      }));
-      return;
+    const cachedTree = getCachedTree(commitHash, nestLimit);
+    if (cachedTree) {
+      tree = cachedTree;
+    } else {
+      try {
+        const urlsToTry = [
+          winningUrl,
+          ...cloneUrls.filter((u) => u !== winningUrl),
+        ];
+
+        tree = await Promise.any(
+          urlsToTry.map((url) =>
+            getDirectoryTreeAt(url, commitHash, nestLimit),
+          ),
+        );
+        cacheTree(commitHash, nestLimit, tree);
+      } catch (err) {
+        if (signal.aborted) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: `Failed to load file tree: ${msg}`,
+        }));
+        return;
+      }
     }
 
     if (signal.aborted) return;

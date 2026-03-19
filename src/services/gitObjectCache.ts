@@ -19,6 +19,7 @@
 import type {
   Commit,
   InfoRefsUploadPackResponse,
+  Tree,
 } from "@fiatjaf/git-natural-api";
 
 // ---------------------------------------------------------------------------
@@ -111,6 +112,13 @@ const memCommits = new Map<string, Commit>();
 const memBlobs = new Map<string, Uint8Array>();
 /** key: `${commitHash}:${path}` → decoded text */
 const memTexts = new Map<string, string>();
+/**
+ * key: `${commitHash}:${nestLimit}` → Tree
+ *
+ * Trees are content-addressed: the same commitHash + nestLimit always yields
+ * the same result, so this cache never needs invalidation.
+ */
+const memTrees = new Map<string, Tree>();
 /** key: cloneUrl → { info, fetchedAt } */
 const memInfoRefs = new Map<
   string,
@@ -242,4 +250,31 @@ export function cacheInfoRefs(
  */
 export function invalidateInfoRefs(url: string): void {
   memInfoRefs.delete(url);
+}
+
+/**
+ * Get a cached directory tree for a commit + nest depth combination.
+ *
+ * Trees are content-addressed: commitHash + nestLimit fully determines the
+ * result, so no TTL or invalidation is needed. Memory-only (trees can be
+ * large and are cheap to re-fetch if the tab is closed).
+ *
+ * Key: `${commitHash}:${nestLimit}`
+ */
+export function getCachedTree(
+  commitHash: string,
+  nestLimit: number,
+): Tree | undefined {
+  return memTrees.get(`${commitHash}:${nestLimit}`);
+}
+
+/**
+ * Store a directory tree for a commit + nest depth combination.
+ */
+export function cacheTree(
+  commitHash: string,
+  nestLimit: number,
+  tree: Tree,
+): void {
+  memTrees.set(`${commitHash}:${nestLimit}`, tree);
 }
