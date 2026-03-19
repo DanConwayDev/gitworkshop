@@ -195,6 +195,8 @@ export default function RepoCodePage() {
             repoRelayEose={repoRelayEose}
             urlInfoRefs={gitData.urlInfoRefs}
             cloneUrls={cloneUrls}
+            graspCloneUrls={repo?.graspCloneUrls ?? []}
+            additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
           />
 
           {/* Error state */}
@@ -317,6 +319,8 @@ function LocatorBar({
   repoRelayEose,
   urlInfoRefs,
   cloneUrls,
+  graspCloneUrls,
+  additionalGitServerUrls,
 }: {
   loading: boolean;
   refs: ReturnType<typeof useGitExplorer>["refs"];
@@ -334,6 +338,8 @@ function LocatorBar({
   repoRelayEose: boolean;
   urlInfoRefs: Record<string, UrlInfoRefsResult>;
   cloneUrls: string[];
+  graspCloneUrls: string[];
+  additionalGitServerUrls: string[];
 }) {
   // Hide "checked" text if showing it would cause the bar to wrap onto
   // multiple lines. We directly manipulate the DOM via refs to avoid a
@@ -390,6 +396,8 @@ function LocatorBar({
             loading={loading}
             urlInfoRefs={urlInfoRefs}
             cloneUrls={cloneUrls}
+            graspCloneUrls={graspCloneUrls}
+            additionalGitServerUrls={additionalGitServerUrls}
           />
         ) : loading ? (
           <Skeleton className="h-8 w-28" />

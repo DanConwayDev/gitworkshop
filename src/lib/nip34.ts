@@ -244,6 +244,52 @@ export function getRepoCloneUrls(ev: NostrEvent): string[] {
 }
 
 /**
+ * Returns true if the URL is a Grasp server clone URL.
+ *
+ * A Grasp clone URL has the form:
+ *   https://<domain>/<npub1...>/<repo-name>.git
+ *
+ * Ported from the Rust implementation in ngit (src/lib/repo_ref.rs).
+ */
+export function isGraspCloneUrl(url: string): boolean {
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return false;
+  if (!url.endsWith(".git") && !url.endsWith(".git/")) return false;
+
+  // Extract npub1... substring
+  const npubStart = url.indexOf("npub1");
+  if (npubStart === -1) return false;
+  let npubEnd = npubStart + 5;
+  while (npubEnd < url.length && /[0-9a-z]/.test(url[npubEnd])) npubEnd++;
+  const npub = url.slice(npubStart, npubEnd);
+  if (npub.length < 10) return false; // sanity: too short to be a real npub
+
+  // Must have format: /{npub}/<repo-name>.git
+  const npubPattern = `/${npub}/`;
+  const npubPos = url.indexOf(npubPattern);
+  if (npubPos === -1) return false;
+
+  const afterNpub = url.slice(npubPos + npubPattern.length).replace(/\/$/, "");
+  if (!afterNpub || afterNpub === ".git") return false;
+  if (!afterNpub.endsWith(".git")) return false;
+
+  const repoName = afterNpub.slice(0, -4); // strip .git
+  return repoName.length > 0;
+}
+
+/**
+ * Extract the domain (hostname) from a Grasp clone URL.
+ * Returns undefined if the URL is not a valid Grasp clone URL or cannot be parsed.
+ */
+export function graspCloneUrlDomain(url: string): string | undefined {
+  if (!isGraspCloneUrl(url)) return undefined;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Extract all web URLs from a kind:30617 event.
  * Same multi-value tag format as clone: ["web", "url1", "url2", ...]
  */
@@ -448,6 +494,12 @@ export interface ResolvedRepo {
   // --- Unioned infrastructure fields ---
   /** All clone URLs across all maintainer announcements, deduplicated */
   cloneUrls: string[];
+  /** Subset of cloneUrls that are Grasp server clone URLs */
+  graspCloneUrls: string[];
+  /** Subset of cloneUrls that are NOT Grasp server clone URLs */
+  additionalGitServerUrls: string[];
+  /** Unique Grasp server domains (hostnames) derived from graspCloneUrls */
+  graspServerDomains: string[];
   /** All relay URLs across all maintainer announcements, deduplicated */
   relays: string[];
 
@@ -1053,6 +1105,19 @@ export function resolveChain(
 
   const maintainerSet = Array.from(visited);
 
+  const allCloneUrls = cloneUrlProvenance.map((p) => p.value);
+  const graspCloneUrls = allCloneUrls.filter(isGraspCloneUrl);
+  const additionalGitServerUrls = allCloneUrls.filter(
+    (u) => !isGraspCloneUrl(u),
+  );
+  const graspServerDomains = Array.from(
+    new Set(
+      graspCloneUrls
+        .map(graspCloneUrlDomain)
+        .filter((d): d is string => d !== undefined),
+    ),
+  );
+
   return {
     selectedMaintainer,
     dTag,
@@ -1060,7 +1125,10 @@ export function resolveChain(
     description: descriptionSource.value,
     webUrls: getRepoWebUrls(latestEv),
     updatedAt: latestEv.created_at,
-    cloneUrls: cloneUrlProvenance.map((p) => p.value),
+    cloneUrls: allCloneUrls,
+    graspCloneUrls,
+    additionalGitServerUrls,
+    graspServerDomains,
     relays: relayProvenance.map((p) => p.value),
     maintainerSet,
     allCoordinates: maintainerSet.map((pk) => repoCoordinate(pk, dTag)),

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Popover,
   PopoverContent,
@@ -51,6 +51,10 @@ export interface RefSelectorProps {
   urlInfoRefs?: Record<string, UrlInfoRefsResult>;
   /** All clone URLs for this repo */
   cloneUrls?: string[];
+  /** Subset of cloneUrls that are Grasp server clone URLs */
+  graspCloneUrls?: string[];
+  /** Subset of cloneUrls that are NOT Grasp server clone URLs */
+  additionalGitServerUrls?: string[];
 }
 
 /**
@@ -519,6 +523,75 @@ function ServerStatusLabel({
 }
 
 // ---------------------------------------------------------------------------
+// Server status tooltip
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a human-readable tooltip summarising how many Grasp servers and
+ * additional git servers are serving the signed state for the current ref.
+ *
+ * Examples:
+ *   "3 Grasp servers, 1 additional git server"
+ *   "2 Grasp servers · 1 out of sync, 1 additional git server · out of sync"
+ *   "1 additional git server"
+ */
+function ServerStatusTooltip({
+  graspTotal,
+  graspMatch,
+  additionalTotal,
+  additionalMatch,
+}: {
+  graspTotal: number;
+  graspMatch: number;
+  additionalTotal: number;
+  additionalMatch: number;
+}) {
+  const parts: React.ReactNode[] = [];
+
+  if (graspTotal > 0) {
+    const allOk = graspMatch === graspTotal;
+    const outOfSync = graspTotal - graspMatch;
+    parts.push(
+      <span key="grasp">
+        {graspTotal} Grasp server{graspTotal !== 1 ? "s" : ""}
+        {!allOk && outOfSync > 0 && (
+          <span className="text-amber-400"> · {outOfSync} out of sync</span>
+        )}
+      </span>,
+    );
+  }
+
+  if (additionalTotal > 0) {
+    const allOk = additionalMatch === additionalTotal;
+    const outOfSync = additionalTotal - additionalMatch;
+    parts.push(
+      <span key="additional">
+        {additionalTotal} additional git server
+        {additionalTotal !== 1 ? "s" : ""}
+        {!allOk && outOfSync > 0 && (
+          <span className="text-amber-400"> · {outOfSync} out of sync</span>
+        )}
+      </span>,
+    );
+  }
+
+  if (parts.length === 0) {
+    return <span>No git servers configured</span>;
+  }
+
+  return (
+    <span>
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 && <span className="text-muted-foreground">, </span>}
+          {part}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
@@ -728,6 +801,8 @@ export function RefSelector({
   loading,
   urlInfoRefs = {},
   cloneUrls = [],
+  graspCloneUrls = [],
+  additionalGitServerUrls = [],
 }: RefSelectorProps) {
   const [open, setOpen] = useState(false);
   const [serverPanelOpen, setServerPanelOpen] = useState(false);
@@ -777,8 +852,8 @@ export function RefSelector({
   );
   const currentStatus = currentRefWithStatus?.status ?? "loading";
 
-  // Placeholder: whether this repo uses grasp. Will be wired to ResolvedRepo.
-  const usesGrasp = true;
+  // Whether this repo uses Grasp (at least one Grasp clone URL declared)
+  const usesGrasp = graspCloneUrls.length > 0;
 
   // Show the grasp status indicator in the trigger when grasp is in use and
   // we have a definitive status for the selected ref.
@@ -808,6 +883,19 @@ export function RefSelector({
 
   const matchingServerCount = countMatchingServers(serverStatuses);
   const totalServerCount = cloneUrls.length;
+
+  // Counts for the tooltip: how many Grasp servers and additional git servers
+  // are in sync vs total.
+  const graspServerStatuses = useMemo(
+    () => serverStatuses.filter((s) => graspCloneUrls.includes(s.url)),
+    [serverStatuses, graspCloneUrls],
+  );
+  const additionalServerStatuses = useMemo(
+    () => serverStatuses.filter((s) => additionalGitServerUrls.includes(s.url)),
+    [serverStatuses, additionalGitServerUrls],
+  );
+  const graspMatchCount = countMatchingServers(graspServerStatuses);
+  const additionalMatchCount = countMatchingServers(additionalServerStatuses);
 
   const handleSelect = (refName: string) => {
     onRefChange(refName);
@@ -1010,18 +1098,17 @@ export function RefSelector({
                 </button>
               </PopoverTrigger>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs" sideOffset={6}>
-              {usesGrasp ? (
-                <span>
-                  Grasp — {matchingServerCount}/{totalServerCount} git server
-                  {totalServerCount !== 1 ? "s" : ""} verified
-                </span>
-              ) : (
-                <span>
-                  {matchingServerCount}/{totalServerCount} git server
-                  {totalServerCount !== 1 ? "s" : ""} in sync
-                </span>
-              )}
+            <TooltipContent
+              side="bottom"
+              className="text-xs max-w-[260px]"
+              sideOffset={6}
+            >
+              <ServerStatusTooltip
+                graspTotal={graspCloneUrls.length}
+                graspMatch={graspMatchCount}
+                additionalTotal={additionalGitServerUrls.length}
+                additionalMatch={additionalMatchCount}
+              />
             </TooltipContent>
           </Tooltip>
 
