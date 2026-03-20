@@ -14,6 +14,7 @@ import type {
   UrlState,
   UrlConnectionStatus,
   UrlRefStatus,
+  UrlErrorKind,
   InfoRefsUploadPackResponse,
 } from "./types";
 import type { CorsProxyManager } from "./cors-proxy";
@@ -44,6 +45,7 @@ export class UrlTracker {
       capabilities: [],
       latencyMs: null,
       lastError: null,
+      lastErrorKind: null,
       lastSuccessAt: null,
       refStatus: {},
       refCommits: {},
@@ -112,6 +114,7 @@ export class UrlTracker {
       capabilities: info.capabilities,
       latencyMs: this.avgLatency === Infinity ? null : this.avgLatency,
       lastError: null,
+      lastErrorKind: null,
       lastSuccessAt: Date.now(),
     };
   }
@@ -127,6 +130,7 @@ export class UrlTracker {
       status: "ok",
       latencyMs: this.avgLatency === Infinity ? null : this.avgLatency,
       lastError: null,
+      lastErrorKind: null,
       lastSuccessAt: Date.now(),
     };
   }
@@ -135,11 +139,12 @@ export class UrlTracker {
    * Record a transient error (server 5xx, timeout, etc.).
    * The URL can still be retried.
    */
-  recordTransientError(error: string): void {
+  recordTransientError(error: string, kind: UrlErrorKind = "transient"): void {
     this._state = {
       ...this._state,
       status: "error",
       lastError: error,
+      lastErrorKind: kind,
     };
   }
 
@@ -147,11 +152,12 @@ export class UrlTracker {
    * Record a permanent failure (404, network unreachable, etc.).
    * The URL will never be retried.
    */
-  recordPermanentFailure(error: string): void {
+  recordPermanentFailure(error: string, kind: UrlErrorKind = "network"): void {
     this._state = {
       ...this._state,
       status: "permanent-failure",
       lastError: error,
+      lastErrorKind: kind,
     };
   }
 

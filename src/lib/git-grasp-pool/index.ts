@@ -29,6 +29,7 @@ export type {
   UrlState,
   UrlConnectionStatus,
   UrlRefStatus,
+  UrlErrorKind,
   // State event
   StateEvent,
   StateEventInput,
@@ -50,6 +51,8 @@ export { GitObjectCache } from "./cache";
 // --- Git HTTP (for advanced consumers) ---
 export {
   GitHttpClient,
+  GitFetchError,
   PermanentFetchError,
   classifyFetchError,
+  isNonHttpUrl,
 } from "./git-http";

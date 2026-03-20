@@ -33,7 +33,7 @@ import type {
 } from "./types";
 import { CorsProxyManager } from "./cors-proxy";
 import { GitObjectCache } from "./cache";
-import { GitHttpClient, classifyFetchError } from "./git-http";
+import { GitHttpClient, classifyFetchError, isNonHttpUrl } from "./git-http";
 import { UrlStateManager, UrlTracker } from "./url-state";
 import { StateEventManager } from "./state-event";
 
@@ -349,6 +349,23 @@ export class GitGraspPool {
     const signal = abort.signal;
 
     for (const url of urls) {
+      // Short-circuit for non-HTTP URLs
+      if (isNonHttpUrl(url)) {
+        const tracker = this.urlManager.get(url);
+        if (tracker) {
+          tracker.recordPermanentFailure(
+            `URL uses a non-HTTP scheme and cannot be fetched by the browser: ${url}`,
+            "not-http",
+          );
+        }
+        this.setState((prev) => ({
+          ...prev,
+          urls: this.urlManager.toStateRecord(),
+          health: this.computeHealth(),
+        }));
+        continue;
+      }
+
       try {
         const start = Date.now();
         const info = await this.http.fetchInfoRefs(url, signal);
@@ -379,12 +396,12 @@ export class GitGraspPool {
         if (signal.aborted) return;
         const tracker = this.urlManager.get(url);
         if (tracker) {
-          const errClass = classifyFetchError(err);
+          const { errorClass, kind } = classifyFetchError(err);
           const msg = err instanceof Error ? err.message : String(err);
-          if (errClass === "permanent") {
-            tracker.recordPermanentFailure(msg);
+          if (errorClass === "permanent") {
+            tracker.recordPermanentFailure(msg, kind);
           } else {
-            tracker.recordTransientError(msg);
+            tracker.recordTransientError(msg, kind);
           }
         }
         this.setState((prev) => ({
@@ -655,6 +672,21 @@ export class GitGraspPool {
 
     const infoRefsPromises = allUrls.map(async (url) => {
       const tracker = this.urlManager.getOrCreate(url);
+
+      // Short-circuit immediately for non-HTTP URLs (SSH, git://, etc.)
+      // — the browser cannot fetch these at all.
+      if (isNonHttpUrl(url)) {
+        tracker.recordPermanentFailure(
+          `URL uses a non-HTTP scheme and cannot be fetched by the browser: ${url}`,
+          "not-http",
+        );
+        this.setState((prev) => ({
+          ...prev,
+          urls: this.urlManager.toStateRecord(),
+        }));
+        return;
+      }
+
       try {
         const start = Date.now();
         const info = await this.http.fetchInfoRefs(url, signal);
@@ -741,12 +773,12 @@ export class GitGraspPool {
         }
       } catch (err) {
         if (signal.aborted) return;
-        const errClass = classifyFetchError(err);
+        const { errorClass, kind } = classifyFetchError(err);
         const msg = err instanceof Error ? err.message : String(err);
-        if (errClass === "permanent") {
-          tracker.recordPermanentFailure(msg);
+        if (errorClass === "permanent") {
+          tracker.recordPermanentFailure(msg, kind);
         } else {
-          tracker.recordTransientError(msg);
+          tracker.recordTransientError(msg, kind);
         }
         this.setState((prev) => ({
           ...prev,
@@ -1220,12 +1252,12 @@ export class GitGraspPool {
         // Record the failure and try next URL
         const tracker = this.urlManager.get(url);
         if (tracker) {
-          const errClass = classifyFetchError(err);
+          const { errorClass, kind } = classifyFetchError(err);
           const msg = err instanceof Error ? err.message : String(err);
-          if (errClass === "permanent") {
-            tracker.recordPermanentFailure(msg);
+          if (errorClass === "permanent") {
+            tracker.recordPermanentFailure(msg, kind);
           } else {
-            tracker.recordTransientError(msg);
+            tracker.recordTransientError(msg, kind);
           }
         }
         // Continue to next URL

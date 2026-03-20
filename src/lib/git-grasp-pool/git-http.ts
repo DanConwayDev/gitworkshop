@@ -59,34 +59,59 @@ function createWantRequest(
 }
 import type { CorsProxyManager } from "./cors-proxy";
 import type { GitObjectCache } from "./cache";
-import type { ErrorClass } from "./types";
+import type { ErrorClass, UrlErrorKind } from "./types";
 
 // ---------------------------------------------------------------------------
 // Error classification
 // ---------------------------------------------------------------------------
 
 /**
- * Thrown when both direct and proxy attempts fail permanently.
+ * Thrown when a fetch fails with a known, structured reason.
+ * Carries a UrlErrorKind so the UI can render specific messages.
  */
-export class PermanentFetchError extends Error {
-  constructor(message: string) {
+export class GitFetchError extends Error {
+  readonly kind: UrlErrorKind;
+  readonly isPermanent: boolean;
+
+  constructor(message: string, kind: UrlErrorKind, permanent = true) {
     super(message);
+    this.name = "GitFetchError";
+    this.kind = kind;
+    this.isPermanent = permanent;
+  }
+}
+
+/** @deprecated Use GitFetchError instead */
+export class PermanentFetchError extends GitFetchError {
+  constructor(message: string, kind: UrlErrorKind = "network") {
+    super(message, kind, true);
     this.name = "PermanentFetchError";
   }
 }
 
 /**
  * Classify a fetch error to decide whether retrying is worthwhile.
+ * Returns both the ErrorClass and the UrlErrorKind.
  */
-export function classifyFetchError(err: unknown): ErrorClass {
-  if (err instanceof PermanentFetchError) return "permanent";
+export function classifyFetchError(err: unknown): {
+  errorClass: ErrorClass;
+  kind: UrlErrorKind;
+} {
+  if (err instanceof GitFetchError) {
+    return {
+      errorClass: err.isPermanent ? "permanent" : "transient",
+      kind: err.kind,
+    };
+  }
   if (
     err instanceof Response ||
     (err && typeof err === "object" && "status" in err)
   ) {
     const status = (err as { status: number }).status;
-    if (status >= 400 && status < 500 && status !== 429) return "permanent";
-    return "transient";
+    if (status >= 400 && status < 500 && status !== 429) {
+      return { errorClass: "permanent", kind: "http-error" };
+    }
+    return { errorClass: "transient", kind: "transient" };
   }
   const msg =
     err instanceof Error
@@ -98,14 +123,31 @@ export function classifyFetchError(err: unknown): ErrorClass {
     /address.?unreachable|connection.?refused|err_failed|err_name_not_resolved/i.test(
       msg,
     )
-  )
-    return "permanent";
+  ) {
+    return { errorClass: "permanent", kind: "network" };
+  }
   const statusMatch = msg.match(/\b([1-5]\d{2})\b/);
   if (statusMatch) {
     const status = parseInt(statusMatch[1], 10);
-    if (status >= 400 && status < 500 && status !== 429) return "permanent";
+    if (status >= 400 && status < 500 && status !== 429) {
+      return { errorClass: "permanent", kind: "http-error" };
+    }
   }
-  return "transient";
+  return { errorClass: "transient", kind: "transient" };
+}
+
+/**
+ * Returns true if the URL uses a non-HTTP scheme (ssh://, git://, file://, etc.)
+ * that cannot be fetched by the browser.
+ */
+export function isNonHttpUrl(url: string): boolean {
+  try {
+    const scheme = new URL(url).protocol;
+    return scheme !== "http:" && scheme !== "https:";
+  } catch {
+    // Bare "git@github.com:..." SCP-style SSH URLs don't parse as URLs
+    return url.includes("@") && url.includes(":");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -384,8 +426,11 @@ export class GitHttpClient {
           info.capabilities.length === 0 &&
           Object.keys(info.refs).length === 0
         ) {
-          const permanent = new PermanentFetchError(
+          // If we went direct (no proxy), this is likely a 404 or wrong path
+          const kind = effectiveUrl === url ? "not-git" : "proxy-error";
+          const permanent = new GitFetchError(
             `No git data returned from ${url} (server may have returned a non-git response)`,
+            kind,
           );
           this.permanentFailures.set(url, permanent);
           throw permanent;
@@ -394,11 +439,13 @@ export class GitHttpClient {
         this.cache.putInfoRefs(url, info);
         return info;
       } catch (err) {
-        if (err instanceof PermanentFetchError) throw err;
-        if (classifyFetchError(err) === "permanent") {
+        if (err instanceof GitFetchError) throw err;
+        const { errorClass, kind } = classifyFetchError(err);
+        if (errorClass === "permanent") {
           const msg = err instanceof Error ? err.message : String(err);
-          const permanent = new PermanentFetchError(
+          const permanent = new GitFetchError(
             `Permanent HTTP error for ${url}: ${msg}`,
+            kind,
           );
           this.permanentFailures.set(url, permanent);
           throw permanent;
@@ -406,8 +453,9 @@ export class GitHttpClient {
         // Already tried via proxy — both paths failed
         if (effectiveUrl !== url) {
           const msg = err instanceof Error ? err.message : String(err);
-          const permanent = new PermanentFetchError(
+          const permanent = new GitFetchError(
             `Both direct and proxy fetch failed for ${url}: ${msg}`,
+            "cors-blocked",
           );
           this.permanentFailures.set(url, permanent);
           throw permanent;
@@ -418,13 +466,16 @@ export class GitHttpClient {
         const proxyUrl = this.cors.toProxyUrl(url);
         try {
           const info = await libGetInfoRefs(proxyUrl);
-          // Same empty-response check for the proxy path
+          // Same empty-response check for the proxy path.
+          // Empty response via proxy = proxy reached the server but got a
+          // non-git response (e.g. Cloudflare 523, nginx 502, etc.)
           if (
             info.capabilities.length === 0 &&
             Object.keys(info.refs).length === 0
           ) {
-            const permanent = new PermanentFetchError(
+            const permanent = new GitFetchError(
               `No git data returned from ${url} via proxy (server may have returned a non-git response)`,
+              "proxy-error",
             );
             this.permanentFailures.set(url, permanent);
             throw permanent;
@@ -433,11 +484,12 @@ export class GitHttpClient {
           this.cache.putInfoRefs(url, info);
           return info;
         } catch (proxyErr) {
-          if (proxyErr instanceof PermanentFetchError) throw proxyErr;
+          if (proxyErr instanceof GitFetchError) throw proxyErr;
           const msg =
             proxyErr instanceof Error ? proxyErr.message : String(proxyErr);
-          const permanent = new PermanentFetchError(
+          const permanent = new GitFetchError(
             `Both direct and proxy fetch failed for ${url}: ${msg}`,
+            "cors-blocked",
           );
           this.permanentFailures.set(url, permanent);
           throw permanent;

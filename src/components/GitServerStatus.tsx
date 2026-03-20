@@ -31,6 +31,7 @@ import { graspCloneUrlNpub } from "@/lib/nip34";
 import type {
   UrlState,
   UrlRefStatus,
+  UrlErrorKind,
   RefDiscrepancy,
 } from "@/lib/git-grasp-pool";
 
@@ -81,6 +82,8 @@ interface ServerStatus {
   expectedCommit?: string;
   /** Whether this URL is currently routed through the CORS proxy. */
   usesProxy: boolean;
+  /** Structured error reason from the pool — drives specific UI messages */
+  errorKind?: UrlErrorKind | null;
 }
 
 function shortLabel(url: string): string {
@@ -115,7 +118,13 @@ function buildServerStatuses(
       urlState.status === "permanent-failure" ||
       urlState.status === "error"
     ) {
-      return { url, label, status: "error", usesProxy };
+      return {
+        url,
+        label,
+        status: "error",
+        usesProxy,
+        errorKind: urlState.lastErrorKind,
+      };
     }
 
     // status === "ok" — read pool-computed ref status
@@ -247,6 +256,54 @@ function ProxyBadge() {
 }
 
 // ---------------------------------------------------------------------------
+// Error detail line
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders a specific, human-readable error message for a failed server URL.
+ * Replaces the generic "unreachable" with actionable context.
+ */
+function ErrorDetail({
+  errorKind,
+  usesProxy,
+}: {
+  errorKind?: UrlErrorKind | null;
+  usesProxy: boolean;
+}) {
+  let message: string;
+
+  switch (errorKind) {
+    case "not-http":
+      message = "SSH/non-HTTP URL — not fetchable in browser";
+      break;
+    case "not-git":
+      message = usesProxy
+        ? "no git data via proxy — wrong path or 404"
+        : "no git data — wrong path or 404";
+      break;
+    case "cors-blocked":
+      message = "CORS blocked — direct and proxy both failed";
+      break;
+    case "proxy-error":
+      message = "proxy error — server unreachable via proxy";
+      break;
+    case "http-error":
+      message = "HTTP error — server returned 4xx/5xx";
+      break;
+    case "network":
+      message = "network error — server unreachable";
+      break;
+    case "transient":
+      message = "temporarily unreachable";
+      break;
+    default:
+      message = "unreachable";
+  }
+
+  return <p className="text-[11px] text-red-500/80 mt-0.5">{message}</p>;
+}
+
+// ---------------------------------------------------------------------------
 // Clone URLs section
 // ---------------------------------------------------------------------------
 
@@ -336,7 +393,10 @@ function ServerRow({
           </p>
         )}
         {serverStatus.status === "error" && (
-          <p className="text-[11px] text-red-500/80 mt-0.5">unreachable</p>
+          <ErrorDetail
+            errorKind={serverStatus.errorKind}
+            usesProxy={serverStatus.usesProxy}
+          />
         )}
         {serverStatus.status === "unknown" && (
           <p className="text-[11px] text-muted-foreground mt-0.5">fetching…</p>

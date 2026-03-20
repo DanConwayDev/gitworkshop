@@ -71,6 +71,8 @@ export interface UrlState {
   latencyMs: number | null;
   /** Error message from the most recent failure, if any */
   lastError: string | null;
+  /** Structured reason for the last failure — used by the UI for specific messages */
+  lastErrorKind: UrlErrorKind | null;
   /** Timestamp (ms) of the last successful fetch */
   lastSuccessAt: number | null;
   /**
@@ -276,3 +278,28 @@ export type PoolSubscriber = (state: PoolState) => void;
 
 /** Whether a fetch error is worth retrying */
 export type ErrorClass = "permanent" | "transient";
+
+// ---------------------------------------------------------------------------
+// Per-URL error kind
+// ---------------------------------------------------------------------------
+
+/**
+ * Structured reason for a URL failure, surfaced in UrlState so the UI can
+ * render specific, actionable messages instead of a generic "unreachable".
+ *
+ * - "not-git"          : server responded but returned no git data (404, wrong path, etc.)
+ * - "cors-blocked"     : direct fetch blocked by CORS and proxy also failed
+ * - "proxy-error"      : routed through CORS proxy but the proxy returned an error (e.g. 523)
+ * - "not-http"         : URL uses a non-HTTP scheme (ssh://, git://, file://, etc.)
+ * - "network"          : network-level failure (DNS, TCP, TLS — server unreachable)
+ * - "http-error"       : server returned an HTTP error status (4xx/5xx)
+ * - "transient"        : temporary failure, will be retried
+ */
+export type UrlErrorKind =
+  | "not-git"
+  | "cors-blocked"
+  | "proxy-error"
+  | "not-http"
+  | "network"
+  | "http-error"
+  | "transient";
