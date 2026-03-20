@@ -973,23 +973,66 @@ function FileContentViewer({
 
   const handleDownload = useCallback(() => {
     if (!fileBytes) return;
-    const blob = new Blob([fileBytes.buffer as ArrayBuffer]);
+    const mime =
+      mediaType && "mime" in mediaType
+        ? mediaType.mime
+        : mediaType?.kind === "svg"
+          ? "image/svg+xml"
+          : "application/octet-stream";
+    const blob = new Blob([fileBytes.buffer as ArrayBuffer], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-  }, [fileBytes, filename]);
+  }, [fileBytes, filename, mediaType]);
 
-  const [copied, setCopied] = useState(false);
-  const handleCopy = useCallback(() => {
+  const [copiedText, setCopiedText] = useState(false);
+  const [copiedImage, setCopiedImage] = useState(false);
+
+  // Copy text content to clipboard (text/code/markdown/SVG source)
+  const handleCopyText = useCallback(() => {
     if (!content) return;
     navigator.clipboard.writeText(content).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopiedText(true);
+      setTimeout(() => setCopiedText(false), 2000);
     });
   }, [content]);
+
+  // Copy image to clipboard as PNG via canvas (raster images and SVG)
+  const handleCopyImage = useCallback(() => {
+    if (!fileBytes) return;
+    const isRaster = mediaType?.kind === "image";
+    const isSvg = mediaType?.kind === "svg";
+    if (!isRaster && !isSvg) return;
+    const mime = isRaster ? mediaType.mime : "image/svg+xml";
+    const blob = new Blob([fileBytes.buffer as ArrayBuffer], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob((pngBlob) => {
+        if (!pngBlob) return;
+        navigator.clipboard
+          .write([new ClipboardItem({ "image/png": pngBlob })])
+          .then(() => {
+            setCopiedImage(true);
+            setTimeout(() => setCopiedImage(false), 2000);
+          })
+          .catch(() => {
+            // Clipboard write failed (e.g. permissions denied) — silently ignore
+          });
+      }, "image/png");
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  }, [fileBytes, mediaType]);
 
   // Loading state
   if (!isBinaryMedia && content === null) {
@@ -1067,29 +1110,68 @@ function FileContentViewer({
               </Badge>
             )}
 
-            {/* Download — icon only, binary media only */}
-            {isBinaryMedia && fileBytes && (
+            {/* Copy SVG as text — copy icon with "text" label to distinguish from copy-as-PNG */}
+            {mediaType?.kind === "svg" && content !== null && (
+              <button
+                onClick={handleCopyText}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                title="Copy as text"
+              >
+                {copiedText ? (
+                  <Check className="h-3 w-3 text-green-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+                <span className="text-[10px] font-semibold leading-none">
+                  TEXT
+                </span>
+              </button>
+            )}
+
+            {/* Copy as PNG — label only shown for SVG where both copy buttons coexist */}
+            {(mediaType?.kind === "image" || mediaType?.kind === "svg") &&
+              fileBytes && (
+                <button
+                  onClick={handleCopyImage}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  title="Copy as PNG"
+                >
+                  {copiedImage ? (
+                    <Check className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                  {mediaType?.kind === "svg" && (
+                    <span className="text-[10px] font-semibold leading-none">
+                      PNG
+                    </span>
+                  )}
+                </button>
+              )}
+
+            {/* Copy text — text/code/markdown (not binary media) */}
+            {!isBinaryMedia && content !== null && (
+              <button
+                onClick={handleCopyText}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                title="Copy file content"
+              >
+                {copiedText ? (
+                  <Check className="h-3 w-3 text-green-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </button>
+            )}
+
+            {/* Download — all file types */}
+            {fileBytes && (
               <button
                 onClick={handleDownload}
                 className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                 title="Download file"
               >
                 <Download className="h-3 w-3" />
-              </button>
-            )}
-
-            {/* Copy — text/code/markdown */}
-            {!isBinaryMedia && content !== null && (
-              <button
-                onClick={handleCopy}
-                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                title="Copy file content"
-              >
-                {copied ? (
-                  <Check className="h-3 w-3 text-green-500" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
               </button>
             )}
           </div>
