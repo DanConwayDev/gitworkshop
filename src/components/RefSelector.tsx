@@ -42,6 +42,12 @@ export interface RefSelectorProps {
   repoRelayEose: boolean;
   /** True while data is still being fetched */
   loading?: boolean;
+  /**
+   * True when the git server is confirmed ahead of the signed Nostr state.
+   * Ref commit differences are expected in this case and should not be shown
+   * as suspicious mismatches.
+   */
+  stateBehindGit?: boolean;
 }
 
 /**
@@ -49,6 +55,7 @@ export interface RefSelectorProps {
  *
  * - "verified"        : state event exists and this ref's commit matches
  * - "mismatch"        : state event exists but declares a different commit for this ref
+ * - "state-behind"    : git server is ahead of the signed state (expected lag, not suspicious)
  * - "git-server-only" : state event exists but doesn't include this ref
  * - "no-state"        : no state event was found (after EOSE)
  * - "loading"         : still waiting for state event data
@@ -56,6 +63,7 @@ export interface RefSelectorProps {
 type RefStatus =
   | "verified"
   | "mismatch"
+  | "state-behind"
   | "git-server-only"
   | "no-state"
   | "loading";
@@ -73,6 +81,7 @@ function getRefStatus(
   ref: GitRef,
   repoState: RepositoryState | null | undefined,
   repoRelayEose: boolean,
+  stateBehindGit: boolean,
 ): { status: RefStatus; stateCommit?: string } {
   // Still loading state event data
   if (repoState === undefined || !repoRelayEose) {
@@ -90,7 +99,17 @@ function getRefStatus(
   const stateRef = repoState.refs.find((r) => r.name === fullRefName);
 
   if (!stateRef) {
+    // When the git server is confirmed ahead of the signed state, new refs
+    // that don't appear in the state are expected — don't flag them.
+    if (stateBehindGit) return { status: "state-behind" };
     return { status: "git-server-only" };
+  }
+
+  // When the git server is confirmed ahead of the signed state, the default
+  // branch is always "state-behind" — even if its hash happens to match the
+  // state ref, the HEAD comparison already proved the server is ahead.
+  if (stateBehindGit && ref.isDefault) {
+    return { status: "state-behind", stateCommit: stateRef.commitId };
   }
 
   // Compare commits (handle both full and abbreviated hashes)
@@ -101,6 +120,11 @@ function getRefStatus(
   ) {
     return { status: "verified" };
   }
+
+  // When the git server is confirmed ahead of the signed state, a commit
+  // difference on any other ref is expected — use a softer status.
+  if (stateBehindGit)
+    return { status: "state-behind", stateCommit: stateRef.commitId };
 
   return { status: "mismatch", stateCommit: stateRef.commitId };
 }
@@ -130,6 +154,10 @@ function StatusIcon({
     case "mismatch":
       return (
         <ShieldAlert className={cn("h-3.5 w-3.5 text-amber-500", className)} />
+      );
+    case "state-behind":
+      return (
+        <AlertTriangle className={cn("h-3 w-3 text-amber-500", className)} />
       );
     case "git-server-only":
       return (
@@ -176,6 +204,13 @@ function StatusTooltipText({
             updated without the maintainer's knowledge.
           </p>
         </div>
+      );
+    case "state-behind":
+      return (
+        <span>
+          The git server has newer commits than the maintainer's last signed
+          state — the maintainer hasn't re-signed yet
+        </span>
       );
     case "git-server-only":
       return (
@@ -317,6 +352,7 @@ export function RefSelector({
   repoState,
   repoRelayEose,
   loading,
+  stateBehindGit = false,
 }: RefSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -326,9 +362,9 @@ export function RefSelector({
     () =>
       refs.map((ref) => ({
         ...ref,
-        ...getRefStatus(ref, repoState, repoRelayEose),
+        ...getRefStatus(ref, repoState, repoRelayEose, stateBehindGit),
       })),
-    [refs, repoState, repoRelayEose],
+    [refs, repoState, repoRelayEose, stateBehindGit],
   );
 
   // Split into branches and tags
@@ -350,6 +386,7 @@ export function RefSelector({
     ? tags.filter((t) => t.name.toLowerCase().includes(lowerSearch))
     : tags;
 
+  // Only count genuine mismatches (not state-behind) for the mismatch banner
   const mismatchCount = countMismatches(refsWithStatus);
   const isNoState = repoRelayEose && repoState === null;
 
@@ -365,10 +402,13 @@ export function RefSelector({
   );
   const currentStatus = currentRefWithStatus?.status ?? "loading";
 
-  // Show the shield status indicator in the trigger when we have a
-  // definitive status for the selected ref.
-  const showShieldStatus =
+  // Show the status indicator in the trigger when we have a definitive status
+  // for the selected ref.
+  const showStatusIcon =
     currentStatus !== "loading" && currentStatus !== "no-state";
+
+  // Amber trigger border when there are genuine mismatches or state is behind
+  const showAmberTrigger = mismatchCount > 0 || stateBehindGit;
 
   const handleSelect = (refName: string) => {
     onRefChange(refName);
@@ -388,8 +428,7 @@ export function RefSelector({
             "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs transition-all duration-200",
             "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             "max-w-[280px]",
-            // Neutral border always — status colour lives on the shield icon only
-            mismatchCount > 0
+            showAmberTrigger
               ? "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10"
               : "border-border/60 bg-background",
           )}
@@ -400,14 +439,16 @@ export function RefSelector({
             <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           )}
           <span className="truncate font-medium">{currentRef}</span>
-          {showShieldStatus ? (
-            // Shield icon only — coloured to reflect status
+          {showStatusIcon ? (
             <span className="shrink-0 ml-0.5">
               {currentStatus === "verified" && (
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
               )}
               {currentStatus === "mismatch" && (
                 <ShieldAlert className="h-3.5 w-3.5 text-red-500" />
+              )}
+              {currentStatus === "state-behind" && (
+                <AlertTriangle className="h-3 w-3 text-amber-500" />
               )}
               {currentStatus === "git-server-only" && (
                 <ShieldQuestion className="h-3.5 w-3.5 text-muted-foreground/50" />

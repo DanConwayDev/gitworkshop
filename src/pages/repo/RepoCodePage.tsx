@@ -138,12 +138,13 @@ export default function RepoCodePage() {
   const pulling =
     cloneUrls.length > 0 ? !repoRelayEose || gitData.pulling : false;
 
-  // When the git server is confirmed ahead of the signed Nostr state, prefer
-  // the git server's commit so the code view shows the latest available code.
-  // Only switch once we're confident (not still pulling) to avoid flicker.
+  // When the git server is confirmed ahead of the signed Nostr state, don't
+  // pass a knownHeadCommit so the explorer falls through to the default branch
+  // (which already points at the git server's latest commit). This keeps the
+  // trigger showing the branch name rather than a raw commit hash.
   const effectiveHeadCommit = useMemo(() => {
     if (!pulling && gitData.warning?.kind === "state-behind-git") {
-      return gitData.warning.gitCommitId;
+      return undefined;
     }
     return repoState?.headCommitId;
   }, [pulling, gitData.warning, repoState?.headCommitId]);
@@ -223,6 +224,9 @@ export default function RepoCodePage() {
             cloneUrls={cloneUrls}
             graspCloneUrls={repo?.graspCloneUrls ?? []}
             additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
+            stateBehindGit={
+              !pulling && gitData.warning?.kind === "state-behind-git"
+            }
           />
 
           {/* State sync warning banner */}
@@ -445,6 +449,7 @@ function LocatorBar({
   cloneUrls,
   graspCloneUrls,
   additionalGitServerUrls,
+  stateBehindGit,
 }: {
   loading: boolean;
   refs: ReturnType<typeof useGitExplorer>["refs"];
@@ -464,6 +469,7 @@ function LocatorBar({
   cloneUrls: string[];
   graspCloneUrls: string[];
   additionalGitServerUrls: string[];
+  stateBehindGit: boolean;
 }) {
   // Hide "checked" text if showing it would cause the bar to wrap onto
   // multiple lines. We directly manipulate the DOM via refs to avoid a
@@ -514,6 +520,7 @@ function LocatorBar({
             repoState={repoState}
             repoRelayEose={repoRelayEose}
             loading={loading}
+            stateBehindGit={stateBehindGit}
           />
         ) : loading ? (
           <Skeleton className="h-8 w-28" />
