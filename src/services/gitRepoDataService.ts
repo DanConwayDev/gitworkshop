@@ -74,6 +74,18 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
+ * Thrown by fetchInfoRefs when both the direct fetch and the CORS proxy
+ * attempt fail.  Signals that the host is genuinely unreachable this session
+ * and should not be retried.
+ */
+class PermanentFetchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermanentFetchError";
+  }
+}
+
+/**
  * Classify a fetch error to decide whether retrying the same URL is worthwhile.
  *
  * - "permanent": the server definitively rejected the request (404, 410, etc.)
@@ -82,6 +94,8 @@ import {
  *   resolve on its own.  Retry is reasonable.
  */
 function classifyFetchError(err: unknown): "permanent" | "transient" {
+  // Explicit sentinel: both direct and proxy paths failed
+  if (err instanceof PermanentFetchError) return "permanent";
   if (
     err instanceof Response ||
     (err && typeof err === "object" && "status" in err)
@@ -205,39 +219,128 @@ interface CommitResult {
 // ---------------------------------------------------------------------------
 
 /**
+ * Module-level in-flight deduplication map for infoRefs fetches.
+ *
+ * When runFetch() is restarted (e.g. because onNewStateEvent fires before the
+ * first fetch completes), the new run must not fire a second HTTP request for
+ * a URL that already has one in flight.  Sharing the same promise means:
+ *   - Only one HTTP request per URL at a time (no duplicate network traffic)
+ *   - The result (success, 404, or network error) is processed exactly once
+ *   - permanentlyFailedUrls is populated correctly even across restarts
+ *
+ * Entries are removed when the promise resolves successfully or after a
+ * transient error.  Permanent failures are kept in permanentInfoRefFailures
+ * so that subsequent calls immediately re-throw without a new HTTP request.
+ */
+const inFlightInfoRefs = new Map<string, Promise<InfoRefsUploadPackResponse>>();
+
+/**
+ * URLs whose infoRefs fetch permanently failed this session (404, both
+ * direct and proxy unreachable, etc.).  Checked synchronously at the top of
+ * fetchInfoRefs so that no new HTTP request is ever made for these URLs,
+ * even after the in-flight promise has been removed from inFlightInfoRefs.
+ */
+const permanentInfoRefFailures = new Map<string, PermanentFetchError>();
+
+/**
  * Fetch infoRefs for a URL, checking the object cache first.
  * Automatically falls back to the CORS proxy on CORS-like errors.
  * The cache key is always the original URL so callers stay unaware of the proxy.
+ *
+ * Deduplicates concurrent requests: if a fetch for this URL is already in
+ * flight (e.g. from a previous runFetch() that was aborted at the entry level),
+ * the existing promise is returned rather than firing a new HTTP request.
+ *
+ * Throws PermanentFetchError when both the direct fetch and the CORS proxy
+ * attempt fail with a network-level error, or when a 4xx response is received.
+ * Subsequent calls for the same URL immediately re-throw without a network hit.
  */
-async function fetchInfoRefs(
+export function fetchInfoRefs(
   url: string,
   signal: AbortSignal,
 ): Promise<InfoRefsUploadPackResponse> {
-  const cached = await getCachedInfoRefs(url);
-  if (cached) return cached;
-  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+  // Fast-path: already known to be permanently unreachable this session.
+  const knownFailure = permanentInfoRefFailures.get(url);
+  if (knownFailure) return Promise.reject(knownFailure);
 
-  const effectiveUrl = resolveGitUrl(url);
-  try {
-    const info = await getInfoRefs(effectiveUrl);
-    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    if (effectiveUrl === url) markOriginDirect(url);
-    cacheInfoRefs(url, info);
-    return info;
-  } catch (err) {
-    // If we already tried via proxy (effectiveUrl !== url), propagate the error
-    if (effectiveUrl !== url) throw err;
-    // Only attempt proxy fallback for CORS-like errors
-    if (!isCorsLikeError(err)) throw err;
-    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-
-    const proxyUrl = toProxyUrl(url);
-    const info = await getInfoRefs(proxyUrl);
-    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    markOriginNeedsProxy(url);
-    cacheInfoRefs(url, info);
-    return info;
+  // Reuse an already-in-flight request for this URL if one exists.
+  // This check is synchronous so concurrent callers all see the same promise
+  // before any async work begins — preventing duplicate HTTP requests.
+  const existing = inFlightInfoRefs.get(url);
+  if (existing) {
+    // Wrap: re-check abort after the shared promise settles.
+    return existing.then((info) => {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      return info;
+    });
   }
+
+  // Create the shared fetch promise and register it synchronously so that
+  // any concurrent call arriving before the first await sees it.
+  const effectiveUrl = resolveGitUrl(url);
+
+  const fetchPromise: Promise<InfoRefsUploadPackResponse> = (async () => {
+    // Check IDB cache before hitting the network.
+    const cached = await getCachedInfoRefs(url);
+    if (cached) return cached;
+
+    try {
+      const info = await getInfoRefs(effectiveUrl);
+      if (effectiveUrl === url) markOriginDirect(url);
+      cacheInfoRefs(url, info);
+      return info;
+    } catch (err) {
+      // 4xx response — permanent, no point retrying.
+      if (classifyFetchError(err) === "permanent") {
+        const msg = err instanceof Error ? err.message : String(err);
+        const permanent = new PermanentFetchError(
+          `Permanent HTTP error for ${url}: ${msg}`,
+        );
+        permanentInfoRefFailures.set(url, permanent);
+        throw permanent;
+      }
+      // If we already tried via proxy (effectiveUrl !== url), both paths failed —
+      // treat as permanent so the URL is not retried this session.
+      if (effectiveUrl !== url) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const permanent = new PermanentFetchError(
+          `Both direct and proxy fetch failed for ${url}: ${msg}`,
+        );
+        permanentInfoRefFailures.set(url, permanent);
+        throw permanent;
+      }
+      // Only attempt proxy fallback for CORS-like errors
+      if (!isCorsLikeError(err)) throw err;
+
+      const proxyUrl = toProxyUrl(url);
+      try {
+        const info = await getInfoRefs(proxyUrl);
+        markOriginNeedsProxy(url);
+        cacheInfoRefs(url, info);
+        return info;
+      } catch (proxyErr) {
+        // Proxy also failed — host is genuinely unreachable, mark permanent.
+        const msg =
+          proxyErr instanceof Error ? proxyErr.message : String(proxyErr);
+        const permanent = new PermanentFetchError(
+          `Both direct and proxy fetch failed for ${url}: ${msg}`,
+        );
+        permanentInfoRefFailures.set(url, permanent);
+        throw permanent;
+      }
+    }
+  })();
+
+  // Register synchronously before any await so concurrent callers share this
+  // promise. Remove when settled — on permanent failure the error is already
+  // in permanentInfoRefFailures so subsequent calls hit the fast-path above.
+  inFlightInfoRefs.set(url, fetchPromise);
+  fetchPromise.finally(() => inFlightInfoRefs.delete(url));
+
+  return fetchPromise.then((info) => {
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    return info;
+  });
 }
 
 /**
@@ -1051,6 +1154,16 @@ class GitRepoDataEntry {
           }
         })
         .catch((err: unknown) => {
+          // Classify and record permanent failures BEFORE checking signal.aborted.
+          // If this fetch was aborted mid-flight (e.g. because onNewStateEvent
+          // restarted runFetch), the AbortError arrives in the outer catch but
+          // the HTTP response (e.g. 404) may have already been received.
+          // git-natural-api throws the HTTP response object directly, so we can
+          // detect a permanent failure even when the signal is already aborted.
+          // Recording it here ensures the restarted runFetch skips this URL.
+          if (classifyFetchError(err) === "permanent") {
+            this.permanentlyFailedUrls.add(url);
+          }
           if (signal.aborted) return;
           const message = err instanceof Error ? err.message : String(err);
           urlInfoRefs[url] = { status: "error", error: message };
@@ -1061,11 +1174,6 @@ class GitRepoDataEntry {
               [url]: { status: "error", error: message },
             },
           }));
-          // Mark permanently-failed URLs so we don't retry them on the next
-          // backoff cycle.  Transient errors (5xx, timeout) are still retried.
-          if (classifyFetchError(err) === "permanent") {
-            this.permanentlyFailedUrls.add(url);
-          }
         })
         .finally(() => {
           if (signal.aborted) return;

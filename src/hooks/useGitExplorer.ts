@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  getInfoRefs,
   getDirectoryTreeAt,
   getObject,
   fetchCommitsOnly,
@@ -9,8 +8,6 @@ import {
   type InfoRefsUploadPackResponse,
 } from "@fiatjaf/git-natural-api";
 import {
-  getCachedInfoRefs,
-  cacheInfoRefs,
   peekCachedInfoRefsStale,
   getCachedBlob,
   cacheBlob,
@@ -25,13 +22,8 @@ import {
   peekCachedCommitHistory,
   cacheCommitHistory,
 } from "@/services/gitObjectCache";
-import {
-  isCorsLikeError,
-  toProxyUrl,
-  markOriginDirect,
-  markOriginNeedsProxy,
-  resolveGitUrl,
-} from "@/lib/corsProxy";
+import { resolveGitUrl } from "@/lib/corsProxy";
+import { fetchInfoRefs } from "@/services/gitRepoDataService";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -249,36 +241,6 @@ function resolveRefAndPath(
  * Automatically falls back to the CORS proxy on CORS-like errors.
  * The cache key is always the original URL so callers stay unaware of the proxy.
  */
-async function fetchInfoRefsCached(
-  url: string,
-  signal: AbortSignal,
-): Promise<InfoRefsUploadPackResponse> {
-  const cached = await getCachedInfoRefs(url);
-  if (cached) return cached;
-  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-
-  const effectiveUrl = resolveGitUrl(url);
-  try {
-    const info = await getInfoRefs(effectiveUrl);
-    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    if (effectiveUrl === url) markOriginDirect(url);
-    cacheInfoRefs(url, info);
-    return info;
-  } catch (err) {
-    // If we already tried via proxy (effectiveUrl !== url), propagate the error
-    if (effectiveUrl !== url) throw err;
-    // Only attempt proxy fallback for CORS-like errors
-    if (!isCorsLikeError(err)) throw err;
-    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-
-    const proxyUrl = toProxyUrl(url);
-    const info = await getInfoRefs(proxyUrl);
-    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    markOriginNeedsProxy(url);
-    cacheInfoRefs(url, info);
-    return info;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Main hook
@@ -536,7 +498,7 @@ export function useGitExplorer(
     try {
       const result = await Promise.any(
         cloneUrls.map(async (url) => {
-          const i = await fetchInfoRefsCached(url, signal);
+          const i = await fetchInfoRefs(url, signal);
           return { url, info: i };
         }),
       );
@@ -873,7 +835,7 @@ export function useCommitHistory(
     const signal = abort.signal;
 
     // First resolve the ref to a commit hash via getInfoRefs (cache-aware)
-    Promise.any(cloneUrls.map((url) => fetchInfoRefsCached(url, signal)))
+    Promise.any(cloneUrls.map((url) => fetchInfoRefs(url, signal)))
       .then(async (info) => {
         if (signal.aborted) return;
 
