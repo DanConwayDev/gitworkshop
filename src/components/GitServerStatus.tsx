@@ -453,8 +453,7 @@ function ServerRow({
           ? "behind signed"
           : "diverged";
 
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCopy = () => {
     navigator.clipboard.writeText(serverStatus.url);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -496,14 +495,17 @@ function ServerRow({
     : null;
 
   return (
-    <div
+    <button
+      onClick={handleCopy}
       className={cn(
-        "flex items-start gap-2.5 px-4 py-2 text-xs group hover:bg-accent/30 transition-colors relative",
+        "w-full text-left flex items-start gap-2.5 px-4 py-2 text-xs group transition-colors relative cursor-pointer",
         selectedHighlight === "emerald" &&
-          "bg-emerald-500/5 border-l-2 border-emerald-500 pl-[14px]",
+          "bg-emerald-500/5 border-l-2 border-emerald-500 pl-[14px] hover:bg-emerald-500/10",
         selectedHighlight === "amber" &&
-          "bg-amber-500/5 border-l-2 border-amber-500 pl-[14px]",
+          "bg-amber-500/5 border-l-2 border-amber-500 pl-[14px] hover:bg-amber-500/10",
+        !selectedHighlight && "hover:bg-accent/30",
       )}
+      aria-label={`Copy clone URL: ${serverStatus.url}`}
     >
       <ServerStatusDot status={serverStatus.status} gitIsAhead={gitIsAhead} />
 
@@ -648,24 +650,23 @@ function ServerRow({
       </div>
 
       {serverStatus.usesProxy && <ProxyBadge />}
-      <button
-        onClick={handleCopy}
-        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground mt-0.5"
-        aria-label="Copy clone URL"
+      <span
+        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground mt-0.5"
+        aria-hidden
       >
         {copied ? (
           <Check className="h-3 w-3 text-emerald-500" />
         ) : (
           <Copy className="h-3 w-3" />
         )}
-      </button>
+      </span>
       <ServerStatusLabel
         status={serverStatus.status}
         hasState={hasState}
         gitIsAhead={gitIsAhead}
         refinedBehindLabel={refinedBehindLabel}
       />
-    </div>
+    </button>
   );
 }
 
