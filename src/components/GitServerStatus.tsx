@@ -470,15 +470,43 @@ function ServerRow({
   const serverIsSignedOnly =
     serverStatus.status === "match" && hasState && gitIsAhead;
 
+  // A server "has the selected state" when its commit matches what is currently
+  // being shown. When git is ahead of the signed state, the servers with the
+  // *newer* unsigned commit (pool status "behind") are the ones serving the
+  // current view. Otherwise, "match" means the server has the signed state.
+  const hasSelectedState = gitIsAhead
+    ? serverStatus.status === "behind"
+    : serverStatus.status === "match";
+
+  // The highlight color follows the status dot color so the accent is
+  // semantically consistent: emerald for a clean signed match, amber when
+  // the server is serving unsigned-ahead commits.
+  const selectedHighlight = hasSelectedState
+    ? gitIsAhead
+      ? ("amber" as const)
+      : ("emerald" as const)
+    : null;
+
   return (
-    <div className="flex items-start gap-2.5 px-4 py-2 text-xs group hover:bg-accent/30 transition-colors">
+    <div
+      className={cn(
+        "flex items-start gap-2.5 px-4 py-2 text-xs group hover:bg-accent/30 transition-colors relative",
+        selectedHighlight === "emerald" &&
+          "bg-emerald-500/5 border-l-2 border-emerald-500 pl-[14px]",
+        selectedHighlight === "amber" &&
+          "bg-amber-500/5 border-l-2 border-amber-500 pl-[14px]",
+      )}
+    >
       <ServerStatusDot status={serverStatus.status} gitIsAhead={gitIsAhead} />
 
       <div className="min-w-0 flex-1">
         {/* URL + identity bubble on the same line */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <p
-            className="font-mono text-[10px] text-foreground/80 break-all leading-snug"
+            className={cn(
+              "font-mono text-[10px] break-all leading-snug",
+              hasSelectedState ? "text-foreground/90" : "text-foreground/80",
+            )}
             title={serverStatus.url}
           >
             {displayUrl}
