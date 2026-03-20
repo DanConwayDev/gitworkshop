@@ -112,14 +112,21 @@ export default function RepoCommitsPage() {
         {/* Git server status */}
         {cloneUrls.length > 0 && (
           <GitServerStatus
-            currentRef={resolvedRef ?? ""}
-            refs={explorer.refs}
-            repoState={repoState}
+            currentRefFull={(() => {
+              const ref = explorer.refs.find((r) => r.name === resolvedRef);
+              if (!ref || !resolvedRef) return "";
+              return ref.isBranch
+                ? `refs/heads/${resolvedRef}`
+                : `refs/tags/${resolvedRef}`;
+            })()}
+            currentRefShort={resolvedRef ?? ""}
             repoRelayEose={repoRelayEose}
+            hasStateEvent={!!repoState}
             urlStates={poolState.urls}
             cloneUrls={cloneUrls}
             graspCloneUrls={repo?.graspCloneUrls ?? []}
             additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
+            crossRefDiscrepancies={poolState.crossRefDiscrepancies}
           />
         )}
       </div>

@@ -28,23 +28,29 @@ import { GraspLogo } from "@/components/GraspLogo";
 import { GitServerStatusIcon } from "@/components/GitServerStatusIcon";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { graspCloneUrlNpub } from "@/lib/nip34";
-import type { UrlState } from "@/lib/git-grasp-pool";
-import type { GitRef } from "@/hooks/useGitExplorer";
-import type { RepositoryState } from "@/casts/RepositoryState";
+import type {
+  UrlState,
+  UrlRefStatus,
+  RefDiscrepancy,
+} from "@/lib/git-grasp-pool";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface GitServerStatusProps {
-  /** Currently selected ref name */
-  currentRef: string;
-  /** All known refs */
-  refs: GitRef[];
-  /** The winning Nostr state event, null if none found, undefined while loading */
-  repoState: RepositoryState | null | undefined;
+  /**
+   * Full ref name for the currently selected ref
+   * (e.g. "refs/heads/main" or "refs/tags/v1.0").
+   * Used to look up per-URL ref status from the pool.
+   */
+  currentRefFull: string;
+  /** Short display name for the current ref (e.g. "main") */
+  currentRefShort: string;
   /** True once the relay EOSE has been received for the state query */
   repoRelayEose: boolean;
+  /** Whether a Nostr state event exists for this repo */
+  hasStateEvent: boolean;
   /** Per-URL state from PoolState.urls — the pool's native shape. */
   urlStates: Record<string, UrlState>;
   /** All clone URLs for this repo */
@@ -53,38 +59,26 @@ export interface GitServerStatusProps {
   graspCloneUrls: string[];
   /** Subset of cloneUrls that are NOT Grasp server clone URLs */
   additionalGitServerUrls: string[];
+  /**
+   * Cross-ref discrepancies computed by the pool (PoolState.crossRefDiscrepancies).
+   * Refs where servers disagree on the commit.
+   */
+  crossRefDiscrepancies: RefDiscrepancy[];
 }
 
 // ---------------------------------------------------------------------------
 // Per-server status helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Status of a single git server for a given ref.
- * - "unknown"   : URL is untested / still fetching infoRefs
- * - "connected" : infoRefs fetched successfully but no ref to compare yet
- * - "match"     : server's ref matches the signed state (or majority)
- * - "ahead"     : server is ahead of the signed state
- * - "behind"    : server is behind the signed state
- * - "error"     : permanent failure (unreachable, 404, etc.)
- */
-type ServerRefStatus =
-  | "match"
-  | "ahead"
-  | "behind"
-  | "unknown"
-  | "connected"
-  | "error";
-
 interface ServerStatus {
   url: string;
   /** Short display label derived from the URL */
   label: string;
-  status: ServerRefStatus;
-  /** The commit this server has for the ref (if known) */
+  status: UrlRefStatus;
+  /** The commit this server has for the current ref (if known) */
   serverCommit?: string;
-  /** The commit the state event declares (if known) */
-  stateCommit?: string;
+  /** The expected commit (state event or majority) for the current ref */
+  expectedCommit?: string;
   /** Whether this URL is currently routed through the CORS proxy. */
   usesProxy: boolean;
 }
@@ -99,30 +93,15 @@ function shortLabel(url: string): string {
 }
 
 /**
- * Compute per-server status for the currently selected ref.
+ * Build per-server status for the currently selected ref directly from
+ * pool-computed UrlState data. No ref comparison logic here — the pool
+ * already did it.
  */
-function computeServerStatuses(
-  currentRef: string,
-  currentRefObj: GitRef | undefined,
-  repoState: RepositoryState | null | undefined,
-  repoRelayEose: boolean,
+function buildServerStatuses(
+  currentRefFull: string,
   urlStates: Record<string, UrlState>,
   cloneUrls: string[],
 ): ServerStatus[] {
-  if (cloneUrls.length === 0) return [];
-
-  const prefix = currentRefObj?.isBranch ? "refs/heads/" : "refs/tags/";
-  const fullRefName = currentRefObj
-    ? `${prefix}${currentRefObj.name}`
-    : undefined;
-
-  // Get the state commit for this ref (if state event exists)
-  let stateCommit: string | undefined;
-  if (repoState && fullRefName) {
-    const stateRef = repoState.refs.find((r) => r.name === fullRefName);
-    stateCommit = stateRef?.commitId;
-  }
-
   return cloneUrls.map((url) => {
     const urlState = urlStates[url];
     const label = shortLabel(url);
@@ -139,145 +118,13 @@ function computeServerStatuses(
       return { url, label, status: "error", usesProxy };
     }
 
-    // status === "ok"
-    const serverCommit = fullRefName
-      ? urlState.infoRefs?.refs[fullRefName]
-      : undefined;
+    // status === "ok" — read pool-computed ref status
+    const status: UrlRefStatus =
+      urlState.refStatus[currentRefFull] ?? "connected";
+    const serverCommit = urlState.refCommits[currentRefFull];
 
-    if (!serverCommit) {
-      // Server is reachable but we have no ref to compare against yet
-      // (e.g. explorer hasn't resolved the ref, or the ref doesn't exist on
-      // this server). Show "connected" rather than "fetching…".
-      return { url, label, status: "connected", usesProxy };
-    }
-
-    if (repoState !== undefined && repoRelayEose) {
-      if (!stateCommit) {
-        return { url, label, status: "unknown", serverCommit, usesProxy };
-      }
-
-      const matches =
-        serverCommit === stateCommit ||
-        serverCommit.startsWith(stateCommit) ||
-        stateCommit.startsWith(serverCommit);
-
-      return {
-        url,
-        label,
-        status: matches ? "match" : "behind",
-        serverCommit,
-        stateCommit,
-        usesProxy,
-      };
-    }
-
-    // No state event — compare servers to each other.
-    const firstState = urlStates[cloneUrls[0]];
-    const firstCommit =
-      firstState?.status === "ok" && fullRefName
-        ? firstState.infoRefs?.refs[fullRefName]
-        : undefined;
-
-    if (!firstCommit || url === cloneUrls[0]) {
-      return { url, label, status: "match", serverCommit, usesProxy };
-    }
-
-    const matches =
-      serverCommit === firstCommit ||
-      serverCommit.startsWith(firstCommit) ||
-      firstCommit.startsWith(serverCommit);
-
-    return {
-      url,
-      label,
-      status: matches ? "match" : "behind",
-      serverCommit,
-      stateCommit: firstCommit,
-      usesProxy,
-    };
+    return { url, label, status, serverCommit, usesProxy };
   });
-}
-
-// ---------------------------------------------------------------------------
-// Cross-ref discrepancy detection
-// ---------------------------------------------------------------------------
-
-interface RefDiscrepancy {
-  refName: string;
-  /** Number of servers that disagree with the majority/state commit */
-  disagreeCount: number;
-  totalServers: number;
-}
-
-/**
- * Detect discrepancies across ALL refs (not just the current one).
- * Compares each server's info/refs data against the state event or majority.
- */
-function detectCrossRefDiscrepancies(
-  currentRef: string,
-  refs: GitRef[],
-  repoState: RepositoryState | null | undefined,
-  repoRelayEose: boolean,
-  urlStates: Record<string, UrlState>,
-  cloneUrls: string[],
-): RefDiscrepancy[] {
-  if (cloneUrls.length < 2) return [];
-
-  const okStates = cloneUrls
-    .map((url) => ({ url, state: urlStates[url] }))
-    .filter(
-      (r): r is { url: string; state: UrlState & { status: "ok" } } =>
-        r.state?.status === "ok" && !!r.state.infoRefs,
-    );
-
-  if (okStates.length < 2) return [];
-
-  const discrepancies: RefDiscrepancy[] = [];
-
-  for (const ref of refs) {
-    // Skip the current ref — it's already shown in the main status
-    if (ref.name === currentRef) continue;
-
-    const prefix = ref.isBranch ? "refs/heads/" : "refs/tags/";
-    const fullRefName = `${prefix}${ref.name}`;
-
-    // Get the "expected" commit: from state event, or from the first server
-    let expectedCommit: string | undefined;
-    if (repoState && repoRelayEose) {
-      const stateRef = repoState.refs.find((r) => r.name === fullRefName);
-      expectedCommit = stateRef?.commitId;
-    }
-
-    // Collect commits from each server
-    const serverCommits = okStates
-      .map((r) => r.state.infoRefs!.refs[fullRefName])
-      .filter(Boolean);
-
-    if (serverCommits.length < 2) continue;
-
-    if (!expectedCommit) {
-      // No state — use majority
-      expectedCommit = serverCommits[0];
-    }
-
-    const disagreeCount = serverCommits.filter((c) => {
-      return (
-        c !== expectedCommit &&
-        !c.startsWith(expectedCommit!) &&
-        !expectedCommit!.startsWith(c)
-      );
-    }).length;
-
-    if (disagreeCount > 0) {
-      discrepancies.push({
-        refName: ref.name,
-        disagreeCount,
-        totalServers: serverCommits.length,
-      });
-    }
-  }
-
-  return discrepancies;
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +153,6 @@ function condenseNpub(npub: string): string {
 /**
  * For a Grasp clone URL, replace the full npub in the URL string with the
  * condensed form so the URL fits on one line without losing context.
- * e.g. https://grasp.io/npub1abc...xyz/repo.git → https://grasp.io/npub1ab…yz/repo.git
  */
 function condenseGraspUrl(url: string): string {
   const npub = graspCloneUrlNpub(url);
@@ -318,7 +164,7 @@ function condenseGraspUrl(url: string): string {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function ServerStatusDot({ status }: { status: ServerRefStatus }) {
+function ServerStatusDot({ status }: { status: UrlRefStatus }) {
   switch (status) {
     case "match":
       return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
@@ -343,7 +189,7 @@ function ServerStatusLabel({
   status,
   hasState,
 }: {
-  status: ServerRefStatus;
+  status: UrlRefStatus;
   hasState: boolean;
 }) {
   switch (status) {
@@ -472,25 +318,23 @@ function ServerRow({
         )}
 
         {/* Sync status detail */}
-        {serverStatus.status === "behind" &&
-          serverStatus.serverCommit &&
-          serverStatus.stateCommit && (
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              has{" "}
-              <code className="bg-muted px-1 rounded">
-                {serverStatus.serverCommit.slice(0, 8)}
-              </code>
-              {hasState && (
-                <>
-                  {" "}
-                  · signed{" "}
-                  <code className="bg-muted px-1 rounded">
-                    {serverStatus.stateCommit.slice(0, 8)}
-                  </code>
-                </>
-              )}
-            </p>
-          )}
+        {serverStatus.status === "behind" && serverStatus.serverCommit && (
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            has{" "}
+            <code className="bg-muted px-1 rounded">
+              {serverStatus.serverCommit.slice(0, 8)}
+            </code>
+            {hasState && serverStatus.expectedCommit && (
+              <>
+                {" "}
+                · signed{" "}
+                <code className="bg-muted px-1 rounded">
+                  {serverStatus.expectedCommit.slice(0, 8)}
+                </code>
+              </>
+            )}
+          </p>
+        )}
         {serverStatus.status === "error" && (
           <p className="text-[11px] text-red-500/80 mt-0.5">unreachable</p>
         )}
@@ -578,28 +422,21 @@ function CrossRefDiscrepancies({
 
 function GitServerPanel({
   serverStatuses,
-  repoState,
-  repoRelayEose,
-  currentRef,
-  refs,
+  hasState,
+  noState,
+  currentRefShort,
   graspCloneUrls,
   additionalGitServerUrls,
-  urlStates,
-  cloneUrls,
+  crossRefDiscrepancies,
 }: {
   serverStatuses: ServerStatus[];
-  repoState: RepositoryState | null | undefined;
-  repoRelayEose: boolean;
-  currentRef: string;
-  refs: GitRef[];
+  hasState: boolean;
+  noState: boolean;
+  currentRefShort: string;
   graspCloneUrls: string[];
   additionalGitServerUrls: string[];
-  urlStates: Record<string, UrlState>;
-  cloneUrls: string[];
+  crossRefDiscrepancies: RefDiscrepancy[];
 }) {
-  const hasState =
-    repoState !== null && repoState !== undefined && repoRelayEose;
-  const noState = repoRelayEose && repoState === null;
   const usesGrasp = graspCloneUrls.length > 0;
 
   const graspStatuses = useMemo(
@@ -612,20 +449,7 @@ function GitServerPanel({
     [serverStatuses, additionalGitServerUrls],
   );
 
-  const crossRefDiscrepancies = useMemo(
-    () =>
-      detectCrossRefDiscrepancies(
-        currentRef,
-        refs,
-        repoState,
-        repoRelayEose,
-        urlStates,
-        cloneUrls,
-      ),
-    [currentRef, refs, repoState, repoRelayEose, urlStates, cloneUrls],
-  );
-
-  const uniqueServerCount = cloneUrls.length;
+  const uniqueServerCount = serverStatuses.length;
   const matchingServerCount = serverStatuses.filter(
     (s) => s.status === "match",
   ).length;
@@ -655,7 +479,7 @@ function GitServerPanel({
               {uniqueServerCount === 1 ? "server" : "servers"} serving the
               signed state for{" "}
               <code className="font-mono bg-muted px-1 py-0.5 rounded text-[11px]">
-                {currentRef}
+                {currentRefShort}
               </code>
             </>
           ) : noState ? (
@@ -713,7 +537,7 @@ function GitServerPanel({
         )}
       </ScrollArea>
 
-      {/* Cross-ref discrepancies */}
+      {/* Cross-ref discrepancies — computed by the pool */}
       <CrossRefDiscrepancies discrepancies={crossRefDiscrepancies} />
 
       {/* Footer note */}
@@ -734,32 +558,26 @@ function GitServerPanel({
 // ---------------------------------------------------------------------------
 
 export function GitServerStatus({
-  currentRef,
-  refs,
-  repoState,
+  currentRefFull,
+  currentRefShort,
   repoRelayEose,
+  hasStateEvent,
   urlStates,
   cloneUrls,
   graspCloneUrls,
   additionalGitServerUrls,
+  crossRefDiscrepancies,
 }: GitServerStatusProps) {
   const [open, setOpen] = useState(false);
 
-  const currentRefObj = refs.find((r) => r.name === currentRef);
-
-  // Per-server statuses for the current ref
+  // Build per-server statuses from pool-computed data — no ref comparison here
   const serverStatuses = useMemo(
-    () =>
-      computeServerStatuses(
-        currentRef,
-        currentRefObj,
-        repoState,
-        repoRelayEose,
-        urlStates,
-        cloneUrls,
-      ),
-    [currentRef, currentRefObj, repoState, repoRelayEose, urlStates, cloneUrls],
+    () => buildServerStatuses(currentRefFull, urlStates, cloneUrls),
+    [currentRefFull, urlStates, cloneUrls],
   );
+
+  const hasState = hasStateEvent && repoRelayEose;
+  const noState = repoRelayEose && !hasStateEvent;
 
   const uniqueServerCount = cloneUrls.length;
   const matchingUniqueCount = serverStatuses.filter(
@@ -814,14 +632,12 @@ export function GitServerStatus({
       >
         <GitServerPanel
           serverStatuses={serverStatuses}
-          repoState={repoState}
-          repoRelayEose={repoRelayEose}
-          currentRef={currentRef}
-          refs={refs}
+          hasState={hasState}
+          noState={noState}
+          currentRefShort={currentRefShort}
           graspCloneUrls={graspCloneUrls}
           additionalGitServerUrls={additionalGitServerUrls}
-          urlStates={urlStates}
-          cloneUrls={cloneUrls}
+          crossRefDiscrepancies={crossRefDiscrepancies}
         />
       </PopoverContent>
     </Popover>

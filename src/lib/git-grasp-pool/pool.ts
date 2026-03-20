@@ -24,6 +24,8 @@ import type {
   PoolOptions,
   PoolSubscriber,
   PoolWarning,
+  RefDiscrepancy,
+  UrlRefStatus,
   StateEventInput,
   Commit,
   Tree,
@@ -32,7 +34,7 @@ import type {
 import { CorsProxyManager } from "./cors-proxy";
 import { GitObjectCache } from "./cache";
 import { GitHttpClient, classifyFetchError } from "./git-http";
-import { UrlStateManager } from "./url-state";
+import { UrlStateManager, UrlTracker } from "./url-state";
 import { StateEventManager } from "./state-event";
 
 // ---------------------------------------------------------------------------
@@ -59,7 +61,135 @@ function makeInitialState(): PoolState {
     warning: null,
     error: null,
     lastCheckedAt: null,
+    crossRefDiscrepancies: [],
+    retryAt: null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Ref status computation helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine whether two commit hashes are equivalent (one may be a prefix
+ * of the other when abbreviated hashes are involved).
+ */
+function commitsMatch(a: string, b: string): boolean {
+  return a === b || a.startsWith(b) || b.startsWith(a);
+}
+
+/**
+ * Compute per-URL, per-ref sync status and cross-ref discrepancies.
+ *
+ * For each ref that appears in at least one server's infoRefs:
+ *   - If a state event exists: compare each server's commit against the
+ *     state event's commit for that ref.
+ *   - If no state event: compare each server's commit against the majority
+ *     (first server that reported the ref).
+ *
+ * Returns:
+ *   - `urlRefStatuses`: map of url → { refName → UrlRefStatus }
+ *   - `urlRefCommits`:  map of url → { refName → commitHash }
+ *   - `crossRefDiscrepancies`: refs where servers disagree
+ */
+function computeRefStatuses(
+  trackers: UrlTracker[],
+  stateEvent: StateEventInput,
+  stateEose: boolean,
+): {
+  urlRefStatuses: Map<string, Record<string, UrlRefStatus>>;
+  urlRefCommits: Map<string, Record<string, string>>;
+  crossRefDiscrepancies: RefDiscrepancy[];
+} {
+  const urlRefStatuses = new Map<string, Record<string, UrlRefStatus>>();
+  const urlRefCommits = new Map<string, Record<string, string>>();
+
+  // Initialise maps for all trackers
+  for (const t of trackers) {
+    urlRefStatuses.set(t.url, {});
+    urlRefCommits.set(t.url, {});
+  }
+
+  // Collect all ref names across all ok servers
+  const allRefNames = new Set<string>();
+  for (const t of trackers) {
+    if (t.status === "ok" && t.state.infoRefs) {
+      for (const refName of Object.keys(t.state.infoRefs.refs)) {
+        allRefNames.add(refName);
+      }
+    }
+  }
+
+  const crossRefDiscrepancies: RefDiscrepancy[] = [];
+  const hasStateEvent =
+    stateEvent !== undefined && stateEvent !== null && stateEose;
+
+  for (const refName of allRefNames) {
+    // Build a map of url → commit for this ref (only ok servers)
+    const serverCommits: Array<{ url: string; commit: string }> = [];
+    for (const t of trackers) {
+      if (t.status === "ok" && t.state.infoRefs) {
+        const commit = t.state.infoRefs.refs[refName];
+        if (commit) {
+          serverCommits.push({ url: t.url, commit });
+        }
+      }
+    }
+
+    // Determine the "expected" commit for this ref
+    let expectedCommit: string | undefined;
+    if (hasStateEvent && stateEvent) {
+      const stateRef = stateEvent.refs.find((r) => r.name === refName);
+      expectedCommit = stateRef?.commitId;
+    } else if (serverCommits.length > 0) {
+      // No state event — use the first server's commit as the reference
+      expectedCommit = serverCommits[0].commit;
+    }
+
+    // Assign per-URL status for this ref
+    let disagreeCount = 0;
+    for (const { url, commit } of serverCommits) {
+      const statusMap = urlRefStatuses.get(url)!;
+      const commitMap = urlRefCommits.get(url)!;
+      commitMap[refName] = commit;
+
+      if (!expectedCommit) {
+        // State event exists but doesn't mention this ref — can't compare
+        statusMap[refName] = "connected";
+      } else if (commitsMatch(commit, expectedCommit)) {
+        statusMap[refName] = "match";
+      } else {
+        statusMap[refName] = "behind";
+        disagreeCount++;
+      }
+    }
+
+    // Cross-ref discrepancy: refs where servers disagree (2+ servers needed)
+    if (serverCommits.length >= 2 && disagreeCount > 0) {
+      crossRefDiscrepancies.push({
+        refName,
+        disagreeCount,
+        totalServers: serverCommits.length,
+      });
+    }
+  }
+
+  // For error/untested/permanent-failure URLs, set status based on connection
+  for (const t of trackers) {
+    const statusMap = urlRefStatuses.get(t.url)!;
+    if (t.status === "permanent-failure" || t.status === "error") {
+      // Mark all known refs as "error" for this URL
+      for (const refName of allRefNames) {
+        statusMap[refName] = "error";
+      }
+    } else if (t.status === "untested") {
+      for (const refName of allRefNames) {
+        statusMap[refName] = "unknown";
+      }
+    }
+  }
+
+  return { urlRefStatuses, urlRefCommits, crossRefDiscrepancies };
 }
 
 // ---------------------------------------------------------------------------
@@ -295,6 +425,10 @@ export class GitGraspPool {
           this.cache.invalidateInfoRefs(url);
         }
         this.stateManager.scheduleBackoffFetch(() => this.startFetch());
+        this.setState((prev) => ({
+          ...prev,
+          retryAt: this.stateManager.retryAt,
+        }));
       }
     } else if (!this.fetchedOnce && !this.fetching) {
       // Haven't started yet — the next subscribe() will trigger startFetch
@@ -330,6 +464,8 @@ export class GitGraspPool {
 
   private startFetch(): void {
     this.stateManager.cancelBackoff();
+    // Clear retryAt in state since we're fetching now
+    this.setState((prev) => ({ ...prev, retryAt: null }));
     this.runFetch();
   }
 
@@ -782,6 +918,23 @@ export class GitGraspPool {
     this.fetchedOnce = true;
 
     const hasResult = current.latestCommit !== null;
+    const stateEventForRefs = this.stateManager.currentState;
+    const stateEose = stateEventForRefs !== undefined;
+
+    // Compute per-URL ref statuses and cross-ref discrepancies
+    const { urlRefStatuses, urlRefCommits, crossRefDiscrepancies } =
+      computeRefStatuses(
+        this.urlManager.getAll(),
+        stateEventForRefs,
+        stateEose,
+      );
+
+    // Push computed ref statuses into each tracker
+    for (const tracker of this.urlManager.getAll()) {
+      const refStatus = urlRefStatuses.get(tracker.url) ?? {};
+      const refCommits = urlRefCommits.get(tracker.url) ?? {};
+      tracker.updateRefStatus(refStatus, refCommits);
+    }
 
     this.setState((prev) => ({
       ...prev,
@@ -794,6 +947,9 @@ export class GitGraspPool {
       lastCheckedAt: hasResult
         ? Math.floor(Date.now() / 1000)
         : prev.lastCheckedAt,
+      urls: this.urlManager.toStateRecord(),
+      crossRefDiscrepancies,
+      retryAt: this.stateManager.retryAt,
     }));
 
     // Handle backoff for state event mismatch
@@ -822,6 +978,11 @@ export class GitGraspPool {
         if (!gitIsAhead) {
           // State is ahead of git — servers haven't caught up yet, retry
           this.stateManager.scheduleBackoffFetch(() => this.startFetch());
+          // Update retryAt in state now that it's been set
+          this.setState((prev) => ({
+            ...prev,
+            retryAt: this.stateManager.retryAt,
+          }));
         } else {
           // Git is ahead — reset backoff
           this.stateManager.resetBackoff();

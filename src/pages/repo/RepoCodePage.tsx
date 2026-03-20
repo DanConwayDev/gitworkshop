@@ -249,10 +249,12 @@ export default function RepoCodePage() {
             lastCheckedAt={poolState.lastCheckedAt}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
+            hasStateEvent={!!repoState}
             urlStates={poolState.urls}
             cloneUrls={cloneUrls}
             graspCloneUrls={repo?.graspCloneUrls ?? []}
             additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
+            crossRefDiscrepancies={poolState.crossRefDiscrepancies}
             stateBehindGit={stateBehindGit}
           />
 
@@ -477,10 +479,12 @@ function LocatorBar({
   lastCheckedAt,
   repoState,
   repoRelayEose,
+  hasStateEvent,
   urlStates,
   cloneUrls,
   graspCloneUrls,
   additionalGitServerUrls,
+  crossRefDiscrepancies,
   stateBehindGit,
 }: {
   loading: boolean;
@@ -497,10 +501,12 @@ function LocatorBar({
   lastCheckedAt: number | null;
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
+  hasStateEvent: boolean;
   urlStates: Record<string, UrlState>;
   cloneUrls: string[];
   graspCloneUrls: string[];
   additionalGitServerUrls: string[];
+  crossRefDiscrepancies: import("@/lib/git-grasp-pool").RefDiscrepancy[];
   stateBehindGit: boolean;
 }) {
   // Hide "checked" text if showing it would cause the bar to wrap onto
@@ -511,6 +517,14 @@ function LocatorBar({
   const checkedRef = useRef<HTMLSpanElement>(null);
 
   const hasRepoState = !!repoState;
+
+  // Compute the full ref name for the pool's refStatus lookup
+  const currentRefObj = refs.find((r) => r.name === currentRef);
+  const currentRefFull = currentRefObj
+    ? currentRefObj.isBranch
+      ? `refs/heads/${currentRef}`
+      : `refs/tags/${currentRef}`
+    : "";
   const pathKey = pathSegments.join("/");
 
   useEffect(() => {
@@ -615,14 +629,15 @@ function LocatorBar({
         {/* Git server status indicator — right-most element */}
         {cloneUrls.length > 0 && (
           <GitServerStatus
-            currentRef={currentRef}
-            refs={refs}
-            repoState={repoState}
+            currentRefFull={currentRefFull}
+            currentRefShort={currentRef}
             repoRelayEose={repoRelayEose}
+            hasStateEvent={hasStateEvent}
             urlStates={urlStates}
             cloneUrls={cloneUrls}
             graspCloneUrls={graspCloneUrls}
             additionalGitServerUrls={additionalGitServerUrls}
+            crossRefDiscrepancies={crossRefDiscrepancies}
           />
         )}
       </div>

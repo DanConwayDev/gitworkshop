@@ -42,10 +42,20 @@ export class StateEventManager {
   private _currentState: StateEventInput = undefined;
   private backoffTimer: ReturnType<typeof setTimeout> | null = null;
   private backoffDelay = BACKOFF_INITIAL_MS;
+  /** Unix timestamp (ms) of the next scheduled retry, or null */
+  private _retryAt: number | null = null;
 
   /** The current state event (undefined = loading, null = none, StateEvent = have) */
   get currentState(): StateEventInput {
     return this._currentState;
+  }
+
+  /**
+   * Unix timestamp (ms) of the next scheduled retry.
+   * null when no retry is pending.
+   */
+  get retryAt(): number | null {
+    return this._retryAt;
   }
 
   /**
@@ -95,8 +105,10 @@ export class StateEventManager {
    */
   scheduleBackoffFetch(callback: () => void): void {
     this.cancelBackoff();
+    this._retryAt = Date.now() + this.backoffDelay;
     this.backoffTimer = setTimeout(() => {
       this.backoffTimer = null;
+      this._retryAt = null;
       callback();
     }, this.backoffDelay);
     this.backoffDelay = Math.min(this.backoffDelay * 2, BACKOFF_MAX_MS);
@@ -108,10 +120,12 @@ export class StateEventManager {
       clearTimeout(this.backoffTimer);
       this.backoffTimer = null;
     }
+    this._retryAt = null;
   }
 
   /** Reset the backoff delay to initial (after a successful fetch) */
   resetBackoff(): void {
     this.backoffDelay = BACKOFF_INITIAL_MS;
+    this._retryAt = null;
   }
 }

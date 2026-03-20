@@ -24,9 +24,11 @@ export type {
   PoolOptions,
   PoolSubscriber,
   PoolWarning,
+  RefDiscrepancy,
   // URL state
   UrlState,
   UrlConnectionStatus,
+  UrlRefStatus,
   // State event
   StateEvent,
   StateEventInput,

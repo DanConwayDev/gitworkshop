@@ -61,6 +61,8 @@ function makeInitialState(hasUrls: boolean): PoolState {
     warning: null,
     error: null,
     lastCheckedAt: null,
+    crossRefDiscrepancies: [],
+    retryAt: null,
   };
 }
 

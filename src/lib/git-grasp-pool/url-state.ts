@@ -13,6 +13,7 @@
 import type {
   UrlState,
   UrlConnectionStatus,
+  UrlRefStatus,
   InfoRefsUploadPackResponse,
 } from "./types";
 import type { CorsProxyManager } from "./cors-proxy";
@@ -44,6 +45,8 @@ export class UrlTracker {
       latencyMs: null,
       lastError: null,
       lastSuccessAt: null,
+      refStatus: {},
+      refCommits: {},
     };
   }
 
@@ -149,6 +152,22 @@ export class UrlTracker {
       ...this._state,
       status: "permanent-failure",
       lastError: error,
+    };
+  }
+
+  /**
+   * Update the per-ref sync status computed by the pool.
+   * Called after all infoRefs have settled and the pool has compared
+   * each server's refs against the state event (or majority).
+   */
+  updateRefStatus(
+    refStatus: Record<string, UrlRefStatus>,
+    refCommits: Record<string, string>,
+  ): void {
+    this._state = {
+      ...this._state,
+      refStatus,
+      refCommits,
     };
   }
 

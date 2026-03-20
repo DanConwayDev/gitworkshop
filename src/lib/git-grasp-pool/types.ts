@@ -26,6 +26,27 @@ export type UrlConnectionStatus =
   | "error"
   | "permanent-failure";
 
+/**
+ * Sync status of a single git server for a given ref, relative to the
+ * Nostr state event (or relative to the majority of servers when no state
+ * event exists).
+ *
+ * - "match"     : server's commit for this ref matches the signed state
+ * - "behind"    : server has a different (older) commit than the signed state
+ * - "ahead"     : server has a newer commit than the signed state
+ * - "connected" : server is reachable but no ref comparison is possible yet
+ *                 (e.g. state event still loading, or ref doesn't exist on server)
+ * - "unknown"   : server is untested / still fetching infoRefs
+ * - "error"     : permanent failure (unreachable, 404, etc.)
+ */
+export type UrlRefStatus =
+  | "match"
+  | "behind"
+  | "ahead"
+  | "connected"
+  | "unknown"
+  | "error";
+
 /** Full tracked state for a single clone URL */
 export interface UrlState {
   url: string;
@@ -52,6 +73,22 @@ export interface UrlState {
   lastError: string | null;
   /** Timestamp (ms) of the last successful fetch */
   lastSuccessAt: number | null;
+  /**
+   * Per-ref sync status computed by the pool.
+   *
+   * Keys are full ref names (e.g. "refs/heads/main", "refs/tags/v1.0").
+   * Values are the sync status relative to the Nostr state event, or
+   * relative to the majority of servers when no state event exists.
+   *
+   * Only populated for refs that appear in at least one server's infoRefs.
+   * Empty until the first successful infoRefs fetch.
+   */
+  refStatus: Record<string, UrlRefStatus>;
+  /**
+   * The commit this server has for each ref.
+   * Keys are full ref names. Only populated for refs in infoRefs.
+   */
+  refCommits: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +151,23 @@ export type PoolWarning =
     };
 
 // ---------------------------------------------------------------------------
+// Cross-ref discrepancy
+// ---------------------------------------------------------------------------
+
+/**
+ * A ref where servers disagree on the commit (relative to the state event
+ * or the majority of servers when no state event exists).
+ */
+export interface RefDiscrepancy {
+  /** Full ref name, e.g. "refs/heads/main" */
+  refName: string;
+  /** Number of servers that disagree with the expected commit */
+  disagreeCount: number;
+  /** Total number of servers that reported this ref */
+  totalServers: number;
+}
+
+// ---------------------------------------------------------------------------
 // Pool state (observable)
 // ---------------------------------------------------------------------------
 
@@ -157,6 +211,20 @@ export interface PoolState {
    * null if no fetch has completed yet.
    */
   lastCheckedAt: number | null;
+  /**
+   * Refs where servers disagree on the commit (relative to the state event
+   * or the majority of servers when no state event exists).
+   *
+   * Computed by the pool after all infoRefs have settled. Empty array when
+   * there are fewer than 2 servers or no discrepancies.
+   */
+  crossRefDiscrepancies: RefDiscrepancy[];
+  /**
+   * Unix timestamp (ms) of the next scheduled retry, when the pool is in
+   * backoff mode waiting for git servers to catch up to the state event.
+   * null when no retry is scheduled.
+   */
+  retryAt: number | null;
 }
 
 // ---------------------------------------------------------------------------
