@@ -6,19 +6,6 @@ import type {
 } from "@fiatjaf/git-natural-api";
 import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import type { GitGraspPool, PoolState } from "@/lib/git-grasp-pool";
-import {
-  peekCachedInfoRefsStale,
-  getCachedBlob,
-  peekCachedBlob,
-  getCachedCommit,
-  peekCachedCommit,
-  getCachedTree,
-  peekCachedTree,
-  cacheTree,
-  getCachedCommitHistory,
-  peekCachedCommitHistory,
-  cacheCommitHistory,
-} from "@/services/gitObjectCache";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -321,11 +308,9 @@ export interface UseGitExplorerOptions {
  * Fetches the git file tree and file content for a repository path.
  *
  * Routes all git HTTP operations through the git-grasp-pool so that:
- * - The pool's capabilitiesCache is always warm (no double-fetch)
+ * - The pool's cache is always warm (no double-fetch)
  * - URL racing and CORS proxy logic is centralised in the pool
  * - infoRefs results are shared with useGitRepoData via the same pool
- *
- * Uses gitObjectCache for content-addressed caching of commits and blobs.
  */
 export function useGitExplorer(
   cloneUrls: string[],
@@ -374,7 +359,7 @@ export function useGitExplorer(
     // remount (tab switch, navigation back).
     // -----------------------------------------------------------------------
     const fastInfo = cloneUrls
-      .map((u) => ({ url: u, info: peekCachedInfoRefsStale(u) }))
+      .map((u) => ({ url: u, info: pool.cache.peekInfoRefsStale(u) }))
       .find((r) => r.info !== undefined) as
       | { url: string; info: InfoRefsUploadPackResponse }
       | undefined;
@@ -422,10 +407,10 @@ export function useGitExplorer(
           ? fastResolvedPath.split("/").filter(Boolean)
           : [];
         const fastNestLimit = fastPathSegments.length + 1;
-        const fastTree = peekCachedTree(fastCommitHash, fastNestLimit);
+        const fastTree = pool.cache.peekTree(fastCommitHash, fastNestLimit);
         if (fastTree) {
           // Tree is in memory — attempt a fully-synchronous render.
-          const fastHeadCommit = peekCachedCommit(fastCommitHash) ?? null;
+          const fastHeadCommit = pool.cache.peekCommit(fastCommitHash) ?? null;
           let fastHandled = false;
 
           if (fastPathSegments.length === 0) {
@@ -477,7 +462,7 @@ export function useGitExplorer(
                   ? treeToEntries(parentTree, parentPath)
                   : null;
 
-                const cachedBlob = peekCachedBlob(fileHash);
+                const cachedBlob = pool.cache.peekBlob(fileHash);
                 if (cachedBlob !== undefined) {
                   const content = new TextDecoder("utf-8", {
                     fatal: false,
@@ -649,33 +634,23 @@ export function useGitExplorer(
     // -----------------------------------------------------------------------
     // Phase 2: Fetch the directory tree via the pool.
     //
-    // pool.getTree() routes through the winning URL with fallback, uses the
-    // pool's cache (L1 + IDB), and never re-fetches infoRefs.
-    // We also write through to the old gitObjectCache so the fast-path
-    // peekCachedTree() calls above continue to work on remount.
+    // pool.getTree() checks L1 memory then IDB then fetches from the git
+    // server, routes through the winning URL with fallback, and caches the
+    // result. The fast-path peeks above read from the same shared L1 maps.
     // -----------------------------------------------------------------------
     const pathSegments = path ? path.split("/").filter(Boolean) : [];
     const nestLimit = pathSegments.length + 1;
 
-    let tree: Tree;
-
-    const cachedTree = await getCachedTree(commitHash, nestLimit);
-    if (cachedTree) {
-      tree = cachedTree;
-    } else {
-      const poolTree = await pool.getTree(commitHash, nestLimit, signal);
-      if (signal.aborted) return;
-      if (!poolTree) {
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          error: "Failed to load file tree",
-        }));
-        return;
-      }
-      tree = poolTree;
-      // Write through to the old cache so the fast-path peeks work on remount
-      cacheTree(commitHash, nestLimit, tree);
+    // pool.getTree() checks L1 memory then IDB then fetches — all in one call.
+    const tree = await pool.getTree(commitHash, nestLimit, signal);
+    if (signal.aborted) return;
+    if (!tree) {
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: "Failed to load file tree",
+      }));
+      return;
     }
 
     if (signal.aborted) return;
@@ -725,8 +700,8 @@ export function useGitExplorer(
     // Check if path is a file
     const fileHash = findFileInTree(tree, pathSegments);
     if (fileHash) {
-      // Check blob cache first
-      const cachedData = await getCachedBlob(fileHash);
+      // Check blob cache first (pool.getBlob checks L1 then IDB then fetches)
+      const cachedData = await pool.cache.getBlob(fileHash);
       if (cachedData) {
         if (signal.aborted) return;
         const content = new TextDecoder("utf-8", { fatal: false }).decode(
@@ -813,8 +788,8 @@ async function fetchHeadCommit(
   signal: AbortSignal,
   setState: React.Dispatch<React.SetStateAction<GitExplorerState>>,
 ) {
-  // Check commit cache first
-  const cached = await getCachedCommit(commitHash);
+  // Check commit cache first (pool.cache.getCommit checks L1 then IDB)
+  const cached = await pool.cache.getCommit(commitHash);
   if (cached) {
     if (!signal.aborted) {
       setState((prev) => ({ ...prev, headCommit: cached }));
@@ -849,8 +824,9 @@ export function useCommitHistory(
   const [state, setState] = useState<CommitHistoryState>(() => {
     // Fast path: resolve commitHash from stale infoRefs and check history cache
     if (ref && cloneUrls.length > 0) {
+      const pool = getOrCreatePool({ cloneUrls });
       const fastInfo = cloneUrls
-        .map((u) => peekCachedInfoRefsStale(u))
+        .map((u) => pool.cache.peekInfoRefsStale(u))
         .find((i) => i !== undefined);
       if (fastInfo) {
         const commitHash = ref.startsWith("refs/")
@@ -859,7 +835,7 @@ export function useCommitHistory(
             fastInfo.refs[`refs/tags/${ref}`] ??
             ref);
         if (commitHash) {
-          const cached = peekCachedCommitHistory(commitHash, maxCommits);
+          const cached = pool.cache.peekCommitHistory(commitHash, maxCommits);
           if (cached) return { loading: false, error: null, commits: cached };
         }
       }
@@ -908,7 +884,8 @@ export function useCommitHistory(
         }
 
         // Check history cache before hitting the network
-        const cachedHistory = await getCachedCommitHistory(
+        // pool.cache.getCommitHistory checks L1 then IDB
+        const cachedHistory = await pool.cache.getCommitHistory(
           commitHash,
           maxCommits,
         );
@@ -937,9 +914,7 @@ export function useCommitHistory(
           return;
         }
 
-        // Cache the history list (pool.getCommitHistory already caches internally,
-        // but we also write to the old cache so peekCachedCommitHistory works)
-        cacheCommitHistory(commitHash, maxCommits, commits);
+        // pool.getCommitHistory already caches internally via pool.cache
         setState({ loading: false, error: null, commits });
       })
       .catch((err: unknown) => {

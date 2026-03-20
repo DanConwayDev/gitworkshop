@@ -28,7 +28,7 @@ import { GraspLogo } from "@/components/GraspLogo";
 import { GitServerStatusIcon } from "@/components/GitServerStatusIcon";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { graspCloneUrlNpub } from "@/lib/nip34";
-import { urlUsesProxy } from "@/lib/corsProxy";
+import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import type { UrlInfoRefsResult } from "@/hooks/useGitRepoData";
@@ -384,13 +384,18 @@ function ServerRow({
   serverStatus,
   hasState,
   isGrasp,
+  cloneUrls,
 }: {
   serverStatus: ServerStatus;
   hasState: boolean;
   isGrasp: boolean;
+  cloneUrls: string[];
 }) {
   const [copied, setCopied] = useState(false);
-  const viaProxy = urlUsesProxy(serverStatus.url);
+  const viaProxy =
+    cloneUrls.length > 0
+      ? getOrCreatePool({ cloneUrls }).urlUsesProxy(serverStatus.url)
+      : false;
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -658,6 +663,7 @@ function GitServerPanel({
                 serverStatus={s}
                 hasState={hasState}
                 isGrasp={true}
+                cloneUrls={cloneUrls}
               />
             ))}
           </div>
@@ -679,6 +685,7 @@ function GitServerPanel({
                 serverStatus={s}
                 hasState={hasState}
                 isGrasp={false}
+                cloneUrls={cloneUrls}
               />
             ))}
           </div>

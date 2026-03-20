@@ -5,7 +5,7 @@
  * the same clone URLs share one pool instance.
  *
  * The registry key is the sorted, joined clone URL list — same pattern as
- * the current gitRepoDataService. But unlike the old service, the registry
+ * Unlike the old service-per-repo pattern, the registry
  * handles the case where clone URLs grow over time (new announcement events)
  * by calling pool.addUrls() rather than destroying and recreating the pool.
  *

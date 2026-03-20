@@ -5,8 +5,7 @@
  * single pool instance. The pool handles caching, backoff, and Nostr state
  * event integration.
  *
- * The hook exposes a GitRepoData shape (backward-compatible with the old
- * gitRepoDataService API) so existing consumers don't need to change.
+ * The hook exposes a GitRepoData shape for consumers.
  * The richer PoolState is also returned for consumers that need it.
  */
 

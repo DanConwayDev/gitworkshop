@@ -69,7 +69,8 @@ function makeInitialState(): PoolState {
 export class GitGraspPool {
   // --- Internal services ---
   private cors: CorsProxyManager;
-  private cache: GitObjectCache;
+  /** The shared content-addressed object cache. Read-only access for consumers. */
+  readonly cache: GitObjectCache;
   private http: GitHttpClient;
   private urlManager: UrlStateManager;
   private stateManager: StateEventManager;
@@ -1006,6 +1007,14 @@ export class GitGraspPool {
     if (!targetUrl) return null;
     const tracker = this.urlManager.get(targetUrl);
     return tracker?.state.infoRefs ?? null;
+  }
+
+  /**
+   * Returns true if the given URL is currently being routed through the
+   * CORS proxy. Useful for UI components that display proxy status.
+   */
+  urlUsesProxy(url: string): boolean {
+    return this.cors.urlUsesProxy(url);
   }
 
   // -----------------------------------------------------------------------

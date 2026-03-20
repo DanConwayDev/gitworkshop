@@ -1457,7 +1457,6 @@ function FileContentBody({
 // README viewer (fetched lazily below the file tree)
 // ---------------------------------------------------------------------------
 
-import { getCachedText, cacheText } from "@/services/gitObjectCache";
 import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import { BookOpen } from "lucide-react";
 
@@ -1478,8 +1477,12 @@ function ReadmeViewer({
   useEffect(() => {
     if (!commitHash || cloneUrls.length === 0) return;
 
+    // Route through the pool — uses the winning URL with fallback, CORS proxy,
+    // and the pool's cache. No filterFailedUrls needed; the pool tracks that.
+    const pool = getOrCreatePool({ cloneUrls });
+
     // Check text cache first (synchronous, no loading flash on remount)
-    const cachedText = getCachedText(commitHash, readmeName);
+    const cachedText = pool.cache.getText(commitHash, readmeName);
     if (cachedText !== undefined) {
       setContent(cachedText);
       setLoading(false);
@@ -1489,10 +1492,6 @@ function ReadmeViewer({
     const abort = new AbortController();
     setLoading(true);
     setContent(null);
-
-    // Route through the pool — uses the winning URL with fallback, CORS proxy,
-    // and the pool's cache. No filterFailedUrls needed; the pool tracks that.
-    const pool = getOrCreatePool({ cloneUrls });
 
     pool
       .getObjectByPath(commitHash, readmePath, abort.signal)
@@ -1509,7 +1508,7 @@ function ReadmeViewer({
           return;
         }
         const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-        cacheText(commitHash, readmeName, text);
+        pool.cache.putText(commitHash, readmeName, text);
         setContent(text);
         setLoading(false);
       })
