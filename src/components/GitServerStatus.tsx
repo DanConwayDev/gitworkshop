@@ -59,8 +59,22 @@ export interface GitServerStatusProps {
 // Per-server status helpers
 // ---------------------------------------------------------------------------
 
-/** Status of a single git server for a given ref */
-type ServerRefStatus = "match" | "ahead" | "behind" | "unknown" | "error";
+/**
+ * Status of a single git server for a given ref.
+ * - "unknown"   : URL is untested / still fetching infoRefs
+ * - "connected" : infoRefs fetched successfully but no ref to compare yet
+ * - "match"     : server's ref matches the signed state (or majority)
+ * - "ahead"     : server is ahead of the signed state
+ * - "behind"    : server is behind the signed state
+ * - "error"     : permanent failure (unreachable, 404, etc.)
+ */
+type ServerRefStatus =
+  | "match"
+  | "ahead"
+  | "behind"
+  | "unknown"
+  | "connected"
+  | "error";
 
 interface ServerStatus {
   url: string;
@@ -131,7 +145,10 @@ function computeServerStatuses(
       : undefined;
 
     if (!serverCommit) {
-      return { url, label, status: "unknown", usesProxy };
+      // Server is reachable but we have no ref to compare against yet
+      // (e.g. explorer hasn't resolved the ref, or the ref doesn't exist on
+      // this server). Show "connected" rather than "fetching…".
+      return { url, label, status: "connected", usesProxy };
     }
 
     if (repoState !== undefined && repoRelayEose) {
@@ -311,6 +328,10 @@ function ServerStatusDot({ status }: { status: ServerRefStatus }) {
       return <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
     case "error":
       return <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />;
+    case "connected":
+      return (
+        <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+      );
     case "unknown":
       return (
         <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
@@ -346,6 +367,12 @@ function ServerStatusLabel({
       );
     case "error":
       return <span className="text-[10px] text-red-500 shrink-0">error</span>;
+    case "connected":
+      return (
+        <span className="text-[10px] text-muted-foreground/50 shrink-0">
+          ok
+        </span>
+      );
     case "unknown":
       return (
         <span className="text-[10px] text-muted-foreground/50 shrink-0">…</span>

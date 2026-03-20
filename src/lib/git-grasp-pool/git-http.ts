@@ -376,10 +376,25 @@ export class GitHttpClient {
 
       try {
         const info = await libGetInfoRefs(effectiveUrl);
+        // libGetInfoRefs does not check the HTTP status code — it calls
+        // fetch().text() and parses the body as git pkt-line regardless of
+        // status. A 404 HTML page produces an empty capabilities/refs object.
+        // Treat that as a permanent failure so the URL is not retried.
+        if (
+          info.capabilities.length === 0 &&
+          Object.keys(info.refs).length === 0
+        ) {
+          const permanent = new PermanentFetchError(
+            `No git data returned from ${url} (server may have returned a non-git response)`,
+          );
+          this.permanentFailures.set(url, permanent);
+          throw permanent;
+        }
         if (effectiveUrl === url) this.cors.markOriginDirect(url);
         this.cache.putInfoRefs(url, info);
         return info;
       } catch (err) {
+        if (err instanceof PermanentFetchError) throw err;
         if (classifyFetchError(err) === "permanent") {
           const msg = err instanceof Error ? err.message : String(err);
           const permanent = new PermanentFetchError(
@@ -403,10 +418,22 @@ export class GitHttpClient {
         const proxyUrl = this.cors.toProxyUrl(url);
         try {
           const info = await libGetInfoRefs(proxyUrl);
+          // Same empty-response check for the proxy path
+          if (
+            info.capabilities.length === 0 &&
+            Object.keys(info.refs).length === 0
+          ) {
+            const permanent = new PermanentFetchError(
+              `No git data returned from ${url} via proxy (server may have returned a non-git response)`,
+            );
+            this.permanentFailures.set(url, permanent);
+            throw permanent;
+          }
           this.cors.markOriginNeedsProxy(url);
           this.cache.putInfoRefs(url, info);
           return info;
         } catch (proxyErr) {
+          if (proxyErr instanceof PermanentFetchError) throw proxyErr;
           const msg =
             proxyErr instanceof Error ? proxyErr.message : String(proxyErr);
           const permanent = new PermanentFetchError(

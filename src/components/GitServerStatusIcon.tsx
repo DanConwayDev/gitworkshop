@@ -7,20 +7,27 @@
  * drawn without lights.
  *
  * Status mapping:
- *   "match"   → green (success)
- *   "behind"  → amber (warning)
- *   "ahead"   → amber (warning)
- *   "error"   → red
- *   "unknown" → pulsing grey (fetching — not yet a problem)
+ *   "match"     → green (success)
+ *   "behind"    → amber (warning)
+ *   "ahead"     → amber (warning)
+ *   "error"     → red
+ *   "connected" → grey (reachable, no ref comparison yet)
+ *   "unknown"   → pulsing grey (fetching — not yet a problem)
  */
 
 import { cn } from "@/lib/utils";
 
-type ServerState = "success" | "warning" | "error" | "loading" | undefined;
+type ServerState =
+  | "success"
+  | "warning"
+  | "error"
+  | "loading"
+  | "connected"
+  | undefined;
 
 function mapStatus(
   status: string | undefined,
-): "success" | "warning" | "error" | "loading" {
+): "success" | "warning" | "error" | "loading" | "connected" {
   switch (status) {
     case "match":
       return "success";
@@ -29,6 +36,8 @@ function mapStatus(
       return "warning";
     case "error":
       return "error";
+    case "connected":
+      return "connected";
     case "unknown":
     default:
       return "loading";
@@ -39,6 +48,7 @@ const stateColors: Record<string, string> = {
   success: "fill-emerald-500",
   warning: "fill-amber-500",
   error: "fill-red-500",
+  connected: "fill-muted-foreground/30",
   loading: "fill-muted-foreground/50",
 };
 
@@ -55,7 +65,15 @@ export function GitServerStatusIcon({
   // Map to success/warning/error/loading, sort best-first, trim/pad to 3
   const mapped: ServerState[] = statuses.map(mapStatus).sort((a, b) => {
     const rank = (s: ServerState) =>
-      s === "success" ? 0 : s === "warning" ? 1 : s === "error" ? 2 : 3;
+      s === "success"
+        ? 0
+        : s === "warning"
+          ? 1
+          : s === "error"
+            ? 2
+            : s === "connected"
+              ? 3
+              : 4; // "loading" / undefined last
     return rank(a) - rank(b);
   });
 

@@ -520,30 +520,45 @@ export function useGitExplorer(
           return;
         }
 
+        // BehaviorSubject emits synchronously on subscribe, so the callback
+        // may fire before the subscription object is available. We use a
+        // resolved flag + deferred unsubscribe to avoid the temporal dead zone.
+        let resolved = false;
+
         const sub = pool.observable.subscribe((state) => {
+          if (resolved) return;
+
           if (signal.aborted) {
-            sub.unsubscribe();
+            resolved = true;
             resolve(null);
             return;
           }
 
           const available = getInfoRefsFromState(pool, state);
           if (available) {
-            sub.unsubscribe();
+            resolved = true;
             resolve(available);
             return;
           }
 
           // All URLs settled with no infoRefs — give up.
           if (!state.loading && state.health === "all-failed") {
-            sub.unsubscribe();
+            resolved = true;
             resolve(null);
           }
         });
 
-        signal.addEventListener("abort", () => {
+        // If the callback already resolved synchronously, unsubscribe now.
+        if (resolved) {
           sub.unsubscribe();
-          resolve(null);
+        }
+
+        signal.addEventListener("abort", () => {
+          if (!resolved) {
+            resolved = true;
+            resolve(null);
+          }
+          sub.unsubscribe();
         });
       });
     }
