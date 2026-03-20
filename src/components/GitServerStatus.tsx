@@ -23,7 +23,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { nip19 } from "nostr-tools";
-import { cn } from "@/lib/utils";
+import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 import { GraspLogo } from "@/components/GraspLogo";
 import { GitServerStatusIcon } from "@/components/GitServerStatusIcon";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
@@ -33,6 +33,7 @@ import type {
   UrlRefStatus,
   UrlErrorKind,
   RefDiscrepancy,
+  PoolWarning,
 } from "@/lib/git-grasp-pool";
 
 // ---------------------------------------------------------------------------
@@ -65,6 +66,16 @@ export interface GitServerStatusProps {
    * Refs where servers disagree on the commit.
    */
   crossRefDiscrepancies: RefDiscrepancy[];
+  /**
+   * Pool warning — used to detect when a git server is ahead of the signed
+   * state so we can annotate "signed" labels accordingly.
+   */
+  poolWarning?: PoolWarning | null;
+  /**
+   * Unix timestamp (seconds) of the Nostr state event — used to show
+   * how stale the signed state is relative to what git servers have.
+   */
+  stateCreatedAt?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +184,18 @@ function condenseGraspUrl(url: string): string {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function ServerStatusDot({ status }: { status: UrlRefStatus }) {
+function ServerStatusDot({
+  status,
+  gitIsAhead,
+}: {
+  status: UrlRefStatus;
+  gitIsAhead?: boolean;
+}) {
+  // When git is confirmed ahead of signed state, a "behind" server actually
+  // has the *newer* commit — show it as amber warning, not a red X.
+  if (status === "behind" && gitIsAhead) {
+    return <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+  }
   switch (status) {
     case "match":
       return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
@@ -197,10 +219,35 @@ function ServerStatusDot({ status }: { status: UrlRefStatus }) {
 function ServerStatusLabel({
   status,
   hasState,
+  gitIsAhead,
 }: {
   status: UrlRefStatus;
   hasState: boolean;
+  /** True when a git server is confirmed ahead of the signed state */
+  gitIsAhead?: boolean;
 }) {
+  // When git is confirmed ahead of signed state:
+  //   "match"  → server has the old signed commit (not the latest)
+  //   "behind" → server actually has the *newer* commit (ahead of signed)
+  if (gitIsAhead && hasState) {
+    switch (status) {
+      case "match":
+        return (
+          <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
+            signed, behind
+          </span>
+        );
+      case "behind":
+        return (
+          <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
+            unsigned ahead
+          </span>
+        );
+      default:
+        break;
+    }
+  }
+
   switch (status) {
     case "match":
       return (
@@ -211,7 +258,7 @@ function ServerStatusLabel({
     case "behind":
       return (
         <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
-          {hasState ? "out of sync" : "differs"}
+          {hasState ? "behind signed" : "differs"}
         </span>
       );
     case "ahead":
@@ -316,10 +363,19 @@ function ServerRow({
   serverStatus,
   hasState,
   isGrasp,
+  gitIsAhead,
+  stateCreatedAt,
+  gitCommitterDate,
 }: {
   serverStatus: ServerStatus;
   hasState: boolean;
   isGrasp: boolean;
+  /** True when a git server is confirmed ahead of the signed state */
+  gitIsAhead?: boolean;
+  /** Unix timestamp (seconds) of the Nostr state event */
+  stateCreatedAt?: number;
+  /** Unix timestamp (seconds) of the git server's latest commit (when git is ahead) */
+  gitCommitterDate?: number;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -338,9 +394,18 @@ function ServerRow({
     ? condenseGraspUrl(serverStatus.url)
     : serverStatus.url;
 
+  // When git is confirmed ahead of signed state, the pool's "behind" label is
+  // inverted from the user's perspective:
+  //   pool "behind" = this server has the *newer* unsigned commit (ahead of signed)
+  //   pool "match"  = this server has the *old* signed commit (not the latest)
+  const serverIsUnsignedAhead =
+    serverStatus.status === "behind" && hasState && gitIsAhead;
+  const serverIsSignedOnly =
+    serverStatus.status === "match" && hasState && gitIsAhead;
+
   return (
     <div className="flex items-start gap-2.5 px-4 py-2 text-xs group hover:bg-accent/30 transition-colors">
-      <ServerStatusDot status={serverStatus.status} />
+      <ServerStatusDot status={serverStatus.status} gitIsAhead={gitIsAhead} />
 
       <div className="min-w-0 flex-1">
         {/* URL line */}
@@ -374,24 +439,91 @@ function ServerRow({
           </div>
         )}
 
-        {/* Sync status detail */}
-        {serverStatus.status === "behind" && serverStatus.serverCommit && (
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            has{" "}
+        {/* Server has newer unsigned commits — ahead of the signed state */}
+        {serverIsUnsignedAhead && serverStatus.serverCommit && (
+          <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+            has unsigned commit{" "}
             <code className="bg-muted px-1 rounded">
               {serverStatus.serverCommit.slice(0, 8)}
             </code>
-            {hasState && serverStatus.expectedCommit && (
-              <>
+            {gitCommitterDate && (
+              <span className="text-muted-foreground/70">
                 {" "}
-                · signed{" "}
+                (
+                {safeFormatDistanceToNow(gitCommitterDate, { addSuffix: true })}
+                )
+              </span>
+            )}
+            {serverStatus.expectedCommit && (
+              <span className="text-muted-foreground/60">
+                {" "}
+                · signed was{" "}
                 <code className="bg-muted px-1 rounded">
                   {serverStatus.expectedCommit.slice(0, 8)}
                 </code>
-              </>
+                {stateCreatedAt && (
+                  <span>
+                    {" "}
+                    (
+                    {safeFormatDistanceToNow(stateCreatedAt, {
+                      addSuffix: true,
+                    })}
+                    )
+                  </span>
+                )}
+              </span>
             )}
           </p>
         )}
+
+        {/* Server only has the old signed commit — another server is ahead */}
+        {serverIsSignedOnly && serverStatus.serverCommit && (
+          <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+            serving signed commit{" "}
+            <code className="bg-muted px-1 rounded">
+              {serverStatus.serverCommit.slice(0, 8)}
+            </code>
+            {stateCreatedAt && (
+              <span>
+                {" "}
+                ({safeFormatDistanceToNow(stateCreatedAt, { addSuffix: true })})
+              </span>
+            )}{" "}
+            · another server has newer unsigned commits
+          </p>
+        )}
+
+        {/* Normal "behind signed" case — server is missing commits the signed state has */}
+        {serverStatus.status === "behind" &&
+          !gitIsAhead &&
+          serverStatus.serverCommit && (
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              has{" "}
+              <code className="bg-muted px-1 rounded">
+                {serverStatus.serverCommit.slice(0, 8)}
+              </code>
+              {hasState && serverStatus.expectedCommit && (
+                <span className="text-muted-foreground/70">
+                  {" "}
+                  · signed{" "}
+                  <code className="bg-muted px-1 rounded">
+                    {serverStatus.expectedCommit.slice(0, 8)}
+                  </code>
+                  {stateCreatedAt && (
+                    <span>
+                      {" "}
+                      (
+                      {safeFormatDistanceToNow(stateCreatedAt, {
+                        addSuffix: true,
+                      })}
+                      )
+                    </span>
+                  )}
+                </span>
+              )}
+            </p>
+          )}
+
         {serverStatus.status === "error" && (
           <ErrorDetail
             errorKind={serverStatus.errorKind}
@@ -415,7 +547,11 @@ function ServerRow({
           <Copy className="h-3 w-3" />
         )}
       </button>
-      <ServerStatusLabel status={serverStatus.status} hasState={hasState} />
+      <ServerStatusLabel
+        status={serverStatus.status}
+        hasState={hasState}
+        gitIsAhead={gitIsAhead}
+      />
     </div>
   );
 }
@@ -426,12 +562,27 @@ function ServerRow({
 
 function CrossRefDiscrepancies({
   discrepancies,
+  urlStates,
 }: {
   discrepancies: RefDiscrepancy[];
+  urlStates: Record<string, UrlState>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [expandedRefs, setExpandedRefs] = useState<Set<string>>(new Set());
 
   if (discrepancies.length === 0) return null;
+
+  const toggleRef = (refName: string) => {
+    setExpandedRefs((prev) => {
+      const next = new Set(prev);
+      if (next.has(refName)) {
+        next.delete(refName);
+      } else {
+        next.add(refName);
+      }
+      return next;
+    });
+  };
 
   return (
     <>
@@ -454,21 +605,86 @@ function CrossRefDiscrepancies({
           )}
         </button>
         {expanded && (
-          <div className="mt-2 space-y-1">
-            {discrepancies.map((d) => (
-              <div
-                key={d.refName}
-                className="flex items-center gap-2 text-[11px] text-muted-foreground pl-4"
-              >
-                <code className="font-mono bg-muted px-1 py-0.5 rounded text-[10px]">
-                  {d.refName}
-                </code>
-                <span>
-                  {d.disagreeCount}/{d.totalServers} server
-                  {d.disagreeCount !== 1 ? "s" : ""} differ
-                </span>
-              </div>
-            ))}
+          <div className="mt-2 space-y-2">
+            {discrepancies.map((d) => {
+              const isRefExpanded = expandedRefs.has(d.refName);
+              // Short display name for the ref
+              const shortRef = d.refName
+                .replace(/^refs\/heads\//, "")
+                .replace(/^refs\/tags\//, "tag: ")
+                .replace(/^refs\//, "");
+
+              return (
+                <div key={d.refName} className="pl-4">
+                  {/* Ref header row — clickable to expand server detail */}
+                  <button
+                    onClick={() => toggleRef(d.refName)}
+                    className="flex items-center gap-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full text-left"
+                  >
+                    <code className="font-mono bg-muted px-1 py-0.5 rounded text-[10px] shrink-0">
+                      {shortRef}
+                    </code>
+                    <span className="text-amber-600/80 dark:text-amber-400/70">
+                      {d.disagreeCount}/{d.totalServers} server
+                      {d.disagreeCount !== 1 ? "s" : ""} differ
+                    </span>
+                    {isRefExpanded ? (
+                      <ChevronUp className="h-3 w-3 ml-auto shrink-0 text-muted-foreground/50" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3 ml-auto shrink-0 text-muted-foreground/50" />
+                    )}
+                  </button>
+
+                  {/* Per-server breakdown */}
+                  {isRefExpanded && d.servers.length > 0 && (
+                    <div className="mt-1.5 ml-2 space-y-1 border-l border-border/40 pl-3">
+                      {d.expectedCommit && (
+                        <p className="text-[10px] text-muted-foreground/60 mb-1">
+                          expected:{" "}
+                          <code className="font-mono bg-muted px-1 rounded">
+                            {d.expectedCommit.slice(0, 8)}
+                          </code>
+                        </p>
+                      )}
+                      {d.servers.map((srv) => {
+                        const urlState = urlStates[srv.url];
+                        const lastSuccess = urlState?.lastSuccessAt;
+                        return (
+                          <div
+                            key={srv.url}
+                            className="flex items-center gap-1.5 text-[10px]"
+                          >
+                            {srv.matches ? (
+                              <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                            ) : (
+                              <XCircle className="h-3 w-3 text-amber-500 shrink-0" />
+                            )}
+                            <span
+                              className="font-mono text-muted-foreground truncate min-w-0"
+                              title={srv.url}
+                            >
+                              {shortLabel(srv.url)}
+                            </span>
+                            <code className="font-mono bg-muted px-1 rounded shrink-0">
+                              {srv.commit.slice(0, 8)}
+                            </code>
+                            {lastSuccess && (
+                              <span className="text-muted-foreground/50 shrink-0">
+                                · checked{" "}
+                                {safeFormatDistanceToNow(
+                                  Math.floor(lastSuccess / 1000),
+                                  { addSuffix: true },
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -488,6 +704,10 @@ function GitServerPanel({
   graspCloneUrls,
   additionalGitServerUrls,
   crossRefDiscrepancies,
+  urlStates,
+  gitIsAhead,
+  stateCreatedAt,
+  gitCommitterDate,
 }: {
   serverStatuses: ServerStatus[];
   hasState: boolean;
@@ -496,6 +716,10 @@ function GitServerPanel({
   graspCloneUrls: string[];
   additionalGitServerUrls: string[];
   crossRefDiscrepancies: RefDiscrepancy[];
+  urlStates: Record<string, UrlState>;
+  gitIsAhead: boolean;
+  stateCreatedAt?: number;
+  gitCommitterDate?: number;
 }) {
   const usesGrasp = graspCloneUrls.length > 0;
 
@@ -531,7 +755,16 @@ function GitServerPanel({
           </p>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          {hasState ? (
+          {hasState && gitIsAhead ? (
+            // Git server is ahead of signed state — reframe the summary
+            <span className="text-amber-600/90 dark:text-amber-400/80">
+              At least one server has unsigned commits newer than the signed
+              state for{" "}
+              <code className="font-mono bg-muted px-1 py-0.5 rounded text-[11px]">
+                {currentRefShort}
+              </code>
+            </span>
+          ) : hasState ? (
             <>
               <span className="font-medium text-foreground">
                 {matchingServerCount}/{uniqueServerCount}
@@ -570,6 +803,9 @@ function GitServerPanel({
                 serverStatus={s}
                 hasState={hasState}
                 isGrasp={true}
+                gitIsAhead={gitIsAhead}
+                stateCreatedAt={stateCreatedAt}
+                gitCommitterDate={gitCommitterDate}
               />
             ))}
           </div>
@@ -591,6 +827,9 @@ function GitServerPanel({
                 serverStatus={s}
                 hasState={hasState}
                 isGrasp={false}
+                gitIsAhead={gitIsAhead}
+                stateCreatedAt={stateCreatedAt}
+                gitCommitterDate={gitCommitterDate}
               />
             ))}
           </div>
@@ -598,7 +837,10 @@ function GitServerPanel({
       </ScrollArea>
 
       {/* Cross-ref discrepancies — computed by the pool */}
-      <CrossRefDiscrepancies discrepancies={crossRefDiscrepancies} />
+      <CrossRefDiscrepancies
+        discrepancies={crossRefDiscrepancies}
+        urlStates={urlStates}
+      />
 
       {/* Footer note */}
       {noState && (
@@ -627,6 +869,8 @@ export function GitServerStatus({
   graspCloneUrls,
   additionalGitServerUrls,
   crossRefDiscrepancies,
+  poolWarning,
+  stateCreatedAt,
 }: GitServerStatusProps) {
   const [open, setOpen] = useState(false);
 
@@ -638,6 +882,13 @@ export function GitServerStatus({
 
   const hasState = hasStateEvent && repoRelayEose;
   const noState = repoRelayEose && !hasStateEvent;
+
+  // Detect when a git server is confirmed ahead of the signed state
+  const gitIsAhead = poolWarning?.kind === "state-behind-git";
+  const gitCommitterDate =
+    poolWarning?.kind === "state-behind-git"
+      ? poolWarning.gitCommitterDate
+      : undefined;
 
   const uniqueServerCount = cloneUrls.length;
   const matchingUniqueCount = serverStatuses.filter(
@@ -698,6 +949,10 @@ export function GitServerStatus({
           graspCloneUrls={graspCloneUrls}
           additionalGitServerUrls={additionalGitServerUrls}
           crossRefDiscrepancies={crossRefDiscrepancies}
+          urlStates={urlStates}
+          gitIsAhead={gitIsAhead}
+          stateCreatedAt={stateCreatedAt}
+          gitCommitterDate={gitCommitterDate}
         />
       </PopoverContent>
     </Popover>

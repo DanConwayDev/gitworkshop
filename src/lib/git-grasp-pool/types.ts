@@ -157,6 +157,18 @@ export type PoolWarning =
 // ---------------------------------------------------------------------------
 
 /**
+ * Per-server commit info for a ref discrepancy.
+ */
+export interface RefDiscrepancyServer {
+  /** Clone URL of the server */
+  url: string;
+  /** Commit hash this server has for the ref */
+  commit: string;
+  /** Whether this server's commit matches the expected (state event or majority) */
+  matches: boolean;
+}
+
+/**
  * A ref where servers disagree on the commit (relative to the state event
  * or the majority of servers when no state event exists).
  */
@@ -167,6 +179,10 @@ export interface RefDiscrepancy {
   disagreeCount: number;
   /** Total number of servers that reported this ref */
   totalServers: number;
+  /** The expected commit (from state event or majority server) */
+  expectedCommit?: string;
+  /** Per-server breakdown of which commit each server has */
+  servers: RefDiscrepancyServer[];
 }
 
 // ---------------------------------------------------------------------------

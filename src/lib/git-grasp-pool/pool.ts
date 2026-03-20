@@ -170,6 +170,12 @@ function computeRefStatuses(
         refName,
         disagreeCount,
         totalServers: serverCommits.length,
+        expectedCommit,
+        servers: serverCommits.map(({ url, commit }) => ({
+          url,
+          commit,
+          matches: expectedCommit ? commitsMatch(commit, expectedCommit) : true,
+        })),
       });
     }
   }

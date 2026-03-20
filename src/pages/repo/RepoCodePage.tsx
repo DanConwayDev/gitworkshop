@@ -256,6 +256,7 @@ export default function RepoCodePage() {
             additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
             crossRefDiscrepancies={poolState.crossRefDiscrepancies}
             stateBehindGit={stateBehindGit}
+            poolWarning={poolState.warning}
           />
 
           {/* State sync warning banner */}
@@ -486,6 +487,7 @@ function LocatorBar({
   additionalGitServerUrls,
   crossRefDiscrepancies,
   stateBehindGit,
+  poolWarning,
 }: {
   loading: boolean;
   refs: ReturnType<typeof useGitExplorer>["refs"];
@@ -508,6 +510,7 @@ function LocatorBar({
   additionalGitServerUrls: string[];
   crossRefDiscrepancies: import("@/lib/git-grasp-pool").RefDiscrepancy[];
   stateBehindGit: boolean;
+  poolWarning: PoolWarning | null;
 }) {
   // Hide "checked" text if showing it would cause the bar to wrap onto
   // multiple lines. We directly manipulate the DOM via refs to avoid a
@@ -638,6 +641,8 @@ function LocatorBar({
             graspCloneUrls={graspCloneUrls}
             additionalGitServerUrls={additionalGitServerUrls}
             crossRefDiscrepancies={crossRefDiscrepancies}
+            poolWarning={poolWarning}
+            stateCreatedAt={repoState?.event.created_at}
           />
         )}
       </div>
