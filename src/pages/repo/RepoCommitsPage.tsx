@@ -1,9 +1,8 @@
 import { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useRepoContext } from "./RepoContext";
-import { useCommitHistory } from "@/hooks/useGitExplorer";
-import { useGitExplorer } from "@/hooks/useGitExplorer";
-import { useGitRepoData } from "@/hooks/useGitRepoData";
+import { useCommitHistory, useGitExplorer } from "@/hooks/useGitExplorer";
+import { useGitPool } from "@/hooks/useGitPool";
 import { RefSelector } from "@/components/RefSelector";
 import { GitServerStatus } from "@/components/GitServerStatus";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,26 +17,26 @@ export default function RepoCommitsPage() {
   const navigate = useNavigate();
   const repo = resolved?.repo;
 
-  // Always fetch refs so we can populate the selector.
-  // Pass commitsRef so the explorer resolves to the right commit hash.
-  const explorer = useGitExplorer(cloneUrls, {
-    refAndPath: commitsRef,
-    knownHeadCommit: repoState?.headCommitId,
-  });
-
-  // Git repo data for pulling signal + server status
-  const gitData = useGitRepoData(cloneUrls, {
+  // Pool must come before explorer since pool is passed to explorer.
+  const { pool, poolState } = useGitPool(cloneUrls, {
     knownHeadCommit: repoState?.headCommitId,
     stateRefs: repoState?.refs,
     stateCreatedAt: repoState ? repoState.event.created_at : undefined,
   });
 
+  // Always fetch refs so we can populate the selector.
+  // Pass commitsRef so the explorer resolves to the right commit hash.
+  const explorer = useGitExplorer(pool, poolState, {
+    refAndPath: commitsRef,
+    knownHeadCommit: repoState?.headCommitId,
+  });
+
   const pulling =
-    cloneUrls.length > 0 ? !repoRelayEose || gitData.pulling : false;
+    cloneUrls.length > 0 ? !repoRelayEose || poolState.pulling : false;
 
   const resolvedRef = explorer.resolvedRef ?? undefined;
 
-  const history = useCommitHistory(cloneUrls, resolvedRef, 50);
+  const history = useCommitHistory(pool, poolState, resolvedRef, 50);
 
   // Build base path for commit links (strip /commits/... suffix)
   const basePath = useMemo(() => {
@@ -101,10 +100,10 @@ export default function RepoCommitsPage() {
           <span className="text-xs text-muted-foreground/60 shrink-0 whitespace-nowrap">
             checked just now
           </span>
-        ) : gitData.lastCheckedAt ? (
+        ) : poolState.lastCheckedAt ? (
           <span className="text-xs text-muted-foreground/60 shrink-0 whitespace-nowrap">
             checked{" "}
-            {safeFormatDistanceToNow(gitData.lastCheckedAt, {
+            {safeFormatDistanceToNow(poolState.lastCheckedAt, {
               addSuffix: true,
             })}
           </span>
@@ -117,7 +116,7 @@ export default function RepoCommitsPage() {
             refs={explorer.refs}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
-            urlInfoRefs={gitData.urlInfoRefs}
+            urlStates={poolState.urls}
             cloneUrls={cloneUrls}
             graspCloneUrls={repo?.graspCloneUrls ?? []}
             additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}

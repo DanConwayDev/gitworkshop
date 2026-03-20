@@ -28,10 +28,9 @@ import { GraspLogo } from "@/components/GraspLogo";
 import { GitServerStatusIcon } from "@/components/GitServerStatusIcon";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { graspCloneUrlNpub } from "@/lib/nip34";
-import { getOrCreatePool } from "@/lib/git-grasp-pool";
+import type { UrlState } from "@/lib/git-grasp-pool";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
-import type { UrlInfoRefsResult } from "@/hooks/useGitRepoData";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,14 +45,14 @@ export interface GitServerStatusProps {
   repoState: RepositoryState | null | undefined;
   /** True once the relay EOSE has been received for the state query */
   repoRelayEose: boolean;
-  /** Per-URL infoRefs results from the git data service */
-  urlInfoRefs?: Record<string, UrlInfoRefsResult>;
+  /** Per-URL state from PoolState.urls — the pool's native shape. */
+  urlStates: Record<string, UrlState>;
   /** All clone URLs for this repo */
-  cloneUrls?: string[];
+  cloneUrls: string[];
   /** Subset of cloneUrls that are Grasp server clone URLs */
-  graspCloneUrls?: string[];
+  graspCloneUrls: string[];
   /** Subset of cloneUrls that are NOT Grasp server clone URLs */
-  additionalGitServerUrls?: string[];
+  additionalGitServerUrls: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +71,8 @@ interface ServerStatus {
   serverCommit?: string;
   /** The commit the state event declares (if known) */
   stateCommit?: string;
+  /** Whether this URL is currently routed through the CORS proxy. */
+  usesProxy: boolean;
 }
 
 function shortLabel(url: string): string {
@@ -91,7 +92,7 @@ function computeServerStatuses(
   currentRefObj: GitRef | undefined,
   repoState: RepositoryState | null | undefined,
   repoRelayEose: boolean,
-  urlInfoRefs: Record<string, UrlInfoRefsResult>,
+  urlStates: Record<string, UrlState>,
   cloneUrls: string[],
 ): ServerStatus[] {
   if (cloneUrls.length === 0) return [];
@@ -109,30 +110,33 @@ function computeServerStatuses(
   }
 
   return cloneUrls.map((url) => {
-    const result = urlInfoRefs[url];
+    const urlState = urlStates[url];
     const label = shortLabel(url);
+    const usesProxy = urlState?.usesProxy ?? false;
 
-    if (!result) {
-      return { url, label, status: "unknown" };
+    if (!urlState || urlState.status === "untested") {
+      return { url, label, status: "unknown", usesProxy };
     }
 
-    if (result.status === "error") {
-      return { url, label, status: "error" };
+    if (
+      urlState.status === "permanent-failure" ||
+      urlState.status === "error"
+    ) {
+      return { url, label, status: "error", usesProxy };
     }
 
-    // Get this server's commit for the ref
-    let serverCommit: string | undefined;
-    if (fullRefName) {
-      serverCommit = result.info.refs[fullRefName];
-    }
+    // status === "ok"
+    const serverCommit = fullRefName
+      ? urlState.infoRefs?.refs[fullRefName]
+      : undefined;
 
     if (!serverCommit) {
-      return { url, label, status: "unknown" };
+      return { url, label, status: "unknown", usesProxy };
     }
 
     if (repoState !== undefined && repoRelayEose) {
       if (!stateCommit) {
-        return { url, label, status: "unknown", serverCommit };
+        return { url, label, status: "unknown", serverCommit, usesProxy };
       }
 
       const matches =
@@ -146,18 +150,19 @@ function computeServerStatuses(
         status: matches ? "match" : "behind",
         serverCommit,
         stateCommit,
+        usesProxy,
       };
     }
 
-    // No state event — compare servers to each other
-    const firstResult = urlInfoRefs[cloneUrls[0]];
+    // No state event — compare servers to each other.
+    const firstState = urlStates[cloneUrls[0]];
     const firstCommit =
-      firstResult?.status === "ok" && fullRefName
-        ? firstResult.info.refs[fullRefName]
+      firstState?.status === "ok" && fullRefName
+        ? firstState.infoRefs?.refs[fullRefName]
         : undefined;
 
     if (!firstCommit || url === cloneUrls[0]) {
-      return { url, label, status: "match", serverCommit };
+      return { url, label, status: "match", serverCommit, usesProxy };
     }
 
     const matches =
@@ -171,6 +176,7 @@ function computeServerStatuses(
       status: matches ? "match" : "behind",
       serverCommit,
       stateCommit: firstCommit,
+      usesProxy,
     };
   });
 }
@@ -195,23 +201,19 @@ function detectCrossRefDiscrepancies(
   refs: GitRef[],
   repoState: RepositoryState | null | undefined,
   repoRelayEose: boolean,
-  urlInfoRefs: Record<string, UrlInfoRefsResult>,
+  urlStates: Record<string, UrlState>,
   cloneUrls: string[],
 ): RefDiscrepancy[] {
   if (cloneUrls.length < 2) return [];
 
-  const okResults = cloneUrls
-    .map((url) => ({ url, result: urlInfoRefs[url] }))
+  const okStates = cloneUrls
+    .map((url) => ({ url, state: urlStates[url] }))
     .filter(
-      (
-        r,
-      ): r is {
-        url: string;
-        result: Extract<UrlInfoRefsResult, { status: "ok" }>;
-      } => r.result?.status === "ok",
+      (r): r is { url: string; state: UrlState & { status: "ok" } } =>
+        r.state?.status === "ok" && !!r.state.infoRefs,
     );
 
-  if (okResults.length < 2) return [];
+  if (okStates.length < 2) return [];
 
   const discrepancies: RefDiscrepancy[] = [];
 
@@ -230,8 +232,8 @@ function detectCrossRefDiscrepancies(
     }
 
     // Collect commits from each server
-    const serverCommits = okResults
-      .map((r) => r.result.info.refs[fullRefName])
+    const serverCommits = okStates
+      .map((r) => r.state.infoRefs!.refs[fullRefName])
       .filter(Boolean);
 
     if (serverCommits.length < 2) continue;
@@ -384,18 +386,12 @@ function ServerRow({
   serverStatus,
   hasState,
   isGrasp,
-  cloneUrls,
 }: {
   serverStatus: ServerStatus;
   hasState: boolean;
   isGrasp: boolean;
-  cloneUrls: string[];
 }) {
   const [copied, setCopied] = useState(false);
-  const viaProxy =
-    cloneUrls.length > 0
-      ? getOrCreatePool({ cloneUrls }).urlUsesProxy(serverStatus.url)
-      : false;
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -476,7 +472,7 @@ function ServerRow({
         )}
       </div>
 
-      {viaProxy && <ProxyBadge />}
+      {serverStatus.usesProxy && <ProxyBadge />}
       <button
         onClick={handleCopy}
         className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground mt-0.5"
@@ -561,7 +557,7 @@ function GitServerPanel({
   refs,
   graspCloneUrls,
   additionalGitServerUrls,
-  urlInfoRefs,
+  urlStates,
   cloneUrls,
 }: {
   serverStatuses: ServerStatus[];
@@ -571,7 +567,7 @@ function GitServerPanel({
   refs: GitRef[];
   graspCloneUrls: string[];
   additionalGitServerUrls: string[];
-  urlInfoRefs: Record<string, UrlInfoRefsResult>;
+  urlStates: Record<string, UrlState>;
   cloneUrls: string[];
 }) {
   const hasState =
@@ -596,10 +592,10 @@ function GitServerPanel({
         refs,
         repoState,
         repoRelayEose,
-        urlInfoRefs,
+        urlStates,
         cloneUrls,
       ),
-    [currentRef, refs, repoState, repoRelayEose, urlInfoRefs, cloneUrls],
+    [currentRef, refs, repoState, repoRelayEose, urlStates, cloneUrls],
   );
 
   const uniqueServerCount = cloneUrls.length;
@@ -663,7 +659,6 @@ function GitServerPanel({
                 serverStatus={s}
                 hasState={hasState}
                 isGrasp={true}
-                cloneUrls={cloneUrls}
               />
             ))}
           </div>
@@ -685,7 +680,6 @@ function GitServerPanel({
                 serverStatus={s}
                 hasState={hasState}
                 isGrasp={false}
-                cloneUrls={cloneUrls}
               />
             ))}
           </div>
@@ -717,10 +711,10 @@ export function GitServerStatus({
   refs,
   repoState,
   repoRelayEose,
-  urlInfoRefs = {},
-  cloneUrls = [],
-  graspCloneUrls = [],
-  additionalGitServerUrls = [],
+  urlStates,
+  cloneUrls,
+  graspCloneUrls,
+  additionalGitServerUrls,
 }: GitServerStatusProps) {
   const [open, setOpen] = useState(false);
 
@@ -734,17 +728,10 @@ export function GitServerStatus({
         currentRefObj,
         repoState,
         repoRelayEose,
-        urlInfoRefs,
+        urlStates,
         cloneUrls,
       ),
-    [
-      currentRef,
-      currentRefObj,
-      repoState,
-      repoRelayEose,
-      urlInfoRefs,
-      cloneUrls,
-    ],
+    [currentRef, currentRefObj, repoState, repoRelayEose, urlStates, cloneUrls],
   );
 
   const uniqueServerCount = cloneUrls.length;
@@ -806,7 +793,7 @@ export function GitServerStatus({
           refs={refs}
           graspCloneUrls={graspCloneUrls}
           additionalGitServerUrls={additionalGitServerUrls}
-          urlInfoRefs={urlInfoRefs}
+          urlStates={urlStates}
           cloneUrls={cloneUrls}
         />
       </PopoverContent>

@@ -22,7 +22,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { useGitRepoData, type GitRepoWarning } from "@/hooks/useGitRepoData";
+import { useGitPool } from "@/hooks/useGitPool";
+import type { PoolState, PoolWarning } from "@/lib/git-grasp-pool";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import { safeFormatDistanceToNow } from "@/lib/utils";
 
@@ -32,7 +33,7 @@ export default function RepoAboutPage() {
   const { resolved, repoState, repoRelayEose } = useRepoContext();
   const repo = resolved?.repo;
 
-  const gitData = useGitRepoData(repo?.cloneUrls ?? [], {
+  const { poolState } = useGitPool(repo?.cloneUrls ?? [], {
     knownHeadCommit: repoState?.headCommitId,
     stateRefs: repoState?.refs,
     stateCreatedAt: repoState ? repoState.event.created_at : undefined,
@@ -44,7 +45,7 @@ export default function RepoAboutPage() {
   // clone URLs to check against.
   const pulling =
     repo && repo.cloneUrls.length > 0
-      ? !repoRelayEose || gitData.pulling
+      ? !repoRelayEose || poolState.pulling
       : false;
 
   useSeoMeta({
@@ -76,23 +77,23 @@ export default function RepoAboutPage() {
         <div className="space-y-6">
           {/* State sync warning banner */}
           {repo.cloneUrls.length > 0 && (
-            <StateSyncWarning warning={gitData.warning} pulling={pulling} />
+            <StateSyncWarning warning={poolState.warning} pulling={pulling} />
           )}
 
           {/* Latest commit */}
           {repo.cloneUrls.length > 0 && (
             <LatestCommitCard
-              gitData={gitData}
+              poolState={poolState}
               repoState={repoState}
               pulling={pulling}
             />
           )}
 
           {/* README */}
-          {repo.cloneUrls.length > 0 && <ReadmeCard gitData={gitData} />}
+          {repo.cloneUrls.length > 0 && <ReadmeCard poolState={poolState} />}
 
           {/* Description (shown when no README) */}
-          {!gitData.readmeContent && repo.description && (
+          {!poolState.readmeContent && repo.description && (
             <Card>
               <CardContent className="p-6">
                 <p className="text-base leading-relaxed text-foreground/90">
@@ -243,7 +244,7 @@ function StateSyncWarning({
   warning,
   pulling,
 }: {
-  warning: GitRepoWarning | null;
+  warning: PoolWarning | null;
   /** Suppress warnings while data is still loading */
   pulling: boolean;
 }) {
@@ -319,11 +320,11 @@ function stalenessOpacity(lastCheckedAt: number | null): number {
 }
 
 function LatestCommitCard({
-  gitData,
+  poolState,
   repoState,
   pulling,
 }: {
-  gitData: ReturnType<typeof useGitRepoData>;
+  poolState: PoolState;
   repoState: RepositoryState | null | undefined;
   /** True while Nostr EOSE is pending or a git server re-fetch is in flight. */
   pulling: boolean;
@@ -331,7 +332,7 @@ function LatestCommitCard({
   // Only show the skeleton when we have no commit data at all.
   // When stale cached data is available (pulling=true, loading=true) we skip
   // the skeleton and show the cached commit with the staleness bar instead.
-  if (!gitData.latestCommit && gitData.loading) {
+  if (!poolState.latestCommit && poolState.loading) {
     return (
       <Card>
         <CardContent className="p-4">
@@ -343,11 +344,11 @@ function LatestCommitCard({
     );
   }
 
-  if (gitData.error || !gitData.latestCommit) {
+  if (poolState.error || !poolState.latestCommit) {
     return null;
   }
 
-  const commit = gitData.latestCommit;
+  const commit = poolState.latestCommit;
   const shortHash = commit.hash.slice(0, 8);
   const subject = commit.message.split("\n")[0];
   const relativeTime = safeFormatDistanceToNow(commit.author.timestamp, {
@@ -360,11 +361,11 @@ function LatestCommitCard({
     stateHeadCommit !== undefined &&
     (commit.hash.startsWith(stateHeadCommit) ||
       stateHeadCommit.startsWith(commit.hash));
-  const defaultBranch = gitData.defaultBranch;
+  const defaultBranch = poolState.defaultBranch;
 
   // Top-edge staleness bar: opacity correlates to how long ago we last checked.
   // While actively pulling, the bar pulses at moderate opacity.
-  const barOpacity = pulling ? 0.5 : stalenessOpacity(gitData.lastCheckedAt);
+  const barOpacity = pulling ? 0.5 : stalenessOpacity(poolState.lastCheckedAt);
   const showBar = pulling || barOpacity > 0;
 
   return (
@@ -430,12 +431,8 @@ function LatestCommitCard({
 // README card
 // ---------------------------------------------------------------------------
 
-function ReadmeCard({
-  gitData,
-}: {
-  gitData: ReturnType<typeof useGitRepoData>;
-}) {
-  if (gitData.loading) {
+function ReadmeCard({ poolState }: { poolState: PoolState }) {
+  if (poolState.loading) {
     return (
       <Card>
         <CardHeader className="pb-3">
@@ -455,33 +452,33 @@ function ReadmeCard({
     );
   }
 
-  if (gitData.error) {
+  if (poolState.error) {
     return (
       <Card className="border-destructive/30">
         <CardContent className="p-4">
           <div className="flex items-center gap-2 text-sm text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>Could not load repository data: {gitData.error}</span>
+            <span>Could not load repository data: {poolState.error}</span>
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  if (!gitData.readmeContent) {
+  if (!poolState.readmeContent) {
     return null;
   }
 
   const isMarkdown =
-    gitData.readmeFilename?.toLowerCase().endsWith(".md") ||
-    gitData.readmeFilename?.toLowerCase().endsWith(".markdown");
+    poolState.readmeFilename?.toLowerCase().endsWith(".md") ||
+    poolState.readmeFilename?.toLowerCase().endsWith(".markdown");
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <BookOpen className="h-4 w-4 text-muted-foreground" />
-          {gitData.readmeFilename ?? "README"}
+          {poolState.readmeFilename ?? "README"}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
@@ -495,11 +492,11 @@ function ReadmeCard({
               </div>
             }
           >
-            <MarkdownContent content={gitData.readmeContent} />
+            <MarkdownContent content={poolState.readmeContent} />
           </Suspense>
         ) : (
           <pre className="text-sm whitespace-pre-wrap font-mono text-foreground/80 leading-relaxed">
-            {gitData.readmeContent}
+            {poolState.readmeContent}
           </pre>
         )}
       </CardContent>

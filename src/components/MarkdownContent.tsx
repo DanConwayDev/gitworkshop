@@ -24,6 +24,10 @@ import {
 import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 
+// Note: getOrCreatePool is safe to call here because the pool is already
+// subscribed by useGitPool higher in the tree (RepoCodePage). We are just
+// retrieving the existing pool instance — not creating a new subscription.
+
 // Explicit language imports — only what's needed for a git client.
 // This replaces rehype-highlight's default "all languages" bundle (~1.5 MB).
 import bash from "highlight.js/lib/languages/bash";

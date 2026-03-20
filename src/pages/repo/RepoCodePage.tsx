@@ -9,13 +9,13 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useRepoContext } from "./RepoContext";
+import { useGitPool } from "@/hooks/useGitPool";
 import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
-import { useGitRepoData, type GitRepoWarning } from "@/hooks/useGitRepoData";
 import { UserLink } from "@/components/UserAvatar";
 import { RefSelector } from "@/components/RefSelector";
 import { GitServerStatus } from "@/components/GitServerStatus";
 import type { RepositoryState } from "@/casts/RepositoryState";
-import type { UrlInfoRefsResult } from "@/hooks/useGitRepoData";
+import type { GitGraspPool, PoolWarning, UrlState } from "@/lib/git-grasp-pool";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -125,9 +125,8 @@ export default function RepoCodePage() {
   const navigate = useNavigate();
   const repo = resolved?.repo;
 
-  // Git repo data for the pulling signal (shares the same underlying service
-  // entry as useGitExplorer via clone URLs — no duplicate fetches).
-  const gitData = useGitRepoData(cloneUrls, {
+  // Single pool subscription — drives everything on this page.
+  const { pool, poolState } = useGitPool(cloneUrls, {
     knownHeadCommit: repoState?.headCommitId,
     stateRefs: repoState?.refs,
     stateCreatedAt: repoState ? repoState.event.created_at : undefined,
@@ -137,26 +136,26 @@ export default function RepoCodePage() {
   // or the git server fetch is in flight with stale data already shown.
   // Used for the locator bar's "Checking…" indicator.
   const pulling =
-    cloneUrls.length > 0 ? !repoRelayEose || gitData.pulling : false;
+    cloneUrls.length > 0 ? !repoRelayEose || poolState.pulling : false;
 
   // Whether the git server check itself is still in flight (independent of
   // Nostr relay EOSE). Used for the warning banner and effectiveHeadCommit so
   // that a cached infoRefs result can surface the warning immediately without
   // waiting for the Nostr relay to send EOSE (which can take 2-5 s).
-  const gitPulling = cloneUrls.length > 0 ? gitData.pulling : false;
+  const gitPulling = cloneUrls.length > 0 ? poolState.pulling : false;
 
   // When the git server is confirmed ahead of the signed Nostr state, don't
   // pass a knownHeadCommit so the explorer falls through to the default branch
   // (which already points at the git server's latest commit). This keeps the
   // trigger showing the branch name rather than a raw commit hash.
   const effectiveHeadCommit = useMemo(() => {
-    if (!gitPulling && gitData.warning?.kind === "state-behind-git") {
+    if (!gitPulling && poolState.warning?.kind === "state-behind-git") {
       return undefined;
     }
     return repoState?.headCommitId;
-  }, [gitPulling, gitData.warning, repoState?.headCommitId]);
+  }, [gitPulling, poolState.warning, repoState?.headCommitId]);
 
-  const explorer = useGitExplorer(cloneUrls, {
+  const explorer = useGitExplorer(pool, poolState, {
     refAndPath: treeRefAndPath,
     knownHeadCommit: effectiveHeadCommit,
   });
@@ -193,14 +192,20 @@ export default function RepoCodePage() {
   // hasn't fired yet). Override with the git server's commit info so the
   // commit bar, warning banner, RefSelector, and tree viewer are always
   // consistent with each other.
+  // When the git server is confirmed ahead of the signed Nostr state, the
+  // explorer may still be showing the old signed commit during the render
+  // cycle where stateBehindGit first becomes true (the explorer's useEffect
+  // hasn't fired yet). Override with the git server's commit info so the
+  // commit bar, warning banner, RefSelector, and tree viewer are always
+  // consistent with each other.
   const stateBehindGit =
-    !gitPulling && gitData.warning?.kind === "state-behind-git";
+    !gitPulling && poolState.warning?.kind === "state-behind-git";
   const displayHeadCommit = stateBehindGit
-    ? (gitData.latestCommit ?? explorer.headCommit)
+    ? (poolState.latestCommit ?? explorer.headCommit)
     : explorer.headCommit;
   const displayCommitHash = stateBehindGit
-    ? gitData.warning?.kind === "state-behind-git"
-      ? gitData.warning.gitCommitId
+    ? poolState.warning?.kind === "state-behind-git"
+      ? poolState.warning.gitCommitId
       : explorer.commitHash
     : explorer.commitHash;
 
@@ -241,10 +246,10 @@ export default function RepoCodePage() {
             commitHash={displayCommitHash}
             repoId={repoId}
             pulling={pulling}
-            lastCheckedAt={gitData.lastCheckedAt}
+            lastCheckedAt={poolState.lastCheckedAt}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
-            urlInfoRefs={gitData.urlInfoRefs}
+            urlStates={poolState.urls}
             cloneUrls={cloneUrls}
             graspCloneUrls={repo?.graspCloneUrls ?? []}
             additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
@@ -253,7 +258,7 @@ export default function RepoCodePage() {
 
           {/* State sync warning banner */}
           <GitServerAheadBanner
-            warning={gitData.warning}
+            warning={poolState.warning}
             pulling={gitPulling}
           />
 
@@ -333,12 +338,14 @@ export default function RepoCodePage() {
           {!explorer.loading &&
             explorer.isDirectory &&
             readmeEntry &&
-            explorer.commitHash && (
+            explorer.commitHash &&
+            pool && (
               <ReadmeViewer
-                cloneUrls={cloneUrls}
+                pool={pool}
                 commitHash={explorer.commitHash}
                 readmePath={readmeEntry.path}
                 readmeName={readmeEntry.name}
+                cloneUrls={cloneUrls}
               />
             )}
         </>
@@ -385,7 +392,7 @@ function GitServerAheadBanner({
   warning,
   pulling,
 }: {
-  warning: GitRepoWarning | null;
+  warning: PoolWarning | null;
   pulling: boolean;
 }) {
   // Suppress while data is still loading — the mismatch may resolve once
@@ -470,7 +477,7 @@ function LocatorBar({
   lastCheckedAt,
   repoState,
   repoRelayEose,
-  urlInfoRefs,
+  urlStates,
   cloneUrls,
   graspCloneUrls,
   additionalGitServerUrls,
@@ -490,7 +497,7 @@ function LocatorBar({
   lastCheckedAt: number | null;
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
-  urlInfoRefs: Record<string, UrlInfoRefsResult>;
+  urlStates: Record<string, UrlState>;
   cloneUrls: string[];
   graspCloneUrls: string[];
   additionalGitServerUrls: string[];
@@ -612,7 +619,7 @@ function LocatorBar({
             refs={refs}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
-            urlInfoRefs={urlInfoRefs}
+            urlStates={urlStates}
             cloneUrls={cloneUrls}
             graspCloneUrls={graspCloneUrls}
             additionalGitServerUrls={additionalGitServerUrls}
@@ -1454,34 +1461,31 @@ function FileContentBody({
 }
 
 // ---------------------------------------------------------------------------
-// README viewer (fetched lazily below the file tree)
+// README viewer — receives the pool directly, no getOrCreatePool call
 // ---------------------------------------------------------------------------
 
-import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import { BookOpen } from "lucide-react";
 
 function ReadmeViewer({
-  cloneUrls,
+  pool,
   commitHash,
   readmePath,
   readmeName,
+  cloneUrls,
 }: {
-  cloneUrls: string[];
+  pool: GitGraspPool;
   commitHash: string;
   readmePath: string;
   readmeName: string;
+  cloneUrls: string[];
 }) {
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!commitHash || cloneUrls.length === 0) return;
+    if (!commitHash) return;
 
-    // Route through the pool — uses the winning URL with fallback, CORS proxy,
-    // and the pool's cache. No filterFailedUrls needed; the pool tracks that.
-    const pool = getOrCreatePool({ cloneUrls });
-
-    // Check text cache first (synchronous, no loading flash on remount)
+    // Check text cache first (synchronous, no loading flash on remount).
     const cachedText = pool.cache.getText(commitHash, readmeName);
     if (cachedText !== undefined) {
       setContent(cachedText);
@@ -1497,28 +1501,23 @@ function ReadmeViewer({
       .getObjectByPath(commitHash, readmePath, abort.signal)
       .then(async (result) => {
         if (abort.signal.aborted) return;
-        if (!result || result.isDir) {
+        if (!result || result.isDir || !result.data) {
           setLoading(false);
           return;
         }
-        // getObjectByPath returns the blob data when it's a file
-        const bytes = result.data;
-        if (!bytes) {
-          setLoading(false);
-          return;
-        }
-        const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+        const text = new TextDecoder("utf-8", { fatal: false }).decode(
+          result.data,
+        );
         pool.cache.putText(commitHash, readmeName, text);
         setContent(text);
         setLoading(false);
       })
       .catch(() => {
-        if (abort.signal.aborted) return;
-        setLoading(false);
+        if (!abort.signal.aborted) setLoading(false);
       });
 
     return () => abort.abort();
-  }, [cloneUrls.join(","), commitHash, readmePath, readmeName]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pool, commitHash, readmePath, readmeName]);
 
   if (loading) {
     return (

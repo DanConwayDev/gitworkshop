@@ -1,10 +1,22 @@
+/**
+ * useGitExplorer — reactive git file-tree and file-content hook.
+ * useCommitHistory — reactive commit history hook.
+ *
+ * Both hooks accept a GitGraspPool instance (from useGitPool) rather than
+ * clone URLs. This means:
+ *   - The pool is already subscribed and fetching before these hooks run.
+ *   - No "subscribe briefly to trigger fetch" anti-pattern.
+ *   - infoRefs are read from pool.observable reactively; no waitForInfoRefs.
+ *   - All git operations (getTree, getBlob, getSingleCommit, getCommitHistory)
+ *     route through the pool's winning URL with fallback and cache.
+ */
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import type {
   Commit,
   Tree,
   InfoRefsUploadPackResponse,
 } from "@fiatjaf/git-natural-api";
-import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import type { GitGraspPool, PoolState } from "@/lib/git-grasp-pool";
 
 // ---------------------------------------------------------------------------
@@ -218,6 +230,14 @@ function resolveRefAndPath(
   return best;
 }
 
+function shortRefName(refPath: string): string {
+  if (refPath.startsWith("refs/heads/"))
+    return refPath.replace("refs/heads/", "");
+  if (refPath.startsWith("refs/tags/"))
+    return refPath.replace("refs/tags/", "");
+  return refPath;
+}
+
 /**
  * Extract infoRefs from the pool state — returns the first URL's infoRefs
  * that is available, preferring the winner URL.
@@ -237,52 +257,6 @@ function getInfoRefsFromState(
   }
 
   return null;
-}
-
-/**
- * Wait for the pool to have infoRefs available for any of the given URLs.
- * Subscribes to the pool's observable and resolves once infoRefs appear.
- * Rejects if the signal is aborted or all URLs fail.
- */
-function waitForInfoRefs(
-  pool: GitGraspPool,
-  signal: AbortSignal,
-): Promise<InfoRefsUploadPackResponse> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException("Aborted", "AbortError"));
-      return;
-    }
-
-    // Subscribe to pool state updates until infoRefs appear or we get an error
-    const sub = pool.observable.subscribe((state) => {
-      if (signal.aborted) {
-        sub.unsubscribe();
-        reject(new DOMException("Aborted", "AbortError"));
-        return;
-      }
-
-      // Check if any URL now has infoRefs
-      const info = getInfoRefsFromState(pool, state);
-      if (info) {
-        sub.unsubscribe();
-        resolve(info);
-        return;
-      }
-
-      // All URLs have settled with no infoRefs — give up
-      if (!state.loading && state.health === "all-failed") {
-        sub.unsubscribe();
-        reject(new Error(state.error ?? "Could not reach any clone URL"));
-      }
-    });
-
-    // Clean up subscription when signal aborts
-    signal.addEventListener("abort", () => {
-      sub.unsubscribe();
-      reject(new DOMException("Aborted", "AbortError"));
-    });
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -307,13 +281,15 @@ export interface UseGitExplorerOptions {
 /**
  * Fetches the git file tree and file content for a repository path.
  *
- * Routes all git HTTP operations through the git-grasp-pool so that:
- * - The pool's cache is always warm (no double-fetch)
- * - URL racing and CORS proxy logic is centralised in the pool
- * - infoRefs results are shared with useGitRepoData via the same pool
+ * Requires a GitGraspPool instance from useGitPool — the pool must already
+ * be subscribed (which useGitPool guarantees) so that infoRefs are available
+ * reactively via pool.observable without any extra subscription tricks.
+ *
+ * Pass null for pool when cloneUrls is empty; the hook returns an idle state.
  */
 export function useGitExplorer(
-  cloneUrls: string[],
+  pool: GitGraspPool | null,
+  poolState: PoolState,
   options: UseGitExplorerOptions = {},
 ): GitExplorerState & { reload: () => void } {
   const { refAndPath, knownHeadCommit } = options;
@@ -334,51 +310,40 @@ export function useGitExplorer(
     pathExists: true,
   });
 
-  const urlsKey = cloneUrls.join(",");
   const abortRef = useRef<AbortController | null>(null);
-  const reloadCounterRef = useRef(0);
   /** True when the fast path has rendered partial state (file list without blob). */
   const partialRenderRef = useRef(false);
+  const reloadCounterRef = useRef(0);
+
+  // Stable key for the pool identity — changes when clone URLs change.
+  // We use the pool reference itself as the key; if the pool changes, re-run.
+  const poolRef = useRef<GitGraspPool | null>(null);
 
   const run = useCallback(async () => {
-    if (cloneUrls.length === 0) return;
+    if (!pool) return;
 
     abortRef.current?.abort();
     const abort = new AbortController();
     abortRef.current = abort;
     const signal = abort.signal;
 
-    // Get (or create) the pool for these clone URLs. The pool is long-lived
-    // and shared with useGitRepoData — subscribing here ensures the pool's
-    // infoRefs fetch is triggered if it hasn't started yet.
-    const pool = getOrCreatePool({ cloneUrls });
-
     // -----------------------------------------------------------------------
     // Fast path: if infoRefs + tree are already in the L1 memory cache we can
-    // render immediately without a loading flash.  This is the common case on
-    // remount (tab switch, navigation back).
+    // render immediately without a loading flash. Common case on remount.
     // -----------------------------------------------------------------------
-    const fastInfo = cloneUrls
-      .map((u) => ({ url: u, info: pool.cache.peekInfoRefsStale(u) }))
-      .find((r) => r.info !== undefined) as
-      | { url: string; info: InfoRefsUploadPackResponse }
-      | undefined;
+    const fastInfo = pool.getInfoRefs();
 
     if (fastInfo) {
-      const fastParsedRefs = parseRefs(fastInfo.info);
+      const fastParsedRefs = parseRefs(fastInfo);
       let fastCommitHash: string | undefined;
       let fastResolvedRef: string | undefined;
       let fastResolvedPath: string | undefined;
 
       if (refAndPath) {
-        const resolved = resolveRefAndPath(refAndPath, fastInfo.info);
+        const resolved = resolveRefAndPath(refAndPath, fastInfo);
         if (resolved) {
           fastCommitHash = resolved.hash;
-          fastResolvedRef = resolved.refPath.startsWith("refs/heads/")
-            ? resolved.refPath.replace("refs/heads/", "")
-            : resolved.refPath.startsWith("refs/tags/")
-              ? resolved.refPath.replace("refs/tags/", "")
-              : resolved.refPath;
+          fastResolvedRef = shortRefName(resolved.refPath);
           fastResolvedPath = resolved.path;
         }
       } else if (knownHeadCommit) {
@@ -389,14 +354,12 @@ export function useGitExplorer(
         fastResolvedRef = matchingRef?.name ?? knownHeadCommit.slice(0, 8);
         fastResolvedPath = "";
       } else {
-        const headRef = fastInfo.info.symrefs["HEAD"];
+        const headRef = fastInfo.symrefs["HEAD"];
         const defaultRef = fastParsedRefs.find(
           (r) => r.isDefault && r.isBranch,
         );
         if (defaultRef) {
-          fastCommitHash = headRef
-            ? fastInfo.info.refs[headRef]
-            : defaultRef.hash;
+          fastCommitHash = headRef ? fastInfo.refs[headRef] : defaultRef.hash;
           fastResolvedRef = defaultRef.name;
           fastResolvedPath = "";
         }
@@ -538,26 +501,56 @@ export function useGitExplorer(
     partialRenderRef.current = false;
 
     // -----------------------------------------------------------------------
-    // Phase 1: Get infoRefs from the pool.
+    // Phase 1: Wait for infoRefs from the pool's observable.
     //
-    // The pool owns the URL racing strategy, CORS proxy logic, and
-    // capabilitiesCache. We subscribe to the pool (which triggers the fetch
-    // if not already started) and wait for infoRefs to become available.
-    // Using pool.getInfoRefs() ensures the capabilitiesCache is always warm
-    // and the URL used is always the pool's resolved URL — no double-fetch.
+    // The pool is already subscribed (by useGitPool), so the infoRefs fetch
+    // is already in flight. We just wait for the observable to emit a state
+    // that has infoRefs — no subscribe-briefly trick needed.
     // -----------------------------------------------------------------------
-    let info: InfoRefsUploadPackResponse;
+    let info: InfoRefsUploadPackResponse | null = null;
 
-    // Trigger the pool's fetch by subscribing briefly. The pool's subscribe()
-    // starts the infoRefs race if it hasn't started yet and delivers the
-    // current state immediately.
-    const unsubscribe = pool.subscribe(() => {});
+    // Check if infoRefs are already available synchronously.
+    info = getInfoRefsFromState(pool, poolState);
 
-    try {
-      info = await waitForInfoRefs(pool, signal);
-    } catch {
-      unsubscribe();
-      if (signal.aborted) return;
+    if (!info) {
+      // Wait for the pool's observable to emit infoRefs.
+      info = await new Promise<InfoRefsUploadPackResponse | null>((resolve) => {
+        if (signal.aborted) {
+          resolve(null);
+          return;
+        }
+
+        const sub = pool.observable.subscribe((state) => {
+          if (signal.aborted) {
+            sub.unsubscribe();
+            resolve(null);
+            return;
+          }
+
+          const available = getInfoRefsFromState(pool, state);
+          if (available) {
+            sub.unsubscribe();
+            resolve(available);
+            return;
+          }
+
+          // All URLs settled with no infoRefs — give up.
+          if (!state.loading && state.health === "all-failed") {
+            sub.unsubscribe();
+            resolve(null);
+          }
+        });
+
+        signal.addEventListener("abort", () => {
+          sub.unsubscribe();
+          resolve(null);
+        });
+      });
+    }
+
+    if (signal.aborted) return;
+
+    if (!info) {
       setState((prev) => ({
         ...prev,
         loading: false,
@@ -565,7 +558,6 @@ export function useGitExplorer(
       }));
       return;
     }
-    unsubscribe();
 
     if (signal.aborted) return;
 
@@ -591,11 +583,7 @@ export function useGitExplorer(
         return;
       }
       commitHash = resolved.hash;
-      resolvedRef = resolved.refPath.startsWith("refs/heads/")
-        ? resolved.refPath.replace("refs/heads/", "")
-        : resolved.refPath.startsWith("refs/tags/")
-          ? resolved.refPath.replace("refs/tags/", "")
-          : resolved.refPath;
+      resolvedRef = shortRefName(resolved.refPath);
       path = resolved.path;
     } else if (knownHeadCommit) {
       // Use the Nostr state commit as the preferred starting point
@@ -761,14 +749,41 @@ export function useGitExplorer(
       loading: false,
       pathExists: false,
     }));
-  }, [urlsKey, refAndPath, knownHeadCommit]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pool, refAndPath, knownHeadCommit]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Re-run when the pool changes or when the pool emits infoRefs for the
+  // first time (poolState.health transitions away from "idle"/"connecting").
+  const prevHealthRef = useRef<string>("idle");
+  const hasInfoRefs = pool ? !!getInfoRefsFromState(pool, poolState) : false;
+  const prevHasInfoRefs = useRef(false);
+
+  useEffect(() => {
+    // Re-run if the pool instance changed.
+    const poolChanged = pool !== poolRef.current;
+    // Re-run if infoRefs just became available (first data from the network).
+    const infoRefsArrived = hasInfoRefs && !prevHasInfoRefs.current;
+
+    poolRef.current = pool;
+    prevHasInfoRefs.current = hasInfoRefs;
+    prevHealthRef.current = poolState.health;
+
+    if (poolChanged || infoRefsArrived) {
+      run();
+    }
+
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [pool, hasInfoRefs, run]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Also re-run when refAndPath or knownHeadCommit change (run is stable
+  // per useCallback, but its deps include those values).
   useEffect(() => {
     run();
     return () => {
       abortRef.current?.abort();
     };
-  }, [run, reloadCounterRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [run]);
 
   const reload = useCallback(() => {
     reloadCounterRef.current += 1;
@@ -815,19 +830,20 @@ export interface CommitHistoryState {
 
 /**
  * Fetches the commit history for a ref via the git-grasp-pool.
+ *
+ * Accepts a pool instance (from useGitPool) and the current PoolState so it
+ * can react to infoRefs becoming available without any extra subscriptions.
  */
 export function useCommitHistory(
-  cloneUrls: string[],
+  pool: GitGraspPool | null,
+  poolState: PoolState,
   ref: string | undefined,
   maxCommits: number = 50,
 ): CommitHistoryState {
   const [state, setState] = useState<CommitHistoryState>(() => {
-    // Fast path: resolve commitHash from stale infoRefs and check history cache
-    if (ref && cloneUrls.length > 0) {
-      const pool = getOrCreatePool({ cloneUrls });
-      const fastInfo = cloneUrls
-        .map((u) => pool.cache.peekInfoRefsStale(u))
-        .find((i) => i !== undefined);
+    // Fast path: check L1 cache synchronously on first render.
+    if (ref && pool) {
+      const fastInfo = pool.getInfoRefs();
       if (fastInfo) {
         const commitHash = ref.startsWith("refs/")
           ? fastInfo.refs[ref]
@@ -843,92 +859,111 @@ export function useCommitHistory(
     return { loading: false, error: null, commits: [] };
   });
 
-  const urlsKey = cloneUrls.join(",");
+  const hasInfoRefs = pool ? !!pool.getInfoRefs() : false;
 
   useEffect(() => {
-    if (cloneUrls.length === 0 || !ref) return;
+    if (!pool || !ref) return;
 
     const abort = new AbortController();
     const signal = abort.signal;
 
-    // Get the pool — it may already have infoRefs from useGitExplorer
-    const pool = getOrCreatePool({ cloneUrls });
+    async function run() {
+      if (!pool || !ref) return;
 
-    // Subscribe briefly to ensure the pool's fetch is triggered
-    const unsubscribe = pool.subscribe(() => {});
+      // Wait for infoRefs if not yet available.
+      let info = pool.getInfoRefs();
+      if (!info) {
+        info = await new Promise<InfoRefsUploadPackResponse | null>(
+          (resolve) => {
+            if (signal.aborted) {
+              resolve(null);
+              return;
+            }
+            const sub = pool!.observable.subscribe((s) => {
+              if (signal.aborted) {
+                sub.unsubscribe();
+                resolve(null);
+                return;
+              }
+              const available =
+                pool!.getInfoRefs() ??
+                Object.values(s.urls).find((u) => u.infoRefs)?.infoRefs ??
+                null;
+              if (available) {
+                sub.unsubscribe();
+                resolve(available);
+                return;
+              }
+              if (!s.loading && s.health === "all-failed") {
+                sub.unsubscribe();
+                resolve(null);
+              }
+            });
+            signal.addEventListener("abort", () => {
+              sub.unsubscribe();
+              resolve(null);
+            });
+          },
+        );
+      }
 
-    // Wait for infoRefs, then resolve the ref to a commit hash
-    waitForInfoRefs(pool, signal)
-      .then(async (info) => {
-        unsubscribe();
-        if (signal.aborted) return;
-
-        // Resolve ref to commit hash
-        let commitHash: string;
-        if (ref.startsWith("refs/")) {
-          commitHash = info.refs[ref];
-        } else {
-          commitHash =
-            info.refs[`refs/heads/${ref}`] ??
-            info.refs[`refs/tags/${ref}`] ??
-            ref; // treat as commit hash
-        }
-
-        if (!commitHash) {
+      if (signal.aborted || !info) {
+        if (!signal.aborted) {
           setState({
             loading: false,
-            error: `Ref "${ref}" not found`,
+            error: "Could not reach any clone URL",
             commits: [],
           });
-          return;
         }
+        return;
+      }
 
-        // Check history cache before hitting the network
-        // pool.cache.getCommitHistory checks L1 then IDB
-        const cachedHistory = await pool.cache.getCommitHistory(
-          commitHash,
-          maxCommits,
-        );
-        if (cachedHistory) {
-          setState({ loading: false, error: null, commits: cachedHistory });
-          return;
-        }
+      // Resolve ref to commit hash.
+      const commitHash = ref.startsWith("refs/")
+        ? info.refs[ref]
+        : (info.refs[`refs/heads/${ref}`] ??
+          info.refs[`refs/tags/${ref}`] ??
+          ref);
 
-        setState({ loading: true, error: null, commits: [] });
+      if (!commitHash) {
+        setState({
+          loading: false,
+          error: `Ref "${ref}" not found`,
+          commits: [],
+        });
+        return;
+      }
 
-        // Fetch via the pool — routes through the winning URL with fallback
-        const commits = await pool.getCommitHistory(
-          commitHash,
-          maxCommits,
-          signal,
-        );
+      // Check history cache (L1 then IDB).
+      const cachedHistory = await pool.cache.getCommitHistory(
+        commitHash,
+        maxCommits,
+      );
+      if (cachedHistory) {
+        setState({ loading: false, error: null, commits: cachedHistory });
+        return;
+      }
 
-        if (signal.aborted) return;
+      setState({ loading: true, error: null, commits: [] });
 
-        if (!commits || commits.length === 0) {
-          setState({
-            loading: false,
-            error: "No commits found",
-            commits: [],
-          });
-          return;
-        }
+      const commits = await pool.getCommitHistory(
+        commitHash,
+        maxCommits,
+        signal,
+      );
+      if (signal.aborted) return;
 
-        // pool.getCommitHistory already caches internally via pool.cache
-        setState({ loading: false, error: null, commits });
-      })
-      .catch((err: unknown) => {
-        unsubscribe();
-        if (signal.aborted) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        setState({ loading: false, error: msg, commits: [] });
-      });
+      if (!commits || commits.length === 0) {
+        setState({ loading: false, error: "No commits found", commits: [] });
+        return;
+      }
 
-    return () => {
-      abort.abort();
-      unsubscribe();
-    };
-  }, [urlsKey, ref, maxCommits]); // eslint-disable-line react-hooks/exhaustive-deps
+      setState({ loading: false, error: null, commits });
+    }
+
+    void run();
+    return () => abort.abort();
+  }, [pool, ref, maxCommits, hasInfoRefs]);
 
   return state;
 }

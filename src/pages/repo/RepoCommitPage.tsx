@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import type { Commit } from "@fiatjaf/git-natural-api";
-import { getOrCreatePool } from "@/lib/git-grasp-pool";
+import { useGitPool } from "@/hooks/useGitPool";
 
 export default function RepoCommitPage() {
   const { cloneUrls, commitId } = useRepoContext();
@@ -27,12 +27,14 @@ export default function RepoCommitPage() {
     return idx !== -1 ? pathname.slice(0, idx) : pathname;
   }, []);
 
+  const { pool } = useGitPool(cloneUrls);
+
   const [commit, setCommit] = useState<Commit | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!commitId || cloneUrls.length === 0) {
+    if (!commitId || !pool) {
       setLoading(false);
       return;
     }
@@ -43,7 +45,6 @@ export default function RepoCommitPage() {
     setCommit(null);
 
     // Route through the pool — uses the winning URL with fallback and cache.
-    const pool = getOrCreatePool({ cloneUrls });
     pool
       .getSingleCommit(commitId, abort.signal)
       .then((c) => {
@@ -64,7 +65,7 @@ export default function RepoCommitPage() {
       });
 
     return () => abort.abort();
-  }, [cloneUrls.join(","), commitId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pool, commitId]);
 
   if (!commitId) {
     return (
