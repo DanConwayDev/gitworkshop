@@ -428,15 +428,34 @@ export class GitHttpClient {
   }
 
   // -----------------------------------------------------------------------
+  // Private: capability resolution
+  // -----------------------------------------------------------------------
+
+  /**
+   * Get server capabilities for a URL.
+   *
+   * Peeks the L1 cache first (zero cost when the pool has already fetched
+   * infoRefs). Falls back to a full fetchInfoRefs call — which is itself
+   * deduped and cached — for the case where fetchCommit is called concurrently
+   * with the infoRefs race (e.g. fetchStateCommit).
+   */
+  private async getServerCaps(
+    url: string,
+    signal: AbortSignal,
+  ): Promise<string[]> {
+    const cached = this.cache.peekInfoRefs(url);
+    if (cached) return cached.capabilities;
+    const info = await this.fetchInfoRefs(url, signal);
+    return info.capabilities;
+  }
+
+  // -----------------------------------------------------------------------
   // Commits
   // -----------------------------------------------------------------------
 
   /**
    * Fetch a single commit's metadata, checking cache first.
    * Returns the commit + optional README content.
-   *
-   * Requires the caller to supply the server's capabilities (from infoRefs)
-   * so we can negotiate the packfile request without an extra HTTP round-trip.
    */
   async fetchCommit(
     url: string,
@@ -449,10 +468,8 @@ export class GitHttpClient {
     readmeFilename: string | null;
   } | null> {
     const effectiveUrl = this.cors.resolveUrl(url);
-
-    // Derive capabilities from cached infoRefs (already fetched by the pool)
-    const cachedInfo = this.cache.peekInfoRefs(url);
-    const serverCaps = cachedInfo?.capabilities ?? [];
+    const serverCaps = await this.getServerCaps(url, signal);
+    if (signal.aborted) return null;
 
     // Check commit cache
     const cachedCommit = await this.cache.getCommit(commitHash);
@@ -596,8 +613,8 @@ export class GitHttpClient {
     if (cached) return cached;
 
     const effectiveUrl = this.cors.resolveUrl(url);
-    const cachedInfo = this.cache.peekInfoRefs(url);
-    const serverCaps = cachedInfo?.capabilities ?? [];
+    const serverCaps = await this.getServerCaps(url, signal);
+    if (signal.aborted) return null;
 
     try {
       const commits = await fetchCommitsOnly(
@@ -646,8 +663,8 @@ export class GitHttpClient {
     if (cached) return cached;
 
     const effectiveUrl = this.cors.resolveUrl(url);
-    const cachedInfo = this.cache.peekInfoRefs(url);
-    const serverCaps = cachedInfo?.capabilities ?? [];
+    const serverCaps = await this.getServerCaps(url, signal);
+    if (signal.aborted) return null;
 
     try {
       const tree = await fetchDirectoryTree(
@@ -682,8 +699,8 @@ export class GitHttpClient {
     if (cached) return cached;
 
     const effectiveUrl = this.cors.resolveUrl(url);
-    const cachedInfo = this.cache.peekInfoRefs(url);
-    const serverCaps = cachedInfo?.capabilities ?? [];
+    const serverCaps = await this.getServerCaps(url, signal);
+    if (signal.aborted) return null;
 
     try {
       const data = await this.fetchBlobByHash(
@@ -711,8 +728,8 @@ export class GitHttpClient {
     signal: AbortSignal,
   ): Promise<{ entry: TreeEntry; data: Uint8Array | null } | null> {
     const effectiveUrl = this.cors.resolveUrl(url);
-    const cachedInfo = this.cache.peekInfoRefs(url);
-    const serverCaps = cachedInfo?.capabilities ?? [];
+    const serverCaps = await this.getServerCaps(url, signal);
+    if (signal.aborted) return null;
 
     try {
       const entry = await this.findObjectByPath(
@@ -754,8 +771,8 @@ export class GitHttpClient {
     }
 
     const effectiveUrl = this.cors.resolveUrl(url);
-    const cachedInfo = this.cache.peekInfoRefs(url);
-    const serverCaps = cachedInfo?.capabilities ?? [];
+    const serverCaps = await this.getServerCaps(url, signal);
+    if (signal.aborted) return null;
 
     try {
       const commits = await fetchCommitsOnly(
