@@ -87,6 +87,8 @@ export type GitRepoWarning =
       kind: "state-behind-git";
       stateCommitId: string;
       gitCommitId: string;
+      /** The clone URL of the git server that reported the newer commit. */
+      gitServerUrl: string;
       stateCreatedAt: number;
       gitCommitterDate: number;
     };
@@ -684,6 +686,7 @@ class GitRepoDataEntry {
               kind: "state-behind-git",
               stateCommitId: knownHeadCommit,
               gitCommitId: displayHash,
+              gitServerUrl: displayResult!.sourceUrl,
               stateCreatedAt: stateCreatedAt,
               gitCommitterDate: displayCommitter,
             },
@@ -703,6 +706,7 @@ class GitRepoDataEntry {
                 kind: "state-behind-git",
                 stateCommitId: knownHeadCommit,
                 gitCommitId: gitHash,
+                gitServerUrl: bestGitResult!.sourceUrl,
                 stateCreatedAt: stateCreatedAt,
                 gitCommitterDate: gitCommitterDate,
               },

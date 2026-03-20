@@ -10,7 +10,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { useRepoContext } from "./RepoContext";
 import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
-import { useGitRepoData } from "@/hooks/useGitRepoData";
+import { useGitRepoData, type GitRepoWarning } from "@/hooks/useGitRepoData";
 import { UserLink } from "@/components/UserAvatar";
 import { RefSelector } from "@/components/RefSelector";
 import { GitServerStatus } from "@/components/GitServerStatus";
@@ -33,6 +33,7 @@ import {
   GitBranch,
   GitCommit,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   ArrowLeft,
   Globe,
@@ -124,11 +125,6 @@ export default function RepoCodePage() {
   const navigate = useNavigate();
   const repo = resolved?.repo;
 
-  const explorer = useGitExplorer(cloneUrls, {
-    refAndPath: treeRefAndPath,
-    knownHeadCommit: repoState?.headCommitId,
-  });
-
   // Git repo data for the pulling signal (shares the same underlying service
   // entry as useGitExplorer via clone URLs — no duplicate fetches).
   const gitData = useGitRepoData(cloneUrls, {
@@ -141,6 +137,21 @@ export default function RepoCodePage() {
   // or the git server fetch is in flight with stale data already shown.
   const pulling =
     cloneUrls.length > 0 ? !repoRelayEose || gitData.pulling : false;
+
+  // When the git server is confirmed ahead of the signed Nostr state, prefer
+  // the git server's commit so the code view shows the latest available code.
+  // Only switch once we're confident (not still pulling) to avoid flicker.
+  const effectiveHeadCommit = useMemo(() => {
+    if (!pulling && gitData.warning?.kind === "state-behind-git") {
+      return gitData.warning.gitCommitId;
+    }
+    return repoState?.headCommitId;
+  }, [pulling, gitData.warning, repoState?.headCommitId]);
+
+  const explorer = useGitExplorer(cloneUrls, {
+    refAndPath: treeRefAndPath,
+    knownHeadCommit: effectiveHeadCommit,
+  });
 
   // Build the base URL for this repo (without /tree/...)
   const basePath = useMemo(() => {
@@ -213,6 +224,9 @@ export default function RepoCodePage() {
             graspCloneUrls={repo?.graspCloneUrls ?? []}
             additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
           />
+
+          {/* State sync warning banner */}
+          <GitServerAheadBanner warning={gitData.warning} pulling={pulling} />
 
           {/* Error state */}
           {explorer.error && (
@@ -315,6 +329,97 @@ export default function RepoCodePage() {
       )}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Git server ahead banner
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the hostname from a URL string, falling back to the raw URL.
+ */
+function gitServerDomain(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Banner shown when one or more git servers have commits newer than the
+ * signed Nostr state. Tells the user which server is ahead and how stale
+ * the signed state is, so they understand why the code view may differ from
+ * what the maintainer last signed.
+ */
+function GitServerAheadBanner({
+  warning,
+  pulling,
+}: {
+  warning: GitRepoWarning | null;
+  pulling: boolean;
+}) {
+  // Suppress while data is still loading — the mismatch may resolve once
+  // infoRefs settle.
+  if (!warning || pulling) return null;
+
+  if (warning.kind === "state-behind-git") {
+    const stateAge = safeFormatDistanceToNow(warning.stateCreatedAt, {
+      addSuffix: true,
+    });
+    const gitAge = safeFormatDistanceToNow(warning.gitCommitterDate, {
+      addSuffix: true,
+    });
+    const shortState = warning.stateCommitId.slice(0, 8);
+    const shortGit = warning.gitCommitId.slice(0, 8);
+
+    // Use the domain of the specific server that reported the newer commit.
+    const domain = gitServerDomain(warning.gitServerUrl);
+
+    return (
+      <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="space-y-0.5 min-w-0">
+          <p className="font-medium">
+            {domain} is ahead of the signed Nostr state
+          </p>
+          <p className="text-xs text-amber-600/80 dark:text-amber-400/70 leading-relaxed">
+            Showing the git server&apos;s latest commit{" "}
+            <code className="font-mono bg-amber-500/10 px-1 rounded">
+              {shortGit}
+            </code>{" "}
+            ({gitAge}). The maintainer last signed{" "}
+            <code className="font-mono bg-amber-500/10 px-1 rounded">
+              {shortState}
+            </code>{" "}
+            ({stateAge}) — the git server has newer unsigned commits.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (warning.kind === "state-commit-unavailable") {
+    const shortState = warning.stateCommitId.slice(0, 8);
+    return (
+      <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="space-y-0.5">
+          <p className="font-medium">Signed commit not found on git server</p>
+          <p className="text-xs text-amber-600/80 dark:text-amber-400/70">
+            The maintainer signed commit{" "}
+            <code className="font-mono bg-amber-500/10 px-1 rounded">
+              {shortState}
+            </code>{" "}
+            as HEAD, but it couldn&apos;t be found on any git server. Showing
+            the latest available commit instead.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
