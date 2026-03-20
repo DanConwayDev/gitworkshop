@@ -456,6 +456,7 @@ function ServerRow({
     ? (graspCloneUrlNpub(serverStatus.url) ?? undefined)
     : undefined;
   const pubkey = npub ? npubToPubkey(npub) : undefined;
+
   const displayUrl = isGrasp
     ? condenseGraspUrl(serverStatus.url)
     : serverStatus.url;
@@ -482,9 +483,10 @@ function ServerRow({
           {displayUrl}
         </p>
 
-        {/* Grasp owner identity */}
+        {/* Grasp owner identity — annotates who the npub in the URL belongs to */}
         {isGrasp && (
-          <div className="flex items-center gap-1.5 mt-1">
+          <div className="flex items-center gap-1 mt-0.5 text-[11px] text-muted-foreground">
+            <span className="font-mono opacity-50">↳</span>
             {pubkey ? (
               <>
                 <UserAvatar
@@ -498,9 +500,7 @@ function ServerRow({
                 />
               </>
             ) : npub ? (
-              <span className="font-mono text-[11px] text-muted-foreground">
-                {condenseNpub(npub)}
-              </span>
+              <span className="font-mono">{condenseNpub(npub)}</span>
             ) : null}
           </div>
         )}
