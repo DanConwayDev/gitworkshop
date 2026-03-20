@@ -1,4 +1,12 @@
-import { lazy, Suspense, useMemo, useState, useEffect, useRef } from "react";
+import {
+  lazy,
+  Suspense,
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useRepoContext } from "./RepoContext";
 import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
@@ -32,7 +40,11 @@ import {
   Copy,
   Check,
   ChevronDown,
+  Download,
+  Eye,
+  Code,
 } from "lucide-react";
+import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
@@ -265,7 +277,11 @@ export default function RepoCodePage() {
                 )}
                 <FileContentViewer
                   filename={pathSegments[pathSegments.length - 1] ?? ""}
+                  filePath={explorer.resolvedPath ?? ""}
                   content={explorer.fileContent}
+                  fileBytes={explorer.fileBytes}
+                  cloneUrls={cloneUrls}
+                  commitHash={explorer.commitHash}
                 />
               </>
             )}
@@ -914,14 +930,72 @@ function CloneUrlRow({ url }: { url: string }) {
 // File content viewer
 // ---------------------------------------------------------------------------
 
+type ViewMode = "rendered" | "text";
+
 function FileContentViewer({
   filename,
+  filePath,
   content,
+  fileBytes,
+  cloneUrls,
+  commitHash,
 }: {
   filename: string;
+  filePath: string;
   content: string | null;
+  fileBytes: Uint8Array | null;
+  cloneUrls: string[];
+  commitHash: string | null;
 }) {
-  if (content === null) {
+  const mediaType = getFileMediaType(filename);
+  const isBinaryMedia =
+    mediaType?.kind === "image" ||
+    mediaType?.kind === "video" ||
+    mediaType?.kind === "audio" ||
+    mediaType?.kind === "svg";
+
+  // Default view mode: rendered for markdown/svg/images, text for everything else
+  const defaultMode: ViewMode =
+    mediaType?.kind === "markdown" ||
+    mediaType?.kind === "svg" ||
+    mediaType?.kind === "image" ||
+    mediaType?.kind === "video" ||
+    mediaType?.kind === "audio"
+      ? "rendered"
+      : "text";
+
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultMode);
+
+  // Reset view mode when the file changes
+  useEffect(() => {
+    setViewMode(defaultMode);
+  }, [filename]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDownload = useCallback(() => {
+    if (!fileBytes) return;
+    const blob = new Blob([fileBytes.buffer as ArrayBuffer]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [fileBytes, filename]);
+
+  // Loading state
+  if (!isBinaryMedia && content === null) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading file content…
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+  if (isBinaryMedia && fileBytes === null) {
     return (
       <Card>
         <CardContent className="p-4">
@@ -935,42 +1009,206 @@ function FileContentViewer({
   }
 
   const lang = getLanguageFromFilename(filename);
-  const isMarkdown = isMarkdownFile(filename);
+  const canToggle = mediaType?.kind === "markdown" || mediaType?.kind === "svg";
 
   return (
     <Card className="overflow-hidden">
       <CardHeader className="py-2.5 px-4 border-b border-border/40 bg-muted/20">
-        <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{filename}</span>
-          <Badge variant="outline" className="text-[10px] h-4 px-1.5 ml-auto">
-            {lang}
-          </Badge>
+        <div className="flex items-center gap-2 flex-wrap">
+          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm font-medium truncate min-w-0">
+            {filename}
+          </span>
+
+          <div className="ml-auto flex items-center gap-1.5 shrink-0">
+            {/* View mode toggle — only for renderable text types */}
+            {canToggle && (
+              <>
+                <button
+                  onClick={() => setViewMode("rendered")}
+                  className={cn(
+                    "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
+                    viewMode === "rendered"
+                      ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Eye className="h-3 w-3" />
+                  Preview
+                </button>
+                <button
+                  onClick={() => setViewMode("text")}
+                  className={cn(
+                    "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
+                    viewMode === "text"
+                      ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Code className="h-3 w-3" />
+                  Source
+                </button>
+              </>
+            )}
+
+            {/* Language badge for non-binary, non-toggle files */}
+            {!canToggle && !isBinaryMedia && (
+              <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+                {lang}
+              </Badge>
+            )}
+
+            {/* Download button */}
+            {fileBytes && (
+              <button
+                onClick={handleDownload}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                title="Download file"
+              >
+                <Download className="h-3 w-3" />
+                <span className="hidden sm:inline">Download</span>
+              </button>
+            )}
+          </div>
         </div>
       </CardHeader>
+
       <CardContent className="p-0">
-        {isMarkdown ? (
-          <div className="p-6">
-            <Suspense
-              fallback={
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-5/6" />
-                  <Skeleton className="h-4 w-4/6" />
-                </div>
-              }
-            >
-              <MarkdownContent content={content} />
-            </Suspense>
-          </div>
-        ) : (
-          <pre className="overflow-x-auto text-xs font-mono leading-relaxed p-4 text-foreground/85">
-            <code>{content}</code>
-          </pre>
-        )}
+        <FileContentBody
+          filename={filename}
+          filePath={filePath}
+          content={content}
+          fileBytes={fileBytes}
+          mediaType={mediaType}
+          viewMode={viewMode}
+          cloneUrls={cloneUrls}
+          commitHash={commitHash}
+        />
       </CardContent>
     </Card>
   );
+}
+
+function FileContentBody({
+  filename,
+  filePath,
+  content,
+  fileBytes,
+  mediaType,
+  viewMode,
+  cloneUrls,
+  commitHash,
+}: {
+  filename: string;
+  filePath: string;
+  content: string | null;
+  fileBytes: Uint8Array | null;
+  mediaType: ReturnType<typeof getFileMediaType>;
+  viewMode: ViewMode;
+  cloneUrls: string[];
+  commitHash: string | null;
+}) {
+  // Image (raster)
+  if (mediaType?.kind === "image" && fileBytes) {
+    return (
+      <div className="p-6 flex justify-center items-center bg-[repeating-conic-gradient(#80808015_0%_25%,transparent_0%_50%)] bg-[length:20px_20px]">
+        <img
+          src={toDataUri(fileBytes, mediaType.mime)}
+          alt={filename}
+          className="max-w-full h-auto rounded-md shadow-sm"
+        />
+      </div>
+    );
+  }
+
+  // SVG — rendered or source
+  if (mediaType?.kind === "svg" && fileBytes) {
+    if (viewMode === "rendered") {
+      const svgMime = "image/svg+xml";
+      return (
+        <div className="p-6 flex justify-center items-center bg-[repeating-conic-gradient(#80808015_0%_25%,transparent_0%_50%)] bg-[length:20px_20px]">
+          <img
+            src={toDataUri(fileBytes, svgMime)}
+            alt={filename}
+            className="max-w-full h-auto rounded-md shadow-sm min-w-[120px]"
+          />
+        </div>
+      );
+    }
+    // Fall through to text view
+  }
+
+  // Video
+  if (mediaType?.kind === "video" && fileBytes) {
+    return (
+      <div className="p-6 flex justify-center">
+        <video
+          controls
+          className="max-w-full rounded-md shadow-sm"
+          style={{ maxHeight: "480px" }}
+        >
+          <source
+            src={toDataUri(fileBytes, mediaType.mime)}
+            type={mediaType.mime}
+          />
+          Your browser does not support the video tag.
+        </video>
+      </div>
+    );
+  }
+
+  // Audio
+  if (mediaType?.kind === "audio" && fileBytes) {
+    return (
+      <div className="p-6 flex justify-center">
+        <audio controls className="w-full max-w-md">
+          <source
+            src={toDataUri(fileBytes, mediaType.mime)}
+            type={mediaType.mime}
+          />
+          Your browser does not support the audio tag.
+        </audio>
+      </div>
+    );
+  }
+
+  // Markdown — rendered or source
+  if (mediaType?.kind === "markdown" && content !== null) {
+    if (viewMode === "rendered") {
+      return (
+        <div className="p-6">
+          <Suspense
+            fallback={
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-4 w-4/6" />
+              </div>
+            }
+          >
+            <MarkdownContent
+              content={content}
+              cloneUrls={cloneUrls}
+              commitHash={commitHash}
+              filePath={filePath}
+            />
+          </Suspense>
+        </div>
+      );
+    }
+    // Fall through to text/source view
+  }
+
+  // Plain text / source view
+  if (content !== null) {
+    return (
+      <pre className="overflow-x-auto text-xs font-mono leading-relaxed p-4 text-foreground/85">
+        <code>{content}</code>
+      </pre>
+    );
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1091,7 +1329,12 @@ function ReadmeViewer({
               </div>
             }
           >
-            <MarkdownContent content={content} />
+            <MarkdownContent
+              content={content}
+              cloneUrls={cloneUrls}
+              commitHash={commitHash}
+              filePath={readmePath}
+            />
           </Suspense>
         ) : (
           <pre className="text-sm whitespace-pre-wrap font-mono text-foreground/80 leading-relaxed">

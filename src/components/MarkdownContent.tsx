@@ -9,6 +9,7 @@
  * Usage:
  *   const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
  */
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import ReactMarkdown from "react-markdown";
@@ -20,6 +21,10 @@ import {
   decodeProfilePointer,
   decodeEventPointer,
 } from "applesauce-core/helpers";
+import { getObject, getObjectByPath } from "@fiatjaf/git-natural-api";
+import { resolveGitUrl } from "@/lib/corsProxy";
+import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
+import { getCachedBlob, cacheBlob } from "@/services/gitObjectCache";
 
 // Explicit language imports — only what's needed for a git client.
 // This replaces rehype-highlight's default "all languages" bundle (~1.5 MB).
@@ -83,228 +88,435 @@ const rehypePlugins: any[] = [
   [rehypeHighlight, { languages: highlightLanguages, detect: false }],
 ];
 
-const markdownComponents: Components = {
-  // Nostr-aware links + external link handling
-  a: ({ href, children, ...props }) => {
-    if (href?.startsWith("nostr:")) {
-      const identifier = href.slice(6);
+// ---------------------------------------------------------------------------
+// Git-aware image component
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a relative image path against the markdown file's directory.
+ * e.g. filePath="docs/guide.md", src="./images/foo.png" → "docs/images/foo.png"
+ */
+function resolveRelativePath(filePath: string, src: string): string {
+  // Build a fake absolute URL so URL() handles ".." etc.
+  const base = `https://x/${filePath}`;
+  try {
+    return new URL(src, base).pathname.slice(1); // strip leading "/"
+  } catch {
+    return src;
+  }
+}
+
+function isRelativeSrc(src: string): boolean {
+  return (
+    !src.startsWith("http://") &&
+    !src.startsWith("https://") &&
+    !src.startsWith("data:") &&
+    !src.startsWith("//")
+  );
+}
+
+interface GitImageProps {
+  src?: string;
+  alt?: string;
+  cloneUrls: string[];
+  commitHash: string;
+  filePath: string;
+}
+
+function GitImage({
+  src,
+  alt,
+  cloneUrls,
+  commitHash,
+  filePath,
+}: GitImageProps) {
+  const [dataUri, setDataUri] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!src || !isRelativeSrc(src)) {
+      // Absolute URL — use as-is (no state change needed, rendered below)
+      return;
+    }
+
+    let cancelled = false;
+    const resolvedPath = resolveRelativePath(filePath, src);
+    const mediaType = getFileMediaType(resolvedPath);
+    const mime =
+      mediaType?.kind === "image"
+        ? mediaType.mime
+        : mediaType?.kind === "svg"
+          ? "image/svg+xml"
+          : "application/octet-stream";
+
+    async function load() {
       try {
-        const profile = decodeProfilePointer(identifier);
-        if (profile) {
-          const npub = nip19.npubEncode(profile.pubkey);
-          return (
-            <Link to={`/${npub}`} className="text-primary hover:underline">
-              {children}
-            </Link>
-          );
-        }
-        const event = decodeEventPointer(identifier);
-        if (event) {
-          const note = nip19.noteEncode(event.id);
-          return (
-            <Link to={`/${note}`} className="text-primary hover:underline">
-              {children}
-            </Link>
-          );
+        // Try each clone URL in parallel, use first success
+        const bytes = await Promise.any(
+          cloneUrls.map(async (url) => {
+            const effectiveUrl = resolveGitUrl(url);
+            const entry = await getObjectByPath(
+              effectiveUrl,
+              commitHash,
+              resolvedPath,
+            );
+            if (!entry || entry.isDir) throw new Error("not a file");
+
+            // Check blob cache first
+            const cached = await getCachedBlob(entry.hash);
+            if (cached) return cached;
+
+            const obj = await getObject(effectiveUrl, entry.hash);
+            if (!obj) throw new Error("blob missing");
+            cacheBlob(entry.hash, obj.data);
+            return obj.data;
+          }),
+        );
+
+        if (!cancelled) {
+          setDataUri(toDataUri(bytes, mime));
         }
       } catch {
-        // invalid identifier — fall through
+        if (!cancelled) {
+          setError(`Failed to load: ${src}`);
+        }
       }
-      return <span className="text-primary">{children}</span>;
     }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [src, cloneUrls.join(","), commitHash, filePath]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!src) return null;
+
+  // Absolute URL — render directly
+  if (!isRelativeSrc(src)) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-        {children}
-      </a>
+      <img
+        src={src}
+        alt={alt ?? ""}
+        className="max-w-full rounded-md my-3"
+        loading="lazy"
+      />
     );
-  },
+  }
 
-  // Inline code
-  code: ({ children, className, ...props }) => {
-    const isInline = !className;
-    if (isInline) {
-      return (
-        <code
-          className="px-1.5 py-0.5 rounded text-[0.875em] font-mono bg-muted text-foreground border border-border/60"
-          {...props}
-        >
-          {children}
-        </code>
-      );
-    }
+  if (error) {
     return (
-      <code className={className} {...props}>
-        {children}
-      </code>
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 font-mono">
+        {error}
+      </span>
     );
-  },
+  }
 
-  // Code block wrapper
-  pre: ({ children, ...props }) => (
-    <pre
-      className="overflow-x-auto rounded-lg border border-border bg-muted p-4 text-sm leading-relaxed"
-      {...props}
-    >
-      {children}
-    </pre>
-  ),
+  if (!dataUri) {
+    // Loading placeholder — same dimensions as a typical image
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-muted text-muted-foreground font-mono animate-pulse">
+        Loading {src}…
+      </span>
+    );
+  }
 
-  // Blockquote
-  blockquote: ({ children, ...props }) => (
-    <blockquote
-      className="border-l-4 border-border pl-4 text-muted-foreground italic my-4"
-      {...props}
-    >
-      {children}
-    </blockquote>
-  ),
-
-  // Tables
-  table: ({ children, ...props }) => (
-    <div className="overflow-x-auto my-4">
-      <table className="w-full border-collapse text-sm" {...props}>
-        {children}
-      </table>
-    </div>
-  ),
-  thead: ({ children, ...props }) => (
-    <thead className="border-b border-border" {...props}>
-      {children}
-    </thead>
-  ),
-  tbody: ({ children, ...props }) => (
-    <tbody className="divide-y divide-border" {...props}>
-      {children}
-    </tbody>
-  ),
-  tr: ({ children, ...props }) => (
-    <tr className="hover:bg-muted/40 transition-colors" {...props}>
-      {children}
-    </tr>
-  ),
-  th: ({ children, ...props }) => (
-    <th
-      className="px-3 py-2 text-left font-semibold text-foreground"
-      {...props}
-    >
-      {children}
-    </th>
-  ),
-  td: ({ children, ...props }) => (
-    <td className="px-3 py-2 text-foreground/80" {...props}>
-      {children}
-    </td>
-  ),
-
-  // Headings
-  h1: ({ children, ...props }) => (
-    <h1
-      className="text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border text-foreground"
-      {...props}
-    >
-      {children}
-    </h1>
-  ),
-  h2: ({ children, ...props }) => (
-    <h2
-      className="text-xl font-semibold mt-5 mb-2 pb-1.5 border-b border-border text-foreground"
-      {...props}
-    >
-      {children}
-    </h2>
-  ),
-  h3: ({ children, ...props }) => (
-    <h3 className="text-lg font-semibold mt-4 mb-2 text-foreground" {...props}>
-      {children}
-    </h3>
-  ),
-  h4: ({ children, ...props }) => (
-    <h4
-      className="text-base font-semibold mt-3 mb-1.5 text-foreground"
-      {...props}
-    >
-      {children}
-    </h4>
-  ),
-  h5: ({ children, ...props }) => (
-    <h5 className="text-sm font-semibold mt-3 mb-1 text-foreground" {...props}>
-      {children}
-    </h5>
-  ),
-  h6: ({ children, ...props }) => (
-    <h6
-      className="text-sm font-semibold mt-3 mb-1 text-muted-foreground"
-      {...props}
-    >
-      {children}
-    </h6>
-  ),
-
-  // Paragraphs
-  p: ({ children, ...props }) => (
-    <p className="my-3 leading-7 text-foreground/90" {...props}>
-      {children}
-    </p>
-  ),
-
-  // Lists
-  ul: ({ children, ...props }) => (
-    <ul className="my-3 ml-6 list-disc space-y-1 text-foreground/90" {...props}>
-      {children}
-    </ul>
-  ),
-  ol: ({ children, ...props }) => (
-    <ol
-      className="my-3 ml-6 list-decimal space-y-1 text-foreground/90"
-      {...props}
-    >
-      {children}
-    </ol>
-  ),
-  li: ({ children, ...props }) => (
-    <li className="leading-7" {...props}>
-      {children}
-    </li>
-  ),
-
-  // Horizontal rule
-  hr: (props) => <hr className="my-6 border-border" {...props} />,
-
-  // Images
-  img: ({ src, alt, ...props }) => (
+  return (
     <img
-      src={src}
+      src={dataUri}
       alt={alt ?? ""}
       className="max-w-full rounded-md my-3"
       loading="lazy"
-      {...props}
     />
-  ),
-
-  strong: ({ children, ...props }) => (
-    <strong className="font-semibold text-foreground" {...props}>
-      {children}
-    </strong>
-  ),
-  em: ({ children, ...props }) => (
-    <em className="italic" {...props}>
-      {children}
-    </em>
-  ),
-};
-
-interface MarkdownContentProps {
-  content: string;
-  className?: string;
+  );
 }
 
-export function MarkdownContent({ content, className }: MarkdownContentProps) {
+// ---------------------------------------------------------------------------
+// Markdown component factories
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the react-markdown component overrides.
+ * When cloneUrls + commitHash are provided, images with relative paths are
+ * fetched from the git server and rendered as data URIs.
+ */
+function buildComponents(
+  cloneUrls: string[],
+  commitHash: string | null,
+  filePath: string,
+): Components {
+  const hasGitContext = cloneUrls.length > 0 && commitHash !== null;
+
+  return {
+    // Nostr-aware links + external link handling
+    a: ({ href, children, ...props }) => {
+      if (href?.startsWith("nostr:")) {
+        const identifier = href.slice(6);
+        try {
+          const profile = decodeProfilePointer(identifier);
+          if (profile) {
+            const npub = nip19.npubEncode(profile.pubkey);
+            return (
+              <Link to={`/${npub}`} className="text-primary hover:underline">
+                {children}
+              </Link>
+            );
+          }
+          const event = decodeEventPointer(identifier);
+          if (event) {
+            const note = nip19.noteEncode(event.id);
+            return (
+              <Link to={`/${note}`} className="text-primary hover:underline">
+                {children}
+              </Link>
+            );
+          }
+        } catch {
+          // invalid identifier — fall through
+        }
+        return <span className="text-primary">{children}</span>;
+      }
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+          {children}
+        </a>
+      );
+    },
+
+    // Git-aware image rendering
+    img: ({ src, alt }) => {
+      if (hasGitContext && src && isRelativeSrc(src)) {
+        return (
+          <GitImage
+            src={src}
+            alt={alt}
+            cloneUrls={cloneUrls}
+            commitHash={commitHash!}
+            filePath={filePath}
+          />
+        );
+      }
+      return (
+        <img
+          src={src}
+          alt={alt ?? ""}
+          className="max-w-full rounded-md my-3"
+          loading="lazy"
+        />
+      );
+    },
+
+    // Inline code
+    code: ({ children, className, ...props }) => {
+      const isInline = !className;
+      if (isInline) {
+        return (
+          <code
+            className="px-1.5 py-0.5 rounded text-[0.875em] font-mono bg-muted text-foreground border border-border/60"
+            {...props}
+          >
+            {children}
+          </code>
+        );
+      }
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    },
+
+    // Code block wrapper
+    pre: ({ children, ...props }) => (
+      <pre
+        className="overflow-x-auto rounded-lg border border-border bg-muted p-4 text-sm leading-relaxed"
+        {...props}
+      >
+        {children}
+      </pre>
+    ),
+
+    // Blockquote
+    blockquote: ({ children, ...props }) => (
+      <blockquote
+        className="border-l-4 border-border pl-4 text-muted-foreground italic my-4"
+        {...props}
+      >
+        {children}
+      </blockquote>
+    ),
+
+    // Tables
+    table: ({ children, ...props }) => (
+      <div className="overflow-x-auto my-4">
+        <table className="w-full border-collapse text-sm" {...props}>
+          {children}
+        </table>
+      </div>
+    ),
+    thead: ({ children, ...props }) => (
+      <thead className="border-b border-border" {...props}>
+        {children}
+      </thead>
+    ),
+    tbody: ({ children, ...props }) => (
+      <tbody className="divide-y divide-border" {...props}>
+        {children}
+      </tbody>
+    ),
+    tr: ({ children, ...props }) => (
+      <tr className="hover:bg-muted/40 transition-colors" {...props}>
+        {children}
+      </tr>
+    ),
+    th: ({ children, ...props }) => (
+      <th
+        className="px-3 py-2 text-left font-semibold text-foreground"
+        {...props}
+      >
+        {children}
+      </th>
+    ),
+    td: ({ children, ...props }) => (
+      <td className="px-3 py-2 text-foreground/80" {...props}>
+        {children}
+      </td>
+    ),
+
+    // Headings
+    h1: ({ children, ...props }) => (
+      <h1
+        className="text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border text-foreground"
+        {...props}
+      >
+        {children}
+      </h1>
+    ),
+    h2: ({ children, ...props }) => (
+      <h2
+        className="text-xl font-semibold mt-5 mb-2 pb-1.5 border-b border-border text-foreground"
+        {...props}
+      >
+        {children}
+      </h2>
+    ),
+    h3: ({ children, ...props }) => (
+      <h3
+        className="text-lg font-semibold mt-4 mb-2 text-foreground"
+        {...props}
+      >
+        {children}
+      </h3>
+    ),
+    h4: ({ children, ...props }) => (
+      <h4
+        className="text-base font-semibold mt-3 mb-1.5 text-foreground"
+        {...props}
+      >
+        {children}
+      </h4>
+    ),
+    h5: ({ children, ...props }) => (
+      <h5
+        className="text-sm font-semibold mt-3 mb-1 text-foreground"
+        {...props}
+      >
+        {children}
+      </h5>
+    ),
+    h6: ({ children, ...props }) => (
+      <h6
+        className="text-sm font-semibold mt-3 mb-1 text-muted-foreground"
+        {...props}
+      >
+        {children}
+      </h6>
+    ),
+
+    // Paragraphs
+    p: ({ children, ...props }) => (
+      <p className="my-3 leading-7 text-foreground/90" {...props}>
+        {children}
+      </p>
+    ),
+
+    // Lists
+    ul: ({ children, ...props }) => (
+      <ul
+        className="my-3 ml-6 list-disc space-y-1 text-foreground/90"
+        {...props}
+      >
+        {children}
+      </ul>
+    ),
+    ol: ({ children, ...props }) => (
+      <ol
+        className="my-3 ml-6 list-decimal space-y-1 text-foreground/90"
+        {...props}
+      >
+        {children}
+      </ol>
+    ),
+    li: ({ children, ...props }) => (
+      <li className="leading-7" {...props}>
+        {children}
+      </li>
+    ),
+
+    // Horizontal rule
+    hr: (props) => <hr className="my-6 border-border" {...props} />,
+
+    strong: ({ children, ...props }) => (
+      <strong className="font-semibold text-foreground" {...props}>
+        {children}
+      </strong>
+    ),
+    em: ({ children, ...props }) => (
+      <em className="italic" {...props}>
+        {children}
+      </em>
+    ),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Public component
+// ---------------------------------------------------------------------------
+
+export interface MarkdownContentProps {
+  content: string;
+  className?: string;
+  /**
+   * Clone URLs for the git repository — used to resolve relative image paths.
+   * When provided together with commitHash, images like `./logo.png` in the
+   * markdown are fetched from the git server and rendered inline.
+   */
+  cloneUrls?: string[];
+  /**
+   * Commit hash to use when fetching relative images from git.
+   */
+  commitHash?: string | null;
+  /**
+   * Path of the markdown file within the repository (e.g. "docs/guide.md").
+   * Used to resolve relative image paths correctly.
+   */
+  filePath?: string;
+}
+
+export function MarkdownContent({
+  content,
+  className,
+  cloneUrls = [],
+  commitHash = null,
+  filePath = "",
+}: MarkdownContentProps) {
+  const components = buildComponents(cloneUrls, commitHash, filePath);
+
   return (
     <div className={className ?? "markdown-content"}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
-        components={markdownComponents}
+        components={components}
       >
         {content}
       </ReactMarkdown>

@@ -73,6 +73,8 @@ export interface GitExplorerState {
   parentFileTree: FileEntry[] | null;
   /** Content of the currently viewed file (if path is a file) */
   fileContent: string | null;
+  /** Raw bytes of the currently viewed file (if path is a file) */
+  fileBytes: Uint8Array | null;
   /** Whether the current path is a directory */
   isDirectory: boolean;
   /** Whether the current path exists */
@@ -322,6 +324,7 @@ export function useGitExplorer(
     fileTree: null,
     parentFileTree: null,
     fileContent: null,
+    fileBytes: null,
     isDirectory: true,
     pathExists: true,
   });
@@ -412,6 +415,7 @@ export function useGitExplorer(
               fileTree: treeToEntries(fastTree, ""),
               parentFileTree: null,
               fileContent: null,
+              fileBytes: null,
               isDirectory: true,
               pathExists: true,
             });
@@ -430,6 +434,7 @@ export function useGitExplorer(
                 fileTree: treeToEntries(subTree, fastResolvedPath),
                 parentFileTree: null,
                 fileContent: null,
+                fileBytes: null,
                 isDirectory: true,
                 pathExists: true,
               });
@@ -463,6 +468,7 @@ export function useGitExplorer(
                     fileTree: null,
                     parentFileTree: parentEntries,
                     fileContent: content,
+                    fileBytes: cachedBlob,
                     isDirectory: false,
                     pathExists: true,
                   });
@@ -483,6 +489,7 @@ export function useGitExplorer(
                     fileTree: null,
                     parentFileTree: parentEntries,
                     fileContent: null,
+                    fileBytes: null,
                     isDirectory: false,
                     pathExists: true,
                   });
@@ -513,6 +520,7 @@ export function useGitExplorer(
         fileTree: null,
         parentFileTree: null,
         fileContent: null,
+        fileBytes: null,
         isDirectory: true,
         pathExists: true,
       });
@@ -703,6 +711,7 @@ export function useGitExplorer(
           fileTree: null,
           parentFileTree: parentEntries,
           fileContent: content,
+          fileBytes: cachedData,
           isDirectory: false,
           pathExists: true,
         }));
@@ -727,6 +736,7 @@ export function useGitExplorer(
             fileTree: null,
             parentFileTree: parentEntries,
             fileContent: content,
+            fileBytes: obj.data,
             isDirectory: false,
             pathExists: true,
           }));
@@ -737,6 +747,7 @@ export function useGitExplorer(
             fileTree: null,
             parentFileTree: parentEntries,
             fileContent: null,
+            fileBytes: null,
             isDirectory: false,
             pathExists: true,
           }));
