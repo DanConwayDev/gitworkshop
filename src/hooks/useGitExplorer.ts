@@ -329,6 +329,8 @@ export function useGitExplorer(
   const urlsKey = cloneUrls.join(",");
   const abortRef = useRef<AbortController | null>(null);
   const reloadCounterRef = useRef(0);
+  /** True when the fast path has rendered partial state (file list without blob). */
+  const partialRenderRef = useRef(false);
 
   const run = useCallback(async () => {
     if (cloneUrls.length === 0) return;
@@ -435,17 +437,21 @@ export function useGitExplorer(
             } else {
               const fileHash = findFileInTree(fastTree, fastPathSegments);
               if (fileHash) {
+                const parentSegments = fastPathSegments.slice(0, -1);
+                const parentPath = parentSegments.join("/");
+                const parentTree =
+                  parentSegments.length === 0
+                    ? fastTree
+                    : navigateTree(fastTree, parentSegments);
+                const parentEntries = parentTree
+                  ? treeToEntries(parentTree, parentPath)
+                  : null;
+
                 const cachedBlob = peekCachedBlob(fileHash);
                 if (cachedBlob !== undefined) {
                   const content = new TextDecoder("utf-8", {
                     fatal: false,
                   }).decode(cachedBlob);
-                  const parentSegments = fastPathSegments.slice(0, -1);
-                  const parentPath = parentSegments.join("/");
-                  const parentTree =
-                    parentSegments.length === 0
-                      ? fastTree
-                      : navigateTree(fastTree, parentSegments);
                   setState({
                     loading: false,
                     error: null,
@@ -455,14 +461,33 @@ export function useGitExplorer(
                     commitHash: fastCommitHash,
                     headCommit: fastHeadCommit,
                     fileTree: null,
-                    parentFileTree: parentTree
-                      ? treeToEntries(parentTree, parentPath)
-                      : null,
+                    parentFileTree: parentEntries,
                     fileContent: content,
                     isDirectory: false,
                     pathExists: true,
                   });
                   fastHandled = true;
+                } else {
+                  // Blob not cached yet — render the file list immediately so
+                  // the directory sidebar doesn't flash to a skeleton while the
+                  // blob is being fetched. File content will be filled in by
+                  // the slow path below.
+                  setState({
+                    loading: false,
+                    error: null,
+                    refs: fastParsedRefs,
+                    resolvedRef: fastResolvedRef,
+                    resolvedPath: fastResolvedPath,
+                    commitHash: fastCommitHash,
+                    headCommit: fastHeadCommit,
+                    fileTree: null,
+                    parentFileTree: parentEntries,
+                    fileContent: null,
+                    isDirectory: false,
+                    pathExists: true,
+                  });
+                  partialRenderRef.current = true;
+                  // Don't set fastHandled — let the slow path fetch the blob.
                 }
               }
             }
@@ -474,20 +499,25 @@ export function useGitExplorer(
       }
     }
 
-    setState({
-      loading: true,
-      error: null,
-      refs: [],
-      resolvedRef: null,
-      resolvedPath: null,
-      commitHash: null,
-      headCommit: null,
-      fileTree: null,
-      parentFileTree: null,
-      fileContent: null,
-      isDirectory: true,
-      pathExists: true,
-    });
+    // Only do a full reset if we haven't already rendered partial state from
+    // the fast path (e.g. file list shown while blob is still being fetched).
+    if (!partialRenderRef.current) {
+      setState({
+        loading: true,
+        error: null,
+        refs: [],
+        resolvedRef: null,
+        resolvedPath: null,
+        commitHash: null,
+        headCommit: null,
+        fileTree: null,
+        parentFileTree: null,
+        fileContent: null,
+        isDirectory: true,
+        pathExists: true,
+      });
+    }
+    partialRenderRef.current = false;
 
     // -----------------------------------------------------------------------
     // Phase 1: Race getInfoRefs across all URLs (cache-aware)
