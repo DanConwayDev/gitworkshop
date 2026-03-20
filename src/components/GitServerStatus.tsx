@@ -31,7 +31,7 @@ import { graspCloneUrlNpub } from "@/lib/nip34";
 import { urlUsesProxy } from "@/lib/corsProxy";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
-import type { UrlInfoRefsResult } from "@/services/gitRepoDataService";
+import type { UrlInfoRefsResult } from "@/hooks/useGitRepoData";
 
 // ---------------------------------------------------------------------------
 // Types

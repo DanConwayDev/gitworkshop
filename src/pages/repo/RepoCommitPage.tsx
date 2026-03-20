@@ -15,9 +15,8 @@ import {
   Hash,
 } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
-import { getSingleCommit } from "@fiatjaf/git-natural-api";
 import type { Commit } from "@fiatjaf/git-natural-api";
-import { filterFailedUrls } from "@/services/gitRepoDataService";
+import { getOrCreatePool } from "@/lib/git-grasp-pool";
 
 export default function RepoCommitPage() {
   const { cloneUrls, commitId } = useRepoContext();
@@ -43,11 +42,17 @@ export default function RepoCommitPage() {
     setError(null);
     setCommit(null);
 
-    Promise.any(
-      filterFailedUrls(cloneUrls).map((url) => getSingleCommit(url, commitId)),
-    )
+    // Route through the pool — uses the winning URL with fallback and cache.
+    const pool = getOrCreatePool({ cloneUrls });
+    pool
+      .getSingleCommit(commitId, abort.signal)
       .then((c) => {
         if (abort.signal.aborted) return;
+        if (!c) {
+          setError("Commit not found");
+          setLoading(false);
+          return;
+        }
         setCommit(c);
         setLoading(false);
       })

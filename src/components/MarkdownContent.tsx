@@ -21,11 +21,8 @@ import {
   decodeProfilePointer,
   decodeEventPointer,
 } from "applesauce-core/helpers";
-import { getObject, getObjectByPath } from "@fiatjaf/git-natural-api";
-import { resolveGitUrl } from "@/lib/corsProxy";
-import { filterFailedUrls } from "@/services/gitRepoDataService";
+import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
-import { getCachedBlob, cacheBlob } from "@/services/gitObjectCache";
 
 // Explicit language imports — only what's needed for a git client.
 // This replaces rehype-highlight's default "all languages" bundle (~1.5 MB).
@@ -152,31 +149,21 @@ function GitImage({
 
     async function load() {
       try {
-        // Try each clone URL in parallel, use first success
-        const bytes = await Promise.any(
-          filterFailedUrls(cloneUrls).map(async (url) => {
-            const effectiveUrl = resolveGitUrl(url);
-            const entry = await getObjectByPath(
-              effectiveUrl,
-              commitHash,
-              resolvedPath,
-            );
-            if (!entry || entry.isDir) throw new Error("not a file");
-
-            // Check blob cache first
-            const cached = await getCachedBlob(entry.hash);
-            if (cached) return cached;
-
-            const obj = await getObject(effectiveUrl, entry.hash);
-            if (!obj) throw new Error("blob missing");
-            cacheBlob(entry.hash, obj.data);
-            return obj.data;
-          }),
+        // Route through the pool — uses the winning URL with fallback, CORS
+        // proxy, and the pool's cache. No filterFailedUrls needed.
+        const pool = getOrCreatePool({ cloneUrls });
+        const abort = new AbortController();
+        const result = await pool.getObjectByPath(
+          commitHash,
+          resolvedPath,
+          abort.signal,
         );
-
-        if (!cancelled) {
-          setDataUri(toDataUri(bytes, mime));
+        if (cancelled) return;
+        if (!result || result.isDir || !result.data) {
+          setError(`Failed to load: ${src}`);
+          return;
         }
+        setDataUri(toDataUri(result.data, mime));
       } catch {
         if (!cancelled) {
           setError(`Failed to load: ${src}`);

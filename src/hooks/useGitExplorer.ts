@@ -1,19 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import {
-  getDirectoryTreeAt,
-  getObject,
-  fetchCommitsOnly,
-  type Commit,
-  type Tree,
-  type InfoRefsUploadPackResponse,
+import type {
+  Commit,
+  Tree,
+  InfoRefsUploadPackResponse,
 } from "@fiatjaf/git-natural-api";
+import { getOrCreatePool } from "@/lib/git-grasp-pool";
+import type { GitGraspPool, PoolState } from "@/lib/git-grasp-pool";
 import {
   peekCachedInfoRefsStale,
   getCachedBlob,
-  cacheBlob,
   peekCachedBlob,
   getCachedCommit,
-  cacheCommit,
   peekCachedCommit,
   getCachedTree,
   peekCachedTree,
@@ -22,8 +19,6 @@ import {
   peekCachedCommitHistory,
   cacheCommitHistory,
 } from "@/services/gitObjectCache";
-import { resolveGitUrl } from "@/lib/corsProxy";
-import { fetchInfoRefs, filterFailedUrls } from "@/services/gitRepoDataService";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -237,10 +232,71 @@ function resolveRefAndPath(
 }
 
 /**
- * Fetch infoRefs for a URL, checking the object cache first.
- * Automatically falls back to the CORS proxy on CORS-like errors.
- * The cache key is always the original URL so callers stay unaware of the proxy.
+ * Extract infoRefs from the pool state — returns the first URL's infoRefs
+ * that is available, preferring the winner URL.
  */
+function getInfoRefsFromState(
+  pool: GitGraspPool,
+  state: PoolState,
+): InfoRefsUploadPackResponse | null {
+  // Prefer the winner URL's infoRefs (via pool.getInfoRefs())
+  const winner = pool.getInfoRefs();
+  if (winner) return winner;
+
+  // Fall back to any URL that has infoRefs — this fires as soon as the first
+  // URL in the race completes, rather than waiting for all to settle.
+  for (const urlState of Object.values(state.urls)) {
+    if (urlState.infoRefs) return urlState.infoRefs;
+  }
+
+  return null;
+}
+
+/**
+ * Wait for the pool to have infoRefs available for any of the given URLs.
+ * Subscribes to the pool's observable and resolves once infoRefs appear.
+ * Rejects if the signal is aborted or all URLs fail.
+ */
+function waitForInfoRefs(
+  pool: GitGraspPool,
+  signal: AbortSignal,
+): Promise<InfoRefsUploadPackResponse> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+
+    // Subscribe to pool state updates until infoRefs appear or we get an error
+    const sub = pool.observable.subscribe((state) => {
+      if (signal.aborted) {
+        sub.unsubscribe();
+        reject(new DOMException("Aborted", "AbortError"));
+        return;
+      }
+
+      // Check if any URL now has infoRefs
+      const info = getInfoRefsFromState(pool, state);
+      if (info) {
+        sub.unsubscribe();
+        resolve(info);
+        return;
+      }
+
+      // All URLs have settled with no infoRefs — give up
+      if (!state.loading && state.health === "all-failed") {
+        sub.unsubscribe();
+        reject(new Error(state.error ?? "Could not reach any clone URL"));
+      }
+    });
+
+    // Clean up subscription when signal aborts
+    signal.addEventListener("abort", () => {
+      sub.unsubscribe();
+      reject(new DOMException("Aborted", "AbortError"));
+    });
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Main hook
@@ -262,12 +318,14 @@ export interface UseGitExplorerOptions {
 }
 
 /**
- * Fetches the git file tree and file content for a repository path,
- * racing all clone URLs in parallel and using the first successful response.
+ * Fetches the git file tree and file content for a repository path.
  *
- * Uses git-natural-api (HTTP-based, no local clone required).
- * Leverages gitObjectCache for content-addressed caching of commits and blobs.
- * Shares infoRefs results with gitRepoDataService via the same cache layer.
+ * Routes all git HTTP operations through the git-grasp-pool so that:
+ * - The pool's capabilitiesCache is always warm (no double-fetch)
+ * - URL racing and CORS proxy logic is centralised in the pool
+ * - infoRefs results are shared with useGitRepoData via the same pool
+ *
+ * Uses gitObjectCache for content-addressed caching of commits and blobs.
  */
 export function useGitExplorer(
   cloneUrls: string[],
@@ -304,6 +362,11 @@ export function useGitExplorer(
     const abort = new AbortController();
     abortRef.current = abort;
     const signal = abort.signal;
+
+    // Get (or create) the pool for these clone URLs. The pool is long-lived
+    // and shared with useGitRepoData — subscribing here ensures the pool's
+    // infoRefs fetch is triggered if it hasn't started yet.
+    const pool = getOrCreatePool({ cloneUrls });
 
     // -----------------------------------------------------------------------
     // Fast path: if infoRefs + tree are already in the L1 memory cache we can
@@ -490,22 +553,25 @@ export function useGitExplorer(
     partialRenderRef.current = false;
 
     // -----------------------------------------------------------------------
-    // Phase 1: Race getInfoRefs across all URLs (cache-aware)
+    // Phase 1: Get infoRefs from the pool.
+    //
+    // The pool owns the URL racing strategy, CORS proxy logic, and
+    // capabilitiesCache. We subscribe to the pool (which triggers the fetch
+    // if not already started) and wait for infoRefs to become available.
+    // Using pool.getInfoRefs() ensures the capabilitiesCache is always warm
+    // and the URL used is always the pool's resolved URL — no double-fetch.
     // -----------------------------------------------------------------------
-    let info: InfoRefsUploadPackResponse | undefined;
-    let winningUrl: string | undefined;
+    let info: InfoRefsUploadPackResponse;
+
+    // Trigger the pool's fetch by subscribing briefly. The pool's subscribe()
+    // starts the infoRefs race if it hasn't started yet and delivers the
+    // current state immediately.
+    const unsubscribe = pool.subscribe(() => {});
 
     try {
-      const result = await Promise.any(
-        cloneUrls.map(async (url) => {
-          const i = await fetchInfoRefs(url, signal);
-          return { url, info: i };
-        }),
-      );
-      if (signal.aborted) return;
-      info = result.info;
-      winningUrl = result.url;
+      info = await waitForInfoRefs(pool, signal);
     } catch {
+      unsubscribe();
       if (signal.aborted) return;
       setState((prev) => ({
         ...prev,
@@ -514,6 +580,9 @@ export function useGitExplorer(
       }));
       return;
     }
+    unsubscribe();
+
+    if (signal.aborted) return;
 
     const parsedRefs = parseRefs(info);
     setState((prev) => ({ ...prev, refs: parsedRefs }));
@@ -578,7 +647,12 @@ export function useGitExplorer(
     }));
 
     // -----------------------------------------------------------------------
-    // Phase 2: Fetch the directory tree (depth = path depth + 1 for listing)
+    // Phase 2: Fetch the directory tree via the pool.
+    //
+    // pool.getTree() routes through the winning URL with fallback, uses the
+    // pool's cache (L1 + IDB), and never re-fetches infoRefs.
+    // We also write through to the old gitObjectCache so the fast-path
+    // peekCachedTree() calls above continue to work on remount.
     // -----------------------------------------------------------------------
     const pathSegments = path ? path.split("/").filter(Boolean) : [];
     const nestLimit = pathSegments.length + 1;
@@ -589,28 +663,19 @@ export function useGitExplorer(
     if (cachedTree) {
       tree = cachedTree;
     } else {
-      try {
-        const urlsToTry = filterFailedUrls([
-          winningUrl,
-          ...cloneUrls.filter((u) => u !== winningUrl),
-        ]);
-
-        tree = await Promise.any(
-          urlsToTry.map((url) =>
-            getDirectoryTreeAt(resolveGitUrl(url), commitHash, nestLimit),
-          ),
-        );
-        cacheTree(commitHash, nestLimit, tree);
-      } catch (err) {
-        if (signal.aborted) return;
-        const msg = err instanceof Error ? err.message : String(err);
+      const poolTree = await pool.getTree(commitHash, nestLimit, signal);
+      if (signal.aborted) return;
+      if (!poolTree) {
         setState((prev) => ({
           ...prev,
           loading: false,
-          error: `Failed to load file tree: ${msg}`,
+          error: "Failed to load file tree",
         }));
         return;
       }
+      tree = poolTree;
+      // Write through to the old cache so the fast-path peeks work on remount
+      cacheTree(commitHash, nestLimit, tree);
     }
 
     if (signal.aborted) return;
@@ -628,7 +693,7 @@ export function useGitExplorer(
         isDirectory: true,
         pathExists: true,
       }));
-      fetchHeadCommit(cloneUrls, commitHash, signal, setState);
+      fetchHeadCommit(pool, commitHash, signal, setState);
       return;
     }
 
@@ -644,7 +709,7 @@ export function useGitExplorer(
         isDirectory: true,
         pathExists: true,
       }));
-      fetchHeadCommit(cloneUrls, commitHash, signal, setState);
+      fetchHeadCommit(pool, commitHash, signal, setState);
       return;
     }
 
@@ -677,56 +742,40 @@ export function useGitExplorer(
           isDirectory: false,
           pathExists: true,
         }));
-        fetchHeadCommit(cloneUrls, commitHash, signal, setState);
+        fetchHeadCommit(pool, commitHash, signal, setState);
         return;
       }
 
-      // Fetch the file content from git servers
-      try {
-        const obj = await Promise.any(
-          filterFailedUrls(cloneUrls).map((url) =>
-            getObject(resolveGitUrl(url), fileHash),
-          ),
+      // Fetch the file content via the pool
+      const blobData = await pool.getBlob(fileHash, signal);
+      if (signal.aborted) return;
+      if (blobData) {
+        const content = new TextDecoder("utf-8", { fatal: false }).decode(
+          blobData,
         );
-        if (signal.aborted) return;
-        if (obj) {
-          cacheBlob(fileHash, obj.data);
-          const content = new TextDecoder("utf-8", { fatal: false }).decode(
-            obj.data,
-          );
-          setState((prev) => ({
-            ...prev,
-            loading: false,
-            fileTree: null,
-            parentFileTree: parentEntries,
-            fileContent: content,
-            fileBytes: obj.data,
-            isDirectory: false,
-            pathExists: true,
-          }));
-        } else {
-          setState((prev) => ({
-            ...prev,
-            loading: false,
-            fileTree: null,
-            parentFileTree: parentEntries,
-            fileContent: null,
-            fileBytes: null,
-            isDirectory: false,
-            pathExists: true,
-          }));
-        }
-      } catch {
-        if (signal.aborted) return;
         setState((prev) => ({
           ...prev,
           loading: false,
-          error: "Failed to load file content",
+          fileTree: null,
+          parentFileTree: parentEntries,
+          fileContent: content,
+          fileBytes: blobData,
+          isDirectory: false,
+          pathExists: true,
+        }));
+      } else {
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          fileTree: null,
+          parentFileTree: parentEntries,
+          fileContent: null,
+          fileBytes: null,
           isDirectory: false,
           pathExists: true,
         }));
       }
-      fetchHeadCommit(cloneUrls, commitHash, signal, setState);
+      fetchHeadCommit(pool, commitHash, signal, setState);
       return;
     }
 
@@ -759,7 +808,7 @@ export function useGitExplorer(
 // ---------------------------------------------------------------------------
 
 async function fetchHeadCommit(
-  cloneUrls: string[],
+  pool: GitGraspPool,
   commitHash: string,
   signal: AbortSignal,
   setState: React.Dispatch<React.SetStateAction<GitExplorerState>>,
@@ -773,23 +822,10 @@ async function fetchHeadCommit(
     return;
   }
 
-  const liveUrls = filterFailedUrls(cloneUrls);
-  if (liveUrls.length === 0) return;
-
-  try {
-    const commits = await Promise.any(
-      liveUrls.map((url) =>
-        fetchCommitsOnly(resolveGitUrl(url), commitHash, 1),
-      ),
-    );
-    if (signal.aborted) return;
-    if (commits.length > 0) {
-      cacheCommit(commits[0]);
-      setState((prev) => ({ ...prev, headCommit: commits[0] }));
-    }
-  } catch {
-    // Non-critical — just don't show commit info
-  }
+  // Fetch via the pool — routes through the winning URL with fallback
+  const commit = await pool.getSingleCommit(commitHash, signal);
+  if (signal.aborted || !commit) return;
+  setState((prev) => ({ ...prev, headCommit: commit }));
 }
 
 // ---------------------------------------------------------------------------
@@ -803,7 +839,7 @@ export interface CommitHistoryState {
 }
 
 /**
- * Fetches the commit history for a ref, racing all clone URLs.
+ * Fetches the commit history for a ref via the git-grasp-pool.
  */
 export function useCommitHistory(
   cloneUrls: string[],
@@ -839,9 +875,16 @@ export function useCommitHistory(
     const abort = new AbortController();
     const signal = abort.signal;
 
-    // First resolve the ref to a commit hash via getInfoRefs (cache-aware)
-    Promise.any(cloneUrls.map((url) => fetchInfoRefs(url, signal)))
+    // Get the pool — it may already have infoRefs from useGitExplorer
+    const pool = getOrCreatePool({ cloneUrls });
+
+    // Subscribe briefly to ensure the pool's fetch is triggered
+    const unsubscribe = pool.subscribe(() => {});
+
+    // Wait for infoRefs, then resolve the ref to a commit hash
+    waitForInfoRefs(pool, signal)
       .then(async (info) => {
+        unsubscribe();
         if (signal.aborted) return;
 
         // Resolve ref to commit hash
@@ -876,36 +919,40 @@ export function useCommitHistory(
 
         setState({ loading: true, error: null, commits: [] });
 
-        const commits = await Promise.any(
-          filterFailedUrls(cloneUrls).map((url) =>
-            fetchCommitsOnly(resolveGitUrl(url), commitHash, maxCommits),
-          ),
+        // Fetch via the pool — routes through the winning URL with fallback
+        const commits = await pool.getCommitHistory(
+          commitHash,
+          maxCommits,
+          signal,
         );
 
         if (signal.aborted) return;
 
-        // Cache each individual commit and the full history list
-        for (const commit of commits) {
-          cacheCommit(commit);
+        if (!commits || commits.length === 0) {
+          setState({
+            loading: false,
+            error: "No commits found",
+            commits: [],
+          });
+          return;
         }
 
-        // Sort newest first
-        const sorted = [...commits].sort(
-          (a, b) =>
-            (b.committer?.timestamp ?? b.author.timestamp) -
-            (a.committer?.timestamp ?? a.author.timestamp),
-        );
-
-        cacheCommitHistory(commitHash, maxCommits, sorted);
-        setState({ loading: false, error: null, commits: sorted });
+        // Cache the history list (pool.getCommitHistory already caches internally,
+        // but we also write to the old cache so peekCachedCommitHistory works)
+        cacheCommitHistory(commitHash, maxCommits, commits);
+        setState({ loading: false, error: null, commits });
       })
       .catch((err: unknown) => {
+        unsubscribe();
         if (signal.aborted) return;
         const msg = err instanceof Error ? err.message : String(err);
         setState({ loading: false, error: msg, commits: [] });
       });
 
-    return () => abort.abort();
+    return () => {
+      abort.abort();
+      unsubscribe();
+    };
   }, [urlsKey, ref, maxCommits]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return state;

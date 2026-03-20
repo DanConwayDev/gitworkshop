@@ -15,7 +15,7 @@ import { UserLink } from "@/components/UserAvatar";
 import { RefSelector } from "@/components/RefSelector";
 import { GitServerStatus } from "@/components/GitServerStatus";
 import type { RepositoryState } from "@/casts/RepositoryState";
-import type { UrlInfoRefsResult } from "@/services/gitRepoDataService";
+import type { UrlInfoRefsResult } from "@/hooks/useGitRepoData";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1457,15 +1457,8 @@ function FileContentBody({
 // README viewer (fetched lazily below the file tree)
 // ---------------------------------------------------------------------------
 
-import { getObject, getObjectByPath } from "@fiatjaf/git-natural-api";
-import {
-  getCachedText,
-  cacheText,
-  getCachedBlob,
-  cacheBlob,
-} from "@/services/gitObjectCache";
-import { resolveGitUrl } from "@/lib/corsProxy";
-import { filterFailedUrls } from "@/services/gitRepoDataService";
+import { getCachedText, cacheText } from "@/services/gitObjectCache";
+import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import { BookOpen } from "lucide-react";
 
 function ReadmeViewer({
@@ -1497,30 +1490,26 @@ function ReadmeViewer({
     setLoading(true);
     setContent(null);
 
-    Promise.any(
-      filterFailedUrls(cloneUrls).map(async (url) => {
-        const effectiveUrl = resolveGitUrl(url);
-        const entry = await getObjectByPath(
-          effectiveUrl,
-          commitHash,
-          readmePath,
-        );
-        if (!entry || entry.isDir) throw new Error("not a file");
-        // Check blob cache before hitting the network
-        let bytes = await getCachedBlob(entry.hash);
+    // Route through the pool — uses the winning URL with fallback, CORS proxy,
+    // and the pool's cache. No filterFailedUrls needed; the pool tracks that.
+    const pool = getOrCreatePool({ cloneUrls });
+
+    pool
+      .getObjectByPath(commitHash, readmePath, abort.signal)
+      .then(async (result) => {
+        if (abort.signal.aborted) return;
+        if (!result || result.isDir) {
+          setLoading(false);
+          return;
+        }
+        // getObjectByPath returns the blob data when it's a file
+        const bytes = result.data;
         if (!bytes) {
-          const obj = await getObject(effectiveUrl, entry.hash);
-          if (!obj) throw new Error("blob missing");
-          cacheBlob(entry.hash, obj.data);
-          bytes = obj.data;
+          setLoading(false);
+          return;
         }
         const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
         cacheText(commitHash, readmeName, text);
-        return text;
-      }),
-    )
-      .then((text) => {
-        if (abort.signal.aborted) return;
         setContent(text);
         setLoading(false);
       })
