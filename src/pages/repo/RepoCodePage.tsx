@@ -40,9 +40,9 @@ import {
   Copy,
   Check,
   ChevronDown,
-  Download,
   Eye,
   Code,
+  Download,
 } from "lucide-react";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
@@ -982,6 +982,15 @@ function FileContentViewer({
     URL.revokeObjectURL(url);
   }, [fileBytes, filename]);
 
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    if (!content) return;
+    navigator.clipboard.writeText(content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [content]);
+
   // Loading state
   if (!isBinaryMedia && content === null) {
     return (
@@ -1058,15 +1067,29 @@ function FileContentViewer({
               </Badge>
             )}
 
-            {/* Download button */}
-            {fileBytes && (
+            {/* Download — icon only, binary media only */}
+            {isBinaryMedia && fileBytes && (
               <button
                 onClick={handleDownload}
                 className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                 title="Download file"
               >
                 <Download className="h-3 w-3" />
-                <span className="hidden sm:inline">Download</span>
+              </button>
+            )}
+
+            {/* Copy — text/code/markdown */}
+            {!isBinaryMedia && content !== null && (
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                title="Copy file content"
+              >
+                {copied ? (
+                  <Check className="h-3 w-3 text-green-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
               </button>
             )}
           </div>
