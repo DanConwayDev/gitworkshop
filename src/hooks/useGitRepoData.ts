@@ -1,50 +1,142 @@
 /**
- * Thin React hook that subscribes to the GitRepoDataService.
+ * Thin React hook that subscribes to a GitGraspPool for a repository.
  *
  * Multiple components mounting this hook with the same clone URLs share a
- * single in-flight fetch. The service handles caching, backoff, and Nostr
- * state event integration.
+ * single pool instance. The pool handles caching, backoff, and Nostr state
+ * event integration.
+ *
+ * The hook exposes a GitRepoData shape (backward-compatible with the old
+ * gitRepoDataService API) so existing consumers don't need to change.
+ * The richer PoolState is also returned for consumers that need it.
  */
 
-import { useState, useEffect, useRef } from "react";
-import {
-  subscribeToGitRepoData,
-  notifyNewStateEvent,
-  type GitRepoData,
-  type GitRepoWarning,
-  type UrlInfoRefsResult,
-} from "@/services/gitRepoDataService";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { BehaviorSubject } from "rxjs";
+import { getOrCreatePool } from "@/lib/git-grasp-pool";
+import type {
+  PoolState,
+  UrlState,
+  StateEventInput,
+  StateEvent,
+} from "@/lib/git-grasp-pool";
+import type { Commit } from "@fiatjaf/git-natural-api";
 import type { RepoStateRef } from "@/lib/nip34";
 
-// Re-export types so existing import sites don't need to change
-export type { GitRepoData, GitRepoWarning, UrlInfoRefsResult };
+// ---------------------------------------------------------------------------
+// Re-exported types (backward compat for existing import sites)
+// ---------------------------------------------------------------------------
+
+export type UrlInfoRefsResult =
+  | {
+      status: "ok";
+      headCommit: string;
+      headRef: string | undefined;
+      info: NonNullable<UrlState["infoRefs"]>;
+    }
+  | { status: "error"; error: string };
+
+export type GitRepoWarning =
+  | { kind: "state-commit-unavailable"; stateCommitId: string }
+  | {
+      kind: "state-behind-git";
+      stateCommitId: string;
+      gitCommitId: string;
+      gitServerUrl: string;
+      stateCreatedAt: number;
+      gitCommitterDate: number;
+    };
+
+export interface GitRepoData {
+  loading: boolean;
+  pulling: boolean;
+  error: string | null;
+  latestCommit: Commit | null;
+  readmeContent: string | null;
+  readmeFilename: string | null;
+  defaultBranch: string | null;
+  urlInfoRefs: Record<string, UrlInfoRefsResult>;
+  warning: GitRepoWarning | null;
+  lastCheckedAt: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Map a PoolState's urls record into the legacy UrlInfoRefsResult shape so
+ * that GitServerStatus and other consumers don't need to change yet.
+ */
+function urlsToInfoRefs(
+  urls: Record<string, UrlState>,
+): Record<string, UrlInfoRefsResult> {
+  const result: Record<string, UrlInfoRefsResult> = {};
+  for (const [url, state] of Object.entries(urls)) {
+    if (state.status === "permanent-failure" || state.status === "error") {
+      result[url] = {
+        status: "error",
+        error: state.lastError ?? "Unknown error",
+      };
+    } else if (state.infoRefs && state.headCommit) {
+      result[url] = {
+        status: "ok",
+        headCommit: state.headCommit,
+        headRef: state.headRef ?? undefined,
+        info: state.infoRefs,
+      };
+    }
+    // "untested" URLs are omitted — they haven't responded yet
+  }
+  return result;
+}
+
+/**
+ * Map a PoolState warning into the legacy GitRepoWarning shape.
+ */
+function poolWarningToGitWarning(
+  warning: PoolState["warning"],
+): GitRepoWarning | null {
+  if (!warning) return null;
+  return warning;
+}
+
+/**
+ * Derive a GitRepoData snapshot from a PoolState.
+ */
+function poolStateToGitRepoData(state: PoolState): GitRepoData {
+  return {
+    loading: state.loading,
+    pulling: state.pulling,
+    error: state.error,
+    latestCommit: state.latestCommit,
+    readmeContent: state.readmeContent,
+    readmeFilename: state.readmeFilename,
+    defaultBranch: state.defaultBranch,
+    urlInfoRefs: urlsToInfoRefs(state.urls),
+    warning: poolWarningToGitWarning(state.warning),
+    lastCheckedAt: state.lastCheckedAt,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Hook options
+// ---------------------------------------------------------------------------
 
 export interface UseGitRepoDataOptions {
-  /**
-   * The HEAD commit ID declared by the authoritative state event (kind:30618).
-   * When provided the service immediately starts fetching this commit's data
-   * and will re-fetch with backoff when this value changes.
-   */
   knownHeadCommit?: string;
-  /**
-   * All refs declared by the authoritative state event (kind:30618).
-   * Used to detect changes to any ref (not just HEAD) so that non-default
-   * branch pushes also trigger a backoff re-fetch of infoRefs.
-   */
   stateRefs?: RepoStateRef[];
-  /**
-   * The created_at timestamp (seconds) of the state event that declared
-   * knownHeadCommit. Used in the heuristic to decide which commit to display,
-   * and as a recency guard — only recent state events trigger backoff polling.
-   */
   stateCreatedAt?: number;
 }
+
+// ---------------------------------------------------------------------------
+// useGitRepoData
+// ---------------------------------------------------------------------------
 
 /**
  * Subscribe to git repository data for the given clone URLs.
  *
- * Returns a reactive snapshot that updates as data arrives from git servers.
- * Multiple hook instances with the same clone URLs share one fetch.
+ * Returns a reactive GitRepoData snapshot that updates as data arrives.
+ * Multiple hook instances with the same clone URLs share one pool.
  */
 export function useGitRepoData(
   cloneUrls: string[],
@@ -54,8 +146,7 @@ export function useGitRepoData(
 
   const urlsKey = cloneUrls.join(",");
 
-  // Build a stable refs map and key from all ref commit IDs so effects fire
-  // whenever any ref changes, not just HEAD.
+  // Build a stable key from the state event so we can detect changes
   const refsKey = stateRefs
     ? stateRefs
         .map((r) => `${r.name}:${r.commitId}`)
@@ -63,9 +154,33 @@ export function useGitRepoData(
         .join(",")
     : "";
 
-  const refsMap: Record<string, string> = {};
-  for (const r of stateRefs ?? []) {
-    refsMap[r.name] = r.commitId;
+  // The stateEvent$ BehaviorSubject is created once per clone-URL set and
+  // lives for the lifetime of the subscription. We push new values into it
+  // whenever the Nostr state event changes.
+  const stateSubjectRef = useRef<BehaviorSubject<StateEventInput> | null>(null);
+
+  // Build the current StateEvent value from the hook options
+  const currentStateEvent = useMemo<StateEventInput>(() => {
+    if (!knownHeadCommit) return undefined;
+    const refs = stateRefs ?? [];
+    if (refs.length === 0) return undefined;
+    return {
+      headCommitId: knownHeadCommit,
+      refs: refs.map((r) => ({ name: r.name, commitId: r.commitId })),
+      createdAt: stateCreatedAt ?? 0,
+    } satisfies StateEvent;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [knownHeadCommit, refsKey, stateCreatedAt]);
+
+  // Keep the subject's current value in sync with the latest state event.
+  // This runs on every render where the state event changes, before the
+  // subscription effect below (effects run after render).
+  const prevRefsKey = useRef<string>("");
+  if (refsKey !== prevRefsKey.current) {
+    prevRefsKey.current = refsKey;
+    if (stateSubjectRef.current) {
+      stateSubjectRef.current.next(currentStateEvent);
+    }
   }
 
   const [state, setState] = useState<GitRepoData>(() => ({
@@ -81,14 +196,7 @@ export function useGitRepoData(
     lastCheckedAt: null,
   }));
 
-  // Track the refs key from the previous subscribe call so we can detect
-  // when the state event changes after the initial subscription.
-  const subscribedRefsKey = useRef<string>("");
-
-  // Subscribe to the service — re-subscribe when clone URLs change.
-  // Pass the current state event info as initialStateEvent so the service
-  // has pendingHead set before startFetch() runs, enabling the fast-path
-  // cache check (peekCachedInfoRefs) to detect state-behind-git immediately.
+  // Subscribe to the pool — re-subscribe when clone URLs change.
   useEffect(() => {
     if (cloneUrls.length === 0) {
       setState({
@@ -103,53 +211,32 @@ export function useGitRepoData(
         warning: null,
         lastCheckedAt: null,
       });
+      stateSubjectRef.current = null;
       return;
     }
 
-    const initialStateEvent =
-      knownHeadCommit && Object.keys(refsMap).length > 0
-        ? {
-            headCommitId: knownHeadCommit,
-            refs: refsMap,
-            stateCreatedAt: stateCreatedAt ?? 0,
-          }
-        : undefined;
+    // Create a fresh BehaviorSubject seeded with the current state event.
+    // The pool subscribes to this observable and reacts to future emissions.
+    const subject = new BehaviorSubject<StateEventInput>(currentStateEvent);
+    stateSubjectRef.current = subject;
 
-    subscribedRefsKey.current = refsKey;
-
-    const unsubscribe = subscribeToGitRepoData(
+    const pool = getOrCreatePool({
       cloneUrls,
-      (newState) => {
-        setState(newState);
-      },
-      initialStateEvent,
-    );
+      stateEvent$: subject.asObservable(),
+    });
 
-    return unsubscribe;
+    const unsubscribe = pool.subscribe((poolState) => {
+      setState(poolStateToGitRepoData(poolState));
+    });
+
+    return () => {
+      unsubscribe();
+      // Don't complete the subject here — the pool may still be alive
+      // (shared with other subscribers). Just drop our reference.
+      stateSubjectRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlsKey]);
-
-  // Notify the service when the Nostr state event changes *after* the initial
-  // subscription. The initial value is already passed via initialStateEvent
-  // above, so we skip the first call to avoid a redundant notifyNewStateEvent.
-  const prevRefsKey = useRef<string>("");
-  useEffect(() => {
-    if (!knownHeadCommit || cloneUrls.length === 0) return;
-    if (refsKey === prevRefsKey.current) return;
-    prevRefsKey.current = refsKey;
-
-    // Skip if this is the same refs key we already passed at subscribe time
-    // (i.e. the state event hasn't changed since the subscription was set up).
-    if (refsKey === subscribedRefsKey.current) return;
-
-    notifyNewStateEvent(
-      cloneUrls,
-      knownHeadCommit,
-      refsMap,
-      stateCreatedAt ?? 0,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refsKey, stateCreatedAt, urlsKey]);
 
   return state;
 }

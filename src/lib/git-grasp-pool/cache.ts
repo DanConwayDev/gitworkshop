@@ -22,8 +22,12 @@ import type {
 // IndexedDB setup
 // ---------------------------------------------------------------------------
 
-const DB_NAME = "git-grasp-pool-cache";
-const DB_VERSION = 1;
+// Keep the same DB name as the old gitObjectCache so existing cached data
+// (commits, blobs, infoRefs) survives the migration without a cold-cache reload.
+// DB_VERSION bumped from 2 → 3 to add the new "trees" and "commitHistory" stores
+// that didn't exist in the old schema.
+const DB_NAME = "ngitstack-git-cache";
+const DB_VERSION = 3;
 
 const STORE_COMMITS = "commits";
 const STORE_BLOBS = "blobs";

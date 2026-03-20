@@ -27,7 +27,9 @@ import type {
 // ---------------------------------------------------------------------------
 
 const DB_NAME = "ngitstack-git-cache";
-const DB_VERSION = 2;
+// Bumped to 3 to match git-grasp-pool/cache.ts which owns the same database.
+// The schema is identical — both modules use the same 5 stores.
+const DB_VERSION = 3;
 
 const STORE_COMMITS = "commits";
 const STORE_BLOBS = "blobs";
