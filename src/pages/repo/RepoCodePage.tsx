@@ -964,7 +964,7 @@ function FileContentViewer({
             </Suspense>
           </div>
         ) : (
-          <pre className="overflow-x-auto text-xs font-mono leading-relaxed p-4 text-foreground/85 max-h-[70vh]">
+          <pre className="overflow-x-auto text-xs font-mono leading-relaxed p-4 text-foreground/85">
             <code>{content}</code>
           </pre>
         )}
