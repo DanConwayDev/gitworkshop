@@ -180,6 +180,23 @@ export default function RepoCodePage() {
     ? currentPath.split("/").filter(Boolean)
     : [];
 
+  // When the git server is confirmed ahead of the signed Nostr state, the
+  // explorer may still be showing the old signed commit during the render
+  // cycle where stateBehindGit first becomes true (the explorer's useEffect
+  // hasn't fired yet). Override with the git server's commit info so the
+  // commit bar, warning banner, RefSelector, and tree viewer are always
+  // consistent with each other.
+  const stateBehindGit =
+    !pulling && gitData.warning?.kind === "state-behind-git";
+  const displayHeadCommit = stateBehindGit
+    ? (gitData.latestCommit ?? explorer.headCommit)
+    : explorer.headCommit;
+  const displayCommitHash = stateBehindGit
+    ? gitData.warning?.kind === "state-behind-git"
+      ? gitData.warning.gitCommitId
+      : explorer.commitHash
+    : explorer.commitHash;
+
   // Show the sidebar when at the repo root (no sub-path within the tree)
   const isAtRoot = !treeRefAndPath || pathSegments.length === 0;
 
@@ -213,8 +230,8 @@ export default function RepoCodePage() {
             basePath={basePath}
             treeUrl={treeUrl}
             onRefChange={handleRefChange}
-            headCommit={explorer.headCommit}
-            commitHash={explorer.commitHash}
+            headCommit={displayHeadCommit}
+            commitHash={displayCommitHash}
             repoId={repoId}
             pulling={pulling}
             lastCheckedAt={gitData.lastCheckedAt}
@@ -224,9 +241,7 @@ export default function RepoCodePage() {
             cloneUrls={cloneUrls}
             graspCloneUrls={repo?.graspCloneUrls ?? []}
             additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
-            stateBehindGit={
-              !pulling && gitData.warning?.kind === "state-behind-git"
-            }
+            stateBehindGit={stateBehindGit}
           />
 
           {/* State sync warning banner */}
