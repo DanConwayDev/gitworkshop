@@ -54,6 +54,20 @@ export function useGitRepoData(
 
   const urlsKey = cloneUrls.join(",");
 
+  // Build a stable refs map and key from all ref commit IDs so effects fire
+  // whenever any ref changes, not just HEAD.
+  const refsKey = stateRefs
+    ? stateRefs
+        .map((r) => `${r.name}:${r.commitId}`)
+        .sort()
+        .join(",")
+    : "";
+
+  const refsMap: Record<string, string> = {};
+  for (const r of stateRefs ?? []) {
+    refsMap[r.name] = r.commitId;
+  }
+
   const [state, setState] = useState<GitRepoData>(() => ({
     loading: cloneUrls.length > 0,
     pulling: false,
@@ -67,7 +81,14 @@ export function useGitRepoData(
     lastCheckedAt: null,
   }));
 
-  // Subscribe to the service — re-subscribe when clone URLs change
+  // Track the refs key from the previous subscribe call so we can detect
+  // when the state event changes after the initial subscription.
+  const subscribedRefsKey = useRef<string>("");
+
+  // Subscribe to the service — re-subscribe when clone URLs change.
+  // Pass the current state event info as initialStateEvent so the service
+  // has pendingHead set before startFetch() runs, enabling the fast-path
+  // cache check (peekCachedInfoRefs) to detect state-behind-git immediately.
   useEffect(() => {
     if (cloneUrls.length === 0) {
       setState({
@@ -85,35 +106,41 @@ export function useGitRepoData(
       return;
     }
 
-    const unsubscribe = subscribeToGitRepoData(cloneUrls, (newState) => {
-      setState(newState);
-    });
+    const initialStateEvent =
+      knownHeadCommit && Object.keys(refsMap).length > 0
+        ? {
+            headCommitId: knownHeadCommit,
+            refs: refsMap,
+            stateCreatedAt: stateCreatedAt ?? 0,
+          }
+        : undefined;
+
+    subscribedRefsKey.current = refsKey;
+
+    const unsubscribe = subscribeToGitRepoData(
+      cloneUrls,
+      (newState) => {
+        setState(newState);
+      },
+      initialStateEvent,
+    );
 
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlsKey]);
 
-  // Notify the service when the Nostr state event changes.
-  // Build a stable key from all ref commit IDs so the effect fires whenever
-  // any ref changes, not just HEAD.
-  const refsKey = stateRefs
-    ? stateRefs
-        .map((r) => `${r.name}:${r.commitId}`)
-        .sort()
-        .join(",")
-    : "";
-
+  // Notify the service when the Nostr state event changes *after* the initial
+  // subscription. The initial value is already passed via initialStateEvent
+  // above, so we skip the first call to avoid a redundant notifyNewStateEvent.
   const prevRefsKey = useRef<string>("");
   useEffect(() => {
     if (!knownHeadCommit || cloneUrls.length === 0) return;
     if (refsKey === prevRefsKey.current) return;
     prevRefsKey.current = refsKey;
 
-    // Convert RepoStateRef[] to the Record<refName, commitId> the service expects
-    const refsMap: Record<string, string> = {};
-    for (const r of stateRefs ?? []) {
-      refsMap[r.name] = r.commitId;
-    }
+    // Skip if this is the same refs key we already passed at subscribe time
+    // (i.e. the state event hasn't changed since the subscription was set up).
+    if (refsKey === subscribedRefsKey.current) return;
 
     notifyNewStateEvent(
       cloneUrls,

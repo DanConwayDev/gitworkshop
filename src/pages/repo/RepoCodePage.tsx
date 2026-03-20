@@ -135,19 +135,26 @@ export default function RepoCodePage() {
 
   // Combined "pulling" signal: true while either Nostr relay EOSE is pending
   // or the git server fetch is in flight with stale data already shown.
+  // Used for the locator bar's "Checking…" indicator.
   const pulling =
     cloneUrls.length > 0 ? !repoRelayEose || gitData.pulling : false;
+
+  // Whether the git server check itself is still in flight (independent of
+  // Nostr relay EOSE). Used for the warning banner and effectiveHeadCommit so
+  // that a cached infoRefs result can surface the warning immediately without
+  // waiting for the Nostr relay to send EOSE (which can take 2-5 s).
+  const gitPulling = cloneUrls.length > 0 ? gitData.pulling : false;
 
   // When the git server is confirmed ahead of the signed Nostr state, don't
   // pass a knownHeadCommit so the explorer falls through to the default branch
   // (which already points at the git server's latest commit). This keeps the
   // trigger showing the branch name rather than a raw commit hash.
   const effectiveHeadCommit = useMemo(() => {
-    if (!pulling && gitData.warning?.kind === "state-behind-git") {
+    if (!gitPulling && gitData.warning?.kind === "state-behind-git") {
       return undefined;
     }
     return repoState?.headCommitId;
-  }, [pulling, gitData.warning, repoState?.headCommitId]);
+  }, [gitPulling, gitData.warning, repoState?.headCommitId]);
 
   const explorer = useGitExplorer(cloneUrls, {
     refAndPath: treeRefAndPath,
@@ -187,7 +194,7 @@ export default function RepoCodePage() {
   // commit bar, warning banner, RefSelector, and tree viewer are always
   // consistent with each other.
   const stateBehindGit =
-    !pulling && gitData.warning?.kind === "state-behind-git";
+    !gitPulling && gitData.warning?.kind === "state-behind-git";
   const displayHeadCommit = stateBehindGit
     ? (gitData.latestCommit ?? explorer.headCommit)
     : explorer.headCommit;
@@ -245,7 +252,10 @@ export default function RepoCodePage() {
           />
 
           {/* State sync warning banner */}
-          <GitServerAheadBanner warning={gitData.warning} pulling={pulling} />
+          <GitServerAheadBanner
+            warning={gitData.warning}
+            pulling={gitPulling}
+          />
 
           {/* Error state */}
           {explorer.error && (

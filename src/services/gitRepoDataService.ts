@@ -59,6 +59,7 @@ import {
   getCachedInfoRefs,
   cacheInfoRefs,
   peekCachedCommit,
+  peekCachedInfoRefs,
 } from "./gitObjectCache";
 import {
   isCorsLikeError,
@@ -428,12 +429,37 @@ class GitRepoDataEntry {
    * @param refs          - All refs declared by the state event (refName → commitId)
    * @param stateCreatedAt - Unix timestamp (seconds) of the state event
    */
-  onNewStateEvent(
+  /**
+   * Set pendingHead without triggering any fetch or backoff logic.
+   * Used by subscribeToGitRepoData() to pre-seed the known head commit before
+   * the first fetch starts, so runFetch() can use it in the fast-path cache
+   * check. Only call this before subscribe() triggers startFetch().
+   */
+  setPendingHead(
     headCommitId: string,
     refs: Record<string, string>,
     stateCreatedAt: number,
   ) {
     this.pendingHead = { commitId: headCommitId, refs, stateCreatedAt };
+  }
+
+  onNewStateEvent(
+    headCommitId: string,
+    refs: Record<string, string>,
+    stateCreatedAt: number,
+  ) {
+    const hadNoPendingHead = this.pendingHead === null;
+    this.pendingHead = { commitId: headCommitId, refs, stateCreatedAt };
+
+    // If a fetch is already in progress but we just learned the state commit
+    // for the first time (pendingHead was null), abort it and restart so the
+    // fast-path cache check runs with the now-known head commit. This handles
+    // the common case where the initial fetch starts before the Nostr state
+    // event arrives over the relay connection.
+    if (this.fetching && hadNoPendingHead && !this.fetchedOnce) {
+      this.startFetch();
+      return;
+    }
 
     // Only trigger backoff polling for recently-published state events.
     // Historical events arriving on initial load (before EOSE) should not
@@ -504,12 +530,104 @@ class GitRepoDataEntry {
     const stateCreatedAt = this.pendingHead?.stateCreatedAt;
 
     // -----------------------------------------------------------------------
+    // Fast-path: synchronously check the L1 infoRefs cache for all URLs.
+    // If any URL has a fresh cached result whose HEAD differs from the known
+    // state commit, we can immediately surface the warning and show the git
+    // server's commit (if also cached) — no network round-trip required.
+    // -----------------------------------------------------------------------
+    let cachedGitAheadResult: CommitResult | null = null;
+    let cachedGitAheadCommit: string | null = null;
+    if (knownHeadCommit) {
+      for (const url of this.cloneUrls) {
+        const cachedInfo = peekCachedInfoRefs(url);
+        if (!cachedInfo) continue;
+        const headRef = cachedInfo.symrefs["HEAD"];
+        const headCommit = headRef
+          ? cachedInfo.refs[headRef]
+          : Object.values(cachedInfo.refs)[0];
+        if (!headCommit) continue;
+        const matchesState =
+          headCommit.startsWith(knownHeadCommit) ||
+          knownHeadCommit.startsWith(headCommit);
+        if (!matchesState) {
+          // Git server is ahead — check if we also have the commit cached
+          const gitCommit = peekCachedCommit(headCommit);
+          if (gitCommit) {
+            cachedGitAheadResult = {
+              commit: gitCommit,
+              readmeContent: getCachedText(headCommit, "README.md") ?? null,
+              readmeFilename:
+                getCachedText(headCommit, "README.md") !== undefined
+                  ? "README.md"
+                  : null,
+              sourceUrl: url,
+            };
+          }
+          cachedGitAheadCommit = headCommit;
+          break;
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
     // Stale-while-revalidate: pre-populate from IDB cache before going to the
     // network. If we already have a cached commit for the known head, show it
     // immediately so the UI never blanks on refresh.
+    //
+    // Exception: if the cached infoRefs already tells us the git server is
+    // ahead, skip showing the old signed commit and jump straight to showing
+    // the git server's commit (with the warning) to avoid a visible flash.
     // -----------------------------------------------------------------------
     let hasCachedData = false;
-    if (knownHeadCommit) {
+
+    if (cachedGitAheadResult && stateCreatedAt !== undefined) {
+      // We already know from the L1 infoRefs cache that the git server is
+      // ahead. Show the git server's commit immediately with the warning so
+      // the user never sees the old signed state flash in.
+      // Use pulling:false so the banner is not suppressed — we're confident
+      // in the cached result; the network fetch will confirm or update it.
+      const gitCommitterDate =
+        cachedGitAheadResult.commit.committer?.timestamp ??
+        cachedGitAheadResult.commit.author.timestamp;
+      this.setState((prev) => ({
+        ...prev,
+        loading: false,
+        pulling: false,
+        error: null,
+        latestCommit: cachedGitAheadResult!.commit,
+        readmeContent:
+          cachedGitAheadResult!.readmeContent ?? prev.readmeContent,
+        readmeFilename:
+          cachedGitAheadResult!.readmeFilename ?? prev.readmeFilename,
+        urlInfoRefs: {},
+        warning: {
+          kind: "state-behind-git",
+          stateCommitId: knownHeadCommit!,
+          gitCommitId: cachedGitAheadResult!.commit.hash,
+          gitServerUrl: cachedGitAheadResult!.sourceUrl,
+          stateCreatedAt,
+          gitCommitterDate,
+        },
+      }));
+      hasCachedData = true;
+    } else if (cachedGitAheadCommit && stateCreatedAt !== undefined) {
+      // Cached infoRefs shows git is ahead but the git commit itself isn't
+      // cached yet. Show a loading state without the old signed commit to
+      // avoid the flash — the network fetch will fill in the commit shortly.
+      this.setState((prev) => ({
+        ...prev,
+        loading: true,
+        pulling: false,
+        error: null,
+        latestCommit: null,
+        readmeContent: null,
+        readmeFilename: null,
+        defaultBranch: null,
+        urlInfoRefs: {},
+        warning: null,
+      }));
+      hasCachedData = false; // treat as no cached data so we show loading
+    } else if (knownHeadCommit) {
       const cachedCommit = peekCachedCommit(knownHeadCommit);
       if (cachedCommit) {
         // Commit is in the L1 memory cache — populate state immediately
@@ -548,7 +666,7 @@ class GitRepoDataEntry {
       }
     }
 
-    if (!hasCachedData) {
+    if (!hasCachedData && !cachedGitAheadCommit) {
       // Nothing cached — show a blank loading state (first visit or unknown head)
       this.setState((prev) => ({
         ...prev,
@@ -982,16 +1100,37 @@ function getOrCreateEntry(cloneUrls: string[]): GitRepoDataEntry {
  * on every update. Returns an unsubscribe function.
  *
  * Multiple callers with the same clone URLs share a single fetch.
+ *
+ * @param initialStateEvent - Optional Nostr state event info known at subscribe
+ *   time. When provided, `pendingHead` is set before the first fetch starts so
+ *   the fast-path cache check (peekCachedInfoRefs) can immediately detect a
+ *   state-behind-git mismatch without waiting for a separate notifyNewStateEvent
+ *   call. This eliminates the race where subscribe() starts a fetch before the
+ *   hook's second useEffect fires notifyNewStateEvent().
  */
 export function subscribeToGitRepoData(
   cloneUrls: string[],
   cb: Subscriber,
+  initialStateEvent?: {
+    headCommitId: string;
+    refs: Record<string, string>;
+    stateCreatedAt: number;
+  },
 ): () => void {
   if (cloneUrls.length === 0) {
     cb({ ...INITIAL_STATE });
     return () => {};
   }
   const entry = getOrCreateEntry(cloneUrls);
+  if (initialStateEvent) {
+    // Set pendingHead before subscribe() triggers startFetch() so runFetch()
+    // sees the known head commit on its very first run.
+    entry.setPendingHead(
+      initialStateEvent.headCommitId,
+      initialStateEvent.refs,
+      initialStateEvent.stateCreatedAt,
+    );
+  }
   return entry.subscribe(cb);
 }
 
