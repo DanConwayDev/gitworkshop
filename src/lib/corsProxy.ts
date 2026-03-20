@@ -36,8 +36,29 @@ const KNOWN_CORS_BLOCKED_ORIGINS = new Set([
 const proxyCache = new Map<string, boolean>();
 
 /**
- * Returns true if the error message looks like a CORS / network failure
- * that might be resolved by routing through the proxy.
+ * Returns true if the error looks like a genuine CORS policy rejection —
+ * i.e. the browser blocked the response because the server didn't send the
+ * right Access-Control headers.  This is distinct from a network-level
+ * failure (ERR_FAILED, ERR_ADDRESS_UNREACHABLE) where the server is simply
+ * unreachable; routing those through a proxy won't help.
+ *
+ * Heuristic: isomorphic-git / the Fetch API surfaces CORS errors as a
+ * TypeError with a message containing "cors" or "cross-origin", or as a
+ * generic "Failed to fetch" that is NOT accompanied by a status code.
+ * Network-unreachable errors from the browser also say "Failed to fetch"
+ * but they tend to arrive as a plain TypeError with no additional context.
+ *
+ * We treat "Failed to fetch" alone as a CORS candidate only when there is
+ * no indication the host is simply down (e.g. no ERR_ADDRESS_UNREACHABLE /
+ * ERR_FAILED in the message).  In practice the browser doesn't expose those
+ * internal error codes in the JS error message, so we can't distinguish them
+ * purely from the message text.  Instead we rely on the fact that a CORS
+ * error always has a response (the browser received something and blocked it),
+ * whereas a network error has no response at all.
+ *
+ * Since we can't inspect the response here, we keep the heuristic but
+ * explicitly exclude messages that contain "address unreachable" or similar
+ * unambiguous network-down signals.
  */
 export function isCorsLikeError(err: unknown): boolean {
   const msg =
@@ -46,7 +67,11 @@ export function isCorsLikeError(err: unknown): boolean {
       : typeof err === "string"
         ? err
         : String(err);
-  return /failed to fetch|cors|network/i.test(msg);
+  const lower = msg.toLowerCase();
+  // Explicit network-down signals — proxy won't help
+  if (/address.?unreachable|connection.?refused|err_failed/i.test(lower))
+    return false;
+  return /failed to fetch|cors|cross.?origin/i.test(lower);
 }
 
 /**

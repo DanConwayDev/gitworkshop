@@ -70,6 +70,50 @@ import {
 } from "@/lib/corsProxy";
 
 // ---------------------------------------------------------------------------
+// Per-URL failure classification
+// ---------------------------------------------------------------------------
+
+/**
+ * Classify a fetch error to decide whether retrying the same URL is worthwhile.
+ *
+ * - "permanent": the server definitively rejected the request (404, 410, etc.)
+ *   or is unreachable at the network level.  No point retrying.
+ * - "transient": server error (5xx), timeout, or other condition that may
+ *   resolve on its own.  Retry is reasonable.
+ */
+function classifyFetchError(err: unknown): "permanent" | "transient" {
+  if (
+    err instanceof Response ||
+    (err && typeof err === "object" && "status" in err)
+  ) {
+    const status = (err as { status: number }).status;
+    // 4xx (except 429 Too Many Requests) are permanent — the resource doesn't exist
+    if (status >= 400 && status < 500 && status !== 429) return "permanent";
+    return "transient";
+  }
+  const msg =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : String(err);
+  // Network-level unreachable / CORS proxy also failed → permanent for this session
+  if (
+    /address.?unreachable|connection.?refused|err_failed|err_name_not_resolved/i.test(
+      msg,
+    )
+  )
+    return "permanent";
+  // HTTP status embedded in message (isomorphic-git style: "HTTP Error: 404")
+  const statusMatch = msg.match(/\b([1-5]\d{2})\b/);
+  if (statusMatch) {
+    const status = parseInt(statusMatch[1], 10);
+    if (status >= 400 && status < 500 && status !== 429) return "permanent";
+  }
+  return "transient";
+}
+
+// ---------------------------------------------------------------------------
 // Public types (re-exported for hook consumers)
 // ---------------------------------------------------------------------------
 
@@ -364,6 +408,12 @@ class GitRepoDataEntry {
   private fetching = false;
   /** Whether at least one fetch has completed (successfully or not) */
   private fetchedOnce = false;
+  /**
+   * URLs that have permanently failed (404, network-unreachable, etc.) and
+   * should not be retried within this session.  Reset only when the entry is
+   * destroyed (page unload / eviction).
+   */
+  private permanentlyFailedUrls = new Set<string>();
 
   constructor(cloneUrls: string[]) {
     this.cloneUrls = cloneUrls;
@@ -877,12 +927,37 @@ class GitRepoDataEntry {
       maybeUpdateDisplay(result, isStateCommit);
     };
 
+    // Skip URLs that have permanently failed in a previous fetch cycle — there
+    // is no reason to expect a different result (e.g. 404, unreachable host).
+    const activeUrls = this.cloneUrls.filter(
+      (url) => !this.permanentlyFailedUrls.has(url),
+    );
+
     // -----------------------------------------------------------------------
     // Phase 1 shortcut: if we know the state HEAD, start fetching it now
     // -----------------------------------------------------------------------
     if (knownHeadCommit) {
+      // Only try URLs where we have no cached infoRefs, or where the cached
+      // infoRefs show the server has the known head commit.  Skipping URLs
+      // whose cached infoRefs show a *different* HEAD avoids wasting requests
+      // on servers that clearly don't have the signed commit (e.g. a server
+      // that is ahead of the signed state, or one that is unreachable).
+      const urlsLikelyHaveCommit = activeUrls.filter((url) => {
+        const cached = peekCachedInfoRefs(url);
+        if (!cached) return true; // unknown — worth trying
+        const headRef = cached.symrefs["HEAD"];
+        const headCommit = headRef
+          ? cached.refs[headRef]
+          : Object.values(cached.refs)[0];
+        if (!headCommit) return true; // can't tell — worth trying
+        return (
+          headCommit.startsWith(knownHeadCommit) ||
+          knownHeadCommit.startsWith(headCommit)
+        );
+      });
+
       Promise.any(
-        this.cloneUrls.map(async (url) => {
+        urlsLikelyHaveCommit.map(async (url) => {
           const result = await fetchCommitCached(
             url,
             knownHeadCommit,
@@ -912,9 +987,26 @@ class GitRepoDataEntry {
     // -----------------------------------------------------------------------
     // Phase 1: race getInfoRefs across all URLs concurrently
     // -----------------------------------------------------------------------
-    const totalUrls = this.cloneUrls.length;
+    const totalUrls = activeUrls.length;
 
-    for (const url of this.cloneUrls) {
+    // If every URL has permanently failed, mark done immediately.
+    if (totalUrls === 0) {
+      this.fetching = false;
+      this.fetchedOnce = true;
+      if (!displayResult) {
+        this.setState((prev) => ({
+          ...prev,
+          loading: false,
+          pulling: false,
+          error: "Could not reach any clone URL",
+        }));
+      } else {
+        this.setState((prev) => ({ ...prev, loading: false, pulling: false }));
+      }
+      return;
+    }
+
+    for (const url of activeUrls) {
       fetchInfoRefs(url, signal)
         .then(async (info) => {
           if (signal.aborted) return;
@@ -969,6 +1061,11 @@ class GitRepoDataEntry {
               [url]: { status: "error", error: message },
             },
           }));
+          // Mark permanently-failed URLs so we don't retry them on the next
+          // backoff cycle.  Transient errors (5xx, timeout) are still retried.
+          if (classifyFetchError(err) === "permanent") {
+            this.permanentlyFailedUrls.add(url);
+          }
         })
         .finally(() => {
           if (signal.aborted) return;
@@ -1024,25 +1121,54 @@ class GitRepoDataEntry {
                 this.pendingHead &&
                 !this.refsMatchLastFetched(this.pendingHead.refs)
               ) {
-                // Refs still don't match — keep the backoff growing, don't
-                // reset to BACKOFF_INITIAL_MS, so we don't hammer the server.
-                this.backoffDelay = Math.min(
-                  this.backoffDelay * 2,
-                  BACKOFF_MAX_MS,
-                );
-                this.scheduleBackoffFetch();
+                // Refs don't match. Only retry if the signed state is *newer*
+                // than what the git servers returned — i.e. we expect the
+                // servers to catch up to a recent push.
+                //
+                // If any git server's HEAD is already *different* from the
+                // signed state commit, the server is ahead (or diverged) and
+                // retrying won't make the signed commit appear.  Give up and
+                // wait for a new state event to trigger a fresh attempt.
+                const signedCommit = this.pendingHead.commitId;
+                const gitIsAhead = Object.values(urlInfoRefs).some((r) => {
+                  if (r.status !== "ok") return false;
+                  const headRef = r.info.symrefs["HEAD"];
+                  const headCommit = headRef
+                    ? r.info.refs[headRef]
+                    : Object.values(r.info.refs)[0];
+                  if (!headCommit) return false;
+                  // Server has a commit that is NOT the signed commit
+                  return (
+                    !headCommit.startsWith(signedCommit) &&
+                    !signedCommit.startsWith(headCommit)
+                  );
+                });
+                if (!gitIsAhead) {
+                  this.backoffDelay = Math.min(
+                    this.backoffDelay * 2,
+                    BACKOFF_MAX_MS,
+                  );
+                  this.scheduleBackoffFetch();
+                } else {
+                  // Git is ahead — reset backoff so the next genuine push
+                  // starts fresh rather than with a long delay.
+                  this.backoffDelay = BACKOFF_INITIAL_MS;
+                }
               } else {
                 // Refs match (or no pending state event) — reset backoff for
                 // the next time a new state event triggers a re-fetch.
                 this.backoffDelay = BACKOFF_INITIAL_MS;
               }
             } else if (!signal.aborted) {
-              // Failed — only retry if a state event says the server should
-              // have data we haven't seen yet. If there's no pendingHead there
-              // is no reason to expect a retry will succeed (e.g. CORS-blocked
-              // servers like GitHub/Codeberg), so give up and wait for
-              // onNewStateEvent to trigger a fresh attempt if needed.
-              if (this.pendingHead) {
+              // All active URLs failed to return a usable result.
+              // Only schedule a retry if a state event says the server should
+              // have data we haven't seen yet AND there are still non-permanently-
+              // failed URLs to try.  If every URL has been marked permanent, the
+              // next runFetch() will bail out immediately with no network requests.
+              const hasRetryableUrls = this.cloneUrls.some(
+                (u) => !this.permanentlyFailedUrls.has(u),
+              );
+              if (this.pendingHead && hasRetryableUrls) {
                 this.backoffDelay = Math.min(
                   this.backoffDelay * 2,
                   BACKOFF_MAX_MS,
