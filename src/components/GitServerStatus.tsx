@@ -475,35 +475,36 @@ function ServerRow({
       <ServerStatusDot status={serverStatus.status} gitIsAhead={gitIsAhead} />
 
       <div className="min-w-0 flex-1">
-        {/* URL line */}
-        <p
-          className="font-mono text-foreground/80 break-all leading-snug"
-          title={serverStatus.url}
-        >
-          {displayUrl}
-        </p>
-
-        {/* Grasp owner identity — annotates who the npub in the URL belongs to */}
-        {isGrasp && (
-          <div className="flex items-center gap-1 mt-0.5 text-[11px] text-muted-foreground">
-            <span className="font-mono opacity-50">↳</span>
-            {pubkey ? (
-              <>
-                <UserAvatar
-                  pubkey={pubkey}
-                  size="sm"
-                  className="h-4 w-4 text-[7px]"
-                />
-                <UserName
-                  pubkey={pubkey}
-                  className="text-[11px] text-muted-foreground"
-                />
-              </>
-            ) : npub ? (
-              <span className="font-mono">{condenseNpub(npub)}</span>
-            ) : null}
-          </div>
-        )}
+        {/* URL + identity bubble on the same line */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p
+            className="font-mono text-[10px] text-foreground/80 break-all leading-snug"
+            title={serverStatus.url}
+          >
+            {displayUrl}
+          </p>
+          {isGrasp && (pubkey ?? npub) && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-popover px-1.5 py-0.5 shadow-sm whitespace-nowrap font-sans leading-none shrink-0">
+              {pubkey ? (
+                <>
+                  <UserAvatar
+                    pubkey={pubkey}
+                    size="sm"
+                    className="h-3.5 w-3.5 text-[6px] shrink-0"
+                  />
+                  <UserName
+                    pubkey={pubkey}
+                    className="text-[10px] text-muted-foreground font-normal"
+                  />
+                </>
+              ) : (
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {condenseNpub(npub!)}
+                </span>
+              )}
+            </span>
+          )}
+        </div>
 
         {/* Server has newer unsigned commits — ahead of the signed state */}
         {serverIsUnsignedAhead && serverStatus.serverCommit && (
