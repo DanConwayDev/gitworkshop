@@ -10,7 +10,7 @@
  *   "match"     → green (success)
  *   "behind"    → amber (warning)
  *   "ahead"     → amber (warning)
- *   "error"     → red
+ *   "error"     → grey (unreachable — not a known discrepancy)
  *   "connected" → grey (reachable, no ref comparison yet)
  *   "unknown"   → pulsing grey (fetching — not yet a problem)
  */
@@ -47,7 +47,7 @@ function mapStatus(
 const stateColors: Record<string, string> = {
   success: "fill-emerald-500",
   warning: "fill-amber-500",
-  error: "fill-red-500",
+  error: "fill-muted-foreground/50",
   connected: "fill-muted-foreground/30",
   loading: "fill-muted-foreground/50",
 };
@@ -69,9 +69,9 @@ export function GitServerStatusIcon({
         ? 0
         : s === "warning"
           ? 1
-          : s === "error"
+          : s === "connected"
             ? 2
-            : s === "connected"
+            : s === "error"
               ? 3
               : 4; // "loading" / undefined last
     return rank(a) - rank(b);

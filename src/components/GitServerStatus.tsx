@@ -211,7 +211,9 @@ function ServerStatusDot({
     case "ahead":
       return <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
     case "error":
-      return <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />;
+      return (
+        <XCircle className="h-3.5 w-3.5 text-muted-foreground/80 shrink-0" />
+      );
     case "connected":
       return (
         <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
@@ -283,7 +285,11 @@ function ServerStatusLabel({
         </span>
       );
     case "error":
-      return <span className="text-[10px] text-red-500 shrink-0">error</span>;
+      return (
+        <span className="text-[10px] text-muted-foreground/80 shrink-0">
+          error
+        </span>
+      );
     case "connected":
       return (
         <span className="text-[10px] text-muted-foreground/50 shrink-0">
@@ -362,7 +368,9 @@ function ErrorDetail({
       message = "unreachable";
   }
 
-  return <p className="text-[11px] text-red-500/80 mt-0.5">{message}</p>;
+  return (
+    <p className="text-[11px] text-muted-foreground/80 mt-0.5">{message}</p>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -505,14 +513,23 @@ function ServerRow({
           <p
             className={cn(
               "font-mono text-[10px] break-all leading-snug",
-              hasSelectedState ? "text-foreground/90" : "text-foreground/80",
+              serverStatus.status === "error"
+                ? "text-muted-foreground/80"
+                : hasSelectedState
+                  ? "text-foreground/90"
+                  : "text-foreground/80",
             )}
             title={serverStatus.url}
           >
             {displayUrl}
           </p>
           {isGrasp && (pubkey ?? npub) && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-popover px-1.5 py-0.5 shadow-sm whitespace-nowrap font-sans leading-none shrink-0">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border border-border/60 bg-popover px-1.5 py-0.5 shadow-sm whitespace-nowrap font-sans leading-none shrink-0",
+                serverStatus.status === "error" && "opacity-60 grayscale",
+              )}
+            >
               {pubkey ? (
                 <>
                   <UserAvatar
