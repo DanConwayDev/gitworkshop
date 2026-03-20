@@ -127,6 +127,8 @@ export default function RepoCommitsPage() {
             graspCloneUrls={repo?.graspCloneUrls ?? []}
             additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
             crossRefDiscrepancies={poolState.crossRefDiscrepancies}
+            pool={pool}
+            stateCreatedAt={repoState?.event.created_at}
           />
         )}
       </div>

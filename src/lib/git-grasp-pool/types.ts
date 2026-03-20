@@ -32,7 +32,7 @@ export type UrlConnectionStatus =
  * event exists).
  *
  * - "match"     : server's commit for this ref matches the signed state
- * - "behind"    : server has a different (older) commit than the signed state
+ * - "behind"    : server has a different commit than the signed state (may be older, diverged, or unknown)
  * - "ahead"     : server has a newer commit than the signed state
  * - "connected" : server is reachable but no ref comparison is possible yet
  *                 (e.g. state event still loading, or ref doesn't exist on server)

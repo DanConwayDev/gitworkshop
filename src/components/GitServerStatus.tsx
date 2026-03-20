@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Popover,
   PopoverContent,
@@ -34,6 +34,7 @@ import type {
   UrlErrorKind,
   RefDiscrepancy,
   PoolWarning,
+  GitGraspPool,
 } from "@/lib/git-grasp-pool";
 
 // ---------------------------------------------------------------------------
@@ -76,6 +77,12 @@ export interface GitServerStatusProps {
    * how stale the signed state is relative to what git servers have.
    */
   stateCreatedAt?: number;
+  /**
+   * Pool instance — used to lazily fetch commit timestamps for servers
+   * that differ from the signed state, so we can distinguish "behind"
+   * (older commit) from "diverged" (different but not necessarily older).
+   */
+  pool?: GitGraspPool | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -220,11 +227,19 @@ function ServerStatusLabel({
   status,
   hasState,
   gitIsAhead,
+  refinedBehindLabel,
 }: {
   status: UrlRefStatus;
   hasState: boolean;
   /** True when a git server is confirmed ahead of the signed state */
   gitIsAhead?: boolean;
+  /**
+   * Refined label for the "behind" status — determined by comparing the
+   * server's commit timestamp to the state event's created_at.
+   * "differs" while loading (safe default), "behind signed" if older,
+   * "diverged" if same age or newer.
+   */
+  refinedBehindLabel?: "behind signed" | "diverged" | "differs";
 }) {
   // When git is confirmed ahead of signed state:
   //   "match"  → server has the old signed commit (not the latest)
@@ -258,7 +273,7 @@ function ServerStatusLabel({
     case "behind":
       return (
         <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
-          {hasState ? "behind signed" : "differs"}
+          {hasState ? (refinedBehindLabel ?? "differs") : "differs"}
         </span>
       );
     case "ahead":
@@ -366,6 +381,7 @@ function ServerRow({
   gitIsAhead,
   stateCreatedAt,
   gitCommitterDate,
+  pool,
 }: {
   serverStatus: ServerStatus;
   hasState: boolean;
@@ -376,8 +392,58 @@ function ServerRow({
   stateCreatedAt?: number;
   /** Unix timestamp (seconds) of the git server's latest commit (when git is ahead) */
   gitCommitterDate?: number;
+  pool?: GitGraspPool | null;
 }) {
   const [copied, setCopied] = useState(false);
+
+  // Lazily fetch the server's commit timestamp when it differs from the signed
+  // state, so we can distinguish "behind signed" (older) from "diverged"
+  // (different but not necessarily older). null = fetch failed/not needed.
+  const [serverCommitTs, setServerCommitTs] = useState<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const needsTimestampCheck =
+    serverStatus.status === "behind" &&
+    hasState &&
+    !gitIsAhead &&
+    !!serverStatus.serverCommit &&
+    !!pool &&
+    stateCreatedAt !== undefined;
+
+  useEffect(() => {
+    if (!needsTimestampCheck) return;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    pool!
+      .getSingleCommit(serverStatus.serverCommit!, ac.signal)
+      .then((commit) => {
+        if (ac.signal.aborted || !commit) return;
+        const ts = commit.committer?.timestamp ?? commit.author.timestamp;
+        setServerCommitTs(ts);
+      })
+      .catch(() => {
+        /* ignore — label stays "differs" */
+      });
+
+    return () => {
+      ac.abort();
+    };
+  }, [needsTimestampCheck, serverStatus.serverCommit, pool]);
+
+  // Determine the refined label for a "behind" server:
+  //   - while loading (serverCommitTs null): show "differs" (safe default)
+  //   - commit older than state event: "behind signed"
+  //   - commit same age or newer: "diverged"
+  const refinedBehindLabel: "behind signed" | "diverged" | "differs" =
+    !needsTimestampCheck
+      ? "differs"
+      : serverCommitTs === null
+        ? "differs"
+        : serverCommitTs < stateCreatedAt!
+          ? "behind signed"
+          : "diverged";
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -551,6 +617,7 @@ function ServerRow({
         status={serverStatus.status}
         hasState={hasState}
         gitIsAhead={gitIsAhead}
+        refinedBehindLabel={refinedBehindLabel}
       />
     </div>
   );
@@ -708,6 +775,7 @@ function GitServerPanel({
   gitIsAhead,
   stateCreatedAt,
   gitCommitterDate,
+  pool,
 }: {
   serverStatuses: ServerStatus[];
   hasState: boolean;
@@ -720,6 +788,7 @@ function GitServerPanel({
   gitIsAhead: boolean;
   stateCreatedAt?: number;
   gitCommitterDate?: number;
+  pool?: GitGraspPool | null;
 }) {
   const usesGrasp = graspCloneUrls.length > 0;
 
@@ -806,6 +875,7 @@ function GitServerPanel({
                 gitIsAhead={gitIsAhead}
                 stateCreatedAt={stateCreatedAt}
                 gitCommitterDate={gitCommitterDate}
+                pool={pool}
               />
             ))}
           </div>
@@ -830,6 +900,7 @@ function GitServerPanel({
                 gitIsAhead={gitIsAhead}
                 stateCreatedAt={stateCreatedAt}
                 gitCommitterDate={gitCommitterDate}
+                pool={pool}
               />
             ))}
           </div>
@@ -871,6 +942,7 @@ export function GitServerStatus({
   crossRefDiscrepancies,
   poolWarning,
   stateCreatedAt,
+  pool,
 }: GitServerStatusProps) {
   const [open, setOpen] = useState(false);
 
@@ -953,6 +1025,7 @@ export function GitServerStatus({
           gitIsAhead={gitIsAhead}
           stateCreatedAt={stateCreatedAt}
           gitCommitterDate={gitCommitterDate}
+          pool={pool}
         />
       </PopoverContent>
     </Popover>
