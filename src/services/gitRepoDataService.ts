@@ -530,16 +530,25 @@ class GitRepoDataEntry {
     const stateCreatedAt = this.pendingHead?.stateCreatedAt;
 
     // -----------------------------------------------------------------------
-    // Fast-path: synchronously check the L1 infoRefs cache for all URLs.
-    // If any URL has a fresh cached result whose HEAD differs from the known
-    // state commit, we can immediately surface the warning and show the git
-    // server's commit (if also cached) — no network round-trip required.
+    // Fast-path: check the infoRefs cache (L1 memory first, then IDB) for
+    // all URLs. If any URL has a fresh cached result whose HEAD differs from
+    // the known state commit, we can immediately surface the warning and show
+    // the git server's commit (if also cached) — no network round-trip needed.
+    //
+    // We check IDB here (not just L1 memory) so that the fast-path works on
+    // page reload, when the L1 cache is empty but IDB still has fresh data.
     // -----------------------------------------------------------------------
     let cachedGitAheadResult: CommitResult | null = null;
     let cachedGitAheadCommit: string | null = null;
     if (knownHeadCommit) {
       for (const url of this.cloneUrls) {
-        const cachedInfo = peekCachedInfoRefs(url);
+        // Try L1 memory first (synchronous), then IDB (async)
+        const cachedInfo =
+          peekCachedInfoRefs(url) ?? (await getCachedInfoRefs(url));
+        if (signal.aborted) {
+          this.fetching = false;
+          return;
+        }
         if (!cachedInfo) continue;
         const headRef = cachedInfo.symrefs["HEAD"];
         const headCommit = headRef
@@ -550,8 +559,15 @@ class GitRepoDataEntry {
           headCommit.startsWith(knownHeadCommit) ||
           knownHeadCommit.startsWith(headCommit);
         if (!matchesState) {
-          // Git server is ahead — check if we also have the commit cached
-          const gitCommit = peekCachedCommit(headCommit);
+          // Git server is ahead — check if we also have the commit cached.
+          // Try L1 memory first (synchronous), then IDB (async) so the
+          // fast-path works on page reload when L1 is empty.
+          const gitCommit =
+            peekCachedCommit(headCommit) ?? (await getCachedCommit(headCommit));
+          if (signal.aborted) {
+            this.fetching = false;
+            return;
+          }
           if (gitCommit) {
             cachedGitAheadResult = {
               commit: gitCommit,
@@ -708,58 +724,6 @@ class GitRepoDataEntry {
     let bestGitResult: CommitResult | null = null;
     let defaultBranch: string | null = null;
 
-    const maybeUpdateDisplay = (
-      result: CommitResult,
-      isStateCommit: boolean,
-    ) => {
-      if (signal.aborted) return;
-
-      const committerDate =
-        result.commit.committer?.timestamp ?? result.commit.author.timestamp;
-
-      if (isStateCommit) {
-        stateCommitFetched = true;
-      } else {
-        if (
-          !bestGitResult ||
-          committerDate >
-            (bestGitResult.commit.committer?.timestamp ??
-              bestGitResult.commit.author.timestamp)
-        ) {
-          bestGitResult = result;
-        }
-      }
-
-      if (!displayResult) {
-        displayResult = result;
-        displayCommitterDate = committerDate;
-        this.setState((prev) => ({
-          ...prev,
-          loading: false,
-          pulling: false,
-          latestCommit: result.commit,
-          readmeContent: result.readmeContent,
-          readmeFilename: result.readmeFilename,
-          warning: null,
-        }));
-        return;
-      }
-
-      if (committerDate > displayCommitterDate) {
-        displayResult = result;
-        displayCommitterDate = committerDate;
-        this.setState((prev) => ({
-          ...prev,
-          loading: false,
-          pulling: false,
-          latestCommit: result.commit,
-          readmeContent: result.readmeContent ?? prev.readmeContent,
-          readmeFilename: result.readmeFilename ?? prev.readmeFilename,
-          warning: null,
-        }));
-      }
-    };
-
     const recomputeWarning = () => {
       if (signal.aborted || !displayResult) return;
 
@@ -835,6 +799,64 @@ class GitRepoDataEntry {
       }
 
       this.setState((prev) => ({ ...prev, warning: null }));
+    };
+
+    /**
+     * Update the displayed commit if `result` is newer than what's currently
+     * shown, then recompute the warning. Never clears the warning directly —
+     * recomputeWarning() decides whether a warning is appropriate based on the
+     * full picture (bestGitResult, stateCommitFetched, etc.).
+     */
+    const maybeUpdateDisplay = (
+      result: CommitResult,
+      isStateCommit: boolean,
+    ) => {
+      if (signal.aborted) return;
+
+      const committerDate =
+        result.commit.committer?.timestamp ?? result.commit.author.timestamp;
+
+      if (isStateCommit) {
+        stateCommitFetched = true;
+      } else {
+        if (
+          !bestGitResult ||
+          committerDate >
+            (bestGitResult.commit.committer?.timestamp ??
+              bestGitResult.commit.author.timestamp)
+        ) {
+          bestGitResult = result;
+        }
+      }
+
+      if (!displayResult) {
+        displayResult = result;
+        displayCommitterDate = committerDate;
+        this.setState((prev) => ({
+          ...prev,
+          loading: false,
+          pulling: false,
+          latestCommit: result.commit,
+          readmeContent: result.readmeContent,
+          readmeFilename: result.readmeFilename,
+        }));
+        recomputeWarning();
+        return;
+      }
+
+      if (committerDate > displayCommitterDate) {
+        displayResult = result;
+        displayCommitterDate = committerDate;
+        this.setState((prev) => ({
+          ...prev,
+          loading: false,
+          pulling: false,
+          latestCommit: result.commit,
+          readmeContent: result.readmeContent ?? prev.readmeContent,
+          readmeFilename: result.readmeFilename ?? prev.readmeFilename,
+        }));
+        recomputeWarning();
+      }
     };
 
     const fetchCommitIfNeeded = async (
