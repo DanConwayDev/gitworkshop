@@ -36,8 +36,9 @@ const ESSENTIALS_KINDS = [...STATUS_KINDS, LABEL_KIND, DELETION_KIND] as const;
  *      zaps into a single stream that re-emits whenever any of the three
  *      updates. buildResolvedIssues is called on each emission.
  *
- * Comment and zap counts are 0 until useNip34Loaders fetches those events
- * into the store. The model reacts to whatever is present — no special casing.
+ * Comment and zap counts are 0 until useNip34ItemLoader (tier: "thread")
+ * fetches those events into the store. The model reacts to whatever is
+ * present — no special casing.
  *
  * Used for both the list page (many issues) and the detail page (one issue,
  * passed as a single-element coord set). PatchListModel will be structurally
@@ -49,7 +50,7 @@ const ESSENTIALS_KINDS = [...STATUS_KINDS, LABEL_KIND, DELETION_KIND] as const;
  * pubkeyFromCoordinate — no BFS needed here, that's done upstream.
  *
  * This model does NOT fetch from relays — pair it with relay subscriptions in
- * useIssues and useNip34Loaders that populate the store first.
+ * useIssues and useNip34ItemLoader that populate the store first.
  *
  * @param coordsCacheKey - Sorted, comma-joined coordinate string (cache key)
  * @param options        - Per-entity-type auth tweaks passed to resolveEssentials

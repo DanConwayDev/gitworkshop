@@ -5,7 +5,6 @@ import { useSeoMeta } from "@unhead/react";
 import { formatDistanceToNow } from "date-fns";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { useRepoContext } from "./RepoContext";
-import { useNip34Loaders } from "@/hooks/useNip34Loaders";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusTabs } from "@/components/StatusTabs";
@@ -41,14 +40,12 @@ import {
   Plus,
 } from "lucide-react";
 import type { IssueStatus, ResolvedIssue } from "@/lib/nip34";
-import type { RelayGroup } from "applesauce-relay";
 
 const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open", "draft"];
 
 export default function RepoIssuesPage() {
   const { pubkey, repoId, resolved, issues } = useRepoContext();
   const repo = resolved?.repo;
-  const repoRelayGroup = resolved?.repoRelayGroup;
   const account = useActiveAccount();
 
   // New issue dialog
@@ -286,7 +283,6 @@ export default function RepoIssuesPage() {
               key={issue.id}
               issue={issue}
               repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [])}
-              repoRelayGroup={repoRelayGroup}
             />
           ))}
         </div>
@@ -307,17 +303,13 @@ function AuthorSelectLabel({ pubkey }: { pubkey: string }) {
 function IssueRow({
   issue,
   repoPath,
-  repoRelayGroup,
 }: {
   issue: ResolvedIssue;
   repoPath: string;
-  repoRelayGroup: RelayGroup | undefined;
 }) {
   const timeAgo = formatDistanceToNow(new Date(issue.createdAt * 1000), {
     addSuffix: true,
   });
-
-  useNip34Loaders(issue.id, repoRelayGroup);
 
   return (
     <Link to={`${repoPath}/issues/${issue.id}`} className="group block">

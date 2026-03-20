@@ -4,7 +4,6 @@ import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
 import { formatDistanceToNow } from "date-fns";
 import { useRepoContext } from "./RepoContext";
-import { useNip34Loaders } from "@/hooks/useNip34Loaders";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusTabs } from "@/components/StatusTabs";
@@ -32,7 +31,6 @@ import {
   X,
 } from "lucide-react";
 import type { IssueStatus, ResolvedPR, PRItemType } from "@/lib/nip34";
-import type { RelayGroup } from "applesauce-relay";
 
 const TYPE_OPTIONS: MultiSelectOption[] = [
   { value: "pr", label: "Pull Requests" },
@@ -44,7 +42,6 @@ const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open", "draft"];
 export default function RepoPRsPage() {
   const { pubkey, repoId, resolved, prs } = useRepoContext();
   const repo = resolved?.repo;
-  const repoRelayGroup = resolved?.repoRelayGroup;
 
   // Filters — all multi-select; status defaults to open+draft
   const [statusFilter, setStatusFilter] = useState<IssueStatus[]>(
@@ -247,7 +244,6 @@ export default function RepoPRsPage() {
               key={pr.id}
               pr={pr}
               repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [])}
-              repoRelayGroup={repoRelayGroup}
             />
           ))}
         </div>
@@ -265,20 +261,10 @@ function AuthorSelectLabel({ pubkey }: { pubkey: string }) {
   );
 }
 
-function PRRow({
-  pr,
-  repoPath,
-  repoRelayGroup,
-}: {
-  pr: ResolvedPR;
-  repoPath: string;
-  repoRelayGroup: RelayGroup | undefined;
-}) {
+function PRRow({ pr, repoPath }: { pr: ResolvedPR; repoPath: string }) {
   const timeAgo = formatDistanceToNow(new Date(pr.createdAt * 1000), {
     addSuffix: true,
   });
-
-  useNip34Loaders(pr.id, repoRelayGroup);
 
   const TypeIcon =
     pr.itemType === "patch" ? GitCommitHorizontal : GitPullRequest;

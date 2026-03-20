@@ -599,18 +599,18 @@ export interface ResolvedIssue {
   /** All repository coordinates from `#a` tags, sorted */
   repoCoords: string[];
   /**
-   * Number of NIP-22 comments (kind:1111). Zero until useNip34Loaders has
-   * fetched comment events into the store.
+   * Number of NIP-22 comments (kind:1111). Zero until useNip34ItemLoader
+   * (tier: "comments" or "thread") has fetched comment events into the store.
    */
   commentCount: number;
   /**
    * Number of unique commenter pubkeys (including the issue author).
-   * Zero until useNip34Loaders has fetched comment events into the store.
+   * Zero until useNip34ItemLoader has fetched comment events into the store.
    */
   participantCount: number;
   /**
-   * Number of zap receipts (kind:9735). Zero until useNip34Loaders has
-   * fetched zap events into the store.
+   * Number of zap receipts (kind:9735). Zero until useNip34ItemLoader
+   * (tier: "thread") has fetched zap events into the store.
    */
   zapCount: number;
   /**
@@ -874,7 +874,8 @@ function buildResolvedList(
 
 /**
  * Build a sorted list of ResolvedIssue objects from raw events. Pure function,
- * no side effects. Comment/zap counts are 0 until useNip34Loaders fetches them.
+ * no side effects. Comment/zap counts are 0 until useNip34ItemLoader (tier:
+ * "thread") fetches them into the store.
  */
 export function buildResolvedIssues(
   rootEvents: NostrEvent[],

@@ -1,12 +1,9 @@
 import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
-import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
 import type { RelayGroup } from "applesauce-relay";
 import {
   PR_ROOT_KINDS,
-  PATCH_KIND,
   STATUS_KINDS,
   LABEL_KIND,
   DELETION_KIND,
@@ -23,15 +20,10 @@ import {
 } from "@/lib/nip34";
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 import { PRListModel } from "@/models/PRListModel";
-import {
-  getTagValue,
-  hasNameValueTag,
-  type Filter,
-} from "applesauce-core/helpers";
+import { getTagValue, type Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
-import { bufferTime, mergeMap, filter } from "rxjs/operators";
-import { EMPTY } from "rxjs";
 import type { Observable } from "rxjs";
+import { nip34RepoLoader } from "@/services/nostr";
 
 /** All essential kinds fetched per-PR by nip34EssentialsLoader. */
 const ESSENTIALS_KINDS = [...STATUS_KINDS, LABEL_KIND, DELETION_KIND] as const;
@@ -103,48 +95,15 @@ export function usePRs(
 
   const cacheKey = coords ? coordsCacheKey(coords) : "";
 
-  // Fetch PRs/patches from relay via the long-lived group subscription.
+  // Fetch PRs/patches from relay and pipe each newly discovered root item ID
+  // into nip34EssentialsLoader via nip34RepoLoader. The factory handles dedup
+  // (seenIds in closure) and closes cleanly on unsubscribe. Filter merging
+  // with nip34ItemLoader calls from useNip34ItemLoader is automatic because
+  // both share the same singleton loader instances.
   use$(() => {
     if (!coords || coords.length === 0 || !repoRelayGroup) return undefined;
-    return repoRelayGroup
-      .subscription([{ kinds: [...PR_ROOT_KINDS], "#a": coords } as Filter])
-      .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [cacheKey, repoRelayGroup, store]);
-
-  // Fetch status + label + deletion events from relay, keyed by PR/patch ID.
-  // Status/label/deletion events reference the PR/patch via "#e" (not "#a"),
-  // so we pipe the PRs relay stream through bufferTime to batch IDs that arrive
-  // in quick succession into a single subscription per batch.
-  // mergeMap keeps existing subscriptions alive; seenIds ensures each ID is
-  // only subscribed once. Non-root patches are excluded from the batch.
-  use$(() => {
-    if (!coords || coords.length === 0 || !repoRelayGroup) return undefined;
-    const seenIds = new Set<string>();
-    return repoRelayGroup
-      .subscription([{ kinds: [...PR_ROOT_KINDS], "#a": coords } as Filter])
-      .pipe(
-        onlyEvents(),
-        mapEventsToStore(store),
-        bufferTime(100),
-        filter((batch) => batch.length > 0),
-        mergeMap((batch) => {
-          const newIds = (batch as NostrEvent[])
-            .filter(
-              (ev) =>
-                ev.kind !== PATCH_KIND || hasNameValueTag(ev, "t", "root"),
-            )
-            .map((ev) => ev.id)
-            .filter((id) => !seenIds.has(id));
-          if (newIds.length === 0) return EMPTY;
-          for (const id of newIds) seenIds.add(id);
-          return repoRelayGroup
-            .subscription([
-              { kinds: [...ESSENTIALS_KINDS], "#e": newIds } as Filter,
-            ])
-            .pipe(onlyEvents(), mapEventsToStore(store));
-        }),
-      );
-  }, [cacheKey, repoRelayGroup, store]);
+    return nip34RepoLoader(coords, repoRelayGroup);
+  }, [cacheKey, repoRelayGroup]);
 
   // Subscribe to the model — cached by the store, shared across components.
   return use$(() => {

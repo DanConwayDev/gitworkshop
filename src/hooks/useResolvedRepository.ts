@@ -22,7 +22,7 @@ const MAX_MAILBOX_RELAYS_PER_USER = 3;
 export interface ResolvedRepository {
   repo: ResolvedRepo;
   /** Base RelayGroup: repo-declared relays + relay hints only.
-   *  Always pass to useIssues / useNip34Loaders. */
+   *  Always pass to useIssues / usePRs / useNip34ItemLoader. */
   repoRelayGroup: RelayGroupType;
   /** Delta RelayGroup: maintainer outbox + inbox relays that are NOT already
    *  in repoRelayGroup (up to MAX_MAILBOX_RELAYS_PER_USER each, prioritising

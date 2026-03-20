@@ -1,5 +1,6 @@
-import { EventStore } from "applesauce-core";
+import { EventStore, mapEventsToStore } from "applesauce-core";
 import { persistEventsToCache, relaySet } from "applesauce-core/helpers";
+import type { Filter } from "applesauce-core/helpers";
 import {
   createAddressLoader,
   createEventLoaderForStore,
@@ -8,12 +9,15 @@ import {
   createZapsLoader,
   DnsIdentityLoader,
 } from "applesauce-loaders/loaders";
-import { RelayLiveness, RelayPool } from "applesauce-relay";
+import { RelayLiveness, RelayPool, onlyEvents } from "applesauce-relay";
+import type { RelayGroup } from "applesauce-relay";
 import { NostrConnectSigner } from "applesauce-signers";
 import type { NostrEvent } from "nostr-tools";
 import { verifyEvent } from "nostr-tools";
+import { Observable, merge } from "rxjs";
 import { cacheRequest, saveEvents } from "./cache";
 import { extraRelays, lookupRelays } from "./settings";
+import { ISSUE_KIND, PR_ROOT_KINDS } from "@/lib/nip34";
 
 /**
  * Global EventStore instance for all Nostr events.
@@ -182,3 +186,149 @@ export const nip34ThreadLoader = createTagValueLoader(pool, "e", {
   kinds: [7, 9735],
   bufferTime: NIP34_THREAD_BUFFER,
 });
+
+// ---------------------------------------------------------------------------
+// NIP-34 observable factories
+//
+// These are pure RxJS observable factories — no React, no hooks. They are
+// consumed by React hooks via use$(), which handles subscription lifecycle.
+//
+// Two factories cover the three loading tiers:
+//
+//   nip34RepoLoader   — repo level: subscribes to all items for a set of repo
+//                       coordinates and pipes each newly discovered item ID
+//                       into nip34EssentialsLoader. Called from useIssues /
+//                       usePRs. seenIds in the closure ensures each ID is only
+//                       submitted to the loader once per subscription lifetime.
+//                       Closes and resets when the component unmounts (e.g.
+//                       navigating away from the repo).
+//
+//   nip34ItemLoader   — item level: fires loader tiers for a single known item
+//                       ID. Tiers are additive — calling with a higher tier
+//                       fires any tiers not yet seen without re-firing lower
+//                       ones. seenTiers in the closure prevents duplicate
+//                       relay requests within the same subscription lifetime.
+//                       Separate instances for repo relays vs inbox delta
+//                       relays keep relay-group dedup independent.
+//
+// Filter merging: because nip34EssentialsLoader / nip34CommentsLoader /
+// nip34ThreadLoader are singleton instances, calls from nip34RepoLoader and
+// nip34ItemLoader that arrive within the same buffer window are automatically
+// merged into a single relay subscription by applesauce — even across issues
+// and PRs.
+// ---------------------------------------------------------------------------
+
+/** All root item kinds tracked at the repo level (issues + PR root kinds). */
+const REPO_ITEM_KINDS = [ISSUE_KIND, ...PR_ROOT_KINDS] as const;
+
+/**
+ * Repo-level observable factory.
+ *
+ * Subscribes to all NIP-34 root items (issues + PR/patch roots) for the given
+ * repository coordinates via the relay group. For each newly discovered item
+ * ID, calls nip34EssentialsLoader so status, labels, and deletion events are
+ * fetched and written into the EventStore.
+ *
+ * Deduplication: a seenIds Set in the closure ensures each item ID is
+ * submitted to the essentials loader exactly once, regardless of how many
+ * times the relay re-delivers the root event. The set is fresh per
+ * subscription — navigating away and back creates a new observable with a new
+ * set, triggering a fresh fetch.
+ *
+ * Filter merging: nip34EssentialsLoader is a singleton; calls from this
+ * factory and from nip34ItemLoader that arrive within the 100ms buffer window
+ * are merged into a single relay subscription automatically.
+ *
+ * @param coords     - Sorted array of repo coordinate strings
+ * @param relayGroup - Relay group from useResolvedRepository
+ */
+export function nip34RepoLoader(
+  coords: string[],
+  relayGroup: RelayGroup,
+): Observable<NostrEvent> {
+  return new Observable<NostrEvent>((subscriber) => {
+    const seenIds = new Set<string>();
+    const relayUrls = relayGroup.relays.map((r) => r.url);
+
+    const sub = relayGroup
+      .subscription([{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter])
+      .pipe(onlyEvents(), mapEventsToStore(eventStore))
+      .subscribe({
+        next: (event) => {
+          const ev = event as NostrEvent;
+          if (!seenIds.has(ev.id)) {
+            seenIds.add(ev.id);
+            // Fire essentials loader — batched with all other calls within
+            // the buffer window by the singleton loader instance.
+            nip34EssentialsLoader({
+              value: ev.id,
+              relays: relayUrls,
+            }).subscribe(subscriber);
+          }
+        },
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+    return () => sub.unsubscribe();
+  });
+}
+
+/**
+ * The loading tier for a single NIP-34 item.
+ *
+ * - essentials: status (1630-1633), labels (1985), deletions (5)
+ * - comments:   essentials + NIP-22 comments (1111)
+ * - thread:     comments + reactions (7) + zaps (9735)
+ */
+export type Nip34ItemTier = "essentials" | "comments" | "thread";
+
+/**
+ * Item-level observable factory.
+ *
+ * Merges the appropriate singleton loader observables for a single known item
+ * ID at the requested tier. Tiers are additive:
+ *
+ *   essentials  →  nip34EssentialsLoader only
+ *   comments    →  essentials + nip34CommentsLoader
+ *   thread      →  comments  + nip34ThreadLoader (reactions + zaps)
+ *
+ * Tier upgrade / deduplication: the hook layer (useNip34ItemLoader) manages
+ * which tiers have already been subscribed via separate use$() calls keyed on
+ * the tier. When the user navigates to a higher-tier page (e.g. list → detail)
+ * only the new tier's use$() fires — lower tiers remain open and are not
+ * re-subscribed. On navigation away from the repo, all use$() calls
+ * unsubscribe and the next visit starts fresh.
+ *
+ * Relay-group independence: pass repo relays and inbox-delta relays as
+ * separate nip34ItemLoader calls so each has its own subscription and
+ * deduplication is independent per relay set.
+ *
+ * Filter merging: because nip34EssentialsLoader / nip34CommentsLoader /
+ * nip34ThreadLoader are singleton instances, concurrent calls from multiple
+ * components within the same buffer window are merged into a single relay
+ * subscription automatically.
+ *
+ * @param itemId   - The event ID of the issue / patch / PR
+ * @param relays   - Relay URLs to query
+ * @param tier     - The desired loading tier
+ */
+export function nip34ItemLoader(
+  itemId: string,
+  relays: string[],
+  tier: Nip34ItemTier,
+): Observable<NostrEvent> {
+  const observables: Observable<NostrEvent>[] = [
+    nip34EssentialsLoader({ value: itemId, relays }),
+  ];
+
+  if (tier === "comments" || tier === "thread") {
+    observables.push(nip34CommentsLoader({ value: itemId, relays }));
+  }
+
+  if (tier === "thread") {
+    observables.push(nip34ThreadLoader({ value: itemId, relays }));
+  }
+
+  return merge(...observables);
+}
