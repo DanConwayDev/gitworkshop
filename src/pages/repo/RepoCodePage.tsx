@@ -1465,6 +1465,7 @@ import {
   cacheBlob,
 } from "@/services/gitObjectCache";
 import { resolveGitUrl } from "@/lib/corsProxy";
+import { filterFailedUrls } from "@/services/gitRepoDataService";
 import { BookOpen } from "lucide-react";
 
 function ReadmeViewer({
@@ -1497,7 +1498,7 @@ function ReadmeViewer({
     setContent(null);
 
     Promise.any(
-      cloneUrls.map(async (url) => {
+      filterFailedUrls(cloneUrls).map(async (url) => {
         const effectiveUrl = resolveGitUrl(url);
         const entry = await getObjectByPath(
           effectiveUrl,

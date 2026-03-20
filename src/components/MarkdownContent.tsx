@@ -23,6 +23,7 @@ import {
 } from "applesauce-core/helpers";
 import { getObject, getObjectByPath } from "@fiatjaf/git-natural-api";
 import { resolveGitUrl } from "@/lib/corsProxy";
+import { filterFailedUrls } from "@/services/gitRepoDataService";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { getCachedBlob, cacheBlob } from "@/services/gitObjectCache";
 
@@ -153,7 +154,7 @@ function GitImage({
       try {
         // Try each clone URL in parallel, use first success
         const bytes = await Promise.any(
-          cloneUrls.map(async (url) => {
+          filterFailedUrls(cloneUrls).map(async (url) => {
             const effectiveUrl = resolveGitUrl(url);
             const entry = await getObjectByPath(
               effectiveUrl,

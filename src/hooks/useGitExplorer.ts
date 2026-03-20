@@ -23,7 +23,7 @@ import {
   cacheCommitHistory,
 } from "@/services/gitObjectCache";
 import { resolveGitUrl } from "@/lib/corsProxy";
-import { fetchInfoRefs } from "@/services/gitRepoDataService";
+import { fetchInfoRefs, filterFailedUrls } from "@/services/gitRepoDataService";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -590,10 +590,10 @@ export function useGitExplorer(
       tree = cachedTree;
     } else {
       try {
-        const urlsToTry = [
+        const urlsToTry = filterFailedUrls([
           winningUrl,
           ...cloneUrls.filter((u) => u !== winningUrl),
-        ];
+        ]);
 
         tree = await Promise.any(
           urlsToTry.map((url) =>
@@ -684,7 +684,9 @@ export function useGitExplorer(
       // Fetch the file content from git servers
       try {
         const obj = await Promise.any(
-          cloneUrls.map((url) => getObject(resolveGitUrl(url), fileHash)),
+          filterFailedUrls(cloneUrls).map((url) =>
+            getObject(resolveGitUrl(url), fileHash),
+          ),
         );
         if (signal.aborted) return;
         if (obj) {
@@ -771,9 +773,12 @@ async function fetchHeadCommit(
     return;
   }
 
+  const liveUrls = filterFailedUrls(cloneUrls);
+  if (liveUrls.length === 0) return;
+
   try {
     const commits = await Promise.any(
-      cloneUrls.map((url) =>
+      liveUrls.map((url) =>
         fetchCommitsOnly(resolveGitUrl(url), commitHash, 1),
       ),
     );
@@ -872,7 +877,7 @@ export function useCommitHistory(
         setState({ loading: true, error: null, commits: [] });
 
         const commits = await Promise.any(
-          cloneUrls.map((url) =>
+          filterFailedUrls(cloneUrls).map((url) =>
             fetchCommitsOnly(resolveGitUrl(url), commitHash, maxCommits),
           ),
         );

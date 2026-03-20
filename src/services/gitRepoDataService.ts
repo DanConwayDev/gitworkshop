@@ -243,6 +243,26 @@ const inFlightInfoRefs = new Map<string, Promise<InfoRefsUploadPackResponse>>();
 const permanentInfoRefFailures = new Map<string, PermanentFetchError>();
 
 /**
+ * Returns true if `url` has permanently failed an infoRefs fetch this session
+ * (404, network-unreachable, etc.).  Use this to filter clone URLs *before*
+ * passing them to library functions (getDirectoryTreeAt, fetchCommitsOnly,
+ * getObject, etc.) that internally call the library's own getInfoRefs — which
+ * bypasses all the protections in fetchInfoRefs.
+ */
+export function isUrlPermanentlyFailed(url: string): boolean {
+  return permanentInfoRefFailures.has(url);
+}
+
+/**
+ * Filter an array of clone URLs, removing any that have permanently failed.
+ * Convenience wrapper around isUrlPermanentlyFailed for the common
+ * `cloneUrls.filter(...)` pattern.
+ */
+export function filterFailedUrls(urls: string[]): string[] {
+  return urls.filter((u) => !permanentInfoRefFailures.has(u));
+}
+
+/**
  * Fetch infoRefs for a URL, checking the object cache first.
  * Automatically falls back to the CORS proxy on CORS-like errors.
  * The cache key is always the original URL so callers stay unaware of the proxy.

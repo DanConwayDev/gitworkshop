@@ -17,6 +17,7 @@ import {
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { getSingleCommit } from "@fiatjaf/git-natural-api";
 import type { Commit } from "@fiatjaf/git-natural-api";
+import { filterFailedUrls } from "@/services/gitRepoDataService";
 
 export default function RepoCommitPage() {
   const { cloneUrls, commitId } = useRepoContext();
@@ -42,7 +43,9 @@ export default function RepoCommitPage() {
     setError(null);
     setCommit(null);
 
-    Promise.any(cloneUrls.map((url) => getSingleCommit(url, commitId)))
+    Promise.any(
+      filterFailedUrls(cloneUrls).map((url) => getSingleCommit(url, commitId)),
+    )
       .then((c) => {
         if (abort.signal.aborted) return;
         setCommit(c);
