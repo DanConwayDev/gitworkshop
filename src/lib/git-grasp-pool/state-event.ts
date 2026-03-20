@@ -10,7 +10,7 @@
  * - Recency guard (only backoff-poll for recently-published state events)
  */
 
-import type { StateEventInput, StateEvent } from "./types";
+import type { StateEventInput } from "./types";
 
 // ---------------------------------------------------------------------------
 // Constants

@@ -19,7 +19,7 @@
  */
 
 import type { Observable } from "rxjs";
-import type { PoolOptions, StateEventInput } from "./types";
+import type { StateEventInput } from "./types";
 import { GitGraspPool } from "./pool";
 
 // ---------------------------------------------------------------------------

@@ -25,14 +25,13 @@ import type {
   PoolSubscriber,
   PoolWarning,
   StateEventInput,
-  StateEvent,
   Commit,
   Tree,
   InfoRefsUploadPackResponse,
 } from "./types";
 import { CorsProxyManager } from "./cors-proxy";
 import { GitObjectCache } from "./cache";
-import { GitHttpClient, classifyFetchError, README_NAMES } from "./git-http";
+import { GitHttpClient, classifyFetchError } from "./git-http";
 import { UrlStateManager } from "./url-state";
 import { StateEventManager } from "./state-event";
 

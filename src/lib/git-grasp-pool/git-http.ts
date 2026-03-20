@@ -1,33 +1,62 @@
 /**
  * git-grasp-pool — git HTTP protocol layer
  *
- * Wraps the low-level exports from @fiatjaf/git-natural-api to provide
- * cache-aware, CORS-proxy-aware, abort-signal-aware git operations.
+ * Uses only the low-level exports from @fiatjaf/git-natural-api:
+ *   fetchPackfile, createWantRequest, loadTree, parseTree, parseCommit,
+ *   getInfoRefs, MissingRef, ParsedObject
+ *
+ * We never call the library's high-level functions (getObject,
+ * fetchCommitsOnly, getDirectoryTreeAt, etc.) because every one of them
+ * calls getCapabilities() internally, which re-fetches infoRefs and
+ * bypasses our cache entirely.
+ *
+ * Instead, we replicate the same capability-negotiation + packfile pattern
+ * ourselves, passing the capabilities we already have from our cached
+ * infoRefs response. This means zero extra HTTP requests for capabilities.
  *
  * Every function accepts an already-resolved effective URL (proxy or direct).
- * The pool is responsible for choosing which URL to pass. This layer just
- * does the HTTP work and caching.
- *
- * Key difference from using the library's high-level functions directly:
- * - We never call the library's getInfoRefs — the pool owns that
- * - We pre-seed the library's capabilitiesCache after our own infoRefs fetch
- * - All HTTP goes through URLs the pool has already validated
+ * The pool is responsible for choosing which URL to pass.
  */
 
 import {
   getInfoRefs as libGetInfoRefs,
-  getCapabilities,
-  fetchCommitsOnly as libFetchCommitsOnly,
-  getDirectoryTreeAt as libGetDirectoryTreeAt,
-  getObject as libGetObject,
-  getObjectByPath as libGetObjectByPath,
-  getSingleCommit as libGetSingleCommit,
-  shallowCloneRepositoryAt as libShallowClone,
+  fetchPackfile,
+  loadTree,
+  parseCommit,
   type Commit,
   type Tree,
   type TreeEntry,
   type InfoRefsUploadPackResponse,
+  type ParsedObject,
 } from "@fiatjaf/git-natural-api";
+
+// ---------------------------------------------------------------------------
+// Vendored from @fiatjaf/git-natural-api/packs.ts (not exported by the package)
+// createWantRequest builds the git smart-HTTP pkt-line want request body.
+// ---------------------------------------------------------------------------
+
+function pktEncode(data: string): string {
+  if (data.length === 0) return "0000";
+  const len = data.length + 4;
+  return len.toString(16).padStart(4, "0") + data;
+}
+
+function createWantRequest(
+  commitSha: string,
+  capabilities: string[],
+  deepen: number | undefined,
+  filter?: string,
+): string {
+  if (commitSha.length !== 40)
+    throw new Error(`invalid commit '${commitSha}', must be 40 char hex`);
+  const pkts: string[] = [];
+  pkts.push(`want ${commitSha} ${capabilities.join(" ")} agent=nsa/1.0.0\n`);
+  if (typeof deepen !== "undefined") pkts.push(`deepen ${deepen}\n`);
+  if (filter) pkts.push("filter " + filter + "\n");
+  pkts.push("");
+  pkts.push("done\n");
+  return pkts.map(pktEncode).join("");
+}
 import type { CorsProxyManager } from "./cors-proxy";
 import type { GitObjectCache } from "./cache";
 import type { ErrorClass } from "./types";
@@ -96,6 +125,175 @@ const README_NAMES = [
 export { README_NAMES };
 
 // ---------------------------------------------------------------------------
+// Capability negotiation
+//
+// Mirrors the logic in git-natural-api/index.ts but operates on a
+// capabilities array we already have — no extra HTTP request.
+// ---------------------------------------------------------------------------
+
+const NECESSARY_CAPS = ["multi_ack_detailed", "side-band-64k"];
+const REQUIRED_CAPS = ["shallow", "object-format=sha1"];
+const DEFAULT_CAPS = ["ofs-delta", "no-progress"];
+
+/**
+ * Select the capabilities to advertise in a want request, given the server's
+ * capability list from infoRefs.
+ *
+ * Throws if a required capability is missing.
+ */
+function selectCapabilities(serverCaps: string[]): string[] {
+  const caps: string[] = [];
+
+  for (const cap of DEFAULT_CAPS) {
+    if (serverCaps.includes(cap)) caps.push(cap);
+  }
+  for (const cap of NECESSARY_CAPS) {
+    if (serverCaps.includes(cap)) caps.push(cap);
+    else throw new Error(`git server missing required capability: ${cap}`);
+  }
+  for (const cap of REQUIRED_CAPS) {
+    if (!serverCaps.includes(cap))
+      throw new Error(`git server missing required capability: ${cap}`);
+  }
+
+  return caps;
+}
+
+// ---------------------------------------------------------------------------
+// Low-level packfile helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch a single object (blob/commit/tree) by its hash.
+ * Uses the capabilities from the already-fetched infoRefs.
+ */
+async function fetchObject(
+  effectiveUrl: string,
+  hash: string,
+  serverCaps: string[],
+  signal: AbortSignal,
+): Promise<ParsedObject | undefined> {
+  if (signal.aborted) return undefined;
+  const caps = selectCapabilities(serverCaps);
+  const want = createWantRequest(hash, caps, 1);
+  const result = await fetchPackfile(effectiveUrl, want);
+  if (signal.aborted) return undefined;
+  return result.objects.get(hash);
+}
+
+/**
+ * Fetch commits only (tree:0 filter) up to maxCommits depth.
+ * Requires the server to support "filter".
+ */
+async function fetchCommitsOnly(
+  effectiveUrl: string,
+  commitHash: string,
+  maxCommits: number,
+  serverCaps: string[],
+  signal: AbortSignal,
+): Promise<Commit[]> {
+  if (signal.aborted) return [];
+  const caps = selectCapabilities(serverCaps);
+  if (!serverCaps.includes("filter"))
+    throw new Error("git server does not support filter capability");
+  caps.push("filter");
+  const want = createWantRequest(commitHash, caps, maxCommits, "tree:0");
+  const result = await fetchPackfile(effectiveUrl, want);
+  if (signal.aborted) return [];
+  const commits: Commit[] = [];
+  for (const [hash, obj] of result.objects) {
+    commits.push(parseCommit(obj.data, hash));
+  }
+  return commits;
+}
+
+/**
+ * Fetch the directory tree at a commit (blob:none filter).
+ * Requires the server to support "filter".
+ */
+async function fetchDirectoryTree(
+  effectiveUrl: string,
+  commitHash: string,
+  nestLimit: number,
+  serverCaps: string[],
+  signal: AbortSignal,
+): Promise<Tree> {
+  if (signal.aborted) throw new Error("aborted");
+  const caps = selectCapabilities(serverCaps);
+  if (!serverCaps.includes("filter"))
+    throw new Error("git server does not support filter capability");
+  caps.push("filter");
+  const want = createWantRequest(commitHash, caps, nestLimit, "blob:none");
+  const result = await fetchPackfile(effectiveUrl, want);
+  if (signal.aborted) throw new Error("aborted");
+
+  const commitObj = result.objects.get(commitHash);
+  if (!commitObj) throw new Error(`commit object not found: ${commitHash}`);
+
+  const utf8 = new TextDecoder("utf-8");
+  const rootTreeHash = utf8.decode(commitObj.data.slice(5, 45));
+  const rootTreeObj = result.objects.get(rootTreeHash);
+  if (!rootTreeObj) throw new Error(`root tree object not found`);
+
+  return loadTree(rootTreeObj, result.objects, nestLimit);
+}
+
+/**
+ * Shallow clone: fetch commit + full tree (no filter).
+ * Fallback for servers that don't support "filter".
+ */
+async function shallowClone(
+  effectiveUrl: string,
+  commitHash: string,
+  serverCaps: string[],
+  signal: AbortSignal,
+): Promise<{ commit: Commit; tree: Tree }> {
+  if (signal.aborted) throw new Error("aborted");
+  const caps = selectCapabilities(serverCaps);
+  const want = createWantRequest(commitHash, caps, 1);
+  const result = await fetchPackfile(effectiveUrl, want);
+  if (signal.aborted) throw new Error("aborted");
+
+  const commitObj = result.objects.get(commitHash);
+  if (!commitObj) throw new Error(`commit object not found: ${commitHash}`);
+
+  const commit = parseCommit(commitObj.data, commitHash);
+
+  const utf8 = new TextDecoder("utf-8");
+  const rootTreeHash = utf8.decode(commitObj.data.slice(5, 45));
+  const rootTreeObj = result.objects.get(rootTreeHash);
+  if (!rootTreeObj) throw new Error(`root tree object not found`);
+
+  return { commit, tree: loadTree(rootTreeObj, result.objects) };
+}
+
+/**
+ * Navigate a Tree to find an entry at the given path segments.
+ * Returns the TreeEntry if found, undefined otherwise.
+ */
+function findInTree(tree: Tree, segments: string[]): TreeEntry | undefined {
+  if (segments.length === 0) return undefined;
+  const [head, ...rest] = segments;
+  const isLast = rest.length === 0;
+
+  for (const dir of tree.directories) {
+    if (dir.name === head) {
+      if (isLast)
+        return { path: head, mode: "40000", isDir: true, hash: dir.hash };
+      if (dir.content) return findInTree(dir.content, rest);
+      return undefined;
+    }
+  }
+  if (isLast) {
+    for (const file of tree.files) {
+      if (file.name === head)
+        return { path: head, mode: "100644", isDir: false, hash: file.hash };
+    }
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
 // GitHttpClient
 // ---------------------------------------------------------------------------
 
@@ -105,6 +303,9 @@ export { README_NAMES };
  * Each pool creates one GitHttpClient. The client uses the pool's cache and
  * CORS proxy manager but doesn't know about URL racing or winner selection —
  * it operates on a single URL at a time.
+ *
+ * All operations use only the low-level exports from git-natural-api so that
+ * the library never makes its own infoRefs HTTP requests.
  */
 export class GitHttpClient {
   private cache: GitObjectCache;
@@ -136,20 +337,6 @@ export class GitHttpClient {
   /** Filter out permanently failed URLs */
   filterLiveUrls(urls: string[]): string[] {
     return urls.filter((u) => !this.permanentFailures.has(u));
-  }
-
-  /**
-   * Pre-seed the library's capabilities cache for a URL.
-   * Call this after a successful infoRefs fetch so that subsequent library
-   * calls (getObject, fetchCommitsOnly, etc.) don't make their own
-   * getInfoRefs request.
-   */
-  seedCapabilitiesCache(
-    effectiveUrl: string,
-    info: InfoRefsUploadPackResponse,
-  ): void {
-    // getCapabilities accepts an optional second arg that populates the cache
-    getCapabilities(effectiveUrl, info);
   }
 
   // -----------------------------------------------------------------------
@@ -191,8 +378,6 @@ export class GitHttpClient {
         const info = await libGetInfoRefs(effectiveUrl);
         if (effectiveUrl === url) this.cors.markOriginDirect(url);
         this.cache.putInfoRefs(url, info);
-        // Pre-seed the library's capabilities cache
-        this.seedCapabilitiesCache(effectiveUrl, info);
         return info;
       } catch (err) {
         if (classifyFetchError(err) === "permanent") {
@@ -220,7 +405,6 @@ export class GitHttpClient {
           const info = await libGetInfoRefs(proxyUrl);
           this.cors.markOriginNeedsProxy(url);
           this.cache.putInfoRefs(url, info);
-          this.seedCapabilitiesCache(proxyUrl, info);
           return info;
         } catch (proxyErr) {
           const msg =
@@ -250,6 +434,9 @@ export class GitHttpClient {
   /**
    * Fetch a single commit's metadata, checking cache first.
    * Returns the commit + optional README content.
+   *
+   * Requires the caller to supply the server's capabilities (from infoRefs)
+   * so we can negotiate the packfile request without an extra HTTP round-trip.
    */
   async fetchCommit(
     url: string,
@@ -262,6 +449,10 @@ export class GitHttpClient {
     readmeFilename: string | null;
   } | null> {
     const effectiveUrl = this.cors.resolveUrl(url);
+
+    // Derive capabilities from cached infoRefs (already fetched by the pool)
+    const cachedInfo = this.cache.peekInfoRefs(url);
+    const serverCaps = cachedInfo?.capabilities ?? [];
 
     // Check commit cache
     const cachedCommit = await this.cache.getCommit(commitHash);
@@ -277,30 +468,28 @@ export class GitHttpClient {
           break;
         }
       }
-      // If not in text cache, try fetching via getObjectByPath
-      if (!readmeContent) {
+      // If not in text cache, try fetching the blob directly
+      if (!readmeContent && serverCaps.length > 0) {
         for (const name of README_NAMES) {
           try {
-            const entry = await libGetObjectByPath(
+            const entry = await this.findObjectByPath(
               effectiveUrl,
               commitHash,
               name,
+              serverCaps,
+              signal,
             );
             if (signal.aborted) return null;
             if (!entry || entry.isDir) continue;
-            const cached = await this.cache.getBlob(entry.hash);
-            if (cached) {
-              const text = new TextDecoder("utf-8").decode(cached);
-              this.cache.putText(commitHash, name, text);
-              readmeContent = text;
-              readmeFilename = name;
-              break;
-            }
-            const obj = await libGetObject(effectiveUrl, entry.hash);
+            const blobData = await this.fetchBlobByHash(
+              effectiveUrl,
+              entry.hash,
+              serverCaps,
+              signal,
+            );
             if (signal.aborted) return null;
-            if (obj) {
-              this.cache.putBlob(entry.hash, obj.data);
-              const text = new TextDecoder("utf-8").decode(obj.data);
+            if (blobData) {
+              const text = new TextDecoder("utf-8").decode(blobData);
               this.cache.putText(commitHash, name, text);
               readmeContent = text;
               readmeFilename = name;
@@ -322,15 +511,17 @@ export class GitHttpClient {
       let readmeContent: string | null = null;
       let readmeFilename: string | null = null;
 
-      if (supportsFilter) {
+      if (supportsFilter && serverCaps.length > 0) {
         const [commits, readmeResult] = await Promise.all([
-          libFetchCommitsOnly(effectiveUrl, commitHash, 1),
+          fetchCommitsOnly(effectiveUrl, commitHash, 1, serverCaps, signal),
           Promise.any(
             README_NAMES.map(async (name) => {
-              const entry = await libGetObjectByPath(
+              const entry = await this.findObjectByPath(
                 effectiveUrl,
                 commitHash,
                 name,
+                serverCaps,
+                signal,
               );
               if (!entry || entry.isDir) throw new Error(`${name} not found`);
               const cachedBlob = await this.cache.getBlob(entry.hash);
@@ -339,10 +530,14 @@ export class GitHttpClient {
                 this.cache.putText(commitHash, name, text);
                 return { name, content: text };
               }
-              const obj = await libGetObject(effectiveUrl, entry.hash);
-              if (!obj) throw new Error(`${name} blob missing`);
-              this.cache.putBlob(entry.hash, obj.data);
-              const text = new TextDecoder("utf-8").decode(obj.data);
+              const blobData = await this.fetchBlobByHash(
+                effectiveUrl,
+                entry.hash,
+                serverCaps,
+                signal,
+              );
+              if (!blobData) throw new Error(`${name} blob missing`);
+              const text = new TextDecoder("utf-8").decode(blobData);
               this.cache.putText(commitHash, name, text);
               return { name, content: text };
             }),
@@ -356,7 +551,13 @@ export class GitHttpClient {
         readmeContent = readmeResult?.content ?? null;
         readmeFilename = readmeResult?.name ?? null;
       } else {
-        const result = await libShallowClone(effectiveUrl, commitHash);
+        // Fallback: shallow clone (no filter capability)
+        const result = await shallowClone(
+          effectiveUrl,
+          commitHash,
+          serverCaps,
+          signal,
+        );
         if (signal.aborted) return null;
 
         commit = result.commit;
@@ -395,12 +596,16 @@ export class GitHttpClient {
     if (cached) return cached;
 
     const effectiveUrl = this.cors.resolveUrl(url);
+    const cachedInfo = this.cache.peekInfoRefs(url);
+    const serverCaps = cachedInfo?.capabilities ?? [];
 
     try {
-      const commits = await libFetchCommitsOnly(
+      const commits = await fetchCommitsOnly(
         effectiveUrl,
         commitHash,
         maxCommits,
+        serverCaps,
+        signal,
       );
       if (signal.aborted) return null;
 
@@ -441,12 +646,16 @@ export class GitHttpClient {
     if (cached) return cached;
 
     const effectiveUrl = this.cors.resolveUrl(url);
+    const cachedInfo = this.cache.peekInfoRefs(url);
+    const serverCaps = cachedInfo?.capabilities ?? [];
 
     try {
-      const tree = await libGetDirectoryTreeAt(
+      const tree = await fetchDirectoryTree(
         effectiveUrl,
         commitHash,
         nestLimit,
+        serverCaps,
+        signal,
       );
       if (signal.aborted) return null;
       this.cache.putTree(commitHash, nestLimit, tree);
@@ -473,13 +682,18 @@ export class GitHttpClient {
     if (cached) return cached;
 
     const effectiveUrl = this.cors.resolveUrl(url);
+    const cachedInfo = this.cache.peekInfoRefs(url);
+    const serverCaps = cachedInfo?.capabilities ?? [];
 
     try {
-      const obj = await libGetObject(effectiveUrl, blobHash);
+      const data = await this.fetchBlobByHash(
+        effectiveUrl,
+        blobHash,
+        serverCaps,
+        signal,
+      );
       if (signal.aborted) return null;
-      if (!obj) return null;
-      this.cache.putBlob(blobHash, obj.data);
-      return obj.data;
+      return data;
     } catch {
       if (signal.aborted) return null;
       return null;
@@ -497,9 +711,17 @@ export class GitHttpClient {
     signal: AbortSignal,
   ): Promise<{ entry: TreeEntry; data: Uint8Array | null } | null> {
     const effectiveUrl = this.cors.resolveUrl(url);
+    const cachedInfo = this.cache.peekInfoRefs(url);
+    const serverCaps = cachedInfo?.capabilities ?? [];
 
     try {
-      const entry = await libGetObjectByPath(effectiveUrl, commitHash, path);
+      const entry = await this.findObjectByPath(
+        effectiveUrl,
+        commitHash,
+        path,
+        serverCaps,
+        signal,
+      );
       if (signal.aborted) return null;
       if (!entry) return null;
 
@@ -518,7 +740,7 @@ export class GitHttpClient {
   }
 
   /**
-   * Fetch a single commit by hash or ref.
+   * Fetch a single commit by hash.
    */
   async fetchSingleCommit(
     url: string,
@@ -532,15 +754,82 @@ export class GitHttpClient {
     }
 
     const effectiveUrl = this.cors.resolveUrl(url);
+    const cachedInfo = this.cache.peekInfoRefs(url);
+    const serverCaps = cachedInfo?.capabilities ?? [];
 
     try {
-      const commit = await libGetSingleCommit(effectiveUrl, commitOrRef);
+      const commits = await fetchCommitsOnly(
+        effectiveUrl,
+        commitOrRef,
+        1,
+        serverCaps,
+        signal,
+      );
       if (signal.aborted) return null;
+      if (commits.length === 0) return null;
+      const commit = commits[0];
       this.cache.putCommit(commit);
       return commit;
     } catch {
       if (signal.aborted) return null;
       return null;
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // Private helpers
+  // -----------------------------------------------------------------------
+
+  /**
+   * Fetch a blob by hash using the low-level packfile API.
+   * Checks L1/L2 cache first, then fetches from the server.
+   */
+  private async fetchBlobByHash(
+    effectiveUrl: string,
+    hash: string,
+    serverCaps: string[],
+    signal: AbortSignal,
+  ): Promise<Uint8Array | null> {
+    const cached =
+      this.cache.peekBlob(hash) ?? (await this.cache.getBlob(hash));
+    if (cached) return cached;
+
+    if (signal.aborted) return null;
+    const obj = await fetchObject(effectiveUrl, hash, serverCaps, signal);
+    if (signal.aborted) return null;
+    if (!obj) return null;
+    this.cache.putBlob(hash, obj.data);
+    return obj.data;
+  }
+
+  /**
+   * Find a tree entry by path within a commit.
+   * Fetches the directory tree (blob:none) and navigates to the path.
+   */
+  private async findObjectByPath(
+    effectiveUrl: string,
+    commitHash: string,
+    path: string,
+    serverCaps: string[],
+    signal: AbortSignal,
+  ): Promise<TreeEntry | undefined> {
+    const normalizedPath = path
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "");
+    const segments = normalizedPath === "" ? [] : normalizedPath.split("/");
+    if (segments.length === 0) return undefined;
+
+    const nestLimit = segments.length;
+    const tree = await fetchDirectoryTree(
+      effectiveUrl,
+      commitHash,
+      nestLimit,
+      serverCaps,
+      signal,
+    );
+    if (signal.aborted) return undefined;
+
+    return findInTree(tree, segments);
   }
 }
