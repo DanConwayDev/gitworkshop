@@ -14,15 +14,15 @@ import { useDnsIdentity } from "@/hooks/useDnsIdentity";
 import { useRepositoryState } from "@/hooks/useRepositoryState";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
+import { useProfile } from "@/hooks/useProfile";
+import { UserAvatar } from "@/components/UserAvatar";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
-import { UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { nip19 } from "nostr-tools";
 import {
-  GitBranch,
-  ExternalLink,
   ArrowLeft,
   CircleDot,
   GitPullRequest,
@@ -332,82 +332,19 @@ function RepoLayoutResolved({
       <div className="relative isolate border-b border-border/40">
         <div className="absolute inset-0 -z-10 bg-gradient-to-br from-violet-500/5 via-transparent to-fuchsia-500/5" />
 
-        <div className="container max-w-screen-xl px-4 md:px-8 pt-8 pb-0">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            All repositories
-          </Link>
-
+        <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-0">
           {repo ? (
-            <div className="mb-6">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10">
-                  <GitBranch className="h-5 w-5 text-violet-500" />
-                </div>
-                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-                  {repo.name}
-                </h1>
-                {repo.webUrls.length > 0 && (
-                  <a
-                    href={repo.webUrls[0]}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-muted-foreground hover:text-violet-500 transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                )}
-              </div>
-              {repo.description && (
-                <p className="text-muted-foreground ml-12 mb-3 max-w-2xl">
-                  {repo.description}
-                </p>
-              )}
-              <div className="flex items-center gap-3 ml-12 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <UserLink
-                    pubkey={repo.selectedMaintainer}
-                    avatarSize="sm"
-                    nameClassName="text-sm text-muted-foreground"
-                  />
-                  {repo.maintainerSet
-                    .filter((pk) => pk !== repo.selectedMaintainer)
-                    .map((pk) => (
-                      <UserLink
-                        key={pk}
-                        pubkey={pk}
-                        avatarSize="sm"
-                        nameClassName="text-sm text-muted-foreground"
-                      />
-                    ))}
-                </div>
-                {repo.labels.length > 0 && (
-                  <div className="flex gap-1.5 flex-wrap">
-                    {repo.labels.map((label) => (
-                      <Badge
-                        key={label}
-                        variant="secondary"
-                        className="text-xs"
-                      >
-                        {label}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+            <RepoBreadcrumb
+              pubkey={pubkey}
+              repoName={repo.name}
+              basePath={basePath}
+              nip05={nip05}
+            />
           ) : (
-            <div className="space-y-3 mb-6">
-              <Skeleton className="h-8 w-64" />
-              <Skeleton className="h-5 w-96" />
-              <div className="flex gap-3">
-                <Skeleton className="h-6 w-6 rounded-full" />
-                <Skeleton className="h-4 w-24" />
-              </div>
+            <div className="flex items-center gap-1.5 mb-4">
+              <Skeleton className="h-5 w-24" />
+              <span className="text-muted-foreground">/</span>
+              <Skeleton className="h-5 w-32" />
             </div>
           )}
 
@@ -591,6 +528,49 @@ function RouteNotFound({ splat }: { splat: string }) {
           </Link>
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Repo breadcrumb: <username> / <repo-name>
+// ---------------------------------------------------------------------------
+
+function RepoBreadcrumb({
+  pubkey,
+  repoName,
+  basePath,
+  nip05,
+}: {
+  pubkey: string;
+  repoName: string;
+  basePath: string;
+  nip05?: string;
+}) {
+  const profile = useProfile(pubkey);
+  const npub = nip19.npubEncode(pubkey);
+  const username =
+    nip05?.split("@")[0] ??
+    profile?.displayName ??
+    profile?.name ??
+    npub.slice(0, 12) + "…";
+
+  return (
+    <div className="flex items-center gap-2 mb-4">
+      <Link
+        to={`/${npub}`}
+        className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <UserAvatar pubkey={pubkey} size="sm" />
+        <span className="text-base font-medium">{username}</span>
+      </Link>
+      <span className="text-muted-foreground font-normal">/</span>
+      <Link
+        to={basePath}
+        className="text-base font-semibold text-foreground hover:text-violet-500 transition-colors"
+      >
+        {repoName}
+      </Link>
     </div>
   );
 }
