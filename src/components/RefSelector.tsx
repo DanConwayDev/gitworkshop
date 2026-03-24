@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
+import type { PoolWarning } from "@/lib/git-grasp-pool/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,6 +49,18 @@ export interface RefSelectorProps {
    * as suspicious mismatches.
    */
   stateBehindGit?: boolean;
+  /**
+   * Warning from the git pool (state-behind-git, state-commit-unavailable).
+   * When state-behind-git, the warning's gitServerUrl identifies the server
+   * whose unsigned commit is being displayed.
+   */
+  poolWarning?: PoolWarning | null;
+  /**
+   * The clone URL of the winning git server (from poolState.winnerUrl).
+   * Used as a fallback when no signed state exists (no-state) to show
+   * which server the data is coming from.
+   */
+  winnerUrl?: string | null;
 }
 
 /**
@@ -76,6 +89,15 @@ interface RefWithStatus extends GitRef {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Extract the hostname from a URL string, falling back to the raw URL. */
+function gitServerDomain(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
 
 function getRefStatus(
   ref: GitRef,
@@ -353,6 +375,8 @@ export function RefSelector({
   repoRelayEose,
   loading,
   stateBehindGit = false,
+  poolWarning,
+  winnerUrl,
 }: RefSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -410,6 +434,20 @@ export function RefSelector({
   // Amber trigger border when there are genuine mismatches or state is behind
   const showAmberTrigger = mismatchCount > 0 || stateBehindGit;
 
+  // Show the git server domain when the displayed state isn't signed.
+  // This tells the user where the data is coming from.
+  //
+  // When state-behind-git, the warning carries the exact server URL whose
+  // unsigned commit is being displayed. For no-state / git-server-only /
+  // mismatch, fall back to the pool's winner URL (fastest responding server).
+  const gitSourceUrl =
+    poolWarning?.kind === "state-behind-git"
+      ? poolWarning.gitServerUrl
+      : winnerUrl;
+  const showGitDomain =
+    gitSourceUrl && currentStatus !== "verified" && currentStatus !== "loading";
+  const gitDomain = gitSourceUrl ? gitServerDomain(gitSourceUrl) : null;
+
   const handleSelect = (refName: string) => {
     onRefChange(refName);
     setOpen(false);
@@ -433,6 +471,14 @@ export function RefSelector({
               : "border-border/60 bg-background",
           )}
         >
+          {showGitDomain && (
+            <>
+              <span className="text-muted-foreground/70 truncate max-w-[120px]">
+                {gitDomain}
+              </span>
+              <span className="text-muted-foreground/40">/</span>
+            </>
+          )}
           {currentIsTag ? (
             <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           ) : (

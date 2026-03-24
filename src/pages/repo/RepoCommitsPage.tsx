@@ -101,6 +101,8 @@ export default function RepoCommitsPage() {
             repoRelayEose={repoRelayEose}
             loading={explorer.loading}
             stateBehindGit={stateBehindGit}
+            poolWarning={poolState.warning}
+            winnerUrl={poolState.winnerUrl}
           />
         ) : explorer.loading ? (
           <Skeleton className="h-8 w-28" />

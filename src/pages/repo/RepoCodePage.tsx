@@ -258,6 +258,7 @@ export default function RepoCodePage() {
             stateBehindGit={stateBehindGit}
             poolWarning={poolState.warning}
             pool={pool}
+            winnerUrl={poolState.winnerUrl}
           />
 
           {/* State sync warning banner */}
@@ -490,6 +491,7 @@ function LocatorBar({
   stateBehindGit,
   poolWarning,
   pool,
+  winnerUrl,
 }: {
   loading: boolean;
   refs: ReturnType<typeof useGitExplorer>["refs"];
@@ -514,6 +516,7 @@ function LocatorBar({
   stateBehindGit: boolean;
   poolWarning: PoolWarning | null;
   pool: import("@/lib/git-grasp-pool").GitGraspPool | null;
+  winnerUrl: string | null;
 }) {
   // Hide "checked" text if showing it would cause the bar to wrap onto
   // multiple lines. We directly manipulate the DOM via refs to avoid a
@@ -573,6 +576,8 @@ function LocatorBar({
             repoRelayEose={repoRelayEose}
             loading={loading}
             stateBehindGit={stateBehindGit}
+            poolWarning={poolWarning}
+            winnerUrl={winnerUrl}
           />
         ) : loading ? (
           <Skeleton className="h-8 w-28" />
