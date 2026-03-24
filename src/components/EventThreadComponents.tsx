@@ -107,6 +107,25 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
 
     const el = cardRef.current;
 
+    // Once the user intentionally scrolls, stop chasing them back to the
+    // target element.
+    let userScrolled = false;
+    const onUserScroll = () => {
+      userScrolled = true;
+    };
+    window.addEventListener("wheel", onUserScroll, {
+      passive: true,
+      once: true,
+    });
+    window.addEventListener("touchmove", onUserScroll, {
+      passive: true,
+      once: true,
+    });
+    window.addEventListener("keydown", onUserScroll, {
+      passive: true,
+      once: true,
+    });
+
     // Scroll to the element immediately after paint.
     const raf = requestAnimationFrame(() => {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -114,7 +133,7 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
 
     // Transition to "subtle" only once the element is actually visible in the
     // viewport. If more comments load and push it off-screen before the timer
-    // fires, re-scroll and reset.
+    // fires, re-scroll — but only if the user hasn't scrolled themselves.
     let dimTimer: ReturnType<typeof setTimeout> | undefined;
 
     const observer = new IntersectionObserver(
@@ -127,11 +146,15 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
               setHighlight("subtle");
               observer.disconnect();
             }, 3000);
-          } else if (dimTimer !== undefined) {
-            // Pushed off-screen before timer fired — scroll back and reset
+          } else if (dimTimer !== undefined && !userScrolled) {
+            // Pushed off-screen by new content before timer fired — scroll back
             clearTimeout(dimTimer);
             dimTimer = undefined;
             el.scrollIntoView({ behavior: "smooth", block: "start" });
+          } else {
+            // User scrolled away — stop tracking
+            clearTimeout(dimTimer);
+            observer.disconnect();
           }
         }
       },
@@ -144,6 +167,9 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
       cancelAnimationFrame(raf);
       clearTimeout(dimTimer);
       observer.disconnect();
+      window.removeEventListener("wheel", onUserScroll);
+      window.removeEventListener("touchmove", onUserScroll);
+      window.removeEventListener("keydown", onUserScroll);
     };
   }, [isTargeted]);
 

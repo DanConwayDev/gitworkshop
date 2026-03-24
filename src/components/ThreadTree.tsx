@@ -123,6 +123,26 @@ function ThreadComment({ event }: { event: NostrEvent }) {
     if (!isTargeted || !elRef.current) return;
 
     const el = elRef.current;
+
+    // Once the user intentionally scrolls, stop chasing them back to the
+    // target element.
+    let userScrolled = false;
+    const onUserScroll = () => {
+      userScrolled = true;
+    };
+    window.addEventListener("wheel", onUserScroll, {
+      passive: true,
+      once: true,
+    });
+    window.addEventListener("touchmove", onUserScroll, {
+      passive: true,
+      once: true,
+    });
+    window.addEventListener("keydown", onUserScroll, {
+      passive: true,
+      once: true,
+    });
+
     const raf = requestAnimationFrame(() => {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -137,10 +157,15 @@ function ThreadComment({ event }: { event: NostrEvent }) {
               setHighlight("subtle");
               observer.disconnect();
             }, 3000);
-          } else if (dimTimer !== undefined) {
+          } else if (dimTimer !== undefined && !userScrolled) {
+            // Pushed off-screen by new content before timer fired — scroll back
             clearTimeout(dimTimer);
             dimTimer = undefined;
             el.scrollIntoView({ behavior: "smooth", block: "start" });
+          } else {
+            // User scrolled away — stop tracking
+            clearTimeout(dimTimer);
+            observer.disconnect();
           }
         }
       },
@@ -152,6 +177,9 @@ function ThreadComment({ event }: { event: NostrEvent }) {
       cancelAnimationFrame(raf);
       clearTimeout(dimTimer);
       observer.disconnect();
+      window.removeEventListener("wheel", onUserScroll);
+      window.removeEventListener("touchmove", onUserScroll);
+      window.removeEventListener("keydown", onUserScroll);
     };
   }, [isTargeted]);
 
