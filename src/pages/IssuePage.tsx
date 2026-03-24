@@ -8,10 +8,11 @@ import { EditableSubject } from "@/components/EditSubjectInline";
 import {
   EventBodyCard,
   EventBodyCardSkeleton,
-  CommentCard,
   CommentSkeleton,
   SubjectRenameCard,
 } from "@/components/EventThreadComponents";
+import { getThreadTree } from "@/lib/threadTree";
+import { ThreadTree } from "@/components/ThreadTree";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import {
@@ -163,49 +164,26 @@ export default function IssuePage() {
     return Array.from(pubkeys);
   }, [issue, comments]);
 
-  // Build the merged thread: comments + subject-rename events, sorted by
-  // created_at ascending (oldest first), tiebreak by id.
-  const threadItems = useMemo(() => {
-    type ThreadItem =
-      | { type: "comment"; event: NostrEvent }
-      | {
-          type: "rename";
-          event: NostrEvent;
-          newSubject: string;
-          oldSubject: string;
-        };
+  // Build the thread tree from the issue event + comments.
+  // Subject renames are interleaved at the top level chronologically.
+  const threadTree = useMemo(() => {
+    if (!issue || !comments) return undefined;
+    return getThreadTree(issue.event, comments);
+  }, [issue, comments]);
 
-    const items: ThreadItem[] = [];
-
-    if (comments) {
-      for (const c of comments) {
-        items.push({ type: "comment", event: c });
-      }
-    }
-
-    if (subjectRenames) {
-      // Walk renames in order to compute "before" for each rename
-      let prevSubject = issue?.subject ?? "";
-      for (const ev of subjectRenames) {
-        const newSubject =
-          ev.tags.find(([t, , ns]) => t === "l" && ns === "#subject")?.[1] ??
-          prevSubject;
-        items.push({
-          type: "rename",
-          event: ev,
-          newSubject,
-          oldSubject: prevSubject,
-        });
-        prevSubject = newSubject;
-      }
-    }
-
-    return items.sort(
-      (a, b) =>
-        a.event.created_at - b.event.created_at ||
-        a.event.id.localeCompare(b.event.id),
-    );
-  }, [comments, subjectRenames, issue?.subject]);
+  // Compute subject rename items with old/new subjects for display.
+  const renameItems = useMemo(() => {
+    if (!subjectRenames || subjectRenames.length === 0) return [];
+    let prevSubject = issue?.subject ?? "";
+    return subjectRenames.map((ev) => {
+      const newSubject =
+        ev.tags.find(([t, , ns]) => t === "l" && ns === "#subject")?.[1] ??
+        prevSubject;
+      const item = { event: ev, newSubject, oldSubject: prevSubject };
+      prevSubject = newSubject;
+      return item;
+    });
+  }, [subjectRenames, issue?.subject]);
 
   useSeoMeta({
     title: issue ? `${currentSubject || issue.subject} - ngit` : "Issue - ngit",
@@ -296,26 +274,15 @@ export default function IssuePage() {
                     <CommentSkeleton key={i} />
                   ))}
                 </div>
-              ) : threadItems.length === 0 ? (
+              ) : threadTree &&
+                threadTree.children.length === 0 &&
+                renameItems.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground/60 text-sm">
                   No comments yet. The conversation awaits its first voice.
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {threadItems.map((item) =>
-                    item.type === "comment" ? (
-                      <CommentCard key={item.event.id} comment={item.event} />
-                    ) : (
-                      <SubjectRenameCard
-                        key={item.event.id}
-                        event={item.event}
-                        oldSubject={item.oldSubject}
-                        newSubject={item.newSubject}
-                      />
-                    ),
-                  )}
-                </div>
-              )}
+              ) : threadTree ? (
+                <ThreadedComments tree={threadTree} renameItems={renameItems} />
+              ) : null}
             </div>
           </div>
 
@@ -422,5 +389,75 @@ export default function IssuePage() {
         </div>
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ThreadedComments — interleaves the thread tree with subject renames
+// ---------------------------------------------------------------------------
+
+interface RenameItem {
+  event: NostrEvent;
+  newSubject: string;
+  oldSubject: string;
+}
+
+/**
+ * Renders the comment thread tree with subject-rename events interleaved
+ * chronologically among the top-level children.
+ *
+ * Renames are not part of the reply tree — they're timeline markers that
+ * appear between top-level thread nodes based on their created_at timestamp.
+ */
+function ThreadedComments({
+  tree,
+  renameItems,
+}: {
+  tree: {
+    children: import("@/lib/threadTree").ThreadTreeNode[];
+    event: NostrEvent;
+  };
+  renameItems: RenameItem[];
+}) {
+  // Build a merged timeline of top-level items: thread nodes + renames
+  type TimelineItem =
+    | { type: "thread"; node: import("@/lib/threadTree").ThreadTreeNode }
+    | { type: "rename"; item: RenameItem };
+
+  const items: TimelineItem[] = [];
+
+  for (const child of tree.children) {
+    items.push({ type: "thread", node: child });
+  }
+  for (const rename of renameItems) {
+    items.push({ type: "rename", item: rename });
+  }
+
+  items.sort((a, b) => {
+    const aTime =
+      a.type === "thread" ? a.node.event.created_at : a.item.event.created_at;
+    const bTime =
+      b.type === "thread" ? b.node.event.created_at : b.item.event.created_at;
+    if (aTime !== bTime) return aTime - bTime;
+    const aId = a.type === "thread" ? a.node.event.id : a.item.event.id;
+    const bId = b.type === "thread" ? b.node.event.id : b.item.event.id;
+    return aId.localeCompare(bId);
+  });
+
+  return (
+    <div className="space-y-3">
+      {items.map((item) =>
+        item.type === "thread" ? (
+          <ThreadTree key={item.node.event.id} node={item.node} />
+        ) : (
+          <SubjectRenameCard
+            key={item.item.event.id}
+            event={item.item.event}
+            oldSubject={item.item.oldSubject}
+            newSubject={item.item.newSubject}
+          />
+        ),
+      )}
+    </div>
   );
 }
