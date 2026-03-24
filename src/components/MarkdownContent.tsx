@@ -10,6 +10,7 @@
  *   const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
  */
 import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import ReactMarkdown from "react-markdown";
@@ -330,7 +331,7 @@ function buildComponents(
     // Blockquote
     blockquote: ({ children, ...props }) => (
       <blockquote
-        className="border-l-4 border-border pl-4 text-muted-foreground italic my-4"
+        className="border-l-4 border-border pl-4 text-muted-foreground italic my-4 break-words"
         {...props}
       >
         {children}
@@ -377,7 +378,7 @@ function buildComponents(
     // Headings
     h1: ({ children, ...props }) => (
       <h1
-        className="text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border text-foreground"
+        className="text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border text-foreground break-words"
         {...props}
       >
         {children}
@@ -385,7 +386,7 @@ function buildComponents(
     ),
     h2: ({ children, ...props }) => (
       <h2
-        className="text-xl font-semibold mt-5 mb-2 pb-1.5 border-b border-border text-foreground"
+        className="text-xl font-semibold mt-5 mb-2 pb-1.5 border-b border-border text-foreground break-words"
         {...props}
       >
         {children}
@@ -393,7 +394,7 @@ function buildComponents(
     ),
     h3: ({ children, ...props }) => (
       <h3
-        className="text-lg font-semibold mt-4 mb-2 text-foreground"
+        className="text-lg font-semibold mt-4 mb-2 text-foreground break-words"
         {...props}
       >
         {children}
@@ -401,7 +402,7 @@ function buildComponents(
     ),
     h4: ({ children, ...props }) => (
       <h4
-        className="text-base font-semibold mt-3 mb-1.5 text-foreground"
+        className="text-base font-semibold mt-3 mb-1.5 text-foreground break-words"
         {...props}
       >
         {children}
@@ -409,7 +410,7 @@ function buildComponents(
     ),
     h5: ({ children, ...props }) => (
       <h5
-        className="text-sm font-semibold mt-3 mb-1 text-foreground"
+        className="text-sm font-semibold mt-3 mb-1 text-foreground break-words"
         {...props}
       >
         {children}
@@ -417,7 +418,7 @@ function buildComponents(
     ),
     h6: ({ children, ...props }) => (
       <h6
-        className="text-sm font-semibold mt-3 mb-1 text-muted-foreground"
+        className="text-sm font-semibold mt-3 mb-1 text-muted-foreground break-words"
         {...props}
       >
         {children}
@@ -426,7 +427,7 @@ function buildComponents(
 
     // Paragraphs
     p: ({ children, ...props }) => (
-      <p className="my-3 leading-7 text-foreground/90" {...props}>
+      <p className="my-3 leading-7 text-foreground/90 break-words" {...props}>
         {children}
       </p>
     ),
@@ -449,7 +450,7 @@ function buildComponents(
       </ol>
     ),
     li: ({ children, ...props }) => (
-      <li className="leading-7" {...props}>
+      <li className="leading-7 break-words" {...props}>
         {children}
       </li>
     ),
@@ -504,7 +505,9 @@ export function MarkdownContent({
   const components = buildComponents(cloneUrls, commitHash, filePath);
 
   return (
-    <div className={className ?? "markdown-content"}>
+    <div
+      className={cn("min-w-0 overflow-hidden", className ?? "markdown-content")}
+    >
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}

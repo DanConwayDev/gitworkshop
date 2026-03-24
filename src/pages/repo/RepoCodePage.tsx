@@ -360,7 +360,7 @@ export default function RepoCodePage() {
   return (
     <div className="container max-w-screen-xl px-4 md:px-8 py-6">
       {isAtRoot && repo ? (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
           {mainContent}
           <RepoSidebar repo={repo} />
         </div>
