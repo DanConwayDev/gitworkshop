@@ -24,6 +24,10 @@ import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
 
 // ---------------------------------------------------------------------------
+// Depth-based color palette
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
@@ -50,6 +54,11 @@ interface ThreadTreeProps {
    * inline on the parent). Defaults to including all children.
    */
   filterChildren?: (node: ThreadTreeNode) => boolean;
+  /**
+   * Current nesting depth. Used to fade the left border line — deeper
+   * threads get a more subtle line. Clamped so it never disappears entirely.
+   */
+  depth?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,6 +70,7 @@ export function ThreadTree({
   isRoot = false,
   renderEvent,
   filterChildren,
+  depth = 0,
 }: ThreadTreeProps) {
   const visibleChildren = filterChildren
     ? node.children.filter(filterChildren)
@@ -92,6 +102,7 @@ export function ThreadTree({
           renderEvent={renderEvent}
           filterChildren={filterChildren}
           isMissingParentContext={node.missingParent}
+          depth={depth + 1}
         />
       )}
     </div>
@@ -223,11 +234,13 @@ function ThreadChildren({
   renderEvent,
   filterChildren,
   isMissingParentContext,
+  depth,
 }: {
   nodes: ThreadTreeNode[];
   renderEvent?: ThreadTreeProps["renderEvent"];
   filterChildren?: ThreadTreeProps["filterChildren"];
   isMissingParentContext?: boolean;
+  depth: number;
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -236,12 +249,16 @@ function ThreadChildren({
     0,
   );
 
-  const borderColor = isMissingParentContext
-    ? "border-destructive/40"
-    : "border-blue-500/40 dark:border-blue-400/30";
+  // Fade the line as depth increases: start at 0.5 opacity, floor at 0.15.
+  const lineOpacity = isMissingParentContext
+    ? 0.4
+    : Math.max(0.15, 0.5 - (depth - 1) * 0.1);
 
   return (
-    <div className={`border-l-2 ${borderColor} pl-1`}>
+    <div
+      className="border-l-2 ml-1 pl-1"
+      style={{ borderLeftColor: `rgb(59 130 246 / ${lineOpacity})` }}
+    >
       {/* Collapse / expand toggle */}
       {collapsed ? (
         <button
@@ -275,6 +292,7 @@ function ThreadChildren({
             node={child}
             renderEvent={renderEvent}
             filterChildren={filterChildren}
+            depth={depth}
           />
         ))}
     </div>
