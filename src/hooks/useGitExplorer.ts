@@ -351,7 +351,7 @@ export function useGitExplorer(
         const matchingRef = fastParsedRefs.find(
           (r) => r.hash === knownHeadCommit && r.isBranch,
         );
-        fastResolvedRef = matchingRef?.name ?? knownHeadCommit.slice(0, 8);
+        fastResolvedRef = matchingRef?.name ?? knownHeadCommit;
         fastResolvedPath = "";
       } else {
         const headRef = fastInfo.symrefs["HEAD"];
@@ -606,7 +606,7 @@ export function useGitExplorer(
       const matchingRef = parsedRefs.find(
         (r) => r.hash === knownHeadCommit && r.isBranch,
       );
-      resolvedRef = matchingRef?.name ?? knownHeadCommit.slice(0, 8);
+      resolvedRef = matchingRef?.name ?? knownHeadCommit;
       path = "";
     } else {
       // Use the default branch

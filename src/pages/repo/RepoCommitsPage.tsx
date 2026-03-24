@@ -24,15 +24,25 @@ export default function RepoCommitsPage() {
     stateCreatedAt: repoState ? repoState.event.created_at : undefined,
   });
 
+  const pulling =
+    cloneUrls.length > 0 ? !repoRelayEose || poolState.pulling : false;
+  const gitPulling = cloneUrls.length > 0 ? poolState.pulling : false;
+  const stateBehindGit =
+    !gitPulling && poolState.warning?.kind === "state-behind-git";
+
+  // When the git server is confirmed ahead of the signed Nostr state, don't
+  // pass a knownHeadCommit so the explorer falls through to the default branch
+  // (matching the Code tab behaviour).
+  const effectiveHeadCommit = stateBehindGit
+    ? undefined
+    : repoState?.headCommitId;
+
   // Always fetch refs so we can populate the selector.
   // Pass commitsRef so the explorer resolves to the right commit hash.
   const explorer = useGitExplorer(pool, poolState, {
     refAndPath: commitsRef,
-    knownHeadCommit: repoState?.headCommitId,
+    knownHeadCommit: effectiveHeadCommit,
   });
-
-  const pulling =
-    cloneUrls.length > 0 ? !repoRelayEose || poolState.pulling : false;
 
   const resolvedRef = explorer.resolvedRef ?? undefined;
 
@@ -78,6 +88,7 @@ export default function RepoCommitsPage() {
             repoState={repoState}
             repoRelayEose={repoRelayEose}
             loading={explorer.loading}
+            stateBehindGit={stateBehindGit}
           />
         ) : explorer.loading ? (
           <Skeleton className="h-8 w-28" />
