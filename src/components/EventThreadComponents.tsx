@@ -94,10 +94,12 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
   const anchorId = comment.id.slice(0, 15);
   const cardRef = useRef<HTMLDivElement>(null);
   const isTargeted = window.location.hash === `#${anchorId}`;
-  // Highlight ring — stays on until the card has been visible in the viewport
-  // for 3 s. This handles the case where other comments load after this one
-  // and push it below the fold before the user has had a chance to see it.
-  const [highlighted, setHighlighted] = useState(isTargeted);
+  // Two-phase highlight: "strong" on arrival → "subtle" persistent indicator.
+  // Handles async comment loading pushing the card off-screen before the user
+  // has seen it.
+  const [highlight, setHighlight] = useState<"strong" | "subtle" | "none">(
+    isTargeted ? "strong" : "none",
+  );
 
   useEffect(() => {
     if (!isTargeted || !cardRef.current) return;
@@ -109,25 +111,25 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
-    // Start the 3 s fade-out timer only once the element is actually visible
-    // in the viewport. If more comments load and push it off-screen before the
-    // timer fires, the IntersectionObserver will re-scroll and restart the timer.
-    let fadeTimer: ReturnType<typeof setTimeout> | undefined;
+    // Transition to "subtle" only once the element is actually visible in the
+    // viewport. If more comments load and push it off-screen before the timer
+    // fires, re-scroll and reset.
+    let dimTimer: ReturnType<typeof setTimeout> | undefined;
 
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            // Element is visible — (re-)start the fade timer
-            clearTimeout(fadeTimer);
-            fadeTimer = setTimeout(() => {
-              setHighlighted(false);
+            // Element is visible — start the dim-down timer
+            clearTimeout(dimTimer);
+            dimTimer = setTimeout(() => {
+              setHighlight("subtle");
               observer.disconnect();
             }, 3000);
-          } else if (fadeTimer !== undefined) {
-            // Scrolled out of view before timer fired — scroll back and reset
-            clearTimeout(fadeTimer);
-            fadeTimer = undefined;
+          } else if (dimTimer !== undefined) {
+            // Pushed off-screen before timer fired — scroll back and reset
+            clearTimeout(dimTimer);
+            dimTimer = undefined;
             el.scrollIntoView({ behavior: "smooth", block: "start" });
           }
         }
@@ -139,7 +141,7 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
 
     return () => {
       cancelAnimationFrame(raf);
-      clearTimeout(fadeTimer);
+      clearTimeout(dimTimer);
       observer.disconnect();
     };
   }, [isTargeted]);
@@ -148,10 +150,12 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
     <Card
       id={anchorId}
       ref={cardRef}
-      className={`transition-all duration-500 hover:shadow-sm scroll-mt-20 ${
-        highlighted
-          ? "ring-2 ring-violet-500/50 border-violet-500/30 shadow-md shadow-violet-500/10"
-          : "duration-200"
+      className={`transition-all duration-700 hover:shadow-sm scroll-mt-20 ${
+        highlight === "strong"
+          ? "ring-2 ring-violet-500/60 border-violet-500/40 shadow-lg shadow-violet-500/15"
+          : highlight === "subtle"
+            ? "ring-1 ring-violet-500/25 border-violet-500/20"
+            : ""
       }`}
     >
       <CardContent className="p-4">
