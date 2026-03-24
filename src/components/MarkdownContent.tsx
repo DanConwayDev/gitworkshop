@@ -18,10 +18,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { remarkNostrMentions } from "applesauce-content/markdown";
 import type { Components } from "react-markdown";
-import {
-  decodeProfilePointer,
-  decodeEventPointer,
-} from "applesauce-core/helpers";
+import { decodePointer } from "applesauce-core/helpers";
 import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { useProfile } from "@/hooks/useProfile";
@@ -93,6 +90,17 @@ const remarkPlugins = [remarkGfm, remarkNostrMentions];
 const rehypePlugins: any[] = [
   [rehypeHighlight, { languages: highlightLanguages, detect: false }],
 ];
+
+// react-markdown@10's defaultUrlTransform only allows https/http/mailto/irc/xmpp.
+// nostr: URIs must be explicitly passed through so our `a` component can handle them.
+const safeProtocol = /^(https?|ircs?|mailto|xmpp|nostr)$/i;
+export function urlTransform(url: string): string {
+  const colon = url.indexOf(":");
+  if (colon === -1 || safeProtocol.test(url.slice(0, colon))) {
+    return url;
+  }
+  return "";
+}
 
 // ---------------------------------------------------------------------------
 // Git-aware image component
@@ -273,28 +281,49 @@ function buildComponents(
   const hasGitContext = cloneUrls.length > 0 && commitHash !== null;
 
   return {
-    // Nostr-aware links + external link handling
+    // Nostr-aware links + external link handling.
+    // remarkNostrMentions produces link nodes with children:[] (empty), so we
+    // must derive display text from the decoded pointer rather than relying on
+    // {children}.
     a: ({ href, children, ...props }) => {
       if (href?.startsWith("nostr:")) {
         const identifier = href.slice(6);
         try {
-          const profile = decodeProfilePointer(identifier);
-          if (profile) {
-            return <NostrProfileMention pubkey={profile.pubkey} />;
+          const decoded = decodePointer(identifier);
+
+          if (decoded.type === "npub" || decoded.type === "nprofile") {
+            const pubkey =
+              decoded.type === "npub" ? decoded.data : decoded.data.pubkey;
+            return <NostrProfileMention pubkey={pubkey} />;
           }
-          const event = decodeEventPointer(identifier);
-          if (event) {
-            const note = nip19.noteEncode(event.id);
+
+          if (decoded.type === "note" || decoded.type === "nevent") {
+            const id = decoded.type === "note" ? decoded.data : decoded.data.id;
+            const encoded = nip19.noteEncode(id);
             return (
-              <Link to={`/${note}`} className="text-primary hover:underline">
-                {children}
+              <Link to={`/${encoded}`} className="text-primary hover:underline">
+                {encoded.slice(0, 12)}…
+              </Link>
+            );
+          }
+
+          if (decoded.type === "naddr") {
+            const encoded = nip19.naddrEncode(decoded.data);
+            return (
+              <Link to={`/${encoded}`} className="text-primary hover:underline">
+                {encoded.slice(0, 12)}…
               </Link>
             );
           }
         } catch {
           // invalid identifier — fall through
         }
-        return <span className="text-primary">{children}</span>;
+        // Unknown nostr: URI — render identifier truncated
+        return (
+          <span className="text-primary font-mono text-sm">
+            {identifier.slice(0, 12)}…
+          </span>
+        );
       }
       return (
         <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
@@ -540,6 +569,7 @@ export function MarkdownContent({
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
         components={components}
+        urlTransform={urlTransform}
       >
         {content}
       </ReactMarkdown>

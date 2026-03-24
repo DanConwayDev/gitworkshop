@@ -21,7 +21,7 @@ import type { ThreadTreeNode } from "@/lib/threadTree";
 import { countDescendants } from "@/lib/threadTree";
 import { UserLink } from "@/components/UserAvatar";
 import { EventCardActions } from "@/components/EventCardActions";
-import { EventTextContent } from "@/components/EventTextContent";
+import { CommentContent } from "@/components/CommentContent";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -209,7 +209,7 @@ function ThreadComment({ event }: { event: NostrEvent }) {
         </div>
         <EventCardActions event={event} />
       </div>
-      <EventTextContent event={event} />
+      <CommentContent content={event.content} />
     </div>
   );
 }

@@ -1,0 +1,224 @@
+/**
+ * CommentContent — lightweight markdown renderer for kind:1111 comments.
+ *
+ * Intentionally NOT lazy-loaded: comments render synchronously so there is no
+ * "all comments appear at once" flash.
+ *
+ * Supports:
+ *   - NIP-27 / NIP-19 entity rendering (npub, nprofile, note, nevent, naddr)
+ *     via remarkNostrMentions
+ *   - Inline markdown: **bold**, _italic_, `code`, ~~strikethrough~~
+ *   - Fenced code blocks (no syntax highlighting — keeps the bundle tiny)
+ *   - Blockquotes, lists, links
+ *
+ * Does NOT support: syntax highlighting, git-relative images, heading anchors.
+ * Use MarkdownContent for full markdown (issue/PR bodies, README files).
+ */
+import { Link } from "react-router-dom";
+import { nip19 } from "nostr-tools";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { remarkNostrMentions } from "applesauce-content/markdown";
+import { decodePointer } from "applesauce-core/helpers";
+import type { Components } from "react-markdown";
+import { useProfile } from "@/hooks/useProfile";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { genUserName } from "@/lib/genUserName";
+import { cn } from "@/lib/utils";
+
+// ---------------------------------------------------------------------------
+// Inline Nostr profile mention — avatar + @name
+// ---------------------------------------------------------------------------
+
+function NostrProfileMention({ pubkey }: { pubkey: string }) {
+  const profile = useProfile(pubkey);
+  const npub = nip19.npubEncode(pubkey);
+  const displayName =
+    profile?.displayName ?? profile?.name ?? genUserName(pubkey);
+  const initials =
+    profile?.name?.slice(0, 2).toUpperCase() ?? npub.slice(5, 7).toUpperCase();
+
+  return (
+    <Link
+      to={`/${npub}`}
+      className="inline-flex items-center gap-1 align-middle text-primary hover:underline font-medium"
+    >
+      <Avatar className="h-4 w-4 shrink-0">
+        {profile?.picture && (
+          <AvatarImage src={profile.picture} alt={displayName} />
+        )}
+        <AvatarFallback className="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 text-foreground font-medium text-[8px]">
+          {initials}
+        </AvatarFallback>
+      </Avatar>
+      @{displayName}
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// react-markdown component overrides — minimal set for comments
+// ---------------------------------------------------------------------------
+
+const components: Components = {
+  // NIP-27: remarkNostrMentions produces link nodes with href="nostr:..." and
+  // children:[] (empty). Decode the pointer from the href directly.
+  a: ({ href, children }) => {
+    if (href?.startsWith("nostr:")) {
+      const identifier = href.slice(6);
+      try {
+        const decoded = decodePointer(identifier);
+
+        if (decoded.type === "npub" || decoded.type === "nprofile") {
+          const pubkey =
+            decoded.type === "npub" ? decoded.data : decoded.data.pubkey;
+          return <NostrProfileMention pubkey={pubkey} />;
+        }
+
+        if (decoded.type === "note" || decoded.type === "nevent") {
+          const id = decoded.type === "note" ? decoded.data : decoded.data.id;
+          const encoded = nip19.noteEncode(id);
+          return (
+            <Link
+              to={`/${encoded}`}
+              className="text-primary hover:underline font-mono text-sm"
+            >
+              {encoded.slice(0, 12)}…
+            </Link>
+          );
+        }
+
+        if (decoded.type === "naddr") {
+          const encoded = nip19.naddrEncode(decoded.data);
+          return (
+            <Link
+              to={`/${encoded}`}
+              className="text-primary hover:underline font-mono text-sm"
+            >
+              {encoded.slice(0, 12)}…
+            </Link>
+          );
+        }
+      } catch {
+        // invalid identifier — fall through to truncated display
+      }
+      return (
+        <span className="text-primary font-mono text-sm">
+          {identifier.slice(0, 12)}…
+        </span>
+      );
+    }
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:underline break-all"
+      >
+        {children}
+      </a>
+    );
+  },
+
+  // Inline code
+  code: ({ children, className }) => {
+    const isBlock = !!className;
+    if (isBlock) {
+      return <code className={className}>{children}</code>;
+    }
+    return (
+      <code className="px-1.5 py-0.5 rounded text-[0.875em] font-mono bg-muted text-foreground border border-border/60">
+        {children}
+      </code>
+    );
+  },
+
+  // Code block — no syntax highlighting
+  pre: ({ children }) => (
+    <pre className="overflow-x-auto rounded-lg border border-border bg-muted p-3 text-sm leading-relaxed my-2">
+      {children}
+    </pre>
+  ),
+
+  // Blockquote
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-border pl-3 text-muted-foreground italic my-2 break-words">
+      {children}
+    </blockquote>
+  ),
+
+  // Paragraphs — tighter spacing than full MarkdownContent
+  p: ({ children }) => (
+    <p className="my-1.5 leading-6 break-words">{children}</p>
+  ),
+
+  // Lists
+  ul: ({ children }) => (
+    <ul className="my-1.5 ml-5 list-disc space-y-0.5">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="my-1.5 ml-5 list-decimal space-y-0.5">{children}</ol>
+  ),
+  li: ({ children }) => <li className="leading-6 break-words">{children}</li>,
+
+  strong: ({ children }) => (
+    <strong className="font-semibold text-foreground">{children}</strong>
+  ),
+  em: ({ children }) => <em className="italic">{children}</em>,
+
+  // Suppress headings — comments shouldn't have h1/h2 etc.
+  h1: ({ children }) => (
+    <p className="font-bold text-base my-1.5 break-words">{children}</p>
+  ),
+  h2: ({ children }) => (
+    <p className="font-semibold text-base my-1.5 break-words">{children}</p>
+  ),
+  h3: ({ children }) => (
+    <p className="font-semibold my-1 break-words">{children}</p>
+  ),
+  h4: ({ children }) => (
+    <p className="font-medium my-1 break-words">{children}</p>
+  ),
+  h5: ({ children }) => (
+    <p className="font-medium my-1 break-words">{children}</p>
+  ),
+  h6: ({ children }) => (
+    <p className="font-medium my-1 break-words">{children}</p>
+  ),
+};
+
+const remarkPlugins = [remarkGfm, remarkNostrMentions];
+
+// react-markdown@10's defaultUrlTransform only allows https/http/mailto/irc/xmpp.
+// nostr: URIs must be explicitly passed through so our `a` component can handle them.
+const safeProtocol = /^(https?|ircs?|mailto|xmpp|nostr)$/i;
+function urlTransform(url: string): string {
+  const colon = url.indexOf(":");
+  if (colon === -1 || safeProtocol.test(url.slice(0, colon))) {
+    return url;
+  }
+  return "";
+}
+
+// ---------------------------------------------------------------------------
+// Public component
+// ---------------------------------------------------------------------------
+
+interface CommentContentProps {
+  content: string;
+  className?: string;
+}
+
+export function CommentContent({ content, className }: CommentContentProps) {
+  return (
+    <div className={cn("min-w-0 overflow-hidden", className)}>
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        components={components}
+        urlTransform={urlTransform}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}

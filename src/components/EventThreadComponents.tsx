@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Clock, Pencil } from "lucide-react";
 import { EventCardActions } from "@/components/EventCardActions";
-import { EventTextContent } from "@/components/EventTextContent";
+import { CommentContent } from "@/components/CommentContent";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -202,7 +202,7 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
               </div>
               <EventCardActions event={comment} />
             </div>
-            <EventTextContent event={comment} />
+            <CommentContent content={comment.content} />
           </div>
         </div>
       </CardContent>
