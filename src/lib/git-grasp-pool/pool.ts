@@ -110,12 +110,15 @@ function computeRefStatuses(
     urlRefCommits.set(t.url, {});
   }
 
-  // Collect all ref names across all ok servers
+  // Collect all ref names across all ok servers, excluding peeled tag entries
+  // (refs/tags/foo^{}) — those are dereference helpers, not real refs.
   const allRefNames = new Set<string>();
   for (const t of trackers) {
     if (t.status === "ok" && t.state.infoRefs) {
       for (const refName of Object.keys(t.state.infoRefs.refs)) {
-        allRefNames.add(refName);
+        if (!refName.endsWith("^{}")) {
+          allRefNames.add(refName);
+        }
       }
     }
   }
@@ -125,11 +128,18 @@ function computeRefStatuses(
     stateEvent !== undefined && stateEvent !== null && stateEose;
 
   for (const refName of allRefNames) {
-    // Build a map of url → commit for this ref (only ok servers)
+    // Build a map of url → commit for this ref (only ok servers).
+    // For annotated tags, prefer the peeled commit hash (refName + "^{}")
+    // because the state event stores the peeled commit, not the tag object.
+    const peeledRefName = refName + "^{}";
     const serverCommits: Array<{ url: string; commit: string }> = [];
     for (const t of trackers) {
       if (t.status === "ok" && t.state.infoRefs) {
-        const commit = t.state.infoRefs.refs[refName];
+        // Use the peeled commit when available (annotated tag), otherwise the
+        // raw ref value (lightweight tag or branch).
+        const commit =
+          t.state.infoRefs.refs[peeledRefName] ??
+          t.state.infoRefs.refs[refName];
         if (commit) {
           serverCommits.push({ url: t.url, commit });
         }
