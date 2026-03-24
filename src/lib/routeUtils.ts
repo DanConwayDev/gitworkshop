@@ -9,6 +9,9 @@
  *
  * Generated links always use:
  *   /:npub/:relayHint/:repoId      where relayHint = first repo relay with wss:// stripped
+ *
+ * Issue / PR / commit identifiers in URLs are nevent1-encoded for shareability.
+ * Internally the app always works with raw hex event IDs.
  */
 
 import { nip19 } from "nostr-tools";
@@ -82,6 +85,57 @@ export type ParsedRepoRoute = RepoRouteNpub | RepoRouteNip05;
 // Parser
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// NIP-19 event ID helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true if the string is a bech32 event identifier (note1 or nevent1).
+ */
+export function isEventIdentifier(s: string): boolean {
+  return s.startsWith("note1") || s.startsWith("nevent1");
+}
+
+/**
+ * Decode a note1 or nevent1 identifier to a raw hex event ID.
+ * Returns undefined if the string is not a valid event identifier.
+ */
+export function decodeEventIdentifier(s: string): string | undefined {
+  try {
+    const decoded = nip19.decode(s);
+    if (decoded.type === "note") return decoded.data;
+    if (decoded.type === "nevent") return decoded.data.id;
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
+/**
+ * Extract relay hints from a nevent1 identifier.
+ * Returns an empty array for note1 or invalid identifiers.
+ */
+export function relaysFromEventIdentifier(s: string): string[] {
+  try {
+    const decoded = nip19.decode(s);
+    if (decoded.type === "nevent") return decoded.data.relays ?? [];
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+/**
+ * Encode a raw hex event ID as a nevent1 identifier with optional relay hints.
+ * Always uses nevent1 (not note1) so relay hints can be included.
+ */
+export function eventIdToNevent(id: string, relays?: string[]): string {
+  return nip19.neventEncode({
+    id,
+    relays: relays?.length ? relays : undefined,
+  });
+}
+
 /** Sub-paths that appear after the repo identifier in the URL. */
 const REPO_SUB_PATHS = ["issues", "prs", "about", "commits", "commit", "tree"];
 
@@ -106,9 +160,12 @@ function stripSubPaths(splat: string): string {
       return segments.slice(0, i).join("/");
     }
   }
-  // No sub-path keyword found — also strip a trailing 64-char hex ID (issue/PR id)
+  // No sub-path keyword found — strip a trailing 64-char hex ID or nevent/note identifier
   let end = segments.length;
-  if (end > 0 && /^[0-9a-f]{64}$/i.test(segments[end - 1])) end--;
+  const last = segments[end - 1];
+  if (end > 0 && (/^[0-9a-f]{64}$/i.test(last) || isEventIdentifier(last))) {
+    end--;
+  }
   return segments.slice(0, end).join("/");
 }
 

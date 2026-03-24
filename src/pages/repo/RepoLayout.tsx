@@ -36,7 +36,11 @@ import { PATCH_KIND, PR_KIND, type RepoQueryOptions } from "@/lib/nip34";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
 import { relayCurationMode } from "@/services/settings";
 import { cn } from "@/lib/utils";
-import { parseRepoRoute } from "@/lib/routeUtils";
+import {
+  parseRepoRoute,
+  decodeEventIdentifier,
+  isEventIdentifier,
+} from "@/lib/routeUtils";
 
 // ---------------------------------------------------------------------------
 // RepoLayout
@@ -287,7 +291,12 @@ function RepoLayoutResolved({
       const prsIdx = segments.indexOf("prs");
       if (prsIdx !== -1) {
         if (segments.length > prsIdx + 1) {
-          return { subPage: "pr", prId: segments[prsIdx + 1] };
+          const rawSegment = segments[prsIdx + 1];
+          // Accept both raw hex IDs (legacy) and nevent1/note1 identifiers
+          const prId = isEventIdentifier(rawSegment)
+            ? decodeEventIdentifier(rawSegment)
+            : rawSegment;
+          return { subPage: "pr", prId };
         }
         return { subPage: "prs" };
       }
@@ -295,7 +304,12 @@ function RepoLayoutResolved({
       const issuesIdx = segments.indexOf("issues");
       if (issuesIdx !== -1) {
         if (segments.length > issuesIdx + 1) {
-          return { subPage: "issue", issueId: segments[issuesIdx + 1] };
+          const rawSegment = segments[issuesIdx + 1];
+          // Accept both raw hex IDs (legacy) and nevent1/note1 identifiers
+          const issueId = isEventIdentifier(rawSegment)
+            ? decodeEventIdentifier(rawSegment)
+            : rawSegment;
+          return { subPage: "issue", issueId };
         }
         return { subPage: "issues" };
       }

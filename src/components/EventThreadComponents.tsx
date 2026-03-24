@@ -1,7 +1,7 @@
 /**
  * Shared components used in both IssuePage and PRPage thread views.
  */
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { formatDistanceToNow, format } from "date-fns";
 import type { NostrEvent } from "nostr-tools";
 import { UserLink } from "@/components/UserAvatar";
@@ -90,8 +90,38 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
     addSuffix: true,
   });
 
+  // Permalink anchor: first 15 chars of the event ID, matching gitworkshop's convention.
+  const anchorId = comment.id.slice(0, 15);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const isTargeted = window.location.hash === `#${anchorId}`;
+  // Highlight ring fades out after 3 s
+  const [highlighted, setHighlighted] = useState(isTargeted);
+
+  // Scroll into view after paint if the URL fragment matches this comment.
+  // Using rAF ensures the element is in the layout before we scroll.
+  useEffect(() => {
+    if (!isTargeted || !cardRef.current) return;
+    const raf = requestAnimationFrame(() => {
+      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    // Fade the highlight ring out after 3 s
+    const timer = setTimeout(() => setHighlighted(false), 3000);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [isTargeted]);
+
   return (
-    <Card className="transition-all duration-200 hover:shadow-sm">
+    <Card
+      id={anchorId}
+      ref={cardRef}
+      className={`transition-all duration-500 hover:shadow-sm scroll-mt-20 ${
+        highlighted
+          ? "ring-2 ring-violet-500/50 border-violet-500/30 shadow-md shadow-violet-500/10"
+          : "duration-200"
+      }`}
+    >
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">

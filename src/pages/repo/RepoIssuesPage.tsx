@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { repoToPath } from "@/lib/routeUtils";
+import { repoToPath, eventIdToNevent } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
 import { formatDistanceToNow } from "date-fns";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -283,6 +283,7 @@ export default function RepoIssuesPage() {
               key={issue.id}
               issue={issue}
               repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [])}
+              repoRelays={repo?.relays ?? []}
             />
           ))}
         </div>
@@ -303,16 +304,20 @@ function AuthorSelectLabel({ pubkey }: { pubkey: string }) {
 function IssueRow({
   issue,
   repoPath,
+  repoRelays,
 }: {
   issue: ResolvedIssue;
   repoPath: string;
+  repoRelays: string[];
 }) {
   const timeAgo = formatDistanceToNow(new Date(issue.createdAt * 1000), {
     addSuffix: true,
   });
 
+  const nevent = eventIdToNevent(issue.id, repoRelays);
+
   return (
-    <Link to={`${repoPath}/issues/${issue.id}`} className="group block">
+    <Link to={`${repoPath}/issues/${nevent}`} className="group block">
       <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">

@@ -30,7 +30,7 @@ function treeParentDir(pathname: string): string {
 }
 
 export function ScrollToTop() {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   const prevPathnameRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -38,12 +38,16 @@ export function ScrollToTop() {
     prevPathnameRef.current = pathname;
 
     if (prev === null) {
-      // Initial mount — always scroll to top
-      window.scrollTo(0, 0);
+      // Initial mount — scroll to top unless there's a hash fragment target
+      if (!hash) window.scrollTo(0, 0);
       return;
     }
 
     if (prev === pathname) return;
+
+    // If the new URL has a hash fragment, let the browser / CommentCard handle
+    // scrolling to the anchor — don't reset to the top.
+    if (hash) return;
 
     const prevParent = treeParentDir(prev);
     const nextParent = treeParentDir(pathname);
@@ -53,7 +57,7 @@ export function ScrollToTop() {
 
     // Directory changed (or non-tree navigation) → scroll to top
     window.scrollTo(0, 0);
-  }, [pathname]);
+  }, [pathname, hash]);
 
   return null;
 }
