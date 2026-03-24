@@ -24,6 +24,9 @@ import {
 } from "applesauce-core/helpers";
 import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
+import { useProfile } from "@/hooks/useProfile";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { genUserName } from "@/lib/genUserName";
 
 // Note: getOrCreatePool is safe to call here because the pool is already
 // subscribed by useGitPool higher in the tree (RepoCodePage). We are just
@@ -224,6 +227,36 @@ function GitImage({
 }
 
 // ---------------------------------------------------------------------------
+// Inline Nostr profile mention for markdown — avatar + @name
+// ---------------------------------------------------------------------------
+
+function NostrProfileMention({ pubkey }: { pubkey: string }) {
+  const profile = useProfile(pubkey);
+  const npub = nip19.npubEncode(pubkey);
+  const displayName =
+    profile?.displayName ?? profile?.name ?? genUserName(pubkey);
+  const initials =
+    profile?.name?.slice(0, 2).toUpperCase() ?? npub.slice(5, 7).toUpperCase();
+
+  return (
+    <Link
+      to={`/${npub}`}
+      className="inline-flex items-center gap-1 align-middle text-primary hover:underline font-medium"
+    >
+      <Avatar className="h-4 w-4 shrink-0">
+        {profile?.picture && (
+          <AvatarImage src={profile.picture} alt={displayName} />
+        )}
+        <AvatarFallback className="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 text-foreground font-medium text-[8px]">
+          {initials}
+        </AvatarFallback>
+      </Avatar>
+      @{displayName}
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Markdown component factories
 // ---------------------------------------------------------------------------
 
@@ -247,12 +280,7 @@ function buildComponents(
         try {
           const profile = decodeProfilePointer(identifier);
           if (profile) {
-            const npub = nip19.npubEncode(profile.pubkey);
-            return (
-              <Link to={`/${npub}`} className="text-primary hover:underline">
-                {children}
-              </Link>
-            );
+            return <NostrProfileMention pubkey={profile.pubkey} />;
           }
           const event = decodeEventPointer(identifier);
           if (event) {

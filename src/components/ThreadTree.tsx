@@ -13,7 +13,7 @@
  * comments don't get their own Card border. Each comment is separated by a
  * subtle top border. This keeps deep threads compact (matching gitworkshop).
  */
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ChevronUp, ChevronDown, AlertTriangle, Calendar } from "lucide-react";
 import type { NostrEvent } from "nostr-tools";
@@ -21,8 +21,7 @@ import type { ThreadTreeNode } from "@/lib/threadTree";
 import { countDescendants } from "@/lib/threadTree";
 import { UserLink } from "@/components/UserAvatar";
 import { EventCardActions } from "@/components/EventCardActions";
-
-const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
+import { EventTextContent } from "@/components/EventTextContent";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -182,11 +181,7 @@ function ThreadComment({ event }: { event: NostrEvent }) {
         </div>
         <EventCardActions event={event} />
       </div>
-      <Suspense
-        fallback={<div className="h-8 animate-pulse bg-muted rounded" />}
-      >
-        <MarkdownContent content={event.content} />
-      </Suspense>
+      <EventTextContent event={event} />
     </div>
   );
 }
