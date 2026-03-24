@@ -446,7 +446,7 @@ function ThreadedComments({
 
   return (
     <div
-      className="border-l-2 pl-1"
+      className="border-l pl-1"
       style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
     >
       {items.map((item) =>

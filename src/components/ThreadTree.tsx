@@ -198,7 +198,7 @@ function ThreadComment({ event }: { event: NostrEvent }) {
     <div
       id={anchorId}
       ref={elRef}
-      className={`border-t border-border/40 py-3 px-2 scroll-mt-20 transition-colors duration-700 ${
+      className={`border-t border-border/40 pt-2 pb-1 scroll-mt-20 transition-colors duration-700 ${
         highlight === "strong"
           ? "bg-violet-500/10"
           : highlight === "subtle"
@@ -206,7 +206,8 @@ function ThreadComment({ event }: { event: NostrEvent }) {
             : ""
       }`}
     >
-      <div className="flex items-center justify-between gap-2 mb-1.5">
+      {/* Header row: avatar flush left, body content indented */}
+      <div className="flex items-center justify-between gap-2 mb-1">
         <div className="flex items-center gap-2">
           <UserLink
             pubkey={event.pubkey}
@@ -220,7 +221,10 @@ function ThreadComment({ event }: { event: NostrEvent }) {
         </div>
         <EventCardActions event={event} />
       </div>
-      <CommentContent content={event.content} />
+      {/* Body: left-padded to align with avatar, giving breathing room */}
+      <div className="ml-9 pb-2">
+        <CommentContent content={event.content} />
+      </div>
     </div>
   );
 }
@@ -256,7 +260,7 @@ function ThreadChildren({
 
   return (
     <div
-      className="border-l-2 ml-1 pl-1"
+      className="border-l pl-1"
       style={{ borderLeftColor: `rgb(59 130 246 / ${lineOpacity})` }}
     >
       {/* Collapse / expand toggle */}
