@@ -46,13 +46,19 @@ export default function RepoCommitsPage() {
 
   const resolvedRef = explorer.resolvedRef ?? undefined;
 
-  // Use the resolved commit hash directly so the history starts from whatever
-  // commit the explorer landed on (e.g. the git server's latest when
-  // stateBehindGit, rather than re-resolving the branch name against infoRefs
-  // which may point at an older commit on a different server).
-  const historyRef = explorer.commitHash ?? resolvedRef;
+  // When the git server is confirmed ahead of the signed state, use the pool's
+  // authoritative gitCommitId directly — this is available as soon as the pool
+  // computes the warning, before the explorer has had a chance to re-run.
+  // Otherwise fall back to the explorer's resolved commit hash (full 40-char),
+  // which avoids re-resolving the branch name against infoRefs (which could
+  // map to an older commit on a different server).
+  const historyCommit: string | undefined = stateBehindGit
+    ? poolState.warning?.kind === "state-behind-git"
+      ? poolState.warning.gitCommitId
+      : (explorer.commitHash ?? undefined)
+    : (explorer.commitHash ?? undefined);
 
-  const history = useCommitHistory(pool, poolState, historyRef, 50);
+  const history = useCommitHistory(pool, poolState, historyCommit, 50);
 
   // Build base path for commit links (strip /commits/... suffix)
   const basePath = useMemo(() => {
