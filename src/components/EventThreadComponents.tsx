@@ -94,21 +94,53 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
   const anchorId = comment.id.slice(0, 15);
   const cardRef = useRef<HTMLDivElement>(null);
   const isTargeted = window.location.hash === `#${anchorId}`;
-  // Highlight ring fades out after 3 s
+  // Highlight ring — stays on until the card has been visible in the viewport
+  // for 3 s. This handles the case where other comments load after this one
+  // and push it below the fold before the user has had a chance to see it.
   const [highlighted, setHighlighted] = useState(isTargeted);
 
-  // Scroll into view after paint if the URL fragment matches this comment.
-  // Using rAF ensures the element is in the layout before we scroll.
   useEffect(() => {
     if (!isTargeted || !cardRef.current) return;
+
+    const el = cardRef.current;
+
+    // Scroll to the element immediately after paint.
     const raf = requestAnimationFrame(() => {
-      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-    // Fade the highlight ring out after 3 s
-    const timer = setTimeout(() => setHighlighted(false), 3000);
+
+    // Start the 3 s fade-out timer only once the element is actually visible
+    // in the viewport. If more comments load and push it off-screen before the
+    // timer fires, the IntersectionObserver will re-scroll and restart the timer.
+    let fadeTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            // Element is visible — (re-)start the fade timer
+            clearTimeout(fadeTimer);
+            fadeTimer = setTimeout(() => {
+              setHighlighted(false);
+              observer.disconnect();
+            }, 3000);
+          } else if (fadeTimer !== undefined) {
+            // Scrolled out of view before timer fired — scroll back and reset
+            clearTimeout(fadeTimer);
+            fadeTimer = undefined;
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        }
+      },
+      { threshold: 0.5 },
+    );
+
+    observer.observe(el);
+
     return () => {
       cancelAnimationFrame(raf);
-      clearTimeout(timer);
+      clearTimeout(fadeTimer);
+      observer.disconnect();
     };
   }, [isTargeted]);
 
