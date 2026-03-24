@@ -133,7 +133,7 @@ function parseRefs(info: InfoRefsUploadPackResponse): GitRef[] {
   const refs: GitRef[] = [];
 
   for (const [refName, hash] of Object.entries(info.refs)) {
-    // Skip peeled tags (^{})
+    // Skip peeled tags (^{}) — we use them below to dereference annotated tags
     if (refName.endsWith("^{}")) continue;
 
     const isBranch = refName.startsWith("refs/heads/");
@@ -145,9 +145,13 @@ function parseRefs(info: InfoRefsUploadPackResponse): GitRef[] {
       ? refName.replace("refs/heads/", "")
       : refName.replace("refs/tags/", "");
 
+    // For annotated tags the ref points to a tag object, not a commit.
+    // The peeled entry (refName + "^{}") holds the actual commit hash.
+    const commitHash = isTag ? (info.refs[`${refName}^{}`] ?? hash) : hash;
+
     refs.push({
       name: shortName,
-      hash,
+      hash: commitHash,
       isBranch,
       isTag,
       isDefault: refName === headRef,
@@ -210,12 +214,13 @@ function resolveRefAndPath(
       };
     }
 
-    // Try as tag name
+    // Try as tag name — prefer the peeled commit hash for annotated tags
     const tagPath = `refs/tags/${candidate}`;
     if (info.refs[tagPath] && (!best || i > best.prefixLen)) {
+      const tagHash = info.refs[`${tagPath}^{}`] ?? info.refs[tagPath];
       best = {
         refPath: tagPath,
-        hash: info.refs[tagPath],
+        hash: tagHash,
         path,
         prefixLen: i,
       };
@@ -871,11 +876,20 @@ export function useCommitHistory(
     if (ref && pool) {
       const fastInfo = pool.getInfoRefs();
       if (fastInfo) {
-        const commitHash = ref.startsWith("refs/")
+        const rawHash = ref.startsWith("refs/")
           ? fastInfo.refs[ref]
           : (fastInfo.refs[`refs/heads/${ref}`] ??
             fastInfo.refs[`refs/tags/${ref}`] ??
             ref);
+        // Dereference annotated tags: prefer the peeled commit hash
+        const tagRefName = ref.startsWith("refs/")
+          ? ref
+          : fastInfo.refs[`refs/heads/${ref}`]
+            ? undefined
+            : `refs/tags/${ref}`;
+        const commitHash = tagRefName
+          ? (fastInfo.refs[`${tagRefName}^{}`] ?? rawHash)
+          : rawHash;
         if (commitHash) {
           const cached = pool.cache.peekCommitHistory(commitHash, maxCommits);
           if (cached) return { loading: false, error: null, commits: cached };
@@ -944,12 +958,21 @@ export function useCommitHistory(
         return;
       }
 
-      // Resolve ref to commit hash.
-      const commitHash = ref.startsWith("refs/")
+      // Resolve ref to commit hash, dereferencing annotated tags via the
+      // peeled entry (refName + "^{}") when present.
+      const rawHash = ref.startsWith("refs/")
         ? info.refs[ref]
         : (info.refs[`refs/heads/${ref}`] ??
           info.refs[`refs/tags/${ref}`] ??
           ref);
+      const tagRefName = ref.startsWith("refs/")
+        ? ref
+        : info.refs[`refs/heads/${ref}`]
+          ? undefined
+          : `refs/tags/${ref}`;
+      const commitHash = tagRefName
+        ? (info.refs[`${tagRefName}^{}`] ?? rawHash)
+        : rawHash;
 
       if (!commitHash) {
         setState({

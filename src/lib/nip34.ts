@@ -364,18 +364,32 @@ export interface RepoStateRef {
 /**
  * Extract all refs from a kind:30618 state event.
  * Format: ["refs/<heads|tags>/<name>", "<commit-id>", "<parent>", ...]
+ *
+ * For annotated tags the state event may include both the tag object entry
+ * and a peeled entry (name + "^{}") that holds the actual commit hash.
+ * We use the peeled commit hash when available so comparisons against git
+ * infoRefs (which we also peel) stay consistent.
  */
 export function getStateRefs(ev: NostrEvent): RepoStateRef[] {
-  return getOrComputeCachedValue(ev, StateRefsSymbol, () =>
-    ev.tags
-      .filter(([t]) => t?.startsWith("refs/"))
+  return getOrComputeCachedValue(ev, StateRefsSymbol, () => {
+    // Build a map of peeled commit hashes: "refs/tags/v1.0.0" → "abc123..."
+    const peeled = new Map<string, string>();
+    for (const [name, commitId] of ev.tags) {
+      if (name?.endsWith("^{}") && commitId) {
+        peeled.set(name.slice(0, -3), commitId);
+      }
+    }
+
+    return ev.tags
+      .filter(([t]) => t?.startsWith("refs/") && !t.endsWith("^{}"))
       .map(([name, commitId, ...parents]) => ({
         name,
-        commitId: commitId ?? "",
+        // Prefer the peeled commit hash for annotated tags
+        commitId: peeled.get(name) ?? commitId ?? "",
         parentCommitIds: parents.filter(Boolean),
       }))
-      .filter((r) => r.commitId),
-  );
+      .filter((r) => r.commitId);
+  });
 }
 
 /**
