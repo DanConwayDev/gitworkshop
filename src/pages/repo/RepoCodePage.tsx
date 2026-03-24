@@ -676,7 +676,7 @@ function LocatorBar({
             {commitHash?.slice(0, 8)}
           </code>
         </Link>
-      ) : loading ? (
+      ) : loading || commitHash ? (
         <div className="flex items-center gap-3 px-3 py-2.5 border-t border-border/40">
           <Skeleton className="h-7 w-7 rounded-full" />
           <div className="flex-1 space-y-1">

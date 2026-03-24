@@ -393,6 +393,11 @@ export function useGitExplorer(
               pathExists: true,
             });
             fastHandled = true;
+            // If the commit wasn't in the L1 cache, fetch it asynchronously
+            // so the commit bar reflects the correct ref after a branch switch.
+            if (!fastHeadCommit) {
+              fetchHeadCommit(pool, fastCommitHash, signal, setState);
+            }
           } else {
             const subTree = navigateTree(fastTree, fastPathSegments);
             if (subTree) {
@@ -412,6 +417,9 @@ export function useGitExplorer(
                 pathExists: true,
               });
               fastHandled = true;
+              if (!fastHeadCommit) {
+                fetchHeadCommit(pool, fastCommitHash, signal, setState);
+              }
             } else {
               const fileHash = findFileInTree(fastTree, fastPathSegments);
               if (fileHash) {
@@ -446,6 +454,9 @@ export function useGitExplorer(
                     pathExists: true,
                   });
                   fastHandled = true;
+                  if (!fastHeadCommit) {
+                    fetchHeadCommit(pool, fastCommitHash, signal, setState);
+                  }
                 } else {
                   // Blob not cached yet — render the file list immediately so
                   // the directory sidebar doesn't flash to a skeleton while the
