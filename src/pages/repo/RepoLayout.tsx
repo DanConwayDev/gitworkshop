@@ -549,10 +549,13 @@ function RepoBreadcrumb({
 }) {
   const profile = useProfile(pubkey);
   const npub = nip19.npubEncode(pubkey);
+  const nip05Local = nip05?.split("@")[0];
+  const nip05Domain = nip05?.split("@")[1];
+  const nip05Label = nip05Local === "_" ? nip05Domain : nip05Local;
   const username =
-    nip05?.split("@")[0] ??
     profile?.displayName ??
     profile?.name ??
+    nip05Label ??
     npub.slice(0, 12) + "…";
 
   return (
