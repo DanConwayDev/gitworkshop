@@ -46,7 +46,13 @@ export default function RepoCommitsPage() {
 
   const resolvedRef = explorer.resolvedRef ?? undefined;
 
-  const history = useCommitHistory(pool, poolState, resolvedRef, 50);
+  // Use the resolved commit hash directly so the history starts from whatever
+  // commit the explorer landed on (e.g. the git server's latest when
+  // stateBehindGit, rather than re-resolving the branch name against infoRefs
+  // which may point at an older commit on a different server).
+  const historyRef = explorer.commitHash ?? resolvedRef;
+
+  const history = useCommitHistory(pool, poolState, historyRef, 50);
 
   // Build base path for commit links (strip /commits/... suffix)
   const basePath = useMemo(() => {
