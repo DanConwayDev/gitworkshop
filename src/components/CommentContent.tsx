@@ -24,7 +24,7 @@ import type { Components } from "react-markdown";
 import { useProfile } from "@/hooks/useProfile";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { genUserName } from "@/lib/genUserName";
-import { cn } from "@/lib/utils";
+import { cn, markdownUrlTransform } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Inline Nostr profile mention — avatar + @name
@@ -189,17 +189,8 @@ const components: Components = {
 
 const remarkPlugins = [remarkGfm, remarkNostrMentions];
 
-// react-markdown@10's defaultUrlTransform only allows https/http/mailto/irc/xmpp.
-// nostr: URIs must be explicitly passed through so our `a` component can handle them.
-const safeProtocol = /^(https?|ircs?|mailto|xmpp|nostr)$/i;
-function urlTransform(url: string): string {
-  const colon = url.indexOf(":");
-  if (colon === -1 || safeProtocol.test(url.slice(0, colon))) {
-    return url;
-  }
-  return "";
-}
-
+// ---------------------------------------------------------------------------
+// Public component
 // ---------------------------------------------------------------------------
 // Public component
 // ---------------------------------------------------------------------------
@@ -215,7 +206,7 @@ export function CommentContent({ content, className }: CommentContentProps) {
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         components={components}
-        urlTransform={urlTransform}
+        urlTransform={markdownUrlTransform}
       >
         {content}
       </ReactMarkdown>

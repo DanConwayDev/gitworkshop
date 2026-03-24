@@ -10,7 +10,7 @@
  *   const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
  */
 import { useState, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { cn, markdownUrlTransform } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import ReactMarkdown from "react-markdown";
@@ -90,17 +90,6 @@ const remarkPlugins = [remarkGfm, remarkNostrMentions];
 const rehypePlugins: any[] = [
   [rehypeHighlight, { languages: highlightLanguages, detect: false }],
 ];
-
-// react-markdown@10's defaultUrlTransform only allows https/http/mailto/irc/xmpp.
-// nostr: URIs must be explicitly passed through so our `a` component can handle them.
-const safeProtocol = /^(https?|ircs?|mailto|xmpp|nostr)$/i;
-export function urlTransform(url: string): string {
-  const colon = url.indexOf(":");
-  if (colon === -1 || safeProtocol.test(url.slice(0, colon))) {
-    return url;
-  }
-  return "";
-}
 
 // ---------------------------------------------------------------------------
 // Git-aware image component
@@ -569,7 +558,7 @@ export function MarkdownContent({
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
         components={components}
-        urlTransform={urlTransform}
+        urlTransform={markdownUrlTransform}
       >
         {content}
       </ReactMarkdown>
