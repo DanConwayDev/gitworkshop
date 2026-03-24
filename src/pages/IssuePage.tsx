@@ -445,7 +445,7 @@ function ThreadedComments({
   });
 
   return (
-    <div className="space-y-3">
+    <div className="border-l-2 border-blue-500/40 dark:border-blue-400/30 pl-1">
       {items.map((item) =>
         item.type === "thread" ? (
           <ThreadTree key={item.node.event.id} node={item.node} />
