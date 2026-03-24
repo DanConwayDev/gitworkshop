@@ -198,7 +198,7 @@ function ThreadComment({ event }: { event: NostrEvent }) {
     <div
       id={anchorId}
       ref={elRef}
-      className={`border-t border-border/40 pt-2 pb-1 scroll-mt-20 transition-colors duration-700 ${
+      className={`border-t border-border/40 p-3 scroll-mt-20 transition-colors duration-700 ${
         highlight === "strong"
           ? "bg-violet-500/10"
           : highlight === "subtle"
@@ -206,8 +206,8 @@ function ThreadComment({ event }: { event: NostrEvent }) {
             : ""
       }`}
     >
-      {/* Header row: avatar flush left, body content indented */}
-      <div className="flex items-center justify-between gap-2 mb-1">
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-2 mb-1.5">
         <div className="flex items-center gap-2">
           <UserLink
             pubkey={event.pubkey}
@@ -221,8 +221,9 @@ function ThreadComment({ event }: { event: NostrEvent }) {
         </div>
         <EventCardActions event={event} />
       </div>
-      {/* Body: left-padded to align with avatar, giving breathing room */}
-      <div className="ml-9 pb-2">
+      {/* Body: on small screens equal padding; on sm+ align under username text.
+          UserLink uses w-8 avatar + gap-1.5 = 38px before the name text. */}
+      <div className="sm:ml-[38px]">
         <CommentContent content={event.content} />
       </div>
     </div>
