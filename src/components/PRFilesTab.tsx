@@ -248,7 +248,7 @@ function FileTreeSidebar({
   const tree = useMemo(() => buildTree(changes), [changes]);
 
   return (
-    <div className="hidden lg:flex flex-col w-56 shrink-0 border-r border-border/40 self-stretch">
+    <div className="hidden lg:flex flex-col w-56 shrink-0 border-r border-border/40 sticky top-14 self-start max-h-[calc(100vh-3.5rem)] overflow-hidden">
       <div className="px-2 py-1.5 border-b border-border/40 flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
         <span className="font-medium text-foreground">{changes.length}</span>
         <span>{changes.length === 1 ? "file" : "files"} changed</span>
@@ -465,7 +465,7 @@ export function PRFilesTab({
 
   if (phase.kind === "loading-diff") {
     return (
-      <div className="flex gap-0 rounded-lg border border-border/60 overflow-hidden min-w-0">
+      <div className="flex gap-0 rounded-lg border border-border/60 min-w-0">
         <FileTreeSidebar
           changes={phase.changes}
           activeFile={activeFile}
@@ -493,7 +493,7 @@ export function PRFilesTab({
   }
 
   return (
-    <div className="flex gap-0 rounded-lg border border-border/60 overflow-hidden min-w-0">
+    <div className="flex gap-0 rounded-lg border border-border/60 min-w-0">
       <FileTreeSidebar
         changes={phase.changes}
         activeFile={activeFile}

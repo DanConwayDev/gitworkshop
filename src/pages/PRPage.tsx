@@ -487,10 +487,7 @@ export default function PRPage() {
 
             {/* Files Changed tab */}
             {itemType === "pr" && (
-              <TabsContent
-                value="files"
-                className="mt-0 min-w-0 overflow-hidden"
-              >
+              <TabsContent value="files" className="mt-0 min-w-0">
                 {!pr?.tipCommitId ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
                     {prEvent
