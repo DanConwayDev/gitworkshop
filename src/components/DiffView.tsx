@@ -33,7 +33,9 @@ import {
   Plus,
   Minus,
   AlertTriangle,
+  Loader2,
 } from "lucide-react";
+import type { FileChange } from "@/lib/git-grasp-pool";
 
 // ---------------------------------------------------------------------------
 // Theme hook — detect dark mode (same as CodeBlock)
@@ -74,6 +76,11 @@ export interface DiffViewProps {
    * view. Pass the repo-root-relative path (e.g. "src/lib/foo.ts").
    */
   expandedFile?: string | null;
+  /**
+   * Files whose diff content is still loading. A loading card (real header,
+   * spinner body) is rendered for each entry, after any already-parsed files.
+   */
+  loadingFiles?: FileChange[];
 }
 
 /** Stable DOM id for a file's diff card — used for scroll targeting. */
@@ -176,6 +183,148 @@ function StatBar({
 }
 
 // ---------------------------------------------------------------------------
+// Shared file-card header
+// ---------------------------------------------------------------------------
+
+/**
+ * The clickable header row shared by both the real FileDiffCard and the
+ * loading variant. Keeping it in one place means visual changes only need to
+ * happen here.
+ */
+function FileDiffCardHeader({
+  collapsed,
+  onToggle,
+  isNew,
+  isDeleted,
+  isRenamed,
+  filename,
+  fileFrom,
+  fileTo,
+  additions,
+  deletions,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+  isNew: boolean;
+  isDeleted: boolean;
+  isRenamed: boolean;
+  filename: string;
+  /** Only needed when isRenamed is true */
+  fileFrom?: string;
+  /** Only needed when isRenamed is true */
+  fileTo?: string;
+  /** undefined while loading (stats not yet known) */
+  additions?: number;
+  deletions?: number;
+}) {
+  const FileIcon = isNew ? FilePlus2 : isDeleted ? FileX2 : FileDiff;
+
+  return (
+    <button
+      onClick={onToggle}
+      className={cn(
+        "flex items-center gap-2 w-full px-3 py-2 text-left",
+        "bg-muted/30 hover:bg-muted/50 transition-colors",
+        "text-sm",
+      )}
+    >
+      {collapsed ? (
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      ) : (
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      )}
+      <FileIcon
+        className={cn(
+          "h-3.5 w-3.5 shrink-0",
+          isNew
+            ? "text-green-600 dark:text-green-400"
+            : isDeleted
+              ? "text-red-600 dark:text-red-400"
+              : "text-muted-foreground",
+        )}
+      />
+      <span className="font-mono text-xs truncate min-w-0 flex-1">
+        {isRenamed ? (
+          <>
+            <span className="text-muted-foreground">{fileFrom}</span>
+            <span className="text-muted-foreground/50 mx-1">→</span>
+            <span className="text-foreground">{fileTo}</span>
+          </>
+        ) : (
+          <span className="text-foreground">{filename}</span>
+        )}
+      </span>
+
+      {/* Stats — omitted while loading */}
+      {additions !== undefined || deletions !== undefined ? (
+        <span className="flex items-center gap-2 shrink-0 text-xs">
+          {(additions ?? 0) > 0 && (
+            <span className="text-green-600 dark:text-green-400 font-medium">
+              +{additions}
+            </span>
+          )}
+          {(deletions ?? 0) > 0 && (
+            <span className="text-red-600 dark:text-red-400 font-medium">
+              -{deletions}
+            </span>
+          )}
+          <StatBar additions={additions ?? 0} deletions={deletions ?? 0} />
+        </span>
+      ) : (
+        /* Placeholder so the header height stays consistent */
+        <span className="flex items-center gap-px ml-2 shrink-0">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <span
+              key={i}
+              className="w-1.5 h-1.5 rounded-[1px] bg-muted-foreground/20"
+            />
+          ))}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Loading variant — real header, spinner body
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders a collapsible card for a file whose diff content is still loading.
+ * Uses the same FileDiffCardHeader as the real card so they stay in sync.
+ */
+export const FileDiffCardLoading = memo(function FileDiffCardLoading({
+  change,
+}: {
+  change: FileChange;
+}) {
+  const [collapsed, setCollapsed] = useState(true);
+  const toggle = useCallback(() => setCollapsed((c) => !c), []);
+
+  const isNew = change.status === "added";
+  const isDeleted = change.status === "deleted";
+
+  return (
+    <div className="rounded-lg border border-border/60 overflow-hidden">
+      <FileDiffCardHeader
+        collapsed={collapsed}
+        onToggle={toggle}
+        isNew={isNew}
+        isDeleted={isDeleted}
+        isRenamed={false}
+        filename={change.path}
+      />
+      {!collapsed && (
+        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground border-t border-border/40 bg-muted/10">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading diff…</span>
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -184,6 +333,7 @@ export const DiffView = memo(function DiffView({
   className,
   defaultCollapsed = true,
   expandedFile,
+  loadingFiles,
 }: DiffViewProps) {
   const files = useMemo(() => parseDiff(diff), [diff]);
 
@@ -201,7 +351,9 @@ export const DiffView = memo(function DiffView({
     prevExpandedFile.current = expandedFile;
   }, [expandedFile]);
 
-  if (files.length === 0) {
+  const totalFiles = files.length + (loadingFiles?.length ?? 0);
+
+  if (totalFiles === 0) {
     return (
       <div className="text-sm text-muted-foreground text-center py-6">
         No changes found in this diff.
@@ -212,6 +364,7 @@ export const DiffView = memo(function DiffView({
   // Summary stats
   const totalAdditions = files.reduce((s, f) => s + f.additions, 0);
   const totalDeletions = files.reduce((s, f) => s + f.deletions, 0);
+  const isLoading = (loadingFiles?.length ?? 0) > 0;
 
   return (
     <div className={cn("space-y-3 min-w-0", className)}>
@@ -219,24 +372,29 @@ export const DiffView = memo(function DiffView({
       <div className="flex items-center gap-3 text-xs text-muted-foreground px-1">
         <span>
           Showing{" "}
-          <span className="font-medium text-foreground">{files.length}</span>{" "}
-          changed {files.length === 1 ? "file" : "files"}
+          <span className="font-medium text-foreground">{totalFiles}</span>{" "}
+          changed {totalFiles === 1 ? "file" : "files"}
         </span>
-        <span className="flex items-center gap-1">
-          <Plus className="h-3 w-3 text-green-600 dark:text-green-400" />
-          <span className="text-green-600 dark:text-green-400 font-medium">
-            {totalAdditions}
-          </span>
-        </span>
-        <span className="flex items-center gap-1">
-          <Minus className="h-3 w-3 text-red-600 dark:text-red-400" />
-          <span className="text-red-600 dark:text-red-400 font-medium">
-            {totalDeletions}
-          </span>
-        </span>
+        {!isLoading && (
+          <>
+            <span className="flex items-center gap-1">
+              <Plus className="h-3 w-3 text-green-600 dark:text-green-400" />
+              <span className="text-green-600 dark:text-green-400 font-medium">
+                {totalAdditions}
+              </span>
+            </span>
+            <span className="flex items-center gap-1">
+              <Minus className="h-3 w-3 text-red-600 dark:text-red-400" />
+              <span className="text-red-600 dark:text-red-400 font-medium">
+                {totalDeletions}
+              </span>
+            </span>
+          </>
+        )}
+        {isLoading && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
       </div>
 
-      {/* File diffs */}
+      {/* Parsed file diffs */}
       {files.map((file, i) => {
         const filename =
           (file.to !== "/dev/null" ? file.to : undefined) ??
@@ -258,6 +416,11 @@ export const DiffView = memo(function DiffView({
           />
         );
       })}
+
+      {/* Loading cards for files whose diff content hasn't arrived yet */}
+      {loadingFiles?.map((change) => (
+        <FileDiffCardLoading key={change.path} change={change} />
+      ))}
     </div>
   );
 });
@@ -365,8 +528,6 @@ const FileDiffCard = memo(function FileDiffCard({
     };
   }, [hl, allLines, lang, theme, collapsed]);
 
-  const FileIcon = isNew ? FilePlus2 : isDeleted ? FileX2 : FileDiff;
-
   return (
     <div
       ref={cardRef}
@@ -378,57 +539,18 @@ const FileDiffCard = memo(function FileDiffCard({
           : "border-border/60",
       )}
     >
-      {/* File header */}
-      <button
-        onClick={toggle}
-        className={cn(
-          "flex items-center gap-2 w-full px-3 py-2 text-left",
-          "bg-muted/30 hover:bg-muted/50 transition-colors",
-          "text-sm",
-        )}
-      >
-        {collapsed ? (
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        )}
-        <FileIcon
-          className={cn(
-            "h-3.5 w-3.5 shrink-0",
-            isNew
-              ? "text-green-600 dark:text-green-400"
-              : isDeleted
-                ? "text-red-600 dark:text-red-400"
-                : "text-muted-foreground",
-          )}
-        />
-        <span className="font-mono text-xs truncate min-w-0 flex-1">
-          {isRenamed ? (
-            <>
-              <span className="text-muted-foreground">{file.from}</span>
-              <span className="text-muted-foreground/50 mx-1">→</span>
-              <span className="text-foreground">{file.to}</span>
-            </>
-          ) : (
-            <span className="text-foreground">{filename}</span>
-          )}
-        </span>
-
-        {/* Stats */}
-        <span className="flex items-center gap-2 shrink-0 text-xs">
-          {file.additions > 0 && (
-            <span className="text-green-600 dark:text-green-400 font-medium">
-              +{file.additions}
-            </span>
-          )}
-          {file.deletions > 0 && (
-            <span className="text-red-600 dark:text-red-400 font-medium">
-              -{file.deletions}
-            </span>
-          )}
-          <StatBar additions={file.additions} deletions={file.deletions} />
-        </span>
-      </button>
+      <FileDiffCardHeader
+        collapsed={collapsed}
+        onToggle={toggle}
+        isNew={isNew}
+        isDeleted={isDeleted}
+        isRenamed={isRenamed}
+        filename={filename}
+        fileFrom={file.from}
+        fileTo={file.to}
+        additions={file.additions}
+        deletions={file.deletions}
+      />
 
       {/* Large diff notice — shown instead of content until user loads it */}
       {!collapsed && hidden && (

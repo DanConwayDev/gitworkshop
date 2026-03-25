@@ -51,35 +51,6 @@ export interface CommitDiffViewProps {
 }
 
 // ---------------------------------------------------------------------------
-// File change status icon + colour
-// ---------------------------------------------------------------------------
-
-function FileStatusIcon({ status }: { status: FileChange["status"] }) {
-  if (status === "added")
-    return <FilePlus2 className="h-3.5 w-3.5 text-green-500 shrink-0" />;
-  if (status === "deleted")
-    return <FileX2 className="h-3.5 w-3.5 text-red-500 shrink-0" />;
-  return <FileDiff className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
-}
-
-function FileStatusBadge({ status }: { status: FileChange["status"] }) {
-  return (
-    <span
-      className={cn(
-        "text-[10px] font-medium px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0",
-        status === "added" &&
-          "bg-green-500/10 text-green-600 dark:text-green-400",
-        status === "deleted" && "bg-red-500/10 text-red-600 dark:text-red-400",
-        status === "modified" &&
-          "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-      )}
-    >
-      {status === "added" ? "A" : status === "deleted" ? "D" : "M"}
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // File tree data structure + sidebar
 // ---------------------------------------------------------------------------
 
@@ -267,7 +238,7 @@ function FileTreeSidebar({
 }
 
 // ---------------------------------------------------------------------------
-// Phase 1: file list skeleton
+// Phase 1: file list skeleton (shown while trees are being fetched)
 // ---------------------------------------------------------------------------
 
 function FileListSkeleton() {
@@ -285,59 +256,6 @@ function FileListSkeleton() {
           />
         </div>
       ))}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Phase 1: file list (shown while diff is loading)
-// ---------------------------------------------------------------------------
-
-function FileList({ changes }: { changes: FileChange[] }) {
-  const added = changes.filter((c) => c.status === "added").length;
-  const deleted = changes.filter((c) => c.status === "deleted").length;
-  const modified = changes.filter((c) => c.status === "modified").length;
-
-  return (
-    <div className="rounded-lg border border-border/60 overflow-hidden">
-      {/* Summary header */}
-      <div className="flex items-center gap-4 px-3 py-2 bg-muted/30 border-b border-border/40 text-xs text-muted-foreground">
-        <span>
-          <span className="font-medium text-foreground">{changes.length}</span>{" "}
-          {changes.length === 1 ? "file" : "files"} changed
-        </span>
-        {added > 0 && (
-          <span className="text-green-600 dark:text-green-400 font-medium">
-            +{added} added
-          </span>
-        )}
-        {modified > 0 && (
-          <span className="text-blue-600 dark:text-blue-400 font-medium">
-            ~{modified} modified
-          </span>
-        )}
-        {deleted > 0 && (
-          <span className="text-red-600 dark:text-red-400 font-medium">
-            -{deleted} deleted
-          </span>
-        )}
-      </div>
-
-      {/* File rows */}
-      <div className="divide-y divide-border/30">
-        {changes.map((change) => (
-          <div
-            key={change.path}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted/20 transition-colors"
-          >
-            <FileStatusIcon status={change.status} />
-            <FileStatusBadge status={change.status} />
-            <span className="font-mono text-xs text-foreground/85 truncate min-w-0">
-              {change.path}
-            </span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -466,12 +384,8 @@ export function CommitDiffView({
           onSelect={handleFileSelect}
           loading
         />
-        <div className="flex-1 min-w-0 space-y-4 p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Loading diff…</span>
-          </div>
-          <FileList changes={phase.changes} />
+        <div className="flex-1 min-w-0 p-3 overflow-hidden">
+          <DiffView diff="" loadingFiles={phase.changes} />
         </div>
       </div>
     );
