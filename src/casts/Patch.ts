@@ -9,6 +9,7 @@ import {
   PATCH_KIND,
   extractPatchSubject,
   extractPatchBody,
+  extractPatchDiff,
   PATCH_CHAIN_TAGS,
 } from "@/lib/nip34";
 
@@ -17,6 +18,7 @@ type PatchEvent = KnownEvent<typeof PATCH_KIND>;
 // Cache symbols
 const SubjectSymbol = Symbol.for("patch-subject");
 const BodySymbol = Symbol.for("patch-body");
+const PatchDiffSymbol = Symbol.for("patch-diff");
 const IsRootSymbol = Symbol.for("patch-is-root");
 const LabelsSymbol = Symbol.for("patch-labels");
 const RepoCoordSymbol = Symbol.for("patch-repo-coord");
@@ -47,6 +49,13 @@ export class Patch extends EventCast<PatchEvent> {
   get body(): string {
     return getOrComputeCachedValue(this.event, BodySymbol, () =>
       extractPatchBody(this.event),
+    );
+  }
+
+  /** The unified diff extracted from the patch content. Empty string if absent. */
+  get patchDiff(): string {
+    return getOrComputeCachedValue(this.event, PatchDiffSymbol, () =>
+      extractPatchDiff(this.event.content),
     );
   }
 

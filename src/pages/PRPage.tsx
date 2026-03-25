@@ -45,22 +45,18 @@ import {
   GitCommitHorizontal,
   FileDiff,
 } from "lucide-react";
-import {
-  PATCH_KIND,
-  PATCH_CHAIN_TAGS,
-  PR_ROOT_KINDS,
-  extractSubject,
-  extractBody,
-  extractPatchDiff,
-} from "@/lib/nip34";
+import { PR_ROOT_KINDS, PR_KIND, PATCH_KIND } from "@/lib/nip34";
+import { PR } from "@/casts/PR";
+import { Patch } from "@/casts/Patch";
 import { DiffView } from "@/components/DiffView";
 import { PRFilesTab } from "@/components/PRFilesTab";
 import { gitIndexRelays, relayCurationMode } from "@/services/settings";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { castTimelineStream } from "applesauce-common/observable";
+import type { CastRefEventStore } from "applesauce-common/casts/cast";
 import type { Filter } from "applesauce-core/helpers";
-import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
 export default function PRPage() {
@@ -72,6 +68,7 @@ export default function PRPage() {
 
   const curationMode = use$(relayCurationMode);
   const store = useEventStore();
+  const castStore = store as unknown as CastRefEventStore;
 
   // Git pool — uses the repo's clone URLs (same as RepoCodePage).
   const { pool: gitPool } = useGitPool(cloneUrls);
@@ -105,41 +102,31 @@ export default function PRPage() {
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [prId, curationMode, extraRelaysForMaintainerMailboxCoverage, store]);
 
-  // Subscribe to the raw event from the store.
-  const prEvent = use$(() => {
+  // Subscribe to the store and cast to PR (kind 1618).
+  const prs = use$(() => {
     if (!prId) return undefined;
-    return store.event(prId) as unknown as Observable<NostrEvent | undefined>;
+    const filters: Filter[] = [{ kinds: [PR_KIND], ids: [prId] }];
+    return store
+      .timeline(filters)
+      .pipe(castTimelineStream(PR, castStore)) as unknown as Observable<PR[]>;
   }, [prId, store]);
 
-  // Derive subject and body from the raw event using the extractors.
-  const originalSubject = prEvent ? extractSubject(prEvent) : "";
-  const body = prEvent ? extractBody(prEvent) : "";
-  const itemType = prEvent?.kind === PATCH_KIND ? "patch" : "pr";
+  // Subscribe to the store and cast to Patch (kind 1617).
+  const patches = use$(() => {
+    if (!prId) return undefined;
+    const filters: Filter[] = [{ kinds: [PATCH_KIND], ids: [prId] }];
+    return store
+      .timeline(filters)
+      .pipe(castTimelineStream(Patch, castStore)) as unknown as Observable<
+      Patch[]
+    >;
+  }, [prId, store]);
 
-  // Extract the unified diff from the patch content (only for patches).
-  const patchDiff = useMemo(
-    () =>
-      prEvent?.kind === PATCH_KIND ? extractPatchDiff(prEvent.content) : "",
-    [prEvent],
-  );
-
-  // PR commit IDs from NIP-34 tags (kind 1618 only).
-  // ["c", "<tip-commit-id>"]          — head of the PR branch
-  // ["merge-base", "<base-commit-id>"] — common ancestor with target branch
-  const prTipCommitId = useMemo(
-    () =>
-      prEvent?.kind !== PATCH_KIND
-        ? (prEvent?.tags.find(([t]) => t === "c")?.[1] ?? null)
-        : null,
-    [prEvent],
-  );
-  const prMergeBase = useMemo(
-    () =>
-      prEvent?.kind !== PATCH_KIND
-        ? (prEvent?.tags.find(([t]) => t === "merge-base")?.[1] ?? null)
-        : null,
-    [prEvent],
-  );
+  // Exactly one of these will be populated — the event is either a PR or a patch.
+  const pr = prs?.[0];
+  const patch = patches?.[0];
+  const prEvent = pr?.event ?? patch?.event;
+  const itemType = patch ? "patch" : "pr";
 
   // Trigger two-tier loading for this PR/patch.
   useNip34Loaders(prId, repoRelayGroup, {
@@ -165,6 +152,7 @@ export default function PRPage() {
   );
 
   // Resolve the current (effective) subject from rename events.
+  const originalSubject = pr?.subject ?? patch?.subject ?? "";
   const currentSubject = resolveCurrentPRSubject(
     originalSubject,
     subjectRenames,
@@ -181,19 +169,11 @@ export default function PRPage() {
   const canEditSubject = canEdit;
 
   // Merge labels from the event's own t-tags with NIP-32 label events.
-  // Exclude internal patch-chain tags (root, revision-root, etc.) so they
-  // don't appear as user-visible labels.
-  const eventLabels = useMemo(() => {
-    if (!prEvent) return [];
-    return prEvent.tags
-      .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
-      .map(([, v]) => v);
-  }, [prEvent]);
-
   const allLabels = useMemo(() => {
+    const eventLabels = pr?.labels ?? patch?.labels ?? [];
     const merged = new Set([...eventLabels, ...nip32Labels]);
     return Array.from(merged).sort();
-  }, [eventLabels, nip32Labels]);
+  }, [pr?.labels, patch?.labels, nip32Labels]);
 
   // Participants: author + comment authors
   const participants = useMemo(() => {
@@ -227,11 +207,13 @@ export default function PRPage() {
 
   const TypeIcon = itemType === "patch" ? GitCommitHorizontal : GitPullRequest;
 
+  const body = pr?.body ?? patch?.body ?? "";
+
   useSeoMeta({
     title: prEvent
       ? `${currentSubject || originalSubject} - ngit`
       : "PR - ngit",
-    description: body?.slice(0, 160) ?? "Loading PR...",
+    description: body.slice(0, 160) || "Loading PR...",
   });
 
   return (
@@ -319,7 +301,7 @@ export default function PRPage() {
               )}
 
               {/* Patch diff tab — only for patches (kind 1617) */}
-              {patchDiff && (
+              {patch?.patchDiff && (
                 <TabsTrigger value="patch" className="gap-1.5 text-sm">
                   <GitCommitHorizontal className="h-3.5 w-3.5" />
                   Patch
@@ -373,13 +355,13 @@ export default function PRPage() {
             {/* Files Changed tab */}
             {itemType === "pr" && (
               <TabsContent value="files" className="mt-0">
-                {!prTipCommitId ? (
+                {!pr?.tipCommitId ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
                     {prEvent
                       ? "This PR does not include a tip commit ID."
                       : "Loading PR data…"}
                   </div>
-                ) : !prMergeBase ? (
+                ) : !pr.mergeBase ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
                     This PR does not include a merge-base commit. Cannot
                     determine which files changed.
@@ -390,8 +372,8 @@ export default function PRPage() {
                   </div>
                 ) : (
                   <PRFilesTab
-                    tipCommitId={prTipCommitId}
-                    baseCommitId={prMergeBase}
+                    tipCommitId={pr.tipCommitId}
+                    baseCommitId={pr.mergeBase}
                     pool={gitPool}
                   />
                 )}
@@ -399,9 +381,9 @@ export default function PRPage() {
             )}
 
             {/* Patch diff tab */}
-            {patchDiff && (
+            {patch?.patchDiff && (
               <TabsContent value="patch" className="mt-0">
-                <DiffView diff={patchDiff} />
+                <DiffView diff={patch.patchDiff} />
               </TabsContent>
             )}
           </Tabs>
@@ -420,9 +402,7 @@ export default function PRPage() {
                   <ChangeStatusDropdown
                     itemId={prEvent.id}
                     itemAuthorPubkey={prEvent.pubkey}
-                    repoCoords={prEvent.tags
-                      .filter(([t]) => t === "a")
-                      .map(([, v]) => v)}
+                    repoCoords={pr?.repoCoords ?? patch?.repoCoords ?? []}
                     currentStatus={status}
                     options={[
                       { value: "open", label: "Open" },

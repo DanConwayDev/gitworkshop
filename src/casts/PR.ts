@@ -11,6 +11,8 @@ const SubjectSymbol = Symbol.for("pr-subject");
 const LabelsSymbol = Symbol.for("pr-labels");
 const RepoCoordSymbol = Symbol.for("pr-repo-coord");
 const RepoCoordsSymbol = Symbol.for("pr-repo-coords");
+const TipCommitIdSymbol = Symbol.for("pr-tip-commit-id");
+const MergeBaseSymbol = Symbol.for("pr-merge-base");
 
 /** Validate that a raw event is a well-formed pull request */
 export function isValidPR(event: NostrEvent): event is PREvent {
@@ -58,6 +60,30 @@ export class PR extends EventCast<PREvent> {
       this.event.tags
         .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
         .map(([, v]) => v),
+    );
+  }
+
+  /**
+   * Tip commit ID from the ["c", "<id>"] tag — the head of the PR branch.
+   * Returns undefined if the tag is absent.
+   */
+  get tipCommitId(): string | undefined {
+    return getOrComputeCachedValue(
+      this.event,
+      TipCommitIdSymbol,
+      () => this.event.tags.find(([t]) => t === "c")?.[1],
+    );
+  }
+
+  /**
+   * Merge-base commit ID from the ["merge-base", "<id>"] tag — the common
+   * ancestor with the target branch. Returns undefined if absent.
+   */
+  get mergeBase(): string | undefined {
+    return getOrComputeCachedValue(
+      this.event,
+      MergeBaseSymbol,
+      () => this.event.tags.find(([t]) => t === "merge-base")?.[1],
     );
   }
 }
