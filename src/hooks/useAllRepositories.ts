@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { lastValueFrom, toArray } from "rxjs";
 import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents, SyncDirection, completeOnEose } from "applesauce-relay";
+import { onlyEvents, completeOnEose } from "applesauce-relay";
 import { pool, eventStore } from "@/services/nostr";
 import { gitIndexRelays } from "@/services/settings";
 import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
@@ -89,11 +89,30 @@ export function useAllRepositories(
 
         if (supportedNips.includes(77)) {
           // ── NIP-77 path ──────────────────────────────────────────────────
-          await lastValueFrom(
-            pool
-              .sync(relays, eventStore, REPO_FILTER, SyncDirection.RECEIVE)
-              .pipe(mapEventsToStore(eventStore)),
-            { defaultValue: null },
+          // Use pool.negentropy() with a custom reconcile so we can chunk the
+          // `need` IDs into batches of 500. pool.sync() sends all IDs in a
+          // single REQ which exceeds most relays' per-filter ID limit (~500),
+          // causing the relay to silently truncate and return fewer events.
+          const ID_CHUNK = 500;
+          await pool.negentropy(
+            relays,
+            eventStore,
+            REPO_FILTER,
+            async (_have, need) => {
+              if (cancelled || need.length === 0) return;
+              // Fetch in chunks to stay within relay ID-filter limits
+              for (let i = 0; i < need.length; i += ID_CHUNK) {
+                if (cancelled) break;
+                const chunk = need.slice(i, i + ID_CHUNK);
+                const events = await lastValueFrom(
+                  pool
+                    .req(relays, { ids: chunk } as Filter)
+                    .pipe(completeOnEose(), onlyEvents(), toArray()),
+                  { defaultValue: [] },
+                );
+                for (const ev of events) eventStore.add(ev);
+              }
+            },
           );
         } else {
           // ── Fallback: sequential until-walk ─────────────────────────────
