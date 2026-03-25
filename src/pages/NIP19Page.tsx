@@ -8,12 +8,18 @@ import { Navigate, useParams } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import { eventStore, pool } from "../services/nostr";
 import { REPO_KIND, ISSUE_KIND, PATCH_KIND, PR_KIND } from "../lib/nip34";
-import { repoToPath, eventIdToNevent } from "../lib/routeUtils";
+import {
+  repoToPath,
+  eventIdToNevent,
+  isNip05,
+  standardizeNip05,
+} from "../lib/routeUtils";
 import UserPage from "./UserPage";
 import NotFound from "./NotFound";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { gitIndexRelays } from "../services/settings";
+import { useDnsIdentity } from "../hooks/useDnsIdentity";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
@@ -159,6 +165,24 @@ function EventRedirect({
 }
 
 // ---------------------------------------------------------------------------
+// NIP-05 user page — resolves identity then renders UserPage
+// ---------------------------------------------------------------------------
+
+function Nip05UserPage({ nip05 }: { nip05: string }) {
+  const identity = useDnsIdentity(nip05);
+
+  if (identity.status === "loading") {
+    return <LoadingState message={`Resolving ${nip05}…`} />;
+  }
+
+  if (identity.status === "not-found" || identity.status === "error") {
+    return <NotFound />;
+  }
+
+  return <UserPage pubkey={identity.pubkey} />;
+}
+
+// ---------------------------------------------------------------------------
 // Main NIP19Page
 // ---------------------------------------------------------------------------
 
@@ -234,6 +258,9 @@ export function NIP19Page() {
       default:
         return <div>Unknown event type</div>;
     }
+  } else if (isNip05(identifier)) {
+    // Bare domain (danconwaydev.com) or _@domain.com — resolve to user page
+    return <Nip05UserPage nip05={standardizeNip05(identifier)} />;
   } else {
     return <NotFound />;
   }
