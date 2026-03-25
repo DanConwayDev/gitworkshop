@@ -17,6 +17,8 @@ import {
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import type { Commit } from "@fiatjaf/git-natural-api";
 import { useGitPool } from "@/hooks/useGitPool";
+import { CommitDiffView } from "@/components/CommitDiffView";
+import type { GitGraspPool } from "@/lib/git-grasp-pool";
 
 export default function RepoCommitPage() {
   const { cloneUrls, commitId } = useRepoContext();
@@ -109,8 +111,8 @@ export default function RepoCommitPage() {
       {loading && <CommitDetailSkeleton />}
 
       {/* Commit detail */}
-      {!loading && commit && (
-        <CommitDetail commit={commit} basePath={basePath} />
+      {!loading && commit && pool && (
+        <CommitDetail commit={commit} basePath={basePath} pool={pool} />
       )}
     </div>
   );
@@ -123,9 +125,11 @@ export default function RepoCommitPage() {
 function CommitDetail({
   commit,
   basePath,
+  pool,
 }: {
   commit: Commit;
   basePath: string;
+  pool: GitGraspPool;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -134,6 +138,8 @@ function CommitDetail({
     (commit.committer?.timestamp ?? commit.author.timestamp) * 1000;
   const subject = commit.message.split("\n")[0];
   const body = commit.message.split("\n").slice(2).join("\n").trim();
+
+  const parentHash = commit.parents?.[0] ?? null;
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(commit.hash);
@@ -252,18 +258,18 @@ function CommitDetail({
         </CardContent>
       </Card>
 
-      {/* No diff notice */}
-      <Card className="border-dashed">
-        <CardContent className="py-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            Diff view is not yet available. Use{" "}
-            <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
-              git show {commit.hash.slice(0, 8)}
-            </code>{" "}
-            locally to see the changes.
-          </p>
-        </CardContent>
-      </Card>
+      {/* Diff view */}
+      {parentHash ? (
+        <CommitDiffView
+          tipCommitId={commit.hash}
+          baseCommitId={parentHash}
+          pool={pool}
+        />
+      ) : (
+        <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+          This is the initial commit — no parent to diff against.
+        </div>
+      )}
     </div>
   );
 }
