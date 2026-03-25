@@ -26,6 +26,7 @@ import {
 } from "@/hooks/usePRs";
 import { useNip34Loaders } from "@/hooks/useNip34Loaders";
 import { useRepoContext } from "@/pages/repo/RepoContext";
+import { useGitPool } from "@/hooks/useGitPool";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
@@ -33,6 +34,7 @@ import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   ArrowLeft,
   MessageCircle,
@@ -41,6 +43,7 @@ import {
   Clock,
   GitPullRequest,
   GitCommitHorizontal,
+  FileDiff,
 } from "lucide-react";
 import {
   PATCH_KIND,
@@ -51,6 +54,7 @@ import {
   extractPatchDiff,
 } from "@/lib/nip34";
 import { DiffView } from "@/components/DiffView";
+import { PRFilesTab } from "@/components/PRFilesTab";
 import { gitIndexRelays, relayCurationMode } from "@/services/settings";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
@@ -60,7 +64,7 @@ import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
 export default function PRPage() {
-  const { pubkey, repoId, resolved, prId } = useRepoContext();
+  const { pubkey, repoId, resolved, prId, cloneUrls } = useRepoContext();
   const repo = resolved?.repo;
   const repoRelayGroup = resolved?.repoRelayGroup;
   const extraRelaysForMaintainerMailboxCoverage =
@@ -68,6 +72,9 @@ export default function PRPage() {
 
   const curationMode = use$(relayCurationMode);
   const store = useEventStore();
+
+  // Git pool — uses the repo's clone URLs (same as RepoCodePage).
+  const { pool: gitPool } = useGitPool(cloneUrls);
 
   // Fetch the PR/patch event via the repo relay group when available;
   // fall back to git index relays for initial discovery.
@@ -113,6 +120,24 @@ export default function PRPage() {
   const patchDiff = useMemo(
     () =>
       prEvent?.kind === PATCH_KIND ? extractPatchDiff(prEvent.content) : "",
+    [prEvent],
+  );
+
+  // PR commit IDs from NIP-34 tags (kind 1618 only).
+  // ["c", "<tip-commit-id>"]          — head of the PR branch
+  // ["merge-base", "<base-commit-id>"] — common ancestor with target branch
+  const prTipCommitId = useMemo(
+    () =>
+      prEvent?.kind !== PATCH_KIND
+        ? (prEvent?.tags.find(([t]) => t === "c")?.[1] ?? null)
+        : null,
+    [prEvent],
+  );
+  const prMergeBase = useMemo(
+    () =>
+      prEvent?.kind !== PATCH_KIND
+        ? (prEvent?.tags.find(([t]) => t === "merge-base")?.[1] ?? null)
+        : null,
     [prEvent],
   );
 
@@ -272,56 +297,114 @@ export default function PRPage() {
       {/* Content */}
       <div className="container max-w-screen-xl px-4 md:px-8 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
-          {/* Main content */}
-          <div className="space-y-4">
-            {/* PR body */}
-            {prEvent ? (
-              <EventBodyCard event={prEvent} content={body} />
-            ) : (
-              <EventBodyCardSkeleton />
-            )}
+          {/* Main content — tabbed */}
+          <Tabs defaultValue="conversation" className="space-y-4">
+            <TabsList className="h-9">
+              <TabsTrigger value="conversation" className="gap-1.5 text-sm">
+                <MessageCircle className="h-3.5 w-3.5" />
+                Conversation
+                {comments !== undefined && comments.length > 0 && (
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    {comments.length}
+                  </span>
+                )}
+              </TabsTrigger>
 
-            {/* Patch diff */}
-            {patchDiff && (
+              {/* Files Changed tab — only for PRs (kind 1618), not raw patches */}
+              {itemType === "pr" && (
+                <TabsTrigger value="files" className="gap-1.5 text-sm">
+                  <FileDiff className="h-3.5 w-3.5" />
+                  Files Changed
+                </TabsTrigger>
+              )}
+
+              {/* Patch diff tab — only for patches (kind 1617) */}
+              {patchDiff && (
+                <TabsTrigger value="patch" className="gap-1.5 text-sm">
+                  <GitCommitHorizontal className="h-3.5 w-3.5" />
+                  Patch
+                </TabsTrigger>
+              )}
+            </TabsList>
+
+            {/* Conversation tab */}
+            <TabsContent value="conversation" className="space-y-4 mt-0">
+              {/* PR body */}
+              {prEvent ? (
+                <EventBodyCard event={prEvent} content={body} />
+              ) : (
+                <EventBodyCardSkeleton />
+              )}
+
+              {/* Thread: comments + subject renames */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <GitCommitHorizontal className="h-4 w-4" />
-                  <span>Changes</span>
+                  <MessageCircle className="h-4 w-4" />
+                  <span>
+                    {comments
+                      ? `${comments.length} ${comments.length === 1 ? "comment" : "comments"}`
+                      : "Loading comments..."}
+                  </span>
                 </div>
-                <DiffView diff={patchDiff} />
+
+                <Separator />
+
+                {!comments ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <CommentSkeleton key={i} />
+                    ))}
+                  </div>
+                ) : threadTree &&
+                  threadTree.children.length === 0 &&
+                  renameItems.length === 0 ? (
+                  <div className="py-8 text-center text-muted-foreground/60 text-sm">
+                    No comments yet. The conversation awaits its first voice.
+                  </div>
+                ) : threadTree ? (
+                  <ThreadedComments
+                    tree={threadTree}
+                    renameItems={renameItems}
+                  />
+                ) : null}
               </div>
+            </TabsContent>
+
+            {/* Files Changed tab */}
+            {itemType === "pr" && (
+              <TabsContent value="files" className="mt-0">
+                {!prTipCommitId ? (
+                  <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+                    {prEvent
+                      ? "This PR does not include a tip commit ID."
+                      : "Loading PR data…"}
+                  </div>
+                ) : !prMergeBase ? (
+                  <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+                    This PR does not include a merge-base commit. Cannot
+                    determine which files changed.
+                  </div>
+                ) : !gitPool ? (
+                  <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+                    Connecting to git server…
+                  </div>
+                ) : (
+                  <PRFilesTab
+                    tipCommitId={prTipCommitId}
+                    baseCommitId={prMergeBase}
+                    pool={gitPool}
+                  />
+                )}
+              </TabsContent>
             )}
 
-            {/* Thread: comments + subject renames */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <MessageCircle className="h-4 w-4" />
-                <span>
-                  {comments
-                    ? `${comments.length} ${comments.length === 1 ? "comment" : "comments"}`
-                    : "Loading comments..."}
-                </span>
-              </div>
-
-              <Separator />
-
-              {!comments ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 2 }).map((_, i) => (
-                    <CommentSkeleton key={i} />
-                  ))}
-                </div>
-              ) : threadTree &&
-                threadTree.children.length === 0 &&
-                renameItems.length === 0 ? (
-                <div className="py-8 text-center text-muted-foreground/60 text-sm">
-                  No comments yet. The conversation awaits its first voice.
-                </div>
-              ) : threadTree ? (
-                <ThreadedComments tree={threadTree} renameItems={renameItems} />
-              ) : null}
-            </div>
-          </div>
+            {/* Patch diff tab */}
+            {patchDiff && (
+              <TabsContent value="patch" className="mt-0">
+                <DiffView diff={patchDiff} />
+              </TabsContent>
+            )}
+          </Tabs>
 
           {/* Sidebar */}
           <div className="space-y-4">
