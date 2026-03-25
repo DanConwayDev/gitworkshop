@@ -295,49 +295,124 @@ export default function PRPage() {
     description: body.slice(0, 160) || "Loading PR...",
   });
 
+  // Tab bar rendered in the PR header, bottom-right on desktop, below meta on mobile.
+  // Uses underline style: transparent background, active tab gets a bottom border indicator.
+  const tabList = (
+    <TabsList className="h-auto bg-transparent p-0 gap-0 rounded-none border-0">
+      <TabsTrigger
+        value="conversation"
+        className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <MessageCircle className="h-3.5 w-3.5" />
+        Conversation
+        {comments !== undefined && (
+          <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
+            {comments.length}
+          </span>
+        )}
+      </TabsTrigger>
+
+      {/* Files Changed tab — only for PRs (kind 1618), not raw patches */}
+      {itemType === "pr" && (
+        <TabsTrigger
+          value="files"
+          className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <FileDiff className="h-3.5 w-3.5" />
+          Files Changed
+          {fileCount !== undefined && fileCount > 0 && (
+            <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
+              {fileCount}
+            </span>
+          )}
+        </TabsTrigger>
+      )}
+
+      {/* Commits tab — only for PRs with a tip commit */}
+      {itemType === "pr" && pr?.tipCommitId && (
+        <TabsTrigger
+          value="commits"
+          className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <GitCommitHorizontal className="h-3.5 w-3.5" />
+          Commits
+          {prCommits.length > 0 && (
+            <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
+              {prCommits.length}
+            </span>
+          )}
+        </TabsTrigger>
+      )}
+
+      {/* Patch diff tab — only for patches (kind 1617) */}
+      {patch?.patchDiff && (
+        <TabsTrigger
+          value="patch"
+          className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <GitCommitHorizontal className="h-3.5 w-3.5" />
+          Patch
+        </TabsTrigger>
+      )}
+    </TabsList>
+  );
+
   return (
-    <>
+    <Tabs value={activeTab} onValueChange={handleTabChange}>
       {/* PR header */}
       <div className="border-b border-border/40">
-        <div className="container max-w-screen-xl px-4 md:px-8 py-6">
+        <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-0">
           {prEvent ? (
-            <div>
-              <div className="flex items-start gap-3 mb-3">
-                <StatusBadge status={status} variant="pr" className="mt-1" />
-                <EditableSubject
-                  issueId={prEvent.id}
-                  currentSubject={currentSubject || originalSubject}
-                  canEdit={canEditSubject}
-                  repoRelays={repo?.relays}
-                />
+            <div className="flex flex-wrap items-end justify-between gap-x-4">
+              {/* Left: title + meta */}
+              <div className="min-w-0 pb-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <StatusBadge
+                    status={status}
+                    variant="pr"
+                    className="mt-1 shrink-0"
+                  />
+                  <EditableSubject
+                    issueId={prEvent.id}
+                    currentSubject={currentSubject || originalSubject}
+                    canEdit={canEditSubject}
+                    repoRelays={repo?.relays}
+                  />
+                </div>
+
+                <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground ml-[calc(theme(spacing.3)+4.5rem-3.5rem)]">
+                  <div className="flex items-center gap-1">
+                    <TypeIcon className="h-3.5 w-3.5" />
+                    <span className="text-xs capitalize">{itemType}</span>
+                  </div>
+                  <UserLink
+                    pubkey={prEvent.pubkey}
+                    avatarSize="sm"
+                    nameClassName="text-sm"
+                  />
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>
+                      {formatDistanceToNow(
+                        new Date(prEvent.created_at * 1000),
+                        {
+                          addSuffix: true,
+                        },
+                      )}
+                    </span>
+                  </div>
+                  {allLabels.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {allLabels.map((label) => (
+                        <LabelBadge key={label} label={label} />
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground ml-[calc(theme(spacing.3)+4.5rem-3.5rem)]">
-                <div className="flex items-center gap-1">
-                  <TypeIcon className="h-3.5 w-3.5" />
-                  <span className="text-xs capitalize">{itemType}</span>
-                </div>
-                <UserLink
-                  pubkey={prEvent.pubkey}
-                  avatarSize="sm"
-                  nameClassName="text-sm"
-                />
-                <div className="flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>
-                    {formatDistanceToNow(new Date(prEvent.created_at * 1000), {
-                      addSuffix: true,
-                    })}
-                  </span>
-                </div>
-                {allLabels.length > 0 && (
-                  <div className="flex gap-1.5 flex-wrap">
-                    {allLabels.map((label) => (
-                      <LabelBadge key={label} label={label} />
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* Right: tabs anchored to bottom-right on desktop, below meta on mobile */}
+              <div className="shrink-0">{tabList}</div>
             </div>
           ) : (
             <div className="space-y-3">
@@ -366,57 +441,7 @@ export default function PRPage() {
           )}
         >
           {/* Main content — tabbed */}
-          <Tabs
-            value={activeTab}
-            onValueChange={handleTabChange}
-            className="space-y-4 min-w-0"
-          >
-            <TabsList className="h-9">
-              <TabsTrigger value="conversation" className="gap-1.5 text-sm">
-                <MessageCircle className="h-3.5 w-3.5" />
-                Conversation
-                {comments !== undefined && (
-                  <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
-                    {comments.length}
-                  </span>
-                )}
-              </TabsTrigger>
-
-              {/* Files Changed tab — only for PRs (kind 1618), not raw patches */}
-              {itemType === "pr" && (
-                <TabsTrigger value="files" className="gap-1.5 text-sm">
-                  <FileDiff className="h-3.5 w-3.5" />
-                  Files Changed
-                  {fileCount !== undefined && fileCount > 0 && (
-                    <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
-                      {fileCount}
-                    </span>
-                  )}
-                </TabsTrigger>
-              )}
-
-              {/* Commits tab — only for PRs with a tip commit */}
-              {itemType === "pr" && pr?.tipCommitId && (
-                <TabsTrigger value="commits" className="gap-1.5 text-sm">
-                  <GitCommitHorizontal className="h-3.5 w-3.5" />
-                  Commits
-                  {prCommits.length > 0 && (
-                    <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
-                      {prCommits.length}
-                    </span>
-                  )}
-                </TabsTrigger>
-              )}
-
-              {/* Patch diff tab — only for patches (kind 1617) */}
-              {patch?.patchDiff && (
-                <TabsTrigger value="patch" className="gap-1.5 text-sm">
-                  <GitCommitHorizontal className="h-3.5 w-3.5" />
-                  Patch
-                </TabsTrigger>
-              )}
-            </TabsList>
-
+          <div className="space-y-4 min-w-0">
             {/* Conversation tab */}
             <TabsContent value="conversation" className="space-y-4 mt-0">
               {/* PR body */}
@@ -523,7 +548,7 @@ export default function PRPage() {
                 <DiffView diff={patch.patchDiff} />
               </TabsContent>
             )}
-          </Tabs>
+          </div>
 
           {/* Sidebar — hidden on the files tab to give the diff more room */}
           <div className={cn("space-y-4", activeTab === "files" && "hidden")}>
@@ -628,6 +653,6 @@ export default function PRPage() {
           </div>
         </div>
       </div>
-    </>
+    </Tabs>
   );
 }
