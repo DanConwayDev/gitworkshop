@@ -158,6 +158,9 @@ export const PATCH_KIND = 1617;
 /** Git pull request (kind 1618) */
 export const PR_KIND = 1618;
 
+/** Git pull request update — changes the tip of a referenced PR (kind 1619) */
+export const PR_UPDATE_KIND = 1619;
+
 /** Root kinds that appear in the PRs list (patches + PRs). */
 export const PR_ROOT_KINDS = [PATCH_KIND, PR_KIND] as const;
 
@@ -685,9 +688,14 @@ export function extractBody(ev: NostrEvent): string {
  *   (resolved/closed) require the author to be a maintainer — the item author
  *   alone is not sufficient. Used for patches and PRs where only maintainers
  *   can mark something as merged. Default: false (issue behaviour).
+ *
+ * prUpdateEvents: kind:1619 PR Update events to factor into lastActivityAt.
+ *   These are keyed by their `E` (uppercase) root pointer to the original PR.
+ *   Only used for PRs — ignored for issues.
  */
 export interface ResolveEssentialsOptions {
   mergeStatusRequiresMaintainer?: boolean;
+  prUpdateEvents?: NostrEvent[];
 }
 
 /**
@@ -714,7 +722,7 @@ function buildResolvedList(
   maintainerSet: Set<string>,
   options: ResolveEssentialsOptions = {},
 ): (ResolvedIssue & { itemType?: PRItemType })[] {
-  const { mergeStatusRequiresMaintainer = false } = options;
+  const { mergeStatusRequiresMaintainer = false, prUpdateEvents } = options;
 
   // ── Index root events ────────────────────────────────────────────────────
   const authorById = new Map<string, string>();
@@ -831,6 +839,21 @@ function buildResolvedList(
     zapsByRoot.set(rootId, (zapsByRoot.get(rootId) ?? 0) + 1);
   }
 
+  // ── Index PR Update events (kind:1619) for lastActivityAt ────────────────
+  // PR Updates use ["E", "<pr-id>"] (uppercase, NIP-22 root pointer).
+  // Auth: only the PR author or a maintainer may push a PR Update.
+  // We don't enforce auth here — the timestamp is used only for sorting, so
+  // an unauthorised update at most bumps the sort order, not the displayed tip.
+  const latestPRUpdateAt = new Map<string, number>();
+  if (prUpdateEvents) {
+    for (const ev of prUpdateEvents) {
+      const rootId = ev.tags.find(([t]) => t === "E")?.[1];
+      if (!rootId || !authorById.has(rootId)) continue;
+      const prev = latestPRUpdateAt.get(rootId) ?? 0;
+      if (ev.created_at > prev) latestPRUpdateAt.set(rootId, ev.created_at);
+    }
+  }
+
   // ── Build resolved items ─────────────────────────────────────────────────
   return rootEvents
     .map((ev) => {
@@ -871,6 +894,7 @@ function buildResolvedList(
         ev.created_at,
         latestCommentAt,
         latestEssentialAt.get(ev.id) ?? 0,
+        latestPRUpdateAt.get(ev.id) ?? 0,
       );
 
       return {
@@ -978,6 +1002,10 @@ export interface ResolvedPR {
  * Build a sorted list of ResolvedPR objects from raw patch and PR events.
  * Identical to buildResolvedIssues but mergeStatusRequiresMaintainer=true and
  * each item gets an itemType discriminator ("patch" | "pr").
+ *
+ * prUpdateEvents (kind:1619) are factored into lastActivityAt so the list
+ * sorts correctly when a PR branch is updated. They are NOT counted as
+ * comments.
  */
 export function buildResolvedPRs(
   rootEvents: NostrEvent[],
@@ -985,6 +1013,7 @@ export function buildResolvedPRs(
   commentEvents: NostrEvent[],
   zapEvents: NostrEvent[],
   maintainerSet: Set<string>,
+  prUpdateEvents: NostrEvent[] = [],
 ): ResolvedPR[] {
   return buildResolvedList(
     rootEvents,
@@ -994,6 +1023,7 @@ export function buildResolvedPRs(
     maintainerSet,
     {
       mergeStatusRequiresMaintainer: true,
+      prUpdateEvents,
     },
   ).map((item) => ({
     ...item,

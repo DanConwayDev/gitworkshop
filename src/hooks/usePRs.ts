@@ -4,6 +4,7 @@ import { useEventStore } from "./useEventStore";
 import type { RelayGroup } from "applesauce-relay";
 import {
   PR_ROOT_KINDS,
+  PR_UPDATE_KIND,
   STATUS_KINDS,
   LABEL_KIND,
   DELETION_KIND,
@@ -256,6 +257,60 @@ export function usePRIsDeleted(
   return events.some(
     (ev) => ev.kind === DELETION_KIND && ev.pubkey === prPubkey,
   );
+}
+
+/**
+ * The effective tip commit and merge base for a PR, accounting for any
+ * authorised PR Update events (kind:1619).
+ *
+ * Returns the latest authorised PR Update's commit info, or undefined when no
+ * updates exist (caller should fall back to the original PR event's tags).
+ *
+ * Auth: only the PR author or a maintainer may push a PR Update.
+ * When selectedMaintainers is undefined (still loading), all updates are
+ * accepted so the UI doesn't stay blank.
+ *
+ * Reactive: re-evaluates whenever a new kind:1619 event lands in the store
+ * (e.g. the PR author pushes a new branch revision while the page is open).
+ *
+ * @param prId                - The event ID of the original PR (kind:1618)
+ * @param prPubkey            - The pubkey of the PR author (always authorised)
+ * @param selectedMaintainers - Effective maintainer set; undefined = loading
+ */
+export function usePRTip(
+  prId: string | undefined,
+  prPubkey: string | undefined,
+  selectedMaintainers: Set<string> | undefined,
+): { tipCommitId: string; mergeBase: string | undefined } | undefined {
+  const store = useEventStore();
+
+  const updates = use$(() => {
+    if (!prId) return undefined;
+    return store.timeline([
+      { kinds: [PR_UPDATE_KIND], "#E": [prId] } as Filter,
+    ]) as unknown as Observable<NostrEvent[]>;
+  }, [prId, store]);
+
+  if (!updates || updates.length === 0) return undefined;
+
+  // Pick the latest authorised PR Update.
+  const latest = updates
+    .filter((ev) =>
+      isPubkeyAuthorised(ev.pubkey, prPubkey, selectedMaintainers),
+    )
+    .reduce<
+      NostrEvent | undefined
+    >((best, ev) => (!best || ev.created_at > best.created_at ? ev : best), undefined);
+
+  if (!latest) return undefined;
+
+  const tipCommitId = latest.tags.find(([t]) => t === "c")?.[1];
+  if (!tipCommitId) return undefined;
+
+  return {
+    tipCommitId,
+    mergeBase: latest.tags.find(([t]) => t === "merge-base")?.[1],
+  };
 }
 
 // ---------------------------------------------------------------------------

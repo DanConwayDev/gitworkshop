@@ -4,6 +4,7 @@ import type { Model } from "applesauce-core/event-store";
 import {
   PATCH_KIND,
   PR_KIND,
+  PR_UPDATE_KIND,
   LABEL_KIND,
   DELETION_KIND,
   STATUS_KINDS,
@@ -63,21 +64,32 @@ export function PRListModel(coordsCacheKey: string): Model<ResolvedPR[]> {
         const essentials$ = store.timeline([
           { kinds: [...ESSENTIALS_KINDS], "#e": ids } as Filter,
         ]);
-        const comments$ = store.timeline([
-          { kinds: [COMMENT_KIND], "#E": ids } as Filter,
+        // Comments (kind:1111) and PR Updates (kind:1619) both use the
+        // uppercase E root tag. Split them here so PR Updates don't inflate
+        // comment counts but still factor into lastActivityAt.
+        const commentsAndUpdates$ = store.timeline([
+          { kinds: [COMMENT_KIND, PR_UPDATE_KIND], "#E": ids } as Filter,
         ]);
         const zaps$ = store.timeline([{ kinds: [9735], "#e": ids } as Filter]);
 
-        return combineLatest([essentials$, comments$, zaps$]).pipe(
-          map(([essentialEvents, commentEvents, zapEvents]) =>
-            buildResolvedPRs(
+        return combineLatest([essentials$, commentsAndUpdates$, zaps$]).pipe(
+          map(([essentialEvents, commentsAndUpdates, zapEvents]) => {
+            const allCommentEvents = commentsAndUpdates as NostrEvent[];
+            const commentEvents = allCommentEvents.filter(
+              (ev) => ev.kind === COMMENT_KIND,
+            );
+            const prUpdateEvents = allCommentEvents.filter(
+              (ev) => ev.kind === PR_UPDATE_KIND,
+            );
+            return buildResolvedPRs(
               events,
               essentialEvents as NostrEvent[],
-              commentEvents as NostrEvent[],
+              commentEvents,
               zapEvents as NostrEvent[],
               maintainerSet,
-            ),
-          ),
+              prUpdateEvents,
+            );
+          }),
         );
       }),
     );

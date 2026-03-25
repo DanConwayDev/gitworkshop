@@ -182,7 +182,7 @@ export const nip34EssentialsLoader = createTagValueLoader(pool, "e", {
 export const nip34CommentsLoader = createTagValueLoader(pool, "E", {
   cacheRequest,
   eventStore,
-  kinds: [1111],
+  kinds: [1111, 1619],
   bufferTime: NIP34_THREAD_BUFFER,
 });
 

@@ -19,6 +19,7 @@ import {
   usePRComments,
   usePRLabels,
   usePRStatus,
+  usePRTip,
   usePRZaps,
   usePRSubjectRenames,
   usePRMaintainers,
@@ -160,53 +161,6 @@ export default function PRPage() {
   const prEvent = pr?.event ?? patch?.event;
   const itemType = patch ? "patch" : "pr";
 
-  // Commit history for the PR commits tab — fetches from tipCommitId and we
-  // slice off everything at and after mergeBase.
-  const prCommitHistory = useCommitHistory(
-    gitPool,
-    gitPoolState,
-    pr?.tipCommitId,
-    100,
-  );
-  const prCommits = useMemo(() => {
-    if (!pr?.mergeBase || !prCommitHistory.commits.length)
-      return prCommitHistory.commits;
-    const idx = prCommitHistory.commits.findIndex(
-      (c) => c.hash === pr.mergeBase,
-    );
-    return idx === -1
-      ? prCommitHistory.commits
-      : prCommitHistory.commits.slice(0, idx);
-  }, [prCommitHistory.commits, pr?.mergeBase]);
-
-  // Eagerly compute file count as soon as the git pool + commit IDs are ready,
-  // so the tab badge shows without the user having to visit the Files tab first.
-  const [fileCount, setFileCount] = useState<number | undefined>(undefined);
-  const fileCountAbortRef = useRef<AbortController | null>(null);
-  useEffect(() => {
-    const tipCommitId = pr?.tipCommitId;
-    const mergeBase = pr?.mergeBase;
-    if (!gitPool || !tipCommitId || !mergeBase) return;
-
-    fileCountAbortRef.current?.abort();
-    const abort = new AbortController();
-    fileCountAbortRef.current = abort;
-
-    gitPool
-      .getCommitRange(tipCommitId, mergeBase, abort.signal)
-      .then((range) => {
-        if (abort.signal.aborted || !range) return;
-        setFileCount(diffTrees(range.tipTree, range.baseTree).length);
-      })
-      .catch(() => {
-        /* ignore errors — count just won't show */
-      });
-
-    return () => {
-      abort.abort();
-    };
-  }, [gitPool, pr?.tipCommitId, pr?.mergeBase]);
-
   // Trigger two-tier loading for this PR/patch.
   useNip34Loaders(prId, repoRelayGroup, {
     includeAuthorNip65: curationMode === "outbox",
@@ -220,6 +174,57 @@ export default function PRPage() {
   usePRMaintainers(prId, selectedMaintainers);
 
   const prPubkey = prEvent?.pubkey;
+
+  // Latest authorised PR Update tip (kind:1619) — falls back to the original
+  // PR event's c/merge-base tags when no authorised updates exist.
+  const prTip = usePRTip(prId, prPubkey, selectedMaintainers);
+  const effectiveTipCommitId = prTip?.tipCommitId ?? pr?.tipCommitId;
+  const effectiveMergeBase = prTip?.mergeBase ?? pr?.mergeBase;
+
+  // Commit history for the PR commits tab — fetches from the effective tip.
+  const prCommitHistory = useCommitHistory(
+    gitPool,
+    gitPoolState,
+    effectiveTipCommitId,
+    100,
+  );
+  const prCommits = useMemo(() => {
+    if (!effectiveMergeBase || !prCommitHistory.commits.length)
+      return prCommitHistory.commits;
+    const idx = prCommitHistory.commits.findIndex(
+      (c) => c.hash === effectiveMergeBase,
+    );
+    return idx === -1
+      ? prCommitHistory.commits
+      : prCommitHistory.commits.slice(0, idx);
+  }, [prCommitHistory.commits, effectiveMergeBase]);
+
+  // Eagerly compute file count as soon as the git pool + commit IDs are ready,
+  // so the tab badge shows without the user having to visit the Files tab first.
+  const [fileCount, setFileCount] = useState<number | undefined>(undefined);
+  const fileCountAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (!gitPool || !effectiveTipCommitId || !effectiveMergeBase) return;
+
+    fileCountAbortRef.current?.abort();
+    const abort = new AbortController();
+    fileCountAbortRef.current = abort;
+
+    gitPool
+      .getCommitRange(effectiveTipCommitId, effectiveMergeBase, abort.signal)
+      .then((range) => {
+        if (abort.signal.aborted || !range) return;
+        setFileCount(diffTrees(range.tipTree, range.baseTree).length);
+      })
+      .catch(() => {
+        /* ignore errors — count just won't show */
+      });
+
+    return () => {
+      abort.abort();
+    };
+  }, [gitPool, effectiveTipCommitId, effectiveMergeBase]);
+
   const status = usePRStatus(prId, prPubkey, selectedMaintainers);
   const nip32Labels = usePRLabels(prId, prPubkey, selectedMaintainers);
   const comments = usePRComments(prId);
@@ -329,7 +334,7 @@ export default function PRPage() {
       )}
 
       {/* Commits tab — only for PRs with a tip commit */}
-      {itemType === "pr" && pr?.tipCommitId && (
+      {itemType === "pr" && effectiveTipCommitId && (
         <TabsTrigger
           value="commits"
           className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
@@ -488,13 +493,13 @@ export default function PRPage() {
             {/* Files Changed tab */}
             {itemType === "pr" && (
               <TabsContent value="files" className="mt-0 min-w-0">
-                {!pr?.tipCommitId ? (
+                {!effectiveTipCommitId ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
                     {prEvent
                       ? "This PR does not include a tip commit ID."
                       : "Loading PR data…"}
                   </div>
-                ) : !pr.mergeBase ? (
+                ) : !effectiveMergeBase ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
                     This PR does not include a merge-base commit. Cannot
                     determine which files changed.
@@ -505,8 +510,8 @@ export default function PRPage() {
                   </div>
                 ) : (
                   <PRFilesTab
-                    tipCommitId={pr.tipCommitId}
-                    baseCommitId={pr.mergeBase}
+                    tipCommitId={effectiveTipCommitId}
+                    baseCommitId={effectiveMergeBase}
                     pool={gitPool}
                   />
                 )}
@@ -514,9 +519,9 @@ export default function PRPage() {
             )}
 
             {/* Commits tab */}
-            {itemType === "pr" && pr?.tipCommitId && (
+            {itemType === "pr" && effectiveTipCommitId && (
               <TabsContent value="commits" className="mt-0">
-                {!pr.mergeBase ? (
+                {!effectiveMergeBase ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
                     This PR does not include a merge-base commit. Cannot
                     determine which commits belong to the PR.
