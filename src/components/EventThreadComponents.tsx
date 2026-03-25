@@ -10,6 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Clock, Pencil } from "lucide-react";
 import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
+import { ThreadTree } from "@/components/ThreadTree";
+import type { ThreadTreeNode } from "@/lib/threadTree";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -277,6 +279,75 @@ export function SubjectRenameCard({
           <span className="font-medium text-foreground">{newSubject}</span>
         </p>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ThreadedComments — interleaves a thread tree with subject-rename events
+// ---------------------------------------------------------------------------
+
+export interface RenameItem {
+  event: NostrEvent;
+  newSubject: string;
+  oldSubject: string;
+}
+
+/**
+ * Renders the comment thread tree with subject-rename events interleaved
+ * chronologically among the top-level children.
+ *
+ * Renames are not part of the reply tree — they're timeline markers that
+ * appear between top-level thread nodes based on their created_at timestamp.
+ */
+export function ThreadedComments({
+  tree,
+  renameItems,
+}: {
+  tree: { children: ThreadTreeNode[]; event: NostrEvent };
+  renameItems: RenameItem[];
+}) {
+  type TimelineItem =
+    | { type: "thread"; node: ThreadTreeNode }
+    | { type: "rename"; item: RenameItem };
+
+  const items: TimelineItem[] = [];
+
+  for (const child of tree.children) {
+    items.push({ type: "thread", node: child });
+  }
+  for (const rename of renameItems) {
+    items.push({ type: "rename", item: rename });
+  }
+
+  items.sort((a, b) => {
+    const aTime =
+      a.type === "thread" ? a.node.event.created_at : a.item.event.created_at;
+    const bTime =
+      b.type === "thread" ? b.node.event.created_at : b.item.event.created_at;
+    if (aTime !== bTime) return aTime - bTime;
+    const aId = a.type === "thread" ? a.node.event.id : a.item.event.id;
+    const bId = b.type === "thread" ? b.node.event.id : b.item.event.id;
+    return aId.localeCompare(bId);
+  });
+
+  return (
+    <div
+      className="border-l pl-1"
+      style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
+    >
+      {items.map((item) =>
+        item.type === "thread" ? (
+          <ThreadTree key={item.node.event.id} node={item.node} />
+        ) : (
+          <SubjectRenameCard
+            key={item.item.event.id}
+            event={item.item.event}
+            oldSubject={item.item.oldSubject}
+            newSubject={item.item.newSubject}
+          />
+        ),
+      )}
     </div>
   );
 }

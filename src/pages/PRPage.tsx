@@ -8,10 +8,10 @@ import { EditableSubject } from "@/components/EditSubjectInline";
 import {
   EventBodyCard,
   EventBodyCardSkeleton,
-  CommentCard,
   CommentSkeleton,
-  SubjectRenameCard,
+  ThreadedComments,
 } from "@/components/EventThreadComponents";
+import { getThreadTree } from "@/lib/threadTree";
 
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
@@ -171,47 +171,25 @@ export default function PRPage() {
     return Array.from(pubkeys);
   }, [prEvent, comments]);
 
-  // Build the merged thread: comments + subject-rename events.
-  const threadItems = useMemo(() => {
-    type ThreadItem =
-      | { type: "comment"; event: NostrEvent }
-      | {
-          type: "rename";
-          event: NostrEvent;
-          newSubject: string;
-          oldSubject: string;
-        };
+  // Build the thread tree from the PR event + comments.
+  const threadTree = useMemo(() => {
+    if (!prEvent || !comments) return undefined;
+    return getThreadTree(prEvent, comments);
+  }, [prEvent, comments]);
 
-    const items: ThreadItem[] = [];
-
-    if (comments) {
-      for (const c of comments) {
-        items.push({ type: "comment", event: c });
-      }
-    }
-
-    if (subjectRenames) {
-      let prevSubject = originalSubject;
-      for (const ev of subjectRenames) {
-        const newSubject =
-          ev.tags.find(([t, , ns]) => t === "l" && ns === "#subject")?.[1] ??
-          prevSubject;
-        items.push({
-          type: "rename",
-          event: ev,
-          newSubject,
-          oldSubject: prevSubject,
-        });
-        prevSubject = newSubject;
-      }
-    }
-
-    return items.sort(
-      (a, b) =>
-        a.event.created_at - b.event.created_at ||
-        a.event.id.localeCompare(b.event.id),
-    );
-  }, [comments, subjectRenames, originalSubject]);
+  // Compute subject rename items with old/new subjects for display.
+  const renameItems = useMemo(() => {
+    if (!subjectRenames || subjectRenames.length === 0) return [];
+    let prevSubject = originalSubject;
+    return subjectRenames.map((ev) => {
+      const newSubject =
+        ev.tags.find(([t, , ns]) => t === "l" && ns === "#subject")?.[1] ??
+        prevSubject;
+      const item = { event: ev, newSubject, oldSubject: prevSubject };
+      prevSubject = newSubject;
+      return item;
+    });
+  }, [subjectRenames, originalSubject]);
 
   const TypeIcon = itemType === "patch" ? GitCommitHorizontal : GitPullRequest;
 
@@ -312,29 +290,15 @@ export default function PRPage() {
                     <CommentSkeleton key={i} />
                   ))}
                 </div>
-              ) : threadItems.length === 0 ? (
+              ) : threadTree &&
+                threadTree.children.length === 0 &&
+                renameItems.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground/60 text-sm">
                   No comments yet. The conversation awaits its first voice.
                 </div>
-              ) : (
-                <div
-                  className="border-l pl-1"
-                  style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
-                >
-                  {threadItems.map((item) =>
-                    item.type === "comment" ? (
-                      <CommentCard key={item.event.id} comment={item.event} />
-                    ) : (
-                      <SubjectRenameCard
-                        key={item.event.id}
-                        event={item.event}
-                        oldSubject={item.oldSubject}
-                        newSubject={item.newSubject}
-                      />
-                    ),
-                  )}
-                </div>
-              )}
+              ) : threadTree ? (
+                <ThreadedComments tree={threadTree} renameItems={renameItems} />
+              ) : null}
             </div>
           </div>
 

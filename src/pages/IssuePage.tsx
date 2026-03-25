@@ -9,10 +9,9 @@ import {
   EventBodyCard,
   EventBodyCardSkeleton,
   CommentSkeleton,
-  SubjectRenameCard,
+  ThreadedComments,
 } from "@/components/EventThreadComponents";
 import { getThreadTree } from "@/lib/threadTree";
-import { ThreadTree } from "@/components/ThreadTree";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import {
@@ -43,7 +42,6 @@ import { onlyEvents } from "applesauce-relay";
 import { castTimelineStream } from "applesauce-common/observable";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
 import type { Filter } from "applesauce-core/helpers";
-import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 
 export default function IssuePage() {
@@ -389,78 +387,5 @@ export default function IssuePage() {
         </div>
       </div>
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ThreadedComments — interleaves the thread tree with subject renames
-// ---------------------------------------------------------------------------
-
-interface RenameItem {
-  event: NostrEvent;
-  newSubject: string;
-  oldSubject: string;
-}
-
-/**
- * Renders the comment thread tree with subject-rename events interleaved
- * chronologically among the top-level children.
- *
- * Renames are not part of the reply tree — they're timeline markers that
- * appear between top-level thread nodes based on their created_at timestamp.
- */
-function ThreadedComments({
-  tree,
-  renameItems,
-}: {
-  tree: {
-    children: import("@/lib/threadTree").ThreadTreeNode[];
-    event: NostrEvent;
-  };
-  renameItems: RenameItem[];
-}) {
-  // Build a merged timeline of top-level items: thread nodes + renames
-  type TimelineItem =
-    | { type: "thread"; node: import("@/lib/threadTree").ThreadTreeNode }
-    | { type: "rename"; item: RenameItem };
-
-  const items: TimelineItem[] = [];
-
-  for (const child of tree.children) {
-    items.push({ type: "thread", node: child });
-  }
-  for (const rename of renameItems) {
-    items.push({ type: "rename", item: rename });
-  }
-
-  items.sort((a, b) => {
-    const aTime =
-      a.type === "thread" ? a.node.event.created_at : a.item.event.created_at;
-    const bTime =
-      b.type === "thread" ? b.node.event.created_at : b.item.event.created_at;
-    if (aTime !== bTime) return aTime - bTime;
-    const aId = a.type === "thread" ? a.node.event.id : a.item.event.id;
-    const bId = b.type === "thread" ? b.node.event.id : b.item.event.id;
-    return aId.localeCompare(bId);
-  });
-
-  return (
-    <div
-      className="border-l pl-1"
-      style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
-    >
-      {items.map((item) =>
-        item.type === "thread" ? (
-          <ThreadTree key={item.node.event.id} node={item.node} />
-        ) : (
-          <SubjectRenameCard
-            key={item.item.event.id}
-            event={item.item.event}
-            oldSubject={item.item.oldSubject}
-            newSubject={item.item.newSubject}
-          />
-        ),
-      )}
-    </div>
   );
 }
