@@ -4,6 +4,7 @@ import { useResolvedRepository } from "@/hooks/useResolvedRepository";
 import RepoIssuesPage from "./RepoIssuesPage";
 import RepoPRsPage from "./RepoPRsPage";
 import RepoCodePage from "./RepoCodePage";
+import RepoAboutPage from "./RepoAboutPage";
 import RepoCommitsPage from "./RepoCommitsPage";
 import RepoCommitPage from "./RepoCommitPage";
 import IssuePage from "@/pages/IssuePage";
@@ -31,6 +32,7 @@ import {
   Loader2,
   Code2,
   GitCommit,
+  Info,
 } from "lucide-react";
 import { RepoContext, type RepoContextValue } from "./RepoContext";
 import { PATCH_KIND, PR_KIND, type RepoQueryOptions } from "@/lib/nip34";
@@ -246,6 +248,7 @@ function RepoLayoutResolved({
     location.pathname.startsWith(`${basePath}/commit`);
   const isIssuesTab = location.pathname.startsWith(`${basePath}/issues`);
   const isPRsTab = location.pathname.startsWith(`${basePath}/prs`);
+  const isAboutTab = location.pathname.startsWith(`${basePath}/about`);
   // Determine which sub-page to render from the splat segments.
   const {
     subPage,
@@ -264,7 +267,8 @@ function RepoLayoutResolved({
       | "pr"
       | "pr-commit"
       | "commits"
-      | "commit";
+      | "commit"
+      | "about";
     issueId?: string;
     prId?: string;
     /** Everything after /tree/ — ref resolution happens inside useGitExplorer */
@@ -339,6 +343,11 @@ function RepoLayoutResolved({
         return { subPage: "issue", issueId };
       }
       return { subPage: "issues" };
+    }
+
+    const aboutIdx = segments.indexOf("about");
+    if (aboutIdx !== -1) {
+      return { subPage: "about" };
     }
 
     return { subPage: "code" };
@@ -435,6 +444,12 @@ function RepoLayoutResolved({
               label="PRs"
               count={openPRCount}
             />
+            <TabLink
+              to={`${basePath}/about`}
+              active={isAboutTab}
+              icon={<Info className="h-4 w-4" />}
+              label="About"
+            />
           </nav>
         </div>
       </div>
@@ -458,6 +473,8 @@ function RepoLayoutResolved({
             <PRCommitPage />
           ) : subPage === "prs" ? (
             <RepoPRsPage />
+          ) : subPage === "about" ? (
+            <RepoAboutPage />
           ) : null}
         </RepoContext.Provider>
       ) : (
