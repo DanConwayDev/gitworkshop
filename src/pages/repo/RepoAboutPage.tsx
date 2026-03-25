@@ -166,13 +166,11 @@ export default function RepoAboutPage() {
                   nameClassName="text-sm"
                 />
               ))}
-              {repo.pendingMaintainers.length > 0 && (
+              {repo.requestedMaintainers.length > 0 && (
                 <>
                   <Separator />
-                  <p className="text-xs text-muted-foreground">
-                    Pending (no announcement)
-                  </p>
-                  {repo.pendingMaintainers.map((pk) => (
+                  <p className="text-xs text-muted-foreground">Requested</p>
+                  {repo.requestedMaintainers.map((pk) => (
                     <UserLink
                       key={pk}
                       pubkey={pk}

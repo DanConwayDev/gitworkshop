@@ -551,15 +551,27 @@ export interface ResolvedRepo {
   relays: string[];
 
   // --- Maintainer set ---
-  /** All pubkeys in the transitive closure reachable from selectedMaintainer */
+  /**
+   * Confirmed maintainers: pubkeys that have published their own announcement
+   * for this dTag AND whose announcement lists at least one already-confirmed
+   * maintainer (mutual acknowledgment). The selectedMaintainer is always
+   * confirmed. This is the safe set to display publicly — it cannot be
+   * inflated by a bad actor simply listing a reputable pubkey.
+   */
   maintainerSet: string[];
   /**
-   * "30617:<pubkey>:<dTag>" for every maintainer — used for #a tag queries
-   * on issues, PRs, and patches.
+   * "30617:<pubkey>:<dTag>" for every confirmed maintainer — used for #a tag
+   * queries on issues, PRs, and patches.
    */
   allCoordinates: string[];
-  /** Pubkeys listed as maintainers but who haven't published their own announcement */
-  pendingMaintainers: string[];
+  /**
+   * Pubkeys that are not confirmed maintainers. Covers two cases:
+   *   1. Listed by someone in the confirmed set but have no announcement at all.
+   *   2. Have an announcement for this dTag but don't list any confirmed
+   *      maintainer back (no reciprocation) — the reputation-hijack vector.
+   * Neither case should be displayed in repo cards.
+   */
+  requestedMaintainers: string[];
   /** Union of `t` tags across all announcements (excluding "personal-fork") */
   labels: string[];
 
@@ -1070,16 +1082,16 @@ export function resolveChain(
   // The selected maintainer must have an announcement to anchor the chain
   if (!byPubkey.has(selectedMaintainer)) return undefined;
 
-  // BFS over the maintainer graph
-  const visited = new Set<string>();
+  // BFS over the maintainer graph — collect all reachable pubkeys
+  const reachable = new Set<string>();
   const queue: string[] = [selectedMaintainer];
   const edges: MaintainerEdge[] = [];
   const pending: string[] = [];
 
   while (queue.length > 0) {
     const pubkey = queue.shift()!;
-    if (visited.has(pubkey)) continue;
-    visited.add(pubkey);
+    if (reachable.has(pubkey)) continue;
+    reachable.add(pubkey);
 
     const ev = byPubkey.get(pubkey);
     if (!ev) {
@@ -1093,15 +1105,55 @@ export function resolveChain(
 
     for (const listed_pubkey of listed) {
       edges.push({ from: pubkey, to: listed_pubkey });
-      if (!visited.has(listed_pubkey)) {
+      if (!reachable.has(listed_pubkey)) {
         queue.push(listed_pubkey);
       }
     }
   }
 
-  // Collect all announcements for visited pubkeys (excluding pending)
+  // ---------------------------------------------------------------------------
+  // Reciprocation check — determine confirmed vs requested maintainers.
+  //
+  // A maintainer B is "confirmed" if:
+  //   1. B is the selectedMaintainer (always trusted as the anchor), OR
+  //   2. B has published their own announcement for this dTag AND B's
+  //      announcement lists at least one already-confirmed maintainer.
+  //
+  // This prevents reputation hijacking: an attacker cannot inflate their
+  // project's credibility by listing a reputable pubkey as a maintainer
+  // unless that pubkey has reciprocated by listing someone in the confirmed
+  // set back.
+  //
+  // We use an iterative fixed-point loop because reciprocation can be
+  // transitive: A confirms B, B confirms C, C confirms D, etc.
+  // ---------------------------------------------------------------------------
+  const confirmed = new Set<string>([selectedMaintainer]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const pubkey of reachable) {
+      if (confirmed.has(pubkey)) continue;
+      const ev = byPubkey.get(pubkey);
+      if (!ev) continue; // pending — no announcement, cannot self-confirm
+      const listed = getRepoMaintainers(ev);
+      if (listed.some((pk) => confirmed.has(pk))) {
+        confirmed.add(pubkey);
+        changed = true;
+      }
+    }
+  }
+
+  // Pubkeys reachable but not confirmed (have an announcement but no back-link)
+  // — merge into pending alongside those with no announcement at all.
+  for (const pubkey of reachable) {
+    if (!confirmed.has(pubkey) && byPubkey.has(pubkey)) {
+      pending.push(pubkey);
+    }
+  }
+
+  // Collect all announcements for confirmed pubkeys only
   const announcements: NostrEvent[] = [];
-  for (const pubkey of visited) {
+  for (const pubkey of confirmed) {
     const ev = byPubkey.get(pubkey);
     if (ev) announcements.push(ev);
   }
@@ -1178,7 +1230,7 @@ export function resolveChain(
     }
   }
 
-  const maintainerSet = Array.from(visited);
+  const maintainerSet = Array.from(confirmed);
 
   const allCloneUrls = cloneUrlProvenance.map((p) => p.value);
   const graspCloneUrls = allCloneUrls.filter(isGraspCloneUrl);
@@ -1207,7 +1259,7 @@ export function resolveChain(
     relays: relayProvenance.map((p) => p.value),
     maintainerSet,
     allCoordinates: maintainerSet.map((pk) => repoCoordinate(pk, dTag)),
-    pendingMaintainers: pending,
+    requestedMaintainers: pending,
     labels,
     announcements,
     maintainerEdges: edges,

@@ -856,12 +856,10 @@ function RepoSidebar({ repo }: { repo: ResolvedRepo }) {
                 />
               ))}
             </div>
-            {repo.pendingMaintainers.length > 0 && (
+            {repo.requestedMaintainers.length > 0 && (
               <div className="space-y-2 pt-1">
-                <p className="text-xs text-muted-foreground/70">
-                  Pending (no announcement)
-                </p>
-                {repo.pendingMaintainers.map((pk) => (
+                <p className="text-xs text-muted-foreground/70">Requested</p>
+                {repo.requestedMaintainers.map((pk) => (
                   <UserLink
                     key={pk}
                     pubkey={pk}
