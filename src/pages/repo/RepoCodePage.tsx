@@ -49,60 +49,8 @@ import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
-
-// ---------------------------------------------------------------------------
-// File extension → language mapping for syntax highlighting hint
-// ---------------------------------------------------------------------------
-function getLanguageFromFilename(filename: string): string {
-  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, string> = {
-    ts: "typescript",
-    tsx: "typescript",
-    js: "javascript",
-    jsx: "javascript",
-    mjs: "javascript",
-    cjs: "javascript",
-    py: "python",
-    rs: "rust",
-    go: "go",
-    c: "c",
-    cpp: "cpp",
-    cc: "cpp",
-    h: "c",
-    hpp: "cpp",
-    java: "java",
-    kt: "kotlin",
-    swift: "swift",
-    rb: "ruby",
-    php: "php",
-    sh: "bash",
-    bash: "bash",
-    zsh: "bash",
-    fish: "bash",
-    ps1: "powershell",
-    json: "json",
-    yaml: "yaml",
-    yml: "yaml",
-    toml: "toml",
-    xml: "xml",
-    html: "html",
-    htm: "html",
-    css: "css",
-    scss: "scss",
-    sass: "scss",
-    less: "less",
-    sql: "sql",
-    md: "markdown",
-    markdown: "markdown",
-    nix: "nix",
-    dockerfile: "dockerfile",
-    makefile: "makefile",
-    mk: "makefile",
-    lock: "toml",
-    env: "bash",
-  };
-  return map[ext] ?? "plaintext";
-}
+import { CodeBlock } from "@/components/CodeBlock";
+import { langFromFilename } from "@/lib/highlighter";
 
 function isMarkdownFile(filename: string): boolean {
   const lower = filename.toLowerCase();
@@ -1233,7 +1181,7 @@ function FileContentViewer({
     );
   }
 
-  const lang = getLanguageFromFilename(filename);
+  const lang = langFromFilename(filename);
   const canToggle = mediaType?.kind === "markdown" || mediaType?.kind === "svg";
 
   return (
@@ -1276,7 +1224,12 @@ function FileContentViewer({
               </>
             )}
 
-            {/* Language badge for non-binary, non-toggle files */}
+            {/* Line count + language badge for non-binary, non-toggle files */}
+            {!canToggle && !isBinaryMedia && content !== null && (
+              <span className="text-[10px] text-muted-foreground/60 tabular-nums">
+                {content.split("\n").length} lines
+              </span>
+            )}
             {!canToggle && !isBinaryMedia && (
               <Badge variant="outline" className="text-[10px] h-5 px-1.5">
                 {lang}
@@ -1477,13 +1430,9 @@ function FileContentBody({
     // Fall through to text/source view
   }
 
-  // Plain text / source view
+  // Plain text / source view — syntax highlighted with line numbers
   if (content !== null) {
-    return (
-      <pre className="overflow-x-auto text-xs font-mono leading-relaxed p-4 text-foreground/85">
-        <code>{content}</code>
-      </pre>
-    );
+    return <CodeBlock code={content} filename={filename} />;
   }
 
   return null;

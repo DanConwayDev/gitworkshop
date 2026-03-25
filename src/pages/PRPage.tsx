@@ -48,7 +48,9 @@ import {
   PR_ROOT_KINDS,
   extractSubject,
   extractBody,
+  extractPatchDiff,
 } from "@/lib/nip34";
+import { DiffView } from "@/components/DiffView";
 import { gitIndexRelays, relayCurationMode } from "@/services/settings";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
@@ -106,6 +108,13 @@ export default function PRPage() {
   const originalSubject = prEvent ? extractSubject(prEvent) : "";
   const body = prEvent ? extractBody(prEvent) : "";
   const itemType = prEvent?.kind === PATCH_KIND ? "patch" : "pr";
+
+  // Extract the unified diff from the patch content (only for patches).
+  const patchDiff = useMemo(
+    () =>
+      prEvent?.kind === PATCH_KIND ? extractPatchDiff(prEvent.content) : "",
+    [prEvent],
+  );
 
   // Trigger two-tier loading for this PR/patch.
   useNip34Loaders(prId, repoRelayGroup, {
@@ -270,6 +279,17 @@ export default function PRPage() {
               <EventBodyCard event={prEvent} content={body} />
             ) : (
               <EventBodyCardSkeleton />
+            )}
+
+            {/* Patch diff */}
+            {patchDiff && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <GitCommitHorizontal className="h-4 w-4" />
+                  <span>Changes</span>
+                </div>
+                <DiffView diff={patchDiff} />
+              </div>
             )}
 
             {/* Thread: comments + subject renames */}

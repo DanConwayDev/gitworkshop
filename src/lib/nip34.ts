@@ -94,6 +94,17 @@ export function extractPatchMessage(s: string): string | undefined {
   }
 }
 
+/**
+ * Extract the unified diff portion from a git format-patch string.
+ * Returns everything from the first `diff --git` line onwards, or an empty
+ * string if no diff section is found.
+ */
+export function extractPatchDiff(s: string): string {
+  const idx = s.indexOf("diff --git ");
+  if (idx === -1) return "";
+  return s.substring(idx).trimEnd();
+}
+
 /** First line of a string. */
 export function firstLine(s: string): string {
   return s.split(/\r?\n/)[0];
