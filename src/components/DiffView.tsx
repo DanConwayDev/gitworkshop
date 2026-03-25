@@ -518,40 +518,58 @@ function DiffLine({
         isDel && "bg-red-500/8 dark:bg-red-400/8",
       )}
     >
-      {/* Old line number */}
+      {/* Sticky gutter: old line · new line · +/- indicator.
+          background-image layers the row tint over the solid bg-background
+          so both are visible without fighting over background-color. */}
       <td
-        className={cn(
-          "select-none text-right align-top px-2 py-0 w-[1%] whitespace-nowrap",
-          "text-muted-foreground/40 group-hover:text-muted-foreground/70",
-          "transition-colors duration-75 border-r border-border/30",
-          isDel && "text-red-600/40 dark:text-red-400/40",
-        )}
+        className="sticky left-0 select-none align-top p-0 w-[1%] whitespace-nowrap bg-background"
+        style={
+          isAdd
+            ? {
+                backgroundImage:
+                  "linear-gradient(rgba(34,197,94,0.08),rgba(34,197,94,0.08))",
+              }
+            : isDel
+              ? {
+                  backgroundImage:
+                    "linear-gradient(rgba(239,68,68,0.08),rgba(239,68,68,0.08))",
+                }
+              : undefined
+        }
       >
-        {oldLine ?? ""}
-      </td>
-
-      {/* New line number */}
-      <td
-        className={cn(
-          "select-none text-right align-top px-2 py-0 w-[1%] whitespace-nowrap",
-          "text-muted-foreground/40 group-hover:text-muted-foreground/70",
-          "transition-colors duration-75 border-r border-border/30",
-          isAdd && "text-green-600/40 dark:text-green-400/40",
-        )}
-      >
-        {newLine ?? ""}
-      </td>
-
-      {/* +/- indicator */}
-      <td
-        className={cn(
-          "select-none text-center align-top px-1 py-0 w-[1%]",
-          isAdd && "text-green-600 dark:text-green-400",
-          isDel && "text-red-600 dark:text-red-400",
-          isNormal && "text-muted-foreground/30",
-        )}
-      >
-        {isAdd ? "+" : isDel ? "-" : " "}
+        <div className="flex items-stretch border-r border-border/30">
+          {/* Old line number */}
+          <span
+            className={cn(
+              "text-right px-2 py-0 min-w-[3ch]",
+              "text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors duration-75",
+              isDel && "text-red-600/40 dark:text-red-400/40",
+            )}
+          >
+            {oldLine ?? ""}
+          </span>
+          {/* New line number */}
+          <span
+            className={cn(
+              "text-right px-2 py-0 min-w-[3ch] border-l border-border/30",
+              "text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors duration-75",
+              isAdd && "text-green-600/40 dark:text-green-400/40",
+            )}
+          >
+            {newLine ?? ""}
+          </span>
+          {/* +/- indicator */}
+          <span
+            className={cn(
+              "text-center px-1 py-0 border-l border-border/30",
+              isAdd && "text-green-600 dark:text-green-400",
+              isDel && "text-red-600 dark:text-red-400",
+              isNormal && "text-muted-foreground/30",
+            )}
+          >
+            {isAdd ? "+" : isDel ? "-" : " "}
+          </span>
+        </div>
       </td>
 
       {/* Code content */}
