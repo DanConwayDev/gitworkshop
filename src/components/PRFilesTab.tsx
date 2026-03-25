@@ -45,6 +45,8 @@ export interface PRFilesTabProps {
   baseCommitId: string;
   /** Pool instance from useGitPool (repo clone URLs). */
   pool: GitGraspPool;
+  /** Called whenever the number of changed files becomes known. */
+  onFileCountChange?: (count: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,9 +168,20 @@ export function PRFilesTab({
   tipCommitId,
   baseCommitId,
   pool,
+  onFileCountChange,
 }: PRFilesTabProps) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading-trees" });
   const abortRef = useRef<AbortController | null>(null);
+
+  // Notify parent when file count is known (phase 1 complete).
+  useEffect(() => {
+    if (
+      (phase.kind === "loading-diff" || phase.kind === "done") &&
+      onFileCountChange
+    ) {
+      onFileCountChange(phase.changes.length);
+    }
+  }, [phase, onFileCountChange]);
 
   useEffect(() => {
     // Cancel any in-flight work when inputs change

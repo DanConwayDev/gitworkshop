@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
@@ -50,6 +50,7 @@ import { PR } from "@/casts/PR";
 import { Patch } from "@/casts/Patch";
 import { DiffView } from "@/components/DiffView";
 import { PRFilesTab } from "@/components/PRFilesTab";
+import { diffTrees } from "@/lib/git-grasp-pool";
 import {
   CommitList,
   CommitListLoading,
@@ -176,6 +177,34 @@ export default function PRPage() {
       ? prCommitHistory.commits
       : prCommitHistory.commits.slice(0, idx);
   }, [prCommitHistory.commits, pr?.mergeBase]);
+
+  // Eagerly compute file count as soon as the git pool + commit IDs are ready,
+  // so the tab badge shows without the user having to visit the Files tab first.
+  const [fileCount, setFileCount] = useState<number | undefined>(undefined);
+  const fileCountAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const tipCommitId = pr?.tipCommitId;
+    const mergeBase = pr?.mergeBase;
+    if (!gitPool || !tipCommitId || !mergeBase) return;
+
+    fileCountAbortRef.current?.abort();
+    const abort = new AbortController();
+    fileCountAbortRef.current = abort;
+
+    gitPool
+      .getCommitRange(tipCommitId, mergeBase, abort.signal)
+      .then((range) => {
+        if (abort.signal.aborted || !range) return;
+        setFileCount(diffTrees(range.tipTree, range.baseTree).length);
+      })
+      .catch(() => {
+        /* ignore errors — count just won't show */
+      });
+
+    return () => {
+      abort.abort();
+    };
+  }, [gitPool, pr?.tipCommitId, pr?.mergeBase]);
 
   // Trigger two-tier loading for this PR/patch.
   useNip34Loaders(prId, repoRelayGroup, {
@@ -338,8 +367,8 @@ export default function PRPage() {
               <TabsTrigger value="conversation" className="gap-1.5 text-sm">
                 <MessageCircle className="h-3.5 w-3.5" />
                 Conversation
-                {comments !== undefined && comments.length > 0 && (
-                  <span className="ml-1 text-xs text-muted-foreground">
+                {comments !== undefined && (
+                  <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
                     {comments.length}
                   </span>
                 )}
@@ -350,6 +379,11 @@ export default function PRPage() {
                 <TabsTrigger value="files" className="gap-1.5 text-sm">
                   <FileDiff className="h-3.5 w-3.5" />
                   Files Changed
+                  {fileCount !== undefined && fileCount > 0 && (
+                    <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
+                      {fileCount}
+                    </span>
+                  )}
                 </TabsTrigger>
               )}
 
@@ -358,6 +392,11 @@ export default function PRPage() {
                 <TabsTrigger value="commits" className="gap-1.5 text-sm">
                   <GitCommitHorizontal className="h-3.5 w-3.5" />
                   Commits
+                  {prCommits.length > 0 && (
+                    <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
+                      {prCommits.length}
+                    </span>
+                  )}
                 </TabsTrigger>
               )}
 
