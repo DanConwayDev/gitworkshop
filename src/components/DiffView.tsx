@@ -514,8 +514,8 @@ function DiffLine({
       data-line-new={newLine}
       className={cn(
         "group",
-        isAdd && "bg-green-500/8 dark:bg-green-400/8",
-        isDel && "bg-red-500/8 dark:bg-red-400/8",
+        isAdd && "bg-green-500/15 dark:bg-green-400/12",
+        isDel && "bg-red-500/15 dark:bg-red-400/12",
       )}
     >
       {/* Sticky gutter: old line · new line · +/- indicator.
@@ -527,12 +527,12 @@ function DiffLine({
           isAdd
             ? {
                 backgroundImage:
-                  "linear-gradient(rgba(34,197,94,0.08),rgba(34,197,94,0.08))",
+                  "linear-gradient(rgba(34,197,94,0.15),rgba(34,197,94,0.15))",
               }
             : isDel
               ? {
                   backgroundImage:
-                    "linear-gradient(rgba(239,68,68,0.08),rgba(239,68,68,0.08))",
+                    "linear-gradient(rgba(239,68,68,0.15),rgba(239,68,68,0.15))",
                 }
               : undefined
         }
@@ -542,8 +542,8 @@ function DiffLine({
           <span
             className={cn(
               "text-right px-2 py-0 min-w-[3ch]",
-              "text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors duration-75",
-              isDel && "text-red-600/40 dark:text-red-400/40",
+              "text-muted-foreground/60 group-hover:text-muted-foreground/90 transition-colors duration-75",
+              isDel && "text-red-700/70 dark:text-red-400/70",
             )}
           >
             {oldLine ?? ""}
@@ -552,8 +552,8 @@ function DiffLine({
           <span
             className={cn(
               "text-right px-2 py-0 min-w-[3ch] border-l border-border/30",
-              "text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors duration-75",
-              isAdd && "text-green-600/40 dark:text-green-400/40",
+              "text-muted-foreground/60 group-hover:text-muted-foreground/90 transition-colors duration-75",
+              isAdd && "text-green-700/70 dark:text-green-400/70",
             )}
           >
             {newLine ?? ""}
@@ -564,7 +564,7 @@ function DiffLine({
               "text-center px-1 py-0 border-l border-border/30",
               isAdd && "text-green-600 dark:text-green-400",
               isDel && "text-red-600 dark:text-red-400",
-              isNormal && "text-muted-foreground/30",
+              isNormal && "text-muted-foreground/40",
             )}
           >
             {isAdd ? "+" : isDel ? "-" : " "}
