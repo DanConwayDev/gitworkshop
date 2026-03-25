@@ -26,7 +26,8 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DiffView, fileDiffCardId } from "@/components/DiffView";
+import { DiffView } from "@/components/DiffView";
+import { fileDiffCardId } from "@/lib/diffCardId";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   diffTrees,

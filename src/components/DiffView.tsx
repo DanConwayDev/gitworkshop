@@ -83,10 +83,7 @@ export interface DiffViewProps {
   loadingFiles?: FileChange[];
 }
 
-/** Stable DOM id for a file's diff card — used for scroll targeting. */
-export function fileDiffCardId(filename: string): string {
-  return "diff-" + filename.replace(/[^a-zA-Z0-9_-]/g, "_");
-}
+import { fileDiffCardId } from "@/lib/diffCardId";
 
 // ---------------------------------------------------------------------------
 // Highlighter hook
