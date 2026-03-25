@@ -5,16 +5,27 @@ import { BehaviorSubject, Subject, Subscription } from "rxjs";
  * Persists a BehaviorSubject or Subject to localStorage.
  * Loads initial value from localStorage if available.
  *
+ * When `defaultValue` is provided the behaviour changes to "user-override only":
+ *   - On load: restore from localStorage only if a saved value exists.
+ *   - On change: if the new value equals the default (by serialized comparison),
+ *     DELETE the localStorage key so future code-level default changes are
+ *     automatically picked up by users who haven't customised the setting.
+ *     Only write to localStorage when the value differs from the default.
+ *
+ * This means updating a default in code takes effect for all users who haven't
+ * explicitly changed the setting, without needing a migration.
+ *
  * @param subject - The subject to persist
  * @param key - localStorage key to use
- * @param options - Optional serializer/deserializer functions
+ * @param options - Optional serializer/deserializer/defaultValue
  * @returns Subscription that can be unsubscribed to stop persisting
  *
  * @example
  * const theme = new BehaviorSubject<"light" | "dark">("light");
  * persist(theme, "theme", {
  *   serialize: (v) => v,
- *   deserialize: (v) => v as "light" | "dark"
+ *   deserialize: (v) => v as "light" | "dark",
+ *   defaultValue: "light",
  * });
  */
 export function persist<T>(
@@ -23,10 +34,15 @@ export function persist<T>(
   options?: {
     serialize?: (value: T) => string;
     deserialize?: (value: string) => T;
+    defaultValue?: T;
   },
 ): Subscription {
   const serialize = options?.serialize ?? JSON.stringify;
   const deserialize = options?.deserialize ?? JSON.parse;
+  const hasDefault = options !== undefined && "defaultValue" in options;
+  const serializedDefault = hasDefault
+    ? serialize(options.defaultValue as T)
+    : undefined;
 
   // Load initial value from localStorage if available
   if (subject instanceof BehaviorSubject) {
@@ -37,14 +53,24 @@ export function persist<T>(
         subject.next(parsed);
       } catch (error) {
         console.warn(`Failed to load ${key} from localStorage:`, error);
+        // Saved value is corrupt — remove it so the code default is used
+        localStorage.removeItem(key);
       }
     }
   }
 
-  // Subscribe to changes and persist to localStorage
+  // Subscribe to changes and persist to localStorage.
+  // When a defaultValue is provided, delete the key instead of writing it
+  // whenever the value matches the default — so code-level default changes
+  // are picked up automatically by users who haven't customised the setting.
   return subject.subscribe((value) => {
     try {
-      localStorage.setItem(key, serialize(value));
+      const serialized = serialize(value);
+      if (hasDefault && serialized === serializedDefault) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, serialized);
+      }
     } catch (error) {
       console.warn(`Failed to save ${key} to localStorage:`, error);
     }
@@ -55,38 +81,47 @@ export function persist<T>(
  * Default relay list for querying events.
  * Users can customize this in settings.
  */
-export const extraRelays = new BehaviorSubject<string[]>(
-  relaySet(["wss://relay.ditto.pub", "wss://relay.damus.io"]),
-);
+const DEFAULT_EXTRA_RELAYS = relaySet([
+  "wss://relay.ditto.pub",
+  "wss://relay.damus.io",
+]);
+
+export const extraRelays = new BehaviorSubject<string[]>(DEFAULT_EXTRA_RELAYS);
 
 // Persist the extra relays to localStorage
-persist(extraRelays, "extraRelays");
+persist(extraRelays, "extraRelays", { defaultValue: DEFAULT_EXTRA_RELAYS });
 
 /**
  * Lookup relays for finding user relay hints (NIP-65, profile relays, etc.)
  * These are used by the event loaders to find events more efficiently.
  */
+const DEFAULT_LOOKUP_RELAYS = relaySet([
+  "wss://purplepag.es/",
+  "wss://index.hzrd149.com/",
+  "wss://indexer.coracle.social/",
+]);
+
 export const lookupRelays = new BehaviorSubject<string[]>(
-  relaySet([
-    "wss://purplepag.es/",
-    "wss://index.hzrd149.com/",
-    "wss://indexer.coracle.social/",
-  ]),
+  DEFAULT_LOOKUP_RELAYS,
 );
 
 // Persist the lookup relays to localStorage
-persist(lookupRelays, "lookupRelays");
+persist(lookupRelays, "lookupRelays", { defaultValue: DEFAULT_LOOKUP_RELAYS });
 
 /**
  * Git index relays — store repository announcements (kind 30617) across the
  * network. Used for discovering repositories published via ngit.
  */
+const DEFAULT_GIT_INDEX_RELAYS = relaySet(["wss://index.ngit.dev"]);
+
 export const gitIndexRelays = new BehaviorSubject<string[]>(
-  relaySet(["wss://index.ngit.dev"]),
+  DEFAULT_GIT_INDEX_RELAYS,
 );
 
 // Persist the git index relays to localStorage
-persist(gitIndexRelays, "gitIndexRelays");
+persist(gitIndexRelays, "gitIndexRelays", {
+  defaultValue: DEFAULT_GIT_INDEX_RELAYS,
+});
 
 /**
  * Relay curation mode.
@@ -102,10 +137,15 @@ persist(gitIndexRelays, "gitIndexRelays");
  */
 export type RelayCurationMode = "repo" | "outbox";
 
-export const relayCurationMode = new BehaviorSubject<RelayCurationMode>("repo");
+const DEFAULT_RELAY_CURATION_MODE: RelayCurationMode = "repo";
+
+export const relayCurationMode = new BehaviorSubject<RelayCurationMode>(
+  DEFAULT_RELAY_CURATION_MODE,
+);
 
 // Persist the relay curation mode to localStorage
 persist(relayCurationMode, "relayCurationMode", {
   serialize: (v) => v,
   deserialize: (v) => (v === "outbox" ? "outbox" : "repo"),
+  defaultValue: DEFAULT_RELAY_CURATION_MODE,
 });
