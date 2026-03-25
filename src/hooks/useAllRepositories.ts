@@ -23,15 +23,14 @@ export interface UseAllRepositoriesResult {
  * Fetch ALL repository announcements (kind 30617) from the given relays and
  * return a deduplicated list of resolved repositories.
  *
- * Fetch strategy (per relay):
- *   1. Check relay NIP support (relay info document, already fetched on connect).
- *   2. NIP-77 supported → pool.sync(..., "down") — efficient diff-based bulk
- *      download; handles the relay's per-request limit transparently.
- *   3. NIP-77 not supported → sequential until-walk: repeatedly call
- *      relay.request({ kinds:[30617], limit:500, until }) until a batch
- *      returns fewer than BATCH_LIMIT events, then stop.
- *   4. After the initial bulk fetch completes, open a live pool.subscription()
- *      so newly published repos appear in real time.
+ * Fetch strategy: sequential until-walk — repeatedly REQ { kinds:[30617],
+ * limit:500, until } walking backwards through time until a batch returns
+ * fewer than BATCH_LIMIT events. Uses pool.req() (no deduplication) so
+ * batch.length reflects the true relay-sent count regardless of what the
+ * concurrent live subscription has already added to the store.
+ *
+ * After the bulk fetch completes, a live pool.subscription() keeps the store
+ * updated so newly published repos appear in real time.
  *
  * isSyncing is true from mount until the bulk fetch completes (or fails).
  *
@@ -61,98 +60,40 @@ export function useAllRepositories(
 
     async function bulkFetch() {
       try {
-        // Check NIP-77 support on the first relay in the list.
-        // We use a single relay for the bulk fetch (the index relay is always
-        // one URL); for multi-relay overrides we fall back to pagination.
-        const firstRelay = pool.relay(relays[0]);
+        // Sequential until-walk: walk backwards through time fetching 500
+        // events at a time until the relay returns a partial batch.
+        // pool.req() is used (not pool.request()) so batch.length reflects
+        // the true relay-sent count — pool.request() deduplicates against the
+        // store, which would cause premature termination when the concurrent
+        // live subscription has already added some events.
+        let until: number | undefined = undefined;
 
-        // Wait briefly for the relay info document to arrive (it's fetched
-        // automatically on first connection). 2 s is generous.
-        const supportedNips = await new Promise<number[]>((resolve) => {
-          let resolved = false;
-          const timeout = setTimeout(() => {
-            if (!resolved) {
-              resolved = true;
-              resolve([]);
-            }
-          }, 2000);
-          firstRelay.supported$.subscribe((nips) => {
-            if (nips !== undefined && !resolved) {
-              resolved = true;
-              clearTimeout(timeout);
-              resolve(nips ?? []);
-            }
-          });
-        });
+        while (!cancelled) {
+          const filter: Filter = {
+            kinds: [REPO_KIND],
+            limit: BATCH_LIMIT,
+            ...(until !== undefined ? { until } : {}),
+          };
 
-        if (cancelled) return;
-
-        if (supportedNips.includes(77)) {
-          // ── NIP-77 path ──────────────────────────────────────────────────
-          // Use pool.negentropy() with a custom reconcile so we can chunk the
-          // `need` IDs into batches of 500. pool.sync() sends all IDs in a
-          // single REQ which exceeds most relays' per-filter ID limit (~500),
-          // causing the relay to silently truncate and return fewer events.
-          const ID_CHUNK = 500;
-          await pool.negentropy(
-            relays,
-            eventStore,
-            REPO_FILTER,
-            async (_have, need) => {
-              if (cancelled || need.length === 0) return;
-              // Fetch in chunks to stay within relay ID-filter limits
-              for (let i = 0; i < need.length; i += ID_CHUNK) {
-                if (cancelled) break;
-                const chunk = need.slice(i, i + ID_CHUNK);
-                const events = await lastValueFrom(
-                  pool
-                    .req(relays, { ids: chunk } as Filter)
-                    .pipe(completeOnEose(), onlyEvents(), toArray()),
-                  { defaultValue: [] },
-                );
-                for (const ev of events) eventStore.add(ev);
-              }
-            },
-            // pool.d.ts types opts as NegentropySyncOptions but the group
-            // implementation requires parallel:true — cast to satisfy TS.
-            { parallel: true } as object,
+          const batch = await lastValueFrom(
+            pool
+              .req(relays, filter)
+              .pipe(completeOnEose(), onlyEvents(), toArray()),
+            { defaultValue: [] },
           );
-        } else {
-          // ── Fallback: sequential until-walk ─────────────────────────────
-          // Use pool.req() (no deduplication) so batch.length reflects the
-          // true number of events the relay sent. pool.request() deduplicates
-          // against the store, so events already added by the concurrent live
-          // pool.subscription() would shrink batches and cause the walk to
-          // terminate prematurely before all events are fetched.
-          let until: number | undefined = undefined;
 
-          while (!cancelled) {
-            const filter: Filter = {
-              kinds: [REPO_KIND],
-              limit: BATCH_LIMIT,
-              ...(until !== undefined ? { until } : {}),
-            };
+          if (cancelled) break;
 
-            const batch = await lastValueFrom(
-              pool
-                .req(relays, filter)
-                .pipe(completeOnEose(), onlyEvents(), toArray()),
-              { defaultValue: [] },
-            );
+          for (const ev of batch) eventStore.add(ev);
 
-            if (cancelled) break;
+          if (batch.length < BATCH_LIMIT) break;
 
-            for (const ev of batch) eventStore.add(ev);
-
-            if (batch.length < BATCH_LIMIT) break;
-
-            // Walk backwards: set until to one second before the oldest event
-            const oldest = Math.min(...batch.map((e) => e.created_at));
-            until = oldest - 1;
-          }
+          // Walk backwards: set until to one second before the oldest event
+          const oldest = Math.min(...batch.map((e) => e.created_at));
+          until = oldest - 1;
         }
       } catch {
-        // Sync failure is non-fatal — we show whatever landed in the store
+        // Fetch failure is non-fatal — show whatever landed in the store
       } finally {
         if (!cancelled) setIsSyncing(false);
       }
