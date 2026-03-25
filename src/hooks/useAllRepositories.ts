@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { lastValueFrom, toArray } from "rxjs";
 import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents, SyncDirection } from "applesauce-relay";
+import { onlyEvents, SyncDirection, completeOnEose } from "applesauce-relay";
 import { pool, eventStore } from "@/services/nostr";
 import { gitIndexRelays } from "@/services/settings";
 import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
@@ -97,6 +97,11 @@ export function useAllRepositories(
           );
         } else {
           // ── Fallback: sequential until-walk ─────────────────────────────
+          // Use pool.req() (no deduplication) so batch.length reflects the
+          // true number of events the relay sent. pool.request() deduplicates
+          // against the store, so events already added by the concurrent live
+          // pool.subscription() would shrink batches and cause the walk to
+          // terminate prematurely before all events are fetched.
           let until: number | undefined = undefined;
 
           while (!cancelled) {
@@ -107,7 +112,9 @@ export function useAllRepositories(
             };
 
             const batch = await lastValueFrom(
-              pool.request(relays, filter).pipe(toArray()),
+              pool
+                .req(relays, filter)
+                .pipe(completeOnEose(), onlyEvents(), toArray()),
               { defaultValue: [] },
             );
 
