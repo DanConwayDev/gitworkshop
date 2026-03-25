@@ -145,6 +145,9 @@ importers:
       date-fns:
         specifier: ^3.6.0
         version: 3.6.0
+      diff:
+        specifier: ^8.0.4
+        version: 8.0.4
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@18.3.1)
@@ -242,6 +245,9 @@ importers:
       "@testing-library/react":
         specifier: ^16.3.2
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      "@types/diff":
+        specifier: ^8.0.0
+        version: 8.0.0
       "@types/node":
         specifier: ^22.19.15
         version: 22.19.15
@@ -2399,6 +2405,13 @@ packages:
         integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==,
       }
 
+  "@types/diff@8.0.0":
+    resolution:
+      {
+        integrity: sha512-o7jqJM04gfaYrdCecCVMbZhNdG6T1MHg/oQoRFdERLV+4d+V7FijhiEAbFu0Usww84Yijk9yH58U4Jk4HbtzZw==,
+      }
+    deprecated: This is a stub types definition. diff provides its own type definitions, so you do not need this installed.
+
   "@types/estree-jsx@1.0.5":
     resolution:
       {
@@ -3396,6 +3409,13 @@ packages:
       {
         integrity: sha512-gxtyfqMg7GKyhQmb056K7M3xszy/myH8w+B4RT+QXBQsvAOdc3XymqDDPHx1BgPgsdAA5SIifona89YtRATDzw==,
       }
+
+  diff@8.0.4:
+    resolution:
+      {
+        integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==,
+      }
+    engines: { node: ">=0.3.1" }
 
   dijkstrajs@1.0.3:
     resolution:
@@ -7914,6 +7934,10 @@ snapshots:
 
   "@types/deep-eql@4.0.2": {}
 
+  "@types/diff@8.0.0":
+    dependencies:
+      diff: 8.0.4
+
   "@types/estree-jsx@1.0.5":
     dependencies:
       "@types/estree": 1.0.8
@@ -8615,6 +8639,8 @@ snapshots:
       dequal: 2.0.3
 
   didyoumean@1.2.2: {}
+
+  diff@8.0.4: {}
 
   dijkstrajs@1.0.3: {}
 

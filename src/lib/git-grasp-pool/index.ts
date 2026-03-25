@@ -58,3 +58,7 @@ export {
   classifyFetchError,
   isNonHttpUrl,
 } from "./git-http";
+
+// --- Diff processing ---
+export { diffTrees, generateUnifiedDiff } from "./diff-utils";
+export type { FileChange, FileChangeStatus } from "./diff-utils";
