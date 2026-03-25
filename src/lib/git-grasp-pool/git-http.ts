@@ -252,20 +252,34 @@ async function fetchCommitsOnly(
 /**
  * Fetch the directory tree at a commit (blob:none filter).
  * Requires the server to support "filter".
+ *
+ * @param deepen   - Git protocol commit-graph depth (controls how many commits
+ *                   the server walks; use 1 to fetch just the tip commit).
+ *                   The server always sends ALL tree objects for those commits
+ *                   regardless of this value.
+ * @param parseDepth - How many directory levels to build in the returned Tree
+ *                   structure. undefined = full recursive parse of everything
+ *                   the server sent. Defaults to deepen for backwards
+ *                   compatibility with the file-browser callers.
  */
 async function fetchDirectoryTree(
   effectiveUrl: string,
   commitHash: string,
-  nestLimit: number,
+  deepen: number,
   serverCaps: string[],
   signal: AbortSignal,
+  parseDepth?: number,
 ): Promise<Tree> {
   if (signal.aborted) throw new Error("aborted");
   const caps = selectCapabilities(serverCaps);
   if (!serverCaps.includes("filter"))
     throw new Error("git server does not support filter capability");
   caps.push("filter");
-  const want = createWantRequest(commitHash, caps, nestLimit, "blob:none");
+  // deepen controls the commit-graph depth sent to the server.
+  // parseDepth controls how deep loadTree() builds the in-memory structure.
+  // They are independent: deepen=1 always causes the server to send ALL tree
+  // objects for that one commit; parseDepth limits what we parse from them.
+  const want = createWantRequest(commitHash, caps, deepen, "blob:none");
   const result = await fetchPackfile(effectiveUrl, want);
   if (signal.aborted) throw new Error("aborted");
 
@@ -277,7 +291,9 @@ async function fetchDirectoryTree(
   const rootTreeObj = result.objects.get(rootTreeHash);
   if (!rootTreeObj) throw new Error(`root tree object not found`);
 
-  return loadTree(rootTreeObj, result.objects, nestLimit);
+  // When parseDepth is undefined, loadTree recurses into every subtree object
+  // the server sent — giving us the complete directory structure.
+  return loadTree(rootTreeObj, result.objects, parseDepth);
 }
 
 /**
@@ -752,9 +768,57 @@ export class GitHttpClient {
         nestLimit,
         serverCaps,
         signal,
+        nestLimit, // parseDepth matches deepen for file-browser callers
       );
       if (signal.aborted) return null;
       this.cache.putTree(commitHash, nestLimit, tree);
+      return tree;
+    } catch {
+      if (signal.aborted) return null;
+      return null;
+    }
+  }
+
+  /**
+   * Fetch the complete recursive directory tree at a commit for diff purposes.
+   *
+   * Uses deepen=1 (one commit, no ancestors) with blob:none (no file content).
+   * The server sends ALL tree objects for that commit; we parse all of them
+   * into a fully-recursive Tree structure.
+   *
+   * Cache key uses the sentinel -1 for nestLimit, which the file-browser path
+   * never uses (it always passes positive integers), so there is no collision.
+   */
+  async fetchFullTree(
+    url: string,
+    commitHash: string,
+    signal: AbortSignal,
+  ): Promise<Tree | null> {
+    // Sentinel value: file-browser callers always pass positive nestLimit values.
+    // -1 is never passed by any other caller, so this cache slot is exclusive
+    // to the fully-parsed tree used for diffs.
+    const FULL_TREE_NEST_LIMIT = -1;
+
+    const cached = await this.cache.getTree(commitHash, FULL_TREE_NEST_LIMIT);
+    if (cached) return cached;
+
+    const effectiveUrl = this.cors.resolveUrl(url);
+    const serverCaps = await this.getServerCaps(url, signal);
+    if (signal.aborted) return null;
+
+    try {
+      // deepen=1: fetch only the tip commit (server still sends all its trees)
+      // parseDepth=undefined: build the complete recursive Tree structure
+      const tree = await fetchDirectoryTree(
+        effectiveUrl,
+        commitHash,
+        1,
+        serverCaps,
+        signal,
+        undefined,
+      );
+      if (signal.aborted) return null;
+      this.cache.putTree(commitHash, FULL_TREE_NEST_LIMIT, tree);
       return tree;
     } catch {
       if (signal.aborted) return null;
@@ -923,6 +987,7 @@ export class GitHttpClient {
       nestLimit,
       serverCaps,
       signal,
+      nestLimit, // parseDepth matches deepen for path-lookup callers
     );
     if (signal.aborted) return undefined;
 

@@ -16,6 +16,38 @@ import type {
 export type { Commit, Tree, InfoRefsUploadPackResponse };
 
 // ---------------------------------------------------------------------------
+// Commit range data
+// ---------------------------------------------------------------------------
+
+/**
+ * The data required to compute a diff between two commits.
+ *
+ * Both trees contain only directory metadata (filenames + object hashes) —
+ * no file content. The blob:none filter is used when fetching, so the only
+ * data transferred is tree objects (~30 bytes per directory entry).
+ *
+ * To produce a diff:
+ *   1. Walk tipTree and baseTree recursively, comparing file hashes to find
+ *      added, deleted, and modified paths.
+ *   2. For each changed path, fetch the blob(s) via pool.getBlob().
+ *   3. Generate unified diff output from the blob content pairs.
+ */
+export interface CommitRangeData {
+  tipCommit: Commit;
+  baseCommit: Commit;
+  /**
+   * Complete recursive directory tree at the tip commit.
+   * file.content is always null (blob:none fetch — no file data).
+   */
+  tipTree: Tree;
+  /**
+   * Complete recursive directory tree at the base commit.
+   * file.content is always null (blob:none fetch — no file data).
+   */
+  baseTree: Tree;
+}
+
+// ---------------------------------------------------------------------------
 // Per-URL state
 // ---------------------------------------------------------------------------
 

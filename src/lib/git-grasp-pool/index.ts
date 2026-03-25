@@ -40,6 +40,8 @@ export type {
   Commit,
   Tree,
   InfoRefsUploadPackResponse,
+  // Diff data
+  CommitRangeData,
 } from "./types";
 
 // --- CORS proxy (for UI components that need to display proxy status) ---

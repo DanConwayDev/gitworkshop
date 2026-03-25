@@ -29,6 +29,7 @@ import type {
   StateEventInput,
   Commit,
   Tree,
+  CommitRangeData,
   InfoRefsUploadPackResponse,
 } from "./types";
 import { CorsProxyManager } from "./cors-proxy";
@@ -1205,6 +1206,55 @@ export class GitGraspPool {
       }
       return result;
     });
+  }
+
+  /**
+   * Fetch the data needed to compute a diff between two commits.
+   *
+   * Returns both commits and both complete recursive directory trees
+   * (metadata only — no file content). The trees are fetched with
+   * blob:none so only tree objects (~30 bytes per directory entry) are
+   * transferred, not file content.
+   *
+   * All four fetches run in parallel and are individually cached.
+   * Repeat calls for the same pair are instant.
+   *
+   * The caller is responsible for:
+   *   1. Walking tipTree and baseTree to find added/deleted/modified paths
+   *   2. Fetching changed file content via pool.getBlob()
+   *   3. Generating unified diff output from the blob pairs
+   */
+  async getCommitRange(
+    tipCommitId: string,
+    baseCommitId: string,
+    signal: AbortSignal,
+  ): Promise<CommitRangeData | null> {
+    const [tipCommit, baseCommit, tipTree, baseTree] = await Promise.all([
+      this.getSingleCommit(tipCommitId, signal),
+      this.getSingleCommit(baseCommitId, signal),
+      this.withFallback(signal, async (url) => {
+        const start = Date.now();
+        const result = await this.http.fetchFullTree(url, tipCommitId, signal);
+        if (result) {
+          const tracker = this.urlManager.get(url);
+          tracker?.recordOperationSuccess(Date.now() - start);
+        }
+        return result;
+      }),
+      this.withFallback(signal, async (url) => {
+        const start = Date.now();
+        const result = await this.http.fetchFullTree(url, baseCommitId, signal);
+        if (result) {
+          const tracker = this.urlManager.get(url);
+          tracker?.recordOperationSuccess(Date.now() - start);
+        }
+        return result;
+      }),
+    ]);
+
+    if (!tipCommit || !baseCommit || !tipTree || !baseTree) return null;
+
+    return { tipCommit, baseCommit, tipTree, baseTree };
   }
 
   /**
