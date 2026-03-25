@@ -31,6 +31,7 @@ import {
   FileDiff,
   Plus,
   Minus,
+  AlertTriangle,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +66,7 @@ export interface DiffViewProps {
   diff: string;
   /** Extra class on the outer wrapper */
   className?: string;
-  /** Whether files start collapsed (default false) */
+  /** Whether files start collapsed (default true) */
   defaultCollapsed?: boolean;
 }
 
@@ -170,7 +171,7 @@ function StatBar({
 export const DiffView = memo(function DiffView({
   diff,
   className,
-  defaultCollapsed = false,
+  defaultCollapsed = true,
 }: DiffViewProps) {
   const files = useMemo(() => parseDiff(diff), [diff]);
 
@@ -225,6 +226,9 @@ export const DiffView = memo(function DiffView({
 // Single file diff card
 // ---------------------------------------------------------------------------
 
+/** Files with more total changed lines than this are hidden until explicitly loaded. */
+const LARGE_DIFF_THRESHOLD = 1000;
+
 const FileDiffCard = memo(function FileDiffCard({
   file,
   defaultCollapsed,
@@ -232,6 +236,12 @@ const FileDiffCard = memo(function FileDiffCard({
   file: parseDiff.File;
   defaultCollapsed: boolean;
 }) {
+  const totalChanges = file.additions + file.deletions;
+  const isLarge = totalChanges > LARGE_DIFF_THRESHOLD;
+
+  // Large files start hidden (not just collapsed) until the user explicitly
+  // clicks "Load diff" — mirrors GitHub's behaviour.
+  const [hidden, setHidden] = useState(isLarge);
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const toggle = useCallback(() => setCollapsed((c) => !c), []);
 
@@ -328,8 +338,28 @@ const FileDiffCard = memo(function FileDiffCard({
         </span>
       </button>
 
+      {/* Large diff notice — shown instead of content until user loads it */}
+      {!collapsed && hidden && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-amber-500/5 border-t border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
+          <span className="flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            Large diff ({totalChanges.toLocaleString()} lines) not rendered by
+            default.
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setHidden(false);
+            }}
+            className="shrink-0 rounded px-2 py-1 font-medium bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
+          >
+            Load diff
+          </button>
+        </div>
+      )}
+
       {/* Diff content */}
-      {!collapsed && (
+      {!collapsed && !hidden && (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[13px] leading-[1.6] font-mono">
             <tbody>
@@ -347,7 +377,7 @@ const FileDiffCard = memo(function FileDiffCard({
       )}
 
       {/* Binary / empty diff */}
-      {!collapsed && file.chunks.length === 0 && (
+      {!collapsed && !hidden && file.chunks.length === 0 && (
         <div className="px-4 py-6 text-center text-sm text-muted-foreground">
           {isNew
             ? "Empty file added"
