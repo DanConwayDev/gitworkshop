@@ -465,7 +465,7 @@ export function PRFilesTab({
 
   if (phase.kind === "loading-diff") {
     return (
-      <div className="flex gap-0 rounded-lg border border-border/60 overflow-hidden">
+      <div className="flex gap-0 rounded-lg border border-border/60 overflow-hidden min-w-0">
         <FileTreeSidebar
           changes={phase.changes}
           activeFile={activeFile}
@@ -493,13 +493,13 @@ export function PRFilesTab({
   }
 
   return (
-    <div className="flex gap-0 rounded-lg border border-border/60 overflow-hidden">
+    <div className="flex gap-0 rounded-lg border border-border/60 overflow-hidden min-w-0">
       <FileTreeSidebar
         changes={phase.changes}
         activeFile={activeFile}
         onSelect={handleFileSelect}
       />
-      <div className="flex-1 min-w-0 p-3">
+      <div className="flex-1 min-w-0 p-3 overflow-hidden">
         <DiffView diff={phase.diff} expandedFile={activeFile} />
       </div>
     </div>

@@ -45,6 +45,7 @@ import {
   GitCommitHorizontal,
   FileDiff,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { PR_ROOT_KINDS, PR_KIND, PATCH_KIND } from "@/lib/nip34";
 import { PR } from "@/casts/PR";
 import { Patch } from "@/casts/Patch";
@@ -356,12 +357,19 @@ export default function PRPage() {
 
       {/* Content */}
       <div className="container max-w-screen-xl px-4 md:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+        <div
+          className={cn(
+            "grid gap-6",
+            activeTab === "files"
+              ? "grid-cols-1"
+              : "grid-cols-1 lg:grid-cols-[1fr_280px]",
+          )}
+        >
           {/* Main content — tabbed */}
           <Tabs
             value={activeTab}
             onValueChange={handleTabChange}
-            className="space-y-4"
+            className="space-y-4 min-w-0"
           >
             <TabsList className="h-9">
               <TabsTrigger value="conversation" className="gap-1.5 text-sm">
@@ -454,7 +462,10 @@ export default function PRPage() {
 
             {/* Files Changed tab */}
             {itemType === "pr" && (
-              <TabsContent value="files" className="mt-0">
+              <TabsContent
+                value="files"
+                className="mt-0 min-w-0 overflow-hidden"
+              >
                 {!pr?.tipCommitId ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
                     {prEvent
@@ -514,8 +525,8 @@ export default function PRPage() {
             )}
           </Tabs>
 
-          {/* Sidebar */}
-          <div className="space-y-4">
+          {/* Sidebar — hidden on the files tab to give the diff more room */}
+          <div className={cn("space-y-4", activeTab === "files" && "hidden")}>
             {/* Stats card */}
             <Card>
               <CardContent className="p-4 space-y-4">

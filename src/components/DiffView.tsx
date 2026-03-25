@@ -142,6 +142,140 @@ async function tokenizeLines(
 }
 
 // ---------------------------------------------------------------------------
+// Synced scroll area — viewport-fixed bottom scrollbar for tall diffs
+// ---------------------------------------------------------------------------
+
+/**
+ * Wraps diff content in an overflow-x-auto container and renders a
+ * position:fixed horizontal scrollbar at the bottom of the viewport.
+ * The fixed bar is only visible while the diff card is "straddling" the
+ * viewport — i.e. the card top is above the viewport bottom and the card
+ * bottom is below the viewport top — so it appears exactly when the native
+ * bottom scrollbar would be off-screen.
+ *
+ * Both bars stay in sync via bidirectional scroll event listeners.
+ */
+function SyncedScrollArea({ children }: { children: React.ReactNode }) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const fixedBarRef = useRef<HTMLDivElement>(null);
+  const syncingRef = useRef(false);
+
+  const [scrollWidth, setScrollWidth] = useState(0);
+  const [clientWidth, setClientWidth] = useState(0);
+  // left/width of the fixed bar, mirroring the content div's viewport position
+  const [barStyle, setBarStyle] = useState<{
+    left: number;
+    width: number;
+    visible: boolean;
+  }>({ left: 0, width: 0, visible: false });
+
+  // Track content scroll width and client width via ResizeObserver
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const ro = new ResizeObserver(() => {
+      setScrollWidth(content.scrollWidth);
+      setClientWidth(content.clientWidth);
+    });
+    ro.observe(content);
+    const table = content.querySelector("table");
+    if (table) ro.observe(table);
+    return () => ro.disconnect();
+  }, []);
+
+  const hasOverflow = scrollWidth > clientWidth;
+
+  // Update fixed bar position/visibility on scroll + resize
+  const updateBarStyle = useCallback(() => {
+    const wrapper = wrapperRef.current;
+    const content = contentRef.current;
+    if (!wrapper || !content) return;
+
+    const rect = wrapper.getBoundingClientRect();
+    const vh = window.innerHeight;
+
+    // Show when the card straddles the viewport: top is above viewport bottom
+    // AND bottom is below the viewport top (i.e. card is at least partially visible)
+    // AND the bottom of the card is below the viewport bottom (native bar off-screen)
+    const straddling = rect.top < vh && rect.bottom > vh;
+
+    setBarStyle({
+      left: rect.left,
+      width: rect.width,
+      visible: straddling && hasOverflow,
+    });
+  }, [hasOverflow]);
+
+  useEffect(() => {
+    updateBarStyle();
+    window.addEventListener("scroll", updateBarStyle, { passive: true });
+    window.addEventListener("resize", updateBarStyle, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", updateBarStyle);
+      window.removeEventListener("resize", updateBarStyle);
+    };
+  }, [updateBarStyle]);
+
+  // Re-run when overflow state changes
+  useEffect(() => {
+    updateBarStyle();
+  }, [hasOverflow, updateBarStyle]);
+
+  // Sync: content → fixed bar
+  const onContentScroll = useCallback(() => {
+    if (syncingRef.current) return;
+    const content = contentRef.current;
+    const fixedBar = fixedBarRef.current;
+    if (!content || !fixedBar) return;
+    syncingRef.current = true;
+    fixedBar.scrollLeft = content.scrollLeft;
+    syncingRef.current = false;
+  }, []);
+
+  // Sync: fixed bar → content
+  const onFixedBarScroll = useCallback(() => {
+    if (syncingRef.current) return;
+    const content = contentRef.current;
+    const fixedBar = fixedBarRef.current;
+    if (!content || !fixedBar) return;
+    syncingRef.current = true;
+    content.scrollLeft = fixedBar.scrollLeft;
+    syncingRef.current = false;
+  }, []);
+
+  return (
+    <div ref={wrapperRef}>
+      {/* Actual scrollable content — native scrollbar hidden via CSS */}
+      <div
+        ref={contentRef}
+        onScroll={onContentScroll}
+        className="overflow-x-auto [&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {children}
+      </div>
+
+      {/* Viewport-fixed mirror scrollbar */}
+      {barStyle.visible && (
+        <div
+          ref={fixedBarRef}
+          onScroll={onFixedBarScroll}
+          className="fixed bottom-0 z-50 overflow-x-auto overflow-y-hidden h-3 bg-background/95 border-t border-border/60 backdrop-blur-sm"
+          style={{
+            left: barStyle.left,
+            width: barStyle.width,
+            scrollbarWidth: "thin",
+          }}
+        >
+          <div style={{ width: scrollWidth, height: 1 }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Stat helpers
 // ---------------------------------------------------------------------------
 
@@ -199,7 +333,7 @@ export const DiffView = memo(function DiffView({
   const totalDeletions = files.reduce((s, f) => s + f.deletions, 0);
 
   return (
-    <div className={cn("space-y-3", className)}>
+    <div className={cn("space-y-3 min-w-0", className)}>
       {/* Summary bar */}
       <div className="flex items-center gap-3 text-xs text-muted-foreground px-1">
         <span>
@@ -410,7 +544,7 @@ const FileDiffCard = memo(function FileDiffCard({
 
       {/* Diff content */}
       {!collapsed && !hidden && (
-        <div className="overflow-x-auto">
+        <SyncedScrollArea>
           <table className="w-full border-collapse text-[13px] leading-[1.6] font-mono">
             <tbody>
               {file.chunks.map((chunk, ci) => (
@@ -423,7 +557,7 @@ const FileDiffCard = memo(function FileDiffCard({
               ))}
             </tbody>
           </table>
-        </div>
+        </SyncedScrollArea>
       )}
 
       {/* Binary / empty diff */}
