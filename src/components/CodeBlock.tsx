@@ -19,6 +19,7 @@ import {
 } from "@/lib/highlighter";
 import type { Highlighter, BundledLanguage } from "shiki";
 import { cn } from "@/lib/utils";
+import { SyncedScrollArea } from "@/components/SyncedScrollArea";
 
 // ---------------------------------------------------------------------------
 // Theme hook — detect dark mode
@@ -144,9 +145,9 @@ export const CodeBlock = memo(function CodeBlock({
     : 0;
 
   return (
-    <div
+    <SyncedScrollArea
       className={cn(
-        "overflow-x-auto text-[13px] leading-[1.6] font-mono",
+        "overflow-x-auto text-[13px] leading-[1.6] font-mono [&::-webkit-scrollbar]:hidden",
         className,
       )}
     >
@@ -172,7 +173,8 @@ export const CodeBlock = memo(function CodeBlock({
                       "select-none text-right align-top px-3 py-0",
                       "text-muted-foreground/40 group-hover:text-muted-foreground/70",
                       "transition-colors duration-75",
-                      "sticky left-0 bg-inherit",
+                      "sticky left-0 bg-background",
+                      isHighlighted && "bg-yellow-500/10 dark:bg-yellow-400/10",
                     )}
                     style={{ minWidth: `${gutterWidth + 2}ch` }}
                   >
@@ -205,6 +207,6 @@ export const CodeBlock = memo(function CodeBlock({
           })}
         </tbody>
       </table>
-    </div>
+    </SyncedScrollArea>
   );
 });
