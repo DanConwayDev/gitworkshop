@@ -1,13 +1,17 @@
 /**
- * SyncedScrollArea — overflow-x-auto container with a viewport-fixed
- * horizontal scrollbar at the bottom of the screen.
+ * SyncedScrollArea — overflow-x-auto container with a smart horizontal
+ * scrollbar that is always reachable:
  *
- * The fixed bar is only visible while the component is "straddling" the
- * viewport bottom — i.e. the top of the element is above the viewport bottom
- * and the bottom of the element is below it — so it appears exactly when the
- * native bottom scrollbar would be off-screen.
+ * - When the component bottom is visible in the viewport the bar sits
+ *   naturally at the bottom of the component (position: sticky bottom-0).
+ * - When the user has scrolled so the component bottom is below the viewport
+ *   bottom the bar switches to position: fixed at the viewport bottom so it
+ *   floats while you scroll through the content.
+ * - When the component has been scrolled entirely above the viewport the bar
+ *   returns to the bottom of the component (no longer fixed).
  *
- * Both bars stay in sync via bidirectional scroll event listeners.
+ * Both the in-flow bar and the fixed bar share the same ref and stay in sync
+ * with the content scroll position via bidirectional scroll listeners.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -23,18 +27,22 @@ export function SyncedScrollArea({
 }: SyncedScrollAreaProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const fixedBarRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const syncingRef = useRef(false);
 
   const [scrollWidth, setScrollWidth] = useState(0);
   const [clientWidth, setClientWidth] = useState(0);
-  const [barStyle, setBarStyle] = useState<{
+
+  // When fixed: position/size of the bar in viewport coords
+  const [fixedStyle, setFixedStyle] = useState<{
+    fixed: boolean;
     left: number;
     width: number;
-    visible: boolean;
-  }>({ left: 0, width: 0, visible: false });
+  }>({ fixed: false, left: 0, width: 0 });
 
-  // Track content scroll width and client width via ResizeObserver
+  const hasOverflow = scrollWidth > clientWidth;
+
+  // Track content scroll/client width via ResizeObserver
   useEffect(() => {
     const content = contentRef.current;
     if (!content) return;
@@ -48,64 +56,57 @@ export function SyncedScrollArea({
     return () => ro.disconnect();
   }, []);
 
-  const hasOverflow = scrollWidth > clientWidth;
-
-  // Update fixed bar position/visibility on scroll + resize
-  const updateBarStyle = useCallback(() => {
+  const updateFixedStyle = useCallback(() => {
     const wrapper = wrapperRef.current;
-    const content = contentRef.current;
-    if (!wrapper || !content) return;
-
+    if (!wrapper) return;
     const rect = wrapper.getBoundingClientRect();
     const vh = window.innerHeight;
-    const straddling = rect.top < vh && rect.bottom > vh;
-
-    setBarStyle({
-      left: rect.left,
-      width: rect.width,
-      visible: straddling && hasOverflow,
-    });
-  }, [hasOverflow]);
+    // Switch to fixed only while the card bottom is below the viewport bottom
+    // (native scrollbar would be off-screen) AND the card top is still above
+    // the viewport bottom (card is at least partially visible).
+    const shouldFix = rect.bottom > vh && rect.top < vh;
+    setFixedStyle({ fixed: shouldFix, left: rect.left, width: rect.width });
+  }, []);
 
   useEffect(() => {
-    updateBarStyle();
-    window.addEventListener("scroll", updateBarStyle, { passive: true });
-    window.addEventListener("resize", updateBarStyle, { passive: true });
+    updateFixedStyle();
+    window.addEventListener("scroll", updateFixedStyle, { passive: true });
+    window.addEventListener("resize", updateFixedStyle, { passive: true });
     return () => {
-      window.removeEventListener("scroll", updateBarStyle);
-      window.removeEventListener("resize", updateBarStyle);
+      window.removeEventListener("scroll", updateFixedStyle);
+      window.removeEventListener("resize", updateFixedStyle);
     };
-  }, [updateBarStyle]);
+  }, [updateFixedStyle]);
 
   useEffect(() => {
-    updateBarStyle();
-  }, [hasOverflow, updateBarStyle]);
+    updateFixedStyle();
+  }, [hasOverflow, updateFixedStyle]);
 
-  // Sync: content → fixed bar
+  // Sync: content → bar
   const onContentScroll = useCallback(() => {
     if (syncingRef.current) return;
+    const bar = barRef.current;
     const content = contentRef.current;
-    const fixedBar = fixedBarRef.current;
-    if (!content || !fixedBar) return;
+    if (!bar || !content) return;
     syncingRef.current = true;
-    fixedBar.scrollLeft = content.scrollLeft;
+    bar.scrollLeft = content.scrollLeft;
     syncingRef.current = false;
   }, []);
 
-  // Sync: fixed bar → content
-  const onFixedBarScroll = useCallback(() => {
+  // Sync: bar → content
+  const onBarScroll = useCallback(() => {
     if (syncingRef.current) return;
+    const bar = barRef.current;
     const content = contentRef.current;
-    const fixedBar = fixedBarRef.current;
-    if (!content || !fixedBar) return;
+    if (!bar || !content) return;
     syncingRef.current = true;
-    content.scrollLeft = fixedBar.scrollLeft;
+    content.scrollLeft = bar.scrollLeft;
     syncingRef.current = false;
   }, []);
 
   return (
     <div ref={wrapperRef}>
-      {/* Actual scrollable content — native scrollbar hidden via CSS */}
+      {/* Scrollable content — native scrollbar hidden */}
       <div
         ref={contentRef}
         onScroll={onContentScroll}
@@ -115,17 +116,27 @@ export function SyncedScrollArea({
         {children}
       </div>
 
-      {/* Viewport-fixed mirror scrollbar */}
-      {barStyle.visible && (
+      {/* Mirror scrollbar — only rendered when there is horizontal overflow */}
+      {hasOverflow && (
         <div
-          ref={fixedBarRef}
-          onScroll={onFixedBarScroll}
-          className="fixed bottom-0 z-50 overflow-x-auto overflow-y-hidden h-3 bg-background/95 border-t border-border/60 backdrop-blur-sm"
-          style={{
-            left: barStyle.left,
-            width: barStyle.width,
-            scrollbarWidth: "thin",
-          }}
+          ref={barRef}
+          onScroll={onBarScroll}
+          className="overflow-x-auto overflow-y-hidden h-3 bg-background/95 border-t border-border/60 backdrop-blur-sm z-50"
+          style={
+            fixedStyle.fixed
+              ? {
+                  position: "fixed",
+                  bottom: 0,
+                  left: fixedStyle.left,
+                  width: fixedStyle.width,
+                  scrollbarWidth: "thin",
+                }
+              : {
+                  position: "sticky",
+                  bottom: 0,
+                  scrollbarWidth: "thin",
+                }
+          }
         >
           <div style={{ width: scrollWidth, height: 1 }} />
         </div>
