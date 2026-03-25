@@ -14,7 +14,7 @@
  * attributes for future line-level commenting.
  */
 
-import { memo, useEffect, useState, useMemo, useCallback } from "react";
+import { memo, useEffect, useRef, useState, useMemo, useCallback } from "react";
 import parseDiff from "parse-diff";
 import {
   getHighlighter,
@@ -68,6 +68,16 @@ export interface DiffViewProps {
   className?: string;
   /** Whether files start collapsed (default true) */
   defaultCollapsed?: boolean;
+  /**
+   * When set, the FileDiffCard for this path is forced open and scrolled into
+   * view. Pass the repo-root-relative path (e.g. "src/lib/foo.ts").
+   */
+  expandedFile?: string | null;
+}
+
+/** Stable DOM id for a file's diff card — used for scroll targeting. */
+export function fileDiffCardId(filename: string): string {
+  return "diff-" + filename.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +182,7 @@ export const DiffView = memo(function DiffView({
   diff,
   className,
   defaultCollapsed = true,
+  expandedFile,
 }: DiffViewProps) {
   const files = useMemo(() => parseDiff(diff), [diff]);
 
@@ -211,13 +222,23 @@ export const DiffView = memo(function DiffView({
       </div>
 
       {/* File diffs */}
-      {files.map((file, i) => (
-        <FileDiffCard
-          key={`${file.from ?? ""}→${file.to ?? ""}-${i}`}
-          file={file}
-          defaultCollapsed={defaultCollapsed}
-        />
-      ))}
+      {files.map((file, i) => {
+        const filename = file.to ?? file.from ?? "unknown";
+        const forceExpand =
+          expandedFile != null &&
+          (filename === expandedFile ||
+            file.from === expandedFile ||
+            file.to === expandedFile);
+        return (
+          <FileDiffCard
+            key={`${file.from ?? ""}→${file.to ?? ""}-${i}`}
+            file={file}
+            defaultCollapsed={defaultCollapsed}
+            forceExpand={forceExpand}
+            isActive={forceExpand}
+          />
+        );
+      })}
     </div>
   );
 });
@@ -232,9 +253,15 @@ const LARGE_DIFF_THRESHOLD = 1000;
 const FileDiffCard = memo(function FileDiffCard({
   file,
   defaultCollapsed,
+  forceExpand = false,
+  isActive = false,
 }: {
   file: parseDiff.File;
   defaultCollapsed: boolean;
+  /** When true, force the card open and scroll it into view. */
+  forceExpand?: boolean;
+  /** When true, render with an accent border to indicate it is selected. */
+  isActive?: boolean;
 }) {
   const totalChanges = file.additions + file.deletions;
   const isLarge = totalChanges > LARGE_DIFF_THRESHOLD;
@@ -244,6 +271,20 @@ const FileDiffCard = memo(function FileDiffCard({
   const [hidden, setHidden] = useState(isLarge);
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const toggle = useCallback(() => setCollapsed((c) => !c), []);
+
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // When forceExpand flips to true, open the card and scroll it into view.
+  useEffect(() => {
+    if (!forceExpand) return;
+    setCollapsed(false);
+    setHidden(false);
+    // Small delay so the DOM has expanded before we scroll
+    const id = setTimeout(() => {
+      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+    return () => clearTimeout(id);
+  }, [forceExpand]);
 
   const isDark = useIsDark();
   const theme = isDark ? "github-dark" : "github-light";
@@ -285,7 +326,16 @@ const FileDiffCard = memo(function FileDiffCard({
   const FileIcon = isNew ? FilePlus2 : isDeleted ? FileX2 : FileDiff;
 
   return (
-    <div className="rounded-lg border border-border/60 overflow-hidden">
+    <div
+      ref={cardRef}
+      id={fileDiffCardId(filename)}
+      className={cn(
+        "rounded-lg border overflow-hidden scroll-mt-20 transition-colors",
+        isActive
+          ? "border-violet-500/60 ring-1 ring-violet-500/30"
+          : "border-border/60",
+      )}
+    >
       {/* File header */}
       <button
         onClick={toggle}

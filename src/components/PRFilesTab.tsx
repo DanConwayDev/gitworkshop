@@ -16,16 +16,20 @@
  * pool state (best-effort).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FileDiff,
   FilePlus2,
   FileX2,
   Loader2,
   AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  Folder,
+  FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DiffView } from "@/components/DiffView";
+import { DiffView, fileDiffCardId } from "@/components/DiffView";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   diffTrees,
@@ -75,6 +79,193 @@ function FileStatusBadge({ status }: { status: FileChange["status"] }) {
     >
       {status === "added" ? "A" : status === "deleted" ? "D" : "M"}
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// File tree data structure + sidebar
+// ---------------------------------------------------------------------------
+
+interface TreeFile {
+  kind: "file";
+  name: string;
+  path: string;
+  status: FileChange["status"];
+}
+
+interface TreeDir {
+  kind: "dir";
+  /** Display label — may be "src/lib" after collapsing single-child dirs */
+  label: string;
+  name: string;
+  children: TreeNode[];
+}
+
+type TreeNode = TreeFile | TreeDir;
+
+function insertNode(
+  map: Map<string, TreeNode>,
+  parts: string[],
+  depth: number,
+  change: FileChange,
+): void {
+  const name = parts[depth];
+  if (depth === parts.length - 1) {
+    map.set(name, {
+      kind: "file",
+      name,
+      path: change.path,
+      status: change.status,
+    });
+    return;
+  }
+  let dir = map.get(name);
+  if (!dir || dir.kind !== "dir") {
+    dir = { kind: "dir", name, label: name, children: [] };
+    map.set(name, dir);
+  }
+  const childMap = new Map((dir as TreeDir).children.map((c) => [c.name, c]));
+  insertNode(childMap, parts, depth + 1, change);
+  (dir as TreeDir).children = Array.from(childMap.values());
+}
+
+/** Collapse single-child directory chains into a combined label, e.g. "src/lib". */
+function collapseTree(nodes: TreeNode[]): TreeNode[] {
+  return nodes.map((node) => {
+    if (node.kind === "file") return node;
+    const collapsed: TreeDir = {
+      ...node,
+      children: collapseTree(node.children),
+    };
+    if (
+      collapsed.children.length === 1 &&
+      collapsed.children[0].kind === "dir"
+    ) {
+      const child = collapsed.children[0] as TreeDir;
+      return {
+        ...child,
+        label: `${collapsed.label}/${child.label}`,
+        name: `${collapsed.name}/${child.name}`,
+      };
+    }
+    return collapsed;
+  });
+}
+
+function buildTree(changes: FileChange[]): TreeNode[] {
+  const root = new Map<string, TreeNode>();
+  for (const change of changes) {
+    insertNode(root, change.path.split("/"), 0, change);
+  }
+  return collapseTree(Array.from(root.values()));
+}
+
+function SidebarFileIcon({ status }: { status: FileChange["status"] }) {
+  if (status === "added")
+    return <FilePlus2 className="h-3.5 w-3.5 text-green-500 shrink-0" />;
+  if (status === "deleted")
+    return <FileX2 className="h-3.5 w-3.5 text-red-500 shrink-0" />;
+  return <FileDiff className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
+}
+
+function TreeNodeRow({
+  node,
+  depth,
+  activeFile,
+  onSelect,
+}: {
+  node: TreeNode;
+  depth: number;
+  activeFile: string | null;
+  onSelect: (path: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const indent = depth * 10;
+
+  if (node.kind === "file") {
+    const isActive = activeFile === node.path;
+    return (
+      <button
+        onClick={() => onSelect(node.path)}
+        title={node.path}
+        style={{ paddingLeft: `${6 + indent}px` }}
+        className={cn(
+          "flex items-center gap-1.5 w-full text-left py-[3px] pr-2 rounded text-xs",
+          "hover:bg-muted/60 transition-colors",
+          isActive && "bg-accent text-accent-foreground",
+        )}
+      >
+        <SidebarFileIcon status={node.status} />
+        <span className="truncate min-w-0">{node.name}</span>
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{ paddingLeft: `${6 + indent}px` }}
+        className="flex items-center gap-1.5 w-full text-left py-[3px] pr-2 rounded text-xs text-muted-foreground hover:bg-muted/40 transition-colors"
+      >
+        {open ? (
+          <ChevronDown className="h-3 w-3 shrink-0" />
+        ) : (
+          <ChevronRight className="h-3 w-3 shrink-0" />
+        )}
+        {open ? (
+          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500/80" />
+        ) : (
+          <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500/80" />
+        )}
+        <span className="truncate min-w-0">{node.label}</span>
+      </button>
+      {open &&
+        node.children.map((child) => (
+          <TreeNodeRow
+            key={child.name}
+            node={child}
+            depth={depth + 1}
+            activeFile={activeFile}
+            onSelect={onSelect}
+          />
+        ))}
+    </div>
+  );
+}
+
+function FileTreeSidebar({
+  changes,
+  activeFile,
+  onSelect,
+  loading,
+}: {
+  changes: FileChange[];
+  activeFile: string | null;
+  onSelect: (path: string) => void;
+  loading?: boolean;
+}) {
+  const tree = useMemo(() => buildTree(changes), [changes]);
+
+  return (
+    <div className="hidden lg:flex flex-col w-56 shrink-0 border-r border-border/40 self-stretch">
+      <div className="px-2 py-1.5 border-b border-border/40 flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+        <span className="font-medium text-foreground">{changes.length}</span>
+        <span>{changes.length === 1 ? "file" : "files"} changed</span>
+        {loading && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
+      </div>
+      <div className="overflow-y-auto flex-1 py-1 px-1">
+        {tree.map((node) => (
+          <TreeNodeRow
+            key={node.name}
+            node={node}
+            depth={0}
+            activeFile={activeFile}
+            onSelect={onSelect}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -171,7 +362,15 @@ export function PRFilesTab({
   onFileCountChange,
 }: PRFilesTabProps) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading-trees" });
+  const [activeFile, setActiveFile] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const handleFileSelect = (path: string) => {
+    setActiveFile(path);
+    // Scroll the diff card into view (it will also be forced open via expandedFile prop)
+    const el = document.getElementById(fileDiffCardId(path));
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   // Notify parent when file count is known (phase 1 complete).
   useEffect(() => {
@@ -266,12 +465,20 @@ export function PRFilesTab({
 
   if (phase.kind === "loading-diff") {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Loading diff…</span>
+      <div className="flex gap-0 rounded-lg border border-border/60 overflow-hidden">
+        <FileTreeSidebar
+          changes={phase.changes}
+          activeFile={activeFile}
+          onSelect={handleFileSelect}
+          loading
+        />
+        <div className="flex-1 min-w-0 space-y-4 p-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Loading diff…</span>
+          </div>
+          <FileList changes={phase.changes} />
         </div>
-        <FileList changes={phase.changes} />
       </div>
     );
   }
@@ -285,5 +492,16 @@ export function PRFilesTab({
     );
   }
 
-  return <DiffView diff={phase.diff} />;
+  return (
+    <div className="flex gap-0 rounded-lg border border-border/60 overflow-hidden">
+      <FileTreeSidebar
+        changes={phase.changes}
+        activeFile={activeFile}
+        onSelect={handleFileSelect}
+      />
+      <div className="flex-1 min-w-0 p-3">
+        <DiffView diff={phase.diff} expandedFile={activeFile} />
+      </div>
+    </div>
+  );
 }
