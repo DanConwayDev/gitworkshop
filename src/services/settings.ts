@@ -82,7 +82,7 @@ persist(lookupRelays, "lookupRelays");
  * network. Used for discovering repositories published via ngit.
  */
 export const gitIndexRelays = new BehaviorSubject<string[]>(
-  relaySet(["wss://relay.ngit.dev"]),
+  relaySet(["wss://index.ngit.dev"]),
 );
 
 // Persist the git index relays to localStorage

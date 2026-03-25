@@ -2,7 +2,6 @@ import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { onlyEvents } from "applesauce-relay";
 import { mapEventsToStore } from "applesauce-core";
-import { pool } from "@/services/nostr";
 import { REPO_STATE_KIND } from "@/lib/nip34";
 import {
   RepositoryState,
@@ -112,21 +111,6 @@ export function useRepositoryState(
         startWith(false),
       );
     }, [dTag, maintainerKey, relayKey, store]) ?? repoRelayGroup === undefined;
-
-  // Also query git index relays in case the repo relays don't have the state events.
-  use$(() => {
-    if (!dTag || !maintainerSet || maintainerSet.length === 0) return undefined;
-
-    const indexFilter: Filter = {
-      kinds: [REPO_STATE_KIND],
-      authors: maintainerSet,
-      "#d": [dTag],
-    } as Filter;
-
-    return pool
-      .subscription(["wss://relay.ngit.dev"], [indexFilter])
-      .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [dTag, maintainerKey, store]);
 
   // Read back from the store and pick the winner.
   // store.getReplaceable returns the latest event per pubkey+kind+d-tag,

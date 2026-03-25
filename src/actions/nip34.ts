@@ -12,7 +12,7 @@
  * Relay selection strategy:
  *   - "your outbox"  → user's NIP-65 write relays (kind:10002 outboxes)
  *   - "repo relays"  → relays declared in the repository announcement
- *   - "git index"    → wss://relay.ngit.dev (always included as fallback)
+ *   - "git index"    → wss://index.ngit.dev (always included as fallback)
  *
  * The outbox store (src/services/outbox.ts) receives the relay groups map and
  * tracks per-relay success, retrying rate-limited relays automatically.

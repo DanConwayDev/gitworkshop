@@ -58,7 +58,7 @@ export default function IssuePage() {
   const castStore = store as unknown as CastRefEventStore;
 
   // Fetch the issue event via the repo relay group when available;
-  // fall back to NGIT_RELAYS for initial discovery before the group is ready.
+  // fall back to gitIndexRelays for initial discovery before the group is ready.
   use$(() => {
     if (!issueId) return undefined;
     const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];

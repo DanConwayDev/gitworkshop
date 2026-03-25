@@ -433,17 +433,21 @@ export function getStateHeadCommit(ev: NostrEvent): string | undefined {
   return refs.find((r) => r.name === headRef)?.commitId;
 }
 
-/** Default git index relay URL. */
-export const NGIT_RELAY = "wss://relay.ngit.dev";
+/**
+ * Default git nostr index relay. Any relay operator can run their own index;
+ * this is just the well-known default used to seed the user-configurable
+ * gitIndexRelays setting.
+ */
+export const DEFAULT_GIT_INDEX_RELAY = "wss://index.ngit.dev";
 
 /**
  * Options controlling which relays are queried for repo-specific events
  * (issues, comments, status, zaps). Announcement events (kind 30617) are
- * always fetched from NGIT_RELAYS regardless of these options.
+ * always fetched from gitIndexRelays regardless of these options.
  *
  * relayHints: extra relays to query in addition to the repo's declared relays.
  *   Defaults to [] (empty). Populated from naddr URL relay hints or per-repo
- *   settings. NGIT_RELAYS is NOT included by default — add it here explicitly
+ *   settings. gitIndexRelays is NOT included by default — add it here explicitly
  *   if you want issues from the discovery relay.
  *
  * useItemAuthorRelays: when true, also query the NIP-65 outbox relays of the

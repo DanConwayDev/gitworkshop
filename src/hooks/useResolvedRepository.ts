@@ -73,7 +73,7 @@ function addMailboxRelaysToGroup(
  * Fetch and reactively resolve a single repository by selected maintainer
  * pubkey + d-tag.
  *
- * Layer 1: fetch the selected maintainer's announcement from NGIT_RELAYS.
+ * Layer 1: fetch the selected maintainer's announcement from gitIndexRelays.
  *          Skips the relay query if the announcement is already in the store,
  *          proceeding directly to Layer 2.
  *
