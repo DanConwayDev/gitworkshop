@@ -561,21 +561,26 @@ function DiffLine({
     >
       {/* Sticky gutter: old line · new line · +/- indicator.
           background-image layers the row tint over the solid bg-background
-          so both are visible without fighting over background-color. */}
+          so both are visible without fighting over background-color.
+          The gutter uses a higher-opacity tint than the row so it reads
+          as slightly darker without losing the hue. */}
       <td
         className="sticky left-0 select-none align-top p-0 w-[1%] whitespace-nowrap bg-background"
         style={
           isAdd
             ? {
                 backgroundImage:
-                  "linear-gradient(rgba(34,197,94,0.15),rgba(34,197,94,0.15))",
+                  "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28))",
               }
             : isDel
               ? {
                   backgroundImage:
-                    "linear-gradient(rgba(239,68,68,0.15),rgba(239,68,68,0.15))",
+                    "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28))",
                 }
-              : undefined
+              : {
+                  backgroundImage:
+                    "linear-gradient(rgba(0,0,0,0.035),rgba(0,0,0,0.035))",
+                }
         }
       >
         <div className="flex items-stretch border-r border-border/30">
