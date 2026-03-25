@@ -234,6 +234,31 @@ export function parseRepoRoute(splat: string): ParsedRepoRoute | undefined {
 }
 
 /**
+ * Parse a relay URL from a route segment or user input.
+ *
+ * Accepts:
+ *   - Full URLs:  wss://relay.ngit.dev  ws://relay.ngit.dev
+ *   - Hint form:  relay.ngit.dev  (no scheme → wss:// prepended)
+ *   - URL-encoded variants of the above
+ *
+ * Returns the normalised wss:// or ws:// URL, or undefined if invalid.
+ */
+export function parseRelayUrl(raw: string): string | undefined {
+  return normalizeRelayHint(raw);
+}
+
+/**
+ * Encode a relay URL for use as a route segment.
+ * Strips wss:// (the common case) so URLs stay readable.
+ * ws:// is kept as-is (URL-encoded) so the scheme is preserved on decode.
+ */
+export function relayUrlToSegment(url: string): string {
+  if (url.startsWith("wss://")) return url.slice(6);
+  // ws:// — keep the scheme but URL-encode the colons/slashes
+  return encodeURIComponent(url);
+}
+
+/**
  * Normalise a relay hint segment back to a full wss:// URL.
  * The hint is stored without the scheme (wss:// stripped when generating).
  */

@@ -1,25 +1,56 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
-import { useRepositoryList } from "@/hooks/useRepositoryList";
+import { useAllRepositories } from "@/hooks/useAllRepositories";
 import { repoToPath } from "@/lib/routeUtils";
 import { UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GitBranch, Search, ExternalLink, Sparkles } from "lucide-react";
+import {
+  GitBranch,
+  Search,
+  ExternalLink,
+  Sparkles,
+  Loader2,
+} from "lucide-react";
 import type { ResolvedRepo } from "@/lib/nip34";
 import { formatDistanceToNow } from "date-fns";
 
-export default function RepositoriesPage() {
+const PAGE_SIZE = 50;
+
+interface RepositoriesPageProps {
+  /** When set, query this relay instead of the user's configured git index relays. */
+  relayOverride?: string[];
+  /** Display label for the relay (e.g. "relay.ngit.dev") shown in the hero. */
+  relayLabel?: string;
+}
+
+export default function RepositoriesPage({
+  relayOverride,
+  relayLabel,
+}: RepositoriesPageProps) {
+  const { repos, isSyncing } = useAllRepositories(relayOverride);
+  const [search, setSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const title = relayLabel
+    ? `Repositories on ${relayLabel} - ngit`
+    : "Repositories - ngit";
+
   useSeoMeta({
-    title: "Repositories - ngit Issue Tracker",
-    description: "Browse git repositories on Nostr",
+    title,
+    description: relayLabel
+      ? `Browse git repositories on ${relayLabel}`
+      : "Browse git repositories on Nostr",
   });
 
-  const repos = useRepositoryList();
-  const [search, setSearch] = useState("");
+  // Reset visible count when search changes so results start from the top
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [search]);
 
   const filtered = useMemo(() => {
     if (!repos) return undefined;
@@ -33,6 +64,33 @@ export default function RepositoriesPage() {
     );
   }, [repos, search]);
 
+  const visible = useMemo(
+    () => filtered?.slice(0, visibleCount),
+    [filtered, visibleCount],
+  );
+
+  const loadMore = useCallback(() => {
+    setVisibleCount((c) => c + PAGE_SIZE);
+  }, []);
+
+  // IntersectionObserver sentinel for infinite scroll
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) loadMore();
+      },
+      { rootMargin: "200px" },
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loadMore]);
+
+  const hasMore = filtered !== undefined && visibleCount < filtered.length;
+
   return (
     <div className="min-h-screen">
       {/* Hero section */}
@@ -45,7 +103,7 @@ export default function RepositoriesPage() {
           <div className="flex items-center gap-3 mb-4">
             <Sparkles className="h-5 w-5 text-violet-500" />
             <span className="text-sm font-medium text-muted-foreground">
-              Powered by Nostr
+              {relayLabel ? relayLabel : "Powered by Nostr"}
             </span>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">
@@ -54,31 +112,52 @@ export default function RepositoriesPage() {
             </span>
           </h1>
           <p className="text-muted-foreground text-lg max-w-2xl mb-8">
-            Decentralized code collaboration. Browse repositories, track issues,
-            and contribute -- all over Nostr.
+            {relayLabel
+              ? `Repositories indexed on ${relayLabel}.`
+              : "Decentralized code collaboration. Browse repositories, track issues, and contribute -- all over Nostr."}
           </p>
 
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search repositories..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 bg-background/60 backdrop-blur-sm border-border/60 focus-visible:ring-violet-500/30"
-            />
+          <div className="flex items-center gap-4">
+            <div className="relative max-w-md flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search repositories..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10 bg-background/60 backdrop-blur-sm border-border/60 focus-visible:ring-violet-500/30"
+              />
+            </div>
+
+            {/* Sync status indicator */}
+            {isSyncing && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+                <span>Syncing…</span>
+                {repos && (
+                  <span className="text-muted-foreground/60">
+                    {repos.length} found
+                  </span>
+                )}
+              </div>
+            )}
+            {!isSyncing && repos && (
+              <span className="text-sm text-muted-foreground/60">
+                {repos.length} repositories
+              </span>
+            )}
           </div>
         </div>
       </div>
 
       {/* Repository list */}
       <div className="container max-w-screen-xl px-4 md:px-8 py-8">
-        {!filtered ? (
+        {!visible ? (
           <div className="grid gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <RepoSkeleton key={i} />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : visible.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="py-16 text-center">
               <GitBranch className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
@@ -88,19 +167,36 @@ export default function RepositoriesPage() {
                   : "No repositories found on this relay"}
               </p>
               <p className="text-muted-foreground/60 text-sm mt-1">
-                Try a different search or check back later
+                {isSyncing
+                  ? "Still syncing — check back in a moment"
+                  : "Try a different search or check back later"}
               </p>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-3">
-            {filtered.map((repo) => (
-              <RepoCard
-                key={`${repo.selectedMaintainer}:${repo.dTag}`}
-                repo={repo}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid gap-3">
+              {visible.map((repo) => (
+                <RepoCard
+                  key={`${repo.selectedMaintainer}:${repo.dTag}`}
+                  repo={repo}
+                />
+              ))}
+            </div>
+
+            {/* Infinite scroll sentinel */}
+            {hasMore && (
+              <div ref={sentinelRef} className="flex justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" />
+              </div>
+            )}
+
+            {!hasMore && filtered && filtered.length > PAGE_SIZE && (
+              <p className="text-center text-sm text-muted-foreground/40 py-8">
+                All {filtered.length} repositories loaded
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>

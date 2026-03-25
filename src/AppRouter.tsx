@@ -3,6 +3,7 @@ import { ScrollToTop } from "./components/ScrollToTop";
 import { AppHeader } from "./components/AppHeader";
 
 import RepositoriesPage from "./pages/RepositoriesPage";
+import RelayPage from "./pages/RelayPage";
 import RepoLayout from "./pages/repo/RepoLayout";
 import Settings from "./pages/Settings";
 import { NIP19Page } from "./pages/NIP19Page";
@@ -16,6 +17,11 @@ export function AppRouter() {
       <Routes>
         <Route path="/" element={<RepositoriesPage />} />
         <Route path="/settings" element={<Settings />} />
+        {/* /relay/:relaySegment — browse repos on a specific relay.
+            The segment uses the same format as relay hints: wss:// is stripped,
+            ws:// is URL-encoded. e.g. /relay/relay.ngit.dev
+            Must be declared before /:nip19 to avoid being swallowed. */}
+        <Route path="/relay/:relaySegment" element={<RelayPage />} />
         {/* NIP-19 route for single-segment bech32 identifiers:
             npub1…, nprofile1…, note1…, nevent1…, naddr1… */}
         <Route path="/:nip19" element={<NIP19Page />} />
