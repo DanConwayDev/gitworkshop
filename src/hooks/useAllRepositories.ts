@@ -113,6 +113,9 @@ export function useAllRepositories(
                 for (const ev of events) eventStore.add(ev);
               }
             },
+            // pool.d.ts types opts as NegentropySyncOptions but the group
+            // implementation requires parallel:true — cast to satisfy TS.
+            { parallel: true } as object,
           );
         } else {
           // ── Fallback: sequential until-walk ─────────────────────────────
