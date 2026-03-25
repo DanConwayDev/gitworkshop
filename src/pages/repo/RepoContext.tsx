@@ -35,6 +35,16 @@ export interface RepoContextValue {
   commitId?: string;
   /** The ref segment from a /commits/:ref URL (branch, tag, or commit hash). */
   commitsRef?: string;
+  /**
+   * Set when viewing a commit detail scoped to a PR
+   * (route: prs/<prId>/commit/<commitId>).
+   */
+  prCommitId?: string;
+  /**
+   * The canonical path to the current PR, e.g. "/npub1.../relay/repo/prs/<prId>".
+   * Set whenever a PR sub-page is active. Used to build PR-scoped commit links.
+   */
+  prBasePath?: string;
 }
 
 export const RepoContext = createContext<RepoContextValue | null>(null);

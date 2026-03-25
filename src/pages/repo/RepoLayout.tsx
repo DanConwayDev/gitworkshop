@@ -8,6 +8,7 @@ import RepoCommitsPage from "./RepoCommitsPage";
 import RepoCommitPage from "./RepoCommitPage";
 import IssuePage from "@/pages/IssuePage";
 import PRPage from "@/pages/PRPage";
+import PRCommitPage from "@/pages/PRCommitPage";
 import { useIssues } from "@/hooks/useIssues";
 import { usePRs } from "@/hooks/usePRs";
 import { useDnsIdentity } from "@/hooks/useDnsIdentity";
@@ -245,79 +246,117 @@ function RepoLayoutResolved({
     location.pathname.startsWith(`${basePath}/commit`);
   const isIssuesTab = location.pathname.startsWith(`${basePath}/issues`);
   const isPRsTab = location.pathname.startsWith(`${basePath}/prs`);
-
   // Determine which sub-page to render from the splat segments.
-  const { subPage, issueId, prId, treeRefAndPath, commitId, commitsRef } =
-    useMemo((): {
-      subPage:
-        | "code"
-        | "issues"
-        | "issue"
-        | "prs"
-        | "pr"
-        | "commits"
-        | "commit";
-      issueId?: string;
-      prId?: string;
-      /** Everything after /tree/ — ref resolution happens inside useGitExplorer */
-      treeRefAndPath?: string;
-      commitId?: string;
-      commitsRef?: string;
-    } => {
-      const segments = splat.split("/").filter(Boolean);
+  const {
+    subPage,
+    issueId,
+    prId,
+    treeRefAndPath,
+    commitId,
+    commitsRef,
+    prCommitId,
+  } = useMemo((): {
+    subPage:
+      | "code"
+      | "issues"
+      | "issue"
+      | "prs"
+      | "pr"
+      | "pr-commit"
+      | "commits"
+      | "commit";
+    issueId?: string;
+    prId?: string;
+    /** Everything after /tree/ — ref resolution happens inside useGitExplorer */
+    treeRefAndPath?: string;
+    commitId?: string;
+    commitsRef?: string;
+    prCommitId?: string;
+  } => {
+    const segments = splat.split("/").filter(Boolean);
 
-      // Find the index of the first known sub-path keyword
-      const treeIdx = segments.indexOf("tree");
-      if (treeIdx !== -1) {
-        // Pass everything after "tree" as a single string; useGitExplorer will
-        // resolve the ref via longest-prefix matching against known git refs.
-        const refAndPath = segments.slice(treeIdx + 1).join("/");
-        return { subPage: "code", treeRefAndPath: refAndPath || undefined };
-      }
+    // Find the index of the first known sub-path keyword
+    const treeIdx = segments.indexOf("tree");
+    if (treeIdx !== -1) {
+      // Pass everything after "tree" as a single string; useGitExplorer will
+      // resolve the ref via longest-prefix matching against known git refs.
+      const refAndPath = segments.slice(treeIdx + 1).join("/");
+      return { subPage: "code", treeRefAndPath: refAndPath || undefined };
+    }
 
-      const commitIdx = segments.indexOf("commit");
-      if (commitIdx !== -1) {
-        return { subPage: "commit", commitId: segments[commitIdx + 1] };
-      }
+    const prsIdx = segments.indexOf("prs");
+    if (prsIdx !== -1) {
+      if (segments.length > prsIdx + 1) {
+        const rawSegment = segments[prsIdx + 1];
+        // Accept both raw hex IDs (legacy) and nevent1/note1 identifiers
+        const prId = isEventIdentifier(rawSegment)
+          ? decodeEventIdentifier(rawSegment)
+          : rawSegment;
 
-      const commitsIdx = segments.indexOf("commits");
-      if (commitsIdx !== -1) {
-        return {
-          subPage: "commits",
-          commitsRef: segments.slice(commitsIdx + 1).join("/") || undefined,
-        };
-      }
+        // prs/<id>/commit/<hash> — commit detail scoped to a PR
+        const prCommitIdx = segments.indexOf("commit", prsIdx + 2);
+        if (prCommitIdx !== -1) {
+          return {
+            subPage: "pr-commit",
+            prId,
+            prCommitId: segments[prCommitIdx + 1],
+          };
+        }
 
-      const prsIdx = segments.indexOf("prs");
-      if (prsIdx !== -1) {
-        if (segments.length > prsIdx + 1) {
-          const rawSegment = segments[prsIdx + 1];
-          // Accept both raw hex IDs (legacy) and nevent1/note1 identifiers
-          const prId = isEventIdentifier(rawSegment)
-            ? decodeEventIdentifier(rawSegment)
-            : rawSegment;
+        // prs/<id>/commits — commits list scoped to a PR (renders PRPage
+        // with the commits tab pre-selected via context)
+        const prCommitsIdx = segments.indexOf("commits", prsIdx + 2);
+        if (prCommitsIdx !== -1) {
           return { subPage: "pr", prId };
         }
-        return { subPage: "prs" };
-      }
 
-      const issuesIdx = segments.indexOf("issues");
-      if (issuesIdx !== -1) {
-        if (segments.length > issuesIdx + 1) {
-          const rawSegment = segments[issuesIdx + 1];
-          // Accept both raw hex IDs (legacy) and nevent1/note1 identifiers
-          const issueId = isEventIdentifier(rawSegment)
-            ? decodeEventIdentifier(rawSegment)
-            : rawSegment;
-          return { subPage: "issue", issueId };
-        }
-        return { subPage: "issues" };
+        return { subPage: "pr", prId };
       }
+      return { subPage: "prs" };
+    }
 
-      return { subPage: "code" };
-    }, [splat]);
+    const commitIdx = segments.indexOf("commit");
+    if (commitIdx !== -1) {
+      return { subPage: "commit", commitId: segments[commitIdx + 1] };
+    }
+
+    const commitsIdx = segments.indexOf("commits");
+    if (commitsIdx !== -1) {
+      return {
+        subPage: "commits",
+        commitsRef: segments.slice(commitsIdx + 1).join("/") || undefined,
+      };
+    }
+
+    const issuesIdx = segments.indexOf("issues");
+    if (issuesIdx !== -1) {
+      if (segments.length > issuesIdx + 1) {
+        const rawSegment = segments[issuesIdx + 1];
+        // Accept both raw hex IDs (legacy) and nevent1/note1 identifiers
+        const issueId = isEventIdentifier(rawSegment)
+          ? decodeEventIdentifier(rawSegment)
+          : rawSegment;
+        return { subPage: "issue", issueId };
+      }
+      return { subPage: "issues" };
+    }
+
+    return { subPage: "code" };
+  }, [splat]);
 
   const cloneUrls = repo?.cloneUrls ?? [];
+
+  // The PR base path: basePath + /prs/<prId> — used for PR sub-route links.
+  const prBasePath = useMemo(() => {
+    if (!prId) return undefined;
+    const full = `/${splat}`;
+    const prsIdx = full.indexOf("/prs/");
+    if (prsIdx === -1) return undefined;
+    // Find the end of the prId segment (next "/" after prs/<id>)
+    const afterPrs = prsIdx + "/prs/".length;
+    const nextSlash = full.indexOf("/", afterPrs);
+    return nextSlash === -1 ? full : full.slice(0, nextSlash);
+  }, [splat, prId]);
 
   const ctxValue: RepoContextValue | null =
     pubkey && repoId
@@ -337,6 +376,8 @@ function RepoLayoutResolved({
           treeRefAndPath,
           commitId,
           commitsRef,
+          prCommitId,
+          prBasePath,
         }
       : null;
 
@@ -413,6 +454,8 @@ function RepoLayoutResolved({
             <RepoIssuesPage />
           ) : subPage === "pr" ? (
             <PRPage />
+          ) : subPage === "pr-commit" ? (
+            <PRCommitPage />
           ) : subPage === "prs" ? (
             <RepoPRsPage />
           ) : null}

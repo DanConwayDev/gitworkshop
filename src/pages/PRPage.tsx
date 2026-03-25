@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -50,6 +50,13 @@ import { PR } from "@/casts/PR";
 import { Patch } from "@/casts/Patch";
 import { DiffView } from "@/components/DiffView";
 import { PRFilesTab } from "@/components/PRFilesTab";
+import {
+  CommitList,
+  CommitListLoading,
+  CommitListEmpty,
+  CommitListError,
+} from "@/components/CommitList";
+import { useCommitHistory } from "@/hooks/useGitExplorer";
 import { gitIndexRelays, relayCurationMode } from "@/services/settings";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
@@ -60,7 +67,10 @@ import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
 
 export default function PRPage() {
-  const { pubkey, repoId, resolved, prId, cloneUrls } = useRepoContext();
+  const { pubkey, repoId, resolved, prId, cloneUrls, prBasePath } =
+    useRepoContext();
+  const location = useLocation();
+  const navigate = useNavigate();
   const repo = resolved?.repo;
   const repoRelayGroup = resolved?.repoRelayGroup;
   const extraRelaysForMaintainerMailboxCoverage =
@@ -71,7 +81,27 @@ export default function PRPage() {
   const castStore = store as unknown as CastRefEventStore;
 
   // Git pool — uses the repo's clone URLs (same as RepoCodePage).
-  const { pool: gitPool } = useGitPool(cloneUrls);
+  const { pool: gitPool, poolState: gitPoolState } = useGitPool(cloneUrls);
+
+  // Derive the active tab from the URL so that navigating to
+  // prs/<id>/commits lands on the commits tab, and clicking a tab updates
+  // the route accordingly.
+  const activeTab = useMemo(() => {
+    const p = location.pathname;
+    if (p.endsWith("/commits")) return "commits";
+    if (p.endsWith("/files")) return "files";
+    if (p.endsWith("/patch")) return "patch";
+    return "conversation";
+  }, [location.pathname]);
+
+  const handleTabChange = (value: string) => {
+    if (!prBasePath) return;
+    if (value === "conversation") {
+      navigate(prBasePath);
+    } else {
+      navigate(`${prBasePath}/${value}`);
+    }
+  };
 
   // Fetch the PR/patch event via the repo relay group when available;
   // fall back to git index relays for initial discovery.
@@ -127,6 +157,25 @@ export default function PRPage() {
   const patch = patches?.[0];
   const prEvent = pr?.event ?? patch?.event;
   const itemType = patch ? "patch" : "pr";
+
+  // Commit history for the PR commits tab — fetches from tipCommitId and we
+  // slice off everything at and after mergeBase.
+  const prCommitHistory = useCommitHistory(
+    gitPool,
+    gitPoolState,
+    pr?.tipCommitId,
+    100,
+  );
+  const prCommits = useMemo(() => {
+    if (!pr?.mergeBase || !prCommitHistory.commits.length)
+      return prCommitHistory.commits;
+    const idx = prCommitHistory.commits.findIndex(
+      (c) => c.hash === pr.mergeBase,
+    );
+    return idx === -1
+      ? prCommitHistory.commits
+      : prCommitHistory.commits.slice(0, idx);
+  }, [prCommitHistory.commits, pr?.mergeBase]);
 
   // Trigger two-tier loading for this PR/patch.
   useNip34Loaders(prId, repoRelayGroup, {
@@ -280,7 +329,11 @@ export default function PRPage() {
       <div className="container max-w-screen-xl px-4 md:px-8 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
           {/* Main content — tabbed */}
-          <Tabs defaultValue="conversation" className="space-y-4">
+          <Tabs
+            value={activeTab}
+            onValueChange={handleTabChange}
+            className="space-y-4"
+          >
             <TabsList className="h-9">
               <TabsTrigger value="conversation" className="gap-1.5 text-sm">
                 <MessageCircle className="h-3.5 w-3.5" />
@@ -297,6 +350,14 @@ export default function PRPage() {
                 <TabsTrigger value="files" className="gap-1.5 text-sm">
                   <FileDiff className="h-3.5 w-3.5" />
                   Files Changed
+                </TabsTrigger>
+              )}
+
+              {/* Commits tab — only for PRs with a tip commit */}
+              {itemType === "pr" && pr?.tipCommitId && (
+                <TabsTrigger value="commits" className="gap-1.5 text-sm">
+                  <GitCommitHorizontal className="h-3.5 w-3.5" />
+                  Commits
                 </TabsTrigger>
               )}
 
@@ -375,6 +436,32 @@ export default function PRPage() {
                     tipCommitId={pr.tipCommitId}
                     baseCommitId={pr.mergeBase}
                     pool={gitPool}
+                  />
+                )}
+              </TabsContent>
+            )}
+
+            {/* Commits tab */}
+            {itemType === "pr" && pr?.tipCommitId && (
+              <TabsContent value="commits" className="mt-0">
+                {!pr.mergeBase ? (
+                  <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+                    This PR does not include a merge-base commit. Cannot
+                    determine which commits belong to the PR.
+                  </div>
+                ) : prCommitHistory.error ? (
+                  <CommitListError message={prCommitHistory.error} />
+                ) : prCommitHistory.loading ? (
+                  <CommitListLoading count={4} />
+                ) : prCommits.length === 0 ? (
+                  <CommitListEmpty message="No commits found for this PR." />
+                ) : (
+                  <CommitList
+                    commits={prCommits}
+                    basePath={
+                      prBasePath ??
+                      repoToPath(pubkey, repoId, repo?.relays ?? [])
+                    }
                   />
                 )}
               </TabsContent>
