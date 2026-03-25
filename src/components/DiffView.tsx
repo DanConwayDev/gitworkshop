@@ -224,7 +224,10 @@ export const DiffView = memo(function DiffView({
 
       {/* File diffs */}
       {files.map((file, i) => {
-        const filename = file.to ?? file.from ?? "unknown";
+        const filename =
+          (file.to !== "/dev/null" ? file.to : undefined) ??
+          (file.from !== "/dev/null" ? file.from : undefined) ??
+          "unknown";
         const forceExpand =
           expandedFile != null &&
           (filename === expandedFile ||
@@ -291,10 +294,13 @@ const FileDiffCard = memo(function FileDiffCard({
   const theme = isDark ? "github-dark" : "github-light";
   const hl = useHighlighter();
 
-  const filename = file.to ?? file.from ?? "unknown";
+  const filename =
+    (file.to !== "/dev/null" ? file.to : undefined) ??
+    (file.from !== "/dev/null" ? file.from : undefined) ??
+    "unknown";
   const lang = langFromFilename(filename);
-  const isNew = file.new === true;
-  const isDeleted = file.deleted === true;
+  const isNew = file.new === true || file.from === "/dev/null";
+  const isDeleted = file.deleted === true || file.to === "/dev/null";
   const isRenamed = file.from !== file.to && !isNew && !isDeleted;
 
   // Collect all unique line contents for batch highlighting
