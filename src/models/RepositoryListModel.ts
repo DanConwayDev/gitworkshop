@@ -1,4 +1,4 @@
-import { map } from "rxjs/operators";
+import { map, debounceTime } from "rxjs/operators";
 import type { Model } from "applesauce-core/event-store";
 import {
   REPO_KIND,
@@ -26,10 +26,15 @@ const repoFilter: Filter[] = [{ kinds: [REPO_KIND] }];
  *
  * Model cache key: (forPubkey) — one shared instance per pubkey
  * (or one global instance when called with no args).
+ *
+ * debounceTime(150) prevents groupIntoResolvedRepos (O(n²)) from running on
+ * every individual event during bulk-fetch (NIP-77 sync / pagination walk),
+ * which would otherwise cause thousands of expensive recomputations.
  */
 export function RepositoryListModel(forPubkey?: string): Model<ResolvedRepo[]> {
   return (store) =>
-    store
-      .timeline(repoFilter)
-      .pipe(map((events) => groupIntoResolvedRepos(events, forPubkey)));
+    store.timeline(repoFilter).pipe(
+      debounceTime(150),
+      map((events) => groupIntoResolvedRepos(events, forPubkey)),
+    );
 }
