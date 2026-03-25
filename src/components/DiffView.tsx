@@ -187,6 +187,20 @@ export const DiffView = memo(function DiffView({
 }: DiffViewProps) {
   const files = useMemo(() => parseDiff(diff), [diff]);
 
+  // Incremented each time a new file is selected from the sidebar — non-active
+  // FileDiffCards watch this to know they should collapse.
+  const [collapseSignal, setCollapseSignal] = useState(0);
+  const prevExpandedFile = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    // Only fire the collapse signal when expandedFile actually changes to a
+    // new non-null value (i.e. the user clicked a different file in the sidebar).
+    if (expandedFile != null && expandedFile !== prevExpandedFile.current) {
+      setCollapseSignal((s) => s + 1);
+    }
+    prevExpandedFile.current = expandedFile;
+  }, [expandedFile]);
+
   if (files.length === 0) {
     return (
       <div className="text-sm text-muted-foreground text-center py-6">
@@ -240,6 +254,7 @@ export const DiffView = memo(function DiffView({
             defaultCollapsed={defaultCollapsed}
             forceExpand={forceExpand}
             isActive={forceExpand}
+            collapseSignal={forceExpand ? undefined : collapseSignal}
           />
         );
       })}
@@ -259,6 +274,7 @@ const FileDiffCard = memo(function FileDiffCard({
   defaultCollapsed,
   forceExpand = false,
   isActive = false,
+  collapseSignal,
 }: {
   file: parseDiff.File;
   defaultCollapsed: boolean;
@@ -266,6 +282,11 @@ const FileDiffCard = memo(function FileDiffCard({
   forceExpand?: boolean;
   /** When true, render with an accent border to indicate it is selected. */
   isActive?: boolean;
+  /**
+   * Incremented by the parent whenever a different file is selected from the
+   * sidebar. Non-active cards collapse when this value changes.
+   */
+  collapseSignal?: number;
 }) {
   const totalChanges = file.additions + file.deletions;
   const isLarge = totalChanges > LARGE_DIFF_THRESHOLD;
@@ -289,6 +310,20 @@ const FileDiffCard = memo(function FileDiffCard({
     }, 50);
     return () => clearTimeout(id);
   }, [forceExpand]);
+
+  // Collapse this card when another file is selected from the sidebar.
+  // collapseSignal is undefined for the active card, so it won't self-collapse.
+  const prevCollapseSignal = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      collapseSignal !== undefined &&
+      prevCollapseSignal.current !== undefined &&
+      collapseSignal !== prevCollapseSignal.current
+    ) {
+      setCollapsed(true);
+    }
+    prevCollapseSignal.current = collapseSignal;
+  }, [collapseSignal]);
 
   const isDark = useIsDark();
   const theme = isDark ? "github-dark" : "github-light";
