@@ -1,9 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useActiveAccount } from "applesauce-react/hooks";
-import { factory } from "@/services/actions";
-import { publish } from "@/services/nostr";
-import { gitIndexRelays } from "@/services/settings";
-import { IssueSubjectRenameBlueprint } from "@/blueprints/label";
+import { runner } from "@/services/actions";
+import { RenameIssueSubject } from "@/actions/nip34";
 import { useToast } from "@/hooks/useToast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,6 +13,8 @@ interface EditableSubjectProps {
   currentSubject: string;
   /** Whether the current user is authorised to edit */
   canEdit: boolean;
+  /** Relay URLs declared in the repository announcement */
+  repoRelays?: string[];
 }
 
 /**
@@ -30,8 +29,8 @@ export function EditableSubject({
   issueId,
   currentSubject,
   canEdit,
+  repoRelays = [],
 }: EditableSubjectProps) {
-  const account = useActiveAccount();
   const { toast } = useToast();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -83,24 +82,9 @@ export function EditableSubject({
       return;
     }
 
-    if (!account) {
-      toast({
-        title: "Not logged in",
-        description: "You must be logged in to rename an issue.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsPending(true);
     try {
-      const template = await factory.create(
-        IssueSubjectRenameBlueprint,
-        issueId,
-        trimmed,
-      );
-      const signed = await factory.sign(template);
-      await publish(signed, gitIndexRelays.getValue());
+      await runner.run(RenameIssueSubject, issueId, trimmed, repoRelays);
 
       toast({
         title: "Issue renamed",
@@ -119,7 +103,7 @@ export function EditableSubject({
     } finally {
       setIsPending(false);
     }
-  }, [value, currentSubject, account, issueId, toast]);
+  }, [value, currentSubject, issueId, repoRelays, toast]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {

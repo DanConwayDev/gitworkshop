@@ -1,9 +1,6 @@
 import { useState, useCallback } from "react";
-import { useActiveAccount } from "applesauce-react/hooks";
-import { factory } from "@/services/actions";
-import { publish } from "@/services/nostr";
-import { IssueBlueprint } from "@/blueprints/issue";
-import { gitIndexRelays } from "@/services/settings";
+import { runner } from "@/services/actions";
+import { CreateIssue } from "@/actions/nip34";
 import { useToast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,13 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { LabelBadge } from "@/components/LabelBadge";
 import { Loader2, Plus, X, CircleDot } from "lucide-react";
-import { pool } from "@/services/nostr";
 
 interface CreateIssueFormProps {
   /** Repository coordinate: "30617:<pubkey>:<d-tag>" */
   repoCoord: string;
   /** Hex pubkey of the repository owner */
   ownerPubkey: string;
+  /** Relay URLs declared in the repository announcement */
+  repoRelays?: string[];
   /** Called after the issue is successfully published */
   onSuccess?: () => void;
   /** Called when the user cancels */
@@ -27,10 +25,10 @@ interface CreateIssueFormProps {
 export function CreateIssueForm({
   repoCoord,
   ownerPubkey,
+  repoRelays = [],
   onSuccess,
   onCancel,
 }: CreateIssueFormProps) {
-  const account = useActiveAccount();
   const { toast } = useToast();
 
   const [subject, setSubject] = useState("");
@@ -67,15 +65,6 @@ export function CreateIssueForm({
     async (e: React.FormEvent) => {
       e.preventDefault();
 
-      if (!account) {
-        toast({
-          title: "Not logged in",
-          description: "You must be logged in to create an issue.",
-          variant: "destructive",
-        });
-        return;
-      }
-
       const trimmedSubject = subject.trim();
       if (!trimmedSubject) {
         toast({
@@ -88,21 +77,15 @@ export function CreateIssueForm({
 
       setIsPending(true);
       try {
-        const template = await factory.create(
-          IssueBlueprint,
+        await runner.run(
+          CreateIssue,
           repoCoord,
           ownerPubkey,
           trimmedSubject,
           content.trim(),
+          repoRelays,
           { labels },
         );
-        const signed = await factory.sign(template);
-
-        // Publish to both the ngit relay and any user-configured relays
-        await publish(signed, gitIndexRelays.getValue());
-
-        // Also publish to the repo's own relay set if available
-        await pool.publish(gitIndexRelays.getValue(), signed);
 
         toast({
           title: "Issue created",
@@ -123,12 +106,12 @@ export function CreateIssueForm({
       }
     },
     [
-      account,
       subject,
       content,
       labels,
       repoCoord,
       ownerPubkey,
+      repoRelays,
       toast,
       onSuccess,
     ],
@@ -235,7 +218,7 @@ export function CreateIssueForm({
         <Button
           type="submit"
           size="sm"
-          disabled={isPending || !subject.trim() || !account}
+          disabled={isPending || !subject.trim()}
           className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
         >
           {isPending ? (
@@ -251,12 +234,6 @@ export function CreateIssueForm({
           )}
         </Button>
       </div>
-
-      {!account && (
-        <p className="text-xs text-muted-foreground text-center">
-          You must be logged in to submit an issue.
-        </p>
-      )}
     </form>
   );
 }

@@ -1,8 +1,14 @@
 import { Link, useLocation } from "react-router-dom";
 import { LoginArea } from "@/components/auth/LoginArea";
-import { GitBranch, Settings } from "lucide-react";
+import { GitBranch, Settings, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { OutboxPanel, OutboxPendingBadge } from "@/components/OutboxPanel";
 
 export function AppHeader() {
   const location = useLocation();
@@ -26,6 +32,29 @@ export function AppHeader() {
         </Link>
 
         <div className="flex items-center gap-2">
+          {/* Outbox button */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 relative"
+                aria-label="Outbox"
+              >
+                <Send className="h-4 w-4" />
+                <span className="absolute -top-0.5 -right-0.5">
+                  <OutboxPendingBadge />
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              className="w-96 p-0 max-h-[480px] overflow-hidden flex flex-col"
+            >
+              <OutboxPanel />
+            </PopoverContent>
+          </Popover>
+
           <Button
             variant="ghost"
             size="icon"

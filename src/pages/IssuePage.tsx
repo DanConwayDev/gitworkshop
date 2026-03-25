@@ -201,6 +201,7 @@ export default function IssuePage() {
                   issueId={issue.id}
                   currentSubject={currentSubject || issue.subject}
                   canEdit={canEditSubject}
+                  repoRelays={repo?.relays}
                 />
               </div>
 
@@ -305,7 +306,7 @@ export default function IssuePage() {
                       { value: "resolved", label: "Resolved" },
                       { value: "closed", label: "Closed" },
                     ]}
-                    relays={repo?.relays}
+                    repoRelays={repo?.relays}
                   />
                 )}
 

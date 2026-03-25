@@ -18,6 +18,7 @@ import { Observable, merge } from "rxjs";
 import { cacheRequest, saveEvents } from "./cache";
 import { extraRelays, lookupRelays } from "./settings";
 import { ISSUE_KIND, PR_ROOT_KINDS } from "@/lib/nip34";
+import { outboxStore } from "./outbox";
 
 /**
  * Global EventStore instance for all Nostr events.
@@ -60,24 +61,34 @@ liveness.connectToPool(pool);
  */
 NostrConnectSigner.pool = pool;
 
+// Inject the pool into the outbox store so it can publish to relays.
+// This is done here (after pool is created) to avoid a circular dependency.
+outboxStore.pool = pool;
+
 /**
  * Publish an event to the configured relays.
- * Automatically adds the event to the local EventStore.
  *
- * @param event - The signed Nostr event to publish
- * @param relays - Optional array of relay URLs (uses defaultRelays if not provided)
+ * This is the low-level publish used by the ActionRunner for built-in
+ * applesauce actions (UpdateProfile, AddOutboxRelay, etc.). It publishes to
+ * the union of the provided relays and the global extraRelays fallback, and
+ * records the attempt in the outbox store for retry and UI display.
+ *
+ * For NIP-34 events (issues, status changes, renames) use the dedicated
+ * Action functions in src/actions/nip34.ts which resolve the correct relay
+ * groups (user outbox + repo relays + notification inboxes) automatically.
+ *
+ * @param event  - The signed Nostr event to publish
+ * @param relays - Optional relay URLs; falls back to extraRelays if omitted
  */
 export async function publish(
   event: NostrEvent,
   relays?: string[],
 ): Promise<void> {
-  console.log("Publishing event:", event);
-
   // Add to local store immediately for optimistic updates
   eventStore.add(event);
 
-  // Publish to relays
-  await pool.publish(relaySet(extraRelays.getValue(), relays), event);
+  const targetRelays = relaySet(extraRelays.getValue(), relays);
+  await outboxStore.publish(event, { relays: [...targetRelays] });
 }
 
 /**

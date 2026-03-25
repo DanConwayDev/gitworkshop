@@ -213,6 +213,7 @@ export default function PRPage() {
                   issueId={prEvent.id}
                   currentSubject={currentSubject || originalSubject}
                   canEdit={canEditSubject}
+                  repoRelays={repo?.relays}
                 />
               </div>
 
@@ -326,7 +327,7 @@ export default function PRPage() {
                       { value: "closed", label: "Closed" },
                       { value: "draft", label: "Draft" },
                     ]}
-                    relays={repo?.relays}
+                    repoRelays={repo?.relays}
                   />
                 )}
 

@@ -1,9 +1,6 @@
 import { useState, useCallback } from "react";
-import { useActiveAccount } from "applesauce-react/hooks";
-import { factory } from "@/services/actions";
-import { publish } from "@/services/nostr";
-import { gitIndexRelays } from "@/services/settings";
-import { StatusChangeBlueprint, STATUS_KIND_MAP } from "@/blueprints/status";
+import { runner } from "@/services/actions";
+import { ChangeIssueStatus } from "@/actions/nip34";
 import { useToast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,8 +29,8 @@ interface ChangeStatusDropdownProps {
   currentStatus: IssueStatus;
   /** Available status options to show */
   options: StatusOption[];
-  /** Optional relay URLs to publish to in addition to git index relays */
-  relays?: string[];
+  /** Relay URLs declared in the repository announcement */
+  repoRelays?: string[];
 }
 
 /**
@@ -46,37 +43,23 @@ export function ChangeStatusDropdown({
   repoCoords,
   currentStatus,
   options,
-  relays,
+  repoRelays = [],
 }: ChangeStatusDropdownProps) {
-  const account = useActiveAccount();
   const { toast } = useToast();
   const [isPending, setIsPending] = useState(false);
 
   const handleSelect = useCallback(
     async (next: Exclude<IssueStatus, "deleted">) => {
-      if (!account) {
-        toast({
-          title: "Not logged in",
-          description: "You must be logged in to change the status.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const statusKind = STATUS_KIND_MAP[next];
       setIsPending(true);
       try {
-        const template = await factory.create(
-          StatusChangeBlueprint,
-          statusKind,
+        await runner.run(
+          ChangeIssueStatus,
           itemId,
-          repoCoords,
           itemAuthorPubkey,
-          account.pubkey,
+          repoCoords,
+          next,
+          repoRelays,
         );
-        const signed = await factory.sign(template);
-        const publishRelays = [...gitIndexRelays.getValue(), ...(relays ?? [])];
-        await publish(signed, publishRelays);
 
         toast({
           title: "Status updated",
@@ -94,7 +77,7 @@ export function ChangeStatusDropdown({
         setIsPending(false);
       }
     },
-    [account, itemId, itemAuthorPubkey, repoCoords, relays, toast],
+    [itemId, itemAuthorPubkey, repoCoords, repoRelays, toast],
   );
 
   // Only show options that differ from the current status.
