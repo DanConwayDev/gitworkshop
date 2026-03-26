@@ -21,7 +21,11 @@
  */
 
 import { blueprint } from "applesauce-core/event-factory";
-import { setContent, includeAltTag } from "applesauce-core/operations";
+import {
+  setContent,
+  includeAltTag,
+  modifyPublicTags,
+} from "applesauce-core/operations";
 import { ISSUE_KIND } from "@/lib/nip34";
 import {
   setSubject,
@@ -29,10 +33,17 @@ import {
   addRepositoryOwnerTag,
   addIssueLabel,
 } from "@/operations/issue";
+import type { NostrTag } from "@/lib/nostrContentTags";
 
 export interface IssueOptions {
   /** Optional labels to attach as `t` tags */
   labels?: string[];
+  /**
+   * Extra tags derived from NIP-19 references in the issue body.
+   * Use `extractContentTags(content)` to generate these.
+   * Produces `p` tags for profile mentions and `q` tags for event/address references.
+   */
+  contentTags?: NostrTag[];
 }
 
 /**
@@ -42,7 +53,7 @@ export interface IssueOptions {
  * @param ownerPubkey - Hex pubkey of the repository owner (added as `p` tag)
  * @param subject     - Issue title / subject line
  * @param content     - Markdown body of the issue
- * @param options     - Optional: labels
+ * @param options     - Optional: labels, contentTags
  */
 export function IssueBlueprint(
   repoCoord: string,
@@ -51,6 +62,7 @@ export function IssueBlueprint(
   content: string,
   options?: IssueOptions,
 ) {
+  const contentTags = options?.contentTags ?? [];
   return blueprint(
     ISSUE_KIND,
     addRepositoryTag(repoCoord),
@@ -59,5 +71,9 @@ export function IssueBlueprint(
     setContent(content),
     includeAltTag(`Git issue: ${subject}`),
     ...(options?.labels ?? []).map(addIssueLabel),
+    // Append p/q tags for NIP-19 references found in the body
+    ...(contentTags.length > 0
+      ? [modifyPublicTags((tags) => [...tags, ...contentTags])]
+      : []),
   );
 }

@@ -34,6 +34,7 @@ import {
   composerHasNsec,
   hasPreviewableContent,
 } from "@/components/NostrComposer";
+import { extractContentTags } from "@/lib/nostrContentTags";
 import { usePublish } from "@/hooks/usePublish";
 import { useToast } from "@/hooks/useToast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -458,6 +459,8 @@ function ReplyBox({ issueId, issuePubkey, repoRelays }: ReplyBoxProps) {
             ["p", issuePubkey],
             // kind of the root event
             ["k", String(ISSUE_KIND)],
+            // p/q tags for any NIP-19 references in the comment body
+            ...extractContentTags(trimmed),
           ],
         });
 

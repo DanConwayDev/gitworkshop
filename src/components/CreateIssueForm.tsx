@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LabelBadge } from "@/components/LabelBadge";
 import { NostrComposer, composerHasNsec } from "@/components/NostrComposer";
+import { extractContentTags } from "@/lib/nostrContentTags";
 import { Loader2, Plus, X, CircleDot } from "lucide-react";
 
 interface CreateIssueFormProps {
@@ -77,14 +78,15 @@ export function CreateIssueForm({
 
       setIsPending(true);
       try {
+        const trimmedContent = content.trim();
         await runner.run(
           CreateIssue,
           repoCoord,
           ownerPubkey,
           trimmedSubject,
-          content.trim(),
+          trimmedContent,
           repoRelays,
-          { labels },
+          { labels, contentTags: extractContentTags(trimmedContent) },
         );
 
         toast({
