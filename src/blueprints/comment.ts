@@ -44,17 +44,39 @@ export interface CommentOptions {
    * Use `extractContentTags(content)` to generate these.
    */
   contentTags?: NostrTag[];
+  /**
+   * When replying to an existing comment (kind 1111) rather than directly to
+   * the root, provide the parent comment's details. The root E/K/P tags always
+   * point to the original issue/PR; the lowercase e/k/p tags point to the
+   * immediate parent (the comment being replied to).
+   */
+  parent?: {
+    id: string;
+    pubkey: string;
+    /** Kind of the parent event — 1111 for a reply-to-comment */
+    kind: number;
+    relayHint?: string;
+  };
 }
 
 /**
- * Blueprint for a NIP-22 top-level comment (kind 1111) on a NIP-34 item.
+ * Blueprint for a NIP-22 comment (kind 1111) on a NIP-34 item or on an
+ * existing comment.
  *
- * @param rootId      - Hex event ID of the root issue/PR being commented on
+ * For a top-level comment (no `options.parent`):
+ *   - Uppercase E/K/P point to the root issue/PR
+ *   - Lowercase e/k/p also point to the root (parent === root)
+ *
+ * For a reply to a comment (`options.parent` provided):
+ *   - Uppercase E/K/P still point to the root issue/PR
+ *   - Lowercase e/k/p point to the parent comment (kind 1111)
+ *
+ * @param rootId      - Hex event ID of the root issue/PR
  * @param rootPubkey  - Hex pubkey of the root event author
  * @param rootKind    - Kind number of the root event (e.g. ISSUE_KIND, PR_KIND)
  * @param content     - Markdown body of the comment
  * @param relayHint   - Optional relay hint URL for the root event
- * @param options     - Optional: contentTags
+ * @param options     - Optional: contentTags, parent
  */
 export function CommentBlueprint(
   rootId: string,
@@ -65,7 +87,15 @@ export function CommentBlueprint(
   options?: CommentOptions,
 ) {
   const contentTags = options?.contentTags ?? [];
-  const kindStr = String(rootKind);
+  const rootKindStr = String(rootKind);
+
+  // Parent defaults to the root when not replying to a comment
+  const parent = options?.parent;
+  const parentId = parent?.id ?? rootId;
+  const parentPubkey = parent?.pubkey ?? rootPubkey;
+  const parentKind = parent?.kind ?? rootKind;
+  const parentRelayHint = parent?.relayHint ?? relayHint;
+
   return blueprint(
     COMMENT_KIND,
     setContent(content),
@@ -75,15 +105,15 @@ export function CommentBlueprint(
       // Root scope: uppercase E with pubkey as 4th element (no marker)
       ["E", rootId, relayHint, rootPubkey],
       // Root kind (uppercase K)
-      ["K", kindStr],
+      ["K", rootKindStr],
       // Root author (uppercase P)
       ["P", rootPubkey, relayHint],
-      // Parent item: same as root for a top-level comment (lowercase e)
-      ["e", rootId, relayHint, rootPubkey],
-      // Parent kind (lowercase k) — same as root kind for top-level comments
-      ["k", kindStr],
+      // Parent item: lowercase e pointing to the immediate parent
+      ["e", parentId, parentRelayHint, parentPubkey],
+      // Parent kind (lowercase k)
+      ["k", String(parentKind)],
       // Parent author (lowercase p)
-      ["p", rootPubkey],
+      ["p", parentPubkey],
       // q/p tags for any NIP-19 references in the comment body
       ...contentTags,
     ]),

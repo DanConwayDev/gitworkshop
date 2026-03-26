@@ -293,6 +293,13 @@ export interface RenameItem {
   oldSubject: string;
 }
 
+export interface ThreadContext {
+  rootId: string;
+  rootPubkey: string;
+  rootKind: number;
+  repoRelays: string[];
+}
+
 /**
  * Renders the comment thread tree with subject-rename events interleaved
  * chronologically among the top-level children.
@@ -303,9 +310,11 @@ export interface RenameItem {
 export function ThreadedComments({
   tree,
   renameItems,
+  threadContext,
 }: {
   tree: { children: ThreadTreeNode[]; event: NostrEvent };
   renameItems: RenameItem[];
+  threadContext?: ThreadContext;
 }) {
   type TimelineItem =
     | { type: "thread"; node: ThreadTreeNode }
@@ -338,7 +347,11 @@ export function ThreadedComments({
     >
       {items.map((item) =>
         item.type === "thread" ? (
-          <ThreadTree key={item.node.event.id} node={item.node} />
+          <ThreadTree
+            key={item.node.event.id}
+            node={item.node}
+            threadContext={threadContext}
+          />
         ) : (
           <SubjectRenameCard
             key={item.item.event.id}

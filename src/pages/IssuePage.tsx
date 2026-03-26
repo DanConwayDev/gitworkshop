@@ -281,7 +281,20 @@ export default function IssuePage() {
                   No comments yet. The conversation awaits its first voice.
                 </div>
               ) : threadTree ? (
-                <ThreadedComments tree={threadTree} renameItems={renameItems} />
+                <ThreadedComments
+                  tree={threadTree}
+                  renameItems={renameItems}
+                  threadContext={
+                    activeAccount && issue
+                      ? {
+                          rootId: issue.id,
+                          rootPubkey: issue.pubkey,
+                          rootKind: ISSUE_KIND,
+                          repoRelays: repo?.relays ?? [],
+                        }
+                      : undefined
+                  }
+                />
               ) : null}
             </div>
 

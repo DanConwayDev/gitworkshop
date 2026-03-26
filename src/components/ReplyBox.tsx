@@ -10,6 +10,7 @@ import { useCallback, useState } from "react";
 import { runner } from "@/services/actions";
 import { useToast } from "@/hooks/useToast";
 import { CreateComment } from "@/actions/nip34";
+import { COMMENT_KIND } from "@/lib/nip34";
 import { extractContentTags } from "@/lib/nostrContentTags";
 import {
   NostrComposer,
@@ -29,6 +30,17 @@ export interface ReplyBoxProps {
   rootKind: number;
   /** Relays declared in the repository announcement */
   repoRelays: string[];
+  /**
+   * When replying to an existing comment rather than the root, provide the
+   * parent comment's details. Omit for top-level comments.
+   */
+  parent?: {
+    id: string;
+    pubkey: string;
+    relayHint?: string;
+  };
+  /** Called after a comment is successfully posted (e.g. to close an inline composer) */
+  onSubmitted?: () => void;
 }
 
 export function ReplyBox({
@@ -36,6 +48,8 @@ export function ReplyBox({
   rootPubkey,
   rootKind,
   repoRelays,
+  parent,
+  onSubmitted,
 }: ReplyBoxProps) {
   const [body, setBody] = useState("");
   const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
@@ -64,7 +78,10 @@ export function ReplyBox({
           trimmed,
           repoRelays,
           relayHint,
-          { contentTags: extractContentTags(trimmed) },
+          {
+            contentTags: extractContentTags(trimmed),
+            parent: parent ? { ...parent, kind: COMMENT_KIND } : undefined,
+          },
         );
 
         toast({
@@ -74,6 +91,7 @@ export function ReplyBox({
 
         setBody("");
         setActiveTab("write");
+        onSubmitted?.();
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to post comment";

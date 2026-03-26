@@ -13,15 +13,36 @@
  * comments don't get their own Card border. Each comment is separated by a
  * subtle top border. This keeps deep threads compact (matching gitworkshop).
  */
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { ChevronUp, ChevronDown, AlertTriangle, Calendar } from "lucide-react";
+import {
+  ChevronUp,
+  ChevronDown,
+  AlertTriangle,
+  Calendar,
+  Reply,
+} from "lucide-react";
 import type { NostrEvent } from "nostr-tools";
 import type { ThreadTreeNode } from "@/lib/threadTree";
 import { countDescendants } from "@/lib/threadTree";
 import { UserLink } from "@/components/UserAvatar";
 import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
+import { ReplyBox } from "@/components/ReplyBox";
+import { useActiveAccount } from "applesauce-react/hooks";
+
+// ---------------------------------------------------------------------------
+// Thread context — passes root info down without prop-drilling
+// ---------------------------------------------------------------------------
+
+interface ThreadContext {
+  rootId: string;
+  rootPubkey: string;
+  rootKind: number;
+  repoRelays: string[];
+}
+
+const ThreadCtx = createContext<ThreadContext | null>(null);
 
 // ---------------------------------------------------------------------------
 // Depth-based color palette
@@ -59,6 +80,11 @@ interface ThreadTreeProps {
    * threads get a more subtle line. Clamped so it never disappears entirely.
    */
   depth?: number;
+  /**
+   * Root context for inline reply composers. Required at the top level;
+   * propagated automatically to nested nodes via context.
+   */
+  threadContext?: ThreadContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,12 +97,13 @@ export function ThreadTree({
   renderEvent,
   filterChildren,
   depth = 0,
+  threadContext,
 }: ThreadTreeProps) {
   const visibleChildren = filterChildren
     ? node.children.filter(filterChildren)
     : node.children;
 
-  return (
+  const inner = (
     <div>
       {/* Render this node's event (unless it's the root — caller handles that) */}
       {!isRoot && (
@@ -107,6 +134,14 @@ export function ThreadTree({
       )}
     </div>
   );
+
+  // Provide context at the top level; nested nodes inherit it automatically.
+  if (threadContext) {
+    return (
+      <ThreadCtx.Provider value={threadContext}>{inner}</ThreadCtx.Provider>
+    );
+  }
+  return inner;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +164,11 @@ function ThreadComment({ event }: { event: NostrEvent }) {
   const [highlight, setHighlight] = useState<"strong" | "subtle" | "none">(
     isTargeted ? "strong" : "none",
   );
+  const [replying, setReplying] = useState(false);
+
+  const ctx = useContext(ThreadCtx);
+  const activeAccount = useActiveAccount();
+  const canReply = !!activeAccount && !!ctx;
 
   useEffect(() => {
     if (!isTargeted || !elRef.current) return;
@@ -219,13 +259,40 @@ function ThreadComment({ event }: { event: NostrEvent }) {
             {timeAgo}
           </span>
         </div>
-        <EventCardActions event={event} />
+        <div className="flex items-center gap-1">
+          {canReply && (
+            <button
+              type="button"
+              onClick={() => setReplying((r) => !r)}
+              className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded"
+              aria-label="Reply to comment"
+            >
+              <Reply className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Reply</span>
+            </button>
+          )}
+          <EventCardActions event={event} />
+        </div>
       </div>
       {/* Body: on small screens equal padding; on sm+ align under username text.
           UserLink uses w-8 avatar + gap-1.5 = 38px before the name text. */}
       <div className="sm:ml-[38px]">
         <CommentContent content={event.content} />
       </div>
+
+      {/* Inline reply composer */}
+      {replying && ctx && (
+        <div className="mt-3 sm:ml-[38px]">
+          <ReplyBox
+            rootId={ctx.rootId}
+            rootPubkey={ctx.rootPubkey}
+            rootKind={ctx.rootKind}
+            repoRelays={ctx.repoRelays}
+            parent={{ id: event.id, pubkey: event.pubkey }}
+            onSubmitted={() => setReplying(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }

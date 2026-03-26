@@ -513,6 +513,16 @@ export default function PRPage() {
                   <ThreadedComments
                     tree={threadTree}
                     renameItems={renameItems}
+                    threadContext={
+                      activeAccount && prEvent
+                        ? {
+                            rootId: prEvent.id,
+                            rootPubkey: prEvent.pubkey,
+                            rootKind: pr ? PR_KIND : PATCH_KIND,
+                            repoRelays: repo?.relays ?? [],
+                          }
+                        : undefined
+                    }
                   />
                 ) : null}
               </div>
