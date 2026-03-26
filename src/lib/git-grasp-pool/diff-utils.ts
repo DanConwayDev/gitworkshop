@@ -225,15 +225,18 @@ const utf8 = new TextDecoder("utf-8");
  * means blobs that were already fetched (e.g. during file browsing) are
  * returned instantly without a network request.
  *
- * @param changes - Output of diffTrees()
- * @param pool    - GitGraspPool instance (for getBlob)
- * @param signal  - AbortSignal for cancellation
+ * @param changes      - Output of diffTrees()
+ * @param pool         - GitGraspPool instance (for getBlob)
+ * @param signal       - AbortSignal for cancellation
+ * @param fallbackUrls - Extra URLs to try after the pool's own URLs if a blob
+ *   is not found there. Not tracked by the pool.
  * @returns Concatenated unified diff string, empty string if no changes
  */
 export async function generateUnifiedDiff(
   changes: FileChange[],
   pool: GitGraspPool,
   signal: AbortSignal,
+  fallbackUrls?: string[],
 ): Promise<string> {
   if (changes.length === 0) return "";
 
@@ -247,7 +250,7 @@ export async function generateUnifiedDiff(
   // Fetch all blobs in parallel
   const blobResults = await Promise.all(
     Array.from(hashesToFetch).map(async (hash) => {
-      const data = await pool.getBlob(hash, signal);
+      const data = await pool.getBlob(hash, signal, fallbackUrls);
       return [hash, data] as const;
     }),
   );

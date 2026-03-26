@@ -864,12 +864,17 @@ export interface CommitHistoryState {
  *
  * Accepts a pool instance (from useGitPool) and the current PoolState so it
  * can react to infoRefs becoming available without any extra subscriptions.
+ *
+ * @param fallbackUrls - Extra URLs to try after the pool's own URLs if the
+ *   commit history is not found there. Not tracked by the pool. Used to pass
+ *   PR/PR-Update clone URLs when fetching history for a PR branch.
  */
 export function useCommitHistory(
   pool: GitGraspPool | null,
   poolState: PoolState,
   ref: string | undefined,
   maxCommits: number = 50,
+  fallbackUrls?: string[],
 ): CommitHistoryState {
   const [state, setState] = useState<CommitHistoryState>(() => {
     // Fast path: check L1 cache synchronously on first render.
@@ -999,6 +1004,7 @@ export function useCommitHistory(
         commitHash,
         maxCommits,
         signal,
+        fallbackUrls,
       );
       if (signal.aborted) return;
 
@@ -1012,7 +1018,8 @@ export function useCommitHistory(
 
     void run();
     return () => abort.abort();
-  }, [pool, ref, maxCommits, hasInfoRefs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pool, ref, maxCommits, hasInfoRefs, fallbackUrls?.join(",")]);
 
   return state;
 }

@@ -1070,11 +1070,16 @@ export class GitGraspPool {
   /**
    * Get the directory tree at a commit hash.
    * Routes through the winning URL with fallback.
+   *
+   * @param fallbackUrls - Extra URLs to try after the pool's own URLs if the
+   *   data is not found. These are not tracked by the pool and are only used
+   *   for this single operation (e.g. PR author's fork clone URLs).
    */
   async getTree(
     commitHash: string,
     nestLimit: number,
     signal: AbortSignal,
+    fallbackUrls?: string[],
   ): Promise<Tree | null> {
     // Check cache first (synchronous peek)
     const cached = this.cache.peekTree(commitHash, nestLimit);
@@ -1085,28 +1090,36 @@ export class GitGraspPool {
     if (idbCached) return idbCached;
 
     // Fetch from git server
-    return this.withFallback(signal, async (url) => {
-      const start = Date.now();
-      const result = await this.http.fetchTree(
-        url,
-        commitHash,
-        nestLimit,
-        signal,
-      );
-      if (result) {
-        const tracker = this.urlManager.get(url);
-        tracker?.recordOperationSuccess(Date.now() - start);
-      }
-      return result;
-    });
+    return this.withFallback(
+      signal,
+      async (url) => {
+        const start = Date.now();
+        const result = await this.http.fetchTree(
+          url,
+          commitHash,
+          nestLimit,
+          signal,
+        );
+        if (result) {
+          const tracker = this.urlManager.get(url);
+          tracker?.recordOperationSuccess(Date.now() - start);
+        }
+        return result;
+      },
+      fallbackUrls,
+    );
   }
 
   /**
    * Get a blob by its object hash.
+   *
+   * @param fallbackUrls - Extra URLs to try after the pool's own URLs if the
+   *   data is not found. Not tracked by the pool.
    */
   async getBlob(
     blobHash: string,
     signal: AbortSignal,
+    fallbackUrls?: string[],
   ): Promise<Uint8Array | null> {
     const cached = this.cache.peekBlob(blobHash);
     if (cached) return cached;
@@ -1114,53 +1127,69 @@ export class GitGraspPool {
     const idbCached = await this.cache.getBlob(blobHash);
     if (idbCached) return idbCached;
 
-    return this.withFallback(signal, async (url) => {
-      const start = Date.now();
-      const result = await this.http.fetchBlob(url, blobHash, signal);
-      if (result) {
-        const tracker = this.urlManager.get(url);
-        tracker?.recordOperationSuccess(Date.now() - start);
-      }
-      return result;
-    });
+    return this.withFallback(
+      signal,
+      async (url) => {
+        const start = Date.now();
+        const result = await this.http.fetchBlob(url, blobHash, signal);
+        if (result) {
+          const tracker = this.urlManager.get(url);
+          tracker?.recordOperationSuccess(Date.now() - start);
+        }
+        return result;
+      },
+      fallbackUrls,
+    );
   }
 
   /**
    * Get an object by path within a commit.
+   *
+   * @param fallbackUrls - Extra URLs to try after the pool's own URLs if the
+   *   data is not found. Not tracked by the pool.
    */
   async getObjectByPath(
     commitHash: string,
     path: string,
     signal: AbortSignal,
+    fallbackUrls?: string[],
   ): Promise<{ hash: string; isDir: boolean; data: Uint8Array | null } | null> {
-    return this.withFallback(signal, async (url) => {
-      const start = Date.now();
-      const result = await this.http.fetchObjectByPath(
-        url,
-        commitHash,
-        path,
-        signal,
-      );
-      if (result) {
-        const tracker = this.urlManager.get(url);
-        tracker?.recordOperationSuccess(Date.now() - start);
-        return {
-          hash: result.entry.hash,
-          isDir: result.entry.isDir,
-          data: result.data,
-        };
-      }
-      return null;
-    });
+    return this.withFallback(
+      signal,
+      async (url) => {
+        const start = Date.now();
+        const result = await this.http.fetchObjectByPath(
+          url,
+          commitHash,
+          path,
+          signal,
+        );
+        if (result) {
+          const tracker = this.urlManager.get(url);
+          tracker?.recordOperationSuccess(Date.now() - start);
+          return {
+            hash: result.entry.hash,
+            isDir: result.entry.isDir,
+            data: result.data,
+          };
+        }
+        return null;
+      },
+      fallbackUrls,
+    );
   }
 
   /**
    * Get commit history for a commit hash.
+   *
+   * @param fallbackUrls - Extra URLs to try after the pool's own URLs if the
+   *   data is not found. Not tracked by the pool.
    */
   async getCommitHistory(
     commitHash: string,
     maxCommits: number,
     signal: AbortSignal,
+    fallbackUrls?: string[],
   ): Promise<Commit[] | null> {
     const cached = this.cache.peekCommitHistory(commitHash, maxCommits);
     if (cached) return cached;
@@ -1168,28 +1197,36 @@ export class GitGraspPool {
     const idbCached = await this.cache.getCommitHistory(commitHash, maxCommits);
     if (idbCached) return idbCached;
 
-    return this.withFallback(signal, async (url) => {
-      const start = Date.now();
-      const result = await this.http.fetchCommitHistory(
-        url,
-        commitHash,
-        maxCommits,
-        signal,
-      );
-      if (result) {
-        const tracker = this.urlManager.get(url);
-        tracker?.recordOperationSuccess(Date.now() - start);
-      }
-      return result;
-    });
+    return this.withFallback(
+      signal,
+      async (url) => {
+        const start = Date.now();
+        const result = await this.http.fetchCommitHistory(
+          url,
+          commitHash,
+          maxCommits,
+          signal,
+        );
+        if (result) {
+          const tracker = this.urlManager.get(url);
+          tracker?.recordOperationSuccess(Date.now() - start);
+        }
+        return result;
+      },
+      fallbackUrls,
+    );
   }
 
   /**
    * Get a single commit by hash.
+   *
+   * @param fallbackUrls - Extra URLs to try after the pool's own URLs if the
+   *   data is not found. Not tracked by the pool.
    */
   async getSingleCommit(
     commitHash: string,
     signal: AbortSignal,
+    fallbackUrls?: string[],
   ): Promise<Commit | null> {
     const cached = this.cache.peekCommit(commitHash);
     if (cached) return cached;
@@ -1197,15 +1234,23 @@ export class GitGraspPool {
     const idbCached = await this.cache.getCommit(commitHash);
     if (idbCached) return idbCached;
 
-    return this.withFallback(signal, async (url) => {
-      const start = Date.now();
-      const result = await this.http.fetchSingleCommit(url, commitHash, signal);
-      if (result) {
-        const tracker = this.urlManager.get(url);
-        tracker?.recordOperationSuccess(Date.now() - start);
-      }
-      return result;
-    });
+    return this.withFallback(
+      signal,
+      async (url) => {
+        const start = Date.now();
+        const result = await this.http.fetchSingleCommit(
+          url,
+          commitHash,
+          signal,
+        );
+        if (result) {
+          const tracker = this.urlManager.get(url);
+          tracker?.recordOperationSuccess(Date.now() - start);
+        }
+        return result;
+      },
+      fallbackUrls,
+    );
   }
 
   /**
@@ -1223,33 +1268,53 @@ export class GitGraspPool {
    *   1. Walking tipTree and baseTree to find added/deleted/modified paths
    *   2. Fetching changed file content via pool.getBlob()
    *   3. Generating unified diff output from the blob pairs
+   *
+   * @param fallbackUrls - Extra URLs to try after the pool's own URLs if the
+   *   data is not found. Not tracked by the pool.
    */
   async getCommitRange(
     tipCommitId: string,
     baseCommitId: string,
     signal: AbortSignal,
+    fallbackUrls?: string[],
   ): Promise<CommitRangeData | null> {
     const [tipCommit, baseCommit, tipTree, baseTree] = await Promise.all([
-      this.getSingleCommit(tipCommitId, signal),
-      this.getSingleCommit(baseCommitId, signal),
-      this.withFallback(signal, async (url) => {
-        const start = Date.now();
-        const result = await this.http.fetchFullTree(url, tipCommitId, signal);
-        if (result) {
-          const tracker = this.urlManager.get(url);
-          tracker?.recordOperationSuccess(Date.now() - start);
-        }
-        return result;
-      }),
-      this.withFallback(signal, async (url) => {
-        const start = Date.now();
-        const result = await this.http.fetchFullTree(url, baseCommitId, signal);
-        if (result) {
-          const tracker = this.urlManager.get(url);
-          tracker?.recordOperationSuccess(Date.now() - start);
-        }
-        return result;
-      }),
+      this.getSingleCommit(tipCommitId, signal, fallbackUrls),
+      this.getSingleCommit(baseCommitId, signal, fallbackUrls),
+      this.withFallback(
+        signal,
+        async (url) => {
+          const start = Date.now();
+          const result = await this.http.fetchFullTree(
+            url,
+            tipCommitId,
+            signal,
+          );
+          if (result) {
+            const tracker = this.urlManager.get(url);
+            tracker?.recordOperationSuccess(Date.now() - start);
+          }
+          return result;
+        },
+        fallbackUrls,
+      ),
+      this.withFallback(
+        signal,
+        async (url) => {
+          const start = Date.now();
+          const result = await this.http.fetchFullTree(
+            url,
+            baseCommitId,
+            signal,
+          );
+          if (result) {
+            const tracker = this.urlManager.get(url);
+            tracker?.recordOperationSuccess(Date.now() - start);
+          }
+          return result;
+        },
+        fallbackUrls,
+      ),
     ]);
 
     if (!tipCommit || !baseCommit || !tipTree || !baseTree) return null;
@@ -1283,13 +1348,27 @@ export class GitGraspPool {
   /**
    * Execute an operation with the winning URL, falling back to other live
    * URLs on failure.
+   *
+   * @param fallbackUrls - Extra URLs to try after the pool's own ordered URLs
+   *   if the operation returns null or throws. These URLs are not tracked by
+   *   the pool — they are only used for this single operation invocation.
+   *   Intended for PR/PR-Update clone URLs that may host commits not yet
+   *   mirrored to the repo's main git servers.
    */
   private async withFallback<T>(
     signal: AbortSignal,
     operation: (url: string) => Promise<T | null>,
+    fallbackUrls?: string[],
   ): Promise<T | null> {
-    // Build ordered URL list: winner first, then other ok URLs by latency
-    const urls = this.getOrderedUrls();
+    // Build ordered URL list: winner first, then other ok URLs by latency,
+    // then any extra fallback URLs that aren't already in the pool.
+    const poolUrls = this.getOrderedUrls();
+    const poolUrlSet = new Set(poolUrls);
+    const extraUrls = fallbackUrls
+      ? fallbackUrls.filter((u) => !poolUrlSet.has(u) && !isNonHttpUrl(u))
+      : [];
+    const urls = [...poolUrls, ...extraUrls];
+
     if (urls.length === 0) return null;
 
     for (const url of urls) {
@@ -1297,9 +1376,9 @@ export class GitGraspPool {
       try {
         const result = await operation(url);
         if (result !== null) {
-          // If this isn't the current winner and it succeeded, consider
-          // promoting it
-          if (url !== this.winnerUrl) {
+          // If this is a pool-tracked URL that isn't the current winner,
+          // consider promoting it.
+          if (url !== this.winnerUrl && poolUrlSet.has(url)) {
             const newWinner = this.urlManager.selectBestUrl(
               this.winnerUrl ?? undefined,
             );
@@ -1315,15 +1394,18 @@ export class GitGraspPool {
         }
       } catch (err) {
         if (signal.aborted) return null;
-        // Record the failure and try next URL
-        const tracker = this.urlManager.get(url);
-        if (tracker) {
-          const { errorClass, kind } = classifyFetchError(err);
-          const msg = err instanceof Error ? err.message : String(err);
-          if (errorClass === "permanent") {
-            tracker.recordPermanentFailure(msg, kind);
-          } else {
-            tracker.recordTransientError(msg, kind);
+        // Only record failures for pool-tracked URLs — extra fallback URLs
+        // are ephemeral and should not affect pool health state.
+        if (poolUrlSet.has(url)) {
+          const tracker = this.urlManager.get(url);
+          if (tracker) {
+            const { errorClass, kind } = classifyFetchError(err);
+            const msg = err instanceof Error ? err.message : String(err);
+            if (errorClass === "permanent") {
+              tracker.recordPermanentFailure(msg, kind);
+            } else {
+              tracker.recordTransientError(msg, kind);
+            }
           }
         }
         // Continue to next URL

@@ -47,6 +47,12 @@ export interface CommitDetailViewProps {
   backTo: string;
   /** Label for the back navigation link */
   backLabel?: string;
+  /**
+   * Extra URLs to try after the pool's own URLs if commit/blob data is not
+   * found there. Not tracked by the pool. Used to pass PR/PR-Update clone
+   * URLs when viewing a commit scoped to a PR.
+   */
+  fallbackUrls?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +65,7 @@ export function CommitDetailView({
   basePath,
   backTo,
   backLabel = "All commits",
+  fallbackUrls,
 }: CommitDetailViewProps) {
   const [commit, setCommit] = useState<Commit | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,7 +78,7 @@ export function CommitDetailView({
     setCommit(null);
 
     pool
-      .getSingleCommit(commitId, abort.signal)
+      .getSingleCommit(commitId, abort.signal, fallbackUrls)
       .then((c) => {
         if (abort.signal.aborted) return;
         if (!c) {
@@ -89,7 +96,8 @@ export function CommitDetailView({
       });
 
     return () => abort.abort();
-  }, [pool, commitId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pool, commitId, fallbackUrls?.join(",")]);
 
   return (
     <div className="space-y-4">
@@ -119,7 +127,12 @@ export function CommitDetailView({
 
       {/* Commit detail */}
       {!loading && commit && (
-        <CommitDetail commit={commit} basePath={basePath} pool={pool} />
+        <CommitDetail
+          commit={commit}
+          basePath={basePath}
+          pool={pool}
+          fallbackUrls={fallbackUrls}
+        />
       )}
     </div>
   );
@@ -133,10 +146,12 @@ function CommitDetail({
   commit,
   basePath,
   pool,
+  fallbackUrls,
 }: {
   commit: Commit;
   basePath: string;
   pool: GitGraspPool;
+  fallbackUrls?: string[];
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -270,6 +285,7 @@ function CommitDetail({
           tipCommitId={commit.hash}
           baseCommitId={parentHash}
           pool={pool}
+          fallbackUrls={fallbackUrls}
         />
       ) : (
         <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">

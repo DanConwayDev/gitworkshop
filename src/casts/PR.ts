@@ -13,6 +13,7 @@ const RepoCoordSymbol = Symbol.for("pr-repo-coord");
 const RepoCoordsSymbol = Symbol.for("pr-repo-coords");
 const TipCommitIdSymbol = Symbol.for("pr-tip-commit-id");
 const MergeBaseSymbol = Symbol.for("pr-merge-base");
+const CloneUrlsSymbol = Symbol.for("pr-clone-urls");
 
 /** Validate that a raw event is a well-formed pull request */
 export function isValidPR(event: NostrEvent): event is PREvent {
@@ -84,6 +85,19 @@ export class PR extends EventCast<PREvent> {
       this.event,
       MergeBaseSymbol,
       () => this.event.tags.find(([t]) => t === "merge-base")?.[1],
+    );
+  }
+
+  /**
+   * Clone URLs from the ["clone", "<url>", ...] tag — where the PR's commits
+   * can be downloaded. These are the PR author's fork URLs and should be used
+   * as fallback URLs when fetching git data for this PR.
+   */
+  get cloneUrls(): string[] {
+    return getOrComputeCachedValue(this.event, CloneUrlsSymbol, () =>
+      this.event.tags
+        .filter(([t]) => t === "clone")
+        .flatMap(([, ...urls]) => urls.filter(Boolean)),
     );
   }
 }

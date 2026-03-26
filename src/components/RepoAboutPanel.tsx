@@ -608,9 +608,9 @@ function FullVariant({
         </section>
       )}
 
-      {/* Raw announcement events — collapsed by default */}
+      {/* Bottom action bar: share + raw event */}
       {repo.announcements.length > 0 && (
-        <RawAnnouncementsSection
+        <FullVariantActionBar
           announcements={repo.announcements}
           selectedMaintainer={repo.selectedMaintainer}
         />
@@ -900,43 +900,117 @@ function AnnouncementEventRows({
 }
 
 // ---------------------------------------------------------------------------
-// RawAnnouncementsSection — collapsed section on the full /about page
+// FullVariantActionBar — share + raw event actions on the /about page
+//
+// Single announcement  → both share and raw event open modals directly
+//                         (icon + label inline buttons, no expandable section)
+// Multiple announcements → share opens the selected announcement's share modal;
+//                          raw event keeps the collapsible section for all events
 // ---------------------------------------------------------------------------
 
-function RawAnnouncementsSection({
+function FullVariantActionBar({
   announcements,
   selectedMaintainer,
 }: {
   announcements: NostrEvent[];
   selectedMaintainer: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [jsonOpen, setJsonOpen] = useState(false);
+  const [rawSectionOpen, setRawSectionOpen] = useState(false);
+
+  const isSingle = announcements.length === 1;
+  const selectedAnnouncement =
+    announcements.find((a) => a.pubkey === selectedMaintainer) ??
+    announcements[0];
+  const nip19Id = eventToNip19(selectedAnnouncement);
 
   return (
     <div className="pt-2">
       <Separator className="mb-4" />
 
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        {open ? (
-          <ChevronUp className="h-3.5 w-3.5" />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5" />
-        )}
-        {open ? "Hide" : "View"} raw announcement event
-        {announcements.length > 1 ? `s (${announcements.length})` : ""}
-      </button>
+      <div className="flex items-center gap-3">
+        {/* Share button — always opens modal */}
+        <button
+          type="button"
+          onClick={() => setShareOpen(true)}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Share2 className="h-3.5 w-3.5" />
+          Share links
+        </button>
 
-      {open && (
+        {/* Raw event button */}
+        {isSingle ? (
+          <button
+            type="button"
+            onClick={() => setJsonOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Braces className="h-3.5 w-3.5" />
+            Raw announcement event
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setRawSectionOpen((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {rawSectionOpen ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+            Raw announcement events ({announcements.length})
+          </button>
+        )}
+      </div>
+
+      {/* Multi-announcement expandable section */}
+      {!isSingle && rawSectionOpen && (
         <div className="mt-3">
           <AnnouncementEventRows
             announcements={announcements}
             selectedMaintainer={selectedMaintainer}
           />
         </div>
+      )}
+
+      {/* Share modal */}
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Share links</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 pt-1">
+            <CopyRow
+              label="gitworkshop.dev"
+              value={`https://gitworkshop.dev/${nip19Id}`}
+            />
+            <CopyRow label="nostr:" value={`nostr:${nip19Id}`} />
+            <CopyRow label="njump.me" value={`https://njump.me/${nip19Id}`} />
+            {isAddressableKind(selectedAnnouncement.kind) ? (
+              <CopyRow
+                label="coordinate"
+                value={
+                  getReplaceableAddress(selectedAnnouncement) ??
+                  selectedAnnouncement.id
+                }
+              />
+            ) : (
+              <CopyRow label="event id" value={selectedAnnouncement.id} />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Raw event JSON modal (single announcement only) */}
+      {isSingle && (
+        <RawEventJsonDialog
+          event={selectedAnnouncement}
+          open={jsonOpen}
+          onOpenChange={setJsonOpen}
+        />
       )}
     </div>
   );

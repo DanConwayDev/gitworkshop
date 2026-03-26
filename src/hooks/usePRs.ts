@@ -260,11 +260,12 @@ export function usePRIsDeleted(
 }
 
 /**
- * The effective tip commit and merge base for a PR, accounting for any
- * authorised PR Update events (kind:1619).
+ * The effective tip commit, merge base, and clone URLs for a PR, accounting
+ * for any authorised PR Update events (kind:1619).
  *
- * Returns the latest authorised PR Update's commit info, or undefined when no
- * updates exist (caller should fall back to the original PR event's tags).
+ * Returns the latest authorised PR Update's commit info and clone URLs, or
+ * undefined when no updates exist (caller should fall back to the original PR
+ * event's tags).
  *
  * Auth: only the PR author or a maintainer may push a PR Update.
  * When selectedMaintainers is undefined (still loading), all updates are
@@ -281,7 +282,13 @@ export function usePRTip(
   prId: string | undefined,
   prPubkey: string | undefined,
   selectedMaintainers: Set<string> | undefined,
-): { tipCommitId: string; mergeBase: string | undefined } | undefined {
+):
+  | {
+      tipCommitId: string;
+      mergeBase: string | undefined;
+      cloneUrls: string[];
+    }
+  | undefined {
   const store = useEventStore();
 
   const updates = use$(() => {
@@ -310,6 +317,9 @@ export function usePRTip(
   return {
     tipCommitId,
     mergeBase: latest.tags.find(([t]) => t === "merge-base")?.[1],
+    cloneUrls: latest.tags
+      .filter(([t]) => t === "clone")
+      .flatMap(([, ...urls]) => urls.filter(Boolean)),
   };
 }
 

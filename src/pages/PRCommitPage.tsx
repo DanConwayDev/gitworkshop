@@ -7,16 +7,31 @@
  * (prs/<prId>/commits) rather than the repo-wide commits page.
  */
 
+import { useMemo } from "react";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import { useGitPool } from "@/hooks/useGitPool";
 import { CommitDetailView } from "@/components/CommitDetailView";
+import { useEventStore } from "@/hooks/useEventStore";
+import { PR_KIND } from "@/lib/nip34";
 
 export default function PRCommitPage() {
-  const { cloneUrls, prCommitId, prBasePath } = useRepoContext();
+  const { cloneUrls, prCommitId, prBasePath, prId } = useRepoContext();
+  const store = useEventStore();
 
   const { pool } = useGitPool(cloneUrls);
+
+  // Extract PR clone URLs from the store (already loaded by PRPage) to use as
+  // per-operation fallback sources when fetching this commit's git data.
+  const prCloneUrls = useMemo(() => {
+    if (!prId) return [];
+    const prEvent = store.getByFilters([{ kinds: [PR_KIND], ids: [prId] }])[0];
+    if (!prEvent) return [];
+    return prEvent.tags
+      .filter(([t]) => t === "clone")
+      .flatMap(([, ...urls]) => urls.filter(Boolean));
+  }, [prId, store]);
 
   if (!prCommitId) {
     return (
@@ -42,6 +57,7 @@ export default function PRCommitPage() {
         pool={pool}
         basePath={prBasePath ?? ""}
         backTo={prBasePath ? `${prBasePath}/commits` : ".."}
+        fallbackUrls={prCloneUrls}
       />
     </div>
   );

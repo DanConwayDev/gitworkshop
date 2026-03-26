@@ -49,6 +49,12 @@ export interface CommitDiffViewProps {
   pool: GitGraspPool;
   /** Called whenever the number of changed files becomes known. */
   onFileCountChange?: (count: number) => void;
+  /**
+   * Extra URLs to try after the pool's own URLs if commit/blob data is not
+   * found there. Not tracked by the pool. Used to pass PR/PR-Update clone
+   * URLs when viewing a PR's file diff.
+   */
+  fallbackUrls?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -276,6 +282,7 @@ export function CommitDiffView({
   baseCommitId,
   pool,
   onFileCountChange,
+  fallbackUrls,
 }: CommitDiffViewProps) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading-trees" });
   const [activeFile, setActiveFile] = useState<string | null>(null);
@@ -310,6 +317,7 @@ export function CommitDiffView({
         tipCommitId,
         baseCommitId,
         abort.signal,
+        fallbackUrls,
       );
 
       if (abort.signal.aborted) return;
@@ -333,7 +341,12 @@ export function CommitDiffView({
       }
 
       // --- Phase 2: fetch blobs and generate unified diff ---
-      const diff = await generateUnifiedDiff(changes, pool, abort.signal);
+      const diff = await generateUnifiedDiff(
+        changes,
+        pool,
+        abort.signal,
+        fallbackUrls,
+      );
 
       if (abort.signal.aborted) return;
 
@@ -351,7 +364,8 @@ export function CommitDiffView({
     return () => {
       abort.abort();
     };
-  }, [tipCommitId, baseCommitId, pool]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipCommitId, baseCommitId, pool, fallbackUrls?.join(",")]);
 
   // --- Render ---
 

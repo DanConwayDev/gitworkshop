@@ -181,12 +181,22 @@ export default function PRPage() {
   const effectiveTipCommitId = prTip?.tipCommitId ?? pr?.tipCommitId;
   const effectiveMergeBase = prTip?.mergeBase ?? pr?.mergeBase;
 
+  // Clone URLs from the PR event and the latest PR Update — used as per-operation
+  // fallback sources when fetching git data specific to this PR.
+  const prCloneUrls = useMemo(() => {
+    const urls = [...(pr?.cloneUrls ?? []), ...(prTip?.cloneUrls ?? [])];
+    // Deduplicate while preserving order
+    return Array.from(new Set(urls));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pr?.cloneUrls?.join(","), prTip?.cloneUrls?.join(",")]);
+
   // Commit history for the PR commits tab — fetches from the effective tip.
   const prCommitHistory = useCommitHistory(
     gitPool,
     gitPoolState,
     effectiveTipCommitId,
     100,
+    prCloneUrls,
   );
   const prCommits = useMemo(() => {
     if (!effectiveMergeBase || !prCommitHistory.commits.length)
@@ -211,7 +221,12 @@ export default function PRPage() {
     fileCountAbortRef.current = abort;
 
     gitPool
-      .getCommitRange(effectiveTipCommitId, effectiveMergeBase, abort.signal)
+      .getCommitRange(
+        effectiveTipCommitId,
+        effectiveMergeBase,
+        abort.signal,
+        prCloneUrls,
+      )
       .then((range) => {
         if (abort.signal.aborted || !range) return;
         setFileCount(diffTrees(range.tipTree, range.baseTree).length);
@@ -223,7 +238,7 @@ export default function PRPage() {
     return () => {
       abort.abort();
     };
-  }, [gitPool, effectiveTipCommitId, effectiveMergeBase]);
+  }, [gitPool, effectiveTipCommitId, effectiveMergeBase, prCloneUrls]);
 
   const status = usePRStatus(prId, prPubkey, selectedMaintainers);
   const nip32Labels = usePRLabels(prId, prPubkey, selectedMaintainers);
@@ -513,6 +528,7 @@ export default function PRPage() {
                     tipCommitId={effectiveTipCommitId}
                     baseCommitId={effectiveMergeBase}
                     pool={gitPool}
+                    fallbackUrls={prCloneUrls}
                   />
                 )}
               </TabsContent>
