@@ -501,16 +501,8 @@ function FullVariant({
                     side="right"
                   >
                     <p>
-                      Nostr git repos use git servers as relays to store and
-                      distribute repository data. In environments where you
-                      can&apos;t install ngit (or a compatible client), these
-                      URLs can be used as{" "}
-                      <strong className="text-foreground">read-only</strong>{" "}
-                      remotes with standard git — e.g.{" "}
-                      <code className="font-mono bg-muted px-1 py-0.5 rounded">
-                        git clone &lt;url&gt;
-                      </code>
-                      .
+                      Git servers act as relays — usable as read-only remotes
+                      without ngit.
                     </p>
                   </PopoverContent>
                 </Popover>
