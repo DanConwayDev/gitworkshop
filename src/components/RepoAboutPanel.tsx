@@ -626,26 +626,31 @@ function NgitCloneField({ command }: { command: string }) {
           <ExternalLink className="h-3 w-3" />
         </a>
       </div>
-      <div className="flex items-center gap-1.5 rounded-md border bg-muted/50 px-3 py-2 min-w-0">
+      <button
+        type="button"
+        onClick={handleCopy}
+        title="Copy command"
+        className={cn(
+          "w-full flex items-center gap-1.5 rounded-md border px-3 py-2 min-w-0 text-left transition-colors cursor-pointer",
+          copied
+            ? "border-green-500/60 bg-green-500/5"
+            : "border-border bg-muted/50 hover:bg-muted hover:border-border/80",
+        )}
+      >
         <code
-          className="flex-1 text-xs font-mono text-foreground/90 truncate min-w-0 select-all"
+          className="flex-1 text-xs font-mono text-foreground/90 truncate min-w-0 select-none"
           title={command}
         >
           {command}
         </code>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
-          title="Copy command"
-        >
+        <span className="shrink-0 text-muted-foreground transition-colors p-0.5 rounded">
           {copied ? (
             <Check className="h-3.5 w-3.5 text-green-500" />
           ) : (
             <Copy className="h-3.5 w-3.5" />
           )}
-        </button>
-      </div>
+        </span>
+      </button>
     </div>
   );
 }
@@ -667,30 +672,32 @@ function CloneServerList({
   if (!hasGrasp && !hasAdditional) return null;
 
   return (
-    <div className="rounded-md border border-border/60 overflow-hidden">
+    <div className="space-y-3">
       {hasGrasp && (
-        <div>
-          <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             <GraspLogo className="h-3 w-3 text-violet-500" />
             Grasp Servers
           </div>
-          {graspCloneUrls.map((url) => (
-            <CloneServerRow key={url} url={url} isGrasp />
-          ))}
+          <div className="space-y-1">
+            {graspCloneUrls.map((url) => (
+              <CloneServerRow key={url} url={url} isGrasp />
+            ))}
+          </div>
         </div>
       )}
 
-      {hasGrasp && hasAdditional && <Separator />}
-
       {hasAdditional && (
-        <div>
-          <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             <Server className="h-3 w-3" />
             Other Git Servers
           </div>
-          {additionalGitServerUrls.map((url) => (
-            <CloneServerRow key={url} url={url} isGrasp={false} />
-          ))}
+          <div className="space-y-1">
+            {additionalGitServerUrls.map((url) => (
+              <CloneServerRow key={url} url={url} isGrasp={false} />
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -714,7 +721,12 @@ function CloneServerRow({ url, isGrasp }: { url: string; isGrasp: boolean }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs group transition-colors hover:bg-accent/30 cursor-pointer"
+      className={cn(
+        "w-full text-left flex items-center gap-2.5 px-2.5 py-1.5 text-xs group transition-colors rounded border cursor-pointer",
+        copied
+          ? "border-green-500/60 bg-green-500/5"
+          : "border-border/40 bg-muted/20 hover:bg-muted/50 hover:border-border/60",
+      )}
       aria-label={`Copy clone URL: ${url}`}
     >
       <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
@@ -746,7 +758,7 @@ function CloneServerRow({ url, isGrasp }: { url: string; isGrasp: boolean }) {
           </span>
         )}
       </div>
-      <span className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground">
+      <span className="shrink-0 opacity-30 group-hover:opacity-100 transition-opacity text-muted-foreground">
         {copied ? (
           <Check className="h-3 w-3 text-emerald-500" />
         ) : (
@@ -1141,26 +1153,32 @@ function CloneDropdown({
                 <ExternalLink className="h-3 w-3" />
               </a>
             </div>
-            {/* Command block */}
-            <div className="flex items-center gap-1.5 rounded-md border bg-muted/50 px-3 py-2 min-w-0">
+            {/* Command block — entire field is the copy button */}
+            <button
+              type="button"
+              onClick={handleCopyCommand}
+              title="Copy command"
+              className={cn(
+                "w-full flex items-center gap-1.5 rounded-md border px-3 py-2 min-w-0 text-left transition-colors cursor-pointer",
+                copiedCommand
+                  ? "border-green-500/60 bg-green-500/5"
+                  : "border-border bg-muted/50 hover:bg-muted hover:border-border/80",
+              )}
+            >
               <code
-                className="flex-1 text-xs font-mono text-foreground/90 truncate min-w-0 select-all"
+                className="flex-1 text-xs font-mono text-foreground/90 truncate min-w-0 select-none"
                 title={nostrCloneCommand}
               >
                 {nostrCloneCommand}
               </code>
-              <button
-                onClick={handleCopyCommand}
-                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
-                title="Copy command"
-              >
+              <span className="shrink-0 text-muted-foreground p-0.5 rounded">
                 {copiedCommand ? (
                   <Check className="h-3.5 w-3.5 text-green-500" />
                 ) : (
                   <Copy className="h-3.5 w-3.5" />
                 )}
-              </button>
-            </div>
+              </span>
+            </button>
           </div>
         )}
 
@@ -1169,55 +1187,39 @@ function CloneDropdown({
           <>
             {nostrCloneCommand && <Separator />}
             <div className="p-3 space-y-2">
-              <p className="text-xs font-semibold text-foreground">
-                Raw git URLs
-              </p>
-              <div className="space-y-1.5">
-                {graspCloneUrls.map((url) => (
-                  <CloneUrlRow key={url} url={url} />
-                ))}
-                {additionalGitServerUrls.map((url) => (
-                  <CloneUrlRow key={url} url={url} />
-                ))}
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs font-semibold text-foreground">
+                  Raw git URLs
+                </p>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="About raw git URLs"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-72 text-xs text-muted-foreground leading-relaxed"
+                    side="right"
+                  >
+                    <p>
+                      Git servers act as relays — usable as read-only remotes
+                      without ngit.
+                    </p>
+                  </PopoverContent>
+                </Popover>
               </div>
+              <CloneServerList
+                graspCloneUrls={graspCloneUrls}
+                additionalGitServerUrls={additionalGitServerUrls}
+              />
             </div>
           </>
         )}
       </PopoverContent>
     </Popover>
-  );
-}
-
-function CloneUrlRow({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 min-w-0">
-      <code
-        className="flex-1 text-xs font-mono truncate text-foreground/80 min-w-0"
-        title={url}
-      >
-        {url}
-      </code>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 shrink-0"
-        onClick={handleCopy}
-        title="Copy URL"
-      >
-        {copied ? (
-          <Check className="h-3.5 w-3.5 text-green-500" />
-        ) : (
-          <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-        )}
-      </Button>
-    </div>
   );
 }
