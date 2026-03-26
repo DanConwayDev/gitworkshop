@@ -60,6 +60,7 @@ import {
   CommitListError,
 } from "@/components/CommitList";
 import { useCommitHistory } from "@/hooks/useGitExplorer";
+import { usePRMergeBase } from "@/hooks/usePRMergeBase";
 import { gitIndexRelays, relayCurationMode } from "@/services/settings";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
@@ -179,7 +180,6 @@ export default function PRPage() {
   // PR event's c/merge-base tags when no authorised updates exist.
   const prTip = usePRTip(prId, prPubkey, selectedMaintainers);
   const effectiveTipCommitId = prTip?.tipCommitId ?? pr?.tipCommitId;
-  const effectiveMergeBase = prTip?.mergeBase ?? pr?.mergeBase;
 
   // Clone URLs from the PR event and the latest PR Update — used as per-operation
   // fallback sources when fetching git data specific to this PR.
@@ -189,6 +189,18 @@ export default function PRPage() {
     return Array.from(new Set(urls));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pr?.cloneUrls?.join(","), prTip?.cloneUrls?.join(",")]);
+
+  // The merge-base tag is optional in NIP-34. When absent, derive it by
+  // walking the commit chain. Re-runs when the tip changes (e.g. after a rebase).
+  const explicitMergeBase = prTip?.mergeBase ?? pr?.mergeBase;
+  const { mergeBase: effectiveMergeBase, computing: computingMergeBase } =
+    usePRMergeBase(
+      gitPool,
+      gitPoolState,
+      effectiveTipCommitId,
+      explicitMergeBase,
+      prCloneUrls,
+    );
 
   // Commit history for the PR commits tab — fetches from the effective tip.
   const prCommitHistory = useCommitHistory(
@@ -516,8 +528,9 @@ export default function PRPage() {
                   </div>
                 ) : !effectiveMergeBase ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-                    This PR does not include a merge-base commit. Cannot
-                    determine which files changed.
+                    {computingMergeBase
+                      ? "Determining base commit…"
+                      : "Could not determine the base commit for this PR."}
                   </div>
                 ) : !gitPool ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
@@ -539,8 +552,9 @@ export default function PRPage() {
               <TabsContent value="commits" className="mt-0">
                 {!effectiveMergeBase ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-                    This PR does not include a merge-base commit. Cannot
-                    determine which commits belong to the PR.
+                    {computingMergeBase
+                      ? "Determining base commit…"
+                      : "Could not determine the base commit for this PR."}
                   </div>
                 ) : prCommitHistory.error ? (
                   <CommitListError message={prCommitHistory.error} />

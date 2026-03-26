@@ -1254,6 +1254,91 @@ export class GitGraspPool {
   }
 
   /**
+   * Find the merge base between a PR tip commit and the default branch.
+   *
+   * Strategy:
+   *   1. Fetch the default branch's commit history (up to `maxDepth` commits)
+   *      and build a Set of those hashes.
+   *   2. Walk the PR tip's commit chain (up to `maxDepth` commits), checking
+   *      each commit against the Set.
+   *   3. The first PR-chain commit found in the default branch history is the
+   *      merge base.
+   *
+   * Fallback (author heuristic):
+   *   If no commit from the PR chain appears in the default branch history
+   *   (e.g. the branch diverged further back than `maxDepth`), we fall back
+   *   to scanning the PR commit chain for the first commit whose author email
+   *   differs from the PR tip's author email. This catches the common case
+   *   where all PR commits share the same author but the base commit was
+   *   authored by someone else (e.g. a maintainer's merge commit).
+   *
+   * Returns the merge-base commit hash, or null if it cannot be determined.
+   *
+   * @param prTipCommitId   - The tip commit of the PR branch.
+   * @param fallbackUrls    - Extra clone URLs to try (e.g. PR author's fork).
+   * @param maxDepth        - How many commits to walk in each chain (default 200).
+   */
+  async findMergeBase(
+    prTipCommitId: string,
+    signal: AbortSignal,
+    fallbackUrls?: string[],
+    maxDepth = 200,
+  ): Promise<string | null> {
+    // Resolve the default branch commit from infoRefs.
+    const info = this.getInfoRefs();
+    if (!info) return null;
+
+    const headRef = info.symrefs["HEAD"];
+    const defaultBranchCommit = headRef
+      ? info.refs[headRef]
+      : Object.values(info.refs)[0];
+    if (!defaultBranchCommit) return null;
+
+    // If the PR tip IS the default branch head, there are no PR-specific commits.
+    if (defaultBranchCommit === prTipCommitId) return null;
+
+    // Fetch both commit chains in parallel.
+    const [prChain, defaultChain] = await Promise.all([
+      this.getCommitHistory(prTipCommitId, maxDepth, signal, fallbackUrls),
+      this.getCommitHistory(defaultBranchCommit, maxDepth, signal),
+    ]);
+
+    if (signal.aborted) return null;
+
+    if (!prChain || prChain.length === 0) return null;
+
+    if (defaultChain && defaultChain.length > 0) {
+      // Build a set of hashes from the default branch chain.
+      const defaultSet = new Set(defaultChain.map((c) => c.hash));
+
+      // Walk the PR chain from tip to root, return the first commit that
+      // appears in the default branch history.
+      for (const commit of prChain) {
+        if (defaultSet.has(commit.hash)) {
+          return commit.hash;
+        }
+      }
+    }
+
+    // Author heuristic fallback: find the first commit in the PR chain whose
+    // author email differs from the PR tip's author email. This handles the
+    // common case where the PR author's commits are at the top of the chain
+    // and the base commit was authored by someone else.
+    const prTipAuthorEmail = prChain[0]?.author.email;
+    if (prTipAuthorEmail) {
+      for (let i = 1; i < prChain.length; i++) {
+        if (prChain[i].author.email !== prTipAuthorEmail) {
+          // The previous commit (i-1) is the last PR-authored commit;
+          // this commit (i) is the first base commit.
+          return prChain[i].hash;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Fetch the data needed to compute a diff between two commits.
    *
    * Returns both commits and both complete recursive directory trees
