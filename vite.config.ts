@@ -1,8 +1,27 @@
 import path from "node:path";
+import { execSync } from "node:child_process";
 
 import react from "@vitejs/plugin-react-swc";
 import { defineConfig, type Plugin } from "vitest/config";
 import { name } from "./package.json";
+
+function getGitCommit(): string {
+  try {
+    return execSync("git rev-parse --short HEAD").toString().trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+function getCommitDate(): string {
+  try {
+    return execSync("git log -1 --format=%cd --date=format:%Y-%m-%d")
+      .toString()
+      .trim();
+  } catch {
+    return "unknown";
+  }
+}
 
 /** Replaces %APP_NAME% tokens in index.html at build and dev time. */
 function htmlAppNamePlugin(): Plugin {
@@ -64,6 +83,8 @@ function manifestPlugin(): Plugin {
 export default defineConfig(() => ({
   define: {
     __APP_NAME__: JSON.stringify(name),
+    __GIT_COMMIT__: JSON.stringify(getGitCommit()),
+    __COMMIT_DATE__: JSON.stringify(getCommitDate()),
   },
   build: {
     sourcemap: true,

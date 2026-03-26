@@ -149,3 +149,37 @@ persist(relayCurationMode, "relayCurationMode", {
   deserialize: (v) => (v === "outbox" ? "outbox" : "repo"),
   defaultValue: DEFAULT_RELAY_CURATION_MODE,
 });
+
+// ---------------------------------------------------------------------------
+// Theme
+// ---------------------------------------------------------------------------
+
+function getSystemTheme(): "light" | "dark" {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function applyTheme(t: "light" | "dark") {
+  if (t === "dark") {
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
+}
+
+export const theme = new BehaviorSubject<"light" | "dark">(getSystemTheme());
+
+// Apply theme class on every change
+theme.subscribe(applyTheme);
+
+// Persist user preference; omit key when it matches the system default so
+// future system-theme changes are respected by users who haven't customised it.
+persist(theme, "theme", {
+  serialize: (v) => v,
+  deserialize: (v) => (v === "light" || v === "dark" ? v : getSystemTheme()),
+});
+
+export function toggleTheme() {
+  theme.next(theme.getValue() === "dark" ? "light" : "dark");
+}
