@@ -4,6 +4,8 @@ import {
   getPointerForEvent,
   encodeDecodeResult,
   getSeenRelays,
+  isAddressableKind,
+  getReplaceableAddress,
 } from "applesauce-core/helpers";
 import { Button } from "@/components/ui/button";
 import {
@@ -125,7 +127,14 @@ export function EventCardActions({ event, className }: EventCardActionsProps) {
             />
             <CopyRow label="nostr:" value={`nostr:${nip19Id}`} />
             <CopyRow label="njump.me" value={`https://njump.me/${nip19Id}`} />
-            <CopyRow label="event id" value={event.id} />
+            {isAddressableKind(event.kind) ? (
+              <CopyRow
+                label="coordinate"
+                value={getReplaceableAddress(event) ?? event.id}
+              />
+            ) : (
+              <CopyRow label="event id" value={event.id} />
+            )}
           </div>
         </DialogContent>
       </Dialog>

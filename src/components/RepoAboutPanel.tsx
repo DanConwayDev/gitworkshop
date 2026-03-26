@@ -50,6 +50,8 @@ import {
   getPointerForEvent,
   encodeDecodeResult,
   getSeenRelays,
+  isAddressableKind,
+  getReplaceableAddress,
 } from "applesauce-core/helpers";
 import { cn } from "@/lib/utils";
 import { relayUrlToSegment } from "@/lib/routeUtils";
@@ -1018,7 +1020,14 @@ function AnnouncementEventActions({ event }: { event: NostrEvent }) {
             />
             <CopyRow label="nostr:" value={`nostr:${nip19Id}`} />
             <CopyRow label="njump.me" value={`https://njump.me/${nip19Id}`} />
-            <CopyRow label="event id" value={event.id} />
+            {isAddressableKind(event.kind) ? (
+              <CopyRow
+                label="coordinate"
+                value={getReplaceableAddress(event) ?? event.id}
+              />
+            ) : (
+              <CopyRow label="event id" value={event.id} />
+            )}
           </div>
         </DialogContent>
       </Dialog>
