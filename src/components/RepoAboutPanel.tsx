@@ -28,6 +28,7 @@ import {
   ChevronDown,
   ChevronUp,
   Server,
+  Info,
 } from "lucide-react";
 import {
   isGraspCloneUrl,
@@ -473,36 +474,52 @@ function FullVariant({
             Clone
           </h3>
 
-          {/* nostr:// address — prominent, always first */}
+          {/* nostr:// address — field style matching CloneDropdown */}
           {nostrCloneUrl && nostrCloneCommand && (
-            <div className="rounded-md border border-border/60 overflow-hidden">
-              <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                <GitBranch className="h-3 w-3 text-violet-500" />
-                <span className="text-violet-600 dark:text-violet-400">
-                  ngit
-                </span>
-                <span className="ml-auto">
-                  <a
-                    href="https://ngit.dev/install"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-0.5 font-normal normal-case tracking-normal"
-                  >
-                    Install ngit
-                    <ExternalLink className="h-2.5 w-2.5" />
-                  </a>
-                </span>
-              </div>
-              <CloneCommandRow value={nostrCloneCommand} />
-            </div>
+            <NgitCloneField command={nostrCloneCommand} />
           )}
 
-          {/* Grasp + other git server URLs */}
+          {/* Git server URLs with explanatory heading */}
           {repo.cloneUrls.length > 0 && (
-            <CloneServerList
-              graspCloneUrls={repo.graspCloneUrls}
-              additionalGitServerUrls={repo.additionalGitServerUrls}
-            />
+            <>
+              <div className="flex items-center gap-1.5 pt-1">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Raw git URLs
+                </h4>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="About raw git URLs"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-72 text-xs text-muted-foreground leading-relaxed"
+                    side="right"
+                  >
+                    <p>
+                      Nostr git repos use git servers as relays to store and
+                      distribute repository data. In environments where you
+                      can&apos;t install ngit (or a compatible client), these
+                      URLs can be used as{" "}
+                      <strong className="text-foreground">read-only</strong>{" "}
+                      remotes with standard git — e.g.{" "}
+                      <code className="font-mono bg-muted px-1 py-0.5 rounded">
+                        git clone &lt;url&gt;
+                      </code>
+                      .
+                    </p>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <CloneServerList
+                graspCloneUrls={repo.graspCloneUrls}
+                additionalGitServerUrls={repo.additionalGitServerUrls}
+              />
+            </>
           )}
         </section>
       )}
@@ -552,43 +569,60 @@ function FullVariant({
 }
 
 // ---------------------------------------------------------------------------
-// Clone command row — for the nostr:// address in full variant
+// NgitCloneField — field-style clone command matching the CloneDropdown look
 // ---------------------------------------------------------------------------
 
-function CloneCommandRow({ value }: { value: string }) {
+function NgitCloneField({ command }: { command: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(value);
+      await navigator.clipboard.writeText(command);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
       /* clipboard unavailable */
     }
-  }, [value]);
+  }, [command]);
 
   return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs group transition-colors hover:bg-accent/30 cursor-pointer"
-      aria-label={`Copy: ${value}`}
-    >
-      <code
-        className="flex-1 font-mono text-[11px] break-all leading-snug text-foreground/80"
-        title={value}
-      >
-        {value}
-      </code>
-      <span className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground">
-        {copied ? (
-          <Check className="h-3 w-3 text-emerald-500" />
-        ) : (
-          <Copy className="h-3 w-3" />
-        )}
-      </span>
-    </button>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground flex items-center gap-1">
+          ngit
+          <span className="text-muted-foreground/70">(nostr git plugin)</span>
+        </p>
+        <a
+          href="https://ngit.dev/install"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1"
+        >
+          Install ngit
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
+      <div className="flex items-center gap-1.5 rounded-md border bg-muted/50 px-3 py-2 min-w-0">
+        <code
+          className="flex-1 text-xs font-mono text-foreground/90 truncate min-w-0 select-all"
+          title={command}
+        >
+          {command}
+        </code>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
+          title="Copy command"
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-green-500" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
+    </div>
   );
 }
 
