@@ -13,12 +13,34 @@ import {
 } from "@/components/NostrComposer";
 import { extractContentTags } from "@/lib/nostrContentTags";
 import { Loader2, Plus, X, CircleDot } from "lucide-react";
+import { Expressions } from "applesauce-core/helpers/regexp";
+import { stripInvisibleChar } from "applesauce-core/helpers/string";
 
-/** Extract #hashtag words from content, normalised to lowercase. */
+/** Normalise a hashtag/label the same way applesauce does: lowercase + strip invisible chars. */
+function normaliseHashtag(tag: string): string {
+  return stripInvisibleChar(tag.toLocaleLowerCase());
+}
+
+/**
+ * Returns true if the string is a valid hashtag per applesauce's regex
+ * (Unicode letters, numbers, and marks only — no spaces, hyphens, underscores, etc.).
+ */
+function isValidHashtag(tag: string): boolean {
+  return /^[\p{L}\p{N}\p{M}]+$/u.test(tag);
+}
+
+/**
+ * Extract #hashtags from content using applesauce's Expressions.hashtag regex,
+ * normalised with the same logic applesauce uses.
+ */
 function extractHashtags(text: string): string[] {
-  const matches = text.match(/#([a-zA-Z][a-zA-Z0-9_-]*)/g);
-  if (!matches) return [];
-  return [...new Set(matches.map((m) => m.slice(1).toLowerCase()))];
+  const re = new RegExp(Expressions.hashtag.source, Expressions.hashtag.flags);
+  const results: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    results.push(normaliseHashtag(match[1]));
+  }
+  return [...new Set(results)];
 }
 
 /**
@@ -73,6 +95,7 @@ export function CreateIssueForm({
   const [content, setContent] = useState("");
   const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
   const [labelInput, setLabelInput] = useState("");
+  const [labelError, setLabelError] = useState<string | null>(null);
   const [labels, setLabels] = useState<string[]>([]);
   const [isPending, setIsPending] = useState(false);
   const [showHashtagHint, setShowHashtagHint] = useState(false);
@@ -93,17 +116,30 @@ export function CreateIssueForm({
   }, []);
 
   const addLabel = useCallback(() => {
-    const trimmed = labelInput.trim().toLowerCase().replace(/\s+/g, "-");
-    if (
-      !trimmed ||
-      labels.includes(trimmed) ||
-      contentLabels.includes(trimmed)
-    ) {
+    const raw = labelInput.trim();
+    if (!raw) {
       setLabelInput("");
+      setLabelError(null);
       return;
     }
-    setLabels((prev) => [...prev, trimmed]);
+
+    if (!isValidHashtag(raw)) {
+      setLabelError(
+        "Labels can only contain letters, numbers, and combining marks — no spaces, hyphens, or underscores.",
+      );
+      return;
+    }
+
+    const normalised = normaliseHashtag(raw);
+    if (labels.includes(normalised) || contentLabels.includes(normalised)) {
+      setLabelInput("");
+      setLabelError(null);
+      return;
+    }
+
+    setLabels((prev) => [...prev, normalised]);
     setLabelInput("");
+    setLabelError(null);
   }, [labelInput, labels, contentLabels]);
 
   const removeLabel = useCallback((label: string) => {
@@ -249,10 +285,13 @@ export function CreateIssueForm({
             id="issue-labels"
             placeholder="Add a label and press Enter"
             value={labelInput}
-            onChange={(e) => setLabelInput(e.target.value)}
+            onChange={(e) => {
+              setLabelInput(e.target.value);
+              setLabelError(null);
+            }}
             onKeyDown={handleLabelKeyDown}
             disabled={isPending}
-            className="bg-background/60 flex-1"
+            className={`bg-background/60 flex-1 ${labelError ? "border-destructive focus-visible:ring-destructive" : ""}`}
           />
           <Button
             type="button"
@@ -265,6 +304,8 @@ export function CreateIssueForm({
             <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
+
+        {labelError && <p className="text-xs text-destructive">{labelError}</p>}
 
         {(contentLabels.length > 0 || labels.length > 0) && (
           <div className="space-y-1.5 pt-1">
