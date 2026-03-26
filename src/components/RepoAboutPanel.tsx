@@ -10,6 +10,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -28,6 +33,7 @@ import {
   Braces,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Server,
   Info,
 } from "lucide-react";
@@ -180,6 +186,17 @@ function SidebarVariant({
   nostrCloneUrl: string | undefined;
   hasAnyCloneUrl: boolean;
 }) {
+  let npub: string | undefined;
+  try {
+    npub = nip19.npubEncode(repo.selectedMaintainer);
+  } catch {
+    npub = undefined;
+  }
+  const aboutPath = npub ? `/${npub}/${repo.dTag}/about` : undefined;
+  const selectedAnnouncement = repo.announcements.find(
+    (a) => a.pubkey === repo.selectedMaintainer,
+  );
+
   return (
     <div className="space-y-3 min-w-0">
       {/* Clone button */}
@@ -194,18 +211,23 @@ function SidebarVariant({
 
       {/* About card */}
       <div className="rounded-lg border border-border/60 overflow-hidden">
-        <div className="px-4 pt-4 pb-4 space-y-4">
+        {/* Card header */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-0">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            About
+          </p>
+          {selectedAnnouncement && (
+            <AnnouncementEventActions event={selectedAnnouncement} />
+          )}
+        </div>
+
+        <div className="px-4 pt-3 pb-4 space-y-4">
           {/* Description */}
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              About
+          {repo.description && (
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {repo.description}
             </p>
-            {repo.description && (
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {repo.description}
-              </p>
-            )}
-          </div>
+          )}
 
           {/* Web URLs */}
           {repo.webUrls.length > 0 && (
@@ -338,6 +360,19 @@ function SidebarVariant({
             </div>
           )}
         </div>
+
+        {/* Show more link */}
+        {aboutPath && (
+          <div className="px-4 pb-3 -mt-1">
+            <Link
+              to={aboutPath}
+              className="text-xs text-muted-foreground/60 hover:text-foreground transition-colors inline-flex items-center gap-0.5"
+            >
+              Show more
+              <ChevronRight className="h-3 w-3" />
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -518,26 +553,33 @@ function FullVariant({
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Raw git URLs
                 </h4>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label="About raw git URLs"
+                <Tooltip>
+                  <Popover>
+                    <TooltipTrigger asChild>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label="About raw git URLs"
+                        >
+                          <Info className="h-3.5 w-3.5" />
+                        </button>
+                      </PopoverTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      Git servers act as relays
+                    </TooltipContent>
+                    <PopoverContent
+                      className="w-72 text-xs text-muted-foreground leading-relaxed"
+                      side="right"
                     >
-                      <Info className="h-3.5 w-3.5" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-72 text-xs text-muted-foreground leading-relaxed"
-                    side="right"
-                  >
-                    <p>
-                      Git servers act as relays — usable as read-only remotes
-                      without ngit.
-                    </p>
-                  </PopoverContent>
-                </Popover>
+                      <p>
+                        Git servers act as relays — usable as read-only remotes
+                        without ngit.
+                      </p>
+                    </PopoverContent>
+                  </Popover>
+                </Tooltip>
               </div>
               <CloneServerList
                 graspCloneUrls={repo.graspCloneUrls}
@@ -1191,26 +1233,33 @@ function CloneDropdown({
                 <p className="text-xs font-semibold text-foreground">
                   Raw git URLs
                 </p>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label="About raw git URLs"
+                <Tooltip>
+                  <Popover>
+                    <TooltipTrigger asChild>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label="About raw git URLs"
+                        >
+                          <Info className="h-3.5 w-3.5" />
+                        </button>
+                      </PopoverTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      Git servers act as relays
+                    </TooltipContent>
+                    <PopoverContent
+                      className="w-72 text-xs text-muted-foreground leading-relaxed"
+                      side="right"
                     >
-                      <Info className="h-3.5 w-3.5" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-72 text-xs text-muted-foreground leading-relaxed"
-                    side="right"
-                  >
-                    <p>
-                      Git servers act as relays — usable as read-only remotes
-                      without ngit.
-                    </p>
-                  </PopoverContent>
-                </Popover>
+                      <p>
+                        Git servers act as relays — usable as read-only remotes
+                        without ngit.
+                      </p>
+                    </PopoverContent>
+                  </Popover>
+                </Tooltip>
               </div>
               <CloneServerList
                 graspCloneUrls={graspCloneUrls}
