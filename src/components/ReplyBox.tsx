@@ -104,7 +104,17 @@ export function ReplyBox({
         setIsPending(false);
       }
     },
-    [body, rootId, rootPubkey, rootKind, repoRelays, relayHint, toast],
+    [
+      body,
+      rootId,
+      rootPubkey,
+      rootKind,
+      repoRelays,
+      relayHint,
+      parent,
+      onSubmitted,
+      toast,
+    ],
   );
 
   return (
