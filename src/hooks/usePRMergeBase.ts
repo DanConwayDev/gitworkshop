@@ -100,14 +100,7 @@ export function usePRMergeBase(
     return () => {
       abort.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    gitPool,
-    hasInfoRefs,
-    tipCommitId,
-    explicitMergeBase,
-    fallbackUrls?.join(","),
-  ]);
+  }, [gitPool, hasInfoRefs, tipCommitId, explicitMergeBase, fallbackUrls]);
 
   // If an explicit merge base is provided, use it directly.
   if (explicitMergeBase !== undefined) {

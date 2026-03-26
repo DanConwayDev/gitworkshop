@@ -6,11 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LabelBadge } from "@/components/LabelBadge";
-import {
-  NostrComposer,
-  composerHasNsec,
-  hasPreviewableContent,
-} from "@/components/NostrComposer";
+import { NostrComposer } from "@/components/NostrComposer";
+import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { extractContentTags } from "@/lib/nostrContentTags";
 import { Loader2, Plus, X, CircleDot } from "lucide-react";
 import { Expressions } from "applesauce-core/helpers/regexp";

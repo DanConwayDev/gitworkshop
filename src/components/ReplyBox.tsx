@@ -13,11 +13,8 @@ import { runner } from "@/services/actions";
 import { useToast } from "@/hooks/useToast";
 import { useProfile } from "@/hooks/useProfile";
 import { CreateComment } from "@/actions/nip34";
-import {
-  NostrComposer,
-  composerHasNsec,
-  hasPreviewableContent,
-} from "@/components/NostrComposer";
+import { NostrComposer } from "@/components/NostrComposer";
+import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
