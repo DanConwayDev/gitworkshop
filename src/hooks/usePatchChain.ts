@@ -38,26 +38,65 @@ import type { CastRefEventStore } from "applesauce-common/casts/cast";
 import type { RelayGroup } from "applesauce-relay";
 
 /**
- * Resolve the latest revision chain from a set of patches.
- *
- * Algorithm:
- *   1. Find all patches that are revision roots (root-revision tag) and
- *      reply to the original root patch. Pick the most recent one.
- *   2. If no revision root exists, the original root patch IS the chain start.
- *   3. Walk the reply chain from the chain start, following replyToId links.
- *
- * Returns patches in order: [chainStart, next, ..., tip].
+ * Walk the reply chain from a given start patch, following replyToId links.
+ * Returns patches in order: [start, next, ..., tip].
  */
-function resolveLatestChain(rootPatchId: string, allPatches: Patch[]): Patch[] {
-  if (allPatches.length === 0) return [];
+function walkChain(
+  start: Patch,
+  children: Map<string, Patch[]>,
+  visited: Set<string>,
+): Patch[] {
+  const chain: Patch[] = [start];
+  visited.add(start.id);
+  let current = start;
 
-  // Index patches by event ID for O(1) lookup
-  const byId = new Map<string, Patch>();
-  for (const p of allPatches) {
-    byId.set(p.id, p);
+  const MAX_CHAIN_LENGTH = 500;
+
+  while (chain.length < MAX_CHAIN_LENGTH) {
+    const kids = children.get(current.id);
+    if (!kids || kids.length === 0) break;
+
+    // Exclude revision roots — they start new chains, not continuations
+    const nonRevisionKids = kids.filter(
+      (p) => !p.isRootRevision && !visited.has(p.id),
+    );
+    if (nonRevisionKids.length === 0) break;
+
+    // Pick the most recent non-revision child
+    const next = nonRevisionKids.reduce((best, p) =>
+      p.event.created_at > best.event.created_at ? p : best,
+    );
+
+    if (visited.has(next.id)) break;
+    visited.add(next.id);
+    chain.push(next);
+    current = next;
   }
 
-  // Build a map: parentId → children (patches that reply to parentId)
+  return chain;
+}
+
+/**
+ * Resolve ALL revision chains from a set of patches, ordered oldest-first.
+ *
+ * Returns an array of PatchRevision objects, one per push:
+ *   - The first entry is always the original root patch chain.
+ *   - Subsequent entries are revision chains (root-revision patches), sorted
+ *     by created_at ascending.
+ *
+ * The last entry is the "current" (latest) revision; all earlier ones are
+ * superseded.
+ */
+export function resolveAllChains(
+  rootPatchId: string,
+  allPatches: Patch[],
+): PatchRevision[] {
+  if (allPatches.length === 0) return [];
+
+  const byId = new Map<string, Patch>();
+  for (const p of allPatches) byId.set(p.id, p);
+
+  // Build children map (parentId → children)
   const children = new Map<string, Patch[]>();
   for (const p of allPatches) {
     const parentId = p.replyToId;
@@ -68,54 +107,51 @@ function resolveLatestChain(rootPatchId: string, allPatches: Patch[]): Patch[] {
     }
   }
 
-  // Find the latest revision root — a patch with root-revision tag that
-  // replies to the original root patch.
-  const revisionRoots = allPatches.filter(
-    (p) => p.isRootRevision && p.replyToId === rootPatchId,
-  );
+  const rootPatch = byId.get(rootPatchId);
+  if (!rootPatch) return [];
 
-  // Pick the most recent revision root (highest created_at)
-  const latestRevisionRoot = revisionRoots.reduce<Patch | undefined>(
-    (best, p) =>
-      !best || p.event.created_at > best.event.created_at ? p : best,
-    undefined,
-  );
+  const visited = new Set<string>();
 
-  // Determine the chain start
-  const chainStart = latestRevisionRoot ?? byId.get(rootPatchId);
-  if (!chainStart) return [];
+  // Original chain starting from the root patch
+  const originalChain = walkChain(rootPatch, children, visited);
 
-  // Walk the chain: from chainStart, follow the single-child reply chain.
-  // At each step, pick the most recent child (in case of forks/conflicts).
-  const chain: Patch[] = [chainStart];
-  let current = chainStart;
+  const revisions: PatchRevision[] = [
+    { rootPatch, chain: originalChain, isRevision: false },
+  ];
 
-  // Safety limit to prevent infinite loops
-  const MAX_CHAIN_LENGTH = 500;
+  // Find all revision roots (direct replies to rootPatchId with root-revision tag)
+  const revisionRoots = allPatches
+    .filter((p) => p.isRootRevision && p.replyToId === rootPatchId)
+    .sort((a, b) => a.event.created_at - b.event.created_at);
 
-  while (chain.length < MAX_CHAIN_LENGTH) {
-    const kids = children.get(current.id);
-    if (!kids || kids.length === 0) break;
-
-    // If there are multiple children, pick the most recent one.
-    // (This handles the case where someone sent multiple follow-up patches.)
-    const next = kids.reduce((best, p) =>
-      p.event.created_at > best.event.created_at ? p : best,
-    );
-
-    // Avoid cycles
-    if (chain.some((p) => p.id === next.id)) break;
-
-    chain.push(next);
-    current = next;
+  for (const revRoot of revisionRoots) {
+    if (visited.has(revRoot.id)) continue;
+    const chain = walkChain(revRoot, children, visited);
+    revisions.push({ rootPatch: revRoot, chain, isRevision: true });
   }
 
-  return chain;
+  return revisions;
+}
+
+/**
+ * A single push revision — either the original patch set or a subsequent
+ * revision (root-revision). The last entry in `allRevisions` is the current
+ * (latest) state; all earlier ones are superseded.
+ */
+export interface PatchRevision {
+  /** The root patch of this revision (has t:root or t:root-revision). */
+  rootPatch: Patch;
+  /** Ordered patches in this revision's chain (oldest first). */
+  chain: Patch[];
+  /** True when this is a revision (not the original root patch set). */
+  isRevision: boolean;
 }
 
 export interface PatchChainResult {
   /** Ordered patches in the latest revision (oldest first). */
   chain: Patch[];
+  /** All revisions ordered oldest-first. Last entry is current; earlier are superseded. */
+  allRevisions: PatchRevision[];
   /** Tip commit ID from the last patch's `commit` tag, if present. */
   tipCommitId: string | undefined;
   /** Base commit ID from the first patch's `parent-commit` tag, if present. */
@@ -212,11 +248,17 @@ export function usePatchChain(
     });
   }, [rootPatch, referencingPatches]);
 
-  // Resolve the latest chain
-  const chain = useMemo(() => {
+  // Resolve all revision chains (oldest first; last is current)
+  const allRevisions = useMemo(() => {
     if (!rootPatchId || allPatches.length === 0) return [];
-    return resolveLatestChain(rootPatchId, allPatches);
+    return resolveAllChains(rootPatchId, allPatches);
   }, [rootPatchId, allPatches]);
+
+  // Latest chain (for backward compat + tip/base extraction)
+  const chain = useMemo(() => {
+    if (allRevisions.length === 0) return [];
+    return allRevisions[allRevisions.length - 1].chain;
+  }, [allRevisions]);
 
   // Extract tip and base commit IDs from the chain
   const tipCommitId = useMemo(() => {
@@ -252,5 +294,5 @@ export function usePatchChain(
 
   const loading = !rootPatch;
 
-  return { chain, tipCommitId, baseCommitId, cloneUrls, loading };
+  return { chain, allRevisions, tipCommitId, baseCommitId, cloneUrls, loading };
 }

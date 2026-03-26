@@ -9,23 +9,28 @@ import {
   EventBodyCard,
   EventBodyCardSkeleton,
   CommentSkeleton,
-  ThreadedComments,
+  SubjectRenameCard,
 } from "@/components/EventThreadComponents";
+import { ThreadTree } from "@/components/ThreadTree";
 import { getThreadTree } from "@/lib/threadTree";
 
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import {
-  usePRComments,
+  usePRAllComments,
   usePRLabels,
   usePRStatus,
   usePRTip,
+  usePRUpdates,
   usePRZaps,
   usePRSubjectRenames,
   usePRMaintainers,
   resolveCurrentPRSubject,
 } from "@/hooks/usePRs";
-import { useNip34Loaders } from "@/hooks/useNip34Loaders";
+import {
+  useNip34Loaders,
+  useNip34ItemLoaderBatch,
+} from "@/hooks/useNip34Loaders";
 import { usePatchChain } from "@/hooks/usePatchChain";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { useGitPool } from "@/hooks/useGitPool";
@@ -48,6 +53,10 @@ import {
   GitCommitHorizontal,
   FileDiff,
 } from "lucide-react";
+import {
+  PatchSetPushEvent,
+  PRUpdatePushEvent,
+} from "@/components/PushEventComponents";
 import { cn } from "@/lib/utils";
 import { PR_ROOT_KINDS, PR_KIND, PATCH_KIND } from "@/lib/nip34";
 import { PR } from "@/casts/PR";
@@ -299,13 +308,34 @@ export default function PRPage() {
 
   const status = usePRStatus(prId, prPubkey, selectedMaintainers);
   const nip32Labels = usePRLabels(prId, prPubkey, selectedMaintainers);
-  const comments = usePRComments(prId);
   const zaps = usePRZaps(prId);
   const subjectRenames = usePRSubjectRenames(
     prId,
     prPubkey,
     selectedMaintainers,
   );
+
+  // For patches: collect all revision root IDs so we can load their comments
+  // and render them in the timeline.
+  const revisionRootIds = useMemo(() => {
+    if (itemType !== "patch") return [];
+    return patchChain.allRevisions
+      .filter((r) => r.isRevision)
+      .map((r) => r.rootPatch.id);
+  }, [itemType, patchChain.allRevisions]);
+
+  // Load essentials + comments + thread for each revision root patch.
+  // The singleton loaders batch all IDs together automatically.
+  useNip34ItemLoaderBatch(revisionRootIds, repoRelayGroup, {
+    tier: "thread",
+    includeAuthorNip65: curationMode === "outbox",
+  });
+
+  // All comments across the root patch + all revision roots.
+  const comments = usePRAllComments(prId, revisionRootIds);
+
+  // PR Updates (kind:1619) — already fetched by nip34CommentsLoader.
+  const prUpdates = usePRUpdates(itemType === "pr" ? prId : undefined);
 
   // Resolve the current (effective) subject from rename events.
   const originalSubject = pr?.subject ?? patch?.subject ?? "";
@@ -331,21 +361,42 @@ export default function PRPage() {
     return Array.from(merged).sort();
   }, [pr?.labels, patch?.labels, nip32Labels]);
 
-  // Participants: author + comment authors
+  // Participants: author + comment authors + PR update authors
   const participants = useMemo(() => {
     const pubkeys = new Set<string>();
     if (prEvent) pubkeys.add(prEvent.pubkey);
     if (comments) {
       for (const c of comments) pubkeys.add(c.pubkey);
     }
+    if (prUpdates) {
+      for (const u of prUpdates) pubkeys.add(u.pubkey);
+    }
     return Array.from(pubkeys);
-  }, [prEvent, comments]);
+  }, [prEvent, comments, prUpdates]);
 
   // Build the thread tree from the PR event + comments.
+  // For patches: exclude comments that belong to a revision root (they'll be
+  // shown under their revision's push event instead).
+  const revisionRootIdSet = useMemo(
+    () => new Set(revisionRootIds),
+    [revisionRootIds],
+  );
+  const rootComments = useMemo(() => {
+    if (!comments) return undefined;
+    if (itemType !== "patch" || revisionRootIdSet.size === 0) return comments;
+    // Keep only comments whose #E root is the original root patch (prId),
+    // not a revision root.
+    return comments.filter((c) => {
+      const rootTag = c.tags.find((t) => t[0] === "E");
+      if (!rootTag) return true; // no root tag — keep
+      return rootTag[1] === prId; // only keep if rooted at the original
+    });
+  }, [comments, itemType, revisionRootIdSet, prId]);
+
   const threadTree = useMemo(() => {
-    if (!prEvent || !comments) return undefined;
-    return getThreadTree(prEvent, comments);
-  }, [prEvent, comments]);
+    if (!prEvent || !rootComments) return undefined;
+    return getThreadTree(prEvent, rootComments);
+  }, [prEvent, rootComments]);
 
   // Compute subject rename items with old/new subjects for display.
   const renameItems = useMemo(() => {
@@ -360,6 +411,119 @@ export default function PRPage() {
       return item;
     });
   }, [subjectRenames, originalSubject]);
+
+  // Build the interleaved push+comment timeline for the conversation tab.
+  // For patches: one PatchSetPushEvent per revision, interleaved with comments.
+  // For PRs: one PRUpdatePushEvent per kind:1619 update, interleaved with comments.
+  type TimelineNode =
+    | {
+        type: "patch-push";
+        revision: (typeof patchChain.allRevisions)[0];
+        superseded: boolean;
+        ts: number;
+      }
+    | {
+        type: "pr-update";
+        update: NonNullable<typeof prUpdates>[0];
+        superseded: boolean;
+        ts: number;
+      }
+    | { type: "rename"; item: (typeof renameItems)[0]; ts: number }
+    | {
+        type: "thread";
+        node: import("@/lib/threadTree").ThreadTreeNode;
+        ts: number;
+      };
+
+  const conversationTimeline = useMemo((): TimelineNode[] => {
+    const nodes: TimelineNode[] = [];
+
+    if (itemType === "patch") {
+      // Push events: one per revision (original + revisions)
+      const revisions = patchChain.allRevisions;
+      revisions.forEach((rev, idx) => {
+        const superseded = idx < revisions.length - 1;
+        nodes.push({
+          type: "patch-push",
+          revision: rev,
+          superseded,
+          ts: rev.rootPatch.event.created_at,
+        });
+        // Comments rooted at this revision's root patch
+        if (idx > 0 && comments) {
+          const revId = rev.rootPatch.id;
+          const revComments = comments.filter((c) => {
+            const rootTag = c.tags.find((t) => t[0] === "E");
+            return rootTag?.[1] === revId;
+          });
+          if (revComments.length > 0 && prEvent) {
+            const revTree = getThreadTree(rev.rootPatch.event, revComments);
+            if (revTree) {
+              for (const child of revTree.children) {
+                nodes.push({
+                  type: "thread",
+                  node: child,
+                  ts: child.event.created_at,
+                });
+              }
+            }
+          }
+        }
+      });
+    } else if (itemType === "pr") {
+      // Original PR push (the PR event itself acts as the first push)
+      // We don't render a separate push node for the original PR event —
+      // the EventBodyCard above already shows it. PR Updates are the pushes.
+      if (prUpdates) {
+        const sortedUpdates = [...prUpdates].sort(
+          (a, b) => a.event.created_at - b.event.created_at,
+        );
+        sortedUpdates.forEach((update, idx) => {
+          // A PR Update is superseded only if a later update changes the tip
+          // to a *different* commit (not just adds on top).
+          // Simple heuristic: superseded if it's not the last update.
+          const superseded = idx < sortedUpdates.length - 1;
+          nodes.push({
+            type: "pr-update",
+            update,
+            superseded,
+            ts: update.event.created_at,
+          });
+        });
+      }
+    }
+
+    // Top-level thread comments (rooted at the original PR/patch)
+    if (threadTree) {
+      for (const child of threadTree.children) {
+        nodes.push({ type: "thread", node: child, ts: child.event.created_at });
+      }
+    }
+
+    // Subject renames
+    for (const item of renameItems) {
+      nodes.push({ type: "rename", item, ts: item.event.created_at });
+    }
+
+    // Sort everything chronologically
+    nodes.sort((a, b) => {
+      if (a.ts !== b.ts) return a.ts - b.ts;
+      // Stable tie-break: push events before comments at same timestamp
+      const typeOrder = (t: TimelineNode["type"]) =>
+        t === "patch-push" || t === "pr-update" ? 0 : 1;
+      return typeOrder(a.type) - typeOrder(b.type);
+    });
+
+    return nodes;
+  }, [
+    itemType,
+    patchChain.allRevisions,
+    prUpdates,
+    threadTree,
+    renameItems,
+    comments,
+    prEvent,
+  ]);
 
   const TypeIcon = itemType === "patch" ? GitCommitHorizontal : GitPullRequest;
 
@@ -529,52 +693,79 @@ export default function PRPage() {
           <div className="space-y-4 min-w-0">
             {/* Conversation tab */}
             <TabsContent value="conversation" className="space-y-4 mt-0">
-              {/* PR body */}
+              {/* PR / patch body */}
               {prEvent ? (
                 <EventBodyCard event={prEvent} content={body} />
               ) : (
                 <EventBodyCardSkeleton />
               )}
 
-              {/* Thread: comments + subject renames */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <MessageCircle className="h-4 w-4" />
-                  <span>
-                    {comments
-                      ? `${comments.length} ${comments.length === 1 ? "comment" : "comments"}`
-                      : "Loading comments..."}
-                  </span>
-                </div>
-
+              {/* Interleaved timeline: push events + comments + renames */}
+              <div className="space-y-1">
                 <Separator />
 
                 {!comments ? (
-                  <div className="space-y-3">
+                  <div className="space-y-3 pt-3">
                     {Array.from({ length: 2 }).map((_, i) => (
                       <CommentSkeleton key={i} />
                     ))}
                   </div>
-                ) : threadTree &&
-                  threadTree.children.length === 0 &&
-                  renameItems.length === 0 ? (
+                ) : conversationTimeline.length === 0 ? (
                   <div className="py-8 text-center text-muted-foreground/60 text-sm">
-                    No comments yet. The conversation awaits its first voice.
+                    No activity yet. The conversation awaits its first voice.
                   </div>
-                ) : threadTree ? (
-                  <ThreadedComments
-                    tree={threadTree}
-                    renameItems={renameItems}
-                    threadContext={
-                      activeAccount && prEvent
-                        ? {
-                            rootEvent: prEvent,
-                            repoRelays: repo?.relays ?? [],
+                ) : (
+                  <div
+                    className="min-w-0 border-l pl-1 space-y-0.5"
+                    style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
+                  >
+                    {conversationTimeline.map((node, idx) => {
+                      if (node.type === "patch-push") {
+                        return (
+                          <PatchSetPushEvent
+                            key={`patch-push-${node.revision.rootPatch.id}`}
+                            revision={node.revision}
+                            superseded={node.superseded}
+                          />
+                        );
+                      }
+                      if (node.type === "pr-update") {
+                        return (
+                          <PRUpdatePushEvent
+                            key={`pr-update-${node.update.id}`}
+                            update={node.update}
+                            superseded={node.superseded}
+                          />
+                        );
+                      }
+                      if (node.type === "rename") {
+                        return (
+                          <SubjectRenameCard
+                            key={node.item.event.id}
+                            event={node.item.event}
+                            oldSubject={node.item.oldSubject}
+                            newSubject={node.item.newSubject}
+                          />
+                        );
+                      }
+                      // thread node
+                      return (
+                        <ThreadTree
+                          key={`thread-${node.node.event.id}-${idx}`}
+                          node={node.node}
+                          threadContext={
+                            activeAccount && prEvent
+                              ? {
+                                  rootEvent: prEvent,
+                                  repoRelays: repo?.relays ?? [],
+                                }
+                              : undefined
                           }
-                        : undefined
-                    }
-                  />
-                ) : null}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Reply box — only for logged-in users */}

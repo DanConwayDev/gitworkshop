@@ -1,9 +1,10 @@
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import type { RelayGroup } from "applesauce-relay";
+import type { NostrEvent } from "nostr-tools";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { includeMailboxes } from "applesauce-core";
-import { of } from "rxjs";
+import { of, merge } from "rxjs";
 import { map } from "rxjs/operators";
 import {
   liveness,
@@ -197,6 +198,112 @@ export function useNip34ItemLoader(
     if (tier !== "thread") return undefined;
     return nip34ItemLoader(itemId, authorInboxDelta, "thread");
   }, [itemId, inboxDeltaKey, tier === "thread"]);
+}
+
+// ---------------------------------------------------------------------------
+// Batch loader — fire nip34ItemLoader for multiple item IDs at once
+// ---------------------------------------------------------------------------
+
+/**
+ * Triggers tiered loading for multiple NIP-34 item IDs simultaneously.
+ *
+ * Internally calls nip34ItemLoader for each ID. Because the singleton loader
+ * instances batch all calls within their buffer window, this results in a
+ * single merged relay subscription rather than N separate ones.
+ *
+ * @param itemIds        - Array of event IDs to load
+ * @param repoRelayGroup - The base relay group from useResolvedRepository
+ * @param options        - Tier and NIP-65 options (applied to all IDs)
+ */
+export function useNip34ItemLoaderBatch(
+  itemIds: string[],
+  repoRelayGroup: RelayGroup | undefined,
+  options?: Nip34ItemLoaderOptions,
+): void {
+  const store = useEventStore();
+  const tier = options?.tier ?? "essentials";
+
+  const repoRelays = repoRelayGroup?.relays.map((r) => r.url) ?? [];
+  const repoRelayKey = repoRelays.join(",");
+  // Stable key for the ID list — re-subscribes only when IDs actually change
+  const idsKey = [...itemIds].sort().join(",");
+
+  use$(() => {
+    if (itemIds.length === 0 || repoRelays.length === 0) return undefined;
+    return merge(
+      ...itemIds.map((id) => nip34ItemLoader(id, repoRelays, "essentials")),
+    );
+  }, [idsKey, repoRelayKey]);
+
+  use$(() => {
+    if (itemIds.length === 0 || repoRelays.length === 0) return undefined;
+    if (tier !== "comments" && tier !== "thread") return undefined;
+    return merge(
+      ...itemIds.map((id) => nip34ItemLoader(id, repoRelays, "comments")),
+    );
+  }, [idsKey, repoRelayKey, tier === "comments" || tier === "thread"]);
+
+  use$(() => {
+    if (itemIds.length === 0 || repoRelays.length === 0) return undefined;
+    if (tier !== "thread") return undefined;
+    return merge(
+      ...itemIds.map((id) => nip34ItemLoader(id, repoRelays, "thread")),
+    );
+  }, [idsKey, repoRelayKey, tier === "thread"]);
+
+  // NIP-65 author inbox relay loading per item
+  // (Only fires when includeAuthorNip65 is true — resolves each item's author
+  // from the store and loads their inbox delta relays.)
+  const authorPubkeys = use$(() => {
+    if (!options?.includeAuthorNip65 || itemIds.length === 0)
+      return of([] as string[]);
+    // Resolve pubkeys from the store synchronously
+    const pubkeys = itemIds
+      .map(
+        (id) =>
+          (store.getByFilters([{ ids: [id] }]) as NostrEvent[])[0]?.pubkey,
+      )
+      .filter((pk): pk is string => !!pk);
+    return of([...new Set(pubkeys)]);
+  }, [idsKey, options?.includeAuthorNip65, store]);
+
+  const uniquePubkeys = authorPubkeys ?? [];
+
+  // For each unique author pubkey, compute inbox delta relays and load
+  // (We reuse useAuthorInboxDeltaRelays for the first pubkey only as a
+  // simplification — full multi-author inbox loading is a future enhancement)
+  const firstPubkey = uniquePubkeys[0];
+  const authorInboxDelta = useAuthorInboxDeltaRelays(
+    firstPubkey,
+    repoRelayGroup,
+    options?.includeAuthorNip65 ?? false,
+  );
+  const inboxDeltaKey = authorInboxDelta.join(",");
+
+  use$(() => {
+    if (itemIds.length === 0 || authorInboxDelta.length === 0) return undefined;
+    return merge(
+      ...itemIds.map((id) =>
+        nip34ItemLoader(id, authorInboxDelta, "essentials"),
+      ),
+    );
+  }, [idsKey, inboxDeltaKey]);
+
+  use$(() => {
+    if (itemIds.length === 0 || authorInboxDelta.length === 0) return undefined;
+    if (tier !== "comments" && tier !== "thread") return undefined;
+    return merge(
+      ...itemIds.map((id) => nip34ItemLoader(id, authorInboxDelta, "comments")),
+    );
+  }, [idsKey, inboxDeltaKey, tier === "comments" || tier === "thread"]);
+
+  use$(() => {
+    if (itemIds.length === 0 || authorInboxDelta.length === 0) return undefined;
+    if (tier !== "thread") return undefined;
+    return merge(
+      ...itemIds.map((id) => nip34ItemLoader(id, authorInboxDelta, "thread")),
+    );
+  }, [idsKey, inboxDeltaKey, tier === "thread"]);
 }
 
 // ---------------------------------------------------------------------------

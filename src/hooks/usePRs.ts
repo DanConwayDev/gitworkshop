@@ -25,6 +25,9 @@ import { getTagValue, type Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 import { nip34RepoLoader } from "@/services/nostr";
+import { castTimelineStream } from "applesauce-common/observable";
+import type { CastRefEventStore } from "applesauce-common/casts/cast";
+import { PRUpdate } from "@/casts/PRUpdate";
 
 /** All essential kinds fetched per-PR by nip34EssentialsLoader. */
 const ESSENTIALS_KINDS = [...STATUS_KINDS, LABEL_KIND, DELETION_KIND] as const;
@@ -150,6 +153,38 @@ export function usePRComments(
 }
 
 /**
+ * Fetch all NIP-22 comments (kind:1111) for a PR/patch AND all its revision
+ * root patches. Returns a flat merged array of all comments across every
+ * revision, deduplicated by event ID.
+ *
+ * This is used on the PR detail page so comments on individual revisions
+ * appear in the conversation timeline alongside comments on the root.
+ *
+ * @param rootId      - The event ID of the original root patch / PR
+ * @param revisionIds - Event IDs of all revision root patches
+ */
+export function usePRAllComments(
+  rootId: string | undefined,
+  revisionIds: string[],
+): NostrEvent[] | undefined {
+  const store = useEventStore();
+  const allIds = useMemo(() => {
+    if (!rootId) return [];
+    return [rootId, ...revisionIds];
+  }, [rootId, revisionIds.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const idsKey = allIds.join(",");
+
+  return use$(() => {
+    if (allIds.length === 0) return undefined;
+    // Query all comment roots in one filter — relays index #E so this is efficient
+    return store.timeline([
+      { kinds: [COMMENT_KIND], "#E": allIds } as Filter,
+    ]) as unknown as Observable<NostrEvent[]>;
+  }, [idsKey, store]);
+}
+
+/**
  * Return zap receipts (kind:9735) for a specific PR/patch.
  */
 export function usePRZaps(prId: string | undefined): NostrEvent[] | undefined {
@@ -159,6 +194,26 @@ export function usePRZaps(prId: string | undefined): NostrEvent[] | undefined {
     return store.timeline([
       { kinds: [9735], "#e": [prId] } as Filter,
     ]) as unknown as Observable<NostrEvent[]>;
+  }, [prId, store]);
+}
+
+/**
+ * Return all kind:1619 PR Update events for a specific PR, cast to PRUpdate,
+ * sorted oldest-first.
+ *
+ * These are already fetched by nip34CommentsLoader (kinds [1111, 1619] with #E).
+ */
+export function usePRUpdates(prId: string | undefined): PRUpdate[] | undefined {
+  const store = useEventStore();
+  const castStore = store as unknown as CastRefEventStore;
+
+  return use$(() => {
+    if (!prId) return undefined;
+    return store
+      .timeline([{ kinds: [PR_UPDATE_KIND], "#E": [prId] } as Filter])
+      .pipe(castTimelineStream(PRUpdate, castStore)) as unknown as Observable<
+      PRUpdate[]
+    >;
   }, [prId, store]);
 }
 
