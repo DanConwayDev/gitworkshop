@@ -253,9 +253,11 @@ export function parseRelayUrl(raw: string): string | undefined {
  * ws:// is kept as-is (URL-encoded) so the scheme is preserved on decode.
  */
 export function relayUrlToSegment(url: string): string {
-  if (url.startsWith("wss://")) return url.slice(6);
+  // Strip trailing slashes before encoding
+  const stripped = url.replace(/\/+$/, "");
+  if (stripped.startsWith("wss://")) return stripped.slice(6);
   // ws:// — keep the scheme but URL-encode the colons/slashes
-  return encodeURIComponent(url);
+  return encodeURIComponent(stripped);
 }
 
 /**

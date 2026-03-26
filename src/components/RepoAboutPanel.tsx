@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { UserLink, UserAvatar, UserName } from "@/components/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -45,6 +46,7 @@ import {
   getSeenRelays,
 } from "applesauce-core/helpers";
 import { cn } from "@/lib/utils";
+import { relayUrlToSegment } from "@/lib/routeUtils";
 import { format } from "date-fns";
 
 // ---------------------------------------------------------------------------
@@ -280,30 +282,58 @@ function SidebarVariant({
             </div>
           )}
 
-          {/* Relays — condensed */}
-          {repo.relays.length > 0 && (
+          {/* Grasp server relays */}
+          {repo.relays.some((r) =>
+            isGraspRelay(r, repo.graspServerDomains),
+          ) && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Relays
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <GraspLogo className="h-3 w-3 text-violet-500" />
+                Grasp Servers
               </p>
               <div className="flex flex-wrap gap-1">
-                {repo.relays.map((relay) => {
-                  const isGrasp = isGraspRelay(relay, repo.graspServerDomains);
-                  return (
-                    <code
+                {repo.relays
+                  .filter((r) => isGraspRelay(r, repo.graspServerDomains))
+                  .map((relay) => (
+                    <Link
                       key={relay}
-                      className={cn(
-                        "text-[11px] font-mono px-1.5 py-0.5 rounded text-muted-foreground",
-                        isGrasp
-                          ? "bg-violet-500/10 text-violet-600 dark:text-violet-400"
-                          : "bg-muted/50",
-                      )}
+                      to={`/relay/${relayUrlToSegment(relay)}`}
                       title={relay}
+                      className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:bg-violet-500/20 transition-colors"
                     >
                       {displayRelay(relay)}
-                    </code>
-                  );
-                })}
+                    </Link>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Other relays (non-Grasp) */}
+          {repo.relays.some(
+            (r) => !isGraspRelay(r, repo.graspServerDomains),
+          ) && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <Radio className="h-3 w-3" />
+                {repo.relays.some((r) =>
+                  isGraspRelay(r, repo.graspServerDomains),
+                )
+                  ? "Other Relays"
+                  : "Relays"}
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {repo.relays
+                  .filter((r) => !isGraspRelay(r, repo.graspServerDomains))
+                  .map((relay) => (
+                    <Link
+                      key={relay}
+                      to={`/relay/${relayUrlToSegment(relay)}`}
+                      title={relay}
+                      className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    >
+                      {displayRelay(relay)}
+                    </Link>
+                  ))}
               </div>
             </div>
           )}
@@ -429,13 +459,14 @@ function FullVariant({
             {repo.relays
               .filter((r) => isGraspRelay(r, repo.graspServerDomains))
               .map((relay) => (
-                <code
+                <Link
                   key={relay}
-                  className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground"
+                  to={`/relay/${relayUrlToSegment(relay)}`}
                   title={relay}
+                  className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
                   {displayRelay(relay)}
-                </code>
+                </Link>
               ))}
           </div>
         </section>
@@ -454,13 +485,14 @@ function FullVariant({
             {repo.relays
               .filter((r) => !isGraspRelay(r, repo.graspServerDomains))
               .map((relay) => (
-                <code
+                <Link
                   key={relay}
-                  className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground"
+                  to={`/relay/${relayUrlToSegment(relay)}`}
                   title={relay}
+                  className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
                   {displayRelay(relay)}
-                </code>
+                </Link>
               ))}
           </div>
         </section>
