@@ -32,6 +32,7 @@ import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
+import { ReplyBox } from "@/components/ReplyBox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -515,6 +516,16 @@ export default function PRPage() {
                   />
                 ) : null}
               </div>
+
+              {/* Reply box — only for logged-in users */}
+              {activeAccount && prEvent && (
+                <ReplyBox
+                  rootId={prEvent.id}
+                  rootPubkey={prEvent.pubkey}
+                  rootKind={pr ? PR_KIND : PATCH_KIND}
+                  repoRelays={repo?.relays ?? []}
+                />
+              )}
             </TabsContent>
 
             {/* Files Changed tab */}
