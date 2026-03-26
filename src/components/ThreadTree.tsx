@@ -29,18 +29,12 @@ import { UserLink } from "@/components/UserAvatar";
 import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
 import { ReplyBox } from "@/components/ReplyBox";
+import type { ThreadContext } from "@/components/EventThreadComponents";
 import { useActiveAccount } from "applesauce-react/hooks";
 
 // ---------------------------------------------------------------------------
 // Thread context — passes root info down without prop-drilling
 // ---------------------------------------------------------------------------
-
-interface ThreadContext {
-  rootId: string;
-  rootPubkey: string;
-  rootKind: number;
-  repoRelays: string[];
-}
 
 const ThreadCtx = createContext<ThreadContext | null>(null);
 
@@ -284,11 +278,9 @@ function ThreadComment({ event }: { event: NostrEvent }) {
       {replying && ctx && (
         <div className="mt-3 sm:ml-[38px]">
           <ReplyBox
-            rootId={ctx.rootId}
-            rootPubkey={ctx.rootPubkey}
-            rootKind={ctx.rootKind}
+            rootEvent={ctx.rootEvent}
+            parentEvent={event}
             repoRelays={ctx.repoRelays}
-            parent={{ id: event.id, pubkey: event.pubkey }}
             onSubmitted={() => setReplying(false)}
           />
         </div>

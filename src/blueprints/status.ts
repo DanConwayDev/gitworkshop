@@ -27,6 +27,10 @@
 
 import { blueprint } from "applesauce-core/event-factory";
 import { modifyPublicTags, includeAltTag } from "applesauce-core/operations";
+import {
+  addAddressPointerTag,
+  addProfilePointerTag,
+} from "applesauce-core/operations/tag/common";
 import type { IssueStatus } from "@/lib/nip34";
 import {
   STATUS_OPEN,
@@ -66,30 +70,32 @@ export function StatusChangeBlueprint(
   itemAuthorPubkey: string,
   signerPubkey?: string,
 ) {
+  // Collect notification pubkeys: item author + all repo owners, deduped,
+  // excluding the signer.
+  const notifyPubkeys = new Set<string>();
+  if (itemAuthorPubkey) notifyPubkeys.add(itemAuthorPubkey);
+  for (const coord of repoCoords) {
+    const ownerPubkey = coord.split(":")[1];
+    if (ownerPubkey) notifyPubkeys.add(ownerPubkey);
+  }
+  if (signerPubkey) notifyPubkeys.delete(signerPubkey);
+
   return blueprint(
     statusKind,
-    modifyPublicTags((tags) => {
-      const next = [
-        ...tags,
-        // Reference the target item with the required "root" marker
-        ["e", itemId, "", "root"],
-        // One a-tag per repo coordinate for relay filter efficiency
-        ...repoCoords.map((coord) => ["a", coord]),
-      ];
-      // p-tags for notifications: item author + all repo owners (one per coord).
-      // Deduplicate and exclude the signer (no need to notify yourself).
-      const notifyPubkeys = new Set<string>();
-      if (itemAuthorPubkey) notifyPubkeys.add(itemAuthorPubkey);
-      for (const coord of repoCoords) {
-        const ownerPubkey = coord.split(":")[1];
-        if (ownerPubkey) notifyPubkeys.add(ownerPubkey);
-      }
-      if (signerPubkey) notifyPubkeys.delete(signerPubkey);
-      for (const pk of notifyPubkeys) {
-        next.push(["p", pk]);
-      }
-      return next;
-    }),
+    // Reference the target item with the NIP-34 required "root" marker.
+    // applesauce's addEventPointerTag does not support NIP-10 markers, so we
+    // use a raw tag operation here. Relay hint resolution is not needed for
+    // the item reference in status events (the id is sufficient).
+    modifyPublicTags((tags) => [...tags, ["e", itemId, "", "root"]]),
+    // One a-tag per repo coordinate for relay filter efficiency.
+    // addAddressPointerTag resolves relay hints via ctx.getPubkeyRelayHint.
+    ...repoCoords.map((coord) =>
+      modifyPublicTags(addAddressPointerTag(coord, false)),
+    ),
+    // p-tags for notifications.
+    ...[...notifyPubkeys].map((pk) =>
+      modifyPublicTags(addProfilePointerTag(pk, false)),
+    ),
     includeAltTag("Status change"),
   );
 }

@@ -516,9 +516,7 @@ export default function PRPage() {
                     threadContext={
                       activeAccount && prEvent
                         ? {
-                            rootId: prEvent.id,
-                            rootPubkey: prEvent.pubkey,
-                            rootKind: pr ? PR_KIND : PATCH_KIND,
+                            rootEvent: prEvent,
                             repoRelays: repo?.relays ?? [],
                           }
                         : undefined
@@ -529,12 +527,7 @@ export default function PRPage() {
 
               {/* Reply box — only for logged-in users */}
               {activeAccount && prEvent && (
-                <ReplyBox
-                  rootId={prEvent.id}
-                  rootPubkey={prEvent.pubkey}
-                  rootKind={pr ? PR_KIND : PATCH_KIND}
-                  repoRelays={repo?.relays ?? []}
-                />
+                <ReplyBox rootEvent={prEvent} repoRelays={repo?.relays ?? []} />
               )}
             </TabsContent>
 

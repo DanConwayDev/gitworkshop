@@ -294,9 +294,7 @@ export interface RenameItem {
 }
 
 export interface ThreadContext {
-  rootId: string;
-  rootPubkey: string;
-  rootKind: number;
+  rootEvent: NostrEvent;
   repoRelays: string[];
 }
 

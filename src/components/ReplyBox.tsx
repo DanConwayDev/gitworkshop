@@ -7,11 +7,10 @@
  */
 
 import { useCallback, useState } from "react";
+import type { NostrEvent } from "nostr-tools";
 import { runner } from "@/services/actions";
 import { useToast } from "@/hooks/useToast";
 import { CreateComment } from "@/actions/nip34";
-import { COMMENT_KIND } from "@/lib/nip34";
-import { extractContentTags } from "@/lib/nostrContentTags";
 import {
   NostrComposer,
   composerHasNsec,
@@ -22,33 +21,24 @@ import { Button } from "@/components/ui/button";
 import { MessageSquarePlus, Loader2 } from "lucide-react";
 
 export interface ReplyBoxProps {
-  /** Hex event ID of the root issue/PR being commented on */
-  rootId: string;
-  /** Hex pubkey of the root event author */
-  rootPubkey: string;
-  /** Kind number of the root event (ISSUE_KIND or PR_KIND) */
-  rootKind: number;
-  /** Relays declared in the repository announcement */
-  repoRelays: string[];
+  /** The root issue/PR event being commented on */
+  rootEvent: NostrEvent;
   /**
    * When replying to an existing comment rather than the root, provide the
-   * parent comment's details. Omit for top-level comments.
+   * parent comment event. The applesauce CommentBlueprint will automatically
+   * propagate the root E/K/P tags from the parent comment.
    */
-  parent?: {
-    id: string;
-    pubkey: string;
-    relayHint?: string;
-  };
+  parentEvent?: NostrEvent;
+  /** Relays declared in the repository announcement */
+  repoRelays: string[];
   /** Called after a comment is successfully posted (e.g. to close an inline composer) */
   onSubmitted?: () => void;
 }
 
 export function ReplyBox({
-  rootId,
-  rootPubkey,
-  rootKind,
+  rootEvent,
+  parentEvent,
   repoRelays,
-  parent,
   onSubmitted,
 }: ReplyBoxProps) {
   const [body, setBody] = useState("");
@@ -59,7 +49,9 @@ export function ReplyBox({
 
   const showToggle = focused || hasPreviewableContent(body);
 
-  const relayHint = repoRelays[0] ?? "";
+  // The applesauce CommentBlueprint takes the immediate parent event.
+  // For a top-level comment that's the root; for a reply it's the comment.
+  const parent = parentEvent ?? rootEvent;
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -70,19 +62,7 @@ export function ReplyBox({
 
       setIsPending(true);
       try {
-        await runner.run(
-          CreateComment,
-          rootId,
-          rootPubkey,
-          rootKind,
-          trimmed,
-          repoRelays,
-          relayHint,
-          {
-            contentTags: extractContentTags(trimmed),
-            parent: parent ? { ...parent, kind: COMMENT_KIND } : undefined,
-          },
-        );
+        await runner.run(CreateComment, parent, trimmed, repoRelays);
 
         toast({
           title: "Comment posted",
@@ -104,17 +84,7 @@ export function ReplyBox({
         setIsPending(false);
       }
     },
-    [
-      body,
-      rootId,
-      rootPubkey,
-      rootKind,
-      repoRelays,
-      relayHint,
-      parent,
-      onSubmitted,
-      toast,
-    ],
+    [body, parent, repoRelays, onSubmitted, toast],
   );
 
   return (

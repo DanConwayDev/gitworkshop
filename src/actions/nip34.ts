@@ -19,6 +19,7 @@
  */
 
 import type { Action } from "applesauce-actions";
+import type { NostrEvent } from "nostr-tools";
 import { IssueBlueprint, type IssueOptions } from "@/blueprints/issue";
 import { CommentBlueprint, type CommentOptions } from "@/blueprints/comment";
 import { StatusChangeBlueprint, STATUS_KIND_MAP } from "@/blueprints/status";
@@ -244,41 +245,33 @@ export function AttachIssueLabels(
 }
 
 /**
- * Post a NIP-22 comment (kind:1111) on a NIP-34 issue or PR/patch.
+ * Post a NIP-22 comment (kind:1111) on a NIP-34 issue, PR/patch, or an
+ * existing comment.
  *
  * Publishes to: git index + user's outbox relays + repo relays + root author's inbox.
  *
- * @param rootId      - Hex event ID of the issue/PR being commented on
- * @param rootPubkey  - Hex pubkey of the root event author
- * @param rootKind    - Kind number of the root event (ISSUE_KIND, PR_KIND, etc.)
+ * @param parent      - The event being commented on (root issue/PR or a comment)
  * @param content     - Markdown body of the comment
  * @param repoRelays  - Relays declared in the repository announcement
- * @param relayHint   - Optional relay hint URL for the root event
- * @param options     - Optional: contentTags for NIP-19 references in the body
+ * @param options     - Optional: CommentBlueprintOptions (alt, expiration, etc.)
  */
 export function CreateComment(
-  rootId: string,
-  rootPubkey: string,
-  rootKind: number,
+  parent: NostrEvent,
   content: string,
   repoRelays: string[],
-  relayHint: string = "",
   options?: CommentOptions,
 ): Action {
   return async ({ factory, sign, self }) => {
     const draft = await factory.create(
       CommentBlueprint,
-      rootId,
-      rootPubkey,
-      rootKind,
+      parent,
       content,
-      relayHint,
       options,
     );
     const signed = await sign(draft);
 
     // Notify the root event author (unless they're the commenter)
-    const notifyPubkeys = rootPubkey !== self ? [rootPubkey] : [];
+    const notifyPubkeys = parent.pubkey !== self ? [parent.pubkey] : [];
     const relayGroups = await buildRelayGroups(self, repoRelays, notifyPubkeys);
     await outboxStore.publish(signed, relayGroups);
   };

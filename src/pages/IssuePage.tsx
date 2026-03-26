@@ -287,9 +287,7 @@ export default function IssuePage() {
                   threadContext={
                     activeAccount && issue
                       ? {
-                          rootId: issue.id,
-                          rootPubkey: issue.pubkey,
-                          rootKind: ISSUE_KIND,
+                          rootEvent: issue.event,
                           repoRelays: repo?.relays ?? [],
                         }
                       : undefined
@@ -301,9 +299,7 @@ export default function IssuePage() {
             {/* Reply box — only for logged-in users */}
             {activeAccount && issue && (
               <ReplyBox
-                rootId={issue.id}
-                rootPubkey={issue.pubkey}
-                rootKind={ISSUE_KIND}
+                rootEvent={issue.event}
                 repoRelays={repo?.relays ?? []}
               />
             )}

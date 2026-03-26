@@ -23,6 +23,10 @@
 
 import { blueprint } from "applesauce-core/event-factory";
 import { modifyPublicTags } from "applesauce-core/operations";
+import {
+  addEventPointerTag,
+  addNameValueTag,
+} from "applesauce-core/operations/tag/common";
 import { LABEL_KIND } from "@/lib/nip34";
 
 /** The label namespace used for issue labels (NIP-32 `#t` convention). */
@@ -37,15 +41,15 @@ export const ISSUE_LABEL_NAMESPACE = "#t";
 export function IssueLabelBlueprint(issueId: string, labels: string[]) {
   return blueprint(
     LABEL_KIND,
-    modifyPublicTags((tags) => [
-      ...tags,
-      // Reference the target issue
-      ["e", issueId],
-      // Declare the namespace
-      ["L", ISSUE_LABEL_NAMESPACE],
-      // Add each label in the namespace
-      ...labels.map((l) => ["l", l, ISSUE_LABEL_NAMESPACE]),
-    ]),
+    // Reference the target issue — addEventPointerTag resolves relay hints
+    // via ctx.getEventRelayHint automatically.
+    modifyPublicTags(addEventPointerTag(issueId, false)),
+    // Declare the namespace
+    modifyPublicTags(addNameValueTag(["L", ISSUE_LABEL_NAMESPACE], false)),
+    // Add each label in the namespace
+    ...labels.map((l) =>
+      modifyPublicTags(addNameValueTag(["l", l, ISSUE_LABEL_NAMESPACE], false)),
+    ),
   );
 }
 
@@ -67,14 +71,14 @@ export function IssueSubjectRenameBlueprint(
 ) {
   return blueprint(
     LABEL_KIND,
-    modifyPublicTags((tags) => [
-      ...tags,
-      // Reference the target issue
-      ["e", issueId],
-      // Declare the namespace
-      ["L", SUBJECT_RENAME_NAMESPACE],
-      // The new subject as a label in the #subject namespace
-      ["l", newSubject, SUBJECT_RENAME_NAMESPACE],
-    ]),
+    // Reference the target issue — addEventPointerTag resolves relay hints
+    // via ctx.getEventRelayHint automatically.
+    modifyPublicTags(addEventPointerTag(issueId, false)),
+    // Declare the namespace
+    modifyPublicTags(addNameValueTag(["L", SUBJECT_RENAME_NAMESPACE], false)),
+    // The new subject as a label in the #subject namespace
+    modifyPublicTags(
+      addNameValueTag(["l", newSubject, SUBJECT_RENAME_NAMESPACE], false),
+    ),
   );
 }
