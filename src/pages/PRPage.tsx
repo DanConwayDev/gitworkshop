@@ -26,6 +26,7 @@ import {
   resolveCurrentPRSubject,
 } from "@/hooks/usePRs";
 import { useNip34Loaders } from "@/hooks/useNip34Loaders";
+import { usePatchChain } from "@/hooks/usePatchChain";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { useGitPool } from "@/hooks/useGitPool";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
@@ -60,6 +61,7 @@ import {
   CommitListEmpty,
   CommitListError,
 } from "@/components/CommitList";
+import { PatchCommitList } from "@/components/PatchCommitList";
 import { useCommitHistory } from "@/hooks/useGitExplorer";
 import { usePRMergeBase } from "@/hooks/usePRMergeBase";
 import { gitIndexRelays, relayCurationMode } from "@/services/settings";
@@ -168,6 +170,14 @@ export default function PRPage() {
     includeAuthorNip65: curationMode === "outbox",
   });
 
+  // For patches: resolve the latest revision chain so we can show Commits and
+  // Files Changed tabs. Only active when the root event is a patch (kind 1617).
+  const patchChain = usePatchChain(
+    itemType === "patch" ? prId : undefined,
+    repoRelayGroup,
+    cloneUrls,
+  );
+
   // Compute the effective maintainer set.
   const selectedMaintainers = useMemo(
     () => (repo?.maintainerSet ? new Set(repo.maintainerSet) : undefined),
@@ -222,12 +232,46 @@ export default function PRPage() {
       : prCommitHistory.commits.slice(0, idx);
   }, [prCommitHistory.commits, effectiveMergeBase]);
 
+  // ── Patch-specific git data ────────────────────────────────────────────────
+  // For patches with commit IDs in their tags, we can show a Files Changed tab
+  // using the git pool (tip = last patch's commit, base = first patch's parent-commit).
+  // Clone URLs come from the patch chain (some clients include them) plus the
+  // repo's own clone URLs.
+  const patchCloneUrls = useMemo(() => {
+    const urls = [...patchChain.cloneUrls, ...cloneUrls];
+    return Array.from(new Set(urls));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patchChain.cloneUrls.join(","), cloneUrls.join(",")]);
+
+  const patchTipCommitId = patchChain.tipCommitId;
+  const patchBaseCommitId = patchChain.baseCommitId;
+
+  // Derive merge base for patches: use the explicit parent-commit from the
+  // first patch's tag, or fall back to walking the commit chain.
+  const { mergeBase: patchMergeBase, computing: computingPatchMergeBase } =
+    usePRMergeBase(
+      itemType === "patch" ? gitPool : null,
+      gitPoolState,
+      patchTipCommitId,
+      patchBaseCommitId,
+      patchCloneUrls,
+    );
+
   // Eagerly compute file count as soon as the git pool + commit IDs are ready,
   // so the tab badge shows without the user having to visit the Files tab first.
   const [fileCount, setFileCount] = useState<number | undefined>(undefined);
   const fileCountAbortRef = useRef<AbortController | null>(null);
+
+  // Effective tip/base for file count — PR uses prTip/mergeBase, patch uses patchChain
+  const fileCountTipId =
+    itemType === "pr" ? effectiveTipCommitId : patchTipCommitId;
+  const fileCountBaseId =
+    itemType === "pr" ? effectiveMergeBase : patchMergeBase;
+  const fileCountFallbackUrls =
+    itemType === "pr" ? prCloneUrls : patchCloneUrls;
+
   useEffect(() => {
-    if (!gitPool || !effectiveTipCommitId || !effectiveMergeBase) return;
+    if (!gitPool || !fileCountTipId || !fileCountBaseId) return;
 
     fileCountAbortRef.current?.abort();
     const abort = new AbortController();
@@ -235,10 +279,10 @@ export default function PRPage() {
 
     gitPool
       .getCommitRange(
-        effectiveTipCommitId,
-        effectiveMergeBase,
+        fileCountTipId,
+        fileCountBaseId,
         abort.signal,
-        prCloneUrls,
+        fileCountFallbackUrls,
       )
       .then((range) => {
         if (abort.signal.aborted || !range) return;
@@ -251,7 +295,7 @@ export default function PRPage() {
     return () => {
       abort.abort();
     };
-  }, [gitPool, effectiveTipCommitId, effectiveMergeBase, prCloneUrls]);
+  }, [gitPool, fileCountTipId, fileCountBaseId, fileCountFallbackUrls]);
 
   const status = usePRStatus(prId, prPubkey, selectedMaintainers);
   const nip32Labels = usePRLabels(prId, prPubkey, selectedMaintainers);
@@ -345,8 +389,9 @@ export default function PRPage() {
         )}
       </TabsTrigger>
 
-      {/* Files Changed tab — only for PRs (kind 1618), not raw patches */}
-      {itemType === "pr" && (
+      {/* Files Changed tab — for PRs (kind 1618) and patches with commit IDs */}
+      {(itemType === "pr" ||
+        (itemType === "patch" && patchTipCommitId && patchMergeBase)) && (
         <TabsTrigger
           value="files"
           className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
@@ -361,21 +406,28 @@ export default function PRPage() {
         </TabsTrigger>
       )}
 
-      {/* Commits tab — only for PRs with a tip commit */}
-      {itemType === "pr" && effectiveTipCommitId && (
+      {/* Commits tab — for PRs with a tip commit, and for patches */}
+      {(itemType === "pr" && effectiveTipCommitId) ||
+      (itemType === "patch" && patchChain.chain.length > 0) ? (
         <TabsTrigger
           value="commits"
           className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
         >
           <GitCommitHorizontal className="h-3.5 w-3.5" />
           Commits
-          {prCommits.length > 0 && (
-            <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
-              {prCommits.length}
-            </span>
-          )}
+          {itemType === "pr"
+            ? prCommits.length > 0 && (
+                <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
+                  {prCommits.length}
+                </span>
+              )
+            : patchChain.chain.length > 0 && (
+                <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
+                  {patchChain.chain.length}
+                </span>
+              )}
         </TabsTrigger>
-      )}
+      ) : null}
 
       {/* Patch diff tab — only for patches (kind 1617) */}
       {patch?.patchDiff && (
@@ -531,20 +583,48 @@ export default function PRPage() {
               )}
             </TabsContent>
 
-            {/* Files Changed tab */}
-            {itemType === "pr" && (
+            {/* Files Changed tab — PRs and patches with commit IDs */}
+            {(itemType === "pr" ||
+              (itemType === "patch" && patchTipCommitId && patchMergeBase)) && (
               <TabsContent value="files" className="mt-0 min-w-0">
-                {!effectiveTipCommitId ? (
+                {itemType === "pr" ? (
+                  // PR: use effectiveTipCommitId + effectiveMergeBase
+                  !effectiveTipCommitId ? (
+                    <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+                      {prEvent
+                        ? "This PR does not include a tip commit ID."
+                        : "Loading PR data…"}
+                    </div>
+                  ) : !effectiveMergeBase ? (
+                    <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+                      {computingMergeBase
+                        ? "Determining base commit…"
+                        : "Could not determine the base commit for this PR."}
+                    </div>
+                  ) : !gitPool ? (
+                    <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+                      Connecting to git server…
+                    </div>
+                  ) : (
+                    <PRFilesTab
+                      tipCommitId={effectiveTipCommitId}
+                      baseCommitId={effectiveMergeBase}
+                      pool={gitPool}
+                      fallbackUrls={prCloneUrls}
+                    />
+                  )
+                ) : // Patch: use patchTipCommitId + patchMergeBase
+                !patchTipCommitId ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-                    {prEvent
-                      ? "This PR does not include a tip commit ID."
-                      : "Loading PR data…"}
+                    {patchChain.loading
+                      ? "Loading patch chain…"
+                      : "Patch does not include commit IDs."}
                   </div>
-                ) : !effectiveMergeBase ? (
+                ) : !patchMergeBase ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-                    {computingMergeBase
+                    {computingPatchMergeBase
                       ? "Determining base commit…"
-                      : "Could not determine the base commit for this PR."}
+                      : "Could not determine the base commit for this patch set."}
                   </div>
                 ) : !gitPool ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
@@ -552,33 +632,50 @@ export default function PRPage() {
                   </div>
                 ) : (
                   <PRFilesTab
-                    tipCommitId={effectiveTipCommitId}
-                    baseCommitId={effectiveMergeBase}
+                    tipCommitId={patchTipCommitId}
+                    baseCommitId={patchMergeBase}
                     pool={gitPool}
-                    fallbackUrls={prCloneUrls}
+                    fallbackUrls={patchCloneUrls}
                   />
                 )}
               </TabsContent>
             )}
 
-            {/* Commits tab */}
-            {itemType === "pr" && effectiveTipCommitId && (
+            {/* Commits tab — PRs and patches */}
+            {(itemType === "pr" && effectiveTipCommitId) ||
+            (itemType === "patch" && patchChain.chain.length > 0) ? (
               <TabsContent value="commits" className="mt-0">
-                {!effectiveMergeBase ? (
-                  <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-                    {computingMergeBase
-                      ? "Determining base commit…"
-                      : "Could not determine the base commit for this PR."}
-                  </div>
-                ) : prCommitHistory.error ? (
-                  <CommitListError message={prCommitHistory.error} />
-                ) : prCommitHistory.loading ? (
-                  <CommitListLoading count={4} />
-                ) : prCommits.length === 0 ? (
-                  <CommitListEmpty message="No commits found for this PR." />
+                {itemType === "pr" ? (
+                  // PR: git-based commit history
+                  !effectiveMergeBase ? (
+                    <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+                      {computingMergeBase
+                        ? "Determining base commit…"
+                        : "Could not determine the base commit for this PR."}
+                    </div>
+                  ) : prCommitHistory.error ? (
+                    <CommitListError message={prCommitHistory.error} />
+                  ) : prCommitHistory.loading ? (
+                    <CommitListLoading count={4} />
+                  ) : prCommits.length === 0 ? (
+                    <CommitListEmpty message="No commits found for this PR." />
+                  ) : (
+                    <CommitList
+                      commits={prCommits}
+                      basePath={
+                        prBasePath ??
+                        repoToPath(pubkey, repoId, repo?.relays ?? [])
+                      }
+                    />
+                  )
+                ) : // Patch: show commits derived from the patch chain
+                patchChain.loading ? (
+                  <CommitListLoading count={2} />
+                ) : patchChain.chain.length === 0 ? (
+                  <CommitListEmpty message="No patches found in this patch set." />
                 ) : (
-                  <CommitList
-                    commits={prCommits}
+                  <PatchCommitList
+                    patches={patchChain.chain}
                     basePath={
                       prBasePath ??
                       repoToPath(pubkey, repoId, repo?.relays ?? [])
@@ -586,7 +683,7 @@ export default function PRPage() {
                   />
                 )}
               </TabsContent>
-            )}
+            ) : null}
 
             {/* Patch diff tab */}
             {patch?.patchDiff && (
