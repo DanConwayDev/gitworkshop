@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
@@ -29,12 +29,24 @@ import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
+import { NostrComposer, composerHasNsec } from "@/components/NostrComposer";
+import { usePublish } from "@/hooks/usePublish";
+import { useToast } from "@/hooks/useToast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, MessageCircle, Zap, Users, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  ArrowLeft,
+  MessageCircle,
+  Zap,
+  Users,
+  Clock,
+  Loader2,
+  MessageSquarePlus,
+} from "lucide-react";
 import { Issue } from "@/casts/Issue";
-import { ISSUE_KIND } from "@/lib/nip34";
+import { ISSUE_KIND, COMMENT_KIND } from "@/lib/nip34";
 import { gitIndexRelays, relayCurationMode } from "@/services/settings";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
@@ -283,6 +295,15 @@ export default function IssuePage() {
                 <ThreadedComments tree={threadTree} renameItems={renameItems} />
               ) : null}
             </div>
+
+            {/* Reply box — only for logged-in users */}
+            {activeAccount && issue && (
+              <ReplyBox
+                issueId={issue.id}
+                issuePubkey={issue.pubkey}
+                repoRelays={repo?.relays ?? []}
+              />
+            )}
           </div>
 
           {/* Sidebar */}
@@ -388,5 +409,106 @@ export default function IssuePage() {
         </div>
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ReplyBox — NIP-22 comment composer for the issue page
+// ---------------------------------------------------------------------------
+
+interface ReplyBoxProps {
+  issueId: string;
+  issuePubkey: string;
+  repoRelays: string[];
+}
+
+function ReplyBox({ issueId, issuePubkey, repoRelays }: ReplyBoxProps) {
+  const [body, setBody] = useState("");
+  const { publishEvent, isPending } = usePublish();
+  const { toast } = useToast();
+
+  const relayHint = repoRelays[0] ?? "";
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+
+      const trimmed = body.trim();
+      if (!trimmed) return;
+
+      try {
+        await publishEvent({
+          kind: COMMENT_KIND,
+          content: trimmed,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            // NIP-22: uppercase = root of thread
+            ["E", issueId, relayHint, "root"],
+            ["P", issuePubkey],
+            // lowercase = immediate reply parent (same as root for top-level comments)
+            ["e", issueId, relayHint, "reply"],
+            ["p", issuePubkey],
+            // kind of the root event
+            ["k", String(ISSUE_KIND)],
+          ],
+        });
+
+        toast({
+          title: "Comment posted",
+          description: "Your comment has been published.",
+        });
+
+        setBody("");
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to post comment";
+        toast({
+          title: "Failed to post comment",
+          description: message,
+          variant: "destructive",
+        });
+      }
+    },
+    [body, issueId, issuePubkey, relayHint, publishEvent, toast],
+  );
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <MessageSquarePlus className="h-4 w-4 text-muted-foreground" />
+            <span>Add a comment</span>
+          </div>
+
+          <NostrComposer
+            value={body}
+            onChange={setBody}
+            placeholder="Leave a comment. Markdown and @mentions supported."
+            disabled={isPending}
+            rows={4}
+            minRows={4}
+          />
+
+          <div className="flex justify-end">
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isPending || !body.trim() || composerHasNsec(body)}
+              className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Posting...
+                </>
+              ) : (
+                "Comment"
+              )}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

@@ -4,9 +4,9 @@ import { CreateIssue } from "@/actions/nip34";
 import { useToast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { LabelBadge } from "@/components/LabelBadge";
+import { NostrComposer, composerHasNsec } from "@/components/NostrComposer";
 import { Loader2, Plus, X, CircleDot } from "lucide-react";
 
 interface CreateIssueFormProps {
@@ -141,14 +141,12 @@ export function CreateIssueForm({
         <Label htmlFor="issue-content" className="text-sm font-medium">
           Description
         </Label>
-        <Textarea
-          id="issue-content"
-          placeholder="Describe the issue in detail. Markdown is supported."
+        <NostrComposer
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={setContent}
+          placeholder="Describe the issue in detail. Markdown is supported."
           disabled={isPending}
           rows={8}
-          className="bg-background/60 resize-y font-mono text-sm"
         />
         <p className="text-xs text-muted-foreground">
           Markdown supported — code blocks, links, lists, etc.
@@ -218,7 +216,7 @@ export function CreateIssueForm({
         <Button
           type="submit"
           size="sm"
-          disabled={isPending || !subject.trim()}
+          disabled={isPending || !subject.trim() || composerHasNsec(content)}
           className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
         >
           {isPending ? (
