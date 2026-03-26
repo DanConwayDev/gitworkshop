@@ -72,9 +72,11 @@ function walkTrees(
   prefix: string,
   out: FileChange[],
 ): void {
-  // Index base files and directories by name for O(1) lookup
+  // Index both sides by name for O(1) lookup in all four loops below
   const baseFiles = new Map(baseTree.files.map((f) => [f.name, f]));
   const baseDirs = new Map(baseTree.directories.map((d) => [d.name, d]));
+  const tipFiles = new Map(tipTree.files.map((f) => [f.name, f]));
+  const tipDirs = new Map(tipTree.directories.map((d) => [d.name, d]));
 
   // --- Files in tip ---
   for (const tipFile of tipTree.files) {
@@ -103,9 +105,9 @@ function walkTrees(
     // Same hash → no change, skip
   }
 
-  // --- Files only in base (deleted) ---
+  // --- Files only in base (deleted) — O(1) via tipFiles Map ---
   for (const baseFile of baseTree.files) {
-    if (!tipTree.files.some((f) => f.name === baseFile.name)) {
+    if (!tipFiles.has(baseFile.name)) {
       out.push({
         path: prefix + baseFile.name,
         status: "deleted",
@@ -136,9 +138,9 @@ function walkTrees(
     }
   }
 
-  // --- Directories only in base (deleted) ---
+  // --- Directories only in base (deleted) — O(1) via tipDirs Map ---
   for (const baseDir of baseTree.directories) {
-    if (!tipTree.directories.some((d) => d.name === baseDir.name)) {
+    if (!tipDirs.has(baseDir.name)) {
       const dirPath = prefix + baseDir.name + "/";
       if (baseDir.content) {
         walkTrees(EMPTY_TREE, baseDir.content, dirPath, out);
@@ -213,6 +215,19 @@ function isBinaryByContent(data: Uint8Array): boolean {
 const utf8 = new TextDecoder("utf-8");
 
 /**
+ * Module-level diff string cache keyed by "tipHash:baseHash".
+ *
+ * Blob fetches are already cached by the pool, but the diff generation
+ * (string allocation + createTwoFilesPatch CPU work) repeats on every mount
+ * (e.g. tab switch). This cache makes repeated renders of the same diff
+ * instant without re-running the generation loop.
+ *
+ * The cache is never evicted — diff strings are small relative to blob data
+ * and the number of unique tip:base pairs a user visits in a session is low.
+ */
+const diffStringCache = new Map<string, string>();
+
+/**
  * Fetch changed blobs and generate a concatenated unified diff string.
  *
  * For each FileChange:
@@ -225,11 +240,17 @@ const utf8 = new TextDecoder("utf-8");
  * means blobs that were already fetched (e.g. during file browsing) are
  * returned instantly without a network request.
  *
+ * The resulting diff string is cached in memory keyed by tipHash:baseHash so
+ * that repeated calls (e.g. switching tabs) are instant.
+ *
  * @param changes      - Output of diffTrees()
  * @param pool         - GitGraspPool instance (for getBlob)
  * @param signal       - AbortSignal for cancellation
  * @param fallbackUrls - Extra URLs to try after the pool's own URLs if a blob
  *   is not found there. Not tracked by the pool.
+ * @param cacheKey     - Optional stable key for the diff string cache (e.g.
+ *   "tipCommitHash:baseCommitHash"). When provided, a cached result is
+ *   returned immediately on repeat calls without re-fetching blobs.
  * @returns Concatenated unified diff string, empty string if no changes
  */
 export async function generateUnifiedDiff(
@@ -237,12 +258,22 @@ export async function generateUnifiedDiff(
   pool: GitGraspPool,
   signal: AbortSignal,
   fallbackUrls?: string[],
+  cacheKey?: string,
 ): Promise<string> {
   if (changes.length === 0) return "";
 
-  // Collect all unique blob hashes we need to fetch
+  // Return cached diff string immediately if available
+  if (cacheKey) {
+    const cached = diffStringCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+  }
+
+  // Collect all unique blob hashes we need to fetch.
+  // Skip hashes for files that are already known to be binary by extension —
+  // those will be emitted as "Binary files … differ" without any blob content.
   const hashesToFetch = new Set<string>();
   for (const change of changes) {
+    if (isBinaryByExtension(change.path)) continue;
     if (change.tipHash) hashesToFetch.add(change.tipHash);
     if (change.baseHash) hashesToFetch.add(change.baseHash);
   }
@@ -309,7 +340,14 @@ export async function generateUnifiedDiff(
     hunks.push(patch);
   }
 
-  return hunks.join("\n");
+  const diffString = hunks.join("\n");
+
+  // Cache the result for instant repeat renders (e.g. tab switches)
+  if (cacheKey && !signal.aborted) {
+    diffStringCache.set(cacheKey, diffString);
+  }
+
+  return diffString;
 }
 
 function binaryDiffLine(aPath: string, bPath: string): string {

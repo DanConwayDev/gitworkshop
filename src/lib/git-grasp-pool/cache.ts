@@ -287,6 +287,35 @@ export class GitObjectCache {
   }
 
   // -----------------------------------------------------------------------
+  // Full trees (for diff — complete recursive trees, no TTL)
+  //
+  // Stored under a namespaced key "full:<commitHash>" to avoid any collision
+  // with the file-browser tree cache which uses "<commitHash>:<nestLimit>".
+  // -----------------------------------------------------------------------
+
+  peekFullTree(commitHash: string): Tree | undefined {
+    return memTrees.get(`full:${commitHash}`);
+  }
+
+  async getFullTree(commitHash: string): Promise<Tree | undefined> {
+    const k = `full:${commitHash}`;
+    const mem = memTrees.get(k);
+    if (mem) return mem;
+    const record = await idbGet<TreeRecord>(STORE_TREES, k);
+    if (record) {
+      memTrees.set(k, record.tree);
+      return record.tree;
+    }
+    return undefined;
+  }
+
+  putFullTree(commitHash: string, tree: Tree): void {
+    const k = `full:${commitHash}`;
+    memTrees.set(k, tree);
+    idbPut(STORE_TREES, { key: k, tree }).catch(() => {});
+  }
+
+  // -----------------------------------------------------------------------
   // Commit history (content-addressed, no TTL)
   // -----------------------------------------------------------------------
 

@@ -1346,7 +1346,11 @@ export class GitGraspPool {
    * blob:none so only tree objects (~30 bytes per directory entry) are
    * transferred, not file content.
    *
-   * All four fetches run in parallel and are individually cached.
+   * Each fetchFullTree call returns both the commit and the tree from the
+   * same packfile response, so no separate getSingleCommit requests are made.
+   * Two fetches instead of four in the common (uncached) case.
+   *
+   * All fetches run in parallel and are individually cached.
    * Repeat calls for the same pair are instant.
    *
    * The caller is responsible for:
@@ -1363,9 +1367,7 @@ export class GitGraspPool {
     signal: AbortSignal,
     fallbackUrls?: string[],
   ): Promise<CommitRangeData | null> {
-    const [tipCommit, baseCommit, tipTree, baseTree] = await Promise.all([
-      this.getSingleCommit(tipCommitId, signal, fallbackUrls),
-      this.getSingleCommit(baseCommitId, signal, fallbackUrls),
+    const [tipResult, baseResult] = await Promise.all([
       this.withFallback(
         signal,
         async (url) => {
@@ -1402,9 +1404,14 @@ export class GitGraspPool {
       ),
     ]);
 
-    if (!tipCommit || !baseCommit || !tipTree || !baseTree) return null;
+    if (!tipResult || !baseResult) return null;
 
-    return { tipCommit, baseCommit, tipTree, baseTree };
+    return {
+      tipCommit: tipResult.commit,
+      baseCommit: baseResult.commit,
+      tipTree: tipResult.tree,
+      baseTree: baseResult.tree,
+    };
   }
 
   /**

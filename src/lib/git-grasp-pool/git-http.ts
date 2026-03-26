@@ -780,46 +780,75 @@ export class GitHttpClient {
   }
 
   /**
-   * Fetch the complete recursive directory tree at a commit for diff purposes.
+   * Fetch the complete recursive directory tree at a commit for diff purposes,
+   * and return the commit object alongside it.
    *
    * Uses deepen=1 (one commit, no ancestors) with blob:none (no file content).
    * The server sends ALL tree objects for that commit; we parse all of them
-   * into a fully-recursive Tree structure.
+   * into a fully-recursive Tree structure. The commit object is present in the
+   * same packfile response, so we parse and cache it here — eliminating the
+   * need for a separate getSingleCommit network request.
    *
-   * Cache key uses the sentinel -1 for nestLimit, which the file-browser path
-   * never uses (it always passes positive integers), so there is no collision.
+   * Cache: the tree is stored via cache.putFullTree(). The commit is stored
+   * via cache.putCommit() so it is available to getSingleCommit callers too.
    */
   async fetchFullTree(
     url: string,
     commitHash: string,
     signal: AbortSignal,
-  ): Promise<Tree | null> {
-    // Sentinel value: file-browser callers always pass positive nestLimit values.
-    // -1 is never passed by any other caller, so this cache slot is exclusive
-    // to the fully-parsed tree used for diffs.
-    const FULL_TREE_NEST_LIMIT = -1;
+  ): Promise<{ commit: Commit; tree: Tree } | null> {
+    // Check both caches synchronously first
+    const cachedTree = this.cache.peekFullTree(commitHash);
+    const cachedCommit = this.cache.peekCommit(commitHash);
+    if (cachedTree && cachedCommit)
+      return { commit: cachedCommit, tree: cachedTree };
 
-    const cached = await this.cache.getTree(commitHash, FULL_TREE_NEST_LIMIT);
-    if (cached) return cached;
+    // Async cache check
+    const [asyncTree, asyncCommit] = await Promise.all([
+      cachedTree
+        ? Promise.resolve(cachedTree)
+        : this.cache.getFullTree(commitHash),
+      cachedCommit
+        ? Promise.resolve(cachedCommit)
+        : this.cache.getCommit(commitHash),
+    ]);
+    if (asyncTree && asyncCommit)
+      return { commit: asyncCommit, tree: asyncTree };
 
     const effectiveUrl = this.cors.resolveUrl(url);
     const serverCaps = await this.getServerCaps(url, signal);
     if (signal.aborted) return null;
 
     try {
+      const caps = selectCapabilities(serverCaps);
+      if (!serverCaps.includes("filter"))
+        throw new Error("git server does not support filter capability");
+      caps.push("filter");
+
       // deepen=1: fetch only the tip commit (server still sends all its trees)
-      // parseDepth=undefined: build the complete recursive Tree structure
-      const tree = await fetchDirectoryTree(
-        effectiveUrl,
-        commitHash,
-        1,
-        serverCaps,
-        signal,
-        undefined,
-      );
+      // blob:none: no file content, only tree objects
+      const want = createWantRequest(commitHash, caps, 1, "blob:none");
+      const result = await fetchPackfile(effectiveUrl, want);
       if (signal.aborted) return null;
-      this.cache.putTree(commitHash, FULL_TREE_NEST_LIMIT, tree);
-      return tree;
+
+      const commitObj = result.objects.get(commitHash);
+      if (!commitObj) throw new Error(`commit object not found: ${commitHash}`);
+
+      // Parse the commit from the same packfile response — no extra request
+      const commit = parseCommit(commitObj.data, commitHash);
+
+      const utf8Decoder = new TextDecoder("utf-8");
+      const rootTreeHash = utf8Decoder.decode(commitObj.data.slice(5, 45));
+      const rootTreeObj = result.objects.get(rootTreeHash);
+      if (!rootTreeObj) throw new Error(`root tree object not found`);
+
+      // parseDepth=undefined: build the complete recursive Tree structure
+      const tree = loadTree(rootTreeObj, result.objects, undefined);
+      if (signal.aborted) return null;
+
+      this.cache.putCommit(commit);
+      this.cache.putFullTree(commitHash, tree);
+      return { commit, tree };
     } catch {
       if (signal.aborted) return null;
       return null;

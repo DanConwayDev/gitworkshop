@@ -341,11 +341,15 @@ export function CommitDiffView({
       }
 
       // --- Phase 2: fetch blobs and generate unified diff ---
+      // Pass a stable cacheKey so repeated renders (e.g. tab switches) are
+      // instant — the diff string is returned from the module-level cache
+      // without re-fetching blobs or re-running the generation loop.
       const diff = await generateUnifiedDiff(
         changes,
         pool,
         abort.signal,
         fallbackUrls,
+        `${tipCommitId}:${baseCommitId}`,
       );
 
       if (abort.signal.aborted) return;
