@@ -37,12 +37,7 @@ import {
   Server,
   Info,
 } from "lucide-react";
-import {
-  isGraspCloneUrl,
-  graspCloneUrlNpub,
-  graspCloneUrlDomain,
-  type ResolvedRepo,
-} from "@/lib/nip34";
+import { graspCloneUrlNpub, type ResolvedRepo } from "@/lib/nip34";
 import { GraspLogo } from "@/components/GraspLogo";
 import type { NostrEvent } from "nostr-tools";
 import { nip19 } from "nostr-tools";
@@ -198,6 +193,8 @@ function SidebarVariant({
   const selectedAnnouncement = repo.announcements.find(
     (a) => a.pubkey === repo.selectedMaintainer,
   );
+  const isMultiAnnouncement = repo.announcements.length > 1;
+  const [multiModalOpen, setMultiModalOpen] = useState(false);
 
   return (
     <div className="space-y-3 min-w-0">
@@ -214,13 +211,10 @@ function SidebarVariant({
       {/* About card */}
       <div className="rounded-lg border border-border/60 overflow-hidden">
         {/* Card header */}
-        <div className="flex items-center justify-between px-4 pt-3 pb-0">
+        <div className="px-4 pt-3 pb-0">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
             About
           </p>
-          {selectedAnnouncement && (
-            <AnnouncementEventActions event={selectedAnnouncement} />
-          )}
         </div>
 
         <div className="px-4 pt-3 pb-4 space-y-4">
@@ -363,9 +357,9 @@ function SidebarVariant({
           )}
         </div>
 
-        {/* Show more link */}
-        {aboutPath && (
-          <div className="px-4 pb-3 -mt-1">
+        {/* Footer: show more + announcement action buttons */}
+        <div className="px-4 pb-3 -mt-1 flex items-center justify-between">
+          {aboutPath ? (
             <Link
               to={aboutPath}
               className="text-xs text-muted-foreground/60 hover:text-foreground transition-colors inline-flex items-center gap-0.5"
@@ -373,8 +367,33 @@ function SidebarVariant({
               Show more
               <ChevronRight className="h-3 w-3" />
             </Link>
-          </div>
-        )}
+          ) : (
+            <span />
+          )}
+          {isMultiAnnouncement ? (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground/50 hover:text-foreground"
+                title="View raw announcement events"
+                onClick={() => setMultiModalOpen(true)}
+              >
+                <Braces className="h-3 w-3" />
+              </Button>
+              <MultiAnnouncementsModal
+                announcements={repo.announcements}
+                selectedMaintainer={repo.selectedMaintainer}
+                open={multiModalOpen}
+                onOpenChange={setMultiModalOpen}
+              />
+            </>
+          ) : (
+            selectedAnnouncement && (
+              <AnnouncementEventActions event={selectedAnnouncement} />
+            )
+          )}
+        </div>
       </div>
     </div>
   );
@@ -393,9 +412,6 @@ function FullVariant({
   nostrCloneUrl: string | undefined;
   nostrCloneCommand: string | undefined;
 }) {
-  const [showRaw, setShowRaw] = useState(false);
-  const isMulti = repo.maintainerSet.length > 1;
-
   return (
     <div className="space-y-6">
       {/* Description */}
@@ -592,45 +608,12 @@ function FullVariant({
         </section>
       )}
 
-      {/* Raw announcements toggle */}
+      {/* Raw announcement events — collapsed by default */}
       {repo.announcements.length > 0 && (
-        <div className="pt-2">
-          <Separator className="mb-4" />
-          <button
-            type="button"
-            onClick={() => setShowRaw((v) => !v)}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {showRaw ? (
-              <ChevronUp className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronDown className="h-3.5 w-3.5" />
-            )}
-            {showRaw ? "Hide" : "View"} raw announcement
-            {repo.announcements.length > 1
-              ? `s (${repo.announcements.length})`
-              : ""}
-            {isMulti && !showRaw && (
-              <span className="text-muted-foreground/60">
-                — see how multiple announcements combine
-              </span>
-            )}
-          </button>
-
-          {showRaw && (
-            <div className="mt-3 space-y-3">
-              {repo.announcements.map((ev) => (
-                <RawAnnouncementCard
-                  key={ev.id}
-                  event={ev}
-                  repo={repo}
-                  isSelected={ev.pubkey === repo.selectedMaintainer}
-                  isMulti={isMulti}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        <RawAnnouncementsSection
+          announcements={repo.announcements}
+          selectedMaintainer={repo.selectedMaintainer}
+        />
       )}
     </div>
   );
@@ -814,170 +797,153 @@ function CloneServerRow({ url, isGrasp }: { url: string; isGrasp: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
-// Raw announcement card
+// AnnouncementEventRows — shared inner content used by both the modal and
+// the collapsed section on the /about page.
 // ---------------------------------------------------------------------------
 
-function RawAnnouncementCard({
-  event,
-  repo,
-  isSelected,
-  isMulti,
+function AnnouncementEventRows({
+  announcements,
+  selectedMaintainer,
 }: {
-  event: NostrEvent;
-  repo: ResolvedRepo;
-  isSelected: boolean;
-  isMulti: boolean;
+  announcements: NostrEvent[];
+  selectedMaintainer: string;
 }) {
-  const cloneUrls = repo.cloneUrlProvenance
-    .filter((p) => p.pubkey === event.pubkey)
-    .map((p) => p.value);
+  const [jsonEvent, setJsonEvent] = useState<NostrEvent | null>(null);
+  const isMulti = announcements.length > 1;
 
-  const relays = repo.relayProvenance
-    .filter((p) => p.pubkey === event.pubkey)
-    .map((p) => p.value);
-
-  const listedMaintainers = repo.maintainerEdges
-    .filter((e) => e.from === event.pubkey)
-    .map((e) => e.to);
-
-  const isNameSource = repo.nameSource.pubkey === event.pubkey;
-  const isDescSource = repo.descriptionSource.pubkey === event.pubkey;
-
-  const createdAt = format(
-    new Date(event.created_at * 1000),
-    "MMM d, yyyy 'at' h:mm a",
-  );
+  // Sort freshest first
+  const sorted = [...announcements].sort((a, b) => b.created_at - a.created_at);
 
   return (
-    <div className="rounded-md border border-border/60 bg-muted/20 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/40">
-        <div className="flex items-center gap-2 min-w-0">
-          <UserLink
-            pubkey={event.pubkey}
-            avatarSize="sm"
-            nameClassName="text-xs font-medium"
-          />
-          {isMulti && isSelected && (
-            <Badge
-              variant="outline"
-              className="text-[10px] px-1.5 py-0 h-4 shrink-0 text-violet-600 border-violet-500/40 dark:text-violet-400"
+    <>
+      <div className="space-y-2">
+        {isMulti && (
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            In a multi-maintainer repository each maintainer publishes their own
+            announcement event. Some fields (relays, clone URLs, maintainers)
+            are{" "}
+            <span className="text-foreground font-medium">
+              unioned across all announcements
+            </span>
+            , while others (name, description) are taken from the{" "}
+            <span className="text-foreground font-medium">
+              most recently updated
+            </span>{" "}
+            announcement.
+          </p>
+        )}
+
+        {sorted.map((ev) => {
+          const isSelected = ev.pubkey === selectedMaintainer;
+          const updatedAt = format(
+            new Date(ev.created_at * 1000),
+            "MMM d, yyyy 'at' h:mm a",
+          );
+          return (
+            <div
+              key={ev.id}
+              className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2"
             >
-              selected
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <span className="text-[11px] text-muted-foreground">{createdAt}</span>
-          <AnnouncementEventActions event={event} />
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="px-3 py-2.5 space-y-2.5 text-xs">
-        {/* Name / description */}
-        {(isNameSource || isDescSource) && (
-          <div className="space-y-1">
-            {isNameSource && repo.name && (
-              <div className="flex gap-2">
-                <span className="text-muted-foreground w-20 shrink-0">
-                  name
-                </span>
-                <span className="font-medium">{repo.name}</span>
-              </div>
-            )}
-            {isDescSource && repo.description && (
-              <div className="flex gap-2">
-                <span className="text-muted-foreground w-20 shrink-0">
-                  description
-                </span>
-                <span className="text-foreground/80">{repo.description}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Clone URLs */}
-        {cloneUrls.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-muted-foreground">Clone URLs</p>
-            <div className="space-y-1">
-              {cloneUrls.map((url) => {
-                const isGrasp = isGraspCloneUrl(url);
-                const domain = isGrasp ? graspCloneUrlDomain(url) : undefined;
-                return (
-                  <div
-                    key={url}
-                    className="flex items-center gap-2 rounded border bg-background/60 px-2 py-1"
+              <div className="flex items-center gap-2 min-w-0">
+                {isMulti ? (
+                  <UserLink
+                    pubkey={ev.pubkey}
+                    avatarSize="sm"
+                    nameClassName="text-xs font-medium"
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {updatedAt}
+                  </span>
+                )}
+                {isMulti && isSelected && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 h-4 shrink-0 text-violet-600 border-violet-500/40 dark:text-violet-400"
                   >
-                    <code className="flex-1 font-mono truncate text-foreground/80">
-                      {url}
-                    </code>
-                    {isGrasp && domain && (
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] shrink-0"
-                      >
-                        grasp
-                      </Badge>
-                    )}
-                    <CopyButton value={url} />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Relays */}
-        {relays.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-muted-foreground">Relays</p>
-            <div className="flex flex-wrap gap-1">
-              {relays.map((relay) => (
-                <code
-                  key={relay}
-                  className="font-mono bg-muted/50 px-1.5 py-0.5 rounded text-muted-foreground"
-                  title={relay}
+                    selected
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {isMulti && (
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                    {updatedAt}
+                  </span>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2 text-[11px] gap-1"
+                  onClick={() => setJsonEvent(ev)}
                 >
-                  {displayRelay(relay)}
-                </code>
-              ))}
+                  <Braces className="h-3 w-3" />
+                  Raw event
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Listed maintainers */}
-        {listedMaintainers.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-muted-foreground">Lists as maintainers</p>
-            <div className="flex flex-wrap gap-2">
-              {listedMaintainers.map((pk) => (
-                <UserLink
-                  key={pk}
-                  pubkey={pk}
-                  avatarSize="sm"
-                  nameClassName="text-xs"
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Event ID */}
-        <div className="flex items-center gap-2 pt-1 border-t border-border/30">
-          <span className="text-muted-foreground/70">event</span>
-          <code className="font-mono text-muted-foreground/60 truncate flex-1">
-            {event.id}
-          </code>
-        </div>
+          );
+        })}
       </div>
+
+      {jsonEvent && (
+        <RawEventJsonDialog
+          event={jsonEvent}
+          open={!!jsonEvent}
+          onOpenChange={(v) => {
+            if (!v) setJsonEvent(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RawAnnouncementsSection — collapsed section on the full /about page
+// ---------------------------------------------------------------------------
+
+function RawAnnouncementsSection({
+  announcements,
+  selectedMaintainer,
+}: {
+  announcements: NostrEvent[];
+  selectedMaintainer: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="pt-2">
+      <Separator className="mb-4" />
+
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {open ? (
+          <ChevronUp className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5" />
+        )}
+        {open ? "Hide" : "View"} raw announcement event
+        {announcements.length > 1 ? `s (${announcements.length})` : ""}
+      </button>
+
+      {open && (
+        <div className="mt-3">
+          <AnnouncementEventRows
+            announcements={announcements}
+            selectedMaintainer={selectedMaintainer}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Announcement event actions (share + JSON modal)
+// Announcement event actions (share + JSON modal) — single event
 // ---------------------------------------------------------------------------
 
 function AnnouncementEventActions({ event }: { event: NostrEvent }) {
@@ -1001,7 +967,7 @@ function AnnouncementEventActions({ event }: { event: NostrEvent }) {
           variant="ghost"
           size="icon"
           className="h-6 w-6 text-muted-foreground/50 hover:text-foreground"
-          title="Event JSON"
+          title="View raw event JSON"
           onClick={() => setJsonOpen(true)}
         >
           <Braces className="h-3 w-3" />
@@ -1032,19 +998,76 @@ function AnnouncementEventActions({ event }: { event: NostrEvent }) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={jsonOpen} onOpenChange={setJsonOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Announcement event JSON</DialogTitle>
-          </DialogHeader>
-          <div className="overflow-auto rounded-md border bg-muted/40 p-4 min-h-0">
-            <pre className="text-xs font-mono whitespace-pre-wrap break-all">
-              {JSON.stringify(event, null, 2)}
-            </pre>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <RawEventJsonDialog
+        event={event}
+        open={jsonOpen}
+        onOpenChange={setJsonOpen}
+      />
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RawEventJsonDialog — reusable modal for viewing a raw event as JSON
+// ---------------------------------------------------------------------------
+
+function RawEventJsonDialog({
+  event,
+  open,
+  onOpenChange,
+}: {
+  event: NostrEvent;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Announcement event JSON</DialogTitle>
+        </DialogHeader>
+        <div className="overflow-auto rounded-md border bg-muted/40 p-4 min-h-0">
+          <pre className="text-xs font-mono whitespace-pre-wrap break-all">
+            {JSON.stringify(event, null, 2)}
+          </pre>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MultiAnnouncementsModal — shown when {} is clicked with >1 announcement
+// ---------------------------------------------------------------------------
+
+function MultiAnnouncementsModal({
+  announcements,
+  selectedMaintainer,
+  open,
+  onOpenChange,
+}: {
+  announcements: NostrEvent[];
+  selectedMaintainer: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Braces className="h-4 w-4 text-muted-foreground" />
+            Announcement events
+          </DialogTitle>
+        </DialogHeader>
+        <div className="pt-1">
+          <AnnouncementEventRows
+            announcements={announcements}
+            selectedMaintainer={selectedMaintainer}
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1097,39 +1120,6 @@ function CopyRow({ label, value }: { label: string; value: string }) {
         <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
       )}
     </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// CopyButton — inline icon button
-// ---------------------------------------------------------------------------
-
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* clipboard unavailable */
-    }
-  }, [value]);
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="h-5 w-5 shrink-0"
-      onClick={handleCopy}
-    >
-      {copied ? (
-        <Check className="h-3 w-3 text-green-500" />
-      ) : (
-        <Copy className="h-3 w-3 text-muted-foreground" />
-      )}
-    </Button>
   );
 }
 
