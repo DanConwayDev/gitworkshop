@@ -241,14 +241,18 @@ const REPO_ITEM_KINDS = [ISSUE_KIND, ...PR_ROOT_KINDS] as const;
  * fetched and written into the EventStore.
  *
  * Deduplication: a seenIds Set in the closure ensures each item ID is
- * submitted to the essentials loader exactly once, regardless of how many
- * times the relay re-delivers the root event. The set is fresh per
- * subscription — navigating away and back creates a new observable with a new
- * set, triggering a fresh fetch.
+ * submitted to the loaders exactly once, regardless of how many times the
+ * relay re-delivers the root event. The set is fresh per subscription —
+ * navigating away and back creates a new observable with a new set,
+ * triggering a fresh fetch.
  *
- * Filter merging: nip34EssentialsLoader is a singleton; calls from this
- * factory and from nip34ItemLoader that arrive within the 100ms buffer window
- * are merged into a single relay subscription automatically.
+ * Both essentials and comments are fired immediately for each discovered item.
+ * Because nip34EssentialsLoader and nip34CommentsLoader are singleton
+ * instances backed by batchLoader, all per-item calls within each loader's
+ * bufferTime window are collapsed into a single relay subscription — so N
+ * items produce one essentials REQ and one comments REQ, not 2N REQs.
+ * Calls from nip34ItemLoader (detail pages) that arrive within the same
+ * window are merged into the same subscriptions automatically.
  *
  * @param coords     - Sorted array of repo coordinate strings
  * @param relayGroup - Relay group from useResolvedRepository
@@ -269,9 +273,14 @@ export function nip34RepoLoader(
           const ev = event as NostrEvent;
           if (!seenIds.has(ev.id)) {
             seenIds.add(ev.id);
-            // Fire essentials loader — batched with all other calls within
-            // the buffer window by the singleton loader instance.
+            // These per-item calls are batched by the singleton loader
+            // instances: all IDs pushed within the bufferTime window are
+            // collapsed into a single relay subscription automatically.
             nip34EssentialsLoader({
+              value: ev.id,
+              relays: relayUrls,
+            }).subscribe(subscriber);
+            nip34CommentsLoader({
               value: ev.id,
               relays: relayUrls,
             }).subscribe(subscriber);
