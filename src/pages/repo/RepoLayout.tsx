@@ -391,7 +391,7 @@ function RepoLayoutResolved({
       : null;
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-full">
       {/* Repo header */}
       <div className="relative isolate border-b border-border/40">
         <div className="absolute inset-0 -z-10 bg-gradient-to-br from-violet-500/5 via-transparent to-fuchsia-500/5" />
@@ -492,7 +492,7 @@ function RepoLayoutResolved({
 
 function Nip05LoadingState({ nip05 }: { nip05: string }) {
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-full flex items-center justify-center">
       <div className="text-center space-y-4 max-w-md px-4">
         <div className="flex justify-center">
           <div className="p-4 rounded-full bg-violet-500/10">
@@ -510,7 +510,7 @@ function Nip05LoadingState({ nip05 }: { nip05: string }) {
 
 function Nip05NotFoundError({ nip05 }: { nip05: string }) {
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-full flex items-center justify-center">
       <div className="text-center space-y-6 max-w-md px-4">
         <div className="flex justify-center">
           <div className="p-4 rounded-full bg-destructive/10">
@@ -553,7 +553,7 @@ function Nip05ResolveError({
         : "An unexpected error occurred while looking up the NIP-05 address.";
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-full flex items-center justify-center">
       <div className="text-center space-y-6 max-w-md px-4">
         <div className="flex justify-center">
           <div className="p-4 rounded-full bg-destructive/10">
@@ -581,7 +581,7 @@ function Nip05ResolveError({
 
 function RouteNotFound({ splat }: { splat: string }) {
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-full flex items-center justify-center">
       <div className="text-center space-y-6 max-w-md px-4">
         <div className="flex justify-center">
           <div className="p-4 rounded-full bg-muted">

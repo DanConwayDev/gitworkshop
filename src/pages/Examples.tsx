@@ -31,7 +31,7 @@ const Examples = () => {
   const activeAccount = useActiveAccount();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-full bg-background">
       {/* Header */}
       <div className="border-b bg-card">
         <div className="container mx-auto py-6 px-4">

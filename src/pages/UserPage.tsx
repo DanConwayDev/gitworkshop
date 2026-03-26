@@ -39,7 +39,7 @@ export default function UserPage({ pubkey }: UserPageProps) {
   });
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-full">
       {/* Profile header */}
       <div className="relative isolate border-b border-border/40">
         {/* Banner */}

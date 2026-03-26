@@ -26,7 +26,7 @@ export default function RelayPage() {
 
   if (!relayUrl) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-full flex items-center justify-center">
         <div className="text-center space-y-2">
           <p className="text-lg font-semibold">Invalid relay URL</p>
           <p className="text-muted-foreground text-sm">

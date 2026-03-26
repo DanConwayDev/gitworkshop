@@ -92,7 +92,7 @@ export default function RepositoriesPage({
   const hasMore = filtered !== undefined && visibleCount < filtered.length;
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-full">
       {/* Hero section */}
       <div className="relative isolate overflow-hidden border-b border-border/40">
         <div className="absolute inset-0 -z-10 bg-gradient-to-br from-violet-500/5 via-transparent to-fuchsia-500/5" />
