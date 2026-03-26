@@ -5,14 +5,13 @@ import { useSeoMeta } from "@unhead/react";
 import { formatDistanceToNow } from "date-fns";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { useRepoContext } from "./RepoContext";
-import { UserAvatar, UserName } from "@/components/UserAvatar";
-import { StatusBadge } from "@/components/StatusBadge";
+import { UserName } from "@/components/UserAvatar";
+import { StatusIcon } from "@/components/StatusIcon";
 import { StatusTabs } from "@/components/StatusTabs";
 import { LabelBadge } from "@/components/LabelBadge";
 import { CreateIssueForm } from "@/components/CreateIssueForm";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,15 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Search,
-  MessageCircle,
-  Zap,
-  Users,
-  CircleDot,
-  X,
-  Plus,
-} from "lucide-react";
+import { Search, MessageCircle, Users, CircleDot, X, Plus } from "lucide-react";
+import { UserAvatar } from "@/components/UserAvatar";
 import type { IssueStatus, ResolvedIssue } from "@/lib/nip34";
 
 const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open", "draft"];
@@ -182,17 +174,6 @@ export default function RepoIssuesPage() {
         </div>
 
         <div className="flex gap-2 flex-wrap items-center ml-auto">
-          {account && repo && (
-            <Button
-              size="sm"
-              className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white h-9"
-              onClick={() => setNewIssueOpen(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New Issue
-            </Button>
-          )}
-
           {allLabels.length > 0 && (
             <MultiSelect
               options={labelOptions}
@@ -236,26 +217,38 @@ export default function RepoIssuesPage() {
         </div>
       </div>
 
-      {/* Status tabs */}
-      <StatusTabs
-        counts={statusCounts}
-        selected={statusFilter}
-        onChange={(v) => setStatusFilter(v as IssueStatus[])}
-        className="mb-3"
-      />
-
-      {/* Issue list */}
-      {!filteredIssues ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <IssueSkeleton key={i} />
-          ))}
+      {/* Bordered container with status tabs header + list */}
+      <div className="rounded-lg border border-border overflow-hidden">
+        {/* Header bar: status tabs + new issue button */}
+        <div className="flex items-center bg-muted/40 px-3 py-1.5 overflow-x-auto">
+          <StatusTabs
+            counts={statusCounts}
+            selected={statusFilter}
+            onChange={(v) => setStatusFilter(v as IssueStatus[])}
+            className="border-b-0 pb-0 mb-0 flex-1"
+          />
+          {account && repo && (
+            <Button
+              size="sm"
+              className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs shrink-0 ml-2"
+              onClick={() => setNewIssueOpen(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New Issue
+            </Button>
+          )}
         </div>
-      ) : filteredIssues.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-16 text-center">
-            <CircleDot className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
-            <p className="text-muted-foreground text-lg">
+
+        {/* Issue list */}
+        {!filteredIssues ? (
+          <ul className="divide-y divide-border">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <IssueSkeleton key={i} />
+            ))}
+          </ul>
+        ) : filteredIssues.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-muted-foreground">
               {hasActiveFilters
                 ? "No issues match your filters"
                 : "No issues yet"}
@@ -265,30 +258,20 @@ export default function RepoIssuesPage() {
                 ? "Try adjusting your filters"
                 : "Be the first to open an issue"}
             </p>
-            {!hasActiveFilters && account && repo && (
-              <Button
-                size="sm"
-                className="mt-4 gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
-                onClick={() => setNewIssueOpen(true)}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                New Issue
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {filteredIssues.map((issue) => (
-            <IssueRow
-              key={issue.id}
-              issue={issue}
-              repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [])}
-              repoRelays={repo?.relays ?? []}
-            />
-          ))}
-        </div>
-      )}
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {filteredIssues.map((issue) => (
+              <IssueRow
+                key={issue.id}
+                issue={issue}
+                repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [])}
+                repoRelays={repo?.relays ?? []}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
@@ -311,107 +294,81 @@ function IssueRow({
   repoPath: string;
   repoRelays: string[];
 }) {
-  const timeAgo = formatDistanceToNow(new Date(issue.createdAt * 1000), {
-    addSuffix: true,
-  });
+  const lastActive = formatDistanceToNow(
+    new Date(issue.lastActivityAt * 1000),
+    { addSuffix: true },
+  );
 
   const nevent = eventIdToNevent(issue.id, repoRelays);
 
   return (
-    <Link to={`${repoPath}/issues/${nevent}`} className="group block">
-      <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5">
-              <StatusBadge status={issue.status} />
-            </div>
+    <li className="group hover:bg-accent/40 transition-colors">
+      <Link
+        to={`${repoPath}/issues/${nevent}`}
+        className="flex items-start gap-3 px-3 py-2.5 text-sm"
+      >
+        {/* Status icon */}
+        <StatusIcon status={issue.status} className="mt-0.5" />
 
-            <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-[15px] group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors mb-1.5 line-clamp-1">
-                {issue.currentSubject}
-              </h3>
-
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <UserAvatar pubkey={issue.pubkey} size="sm" />
-                  <UserName
-                    pubkey={issue.pubkey}
-                    className="text-xs text-muted-foreground"
-                  />
-                </div>
-
-                <span className="text-xs text-muted-foreground/60">
-                  {timeAgo}
-                </span>
-
-                {issue.labels.length > 0 && (
-                  <div className="flex gap-1 flex-wrap">
-                    {issue.labels.map((label) => (
-                      <LabelBadge key={label} label={label} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="flex items-center gap-2.5 text-muted-foreground/60">
-                {issue.commentCount > 0 && (
-                  <div
-                    className="flex items-center gap-1 text-xs"
-                    title={`${issue.commentCount} comments`}
-                  >
-                    <MessageCircle className="h-3.5 w-3.5" />
-                    <span>{issue.commentCount}</span>
-                  </div>
-                )}
-                {issue.zapCount > 0 && (
-                  <div
-                    className="flex items-center gap-1 text-xs text-amber-500/70"
-                    title={`${issue.zapCount} zaps`}
-                  >
-                    <Zap className="h-3.5 w-3.5" />
-                    <span>{issue.zapCount}</span>
-                  </div>
-                )}
-                {issue.participantCount > 0 && (
-                  <div
-                    className="flex items-center gap-1 text-xs"
-                    title={`${issue.participantCount} participants`}
-                  >
-                    <Users className="h-3.5 w-3.5" />
-                    <span>{issue.participantCount}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+        {/* Title + metadata */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors line-clamp-1">
+              {issue.currentSubject}
+            </span>
+            {issue.labels.map((label) => (
+              <LabelBadge
+                key={label}
+                label={label}
+                className="text-[10px] py-0 px-1.5 h-[18px]"
+              />
+            ))}
           </div>
-        </CardContent>
-      </Card>
-    </Link>
+          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+            <span>active {lastActive}</span>
+            <span className="text-muted-foreground/40">&middot;</span>
+            <UserAvatar
+              pubkey={issue.pubkey}
+              size="sm"
+              className="h-4 w-4 text-[8px]"
+            />
+            <UserName
+              pubkey={issue.pubkey}
+              className="text-xs font-normal text-muted-foreground"
+            />
+            {issue.commentCount > 0 && (
+              <>
+                <span className="text-muted-foreground/40">&middot;</span>
+                <span className="inline-flex items-center gap-0.5">
+                  <MessageCircle className="h-3 w-3" />
+                  {issue.commentCount}
+                </span>
+              </>
+            )}
+            {issue.participantCount > 1 && (
+              <>
+                <span className="text-muted-foreground/40">&middot;</span>
+                <span className="inline-flex items-center gap-0.5">
+                  <Users className="h-3 w-3" />
+                  {issue.participantCount}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      </Link>
+    </li>
   );
 }
 
 function IssueSkeleton() {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-start gap-3">
-          <Skeleton className="h-6 w-16 rounded-full" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-5 w-3/4" />
-            <div className="flex gap-3">
-              <Skeleton className="h-6 w-6 rounded-full" />
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-3 w-16" />
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <Skeleton className="h-4 w-8" />
-            <Skeleton className="h-4 w-8" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <li className="flex items-start gap-3 px-3 py-2.5">
+      <Skeleton className="h-5 w-5 rounded-full shrink-0 mt-0.5" />
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-4 w-3/5" />
+        <Skeleton className="h-3 w-2/5" />
+      </div>
+    </li>
   );
 }

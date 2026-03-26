@@ -5,12 +5,11 @@ import { useSeoMeta } from "@unhead/react";
 import { formatDistanceToNow } from "date-fns";
 import { useRepoContext } from "./RepoContext";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusIcon } from "@/components/StatusIcon";
 import { StatusTabs } from "@/components/StatusTabs";
 import { LabelBadge } from "@/components/LabelBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MultiSelect } from "@/components/ui/multi-select";
 import type { MultiSelectOption } from "@/components/ui/multi-select";
@@ -21,15 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Search,
-  MessageCircle,
-  Zap,
-  Users,
-  GitPullRequest,
-  GitCommitHorizontal,
-  X,
-} from "lucide-react";
+import { Search, MessageCircle, Users, X } from "lucide-react";
 import type { IssueStatus, ResolvedPR, PRItemType } from "@/lib/nip34";
 
 const TYPE_OPTIONS: MultiSelectOption[] = [
@@ -205,27 +196,29 @@ export default function RepoPRsPage() {
         </div>
       </div>
 
-      {/* Status tabs */}
-      <StatusTabs
-        counts={statusCounts}
-        selected={statusFilter}
-        onChange={(v) => setStatusFilter(v as IssueStatus[])}
-        variant="pr"
-        className="mb-3"
-      />
-
-      {/* PR list */}
-      {!filteredPRs ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <PRSkeleton key={i} />
-          ))}
+      {/* Bordered container with status tabs header + list */}
+      <div className="rounded-lg border border-border overflow-hidden">
+        {/* Header bar: status tabs */}
+        <div className="flex items-center bg-muted/40 px-3 py-1.5 overflow-x-auto">
+          <StatusTabs
+            counts={statusCounts}
+            selected={statusFilter}
+            onChange={(v) => setStatusFilter(v as IssueStatus[])}
+            variant="pr"
+            className="border-b-0 pb-0 mb-0 flex-1"
+          />
         </div>
-      ) : filteredPRs.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-16 text-center">
-            <GitPullRequest className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
-            <p className="text-muted-foreground text-lg">
+
+        {/* PR list */}
+        {!filteredPRs ? (
+          <ul className="divide-y divide-border">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <PRSkeleton key={i} />
+            ))}
+          </ul>
+        ) : filteredPRs.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-muted-foreground">
               {hasActiveFilters
                 ? "No PRs match your filters"
                 : "No pull requests yet"}
@@ -235,20 +228,20 @@ export default function RepoPRsPage() {
                 ? "Try adjusting your filters"
                 : "Pull requests and patches will appear here"}
             </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {filteredPRs.map((pr) => (
-            <PRRow
-              key={pr.id}
-              pr={pr}
-              repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [])}
-              repoRelays={repo?.relays ?? []}
-            />
-          ))}
-        </div>
-      )}
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {filteredPRs.map((pr) => (
+              <PRRow
+                key={pr.id}
+                pr={pr}
+                repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [])}
+                repoRelays={repo?.relays ?? []}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
@@ -271,113 +264,84 @@ function PRRow({
   repoPath: string;
   repoRelays: string[];
 }) {
-  const timeAgo = formatDistanceToNow(new Date(pr.createdAt * 1000), {
+  const lastActive = formatDistanceToNow(new Date(pr.lastActivityAt * 1000), {
     addSuffix: true,
   });
-
-  const TypeIcon =
-    pr.itemType === "patch" ? GitCommitHorizontal : GitPullRequest;
 
   const nevent = eventIdToNevent(pr.id, repoRelays);
 
   return (
-    <Link to={`${repoPath}/prs/${nevent}`} className="group block">
-      <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5">
-              <StatusBadge status={pr.status} variant="pr" />
-            </div>
+    <li className="group hover:bg-accent/40 transition-colors">
+      <Link
+        to={`${repoPath}/prs/${nevent}`}
+        className="flex items-start gap-3 px-3 py-2.5 text-sm"
+      >
+        {/* Status icon — variant reflects PR vs patch */}
+        <StatusIcon
+          status={pr.status}
+          variant={pr.itemType === "patch" ? "patch" : "pr"}
+          className="mt-0.5"
+        />
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <TypeIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
-                <h3 className="font-medium text-[15px] group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors line-clamp-1">
-                  {pr.currentSubject}
-                </h3>
-              </div>
-
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <UserAvatar pubkey={pr.pubkey} size="sm" />
-                  <UserName
-                    pubkey={pr.pubkey}
-                    className="text-xs text-muted-foreground"
-                  />
-                </div>
-
-                <span className="text-xs text-muted-foreground/60">
-                  {timeAgo}
-                </span>
-
-                {pr.labels.length > 0 && (
-                  <div className="flex gap-1 flex-wrap">
-                    {pr.labels.map((label) => (
-                      <LabelBadge key={label} label={label} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="flex items-center gap-2.5 text-muted-foreground/60">
-                {pr.commentCount > 0 && (
-                  <div
-                    className="flex items-center gap-1 text-xs"
-                    title={`${pr.commentCount} comments`}
-                  >
-                    <MessageCircle className="h-3.5 w-3.5" />
-                    <span>{pr.commentCount}</span>
-                  </div>
-                )}
-                {pr.zapCount > 0 && (
-                  <div
-                    className="flex items-center gap-1 text-xs text-amber-500/70"
-                    title={`${pr.zapCount} zaps`}
-                  >
-                    <Zap className="h-3.5 w-3.5" />
-                    <span>{pr.zapCount}</span>
-                  </div>
-                )}
-                {pr.participantCount > 0 && (
-                  <div
-                    className="flex items-center gap-1 text-xs"
-                    title={`${pr.participantCount} participants`}
-                  >
-                    <Users className="h-3.5 w-3.5" />
-                    <span>{pr.participantCount}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+        {/* Title + metadata */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors line-clamp-1">
+              {pr.currentSubject}
+            </span>
+            {pr.labels.map((label) => (
+              <LabelBadge
+                key={label}
+                label={label}
+                className="text-[10px] py-0 px-1.5 h-[18px]"
+              />
+            ))}
           </div>
-        </CardContent>
-      </Card>
-    </Link>
+          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+            <span>active {lastActive}</span>
+            <span className="text-muted-foreground/40">&middot;</span>
+            <UserAvatar
+              pubkey={pr.pubkey}
+              size="sm"
+              className="h-4 w-4 text-[8px]"
+            />
+            <UserName
+              pubkey={pr.pubkey}
+              className="text-xs font-normal text-muted-foreground"
+            />
+            {pr.commentCount > 0 && (
+              <>
+                <span className="text-muted-foreground/40">&middot;</span>
+                <span className="inline-flex items-center gap-0.5">
+                  <MessageCircle className="h-3 w-3" />
+                  {pr.commentCount}
+                </span>
+              </>
+            )}
+            {pr.participantCount > 1 && (
+              <>
+                <span className="text-muted-foreground/40">&middot;</span>
+                <span className="inline-flex items-center gap-0.5">
+                  <Users className="h-3 w-3" />
+                  {pr.participantCount}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      </Link>
+    </li>
   );
 }
 
 function PRSkeleton() {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-start gap-3">
-          <Skeleton className="h-6 w-16 rounded-full" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-5 w-3/4" />
-            <div className="flex gap-3">
-              <Skeleton className="h-6 w-6 rounded-full" />
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-3 w-16" />
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <Skeleton className="h-4 w-8" />
-            <Skeleton className="h-4 w-8" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <li className="flex items-start gap-3 px-3 py-2.5">
+      <Skeleton className="h-5 w-5 rounded-full shrink-0 mt-0.5" />
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-4 w-3/5" />
+        <Skeleton className="h-3 w-2/5" />
+      </div>
+    </li>
   );
 }
