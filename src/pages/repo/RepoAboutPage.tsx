@@ -1,9 +1,8 @@
 import { useState, useCallback } from "react";
 import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
-import { UserLink } from "@/components/UserAvatar";
+import { UserLink, UserAvatar, UserName } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -15,9 +14,11 @@ import {
   Radio,
   ExternalLink,
   GitBranch,
-  FileCode2,
   Share2,
   Braces,
+  ChevronDown,
+  ChevronUp,
+  Server,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,12 +29,13 @@ import {
 } from "@/components/ui/dialog";
 import {
   isGraspCloneUrl,
-  graspCloneUrlDomain,
   graspCloneUrlNpub,
+  graspCloneUrlDomain,
   type ResolvedRepo,
-  type FieldProvenance,
 } from "@/lib/nip34";
+import { GraspLogo } from "@/components/GraspLogo";
 import type { NostrEvent } from "nostr-tools";
+import { nip19 } from "nostr-tools";
 import {
   getPointerForEvent,
   encodeDecodeResult,
@@ -72,218 +74,223 @@ export default function RepoAboutPage() {
   if (!repo) {
     return (
       <div className="container max-w-screen-xl px-4 md:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-          <div className="space-y-4">
-            <Skeleton className="h-48 w-full" />
-            <Skeleton className="h-48 w-full" />
-          </div>
-          <div className="space-y-4">
-            <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-32 w-full" />
+        <div className="space-y-3 max-w-lg">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+          <div className="pt-4 space-y-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
           </div>
         </div>
       </div>
     );
   }
 
+  return (
+    <div className="container max-w-screen-xl px-4 md:px-8 py-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8">
+        {/* Main: simple merged view */}
+        <MainInfo repo={repo} />
+
+        {/* Sidebar: maintainers + topics */}
+        <Sidebar repo={repo} />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main info — description, clone, web, relays, raw announcements toggle
+// ---------------------------------------------------------------------------
+
+function MainInfo({ repo }: { repo: ResolvedRepo }) {
+  const [showRaw, setShowRaw] = useState(false);
   const isMulti = repo.maintainerSet.length > 1;
 
   return (
-    <div className="container max-w-screen-xl px-4 md:px-8 py-6">
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-        {/* Main: announcements */}
-        <AnnouncementsSection repo={repo} isMulti={isMulti} />
+    <div className="space-y-6">
+      {/* Description */}
+      {repo.description && (
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          {repo.description}
+        </p>
+      )}
 
-        {/* Sidebar */}
-        <div className="space-y-4">
-          {/* Maintainers */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                Maintainers
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {repo.maintainerSet.map((pk) => (
-                <div key={pk} className="flex items-center gap-2">
-                  <UserLink
-                    pubkey={pk}
-                    avatarSize="md"
-                    nameClassName="text-sm"
-                  />
-                  {pk === repo.selectedMaintainer && (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] px-1.5 py-0 h-4 text-violet-600 border-violet-500/40 dark:text-violet-400"
-                    >
-                      selected
-                    </Badge>
-                  )}
-                </div>
+      {/* Clone URLs */}
+      {repo.cloneUrls.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <GitBranch className="h-3.5 w-3.5" />
+            Clone
+          </h3>
+          <CloneServerList
+            graspCloneUrls={repo.graspCloneUrls}
+            additionalGitServerUrls={repo.additionalGitServerUrls}
+          />
+        </section>
+      )}
+
+      {/* Web URLs */}
+      {repo.webUrls.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <Globe className="h-3.5 w-3.5" />
+            Website
+          </h3>
+          <div className="space-y-1">
+            {repo.webUrls.map((url) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                {url}
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Relays */}
+      {repo.relays.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <Radio className="h-3.5 w-3.5" />
+            Relays
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
+            {repo.relays.map((relay) => (
+              <code
+                key={relay}
+                className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground"
+                title={relay}
+              >
+                {displayRelay(relay)}
+              </code>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Raw announcements toggle */}
+      {repo.announcements.length > 0 && (
+        <div className="pt-2">
+          <Separator className="mb-4" />
+          <button
+            type="button"
+            onClick={() => setShowRaw((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {showRaw ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+            {showRaw ? "Hide" : "View"} raw announcement
+            {repo.announcements.length > 1
+              ? `s (${repo.announcements.length})`
+              : ""}
+            {isMulti && !showRaw && (
+              <span className="text-muted-foreground/60">
+                — see how multiple announcements combine
+              </span>
+            )}
+          </button>
+
+          {showRaw && (
+            <div className="mt-3 space-y-3">
+              {repo.announcements.map((ev) => (
+                <RawAnnouncementCard
+                  key={ev.id}
+                  event={ev}
+                  repo={repo}
+                  isSelected={ev.pubkey === repo.selectedMaintainer}
+                  isMulti={isMulti}
+                />
               ))}
-              {repo.requestedMaintainers.length > 0 && (
-                <>
-                  <Separator />
-                  <p className="text-xs text-muted-foreground">Requested</p>
-                  {repo.requestedMaintainers.map((pk) => (
-                    <UserLink
-                      key={pk}
-                      pubkey={pk}
-                      avatarSize="sm"
-                      nameClassName="text-xs text-muted-foreground"
-                    />
-                  ))}
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Clone URLs */}
-          {repo.cloneUrls.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <GitBranch className="h-4 w-4 text-muted-foreground" />
-                  Clone
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {repo.cloneUrlProvenance.map((p) => (
-                  <CloneUrlRow
-                    key={p.value}
-                    url={p.value}
-                    ownerPubkey={isMulti ? p.pubkey : undefined}
-                    selectedMaintainer={repo.selectedMaintainer}
-                  />
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Web URLs */}
-          {repo.webUrls.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-muted-foreground" />
-                  Web
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {repo.webUrls.map((url) => (
-                  <a
-                    key={url}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:underline"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                    {url}
-                  </a>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Topics */}
-          {repo.labels.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Tag className="h-4 w-4 text-muted-foreground" />
-                  Topics
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-1.5">
-                  {repo.labels.map((label) => (
-                    <Badge key={label} variant="secondary" className="text-xs">
-                      {label}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Relays */}
-          {repo.relays.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Radio className="h-4 w-4 text-muted-foreground" />
-                  Relays
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {repo.relayProvenance.map((p) => (
-                    <RelayRow
-                      key={p.value}
-                      provenance={p}
-                      ownerPubkey={isMulti ? p.pubkey : undefined}
-                      selectedMaintainer={repo.selectedMaintainer}
-                    />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Announcements section
+// Sidebar — maintainers + topics
 // ---------------------------------------------------------------------------
 
-function AnnouncementsSection({
-  repo,
-  isMulti,
-}: {
-  repo: ResolvedRepo;
-  isMulti: boolean;
-}) {
-  if (repo.announcements.length === 0) return null;
-
+function Sidebar({ repo }: { repo: ResolvedRepo }) {
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <FileCode2 className="h-4 w-4 text-muted-foreground" />
-        <h3 className="text-sm font-medium text-foreground">
-          {isMulti ? "Announcements" : "Announcement"}
+    <div className="space-y-6">
+      {/* Maintainers */}
+      <section className="space-y-2">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5" />
+          Maintainers
         </h3>
-        {isMulti && (
-          <span className="text-xs text-muted-foreground">
-            — clone URLs and relays are pooled; name, description, and web come
-            from the most recently updated
-          </span>
-        )}
-      </div>
-      <div className="space-y-3">
-        {repo.announcements.map((ev) => (
-          <AnnouncementCard
-            key={ev.id}
-            event={ev}
-            repo={repo}
-            isSelected={ev.pubkey === repo.selectedMaintainer}
-            isMulti={isMulti}
-          />
-        ))}
-      </div>
+        <div className="space-y-2.5">
+          {repo.maintainerSet.map((pk) => (
+            <div key={pk} className="flex items-center gap-2">
+              <UserLink pubkey={pk} avatarSize="md" nameClassName="text-sm" />
+              {pk === repo.selectedMaintainer &&
+                repo.maintainerSet.length > 1 && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 h-4 text-violet-600 border-violet-500/40 dark:text-violet-400"
+                  >
+                    selected
+                  </Badge>
+                )}
+            </div>
+          ))}
+          {repo.requestedMaintainers.length > 0 && (
+            <>
+              <Separator />
+              <p className="text-xs text-muted-foreground">Requested</p>
+              {repo.requestedMaintainers.map((pk) => (
+                <UserLink
+                  key={pk}
+                  pubkey={pk}
+                  avatarSize="sm"
+                  nameClassName="text-xs text-muted-foreground"
+                />
+              ))}
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* Topics */}
+      {repo.labels.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <Tag className="h-3.5 w-3.5" />
+            Topics
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
+            {repo.labels.map((label) => (
+              <Badge key={label} variant="secondary" className="text-xs">
+                {label}
+              </Badge>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Single announcement card
+// Raw announcement card (shown when user expands)
 // ---------------------------------------------------------------------------
 
-function AnnouncementCard({
+function RawAnnouncementCard({
   event,
   repo,
   isSelected,
@@ -315,51 +322,49 @@ function AnnouncementCard({
   );
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <UserLink
-              pubkey={event.pubkey}
-              avatarSize="sm"
-              nameClassName="text-sm font-medium"
-            />
-            {isMulti && isSelected && (
-              <Badge
-                variant="outline"
-                className="text-[10px] px-1.5 py-0 h-4 shrink-0 text-violet-600 border-violet-500/40 dark:text-violet-400"
-              >
-                selected
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <span className="text-xs text-muted-foreground">{createdAt}</span>
-            <AnnouncementEventActions event={event} />
-          </div>
+    <div className="rounded-md border border-border/60 bg-muted/20 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/40">
+        <div className="flex items-center gap-2 min-w-0">
+          <UserLink
+            pubkey={event.pubkey}
+            avatarSize="sm"
+            nameClassName="text-xs font-medium"
+          />
+          {isMulti && isSelected && (
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1.5 py-0 h-4 shrink-0 text-violet-600 border-violet-500/40 dark:text-violet-400"
+            >
+              selected
+            </Badge>
+          )}
         </div>
-      </CardHeader>
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="text-[11px] text-muted-foreground">{createdAt}</span>
+          <AnnouncementEventActions event={event} />
+        </div>
+      </div>
 
-      <CardContent className="pt-0 space-y-3">
-        {/* Name / description — only on the announcement that is the source */}
+      {/* Body */}
+      <div className="px-3 py-2.5 space-y-2.5 text-xs">
+        {/* Name / description */}
         {(isNameSource || isDescSource) && (
           <div className="space-y-1">
             {isNameSource && repo.name && (
-              <div className="flex items-baseline gap-2">
-                <span className="text-xs text-muted-foreground w-20 shrink-0">
+              <div className="flex gap-2">
+                <span className="text-muted-foreground w-20 shrink-0">
                   name
                 </span>
-                <span className="text-sm font-medium">{repo.name}</span>
+                <span className="font-medium">{repo.name}</span>
               </div>
             )}
             {isDescSource && repo.description && (
-              <div className="flex items-baseline gap-2">
-                <span className="text-xs text-muted-foreground w-20 shrink-0">
+              <div className="flex gap-2">
+                <span className="text-muted-foreground w-20 shrink-0">
                   description
                 </span>
-                <span className="text-sm text-foreground/80">
-                  {repo.description}
-                </span>
+                <span className="text-foreground/80">{repo.description}</span>
               </div>
             )}
           </div>
@@ -367,19 +372,18 @@ function AnnouncementCard({
 
         {/* Clone URLs */}
         {cloneUrls.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs text-muted-foreground">Clone URLs</p>
+          <div className="space-y-1">
+            <p className="text-muted-foreground">Clone URLs</p>
             <div className="space-y-1">
               {cloneUrls.map((url) => {
                 const isGrasp = isGraspCloneUrl(url);
                 const domain = isGrasp ? graspCloneUrlDomain(url) : undefined;
-                const npub = isGrasp ? graspCloneUrlNpub(url) : undefined;
                 return (
                   <div
                     key={url}
-                    className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-1.5"
+                    className="flex items-center gap-2 rounded border bg-background/60 px-2 py-1"
                   >
-                    <code className="flex-1 text-xs font-mono truncate text-foreground/80">
+                    <code className="flex-1 font-mono truncate text-foreground/80">
                       {url}
                     </code>
                     {isGrasp && domain && (
@@ -389,11 +393,6 @@ function AnnouncementCard({
                       >
                         grasp
                       </Badge>
-                    )}
-                    {isGrasp && npub && npub !== event.pubkey && (
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {npub.slice(0, 12)}…
-                      </span>
                     )}
                     <CopyButton value={url} />
                   </div>
@@ -405,13 +404,13 @@ function AnnouncementCard({
 
         {/* Relays */}
         {relays.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs text-muted-foreground">Relays</p>
-            <div className="flex flex-wrap gap-1.5">
+          <div className="space-y-1">
+            <p className="text-muted-foreground">Relays</p>
+            <div className="flex flex-wrap gap-1">
               {relays.map((relay) => (
                 <code
                   key={relay}
-                  className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground"
+                  className="font-mono bg-muted/50 px-1.5 py-0.5 rounded text-muted-foreground"
                   title={relay}
                 >
                   {displayRelay(relay)}
@@ -423,10 +422,8 @@ function AnnouncementCard({
 
         {/* Listed maintainers */}
         {listedMaintainers.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs text-muted-foreground">
-              Lists as maintainers
-            </p>
+          <div className="space-y-1">
+            <p className="text-muted-foreground">Lists as maintainers</p>
             <div className="flex flex-wrap gap-2">
               {listedMaintainers.map((pk) => (
                 <UserLink
@@ -441,14 +438,14 @@ function AnnouncementCard({
         )}
 
         {/* Event ID */}
-        <div className="flex items-center gap-2 pt-1 border-t border-border/40">
-          <span className="text-xs text-muted-foreground">event</span>
-          <code className="text-xs font-mono text-muted-foreground/70 truncate flex-1">
+        <div className="flex items-center gap-2 pt-1 border-t border-border/30">
+          <span className="text-muted-foreground/70">event</span>
+          <code className="font-mono text-muted-foreground/60 truncate flex-1">
             {event.id}
           </code>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -467,20 +464,20 @@ function AnnouncementEventActions({ event }: { event: NostrEvent }) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 text-muted-foreground/50 hover:text-foreground"
+          className="h-6 w-6 text-muted-foreground/50 hover:text-foreground"
           title="Share"
           onClick={() => setShareOpen(true)}
         >
-          <Share2 className="h-3.5 w-3.5" />
+          <Share2 className="h-3 w-3" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 text-muted-foreground/50 hover:text-foreground"
+          className="h-6 w-6 text-muted-foreground/50 hover:text-foreground"
           title="Event JSON"
           onClick={() => setJsonOpen(true)}
         >
-          <Braces className="h-3.5 w-3.5" />
+          <Braces className="h-3 w-3" />
         </Button>
       </div>
 
@@ -590,7 +587,7 @@ function CopyButton({ value }: { value: string }) {
     <Button
       variant="ghost"
       size="icon"
-      className="h-6 w-6 shrink-0"
+      className="h-5 w-5 shrink-0"
       onClick={handleCopy}
     >
       {copied ? (
@@ -603,112 +600,130 @@ function CopyButton({ value }: { value: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// CloneUrlRow — sidebar clone URL with optional owner
+// CloneServerList — grouped grasp / git server rows, styled like GitServerPanel
 // ---------------------------------------------------------------------------
 
-function CloneUrlRow({
-  url,
-  ownerPubkey,
-  selectedMaintainer,
+function npubToPubkey(npub: string): string | undefined {
+  try {
+    const decoded = nip19.decode(npub);
+    if (decoded.type === "npub") return decoded.data;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function condenseNpub(npub: string): string {
+  if (npub.length <= 12) return npub;
+  return npub.slice(0, 8) + "…" + npub.slice(-2);
+}
+
+function condenseGraspUrl(url: string): string {
+  const npub = graspCloneUrlNpub(url);
+  if (!npub) return url;
+  return url.replace(npub, condenseNpub(npub));
+}
+
+function CloneServerList({
+  graspCloneUrls,
+  additionalGitServerUrls,
 }: {
-  url: string;
-  ownerPubkey?: string;
-  selectedMaintainer: string;
+  graspCloneUrls: string[];
+  additionalGitServerUrls: string[];
 }) {
+  const hasGrasp = graspCloneUrls.length > 0;
+  const hasAdditional = additionalGitServerUrls.length > 0;
+
+  return (
+    <div className="rounded-md border border-border/60 overflow-hidden">
+      {hasGrasp && (
+        <div>
+          <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            <GraspLogo className="h-3 w-3 text-violet-500" />
+            Grasp Servers
+          </div>
+          {graspCloneUrls.map((url) => (
+            <CloneServerRow key={url} url={url} isGrasp />
+          ))}
+        </div>
+      )}
+
+      {hasGrasp && hasAdditional && <Separator />}
+
+      {hasAdditional && (
+        <div>
+          <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            <Server className="h-3 w-3" />
+            Other Git Servers
+          </div>
+          {additionalGitServerUrls.map((url) => (
+            <CloneServerRow key={url} url={url} isGrasp={false} />
+          ))}
+        </div>
+      )}
+
+      {/* If only one type exists and has no section header needed (single type, no label ambiguity) */}
+      {!hasGrasp && !hasAdditional && null}
+    </div>
+  );
+}
+
+function CloneServerRow({ url, isGrasp }: { url: string; isGrasp: boolean }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(url);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 1500);
   }, [url]);
 
-  const isGrasp = isGraspCloneUrl(url);
-  const domain = isGrasp ? graspCloneUrlDomain(url) : undefined;
+  const npub = isGrasp ? (graspCloneUrlNpub(url) ?? undefined) : undefined;
+  const pubkey = npub ? npubToPubkey(npub) : undefined;
+  const displayUrl = isGrasp ? condenseGraspUrl(url) : url;
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
-        <code className="flex-1 text-sm font-mono truncate text-foreground/80">
-          {url}
-        </code>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          onClick={handleCopy}
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs group transition-colors hover:bg-accent/30 cursor-pointer"
+      aria-label={`Copy clone URL: ${url}`}
+    >
+      <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
+        <p
+          className="font-mono text-[11px] break-all leading-snug text-foreground/80"
+          title={url}
         >
-          {copied ? (
-            <Check className="h-3.5 w-3.5 text-green-500" />
-          ) : (
-            <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
-        </Button>
+          {displayUrl}
+        </p>
+        {isGrasp && (pubkey ?? npub) && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-popover px-1.5 py-0.5 shadow-sm whitespace-nowrap font-sans leading-none shrink-0">
+            {pubkey ? (
+              <>
+                <UserAvatar
+                  pubkey={pubkey}
+                  size="sm"
+                  className="h-3.5 w-3.5 text-[6px] shrink-0"
+                />
+                <UserName
+                  pubkey={pubkey}
+                  className="text-[10px] text-muted-foreground font-normal"
+                />
+              </>
+            ) : (
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {condenseNpub(npub!)}
+              </span>
+            )}
+          </span>
+        )}
       </div>
-      {ownerPubkey && (
-        <div className="flex items-center gap-1.5 px-1">
-          {isGrasp && domain && (
-            <Badge variant="secondary" className="text-[10px]">
-              grasp · {domain}
-            </Badge>
-          )}
-          <UserLink
-            pubkey={ownerPubkey}
-            avatarSize="sm"
-            nameClassName="text-xs text-muted-foreground"
-          />
-          {ownerPubkey === selectedMaintainer && (
-            <Badge
-              variant="outline"
-              className="text-[10px] px-1 py-0 h-3.5 text-violet-600 border-violet-500/40 dark:text-violet-400"
-            >
-              selected
-            </Badge>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// RelayRow — sidebar relay with optional owner
-// ---------------------------------------------------------------------------
-
-function RelayRow({
-  provenance,
-  ownerPubkey,
-  selectedMaintainer,
-}: {
-  provenance: FieldProvenance;
-  ownerPubkey?: string;
-  selectedMaintainer: string;
-}) {
-  return (
-    <div className="space-y-0.5">
-      <p
-        className="text-xs text-muted-foreground font-mono truncate"
-        title={provenance.value}
-      >
-        {displayRelay(provenance.value)}
-      </p>
-      {ownerPubkey && (
-        <div className="flex items-center gap-1.5">
-          <UserLink
-            pubkey={ownerPubkey}
-            avatarSize="sm"
-            nameClassName="text-[10px] text-muted-foreground/70"
-          />
-          {ownerPubkey === selectedMaintainer && (
-            <Badge
-              variant="outline"
-              className="text-[10px] px-1 py-0 h-3 text-violet-600 border-violet-500/40 dark:text-violet-400"
-            >
-              selected
-            </Badge>
-          )}
-        </div>
-      )}
-    </div>
+      <span className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground">
+        {copied ? (
+          <Check className="h-3 w-3 text-emerald-500" />
+        ) : (
+          <Copy className="h-3 w-3" />
+        )}
+      </span>
+    </button>
   );
 }
