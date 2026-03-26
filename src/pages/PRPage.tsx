@@ -749,6 +749,7 @@ export default function PRPage() {
                             key={`patch-push-${node.revision.rootPatch.id}`}
                             revision={node.revision}
                             superseded={node.superseded}
+                            basePath={prBasePath ?? undefined}
                           />
                         );
                       }
@@ -759,6 +760,7 @@ export default function PRPage() {
                             pr={node.pr}
                             superseded={node.superseded}
                             commits={node.commits}
+                            basePath={prBasePath ?? undefined}
                           />
                         );
                       }
@@ -768,6 +770,7 @@ export default function PRPage() {
                             key={`pr-update-${node.update.id}`}
                             update={node.update}
                             superseded={node.superseded}
+                            basePath={prBasePath ?? undefined}
                           />
                         );
                       }

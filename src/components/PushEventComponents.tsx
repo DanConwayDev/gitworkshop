@@ -15,6 +15,7 @@
  */
 
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { GitCommitHorizontal, GitPullRequest, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -30,18 +31,33 @@ import type { PatchRevision } from "@/hooks/usePatchChain";
 function CommitRow({
   shortHash,
   subject,
+  href,
 }: {
   shortHash: string;
   subject: string;
+  href?: string;
 }) {
-  return (
-    <div className="flex items-center gap-2 py-0.5 min-w-0">
+  const inner = (
+    <>
       <span className="font-mono text-[11px] text-muted-foreground/70 shrink-0 w-16">
         {shortHash}
       </span>
       <span className="text-sm text-foreground/80 truncate">{subject}</span>
-    </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <Link
+        to={href}
+        className="flex items-center gap-2 py-0.5 min-w-0 hover:bg-muted/40 rounded px-1 -mx-1 transition-colors"
+      >
+        {inner}
+      </Link>
+    );
+  }
+
+  return <div className="flex items-center gap-2 py-0.5 min-w-0">{inner}</div>;
 }
 
 function SupersededBadge() {
@@ -66,9 +82,11 @@ function SupersededBadge() {
 export function PatchSetPushEvent({
   revision,
   superseded,
+  basePath,
 }: {
   revision: PatchRevision;
   superseded: boolean;
+  basePath?: string;
 }) {
   const { rootPatch, chain } = revision;
 
@@ -81,6 +99,7 @@ export function PatchSetPushEvent({
     () =>
       chain.map((p) => ({
         id: p.id,
+        commitId: p.commitId,
         shortHash: p.commitId?.slice(0, 7) ?? p.id.slice(0, 7),
         subject: p.subject || "(no subject)",
       })),
@@ -125,7 +144,16 @@ export function PatchSetPushEvent({
         {/* Commit list */}
         <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 divide-y divide-border/30">
           {commits.map((c) => (
-            <CommitRow key={c.id} shortHash={c.shortHash} subject={c.subject} />
+            <CommitRow
+              key={c.id}
+              shortHash={c.shortHash}
+              subject={c.subject}
+              href={
+                basePath && c.commitId
+                  ? `${basePath}/commit/${c.commitId}`
+                  : undefined
+              }
+            />
           ))}
         </div>
       </div>
@@ -152,10 +180,12 @@ export function PROpenPushEvent({
   pr,
   commits,
   superseded,
+  basePath,
 }: {
   pr: PR;
   commits?: Array<{ hash: string; subject: string }>;
   superseded: boolean;
+  basePath?: string;
 }) {
   const timeAgo = formatDistanceToNow(new Date(pr.event.created_at * 1000), {
     addSuffix: true,
@@ -167,6 +197,7 @@ export function PROpenPushEvent({
         key: c.hash,
         shortHash: c.hash.slice(0, 7),
         subject: c.subject,
+        href: basePath ? `${basePath}/commit/${c.hash}` : undefined,
       }));
     }
     if (pr.tipCommitId) {
@@ -175,11 +206,12 @@ export function PROpenPushEvent({
           key: pr.tipCommitId,
           shortHash: pr.tipCommitId.slice(0, 7),
           subject: "(commits not yet loaded)",
+          href: undefined,
         },
       ];
     }
     return [];
-  }, [commits, pr.tipCommitId]);
+  }, [commits, pr.tipCommitId, basePath]);
 
   return (
     <div
@@ -224,6 +256,7 @@ export function PROpenPushEvent({
                 key={r.key}
                 shortHash={r.shortHash}
                 subject={r.subject}
+                href={r.href}
               />
             ))}
           </div>
@@ -258,10 +291,12 @@ export function PRUpdatePushEvent({
   update,
   superseded,
   commits,
+  basePath,
 }: {
   update: PRUpdate;
   superseded: boolean;
   commits?: Array<{ hash: string; subject: string }>;
+  basePath?: string;
 }) {
   const timeAgo = formatDistanceToNow(
     new Date(update.event.created_at * 1000),
@@ -274,6 +309,7 @@ export function PRUpdatePushEvent({
         key: c.hash,
         shortHash: c.hash.slice(0, 7),
         subject: c.subject,
+        href: basePath ? `${basePath}/commit/${c.hash}` : undefined,
       }));
     }
     // Fallback: show just the tip commit ID
@@ -283,11 +319,14 @@ export function PRUpdatePushEvent({
           key: update.tipCommitId,
           shortHash: update.tipCommitId.slice(0, 7),
           subject: "(commits not yet loaded)",
+          href: basePath
+            ? `${basePath}/commit/${update.tipCommitId}`
+            : undefined,
         },
       ];
     }
     return [];
-  }, [commits, update.tipCommitId]);
+  }, [commits, update.tipCommitId, basePath]);
 
   return (
     <div
@@ -332,6 +371,7 @@ export function PRUpdatePushEvent({
                 key={r.key}
                 shortHash={r.shortHash}
                 subject={r.subject}
+                href={r.href}
               />
             ))}
           </div>
