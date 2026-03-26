@@ -58,6 +58,38 @@ function displayRelay(url: string): string {
   return url.replace(/^wss?:\/\//, "").replace(/\/$/, "");
 }
 
+/**
+ * Shorten a URL for display: replace any npub1/nsec1/note1/nevent1/naddr1/nprofile1
+ * substrings with a condensed form, then truncate the overall string if still long.
+ */
+function shortenNip19InUrl(url: string): string {
+  // Replace each NIP-19 identifier with a condensed version
+  const shortened = url.replace(
+    /\b(npub1|nsec1|note1|nevent1|naddr1|nprofile1)([0-9a-z]+)/g,
+    (_, prefix: string, rest: string) => {
+      const full = prefix + rest;
+      if (full.length <= 16) return full;
+      return full.slice(0, 10) + "…" + full.slice(-4);
+    },
+  );
+  // If still very long, truncate the whole thing
+  if (shortened.length > 60) {
+    return shortened.slice(0, 57) + "…";
+  }
+  return shortened;
+}
+
+/** Returns true if a relay URL's hostname matches one of the Grasp server domains. */
+function isGraspRelay(relayUrl: string, graspDomains: string[]): boolean {
+  if (!graspDomains.length) return false;
+  try {
+    const hostname = new URL(relayUrl).hostname;
+    return graspDomains.includes(hostname);
+  } catch {
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
@@ -90,19 +122,15 @@ export default function RepoAboutPage() {
 
   return (
     <div className="container max-w-screen-xl px-4 md:px-8 py-6">
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8">
-        {/* Main: simple merged view */}
+      <div className="max-w-2xl space-y-6">
         <MainInfo repo={repo} />
-
-        {/* Sidebar: maintainers + topics */}
-        <Sidebar repo={repo} />
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Main info — description, clone, web, relays, raw announcements toggle
+// Main info — all fields in display order
 // ---------------------------------------------------------------------------
 
 function MainInfo({ repo }: { repo: ResolvedRepo }) {
@@ -111,28 +139,31 @@ function MainInfo({ repo }: { repo: ResolvedRepo }) {
 
   return (
     <div className="space-y-6">
-      {/* Description */}
+      {/* About / description */}
       {repo.description && (
         <p className="text-sm text-foreground/80 leading-relaxed">
           {repo.description}
         </p>
       )}
 
-      {/* Clone URLs */}
-      {repo.cloneUrls.length > 0 && (
+      {/* Labels / topics */}
+      {repo.labels.length > 0 && (
         <section className="space-y-2">
           <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-            <GitBranch className="h-3.5 w-3.5" />
-            Clone
+            <Tag className="h-3.5 w-3.5" />
+            Topics
           </h3>
-          <CloneServerList
-            graspCloneUrls={repo.graspCloneUrls}
-            additionalGitServerUrls={repo.additionalGitServerUrls}
-          />
+          <div className="flex flex-wrap gap-1.5">
+            {repo.labels.map((label) => (
+              <Badge key={label} variant="secondary" className="text-xs">
+                {label}
+              </Badge>
+            ))}
+          </div>
         </section>
       )}
 
-      {/* Web URLs */}
+      {/* Website */}
       {repo.webUrls.length > 0 && (
         <section className="space-y-2">
           <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
@@ -146,34 +177,114 @@ function MainInfo({ repo }: { repo: ResolvedRepo }) {
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:underline"
+                title={url}
+                className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:underline min-w-0"
               >
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                {url}
+                <span className="truncate">{shortenNip19InUrl(url)}</span>
               </a>
             ))}
           </div>
         </section>
       )}
 
-      {/* Relays */}
-      {repo.relays.length > 0 && (
+      {/* Maintainers */}
+      <section className="space-y-2">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5" />
+          Maintainers
+        </h3>
+        <div className="space-y-2.5">
+          {repo.maintainerSet.map((pk) => (
+            <div key={pk} className="flex items-center gap-2">
+              <UserLink pubkey={pk} avatarSize="md" nameClassName="text-sm" />
+              {pk === repo.selectedMaintainer &&
+                repo.maintainerSet.length > 1 && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 h-4 text-violet-600 border-violet-500/40 dark:text-violet-400"
+                  >
+                    selected
+                  </Badge>
+                )}
+            </div>
+          ))}
+          {repo.requestedMaintainers.length > 0 && (
+            <>
+              <Separator />
+              <p className="text-xs text-muted-foreground">Requested</p>
+              {repo.requestedMaintainers.map((pk) => (
+                <UserLink
+                  key={pk}
+                  pubkey={pk}
+                  avatarSize="sm"
+                  nameClassName="text-xs text-muted-foreground"
+                />
+              ))}
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* Grasp Server relays */}
+      {repo.relays.some((r) => isGraspRelay(r, repo.graspServerDomains)) && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <GraspLogo className="h-3.5 w-3.5 text-violet-500" />
+            Grasp Servers
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
+            {repo.relays
+              .filter((r) => isGraspRelay(r, repo.graspServerDomains))
+              .map((relay) => (
+                <code
+                  key={relay}
+                  className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground"
+                  title={relay}
+                >
+                  {displayRelay(relay)}
+                </code>
+              ))}
+          </div>
+        </section>
+      )}
+
+      {/* Other Relays (non-Grasp) */}
+      {repo.relays.some((r) => !isGraspRelay(r, repo.graspServerDomains)) && (
         <section className="space-y-2">
           <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
             <Radio className="h-3.5 w-3.5" />
-            Relays
+            {repo.relays.some((r) => isGraspRelay(r, repo.graspServerDomains))
+              ? "Other Relays"
+              : "Relays"}
           </h3>
           <div className="flex flex-wrap gap-1.5">
-            {repo.relays.map((relay) => (
-              <code
-                key={relay}
-                className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground"
-                title={relay}
-              >
-                {displayRelay(relay)}
-              </code>
-            ))}
+            {repo.relays
+              .filter((r) => !isGraspRelay(r, repo.graspServerDomains))
+              .map((relay) => (
+                <code
+                  key={relay}
+                  className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground"
+                  title={relay}
+                >
+                  {displayRelay(relay)}
+                </code>
+              ))}
           </div>
+        </section>
+      )}
+
+      {/* Clone URLs (Grasp clone URLs + Other Git Servers grouped inside) */}
+      {repo.cloneUrls.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <GitBranch className="h-3.5 w-3.5" />
+            Clone
+          </h3>
+          <CloneServerList
+            graspCloneUrls={repo.graspCloneUrls}
+            additionalGitServerUrls={repo.additionalGitServerUrls}
+          />
         </section>
       )}
 
@@ -216,71 +327,6 @@ function MainInfo({ repo }: { repo: ResolvedRepo }) {
             </div>
           )}
         </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sidebar — maintainers + topics
-// ---------------------------------------------------------------------------
-
-function Sidebar({ repo }: { repo: ResolvedRepo }) {
-  return (
-    <div className="space-y-6">
-      {/* Maintainers */}
-      <section className="space-y-2">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-          <Users className="h-3.5 w-3.5" />
-          Maintainers
-        </h3>
-        <div className="space-y-2.5">
-          {repo.maintainerSet.map((pk) => (
-            <div key={pk} className="flex items-center gap-2">
-              <UserLink pubkey={pk} avatarSize="md" nameClassName="text-sm" />
-              {pk === repo.selectedMaintainer &&
-                repo.maintainerSet.length > 1 && (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] px-1.5 py-0 h-4 text-violet-600 border-violet-500/40 dark:text-violet-400"
-                  >
-                    selected
-                  </Badge>
-                )}
-            </div>
-          ))}
-          {repo.requestedMaintainers.length > 0 && (
-            <>
-              <Separator />
-              <p className="text-xs text-muted-foreground">Requested</p>
-              {repo.requestedMaintainers.map((pk) => (
-                <UserLink
-                  key={pk}
-                  pubkey={pk}
-                  avatarSize="sm"
-                  nameClassName="text-xs text-muted-foreground"
-                />
-              ))}
-            </>
-          )}
-        </div>
-      </section>
-
-      {/* Topics */}
-      {repo.labels.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-            <Tag className="h-3.5 w-3.5" />
-            Topics
-          </h3>
-          <div className="flex flex-wrap gap-1.5">
-            {repo.labels.map((label) => (
-              <Badge key={label} variant="secondary" className="text-xs">
-                {label}
-              </Badge>
-            ))}
-          </div>
-        </section>
       )}
     </div>
   );
