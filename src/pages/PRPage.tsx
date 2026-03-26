@@ -55,6 +55,7 @@ import {
 } from "lucide-react";
 import {
   PatchSetPushEvent,
+  PROpenPushEvent,
   PRUpdatePushEvent,
 } from "@/components/PushEventComponents";
 import { cn } from "@/lib/utils";
@@ -423,6 +424,13 @@ export default function PRPage() {
         ts: number;
       }
     | {
+        type: "pr-open";
+        pr: NonNullable<typeof pr>;
+        superseded: boolean;
+        commits: Array<{ hash: string; subject: string }>;
+        ts: number;
+      }
+    | {
         type: "pr-update";
         update: NonNullable<typeof prUpdates>[0];
         superseded: boolean;
@@ -471,13 +479,26 @@ export default function PRPage() {
         }
       });
     } else if (itemType === "pr") {
-      // Original PR push (the PR event itself acts as the first push)
-      // We don't render a separate push node for the original PR event —
-      // the EventBodyCard above already shows it. PR Updates are the pushes.
-      if (prUpdates) {
-        const sortedUpdates = [...prUpdates].sort(
-          (a, b) => a.event.created_at - b.event.created_at,
-        );
+      // Initial push node: the PR event itself (like GitHub's "opened this PR")
+      if (pr) {
+        const sortedUpdates = prUpdates
+          ? [...prUpdates].sort(
+              (a, b) => a.event.created_at - b.event.created_at,
+            )
+          : [];
+        // The initial push is superseded if any PR Update exists
+        const initialSuperseded = sortedUpdates.length > 0;
+        nodes.push({
+          type: "pr-open",
+          pr,
+          superseded: initialSuperseded,
+          commits: prCommits.map((c) => ({
+            hash: c.hash,
+            subject: c.message.split("\n")[0],
+          })),
+          ts: pr.event.created_at,
+        });
+
         sortedUpdates.forEach((update, idx) => {
           // A PR Update is superseded only if a later update changes the tip
           // to a *different* commit (not just adds on top).
@@ -510,7 +531,7 @@ export default function PRPage() {
       if (a.ts !== b.ts) return a.ts - b.ts;
       // Stable tie-break: push events before comments at same timestamp
       const typeOrder = (t: TimelineNode["type"]) =>
-        t === "patch-push" || t === "pr-update" ? 0 : 1;
+        t === "patch-push" || t === "pr-open" || t === "pr-update" ? 0 : 1;
       return typeOrder(a.type) - typeOrder(b.type);
     });
 
@@ -518,6 +539,8 @@ export default function PRPage() {
   }, [
     itemType,
     patchChain.allRevisions,
+    pr,
+    prCommits,
     prUpdates,
     threadTree,
     renameItems,
@@ -726,6 +749,16 @@ export default function PRPage() {
                             key={`patch-push-${node.revision.rootPatch.id}`}
                             revision={node.revision}
                             superseded={node.superseded}
+                          />
+                        );
+                      }
+                      if (node.type === "pr-open") {
+                        return (
+                          <PROpenPushEvent
+                            key={`pr-open-${node.pr.id}`}
+                            pr={node.pr}
+                            superseded={node.superseded}
+                            commits={node.commits}
                           />
                         );
                       }
