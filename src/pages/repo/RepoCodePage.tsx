@@ -11,36 +11,26 @@ import { Link, useNavigate } from "react-router-dom";
 import { useRepoContext } from "./RepoContext";
 import { useGitPool } from "@/hooks/useGitPool";
 import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
-import { UserLink } from "@/components/UserAvatar";
 import { RefSelector } from "@/components/RefSelector";
 import { GitServerStatus } from "@/components/GitServerStatus";
+import { RepoAboutPanel } from "@/components/RepoAboutPanel";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import type { GitGraspPool, PoolWarning, UrlState } from "@/lib/git-grasp-pool";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Folder,
   FileText,
   ChevronRight,
-  GitBranch,
   GitCommit,
   AlertCircle,
   AlertTriangle,
   Loader2,
   ArrowLeft,
-  Globe,
-  ExternalLink,
   Copy,
   Check,
-  ChevronDown,
   Eye,
   Code,
   Download,
@@ -778,271 +768,8 @@ function FileTreeRow({
 // ---------------------------------------------------------------------------
 
 import type { ResolvedRepo } from "@/lib/nip34";
-import { nip19 } from "nostr-tools";
 function RepoSidebar({ repo }: { repo: ResolvedRepo }) {
-  // Build the nostr:// clone URL for ngit
-  let npub: string | undefined;
-  try {
-    npub = nip19.npubEncode(repo.selectedMaintainer);
-  } catch {
-    npub = undefined;
-  }
-  const nostrCloneUrl = npub ? `nostr://${npub}/${repo.dTag}` : undefined;
-  const nostrCloneCommand = nostrCloneUrl
-    ? `git clone ${nostrCloneUrl}`
-    : undefined;
-
-  const hasAnyCloneUrl =
-    repo.graspCloneUrls.length > 0 || repo.additionalGitServerUrls.length > 0;
-
-  return (
-    <div className="space-y-3 min-w-0">
-      {/* Clone button — always shown if we have a nostr URL or any clone URLs */}
-      {(nostrCloneCommand || hasAnyCloneUrl) && (
-        <CloneDropdown
-          nostrCloneCommand={nostrCloneCommand}
-          nostrCloneUrl={nostrCloneUrl}
-          graspCloneUrls={repo.graspCloneUrls}
-          additionalGitServerUrls={repo.additionalGitServerUrls}
-        />
-      )}
-
-      {/* About card: description + web + maintainers + topics */}
-      <Card className="overflow-hidden">
-        <CardContent className="pt-4 pb-4 space-y-4">
-          {/* About heading + description */}
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              About
-            </p>
-            {repo.description && (
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {repo.description}
-              </p>
-            )}
-          </div>
-
-          {/* Web URLs */}
-          {repo.webUrls.length > 0 && (
-            <div className="space-y-1">
-              {repo.webUrls.map((url) => (
-                <a
-                  key={url}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:underline min-w-0"
-                  title={url}
-                >
-                  <Globe className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{url}</span>
-                </a>
-              ))}
-            </div>
-          )}
-
-          {/* Maintainers */}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Maintainers
-            </p>
-            <div className="space-y-2">
-              {repo.maintainerSet.map((pk) => (
-                <UserLink
-                  key={pk}
-                  pubkey={pk}
-                  avatarSize="sm"
-                  nameClassName="text-sm"
-                />
-              ))}
-            </div>
-            {repo.requestedMaintainers.length > 0 && (
-              <div className="space-y-2 pt-1">
-                <p className="text-xs text-muted-foreground/70">Requested</p>
-                {repo.requestedMaintainers.map((pk) => (
-                  <UserLink
-                    key={pk}
-                    pubkey={pk}
-                    avatarSize="sm"
-                    nameClassName="text-xs text-muted-foreground"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Topics */}
-          {repo.labels.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Topics
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {repo.labels.map((label) => (
-                  <Badge key={label} variant="secondary" className="text-xs">
-                    {label}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Clone dropdown — prominent button that opens a popover
-// ---------------------------------------------------------------------------
-
-function CloneDropdown({
-  nostrCloneCommand,
-  nostrCloneUrl,
-  graspCloneUrls,
-  additionalGitServerUrls,
-}: {
-  nostrCloneCommand: string | undefined;
-  nostrCloneUrl: string | undefined;
-  graspCloneUrls: string[];
-  additionalGitServerUrls: string[];
-}) {
-  const [open, setOpen] = useState(false);
-  const [copiedCommand, setCopiedCommand] = useState(false);
-
-  const handleCopyCommand = async () => {
-    if (!nostrCloneCommand) return;
-    await navigator.clipboard.writeText(nostrCloneCommand);
-    setCopiedCommand(true);
-    setTimeout(() => setCopiedCommand(false), 2000);
-  };
-
-  const hasRawUrls =
-    graspCloneUrls.length > 0 || additionalGitServerUrls.length > 0;
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="default"
-          size="sm"
-          className="w-full justify-between gap-2 bg-violet-600 hover:bg-violet-700 text-white border-0"
-        >
-          <div className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 shrink-0" />
-            <span>Clone</span>
-          </div>
-          <ChevronDown
-            className={cn(
-              "h-4 w-4 shrink-0 transition-transform duration-150",
-              open && "rotate-180",
-            )}
-          />
-        </Button>
-      </PopoverTrigger>
-
-      <PopoverContent
-        className="w-[var(--radix-popover-trigger-width)] p-0 overflow-hidden"
-        align="start"
-        sideOffset={4}
-      >
-        {/* ngit section */}
-        {nostrCloneCommand && nostrCloneUrl && (
-          <div className="p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-foreground">
-                Clone with ngit
-              </p>
-              <a
-                href="https://ngit.dev/install"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1"
-              >
-                Install ngit
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-            {/* Command block */}
-            <div className="flex items-center gap-1.5 rounded-md border bg-muted/50 px-3 py-2 min-w-0">
-              <code
-                className="flex-1 text-xs font-mono text-foreground/90 truncate min-w-0 select-all"
-                title={nostrCloneCommand}
-              >
-                {nostrCloneCommand}
-              </code>
-              <button
-                onClick={handleCopyCommand}
-                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
-                title="Copy command"
-              >
-                {copiedCommand ? (
-                  <Check className="h-3.5 w-3.5 text-green-500" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Raw git URLs */}
-        {hasRawUrls && (
-          <>
-            {nostrCloneCommand && <Separator />}
-            <div className="p-3 space-y-2">
-              <p className="text-xs font-semibold text-foreground">
-                Raw git URLs
-              </p>
-              <div className="space-y-1.5">
-                {graspCloneUrls.map((url) => (
-                  <CloneUrlRow key={url} url={url} />
-                ))}
-                {additionalGitServerUrls.map((url) => (
-                  <CloneUrlRow key={url} url={url} />
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-// ---------------------------------------------------------------------------
-function CloneUrlRow({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 min-w-0">
-      <code
-        className="flex-1 text-xs font-mono truncate text-foreground/80 min-w-0"
-        title={url}
-      >
-        {url}
-      </code>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 shrink-0"
-        onClick={handleCopy}
-        title="Copy URL"
-      >
-        {copied ? (
-          <Check className="h-3.5 w-3.5 text-green-500" />
-        ) : (
-          <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-        )}
-      </Button>
-    </div>
-  );
+  return <RepoAboutPanel repo={repo} variant="sidebar" />;
 }
 
 // ---------------------------------------------------------------------------
