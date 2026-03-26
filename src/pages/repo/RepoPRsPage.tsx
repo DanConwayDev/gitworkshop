@@ -309,25 +309,23 @@ function PRRow({
               pubkey={pr.pubkey}
               className="text-xs font-normal text-muted-foreground"
             />
-            {pr.commentCount > 0 && (
-              <>
-                <span className="text-muted-foreground/40">&middot;</span>
-                <span className="inline-flex items-center gap-0.5">
-                  <MessageCircle className="h-3 w-3" />
-                  {pr.commentCount}
-                </span>
-              </>
-            )}
-            {pr.participantCount > 1 && (
-              <>
-                <span className="text-muted-foreground/40">&middot;</span>
-                <span className="inline-flex items-center gap-0.5">
-                  <Users className="h-3 w-3" />
-                  {pr.participantCount}
-                </span>
-              </>
-            )}
           </div>
+        </div>
+
+        {/* Comment & participant counts — right-aligned */}
+        <div className="flex items-center gap-3 self-center text-xs text-muted-foreground shrink-0">
+          {pr.commentCount > 0 && (
+            <span className="inline-flex items-center gap-0.5">
+              <MessageCircle className="h-3 w-3" />
+              {pr.commentCount}
+            </span>
+          )}
+          {pr.participantCount > 1 && (
+            <span className="inline-flex items-center gap-0.5">
+              <Users className="h-3 w-3" />
+              {pr.participantCount}
+            </span>
+          )}
         </div>
       </Link>
     </li>

@@ -336,25 +336,23 @@ function IssueRow({
               pubkey={issue.pubkey}
               className="text-xs font-normal text-muted-foreground"
             />
-            {issue.commentCount > 0 && (
-              <>
-                <span className="text-muted-foreground/40">&middot;</span>
-                <span className="inline-flex items-center gap-0.5">
-                  <MessageCircle className="h-3 w-3" />
-                  {issue.commentCount}
-                </span>
-              </>
-            )}
-            {issue.participantCount > 1 && (
-              <>
-                <span className="text-muted-foreground/40">&middot;</span>
-                <span className="inline-flex items-center gap-0.5">
-                  <Users className="h-3 w-3" />
-                  {issue.participantCount}
-                </span>
-              </>
-            )}
           </div>
+        </div>
+
+        {/* Comment & participant counts — right-aligned */}
+        <div className="flex items-center gap-3 self-center text-xs text-muted-foreground shrink-0">
+          {issue.commentCount > 0 && (
+            <span className="inline-flex items-center gap-0.5">
+              <MessageCircle className="h-3 w-3" />
+              {issue.commentCount}
+            </span>
+          )}
+          {issue.participantCount > 1 && (
+            <span className="inline-flex items-center gap-0.5">
+              <Users className="h-3 w-3" />
+              {issue.participantCount}
+            </span>
+          )}
         </div>
       </Link>
     </li>
