@@ -26,6 +26,7 @@ import {
   includeAltTag,
   modifyPublicTags,
 } from "applesauce-core/operations";
+import { includeContentHashtags } from "applesauce-core/operations/content";
 import { ISSUE_KIND } from "@/lib/nip34";
 import {
   setSubject,
@@ -69,6 +70,7 @@ export function IssueBlueprint(
     addRepositoryOwnerTag(ownerPubkey),
     setSubject(subject),
     setContent(content),
+    includeContentHashtags(),
     includeAltTag(`Git issue: ${subject}`),
     ...(options?.labels ?? []).map(addIssueLabel),
     // Append p/q tags for NIP-19 references found in the body

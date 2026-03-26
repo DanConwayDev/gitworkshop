@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LabelBadge } from "@/components/LabelBadge";
-import { NostrComposer, composerHasNsec } from "@/components/NostrComposer";
+import {
+  NostrComposer,
+  composerHasNsec,
+  hasPreviewableContent,
+} from "@/components/NostrComposer";
 import { extractContentTags } from "@/lib/nostrContentTags";
 import { Loader2, Plus, X, CircleDot } from "lucide-react";
 
@@ -34,6 +38,7 @@ export function CreateIssueForm({
 
   const [subject, setSubject] = useState("");
   const [content, setContent] = useState("");
+  const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
   const [labelInput, setLabelInput] = useState("");
   const [labels, setLabels] = useState<string[]>([]);
   const [isPending, setIsPending] = useState(false);
@@ -140,15 +145,37 @@ export function CreateIssueForm({
 
       {/* Description */}
       <div className="space-y-1.5">
-        <Label htmlFor="issue-content" className="text-sm font-medium">
-          Description
-        </Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="issue-content" className="text-sm font-medium">
+            Description
+          </Label>
+          {hasPreviewableContent(content) && (
+            <div className="flex items-center gap-1">
+              {(["write", "preview"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`rounded px-2 py-0.5 text-xs font-medium capitalize transition-colors ${
+                    activeTab === tab
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <NostrComposer
           value={content}
           onChange={setContent}
           placeholder="Describe the issue in detail. Markdown is supported."
           disabled={isPending}
           rows={8}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
         />
         <p className="text-xs text-muted-foreground">
           Markdown supported — code blocks, links, lists, etc.
