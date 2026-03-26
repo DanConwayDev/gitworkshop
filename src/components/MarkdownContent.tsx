@@ -367,7 +367,7 @@ function buildComponents(
     // Code block wrapper
     pre: ({ children, ...props }) => (
       <pre
-        className="overflow-x-auto rounded-lg border border-border bg-muted p-4 text-sm leading-relaxed"
+        className="max-w-full overflow-x-auto rounded-lg border border-border bg-muted p-4 text-sm leading-relaxed"
         {...props}
       >
         {children}
@@ -552,7 +552,10 @@ export function MarkdownContent({
 
   return (
     <div
-      className={cn("min-w-0 overflow-hidden", className ?? "markdown-content")}
+      className={cn(
+        "min-w-0 w-full overflow-hidden",
+        className ?? "markdown-content",
+      )}
     >
       <ReactMarkdown
         remarkPlugins={remarkPlugins}

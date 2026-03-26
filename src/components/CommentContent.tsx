@@ -135,7 +135,7 @@ const components: Components = {
 
   // Code block — no syntax highlighting
   pre: ({ children }) => (
-    <pre className="overflow-x-auto rounded-lg border border-border bg-muted p-3 text-sm leading-relaxed my-2">
+    <pre className="max-w-full overflow-x-auto rounded-lg border border-border bg-muted p-3 text-sm leading-relaxed my-2">
       {children}
     </pre>
   ),
@@ -202,7 +202,7 @@ interface CommentContentProps {
 
 export function CommentContent({ content, className }: CommentContentProps) {
   return (
-    <div className={cn("min-w-0 overflow-hidden", className)}>
+    <div className={cn("min-w-0 w-full overflow-hidden", className)}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         components={components}

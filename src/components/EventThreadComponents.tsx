@@ -30,10 +30,10 @@ export function EventBodyCard({ event, content }: EventBodyCardProps) {
   const createdAt = new Date(event.created_at * 1000);
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <UserLink
               pubkey={event.pubkey}
               avatarSize="md"
@@ -46,7 +46,7 @@ export function EventBodyCard({ event, content }: EventBodyCardProps) {
           <EventCardActions event={event} />
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="min-w-0">
         {body ? (
           <Suspense
             fallback={<div className="h-16 animate-pulse bg-muted rounded" />}
@@ -179,7 +179,7 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
     <Card
       id={anchorId}
       ref={cardRef}
-      className={`transition-all duration-700 hover:shadow-sm scroll-mt-20 ${
+      className={`overflow-hidden transition-all duration-700 hover:shadow-sm scroll-mt-20 ${
         highlight === "strong"
           ? "ring-2 ring-violet-500/60 border-violet-500/40 shadow-lg shadow-violet-500/15"
           : highlight === "subtle"
@@ -333,7 +333,7 @@ export function ThreadedComments({
 
   return (
     <div
-      className="border-l pl-1"
+      className="min-w-0 border-l pl-1"
       style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
     >
       {items.map((item) =>

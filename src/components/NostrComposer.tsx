@@ -1,7 +1,7 @@
 /**
  * NostrComposer — a drop-in replacement for <Textarea> with nostr-aware features:
  *
- * - Write / Preview tabs (shown when value is non-empty)
+ * - Write / Preview toggle (bottom toolbar, always visible)
  * - @ mention autocomplete via MentionAutocomplete
  * - NIP-19 paste → nostr: prefix normalisation
  * - nsec guard with inline warning
@@ -10,7 +10,6 @@
 import { useRef, useCallback, useMemo, useState } from "react";
 import { nip19 } from "nostr-tools";
 import { AlertTriangle } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CommentContent } from "@/components/CommentContent";
@@ -32,6 +31,19 @@ const NSEC_RE = /nsec1[023456789acdefghjklmnpqrstuvwxyz]+/;
 const NOSTR_EMBED_RE =
   /nostr:(npub1|nprofile1|note1|nevent1|naddr1)[023456789acdefghjklmnpqrstuvwxyz]+/g;
 
+// Markdown syntax worth previewing: bold, italic, code, headings, links, lists, blockquotes
+const MARKDOWN_RE = /(\*\*|__|\*|_|`|#{1,6} |\[.+\]\(|^[-*+] |^> )/m;
+
+/**
+ * Returns true if the value contains markdown syntax or nostr: identifiers
+ * that would render differently in preview mode.
+ */
+export function hasPreviewableContent(value: string): boolean {
+  if (!value) return false;
+  NOSTR_EMBED_RE.lastIndex = 0;
+  return MARKDOWN_RE.test(value) || NOSTR_EMBED_RE.test(value);
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -44,6 +56,10 @@ export interface NostrComposerProps {
   rows?: number;
   className?: string;
   minRows?: number;
+  /** Controlled preview mode — when provided the toggle is owned by the parent */
+  activeTab?: "write" | "preview";
+  onTabChange?: (tab: "write" | "preview") => void;
+  onFocusChange?: (focused: boolean) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,9 +74,14 @@ export function NostrComposer({
   rows = 6,
   className,
   minRows,
+  activeTab: activeTabProp,
+  onTabChange,
+  onFocusChange,
 }: NostrComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
+  const [internalTab, setInternalTab] = useState<"write" | "preview">("write");
+  const activeTab = activeTabProp ?? internalTab;
+  const _setActiveTab = onTabChange ?? setInternalTab;
 
   // Detect nsec in value
   const hasNsec = NSEC_RE.test(value);
@@ -121,64 +142,38 @@ export function NostrComposer({
     return Array.from(matches);
   }, [value]);
 
-  const showTabs = value.length > 0;
   const minHeight = minRows ? `${minRows * 1.5}rem` : undefined;
 
   return (
     <div className="space-y-2">
-      {showTabs ? (
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) => setActiveTab(v as "write" | "preview")}
-        >
-          <TabsList className="h-8 p-0.5 mb-1">
-            <TabsTrigger value="write" className="h-7 px-3 text-xs">
-              Write
-            </TabsTrigger>
-            <TabsTrigger value="preview" className="h-7 px-3 text-xs">
-              Preview
-            </TabsTrigger>
-          </TabsList>
+      {/* Composer box: textarea (or preview) + bottom toolbar in one bordered unit */}
+      <div className="rounded-md border border-input bg-background/60 focus-within:ring-1 focus-within:ring-ring">
+        {/* Write area */}
+        <div className={cn(activeTab === "preview" ? "hidden" : undefined)}>
+          <WriteArea
+            textareaRef={textareaRef}
+            value={value}
+            onChange={handleChange}
+            onInsertMention={handleInsertMention}
+            onFocusChange={onFocusChange}
+            placeholder={placeholder}
+            disabled={disabled}
+            rows={rows}
+            className={className}
+            minHeight={minHeight}
+          />
+        </div>
 
-          <TabsContent value="write" className="mt-0">
-            <WriteArea
-              textareaRef={textareaRef}
-              value={value}
-              onChange={handleChange}
-              onInsertMention={handleInsertMention}
-              placeholder={placeholder}
-              disabled={disabled}
-              rows={rows}
-              className={className}
-              minHeight={minHeight}
-            />
-          </TabsContent>
-
-          <TabsContent value="preview" className="mt-0">
-            <div
-              className={cn(
-                "rounded-md border border-input bg-background/60 px-3 py-2 text-sm overflow-auto",
-                className,
-              )}
-              style={{ minHeight: minHeight ?? `${rows * 1.5}rem` }}
-            >
-              <CommentContent content={value} />
-            </div>
-          </TabsContent>
-        </Tabs>
-      ) : (
-        <WriteArea
-          textareaRef={textareaRef}
-          value={value}
-          onChange={handleChange}
-          onInsertMention={handleInsertMention}
-          placeholder={placeholder}
-          disabled={disabled}
-          rows={rows}
-          className={className}
-          minHeight={minHeight}
-        />
-      )}
+        {/* Preview area */}
+        {activeTab === "preview" && (
+          <div
+            className={cn("px-3 py-2 text-sm overflow-auto", className)}
+            style={{ minHeight: minHeight ?? `${rows * 1.5}rem` }}
+          >
+            <CommentContent content={value} />
+          </div>
+        )}
+      </div>
 
       {/* nsec guard */}
       {hasNsec && (
@@ -213,6 +208,7 @@ interface WriteAreaProps {
     end: number;
     replacement: string;
   }) => void;
+  onFocusChange?: (focused: boolean) => void;
   placeholder?: string;
   disabled?: boolean;
   rows?: number;
@@ -225,6 +221,7 @@ function WriteArea({
   value,
   onChange,
   onInsertMention,
+  onFocusChange,
   placeholder,
   disabled,
   rows,
@@ -237,10 +234,15 @@ function WriteArea({
         ref={textareaRef as React.RefObject<HTMLTextAreaElement>}
         value={value}
         onChange={onChange}
+        onFocus={() => onFocusChange?.(true)}
+        onBlur={() => onFocusChange?.(false)}
         placeholder={placeholder}
         disabled={disabled}
         rows={rows}
-        className={cn("bg-background/60 resize-y font-mono text-sm", className)}
+        className={cn(
+          "resize-y text-sm border-0 shadow-none focus-visible:ring-0 bg-transparent rounded-b-none",
+          className,
+        )}
         style={minHeight ? { minHeight } : undefined}
       />
       <MentionAutocomplete

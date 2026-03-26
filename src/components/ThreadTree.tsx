@@ -198,7 +198,7 @@ function ThreadComment({ event }: { event: NostrEvent }) {
     <div
       id={anchorId}
       ref={elRef}
-      className={`border-t border-border/40 p-3 scroll-mt-20 transition-colors duration-700 ${
+      className={`min-w-0 overflow-hidden border-t border-border/40 p-3 scroll-mt-20 transition-colors duration-700 ${
         highlight === "strong"
           ? "bg-violet-500/10"
           : highlight === "subtle"
@@ -261,7 +261,7 @@ function ThreadChildren({
 
   return (
     <div
-      className="border-l pl-1"
+      className="min-w-0 border-l pl-1"
       style={{ borderLeftColor: `rgb(59 130 246 / ${lineOpacity})` }}
     >
       {/* Collapse / expand toggle */}

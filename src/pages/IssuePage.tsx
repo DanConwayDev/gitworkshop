@@ -29,7 +29,11 @@ import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
-import { NostrComposer, composerHasNsec } from "@/components/NostrComposer";
+import {
+  NostrComposer,
+  composerHasNsec,
+  hasPreviewableContent,
+} from "@/components/NostrComposer";
 import { usePublish } from "@/hooks/usePublish";
 import { useToast } from "@/hooks/useToast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -258,7 +262,7 @@ export default function IssuePage() {
       <div className="container max-w-screen-xl px-4 md:px-8 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
           {/* Main content */}
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {/* Issue body */}
             {issue ? (
               <EventBodyCard event={issue.event} />
@@ -424,8 +428,12 @@ interface ReplyBoxProps {
 
 function ReplyBox({ issueId, issuePubkey, repoRelays }: ReplyBoxProps) {
   const [body, setBody] = useState("");
+  const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
+  const [focused, setFocused] = useState(false);
   const { publishEvent, isPending } = usePublish();
   const { toast } = useToast();
+
+  const showToggle = focused || hasPreviewableContent(body);
 
   const relayHint = repoRelays[0] ?? "";
 
@@ -484,13 +492,34 @@ function ReplyBox({ issueId, issuePubkey, repoRelays }: ReplyBoxProps) {
           <NostrComposer
             value={body}
             onChange={setBody}
-            placeholder="Leave a comment. Markdown and @mentions supported."
+            placeholder="Leave a comment."
             disabled={isPending}
             rows={4}
             minRows={4}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            onFocusChange={setFocused}
           />
 
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            <div
+              className={`flex items-center gap-1 transition-opacity duration-200 ${showToggle ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+            >
+              {(["write", "preview"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`rounded px-2 py-0.5 text-xs font-medium capitalize transition-colors ${
+                    activeTab === tab
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
             <Button
               type="submit"
               size="sm"
