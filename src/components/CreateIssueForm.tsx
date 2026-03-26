@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { runner } from "@/services/actions";
 import { CreateIssue } from "@/actions/nip34";
 import { useToast } from "@/hooks/useToast";
@@ -13,6 +13,50 @@ import {
 } from "@/components/NostrComposer";
 import { extractContentTags } from "@/lib/nostrContentTags";
 import { Loader2, Plus, X, CircleDot } from "lucide-react";
+
+/** Extract #hashtag words from content, normalised to lowercase. */
+function extractHashtags(text: string): string[] {
+  const matches = text.match(/#([a-zA-Z][a-zA-Z0-9_-]*)/g);
+  if (!matches) return [];
+  return [...new Set(matches.map((m) => m.slice(1).toLowerCase()))];
+}
+
+/**
+ * A label badge for content-derived hashtags. Shows an X button that, when
+ * clicked, displays a brief inline hint explaining how to remove the label.
+ */
+function LockedLabelBadge({ label }: { label: string }) {
+  const [showHint, setShowHint] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleClick = useCallback(() => {
+    setShowHint(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setShowHint(false), 3000);
+  }, []);
+
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <div className="flex items-center gap-0.5">
+        <LabelBadge label={label} />
+        <button
+          type="button"
+          onClick={handleClick}
+          className="ml-0.5 rounded-full p-0.5 text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted transition-colors"
+          aria-label={`Cannot remove label ${label} — derived from #hashtag`}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+      {showHint && (
+        <p className="text-[11px] text-muted-foreground leading-tight max-w-[160px]">
+          Remove <span className="font-mono">#{label}</span> from the
+          description to remove this label.
+        </p>
+      )}
+    </div>
+  );
+}
 
 interface CreateIssueFormProps {
   /** Repository coordinate: "30617:<pubkey>:<d-tag>" */
@@ -43,15 +87,22 @@ export function CreateIssueForm({
   const [labels, setLabels] = useState<string[]>([]);
   const [isPending, setIsPending] = useState(false);
 
+  // Labels derived from #hashtags in the content — read-only, auto-synced
+  const contentLabels = useMemo(() => extractHashtags(content), [content]);
+
   const addLabel = useCallback(() => {
     const trimmed = labelInput.trim().toLowerCase().replace(/\s+/g, "-");
-    if (!trimmed || labels.includes(trimmed)) {
+    if (
+      !trimmed ||
+      labels.includes(trimmed) ||
+      contentLabels.includes(trimmed)
+    ) {
       setLabelInput("");
       return;
     }
     setLabels((prev) => [...prev, trimmed]);
     setLabelInput("");
-  }, [labelInput, labels]);
+  }, [labelInput, labels, contentLabels]);
 
   const removeLabel = useCallback((label: string) => {
     setLabels((prev) => prev.filter((l) => l !== label));
@@ -91,7 +142,10 @@ export function CreateIssueForm({
           trimmedSubject,
           trimmedContent,
           repoRelays,
-          { labels, contentTags: extractContentTags(trimmedContent) },
+          {
+            labels: [...new Set([...contentLabels, ...labels])],
+            contentTags: extractContentTags(trimmedContent),
+          },
         );
 
         toast({
@@ -115,6 +169,7 @@ export function CreateIssueForm({
     [
       subject,
       content,
+      contentLabels,
       labels,
       repoCoord,
       ownerPubkey,
@@ -209,10 +264,18 @@ export function CreateIssueForm({
           </Button>
         </div>
 
-        {labels.length > 0 && (
+        {(contentLabels.length > 0 || labels.length > 0) && (
           <div className="flex flex-wrap gap-1.5 pt-1">
+            {/* Content-derived hashtag labels — locked */}
+            {contentLabels.map((label) => (
+              <LockedLabelBadge key={`content-${label}`} label={label} />
+            ))}
+            {/* Manually added labels — removable */}
             {labels.map((label) => (
-              <div key={label} className="flex items-center gap-0.5">
+              <div
+                key={`manual-${label}`}
+                className="flex items-center gap-0.5"
+              >
                 <LabelBadge label={label} />
                 <button
                   type="button"
