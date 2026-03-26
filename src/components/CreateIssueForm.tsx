@@ -22,38 +22,27 @@ function extractHashtags(text: string): string[] {
 }
 
 /**
- * A label badge for content-derived hashtags. Shows an X button that, when
- * clicked, displays a brief inline hint explaining how to remove the label.
+ * A label badge for content-derived hashtags. Shows a dimmed X button that
+ * fires onLockClick when pressed so the parent can show a shared hint.
  */
-function LockedLabelBadge({ label }: { label: string }) {
-  const [showHint, setShowHint] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleClick = useCallback(() => {
-    setShowHint(true);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setShowHint(false), 3000);
-  }, []);
-
+function LockedLabelBadge({
+  label,
+  onLockClick,
+}: {
+  label: string;
+  onLockClick: () => void;
+}) {
   return (
-    <div className="flex flex-col items-start gap-0.5">
-      <div className="flex items-center gap-0.5">
-        <LabelBadge label={label} />
-        <button
-          type="button"
-          onClick={handleClick}
-          className="ml-0.5 rounded-full p-0.5 text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted transition-colors"
-          aria-label={`Cannot remove label ${label} — derived from #hashtag`}
-        >
-          <X className="h-3 w-3" />
-        </button>
-      </div>
-      {showHint && (
-        <p className="text-[11px] text-muted-foreground leading-tight max-w-[160px]">
-          Remove <span className="font-mono">#{label}</span> from the
-          description to remove this label.
-        </p>
-      )}
+    <div className="flex items-center gap-0.5">
+      <LabelBadge label={label} />
+      <button
+        type="button"
+        onClick={onLockClick}
+        className="ml-0.5 rounded-full p-0.5 text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted transition-colors"
+        aria-label={`Cannot remove label ${label} — derived from #hashtag in description`}
+      >
+        <X className="h-3 w-3" />
+      </button>
     </div>
   );
 }
@@ -86,9 +75,22 @@ export function CreateIssueForm({
   const [labelInput, setLabelInput] = useState("");
   const [labels, setLabels] = useState<string[]>([]);
   const [isPending, setIsPending] = useState(false);
+  const [showHashtagHint, setShowHashtagHint] = useState(false);
+  const hashtagHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // Labels derived from #hashtags in the content — read-only, auto-synced
   const contentLabels = useMemo(() => extractHashtags(content), [content]);
+
+  const handleLockClick = useCallback(() => {
+    setShowHashtagHint(true);
+    if (hashtagHintTimerRef.current) clearTimeout(hashtagHintTimerRef.current);
+    hashtagHintTimerRef.current = setTimeout(
+      () => setShowHashtagHint(false),
+      3500,
+    );
+  }, []);
 
   const addLabel = useCallback(() => {
     const trimmed = labelInput.trim().toLowerCase().replace(/\s+/g, "-");
@@ -265,29 +267,41 @@ export function CreateIssueForm({
         </div>
 
         {(contentLabels.length > 0 || labels.length > 0) && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {/* Content-derived hashtag labels — locked */}
-            {contentLabels.map((label) => (
-              <LockedLabelBadge key={`content-${label}`} label={label} />
-            ))}
-            {/* Manually added labels — removable */}
-            {labels.map((label) => (
-              <div
-                key={`manual-${label}`}
-                className="flex items-center gap-0.5"
-              >
-                <LabelBadge label={label} />
-                <button
-                  type="button"
-                  onClick={() => removeLabel(label)}
-                  disabled={isPending}
-                  className="ml-0.5 rounded-full p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  aria-label={`Remove label ${label}`}
+          <div className="space-y-1.5 pt-1">
+            <div className="flex flex-wrap gap-1.5">
+              {/* Content-derived hashtag labels — locked */}
+              {contentLabels.map((label) => (
+                <LockedLabelBadge
+                  key={`content-${label}`}
+                  label={label}
+                  onLockClick={handleLockClick}
+                />
+              ))}
+              {/* Manually added labels — removable */}
+              {labels.map((label) => (
+                <div
+                  key={`manual-${label}`}
+                  className="flex items-center gap-0.5"
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+                  <LabelBadge label={label} />
+                  <button
+                    type="button"
+                    onClick={() => removeLabel(label)}
+                    disabled={isPending}
+                    className="ml-0.5 rounded-full p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    aria-label={`Remove label ${label}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            {showHashtagHint && (
+              <p className="text-xs text-muted-foreground">
+                Labels derived from <span className="font-mono">#hashtags</span>{" "}
+                in the description are removed by editing the description.
+              </p>
+            )}
           </div>
         )}
       </div>
