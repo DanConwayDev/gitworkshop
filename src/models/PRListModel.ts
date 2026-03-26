@@ -52,10 +52,16 @@ export function PRListModel(coordsCacheKey: string): Model<ResolvedPR[]> {
 
       switchMap((prEvents) => {
         // Filter to root patches only (PRs are always included).
+        // A root patch has t:root but NOT t:root-revision or t:revision-root.
+        // Revision root patches have both t:root and t:root-revision — they
+        // belong to the original root patch's thread, not as separate list entries.
         const events = (prEvents as NostrEvent[]).filter(
           (ev) =>
             ev.kind === PR_KIND ||
-            (ev.kind === PATCH_KIND && hasNameValueTag(ev, "t", "root")),
+            (ev.kind === PATCH_KIND &&
+              hasNameValueTag(ev, "t", "root") &&
+              !hasNameValueTag(ev, "t", "root-revision") &&
+              !hasNameValueTag(ev, "t", "revision-root")),
         );
         if (events.length === 0) return of([] as ResolvedPR[]);
 
