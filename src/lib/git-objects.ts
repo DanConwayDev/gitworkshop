@@ -34,7 +34,7 @@ export async function sha1hex(data: Uint8Array): Promise<string> {
 /**
  * Wrap content with a git object header: `<type> <size>\0<content>`.
  */
-function gitObjectBytes(type: string, content: Uint8Array): Uint8Array {
+export function gitObjectBytes(type: string, content: Uint8Array): Uint8Array {
   const header = encoder.encode(`${type} ${content.length}\0`);
   const full = new Uint8Array(header.length + content.length);
   full.set(header);
