@@ -11,7 +11,7 @@
  * and comment anchors.
  */
 
-import { memo, useEffect, useState, useMemo } from "react";
+import { memo, useEffect, useState, useMemo, useRef, useCallback } from "react";
 import {
   getHighlighter,
   langFromFilename,
@@ -20,6 +20,13 @@ import {
 import type { Highlighter, BundledLanguage } from "shiki";
 import { cn } from "@/lib/utils";
 import { SyncedScrollArea } from "@/components/SyncedScrollArea";
+import { WrapText, ArrowRightToLine } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // ---------------------------------------------------------------------------
 // Theme hook — detect dark mode
@@ -69,6 +76,9 @@ export interface CodeBlockProps {
 // Component
 // ---------------------------------------------------------------------------
 
+/** Columns beyond this threshold mean the file has long lines worth wrapping. */
+const LONG_LINE_THRESHOLD = 120;
+
 export const CodeBlock = memo(function CodeBlock({
   code,
   filename,
@@ -87,6 +97,10 @@ export const CodeBlock = memo(function CodeBlock({
   // Highlighted tokens — null while loading
   const [tokens, setTokens] = useState<ThemedToken[][] | null>(null);
   const [hl, setHl] = useState<Highlighter | null>(null);
+
+  // Word-wrap state — on by default
+  const [wordWrap, setWordWrap] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Load highlighter once
   useEffect(() => {
@@ -144,69 +158,133 @@ export const CodeBlock = memo(function CodeBlock({
     ? String(startLine + lineCount - 1).length
     : 0;
 
-  return (
-    <SyncedScrollArea
-      className={cn(
-        "overflow-x-auto text-[13px] leading-[1.6] font-mono [&::-webkit-scrollbar]:hidden",
-        className,
-      )}
-    >
-      <table className="w-full border-collapse">
-        <tbody>
-          {(tokens ?? plainLines).map((line, i) => {
-            const lineNum = startLine + i;
-            const isHighlighted = highlightLines?.has(lineNum);
+  // Whether any line exceeds the threshold — only show toggle when relevant
+  const hasLongLines = useMemo(
+    () => plainLines.some((l) => l.length > LONG_LINE_THRESHOLD),
+    [plainLines],
+  );
 
-            return (
-              <tr
-                key={lineNum}
-                data-line={lineNum}
-                className={cn(
-                  "group",
-                  isHighlighted && "bg-yellow-500/10 dark:bg-yellow-400/10",
-                )}
+  const toggleWrap = useCallback(() => setWordWrap((w) => !w), []);
+
+  // Alt+Z keyboard shortcut — scoped to this container
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !hasLongLines) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === "z" || e.key === "Z")) {
+        e.preventDefault();
+        toggleWrap();
+      }
+    };
+    el.addEventListener("keydown", handler);
+    return () => el.removeEventListener("keydown", handler);
+  }, [hasLongLines, toggleWrap]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={cn("relative group/codeblock", className)}
+      tabIndex={-1}
+    >
+      {/* Wrap toggle — only shown when there are long lines */}
+      {hasLongLines && (
+        <div className="absolute top-1.5 right-2 z-10 opacity-0 group-hover/codeblock:opacity-100 transition-opacity duration-150">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                onClick={toggleWrap}
+                aria-label={wordWrap ? "Disable word wrap" : "Enable word wrap"}
               >
-                {/* Line number gutter */}
-                {showLineNumbers && (
+                {wordWrap ? (
+                  <WrapText className="h-3.5 w-3.5" />
+                ) : (
+                  <ArrowRightToLine className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs">
+              {wordWrap ? "Disable" : "Enable"} word wrap (Alt+Z)
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      )}
+
+      <SyncedScrollArea
+        className={cn(
+          "text-[13px] leading-[1.6] font-mono [&::-webkit-scrollbar]:hidden",
+          !wordWrap && "overflow-x-auto",
+        )}
+      >
+        <table className="w-full border-collapse">
+          <tbody>
+            {(tokens ?? plainLines).map((line, i) => {
+              const lineNum = startLine + i;
+              const isHighlighted = highlightLines?.has(lineNum);
+
+              return (
+                <tr
+                  key={lineNum}
+                  data-line={lineNum}
+                  className={cn(
+                    "group",
+                    isHighlighted && "bg-yellow-500/10 dark:bg-yellow-400/10",
+                  )}
+                >
+                  {/* Line number gutter */}
+                  {showLineNumbers && (
+                    <td
+                      className={cn(
+                        "select-none text-right align-top px-3 py-0",
+                        "text-muted-foreground/40 group-hover:text-muted-foreground/70",
+                        "transition-colors duration-75",
+                        "sticky left-0 bg-background",
+                        isHighlighted &&
+                          "bg-yellow-500/10 dark:bg-yellow-400/10",
+                      )}
+                      style={{ minWidth: `${gutterWidth + 2}ch` }}
+                    >
+                      {lineNum}
+                    </td>
+                  )}
+
+                  {/* Code content */}
                   <td
                     className={cn(
-                      "select-none text-right align-top px-3 py-0",
-                      "text-muted-foreground/40 group-hover:text-muted-foreground/70",
-                      "transition-colors duration-75",
-                      "sticky left-0 bg-background",
-                      isHighlighted && "bg-yellow-500/10 dark:bg-yellow-400/10",
+                      "px-4 py-0",
+                      wordWrap
+                        ? "whitespace-pre-wrap break-all"
+                        : "whitespace-pre",
                     )}
-                    style={{ minWidth: `${gutterWidth + 2}ch` }}
                   >
-                    {lineNum}
-                  </td>
-                )}
-
-                {/* Code content */}
-                <td className="px-4 py-0 whitespace-pre">
-                  {Array.isArray(line) ? (
-                    // Highlighted tokens
-                    (line as ThemedToken[]).map((token, j) => (
-                      <span key={j} style={{ color: token.color }}>
-                        {token.content}
+                    {Array.isArray(line) ? (
+                      // Highlighted tokens
+                      (line as ThemedToken[]).map((token, j) => (
+                        <span key={j} style={{ color: token.color }}>
+                          {token.content}
+                        </span>
+                      ))
+                    ) : (
+                      // Plain text fallback
+                      <span className="text-foreground/85">
+                        {line as string}
                       </span>
-                    ))
-                  ) : (
-                    // Plain text fallback
-                    <span className="text-foreground/85">{line as string}</span>
-                  )}
-                  {/* Ensure empty lines still have height */}
-                  {((Array.isArray(line) &&
-                    (line as ThemedToken[]).length === 0) ||
-                    (!Array.isArray(line) && (line as string) === "")) && (
-                    <span>{"\n"}</span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </SyncedScrollArea>
+                    )}
+                    {/* Ensure empty lines still have height */}
+                    {((Array.isArray(line) &&
+                      (line as ThemedToken[]).length === 0) ||
+                      (!Array.isArray(line) && (line as string) === "")) && (
+                      <span>{"\n"}</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </SyncedScrollArea>
+    </div>
   );
 });

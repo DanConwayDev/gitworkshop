@@ -34,8 +34,16 @@ import {
   Minus,
   AlertTriangle,
   Loader2,
+  WrapText,
+  ArrowRightToLine,
 } from "lucide-react";
 import type { FileChange } from "@/lib/git-grasp-pool";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // ---------------------------------------------------------------------------
 // Theme hook — detect dark mode (same as CodeBlock)
@@ -199,6 +207,9 @@ function FileDiffCardHeader({
   fileTo,
   additions,
   deletions,
+  hasLongLines,
+  wordWrap,
+  onToggleWrap,
 }: {
   collapsed: boolean;
   onToggle: () => void;
@@ -213,44 +224,54 @@ function FileDiffCardHeader({
   /** undefined while loading (stats not yet known) */
   additions?: number;
   deletions?: number;
+  /** Whether any diff line exceeds the long-line threshold */
+  hasLongLines?: boolean;
+  /** Current word-wrap state */
+  wordWrap?: boolean;
+  /** Called when the wrap toggle button is clicked */
+  onToggleWrap?: () => void;
 }) {
   const FileIcon = isNew ? FilePlus2 : isDeleted ? FileX2 : FileDiff;
 
   return (
-    <button
-      onClick={onToggle}
+    <div
       className={cn(
-        "flex items-center gap-2 w-full px-3 py-2 text-left",
+        "flex items-center gap-2 w-full px-3 py-2",
         "bg-muted/30 hover:bg-muted/50 transition-colors",
         "text-sm",
       )}
     >
-      {collapsed ? (
-        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-      ) : (
-        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-      )}
-      <FileIcon
-        className={cn(
-          "h-3.5 w-3.5 shrink-0",
-          isNew
-            ? "text-green-600 dark:text-green-400"
-            : isDeleted
-              ? "text-red-600 dark:text-red-400"
-              : "text-muted-foreground",
-        )}
-      />
-      <span className="font-mono text-xs truncate min-w-0 flex-1">
-        {isRenamed ? (
-          <>
-            <span className="text-muted-foreground">{fileFrom}</span>
-            <span className="text-muted-foreground/50 mx-1">→</span>
-            <span className="text-foreground">{fileTo}</span>
-          </>
+      <button
+        onClick={onToggle}
+        className="flex items-center gap-2 min-w-0 flex-1 text-left"
+      >
+        {collapsed ? (
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         ) : (
-          <span className="text-foreground">{filename}</span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         )}
-      </span>
+        <FileIcon
+          className={cn(
+            "h-3.5 w-3.5 shrink-0",
+            isNew
+              ? "text-green-600 dark:text-green-400"
+              : isDeleted
+                ? "text-red-600 dark:text-red-400"
+                : "text-muted-foreground",
+          )}
+        />
+        <span className="font-mono text-xs truncate min-w-0 flex-1">
+          {isRenamed ? (
+            <>
+              <span className="text-muted-foreground">{fileFrom}</span>
+              <span className="text-muted-foreground/50 mx-1">→</span>
+              <span className="text-foreground">{fileTo}</span>
+            </>
+          ) : (
+            <span className="text-foreground">{filename}</span>
+          )}
+        </span>
+      </button>
 
       {/* Stats — omitted while loading */}
       {additions !== undefined || deletions !== undefined ? (
@@ -278,7 +299,34 @@ function FileDiffCardHeader({
           ))}
         </span>
       )}
-    </button>
+
+      {/* Wrap toggle — only shown when there are long lines and card is open */}
+      {!collapsed && hasLongLines && onToggleWrap !== undefined && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleWrap();
+              }}
+              aria-label={wordWrap ? "Disable word wrap" : "Enable word wrap"}
+            >
+              {wordWrap ? (
+                <WrapText className="h-3.5 w-3.5" />
+              ) : (
+                <ArrowRightToLine className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs">
+            {wordWrap ? "Disable" : "Enable"} word wrap (Alt+Z)
+          </TooltipContent>
+        </Tooltip>
+      )}
+    </div>
   );
 }
 
@@ -428,6 +476,8 @@ export const DiffView = memo(function DiffView({
 
 /** Files with more total changed lines than this are hidden until explicitly loaded. */
 const LARGE_DIFF_THRESHOLD = 1000;
+/** Columns beyond this threshold mean the diff has long lines worth wrapping. */
+const LONG_LINE_THRESHOLD = 120;
 
 const FileDiffCard = memo(function FileDiffCard({
   file,
@@ -456,6 +506,10 @@ const FileDiffCard = memo(function FileDiffCard({
   const [hidden, setHidden] = useState(isLarge);
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const toggle = useCallback(() => setCollapsed((c) => !c), []);
+
+  // Word-wrap state — on by default
+  const [wordWrap, setWordWrap] = useState(true);
+  const toggleWrap = useCallback(() => setWordWrap((w) => !w), []);
 
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -511,6 +565,12 @@ const FileDiffCard = memo(function FileDiffCard({
     return lines;
   }, [file.chunks]);
 
+  // Whether any diff line exceeds the threshold
+  const hasLongLines = useMemo(
+    () => allLines.some((l) => l.length > LONG_LINE_THRESHOLD),
+    [allLines],
+  );
+
   // Highlighted tokens
   const [tokenMap, setTokenMap] = useState<TokenMap>(new Map());
 
@@ -525,10 +585,25 @@ const FileDiffCard = memo(function FileDiffCard({
     };
   }, [hl, allLines, lang, theme, collapsed]);
 
+  // Alt+Z keyboard shortcut — scoped to this card
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || !hasLongLines) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === "z" || e.key === "Z")) {
+        e.preventDefault();
+        toggleWrap();
+      }
+    };
+    el.addEventListener("keydown", handler);
+    return () => el.removeEventListener("keydown", handler);
+  }, [hasLongLines, toggleWrap]);
+
   return (
     <div
       ref={cardRef}
       id={fileDiffCardId(filename)}
+      tabIndex={-1}
       className={cn(
         "rounded-lg border overflow-hidden scroll-mt-20 transition-colors",
         isActive
@@ -547,6 +622,9 @@ const FileDiffCard = memo(function FileDiffCard({
         fileTo={file.to}
         additions={file.additions}
         deletions={file.deletions}
+        hasLongLines={hasLongLines}
+        wordWrap={wordWrap}
+        onToggleWrap={toggleWrap}
       />
 
       {/* Large diff notice — shown instead of content until user loads it */}
@@ -571,7 +649,12 @@ const FileDiffCard = memo(function FileDiffCard({
 
       {/* Diff content */}
       {!collapsed && !hidden && (
-        <SyncedScrollArea>
+        <SyncedScrollArea
+          className={cn(
+            "[&::-webkit-scrollbar]:hidden",
+            !wordWrap && "overflow-x-auto",
+          )}
+        >
           <table className="w-full border-collapse text-[13px] leading-[1.6] font-mono">
             <tbody>
               {file.chunks.map((chunk, ci) => (
@@ -580,6 +663,7 @@ const FileDiffCard = memo(function FileDiffCard({
                   chunk={chunk}
                   tokenMap={tokenMap}
                   isFirstChunk={ci === 0}
+                  wordWrap={wordWrap}
                 />
               ))}
             </tbody>
@@ -609,10 +693,12 @@ function ChunkRows({
   chunk,
   tokenMap,
   isFirstChunk,
+  wordWrap,
 }: {
   chunk: parseDiff.Chunk;
   tokenMap: TokenMap;
   isFirstChunk: boolean;
+  wordWrap: boolean;
 }) {
   return (
     <>
@@ -633,7 +719,12 @@ function ChunkRows({
 
       {/* Change lines */}
       {chunk.changes.map((change, i) => (
-        <DiffLine key={i} change={change} tokenMap={tokenMap} />
+        <DiffLine
+          key={i}
+          change={change}
+          tokenMap={tokenMap}
+          wordWrap={wordWrap}
+        />
       ))}
     </>
   );
@@ -646,9 +737,11 @@ function ChunkRows({
 function DiffLine({
   change,
   tokenMap,
+  wordWrap,
 }: {
   change: parseDiff.Change;
   tokenMap: TokenMap;
+  wordWrap: boolean;
 }) {
   const text = change.content.slice(1); // strip leading +/-/space
   const tokens = tokenMap.get(text);
@@ -738,7 +831,12 @@ function DiffLine({
       </td>
 
       {/* Code content */}
-      <td className="px-3 py-0 whitespace-pre">
+      <td
+        className={cn(
+          "px-3 py-0",
+          wordWrap ? "whitespace-pre-wrap break-all" : "whitespace-pre",
+        )}
+      >
         {tokens ? (
           tokens.map((token, j) => (
             <span key={j} style={{ color: token.color }}>
