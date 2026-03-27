@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import type { ResolvedRepository } from "@/hooks/useResolvedRepository";
 import type {
-  ResolvedIssue,
+  ResolvedIssueLite,
   ResolvedPRLite,
   RepoQueryOptions,
 } from "@/lib/nip34";
@@ -13,7 +13,7 @@ export interface RepoContextValue {
   repoId: string;
   /** The resolved repository data and relay groups. */
   resolved: ResolvedRepository | undefined;
-  issues: ResolvedIssue[] | undefined;
+  issues: ResolvedIssueLite[] | undefined;
   prs: ResolvedPRLite[] | undefined;
   queryOptions: RepoQueryOptions;
   /** Set when the route was a NIP-05 address (e.g. "user@domain.com"). */

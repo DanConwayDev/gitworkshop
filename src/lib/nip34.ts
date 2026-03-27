@@ -591,7 +591,7 @@ export interface ResolvedRepo {
 }
 
 // ---------------------------------------------------------------------------
-// ResolvedIssue — merged view of an issue + its essentials events
+// ResolvedIssueLite — lightweight summary for list pages
 // ---------------------------------------------------------------------------
 
 /**
@@ -605,8 +605,11 @@ export interface ResolvedRepo {
  * `status` is the single source of truth for deletion — a valid NIP-09
  * deletion request sets status to "deleted", which takes precedence over any
  * status event.
+ *
+ * For the full detail-page view (with comments, zaps, timeline nodes, etc.),
+ * see `ResolvedIssue` which extends this interface.
  */
-export interface ResolvedIssue {
+export interface ResolvedIssueLite {
   /** The raw issue event ID */
   id: string;
   /** The issue author's pubkey */
@@ -737,7 +740,7 @@ function buildResolvedList(
   zapEvents: NostrEvent[],
   maintainerSet: Set<string>,
   options: ResolveEssentialsOptions = {},
-): (ResolvedIssue & { itemType?: PRItemType })[] {
+): (ResolvedIssueLite & { itemType?: PRItemType })[] {
   const { mergeStatusRequiresMaintainer = false, prUpdateEvents } = options;
 
   // ── Index root events ────────────────────────────────────────────────────
@@ -938,7 +941,7 @@ function buildResolvedList(
 }
 
 /**
- * Build a sorted list of ResolvedIssue objects from raw events. Pure function,
+ * Build a sorted list of ResolvedIssueLite objects from raw events. Pure function,
  * no side effects. Comment/zap counts are 0 until useNip34ItemLoader (tier:
  * "thread") fetches them into the store.
  */
@@ -949,7 +952,7 @@ export function buildResolvedIssues(
   zapEvents: NostrEvent[],
   maintainerSet: Set<string>,
   options: ResolveEssentialsOptions = {},
-): ResolvedIssue[] {
+): ResolvedIssueLite[] {
   return buildResolvedList(
     rootEvents,
     essentialEvents,
@@ -1196,12 +1199,76 @@ export function resolveItemEssentials(
 
 /**
  * The result of resolving a single item's essentials. Extends the core
- * ResolvedIssue fields with the sorted rename events (needed by the detail
+ * ResolvedIssueLite fields with the sorted rename events (needed by the detail
  * page for the conversation timeline).
  */
-export interface ResolvedItemEssentials extends ResolvedIssue {
+export interface ResolvedItemEssentials extends ResolvedIssueLite {
   /** Sorted subject-rename events (oldest first), for timeline display. */
   subjectRenames: { createdAt: number; id: string; value: string }[];
+}
+
+// ---------------------------------------------------------------------------
+// ResolvedIssue — full detail-page view of an issue
+// ---------------------------------------------------------------------------
+
+/**
+ * A node in the issue conversation timeline — interleaved comments and
+ * subject renames, sorted chronologically.
+ */
+export type IssueTimelineNode =
+  | {
+      type: "rename";
+      event: NostrEvent;
+      oldSubject: string;
+      newSubject: string;
+      ts: number;
+    }
+  | {
+      type: "thread";
+      node: import("@/lib/threadTree").ThreadTreeNode;
+      ts: number;
+    };
+
+/**
+ * The fully-resolved detail-page view of an issue.
+ *
+ * Extends `ResolvedIssueLite` (the list-page summary) with full comment list,
+ * zaps, timeline nodes, rename items, participants, and the raw root event.
+ *
+ * Produced by `IssueDetailModel`. The UI page consumes this directly without
+ * needing to call per-item hooks for status, labels, subject, etc.
+ */
+export interface ResolvedIssue extends ResolvedIssueLite {
+  /** Issue body (same as content, provided for symmetry with ResolvedPR) */
+  body: string;
+
+  /**
+   * Pre-built conversation timeline: interleaved comments and subject renames,
+   * sorted chronologically.
+   */
+  timelineNodes: IssueTimelineNode[];
+
+  /** All NIP-22 comments (kind:1111) for this issue. */
+  comments: NostrEvent[];
+
+  /** Zap receipts (kind:9735) for this issue. */
+  zaps: NostrEvent[];
+
+  /** Sorted subject-rename events with old/new subjects for display. */
+  renameItems: {
+    event: NostrEvent;
+    oldSubject: string;
+    newSubject: string;
+  }[];
+
+  /** All unique participant pubkeys (author + commenters). */
+  participants: string[];
+
+  /** The raw root event (kind:1621). */
+  rootEvent: NostrEvent;
+
+  /** The effective maintainer set. */
+  maintainers: Set<string>;
 }
 
 // ---------------------------------------------------------------------------

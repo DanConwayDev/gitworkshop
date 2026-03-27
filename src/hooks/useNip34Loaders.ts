@@ -305,19 +305,3 @@ export function useNip34ItemLoaderBatch(
     );
   }, [idsKey, inboxDeltaKey, tier === "thread"]);
 }
-
-// ---------------------------------------------------------------------------
-// Backward-compat alias — remove once all call sites are updated
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use useNip34ItemLoader instead */
-export function useNip34Loaders(
-  itemId: string | undefined,
-  repoRelayGroup: RelayGroup | undefined,
-  options?: { includeAuthorNip65?: boolean },
-): void {
-  useNip34ItemLoader(itemId, repoRelayGroup, {
-    tier: "thread",
-    includeAuthorNip65: options?.includeAuthorNip65,
-  });
-}

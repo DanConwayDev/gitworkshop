@@ -9,21 +9,10 @@ import {
   EventBodyCard,
   EventBodyCardSkeleton,
   CommentSkeleton,
-  ThreadedComments,
+  SubjectRenameCard,
 } from "@/components/EventThreadComponents";
-import { getThreadTree } from "@/lib/threadTree";
-import { use$ } from "@/hooks/use$";
-import { useEventStore } from "@/hooks/useEventStore";
-import {
-  useIssueComments,
-  useIssueLabels,
-  useIssueStatus,
-  useIssueZaps,
-  useIssueSubjectRenames,
-  useIssueMaintainers,
-  resolveCurrentSubject,
-} from "@/hooks/useIssues";
-import { useNip34Loaders } from "@/hooks/useNip34Loaders";
+import { ThreadTree } from "@/components/ThreadTree";
+import { useResolvedIssue } from "@/hooks/useResolvedIssue";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -34,159 +23,37 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, MessageCircle, Zap, Users, Clock } from "lucide-react";
-import { Issue } from "@/casts/Issue";
-import { ISSUE_KIND } from "@/lib/nip34";
-import { gitIndexRelays, relayCurationMode } from "@/services/settings";
-import { pool } from "@/services/nostr";
-import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
-import { castTimelineStream } from "applesauce-common/observable";
-import type { CastRefEventStore } from "applesauce-common/casts/cast";
-import type { Filter } from "applesauce-core/helpers";
-import type { Observable } from "rxjs";
 
 export default function IssuePage() {
   const { pubkey, repoId, resolved, issueId, nip05 } = useRepoContext();
   const repo = resolved?.repo;
-  const repoRelayGroup = resolved?.repoRelayGroup;
-  const extraRelaysForMaintainerMailboxCoverage =
-    resolved?.extraRelaysForMaintainerMailboxCoverage;
 
-  // Respect the user's relay curation preference.
-  const curationMode = use$(relayCurationMode);
-
-  const store = useEventStore();
-  const castStore = store as unknown as CastRefEventStore;
-
-  // Fetch the issue event via the repo relay group when available;
-  // fall back to gitIndexRelays for initial discovery before the group is ready.
-  use$(() => {
-    if (!issueId) return undefined;
-    const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
-    if (repoRelayGroup) {
-      return repoRelayGroup
-        .subscription(issueFilters)
-        .pipe(onlyEvents(), mapEventsToStore(store));
-    }
-    return pool
-      .subscription(gitIndexRelays.getValue(), issueFilters)
-      .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [issueId, repoRelayGroup, store]);
-
-  // In outbox mode, also fetch the issue from the extra maintainer mailbox
-  // relays in case it was published only there.
-  use$(() => {
-    if (
-      !issueId ||
-      curationMode !== "outbox" ||
-      !extraRelaysForMaintainerMailboxCoverage
-    )
-      return undefined;
-    const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
-    return extraRelaysForMaintainerMailboxCoverage
-      .subscription(issueFilters)
-      .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [issueId, curationMode, extraRelaysForMaintainerMailboxCoverage, store]);
-
-  // Subscribe to store, cast to Issue
-  const issues = use$(() => {
-    if (!issueId) return undefined;
-    const issueFilters: Filter[] = [{ kinds: [ISSUE_KIND], ids: [issueId] }];
-    return store
-      .timeline(issueFilters)
-      .pipe(castTimelineStream(Issue, castStore)) as unknown as Observable<
-      Issue[]
-    >;
-  }, [issueId, store]);
-
-  const issue = issues?.[0];
-
-  // Trigger two-tier loading for this issue via the repo relay group.
-  // In outbox mode, also enable author NIP-65 inbox fetching for maximum
-  // completeness — the loader handles the delta internally.
-  useNip34Loaders(issueId, repoRelayGroup, {
-    includeAuthorNip65: curationMode === "outbox",
-  });
-
-  // Compute the effective maintainer set for this issue.
-  // On IssuePage we always have the selected maintainer from the URL, so pass
-  // the resolved maintainerSet directly (or undefined while it's loading).
+  // Compute the effective maintainer set.
   const selectedMaintainers = useMemo(
     () => (repo?.maintainerSet ? new Set(repo.maintainerSet) : undefined),
     [repo?.maintainerSet],
   );
-  // useIssueMaintainers is called here to satisfy the rules of hooks even
-  // though we pass selectedMaintainers directly — it short-circuits internally.
-  useIssueMaintainers(issueId, selectedMaintainers);
 
-  const issuePubkey = issue?.pubkey;
-  const status = useIssueStatus(issueId, issuePubkey, selectedMaintainers);
-  const nip32Labels = useIssueLabels(issueId, issuePubkey, selectedMaintainers);
-  const comments = useIssueComments(issueId);
-  const zaps = useIssueZaps(issueId);
-  const subjectRenames = useIssueSubjectRenames(
+  // ── Unified issue resolution ─────────────────────────────────────────────
+  const issue = useResolvedIssue(
     issueId,
-    issuePubkey,
+    resolved?.repoRelayGroup,
+    resolved?.extraRelaysForMaintainerMailboxCoverage,
     selectedMaintainers,
   );
 
-  // Resolve the current (effective) subject from pre-filtered rename events.
-  const currentSubject = resolveCurrentSubject(
-    issue?.subject ?? "",
-    subjectRenames,
-  );
-
-  // Authorisation: can the logged-in user edit the subject / status?
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const activeAccount = useActiveAccount();
   const canEdit = useMemo(() => {
     if (!activeAccount || !issue) return false;
-    const pk = activeAccount.pubkey;
-    if (pk === issue.pubkey) return true;
-    return selectedMaintainers?.has(pk) ?? false;
-  }, [activeAccount, issue, selectedMaintainers]);
-  const canEditSubject = canEdit;
-
-  // Merge labels from the issue's own t-tags with any NIP-32 label events.
-  // Deduplicated and sorted for stable rendering.
-  const allLabels = useMemo(() => {
-    const merged = new Set([...(issue?.labels ?? []), ...nip32Labels]);
-    return Array.from(merged).sort();
-  }, [issue?.labels, nip32Labels]);
-
-  // Participants: issue author + comment authors
-  const participants = useMemo(() => {
-    const pubkeys = new Set<string>();
-    if (issue) pubkeys.add(issue.pubkey);
-    if (comments) {
-      for (const c of comments) pubkeys.add(c.pubkey);
-    }
-    return Array.from(pubkeys);
-  }, [issue, comments]);
-
-  // Build the thread tree from the issue event + comments.
-  // Subject renames are interleaved at the top level chronologically.
-  const threadTree = useMemo(() => {
-    if (!issue || !comments) return undefined;
-    return getThreadTree(issue.event, comments);
-  }, [issue, comments]);
-
-  // Compute subject rename items with old/new subjects for display.
-  const renameItems = useMemo(() => {
-    if (!subjectRenames || subjectRenames.length === 0) return [];
-    let prevSubject = issue?.subject ?? "";
-    return subjectRenames.map((ev) => {
-      const newSubject =
-        ev.tags.find(([t, , ns]) => t === "l" && ns === "#subject")?.[1] ??
-        prevSubject;
-      const item = { event: ev, newSubject, oldSubject: prevSubject };
-      prevSubject = newSubject;
-      return item;
-    });
-  }, [subjectRenames, issue?.subject]);
+    return issue.authorisedUsers.has(activeAccount.pubkey);
+  }, [activeAccount, issue]);
 
   useSeoMeta({
-    title: issue ? `${currentSubject || issue.subject} - ngit` : "Issue - ngit",
-    description: issue?.content.slice(0, 160) ?? "Loading issue...",
+    title: issue
+      ? `${issue.currentSubject || issue.originalSubject} - ngit`
+      : "Issue - ngit",
+    description: issue?.body.slice(0, 160) ?? "Loading issue...",
   });
 
   return (
@@ -197,11 +64,11 @@ export default function IssuePage() {
           {issue ? (
             <div>
               <div className="flex items-start gap-3 mb-3">
-                <StatusBadge status={status} className="mt-1" />
+                <StatusBadge status={issue.status} className="mt-1" />
                 <EditableSubject
                   issueId={issue.id}
-                  currentSubject={currentSubject || issue.subject}
-                  canEdit={canEditSubject}
+                  currentSubject={issue.currentSubject || issue.originalSubject}
+                  canEdit={canEdit}
                   repoRelays={repo?.relays}
                 />
               </div>
@@ -215,12 +82,14 @@ export default function IssuePage() {
                 <div className="flex items-center gap-1">
                   <Clock className="h-3.5 w-3.5" />
                   <span>
-                    {formatDistanceToNow(issue.createdAt, { addSuffix: true })}
+                    {formatDistanceToNow(new Date(issue.createdAt * 1000), {
+                      addSuffix: true,
+                    })}
                   </span>
                 </div>
-                {allLabels.length > 0 && (
+                {issue.labels.length > 0 && (
                   <div className="flex gap-1.5 flex-wrap">
-                    {allLabels.map((label) => (
+                    {issue.labels.map((label) => (
                       <LabelBadge key={label} label={label} />
                     ))}
                   </div>
@@ -250,7 +119,7 @@ export default function IssuePage() {
           <div className="min-w-0 space-y-4">
             {/* Issue body */}
             {issue ? (
-              <EventBodyCard event={issue.event} />
+              <EventBodyCard event={issue.rootEvent} content={issue.body} />
             ) : (
               <EventBodyCardSkeleton />
             )}
@@ -260,46 +129,64 @@ export default function IssuePage() {
               <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 <MessageCircle className="h-4 w-4" />
                 <span>
-                  {comments
-                    ? `${comments.length} ${comments.length === 1 ? "comment" : "comments"}`
+                  {issue
+                    ? `${issue.commentCount} ${issue.commentCount === 1 ? "comment" : "comments"}`
                     : "Loading comments..."}
                 </span>
               </div>
 
               <Separator />
 
-              {!comments ? (
+              {!issue ? (
                 <div className="space-y-3">
                   {Array.from({ length: 2 }).map((_, i) => (
                     <CommentSkeleton key={i} />
                   ))}
                 </div>
-              ) : threadTree &&
-                threadTree.children.length === 0 &&
-                renameItems.length === 0 ? (
+              ) : issue.timelineNodes.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground/60 text-sm">
                   No comments yet. The conversation awaits its first voice.
                 </div>
-              ) : threadTree ? (
-                <ThreadedComments
-                  tree={threadTree}
-                  renameItems={renameItems}
-                  threadContext={
-                    activeAccount && issue
-                      ? {
-                          rootEvent: issue.event,
-                          repoRelays: repo?.relays ?? [],
+              ) : (
+                <div
+                  className="min-w-0 border-l pl-1 space-y-0.5"
+                  style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
+                >
+                  {issue.timelineNodes.map((node, idx) => {
+                    if (node.type === "rename") {
+                      return (
+                        <SubjectRenameCard
+                          key={node.event.id}
+                          event={node.event}
+                          oldSubject={node.oldSubject}
+                          newSubject={node.newSubject}
+                        />
+                      );
+                    }
+                    // thread node
+                    return (
+                      <ThreadTree
+                        key={`thread-${node.node.event.id}-${idx}`}
+                        node={node.node}
+                        threadContext={
+                          activeAccount && issue
+                            ? {
+                                rootEvent: issue.rootEvent,
+                                repoRelays: repo?.relays ?? [],
+                              }
+                            : undefined
                         }
-                      : undefined
-                  }
-                />
-              ) : null}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Reply box — only for logged-in users */}
             {activeAccount && issue && (
               <ReplyBox
-                rootEvent={issue.event}
+                rootEvent={issue.rootEvent}
                 repoRelays={repo?.relays ?? []}
               />
             )}
@@ -312,15 +199,15 @@ export default function IssuePage() {
               <CardContent className="p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Status</span>
-                  <StatusBadge status={status} />
+                  <StatusBadge status={issue?.status ?? "open"} />
                 </div>
 
-                {canEdit && issue && status !== "deleted" && (
+                {canEdit && issue && issue.status !== "deleted" && (
                   <ChangeStatusDropdown
                     itemId={issue.id}
                     itemAuthorPubkey={issue.pubkey}
                     repoCoords={issue.repoCoords}
-                    currentStatus={status}
+                    currentStatus={issue.status}
                     options={[
                       { value: "open", label: "Open" },
                       { value: "resolved", label: "Resolved" },
@@ -337,7 +224,7 @@ export default function IssuePage() {
                     <MessageCircle className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">Comments</span>
                     <span className="ml-auto font-medium">
-                      {comments?.length ?? 0}
+                      {issue?.commentCount ?? 0}
                     </span>
                   </div>
 
@@ -345,7 +232,7 @@ export default function IssuePage() {
                     <Zap className="h-4 w-4 text-amber-500" />
                     <span className="text-muted-foreground">Zaps</span>
                     <span className="ml-auto font-medium">
-                      {zaps?.length ?? 0}
+                      {issue?.zapCount ?? 0}
                     </span>
                   </div>
 
@@ -353,7 +240,7 @@ export default function IssuePage() {
                     <Users className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">Participants</span>
                     <span className="ml-auto font-medium">
-                      {participants.length}
+                      {issue?.participants.length ?? 0}
                     </span>
                   </div>
                 </div>
@@ -361,24 +248,26 @@ export default function IssuePage() {
                 <Separator />
 
                 {/* Participant avatars */}
-                <div>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Participants
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {participants.map((pk) => (
-                      <UserAvatar
-                        key={pk}
-                        pubkey={pk}
-                        size="sm"
-                        linkToProfile
-                      />
-                    ))}
+                {issue && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Participants
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {issue.participants.map((pk) => (
+                        <UserAvatar
+                          key={pk}
+                          pubkey={pk}
+                          size="sm"
+                          linkToProfile
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Labels */}
-                {allLabels.length > 0 && (
+                {issue && issue.labels.length > 0 && (
                   <>
                     <Separator />
                     <div>
@@ -386,7 +275,7 @@ export default function IssuePage() {
                         Labels
                       </p>
                       <div className="flex flex-wrap gap-1.5">
-                        {allLabels.map((label) => (
+                        {issue.labels.map((label) => (
                           <LabelBadge key={label} label={label} />
                         ))}
                       </div>

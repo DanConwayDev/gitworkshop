@@ -7,7 +7,7 @@
  *
  * Internally:
  * 1. Fetches the root event from relays (repoRelayGroup + fallback)
- * 2. Triggers tiered loading (essentials, comments, thread) via useNip34Loaders
+ * 2. Triggers tiered loading (essentials, comments, thread) via useNip34ItemLoader
  * 3. For patches: fetches patch chain events from relays
  * 4. For patch revisions: batch-loads revision root comments
  * 5. Subscribes to PRDetailModel which reactively produces ResolvedPR
@@ -22,7 +22,7 @@ import { useEventStore } from "./useEventStore";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
-import { useNip34Loaders, useNip34ItemLoaderBatch } from "./useNip34Loaders";
+import { useNip34ItemLoader, useNip34ItemLoaderBatch } from "./useNip34Loaders";
 import { PRDetailModel } from "@/models/PRDetailModel";
 import { PR_ROOT_KINDS, PATCH_KIND, type ResolvedPR } from "@/lib/nip34";
 import { gitIndexRelays, relayCurationMode } from "@/services/settings";
@@ -83,7 +83,8 @@ export function useResolvedPR(
   }, [prId, curationMode, extraRelaysForMaintainerMailboxCoverage, store]);
 
   // ── 2. Trigger tiered loading (essentials + comments + thread) ──────────
-  useNip34Loaders(prId, repoRelayGroup, {
+  useNip34ItemLoader(prId, repoRelayGroup, {
+    tier: "thread",
     includeAuthorNip65: curationMode === "outbox",
   });
 

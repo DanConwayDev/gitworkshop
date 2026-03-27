@@ -9,7 +9,7 @@ import {
   COMMENT_KIND,
   pubkeyFromCoordinate,
   buildResolvedIssues,
-  type ResolvedIssue,
+  type ResolvedIssueLite,
   type ResolveEssentialsOptions,
 } from "@/lib/nip34";
 import type { Filter } from "applesauce-core/helpers";
@@ -58,7 +58,7 @@ const ESSENTIALS_KINDS = [...STATUS_KINDS, LABEL_KIND, DELETION_KIND] as const;
 export function IssueListModel(
   coordsCacheKey: string,
   options: ResolveEssentialsOptions = {},
-): Model<ResolvedIssue[]> {
+): Model<ResolvedIssueLite[]> {
   return (store) => {
     // Derive the maintainer set from the coord strings. The pubkey is always
     // extractable from the coordinate itself ("30617:<pubkey>:<dTag>"), so the
@@ -82,7 +82,7 @@ export function IssueListModel(
 
       switchMap((issueEvents) => {
         const events = issueEvents as NostrEvent[];
-        if (events.length === 0) return of([] as ResolvedIssue[]);
+        if (events.length === 0) return of([] as ResolvedIssueLite[]);
 
         const ids = events.map((e) => e.id);
 

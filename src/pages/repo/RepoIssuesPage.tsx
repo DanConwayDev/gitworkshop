@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Search, MessageCircle, Users, CircleDot, X, Plus } from "lucide-react";
 import { UserAvatar } from "@/components/UserAvatar";
-import type { IssueStatus, ResolvedIssue } from "@/lib/nip34";
+import type { IssueStatus, ResolvedIssueLite } from "@/lib/nip34";
 
 const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open"];
 
@@ -290,7 +290,7 @@ function IssueRow({
   repoPath,
   repoRelays,
 }: {
-  issue: ResolvedIssue;
+  issue: ResolvedIssueLite;
   repoPath: string;
   repoRelays: string[];
 }) {
