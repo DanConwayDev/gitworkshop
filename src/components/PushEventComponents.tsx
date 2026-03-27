@@ -23,6 +23,7 @@ import { UserLink } from "@/components/UserAvatar";
 import type { PR } from "@/casts/PR";
 import type { PRUpdate } from "@/casts/PRUpdate";
 import type { PatchRevision } from "@/hooks/usePatchChain";
+import type { NostrEvent } from "nostr-tools";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -287,13 +288,24 @@ export function PROpenPushEvent({
  * @param superseded - True when a later PR Update has a different tip
  * @param commits    - Optional resolved commit list (subject + short hash)
  */
+/**
+ * Minimal interface for a PR Update — satisfied by both the PRUpdate cast
+ * and a plain object constructed from a PRRevision.
+ */
+interface PRUpdateLike {
+  event: NostrEvent;
+  pubkey: string;
+  tipCommitId: string | undefined;
+  mergeBase: string | undefined;
+}
+
 export function PRUpdatePushEvent({
   update,
   superseded,
   commits,
   basePath,
 }: {
-  update: PRUpdate;
+  update: PRUpdate | PRUpdateLike;
   superseded: boolean;
   commits?: Array<{ hash: string; subject: string }>;
   basePath?: string;

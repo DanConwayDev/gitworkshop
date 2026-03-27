@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search, MessageCircle, Users, X } from "lucide-react";
-import type { IssueStatus, ResolvedPR, PRItemType } from "@/lib/nip34";
+import type { IssueStatus, ResolvedPRLite, PRItemType } from "@/lib/nip34";
 
 const TYPE_OPTIONS: MultiSelectOption[] = [
   { value: "pr", label: "Pull Requests" },
@@ -260,7 +260,7 @@ function PRRow({
   repoPath,
   repoRelays,
 }: {
-  pr: ResolvedPR;
+  pr: ResolvedPRLite;
   repoPath: string;
   repoRelays: string[];
 }) {

@@ -11,7 +11,7 @@ import {
   COMMENT_KIND,
   pubkeyFromCoordinate,
   buildResolvedPRs,
-  type ResolvedPR,
+  type ResolvedPRLite,
 } from "@/lib/nip34";
 import { hasNameValueTag, type Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
@@ -22,18 +22,18 @@ const ESSENTIALS_KINDS = [...STATUS_KINDS, LABEL_KIND, DELETION_KIND] as const;
 /**
  * PRListModel — subscribes to patches (kind:1617) and PRs (kind:1618) and
  * their essentials, comment, and zap events in the store and emits a
- * fully-resolved list of ResolvedPR objects.
+ * fully-resolved list of ResolvedPRLite objects.
  *
  * Structurally identical to IssueListModel but:
  * - Queries kinds [1617, 1618] instead of [1621]
  * - Filters patches to root-only (t:root tag) in the final build step
- * - Passes mergeStatusRequiresMaintainer=true via buildResolvedPRs
+ * - Passes mergeStatusRequiresMaintainer=true via buildResolvedPRLites
  *
  * Cache key: the sorted, comma-joined coordinate string (same as IssueListModel).
  *
  * @param coordsCacheKey - Sorted, comma-joined coordinate string (cache key)
  */
-export function PRListModel(coordsCacheKey: string): Model<ResolvedPR[]> {
+export function PRListModel(coordsCacheKey: string): Model<ResolvedPRLite[]> {
   return (store) => {
     const coords = coordsCacheKey ? coordsCacheKey.split(",") : [];
     const maintainerSet = new Set<string>(
@@ -63,7 +63,7 @@ export function PRListModel(coordsCacheKey: string): Model<ResolvedPR[]> {
               !hasNameValueTag(ev, "t", "root-revision") &&
               !hasNameValueTag(ev, "t", "revision-root")),
         );
-        if (events.length === 0) return of([] as ResolvedPR[]);
+        if (events.length === 0) return of([] as ResolvedPRLite[]);
 
         const ids = events.map((e) => e.id);
 

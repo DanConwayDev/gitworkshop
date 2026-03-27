@@ -16,7 +16,7 @@ import {
   resolveChain,
   kindToStatus,
   type IssueStatus,
-  type ResolvedPR,
+  type ResolvedPRLite,
   type RepoQueryOptions,
 } from "@/lib/nip34";
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
@@ -87,7 +87,7 @@ export function usePRs(
   repoCoords: string | string[] | undefined,
   repoRelayGroup: RelayGroup | undefined,
   _options: RepoQueryOptions,
-): ResolvedPR[] | undefined {
+): ResolvedPRLite[] | undefined {
   const store = useEventStore();
 
   const coords = useMemo(() => {
@@ -113,7 +113,7 @@ export function usePRs(
   return use$(() => {
     if (!coords || coords.length === 0) return undefined;
     return store.model(PRListModel, cacheKey) as unknown as Observable<
-      ResolvedPR[]
+      ResolvedPRLite[]
     >;
   }, [cacheKey, store]);
 }

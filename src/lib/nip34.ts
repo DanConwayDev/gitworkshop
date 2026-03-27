@@ -961,21 +961,23 @@ export function buildResolvedIssues(
 }
 
 // ---------------------------------------------------------------------------
-// ResolvedPR — merged view of a PR or root patch + its essentials events
+// ResolvedPRLite — lightweight summary for list pages
 // ---------------------------------------------------------------------------
 
 /** Discriminator for whether a resolved PR item is a patch or a pull request. */
 export type PRItemType = "patch" | "pr";
 
 /**
- * The fully-resolved view of a PR or root patch after merging the raw event
- * with its status, label, and subject-rename events.
+ * Lightweight resolved view of a PR or root patch for list pages.
  *
- * Structurally identical to ResolvedIssue but with an `itemType` discriminator
- * and `mergeStatusRequiresMaintainer` semantics (the item author cannot issue
- * merge/resolved statuses — only maintainers can).
+ * Contains the core fields derived from merging the raw event with its
+ * status, label, and subject-rename events. Used by PRListModel and
+ * RepoPRsPage for rendering list rows.
+ *
+ * For the full detail-page view (with revisions, timeline nodes, tip info),
+ * see `ResolvedPR` which extends this interface.
  */
-export interface ResolvedPR {
+export interface ResolvedPRLite {
   /** The raw event ID */
   id: string;
   /** The author's pubkey */
@@ -1014,8 +1016,331 @@ export interface ResolvedPR {
   authorisedUsers: Set<string>;
 }
 
+// ---------------------------------------------------------------------------
+// resolveItemEssentials — per-item resolution shared by detail model & list
+// ---------------------------------------------------------------------------
+
 /**
- * Build a sorted list of ResolvedPR objects from raw patch and PR events.
+ * The core resolved fields for a single PR/patch/issue, derived from its
+ * essentials events. This is the per-item resolution logic extracted from
+ * `buildResolvedList` so that both the list model (batch) and the detail
+ * model (single item) can share the same auth and resolution rules.
+ *
+ * @param rootEvent       - The root event (kind 1617, 1618, or 1621)
+ * @param essentialEvents - Status, label, and deletion events for this item
+ * @param commentEvents   - NIP-22 comments (kind:1111) for this item
+ * @param zapEvents       - Zap receipts (kind:9735) for this item
+ * @param maintainerSet   - Authorised maintainer pubkeys
+ * @param options         - mergeStatusRequiresMaintainer, prUpdateEvents
+ */
+export function resolveItemEssentials(
+  rootEvent: NostrEvent,
+  essentialEvents: NostrEvent[],
+  commentEvents: NostrEvent[],
+  zapEvents: NostrEvent[],
+  maintainerSet: Set<string>,
+  options: ResolveEssentialsOptions = {},
+): ResolvedItemEssentials {
+  const { mergeStatusRequiresMaintainer = false, prUpdateEvents } = options;
+  const rootId = rootEvent.id;
+  const rootPubkey = rootEvent.pubkey;
+
+  // ── Process essentials ──────────────────────────────────────────────────
+  let isDeleted = false;
+  let latestStatus: { kind: number; createdAt: number } | undefined;
+  const nip32Labels = new Set<string>();
+  const renames: { createdAt: number; id: string; value: string }[] = [];
+  let latestEssentialAt = 0;
+
+  for (const ev of essentialEvents) {
+    const evRootId = getNip10References(ev).root?.e?.id;
+    if (evRootId !== rootId) continue;
+
+    if (ev.created_at > latestEssentialAt) latestEssentialAt = ev.created_at;
+
+    const isMaintainer = maintainerSet.has(ev.pubkey);
+    const isAuthor = ev.pubkey === rootPubkey;
+
+    // Deletion (kind:5) — NIP-09: only the original author's deletion is valid.
+    if (ev.kind === DELETION_KIND) {
+      if (isAuthor) isDeleted = true;
+      continue;
+    }
+
+    // Status events (kinds 1630-1633)
+    if ((STATUS_KINDS as readonly number[]).includes(ev.kind)) {
+      const isMergeStatus =
+        ev.kind === STATUS_RESOLVED || ev.kind === STATUS_CLOSED;
+      if (mergeStatusRequiresMaintainer && isMergeStatus) {
+        if (!isMaintainer) continue;
+      } else {
+        if (!isAuthor && !isMaintainer) continue;
+      }
+
+      if (!latestStatus || ev.created_at > latestStatus.createdAt) {
+        latestStatus = { kind: ev.kind, createdAt: ev.created_at };
+      }
+      continue;
+    }
+
+    // Label events (kind:1985)
+    if (ev.kind === LABEL_KIND) {
+      if (!isAuthor && !isMaintainer) continue;
+
+      const subjectLabel = ev.tags.find(
+        ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
+      );
+      if (subjectLabel) {
+        renames.push({
+          createdAt: ev.created_at,
+          id: ev.id,
+          value: subjectLabel[1],
+        });
+      }
+
+      for (const [t, label, ns] of ev.tags) {
+        if (t === "l" && ns === ISSUE_LABEL_NAMESPACE && label) {
+          nip32Labels.add(label);
+        }
+      }
+    }
+  }
+
+  // ── Derive status ─────────────────────────────────────────────────────
+  let status: IssueStatus;
+  if (isDeleted) {
+    status = "deleted";
+  } else {
+    status = latestStatus ? kindToStatus(latestStatus.kind) : "open";
+  }
+
+  // ── Derive subject ────────────────────────────────────────────────────
+  const originalSubject = extractSubject(rootEvent);
+  const sortedRenames = renames.sort(
+    (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
+  );
+  const currentSubject =
+    sortedRenames.length > 0
+      ? sortedRenames[sortedRenames.length - 1].value
+      : originalSubject;
+
+  // ── Derive labels ─────────────────────────────────────────────────────
+  const tLabels = rootEvent.tags
+    .filter(([t, v]) => t === "t" && !PATCH_CHAIN_TAGS.has(v))
+    .map(([, v]) => v);
+  const labels = Array.from(
+    new Set([...tLabels, ...Array.from(nip32Labels)]),
+  ).sort();
+
+  // ── Comments and zaps ─────────────────────────────────────────────────
+  const filteredComments = commentEvents.filter((ev) => {
+    const rootPointer = getCommentRootPointer(ev);
+    const commentRootId =
+      rootPointer && "id" in rootPointer ? rootPointer.id : undefined;
+    return commentRootId === rootId;
+  });
+  const participantPubkeys = new Set(filteredComments.map((c) => c.pubkey));
+
+  const filteredZapCount = zapEvents.filter((ev) => {
+    const zapRootId = getNip10References(ev).root?.e?.id;
+    return zapRootId === rootId;
+  }).length;
+
+  // ── PR Update activity ────────────────────────────────────────────────
+  let latestPRUpdateAt = 0;
+  if (prUpdateEvents) {
+    for (const ev of prUpdateEvents) {
+      const updateRootId = ev.tags.find(([t]) => t === "E")?.[1];
+      if (updateRootId === rootId && ev.created_at > latestPRUpdateAt) {
+        latestPRUpdateAt = ev.created_at;
+      }
+    }
+  }
+
+  const latestCommentAt = filteredComments.reduce(
+    (max, c) => Math.max(max, c.created_at),
+    0,
+  );
+  const lastActivityAt = Math.max(
+    rootEvent.created_at,
+    latestCommentAt,
+    latestEssentialAt,
+    latestPRUpdateAt,
+  );
+
+  const authorisedUsers = new Set(maintainerSet);
+  authorisedUsers.add(rootPubkey);
+
+  return {
+    id: rootId,
+    pubkey: rootPubkey,
+    event: rootEvent,
+    originalSubject,
+    currentSubject,
+    content: extractBody(rootEvent),
+    createdAt: rootEvent.created_at,
+    lastActivityAt,
+    status,
+    labels,
+    repoCoords: rootEvent.tags
+      .filter(([t]) => t === "a")
+      .map(([, v]) => v)
+      .sort(),
+    commentCount: filteredComments.length,
+    participantCount: participantPubkeys.size,
+    zapCount: filteredZapCount,
+    authorisedUsers,
+    subjectRenames: sortedRenames,
+  };
+}
+
+/**
+ * The result of resolving a single item's essentials. Extends the core
+ * ResolvedIssue fields with the sorted rename events (needed by the detail
+ * page for the conversation timeline).
+ */
+export interface ResolvedItemEssentials extends ResolvedIssue {
+  /** Sorted subject-rename events (oldest first), for timeline display. */
+  subjectRenames: { createdAt: number; id: string; value: string }[];
+}
+
+// ---------------------------------------------------------------------------
+// ResolvedPR — full detail-page view of a PR or patch
+// ---------------------------------------------------------------------------
+
+/**
+ * A single revision of a PR or patch set. Unified across both mechanisms:
+ * - For patches: a patch chain (original or root-revision)
+ * - For PRs: a PR Update event (kind:1619), or the original PR as revision 0
+ */
+export interface PRRevision {
+  /** Discriminator: "patch-set" for patch chains, "pr-update" for kind:1619 */
+  type: "patch-set" | "pr-update";
+  /** Timestamp of this revision */
+  createdAt: number;
+  /** Tip commit ID from this revision, if available */
+  tipCommitId: string | undefined;
+  /** Merge-base from tags, if available */
+  mergeBase: string | undefined;
+  /** Clone URLs from this revision's tags */
+  cloneUrls: string[];
+  /** True when this revision has been superseded by a later one */
+  superseded: boolean;
+  /** The pubkey of the revision author */
+  pubkey: string;
+  /**
+   * For patch-set revisions: the ordered patches in this chain.
+   * Undefined for pr-update revisions.
+   */
+  patches?: import("@/casts/Patch").Patch[];
+  /**
+   * For pr-update revisions: the raw PR Update event.
+   * Undefined for patch-set revisions.
+   */
+  updateEvent?: NostrEvent;
+  /**
+   * For patch-set revisions: the root patch of this revision.
+   * Undefined for pr-update revisions.
+   */
+  rootPatchEvent?: NostrEvent;
+}
+
+/**
+ * A node in the conversation timeline — interleaved push events, comments,
+ * and subject renames, sorted chronologically.
+ */
+export type PRTimelineNode =
+  | { type: "revision"; revision: PRRevision; ts: number }
+  | {
+      type: "rename";
+      event: NostrEvent;
+      oldSubject: string;
+      newSubject: string;
+      ts: number;
+    }
+  | {
+      type: "thread";
+      node: import("@/lib/threadTree").ThreadTreeNode;
+      ts: number;
+    };
+
+/**
+ * The fully-resolved detail-page view of a PR or patch.
+ *
+ * Extends `ResolvedPRLite` (the list-page summary) with revision history,
+ * timeline nodes, tip info, comments, and other detail-page data.
+ *
+ * Produced by `PRDetailModel`. The UI page consumes this directly without
+ * needing to call per-item hooks for status, labels, subject, etc.
+ */
+export interface ResolvedPR extends ResolvedPRLite {
+  /** Body text (description tag for patches, content for PRs) */
+  body: string;
+
+  /**
+   * All revisions ordered oldest-first. The last entry is the current
+   * (latest) revision; all earlier ones are superseded.
+   *
+   * For patches: one entry per patch chain (original + root-revisions).
+   * For PRs: one entry per kind:1619 PR Update (plus the original PR as
+   * revision 0 when it has a tip commit).
+   */
+  revisions: PRRevision[];
+
+  /**
+   * The effective tip info from the latest authorised revision.
+   * Unified across both PR and patch mechanisms.
+   */
+  tip: {
+    /** Tip commit ID from the latest revision */
+    commitId: string | undefined;
+    /** Merge-base from tags (explicit), if available */
+    explicitMergeBase: string | undefined;
+    /** Clone URLs from the latest revision + the root event */
+    cloneUrls: string[];
+  };
+
+  /**
+   * Pre-built conversation timeline: interleaved push events, comments,
+   * and subject renames, sorted chronologically.
+   */
+  timelineNodes: PRTimelineNode[];
+
+  /** All NIP-22 comments (kind:1111) across all revisions, deduplicated. */
+  comments: NostrEvent[];
+
+  /** Zap receipts (kind:9735) for this item. */
+  zaps: NostrEvent[];
+
+  /** Sorted subject-rename events with old/new subjects for display. */
+  renameItems: {
+    event: NostrEvent;
+    oldSubject: string;
+    newSubject: string;
+  }[];
+
+  /** All unique participant pubkeys (author + commenters + update authors). */
+  participants: string[];
+
+  /** The raw root event (kind:1617 or kind:1618). */
+  rootEvent: NostrEvent;
+
+  /** The effective maintainer set. */
+  maintainers: Set<string>;
+
+  /**
+   * For patches: the raw patch diff from the root patch's content.
+   * Undefined for PRs.
+   */
+  patchDiff?: string;
+}
+
+// ---------------------------------------------------------------------------
+// buildResolvedPRs — batch builder for list pages
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a sorted list of ResolvedPRLite objects from raw patch and PR events.
  * Identical to buildResolvedIssues but mergeStatusRequiresMaintainer=true and
  * each item gets an itemType discriminator ("patch" | "pr").
  *
@@ -1030,7 +1355,7 @@ export function buildResolvedPRs(
   zapEvents: NostrEvent[],
   maintainerSet: Set<string>,
   prUpdateEvents: NostrEvent[] = [],
-): ResolvedPR[] {
+): ResolvedPRLite[] {
   return buildResolvedList(
     rootEvents,
     essentialEvents,

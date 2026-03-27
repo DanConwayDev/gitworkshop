@@ -12,26 +12,8 @@ import {
   SubjectRenameCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
-import { getThreadTree } from "@/lib/threadTree";
 
-import { use$ } from "@/hooks/use$";
-import { useEventStore } from "@/hooks/useEventStore";
-import {
-  usePRAllComments,
-  usePRLabels,
-  usePRStatus,
-  usePRTip,
-  usePRUpdates,
-  usePRZaps,
-  usePRSubjectRenames,
-  usePRMaintainers,
-  resolveCurrentPRSubject,
-} from "@/hooks/usePRs";
-import {
-  useNip34Loaders,
-  useNip34ItemLoaderBatch,
-} from "@/hooks/useNip34Loaders";
-import { usePatchChain } from "@/hooks/usePatchChain";
+import { useResolvedPR } from "@/hooks/useResolvedPR";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { useGitPool } from "@/hooks/useGitPool";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
@@ -58,9 +40,6 @@ import {
   PRUpdatePushEvent,
 } from "@/components/PushEventComponents";
 import { cn } from "@/lib/utils";
-import { PR_ROOT_KINDS, PR_KIND, PATCH_KIND } from "@/lib/nip34";
-import { PR } from "@/casts/PR";
-import { Patch } from "@/casts/Patch";
 import { DiffView } from "@/components/DiffView";
 import { PRFilesTab } from "@/components/PRFilesTab";
 import { diffTrees } from "@/lib/git-grasp-pool";
@@ -73,14 +52,6 @@ import {
 import { PatchCommitList } from "@/components/PatchCommitList";
 import { useCommitHistory } from "@/hooks/useGitExplorer";
 import { usePRMergeBase } from "@/hooks/usePRMergeBase";
-import { gitIndexRelays, relayCurationMode } from "@/services/settings";
-import { pool } from "@/services/nostr";
-import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
-import { castTimelineStream } from "applesauce-common/observable";
-import type { CastRefEventStore } from "applesauce-common/casts/cast";
-import type { Filter } from "applesauce-core/helpers";
-import type { Observable } from "rxjs";
 
 export default function PRPage() {
   const {
@@ -96,20 +67,25 @@ export default function PRPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const repo = resolved?.repo;
-  const repoRelayGroup = resolved?.repoRelayGroup;
-  const extraRelaysForMaintainerMailboxCoverage =
-    resolved?.extraRelaysForMaintainerMailboxCoverage;
 
-  const curationMode = use$(relayCurationMode);
-  const store = useEventStore();
-  const castStore = store as unknown as CastRefEventStore;
+  // Compute the effective maintainer set.
+  const selectedMaintainers = useMemo(
+    () => (repo?.maintainerSet ? new Set(repo.maintainerSet) : undefined),
+    [repo?.maintainerSet],
+  );
+
+  // ── Unified PR/Patch resolution ─────────────────────────────────────────
+  const pr = useResolvedPR(
+    prId,
+    resolved?.repoRelayGroup,
+    resolved?.extraRelaysForMaintainerMailboxCoverage,
+    selectedMaintainers,
+  );
 
   // Git pool — uses the repo's clone URLs (same as RepoCodePage).
   const { pool: gitPool, poolState: gitPoolState } = useGitPool(cloneUrls);
 
-  // Derive the active tab from the URL so that navigating to
-  // prs/<id>/commits lands on the commits tab, and clicking a tab updates
-  // the route accordingly.
+  // Derive the active tab from the URL.
   const activeTab = useMemo(() => {
     const p = location.pathname;
     if (p.endsWith("/commits")) return "commits";
@@ -127,116 +103,31 @@ export default function PRPage() {
     }
   };
 
-  // Fetch the PR/patch event via the repo relay group when available;
-  // fall back to git index relays for initial discovery.
-  use$(() => {
-    if (!prId) return undefined;
-    const filters: Filter[] = [{ kinds: [...PR_ROOT_KINDS], ids: [prId] }];
-    if (repoRelayGroup) {
-      return repoRelayGroup
-        .subscription(filters)
-        .pipe(onlyEvents(), mapEventsToStore(store));
-    }
-    return pool
-      .subscription(gitIndexRelays.getValue(), filters)
-      .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [prId, repoRelayGroup, store]);
-
-  // In outbox mode, also fetch from extra maintainer mailbox relays.
-  use$(() => {
-    if (
-      !prId ||
-      curationMode !== "outbox" ||
-      !extraRelaysForMaintainerMailboxCoverage
-    )
-      return undefined;
-    const filters: Filter[] = [{ kinds: [...PR_ROOT_KINDS], ids: [prId] }];
-    return extraRelaysForMaintainerMailboxCoverage
-      .subscription(filters)
-      .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [prId, curationMode, extraRelaysForMaintainerMailboxCoverage, store]);
-
-  // Subscribe to the store and cast to PR (kind 1618).
-  const prs = use$(() => {
-    if (!prId) return undefined;
-    const filters: Filter[] = [{ kinds: [PR_KIND], ids: [prId] }];
-    return store
-      .timeline(filters)
-      .pipe(castTimelineStream(PR, castStore)) as unknown as Observable<PR[]>;
-  }, [prId, store]);
-
-  // Subscribe to the store and cast to Patch (kind 1617).
-  const patches = use$(() => {
-    if (!prId) return undefined;
-    const filters: Filter[] = [{ kinds: [PATCH_KIND], ids: [prId] }];
-    return store
-      .timeline(filters)
-      .pipe(castTimelineStream(Patch, castStore)) as unknown as Observable<
-      Patch[]
-    >;
-  }, [prId, store]);
-
-  // Exactly one of these will be populated — the event is either a PR or a patch.
-  const pr = prs?.[0];
-  const patch = patches?.[0];
-  const prEvent = pr?.event ?? patch?.event;
-  const itemType = patch ? "patch" : "pr";
-
-  // Trigger two-tier loading for this PR/patch.
-  useNip34Loaders(prId, repoRelayGroup, {
-    includeAuthorNip65: curationMode === "outbox",
-  });
-
-  // For patches: resolve the latest revision chain so we can show Commits and
-  // Files Changed tabs. Only active when the root event is a patch (kind 1617).
-  const patchChain = usePatchChain(
-    itemType === "patch" ? prId : undefined,
-    repoRelayGroup,
-    cloneUrls,
-  );
-
-  // Compute the effective maintainer set.
-  const selectedMaintainers = useMemo(
-    () => (repo?.maintainerSet ? new Set(repo.maintainerSet) : undefined),
-    [repo?.maintainerSet],
-  );
-  usePRMaintainers(prId, selectedMaintainers);
-
-  const prPubkey = prEvent?.pubkey;
-
-  // Latest authorised PR Update tip (kind:1619) — falls back to the original
-  // PR event's c/merge-base tags when no authorised updates exist.
-  const prTip = usePRTip(prId, prPubkey, selectedMaintainers);
-  const effectiveTipCommitId = prTip?.tipCommitId ?? pr?.tipCommitId;
-
-  // Clone URLs from the PR event and the latest PR Update — used as per-operation
-  // fallback sources when fetching git data specific to this PR.
-  const prCloneUrls = useMemo(() => {
-    const urls = [...(pr?.cloneUrls ?? []), ...(prTip?.cloneUrls ?? [])];
-    // Deduplicate while preserving order
+  // ── Git data (lazy — depends on tip from the model) ─────────────────────
+  // Clone URLs: merge repo clone URLs with PR/patch-specific ones
+  const effectiveCloneUrls = useMemo(() => {
+    const urls = [...(pr?.tip.cloneUrls ?? []), ...cloneUrls];
     return Array.from(new Set(urls));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pr?.cloneUrls?.join(","), prTip?.cloneUrls?.join(",")]);
+  }, [pr?.tip.cloneUrls?.join(","), cloneUrls.join(",")]);
 
-  // The merge-base tag is optional in NIP-34. When absent, derive it by
-  // walking the commit chain. Re-runs when the tip changes (e.g. after a rebase).
-  const explicitMergeBase = prTip?.mergeBase ?? pr?.mergeBase;
+  // Merge-base: use explicit tag when available, otherwise derive via git
   const { mergeBase: effectiveMergeBase, computing: computingMergeBase } =
     usePRMergeBase(
       gitPool,
       gitPoolState,
-      effectiveTipCommitId,
-      explicitMergeBase,
-      prCloneUrls,
+      pr?.tip.commitId,
+      pr?.tip.explicitMergeBase,
+      effectiveCloneUrls,
     );
 
   // Commit history for the PR commits tab — fetches from the effective tip.
   const prCommitHistory = useCommitHistory(
     gitPool,
     gitPoolState,
-    effectiveTipCommitId,
+    pr?.itemType === "pr" ? pr?.tip.commitId : undefined,
     100,
-    prCloneUrls,
+    effectiveCloneUrls,
   );
   const prCommits = useMemo(() => {
     if (!effectiveMergeBase || !prCommitHistory.commits.length)
@@ -249,36 +140,18 @@ export default function PRPage() {
       : prCommitHistory.commits.slice(0, idx);
   }, [prCommitHistory.commits, effectiveMergeBase]);
 
-  // ── Ahead / behind counts ─────────────────────────────────────────────────
-  // "Ahead" = commits in the PR branch not yet in the default branch.
-  // "Behind" = commits in the default branch not yet in the PR branch.
-  //
-  // Both are derived from git history so they always reflect the current tip
-  // (including force-pushes via kind:1619 PR Updates).
-  //
-  // Ahead: prCommits is already sliced to [mergeBase..tip], so its length is
-  // the ahead count. Only meaningful for PRs (kind:1618) — patches use the
-  // patch chain length instead.
+  // ── Ahead / behind counts ─────────────────────────────────────────────
   const aheadCount =
-    itemType === "pr"
+    pr?.itemType === "pr"
       ? prCommits.length > 0
         ? prCommits.length
         : undefined
-      : patchChain.chain.length > 0
-        ? patchChain.chain.length
+      : pr?.revisions.length
+        ? pr.revisions[pr.revisions.length - 1].patches?.length
         : undefined;
 
-  // Default branch name from the git pool state (already reactive).
   const defaultBranchName = gitPoolState.defaultBranch ?? repoState?.headBranch;
 
-  // Behind: count commits on the default branch since the merge base.
-  //
-  // countCommitsBehind reuses the default-branch history already cached by
-  // findMergeBase, so this is typically a single in-memory array lookup.
-  //
-  // We also depend on gitPoolState.latestCommit?.hash so the count refreshes
-  // if the default branch advances while the page is open (e.g. someone
-  // pushes to the repo).
   const defaultBranchHead = gitPoolState.latestCommit?.hash;
   const [behindCount, setBehindCount] = useState<number | undefined>(undefined);
   const behindAbortRef = useRef<AbortController | null>(null);
@@ -306,46 +179,12 @@ export default function PRPage() {
     return () => abort.abort();
   }, [gitPool, effectiveMergeBase, defaultBranchHead]);
 
-  // ── Patch-specific git data ────────────────────────────────────────────────
-  // For patches with commit IDs in their tags, we can show a Files Changed tab
-  // using the git pool (tip = last patch's commit, base = first patch's parent-commit).
-  // Clone URLs come from the patch chain (some clients include them) plus the
-  // repo's own clone URLs.
-  const patchCloneUrls = useMemo(() => {
-    const urls = [...patchChain.cloneUrls, ...cloneUrls];
-    return Array.from(new Set(urls));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patchChain.cloneUrls.join(","), cloneUrls.join(",")]);
-
-  const patchTipCommitId = patchChain.tipCommitId;
-  const patchBaseCommitId = patchChain.baseCommitId;
-
-  // Derive merge base for patches: use the explicit parent-commit from the
-  // first patch's tag, or fall back to walking the commit chain.
-  const { mergeBase: patchMergeBase, computing: computingPatchMergeBase } =
-    usePRMergeBase(
-      itemType === "patch" ? gitPool : null,
-      gitPoolState,
-      patchTipCommitId,
-      patchBaseCommitId,
-      patchCloneUrls,
-    );
-
-  // Eagerly compute file count as soon as the git pool + commit IDs are ready,
-  // so the tab badge shows without the user having to visit the Files tab first.
+  // ── File count (eager for tab badge) ──────────────────────────────────
   const [fileCount, setFileCount] = useState<number | undefined>(undefined);
   const fileCountAbortRef = useRef<AbortController | null>(null);
 
-  // Effective tip/base for file count — PR uses prTip/mergeBase, patch uses patchChain
-  const fileCountTipId =
-    itemType === "pr" ? effectiveTipCommitId : patchTipCommitId;
-  const fileCountBaseId =
-    itemType === "pr" ? effectiveMergeBase : patchMergeBase;
-  const fileCountFallbackUrls =
-    itemType === "pr" ? prCloneUrls : patchCloneUrls;
-
   useEffect(() => {
-    if (!gitPool || !fileCountTipId || !fileCountBaseId) return;
+    if (!gitPool || !pr?.tip.commitId || !effectiveMergeBase) return;
 
     fileCountAbortRef.current?.abort();
     const abort = new AbortController();
@@ -353,10 +192,10 @@ export default function PRPage() {
 
     gitPool
       .getCommitRange(
-        fileCountTipId,
-        fileCountBaseId,
+        pr.tip.commitId,
+        effectiveMergeBase,
         abort.signal,
-        fileCountFallbackUrls,
+        effectiveCloneUrls,
       )
       .then((range) => {
         if (abort.signal.aborted || !range) return;
@@ -369,242 +208,38 @@ export default function PRPage() {
     return () => {
       abort.abort();
     };
-  }, [gitPool, fileCountTipId, fileCountBaseId, fileCountFallbackUrls]);
+  }, [gitPool, pr?.tip.commitId, effectiveMergeBase, effectiveCloneUrls]);
 
-  const status = usePRStatus(prId, prPubkey, selectedMaintainers);
-  const nip32Labels = usePRLabels(prId, prPubkey, selectedMaintainers);
-  const zaps = usePRZaps(prId);
-  const subjectRenames = usePRSubjectRenames(
-    prId,
-    prPubkey,
-    selectedMaintainers,
-  );
-
-  // For patches: collect all revision root IDs so we can load their comments
-  // and render them in the timeline.
-  const revisionRootIds = useMemo(() => {
-    if (itemType !== "patch") return [];
-    return patchChain.allRevisions
-      .filter((r) => r.isRevision)
-      .map((r) => r.rootPatch.id);
-  }, [itemType, patchChain.allRevisions]);
-
-  // Load essentials + comments + thread for each revision root patch.
-  // The singleton loaders batch all IDs together automatically.
-  useNip34ItemLoaderBatch(revisionRootIds, repoRelayGroup, {
-    tier: "thread",
-    includeAuthorNip65: curationMode === "outbox",
-  });
-
-  // All comments across the root patch + all revision roots.
-  const comments = usePRAllComments(prId, revisionRootIds);
-
-  // PR Updates (kind:1619) — already fetched by nip34CommentsLoader.
-  const prUpdates = usePRUpdates(itemType === "pr" ? prId : undefined);
-
-  // Resolve the current (effective) subject from rename events.
-  const originalSubject = pr?.subject ?? patch?.subject ?? "";
-  const currentSubject = resolveCurrentPRSubject(
-    originalSubject,
-    subjectRenames,
-  );
-
-  // Authorisation: can the logged-in user edit the subject / status?
+  // ── Auth ──────────────────────────────────────────────────────────────
   const activeAccount = useActiveAccount();
   const canEdit = useMemo(() => {
-    if (!activeAccount || !prEvent) return false;
-    const pk = activeAccount.pubkey;
-    if (pk === prEvent.pubkey) return true;
-    return selectedMaintainers?.has(pk) ?? false;
-  }, [activeAccount, prEvent, selectedMaintainers]);
-  const canEditSubject = canEdit;
+    if (!activeAccount || !pr) return false;
+    return pr.authorisedUsers.has(activeAccount.pubkey);
+  }, [activeAccount, pr]);
 
-  // Merge labels from the event's own t-tags with NIP-32 label events.
-  const allLabels = useMemo(() => {
-    const eventLabels = pr?.labels ?? patch?.labels ?? [];
-    const merged = new Set([...eventLabels, ...nip32Labels]);
-    return Array.from(merged).sort();
-  }, [pr?.labels, patch?.labels, nip32Labels]);
-
-  // Participants: author + comment authors + PR update authors
-  const participants = useMemo(() => {
-    const pubkeys = new Set<string>();
-    if (prEvent) pubkeys.add(prEvent.pubkey);
-    if (comments) {
-      for (const c of comments) pubkeys.add(c.pubkey);
-    }
-    if (prUpdates) {
-      for (const u of prUpdates) pubkeys.add(u.pubkey);
-    }
-    return Array.from(pubkeys);
-  }, [prEvent, comments, prUpdates]);
-
-  // Build the thread tree from the PR event + comments.
-  // For patches: exclude comments that belong to a revision root (they'll be
-  // shown under their revision's push event instead).
-  const revisionRootIdSet = useMemo(
-    () => new Set(revisionRootIds),
-    [revisionRootIds],
-  );
-  const rootComments = useMemo(() => {
-    if (!comments) return undefined;
-    if (itemType !== "patch" || revisionRootIdSet.size === 0) return comments;
-    // Keep only comments whose #E root is the original root patch (prId),
-    // not a revision root.
-    return comments.filter((c) => {
-      const rootTag = c.tags.find((t) => t[0] === "E");
-      if (!rootTag) return true; // no root tag — keep
-      return rootTag[1] === prId; // only keep if rooted at the original
-    });
-  }, [comments, itemType, revisionRootIdSet, prId]);
-
-  const threadTree = useMemo(() => {
-    if (!prEvent || !rootComments) return undefined;
-    return getThreadTree(prEvent, rootComments);
-  }, [prEvent, rootComments]);
-
-  // Compute subject rename items with old/new subjects for display.
-  const renameItems = useMemo(() => {
-    if (!subjectRenames || subjectRenames.length === 0) return [];
-    let prevSubject = originalSubject;
-    return subjectRenames.map((ev) => {
-      const newSubject =
-        ev.tags.find(([t, , ns]) => t === "l" && ns === "#subject")?.[1] ??
-        prevSubject;
-      const item = { event: ev, newSubject, oldSubject: prevSubject };
-      prevSubject = newSubject;
-      return item;
-    });
-  }, [subjectRenames, originalSubject]);
-
-  // Build the interleaved push+comment timeline for the conversation tab.
-  // For patches: one PatchSetPushEvent per revision, interleaved with comments.
-  // For PRs: one PRUpdatePushEvent per kind:1619 update, interleaved with comments.
-  type TimelineNode =
-    | {
-        type: "patch-push";
-        revision: (typeof patchChain.allRevisions)[0];
-        superseded: boolean;
-        ts: number;
-      }
-    | {
-        type: "pr-update";
-        update: NonNullable<typeof prUpdates>[0];
-        superseded: boolean;
-        ts: number;
-      }
-    | { type: "rename"; item: (typeof renameItems)[0]; ts: number }
-    | {
-        type: "thread";
-        node: import("@/lib/threadTree").ThreadTreeNode;
-        ts: number;
-      };
-
-  const conversationTimeline = useMemo((): TimelineNode[] => {
-    const nodes: TimelineNode[] = [];
-
-    if (itemType === "patch") {
-      // Push events: one per revision (original + revisions)
-      const revisions = patchChain.allRevisions;
-      revisions.forEach((rev, idx) => {
-        const superseded = idx < revisions.length - 1;
-        nodes.push({
-          type: "patch-push",
-          revision: rev,
-          superseded,
-          ts: rev.rootPatch.event.created_at,
-        });
-        // Comments rooted at this revision's root patch
-        if (idx > 0 && comments) {
-          const revId = rev.rootPatch.id;
-          const revComments = comments.filter((c) => {
-            const rootTag = c.tags.find((t) => t[0] === "E");
-            return rootTag?.[1] === revId;
-          });
-          if (revComments.length > 0 && prEvent) {
-            const revTree = getThreadTree(rev.rootPatch.event, revComments);
-            if (revTree) {
-              for (const child of revTree.children) {
-                nodes.push({
-                  type: "thread",
-                  node: child,
-                  ts: child.event.created_at,
-                });
-              }
-            }
-          }
-        }
-      });
-    } else if (itemType === "pr") {
-      // PR Updates (kind:1619) — force-push events shown in the timeline.
-      if (pr) {
-        const sortedUpdates = prUpdates
-          ? [...prUpdates].sort(
-              (a, b) => a.event.created_at - b.event.created_at,
-            )
-          : [];
-
-        sortedUpdates.forEach((update, idx) => {
-          // A PR Update is superseded only if a later update changes the tip
-          // to a *different* commit (not just adds on top).
-          // Simple heuristic: superseded if it's not the last update.
-          const superseded = idx < sortedUpdates.length - 1;
-          nodes.push({
-            type: "pr-update",
-            update,
-            superseded,
-            ts: update.event.created_at,
-          });
-        });
-      }
-    }
-
-    // Top-level thread comments (rooted at the original PR/patch)
-    if (threadTree) {
-      for (const child of threadTree.children) {
-        nodes.push({ type: "thread", node: child, ts: child.event.created_at });
-      }
-    }
-
-    // Subject renames
-    for (const item of renameItems) {
-      nodes.push({ type: "rename", item, ts: item.event.created_at });
-    }
-
-    // Sort everything chronologically
-    nodes.sort((a, b) => {
-      if (a.ts !== b.ts) return a.ts - b.ts;
-      // Stable tie-break: push events before comments at same timestamp
-      const typeOrder = (t: TimelineNode["type"]) =>
-        t === "patch-push" || t === "pr-update" ? 0 : 1;
-      return typeOrder(a.type) - typeOrder(b.type);
-    });
-
-    return nodes;
-  }, [
-    itemType,
-    patchChain.allRevisions,
-    pr,
-    prUpdates,
-    threadTree,
-    renameItems,
-    comments,
-    prEvent,
-  ]);
-
-  const TypeIcon = itemType === "patch" ? GitCommitHorizontal : GitPullRequest;
-
-  const body = pr?.body ?? patch?.body ?? "";
-
+  // ── SEO ───────────────────────────────────────────────────────────────
   useSeoMeta({
-    title: prEvent
-      ? `${currentSubject || originalSubject} - ngit`
+    title: pr
+      ? `${pr.currentSubject || pr.originalSubject} - ngit`
       : "PR - ngit",
-    description: body.slice(0, 160) || "Loading PR...",
+    description: pr?.body.slice(0, 160) || "Loading PR...",
   });
 
-  // Tab bar rendered in the PR header, bottom-right on desktop, below meta on mobile.
-  // Uses underline style: transparent background, active tab gets a bottom border indicator.
+  // ── Derived values ────────────────────────────────────────────────────
+  const TypeIcon =
+    pr?.itemType === "patch" ? GitCommitHorizontal : GitPullRequest;
+
+  // Does this patch have git commit IDs for the Files Changed tab?
+  const patchHasGitData =
+    pr?.itemType === "patch" && pr.tip.commitId && effectiveMergeBase;
+
+  // Patch chain for the Commits tab
+  const patchChain =
+    pr?.itemType === "patch" && pr.revisions.length > 0
+      ? pr.revisions[pr.revisions.length - 1].patches
+      : undefined;
+
+  // Tab bar
   const tabList = (
     <TabsList className="h-auto bg-transparent p-0 gap-0 rounded-none border-0">
       <TabsTrigger
@@ -613,16 +248,15 @@ export default function PRPage() {
       >
         <MessageCircle className="h-3.5 w-3.5" />
         Conversation
-        {comments !== undefined && (
+        {pr && (
           <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
-            {comments.length}
+            {pr.commentCount}
           </span>
         )}
       </TabsTrigger>
 
-      {/* Files Changed tab — for PRs (kind 1618) and patches with commit IDs */}
-      {(itemType === "pr" ||
-        (itemType === "patch" && patchTipCommitId && patchMergeBase)) && (
+      {/* Files Changed tab — for PRs and patches with commit IDs */}
+      {(pr?.itemType === "pr" || patchHasGitData) && (
         <TabsTrigger
           value="files"
           className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
@@ -637,31 +271,32 @@ export default function PRPage() {
         </TabsTrigger>
       )}
 
-      {/* Commits tab — for PRs with a tip commit, and for patches */}
-      {(itemType === "pr" && effectiveTipCommitId) ||
-      (itemType === "patch" && patchChain.chain.length > 0) ? (
+      {/* Commits tab */}
+      {((pr?.itemType === "pr" && pr.tip.commitId) ||
+        (patchChain && patchChain.length > 0)) && (
         <TabsTrigger
           value="commits"
           className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
         >
           <GitCommitHorizontal className="h-3.5 w-3.5" />
           Commits
-          {itemType === "pr"
+          {pr?.itemType === "pr"
             ? prCommits.length > 0 && (
                 <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
                   {prCommits.length}
                 </span>
               )
-            : patchChain.chain.length > 0 && (
+            : patchChain &&
+              patchChain.length > 0 && (
                 <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
-                  {patchChain.chain.length}
+                  {patchChain.length}
                 </span>
               )}
         </TabsTrigger>
-      ) : null}
+      )}
 
-      {/* Patch diff tab — only for patches (kind 1617) */}
-      {patch?.patchDiff && (
+      {/* Patch diff tab — only for patches */}
+      {pr?.patchDiff && (
         <TabsTrigger
           value="patch"
           className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
@@ -678,20 +313,20 @@ export default function PRPage() {
       {/* PR header */}
       <div className="border-b border-border/40">
         <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-0">
-          {prEvent ? (
+          {pr ? (
             <div className="flex flex-wrap items-end justify-between gap-x-4">
               {/* Left: title + meta */}
               <div className="min-w-0 pb-4">
                 <div className="flex items-start gap-3 mb-3">
                   <StatusBadge
-                    status={status}
+                    status={pr.status}
                     variant="pr"
                     className="mt-1 shrink-0"
                   />
                   <EditableSubject
-                    issueId={prEvent.id}
-                    currentSubject={currentSubject || originalSubject}
-                    canEdit={canEditSubject}
+                    issueId={pr.rootEvent.id}
+                    currentSubject={pr.currentSubject || pr.originalSubject}
+                    canEdit={canEdit}
                     repoRelays={repo?.relays}
                   />
                 </div>
@@ -699,27 +334,24 @@ export default function PRPage() {
                 <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground ml-[calc(theme(spacing.3)+4.5rem-3.5rem)]">
                   <div className="flex items-center gap-1">
                     <TypeIcon className="h-3.5 w-3.5" />
-                    <span className="text-xs capitalize">{itemType}</span>
+                    <span className="text-xs capitalize">{pr.itemType}</span>
                   </div>
                   <UserLink
-                    pubkey={prEvent.pubkey}
+                    pubkey={pr.pubkey}
                     avatarSize="sm"
                     nameClassName="text-sm"
                   />
                   <div className="flex items-center gap-1">
                     <Clock className="h-3.5 w-3.5" />
                     <span>
-                      {formatDistanceToNow(
-                        new Date(prEvent.created_at * 1000),
-                        {
-                          addSuffix: true,
-                        },
-                      )}
+                      {formatDistanceToNow(new Date(pr.createdAt * 1000), {
+                        addSuffix: true,
+                      })}
                     </span>
                   </div>
-                  {allLabels.length > 0 && (
+                  {pr.labels.length > 0 && (
                     <div className="flex gap-1.5 flex-wrap">
-                      {allLabels.map((label) => (
+                      {pr.labels.map((label) => (
                         <LabelBadge key={label} label={label} />
                       ))}
                     </div>
@@ -727,7 +359,7 @@ export default function PRPage() {
                 </div>
               </div>
 
-              {/* Right: tabs anchored to bottom-right on desktop, below meta on mobile */}
+              {/* Right: tabs */}
               <div className="shrink-0">{tabList}</div>
             </div>
           ) : (
@@ -761,12 +393,12 @@ export default function PRPage() {
             {/* Conversation tab */}
             <TabsContent value="conversation" className="space-y-4 mt-0">
               {/* PR / patch body */}
-              {prEvent ? (
+              {pr ? (
                 <EventBodyCard
-                  event={prEvent}
-                  content={body}
+                  event={pr.rootEvent}
+                  content={pr.body}
                   commits={
-                    itemType === "pr" && prCommits.length > 0
+                    pr.itemType === "pr" && prCommits.length > 0
                       ? prCommits.map((c) => ({
                           hash: c.hash,
                           subject: c.message.split("\n")[0],
@@ -781,17 +413,17 @@ export default function PRPage() {
                 <EventBodyCardSkeleton />
               )}
 
-              {/* Interleaved timeline: push events + comments + renames */}
+              {/* Interleaved timeline */}
               <div className="space-y-1">
                 <Separator />
 
-                {!comments ? (
+                {!pr ? (
                   <div className="space-y-3 pt-3">
                     {Array.from({ length: 2 }).map((_, i) => (
                       <CommentSkeleton key={i} />
                     ))}
                   </div>
-                ) : conversationTimeline.length === 0 ? (
+                ) : pr.timelineNodes.length === 0 ? (
                   <div className="py-8 text-center text-muted-foreground/60 text-sm">
                     No activity yet. The conversation awaits its first voice.
                   </div>
@@ -800,34 +432,56 @@ export default function PRPage() {
                     className="min-w-0 border-l pl-1 space-y-0.5"
                     style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
                   >
-                    {conversationTimeline.map((node, idx) => {
-                      if (node.type === "patch-push") {
-                        return (
-                          <PatchSetPushEvent
-                            key={`patch-push-${node.revision.rootPatch.id}`}
-                            revision={node.revision}
-                            superseded={node.superseded}
-                            basePath={prBasePath ?? undefined}
-                          />
-                        );
-                      }
-                      if (node.type === "pr-update") {
-                        return (
-                          <PRUpdatePushEvent
-                            key={`pr-update-${node.update.id}`}
-                            update={node.update}
-                            superseded={node.superseded}
-                            basePath={prBasePath ?? undefined}
-                          />
-                        );
+                    {pr.timelineNodes.map((node, idx) => {
+                      if (node.type === "revision") {
+                        if (
+                          node.revision.type === "patch-set" &&
+                          node.revision.patches &&
+                          node.revision.patches.length > 0
+                        ) {
+                          const rootPatch = node.revision.patches[0];
+                          return (
+                            <PatchSetPushEvent
+                              key={`patch-push-${node.revision.rootPatchEvent?.id ?? idx}`}
+                              revision={{
+                                rootPatch,
+                                chain: node.revision.patches,
+                                isRevision:
+                                  node.revision.superseded ||
+                                  rootPatch.isRootRevision,
+                              }}
+                              superseded={node.revision.superseded}
+                              basePath={prBasePath ?? undefined}
+                            />
+                          );
+                        }
+                        if (
+                          node.revision.type === "pr-update" &&
+                          node.revision.updateEvent
+                        ) {
+                          return (
+                            <PRUpdatePushEvent
+                              key={`pr-update-${node.revision.updateEvent.id}`}
+                              update={{
+                                event: node.revision.updateEvent,
+                                pubkey: node.revision.pubkey,
+                                tipCommitId: node.revision.tipCommitId,
+                                mergeBase: node.revision.mergeBase,
+                              }}
+                              superseded={node.revision.superseded}
+                              basePath={prBasePath ?? undefined}
+                            />
+                          );
+                        }
+                        return null;
                       }
                       if (node.type === "rename") {
                         return (
                           <SubjectRenameCard
-                            key={node.item.event.id}
-                            event={node.item.event}
-                            oldSubject={node.item.oldSubject}
-                            newSubject={node.item.newSubject}
+                            key={node.event.id}
+                            event={node.event}
+                            oldSubject={node.oldSubject}
+                            newSubject={node.newSubject}
                           />
                         );
                       }
@@ -837,9 +491,9 @@ export default function PRPage() {
                           key={`thread-${node.node.event.id}-${idx}`}
                           node={node.node}
                           threadContext={
-                            activeAccount && prEvent
+                            activeAccount && pr
                               ? {
-                                  rootEvent: prEvent,
+                                  rootEvent: pr.rootEvent,
                                   repoRelays: repo?.relays ?? [],
                                 }
                               : undefined
@@ -851,80 +505,54 @@ export default function PRPage() {
                 )}
               </div>
 
-              {/* Reply box — only for logged-in users */}
-              {activeAccount && prEvent && (
-                <ReplyBox rootEvent={prEvent} repoRelays={repo?.relays ?? []} />
+              {/* Reply box */}
+              {activeAccount && pr && (
+                <ReplyBox
+                  rootEvent={pr.rootEvent}
+                  repoRelays={repo?.relays ?? []}
+                />
               )}
             </TabsContent>
 
-            {/* Files Changed tab — PRs and patches with commit IDs */}
-            {(itemType === "pr" ||
-              (itemType === "patch" && patchTipCommitId && patchMergeBase)) && (
+            {/* Files Changed tab */}
+            {(pr?.itemType === "pr" || patchHasGitData) && (
               <TabsContent value="files" className="mt-0 min-w-0">
-                {itemType === "pr" ? (
-                  // PR: use effectiveTipCommitId + effectiveMergeBase
-                  !effectiveTipCommitId ? (
-                    <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-                      {prEvent
-                        ? "This PR does not include a tip commit ID."
-                        : "Loading PR data…"}
-                    </div>
-                  ) : !effectiveMergeBase ? (
-                    <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-                      {computingMergeBase
-                        ? "Determining base commit…"
-                        : "Could not determine the base commit for this PR."}
-                    </div>
-                  ) : !gitPool ? (
-                    <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-                      Connecting to git server…
-                    </div>
-                  ) : (
-                    <PRFilesTab
-                      tipCommitId={effectiveTipCommitId}
-                      baseCommitId={effectiveMergeBase}
-                      pool={gitPool}
-                      fallbackUrls={prCloneUrls}
-                    />
-                  )
-                ) : // Patch: use patchTipCommitId + patchMergeBase
-                !patchTipCommitId ? (
+                {!pr?.tip.commitId ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-                    {patchChain.loading
-                      ? "Loading patch chain…"
-                      : "Patch does not include commit IDs."}
+                    {pr
+                      ? "This item does not include a tip commit ID."
+                      : "Loading data..."}
                   </div>
-                ) : !patchMergeBase ? (
+                ) : !effectiveMergeBase ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-                    {computingPatchMergeBase
-                      ? "Determining base commit…"
-                      : "Could not determine the base commit for this patch set."}
+                    {computingMergeBase
+                      ? "Determining base commit..."
+                      : "Could not determine the base commit."}
                   </div>
                 ) : !gitPool ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-                    Connecting to git server…
+                    Connecting to git server...
                   </div>
                 ) : (
                   <PRFilesTab
-                    tipCommitId={patchTipCommitId}
-                    baseCommitId={patchMergeBase}
+                    tipCommitId={pr.tip.commitId}
+                    baseCommitId={effectiveMergeBase}
                     pool={gitPool}
-                    fallbackUrls={patchCloneUrls}
+                    fallbackUrls={effectiveCloneUrls}
                   />
                 )}
               </TabsContent>
             )}
 
-            {/* Commits tab — PRs and patches */}
-            {(itemType === "pr" && effectiveTipCommitId) ||
-            (itemType === "patch" && patchChain.chain.length > 0) ? (
+            {/* Commits tab */}
+            {((pr?.itemType === "pr" && pr.tip.commitId) ||
+              (patchChain && patchChain.length > 0)) && (
               <TabsContent value="commits" className="mt-0">
-                {itemType === "pr" ? (
-                  // PR: git-based commit history
+                {pr?.itemType === "pr" ? (
                   !effectiveMergeBase ? (
                     <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
                       {computingMergeBase
-                        ? "Determining base commit…"
+                        ? "Determining base commit..."
                         : "Could not determine the base commit for this PR."}
                     </div>
                   ) : prCommitHistory.error ? (
@@ -942,47 +570,43 @@ export default function PRPage() {
                       }
                     />
                   )
-                ) : // Patch: show commits derived from the patch chain
-                patchChain.loading ? (
-                  <CommitListLoading count={2} />
-                ) : patchChain.chain.length === 0 ? (
-                  <CommitListEmpty message="No patches found in this patch set." />
-                ) : (
+                ) : patchChain && patchChain.length > 0 ? (
                   <PatchCommitList
-                    patches={patchChain.chain}
+                    patches={patchChain}
                     basePath={
                       prBasePath ??
                       repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)
                     }
                   />
+                ) : (
+                  <CommitListEmpty message="No patches found in this patch set." />
                 )}
               </TabsContent>
-            ) : null}
+            )}
 
             {/* Patch diff tab */}
-            {patch?.patchDiff && (
+            {pr?.patchDiff && (
               <TabsContent value="patch" className="mt-0">
-                <DiffView diff={patch.patchDiff} />
+                <DiffView diff={pr.patchDiff} />
               </TabsContent>
             )}
           </div>
 
-          {/* Sidebar — hidden on the files tab to give the diff more room */}
+          {/* Sidebar */}
           <div className={cn("space-y-4", activeTab === "files" && "hidden")}>
-            {/* Stats card */}
             <Card>
               <CardContent className="p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Status</span>
-                  <StatusBadge status={status} variant="pr" />
+                  <StatusBadge status={pr?.status ?? "open"} variant="pr" />
                 </div>
 
-                {canEdit && prEvent && status !== "deleted" && (
+                {canEdit && pr && pr.status !== "deleted" && (
                   <ChangeStatusDropdown
-                    itemId={prEvent.id}
-                    itemAuthorPubkey={prEvent.pubkey}
-                    repoCoords={pr?.repoCoords ?? patch?.repoCoords ?? []}
-                    currentStatus={status}
+                    itemId={pr.rootEvent.id}
+                    itemAuthorPubkey={pr.pubkey}
+                    repoCoords={pr.repoCoords}
+                    currentStatus={pr.status}
                     options={[
                       { value: "open", label: "Open" },
                       { value: "resolved", label: "Merged" },
@@ -993,7 +617,7 @@ export default function PRPage() {
                   />
                 )}
 
-                {/* Ahead / behind the default branch */}
+                {/* Ahead / behind */}
                 {(aheadCount !== undefined || behindCount !== undefined) && (
                   <>
                     <Separator />
@@ -1036,7 +660,7 @@ export default function PRPage() {
                     <MessageCircle className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">Comments</span>
                     <span className="ml-auto font-medium">
-                      {comments?.length ?? 0}
+                      {pr?.commentCount ?? 0}
                     </span>
                   </div>
 
@@ -1044,7 +668,7 @@ export default function PRPage() {
                     <Zap className="h-4 w-4 text-amber-500" />
                     <span className="text-muted-foreground">Zaps</span>
                     <span className="ml-auto font-medium">
-                      {zaps?.length ?? 0}
+                      {pr?.zapCount ?? 0}
                     </span>
                   </div>
 
@@ -1052,7 +676,7 @@ export default function PRPage() {
                     <Users className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">Participants</span>
                     <span className="ml-auto font-medium">
-                      {participants.length}
+                      {pr?.participants.length ?? 0}
                     </span>
                   </div>
                 </div>
@@ -1060,24 +684,26 @@ export default function PRPage() {
                 <Separator />
 
                 {/* Participant avatars */}
-                <div>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Participants
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {participants.map((pk) => (
-                      <UserAvatar
-                        key={pk}
-                        pubkey={pk}
-                        size="sm"
-                        linkToProfile
-                      />
-                    ))}
+                {pr && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Participants
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {pr.participants.map((pk) => (
+                        <UserAvatar
+                          key={pk}
+                          pubkey={pk}
+                          size="sm"
+                          linkToProfile
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Labels */}
-                {allLabels.length > 0 && (
+                {pr && pr.labels.length > 0 && (
                   <>
                     <Separator />
                     <div>
@@ -1085,7 +711,7 @@ export default function PRPage() {
                         Labels
                       </p>
                       <div className="flex flex-wrap gap-1.5">
-                        {allLabels.map((label) => (
+                        {pr.labels.map((label) => (
                           <LabelBadge key={label} label={label} />
                         ))}
                       </div>
