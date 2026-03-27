@@ -12,6 +12,7 @@ import { useRenderedContent, type ComponentMap } from "applesauce-react/hooks";
 import type { NostrEvent } from "nostr-tools";
 import { cn } from "@/lib/utils";
 import { useProfile } from "@/hooks/useProfile";
+import { useUserPath } from "@/hooks/useUserPath";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { genUserName } from "@/lib/genUserName";
 
@@ -21,6 +22,7 @@ import { genUserName } from "@/lib/genUserName";
 
 function MentionComponent({ pubkey }: { pubkey: string }) {
   const profile = useProfile(pubkey);
+  const userPath = useUserPath(pubkey);
   const npub = nip19.npubEncode(pubkey);
   const displayName =
     profile?.displayName ?? profile?.name ?? genUserName(pubkey);
@@ -29,7 +31,7 @@ function MentionComponent({ pubkey }: { pubkey: string }) {
 
   return (
     <Link
-      to={`/${npub}`}
+      to={userPath}
       className="inline-flex items-center gap-1 align-middle text-primary hover:underline font-medium"
     >
       <Avatar className="h-4 w-4 shrink-0">

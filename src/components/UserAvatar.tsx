@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useProfile } from "@/hooks/useProfile";
+import { useUserPath } from "@/hooks/useUserPath";
 import { cn } from "@/lib/utils";
 import { nip19 } from "nostr-tools";
 
@@ -25,6 +26,7 @@ export function UserAvatar({
   linkToProfile,
 }: UserAvatarProps) {
   const profile = useProfile(pubkey);
+  const userPath = useUserPath(pubkey);
   const npub = pubkey ? nip19.npubEncode(pubkey) : undefined;
   const initials =
     profile?.name?.slice(0, 2).toUpperCase() ??
@@ -42,10 +44,10 @@ export function UserAvatar({
     </Avatar>
   );
 
-  if (linkToProfile && npub) {
+  if (linkToProfile && pubkey) {
     return (
       <Link
-        to={`/${npub}`}
+        to={userPath}
         onClick={(e) => e.stopPropagation()}
         className="shrink-0 hover:opacity-80 transition-opacity"
       >
@@ -66,16 +68,17 @@ interface UserNameProps {
 
 export function UserName({ pubkey, className, linkToProfile }: UserNameProps) {
   const profile = useProfile(pubkey);
+  const userPath = useUserPath(pubkey);
   const npub = pubkey ? nip19.npubEncode(pubkey) : undefined;
   const displayName =
     profile?.displayName ??
     profile?.name ??
     (npub ? npub.slice(0, 12) + "..." : "unknown");
 
-  if (linkToProfile && npub) {
+  if (linkToProfile && pubkey) {
     return (
       <Link
-        to={`/${npub}`}
+        to={userPath}
         onClick={(e) => e.stopPropagation()}
         className={cn("font-medium hover:underline", className)}
       >
@@ -108,6 +111,7 @@ export function UserLink({
   noLink = false,
 }: UserLinkProps) {
   const profile = useProfile(pubkey);
+  const userPath = useUserPath(pubkey);
   const npub = pubkey ? nip19.npubEncode(pubkey) : undefined;
   const displayName =
     profile?.displayName ??
@@ -150,7 +154,7 @@ export function UserLink({
 
   return (
     <Link
-      to={`/${npub ?? ""}`}
+      to={userPath}
       onClick={(e) => e.stopPropagation()}
       className={cn(
         "flex items-center gap-1.5 hover:opacity-80 transition-opacity",

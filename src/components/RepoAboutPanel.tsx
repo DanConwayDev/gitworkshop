@@ -49,7 +49,7 @@ import {
   getReplaceableAddress,
 } from "applesauce-core/helpers";
 import { cn } from "@/lib/utils";
-import { relayUrlToSegment } from "@/lib/routeUtils";
+import { relayUrlToSegment, repoToPath } from "@/lib/routeUtils";
 import { format } from "date-fns";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 
@@ -203,13 +203,8 @@ function SidebarVariant({
   nostrCloneUrl: string | undefined;
   hasAnyCloneUrl: boolean;
 }) {
-  let npub: string | undefined;
-  try {
-    npub = nip19.npubEncode(repo.selectedMaintainer);
-  } catch {
-    npub = undefined;
-  }
-  const aboutPath = npub ? `/${npub}/${repo.dTag}/about` : undefined;
+  const { nip05 } = useRepoContext();
+  const aboutPath = `${repoToPath(repo.selectedMaintainer, repo.dTag, repo.relays, nip05)}/about`;
   const selectedAnnouncement = repo.announcements.find(
     (a) => a.pubkey === repo.selectedMaintainer,
   );

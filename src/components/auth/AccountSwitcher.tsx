@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import { useProfile } from "@/hooks/useProfile";
+import { useUserPath } from "@/hooks/useUserPath";
 import { genUserName } from "@/lib/genUserName";
 import type { IAccount } from "applesauce-accounts";
 import {
@@ -23,7 +24,6 @@ import {
 } from "applesauce-react/hooks";
 import { ChevronDown, LogOut, UserIcon, UserPlus } from "lucide-react";
 import { Link } from "react-router-dom";
-import { nip19 } from "nostr-tools";
 
 interface AccountSwitcherProps {
   onAddAccountClick: () => void;
@@ -63,6 +63,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   const accountManager = useAccountManager();
   const accounts = use$(accountManager.accounts$);
   const activeProfile = useProfile(activeAccount?.pubkey);
+  const activeUserPath = useUserPath(activeAccount?.pubkey ?? "");
 
   if (!activeAccount) return null;
 
@@ -98,7 +99,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
           asChild
           className="flex items-center gap-2 cursor-pointer p-2 rounded-md"
         >
-          <Link to={`/${nip19.npubEncode(activeAccount.pubkey)}`}>
+          <Link to={activeUserPath}>
             <Avatar className="w-8 h-8">
               <AvatarImage src={activeProfile?.picture} alt={displayName} />
               <AvatarFallback>{displayName.charAt(0)}</AvatarFallback>

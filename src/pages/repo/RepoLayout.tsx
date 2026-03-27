@@ -18,6 +18,7 @@ import { useRepositoryState } from "@/hooks/useRepositoryState";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import { useProfile } from "@/hooks/useProfile";
+import { useUserPath } from "@/hooks/useUserPath";
 import { UserAvatar } from "@/components/UserAvatar";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
@@ -627,6 +628,7 @@ function RepoBreadcrumb({
   nip05?: string;
 }) {
   const profile = useProfile(pubkey);
+  const userPath = useUserPath(pubkey);
   const npub = nip19.npubEncode(pubkey);
   const nip05Local = nip05?.split("@")[0];
   const nip05Domain = nip05?.split("@")[1];
@@ -640,7 +642,7 @@ function RepoBreadcrumb({
   return (
     <div className="flex items-center gap-2 mb-4">
       <Link
-        to={`/${npub}`}
+        to={userPath}
         className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
       >
         <UserAvatar pubkey={pubkey} size="sm" />

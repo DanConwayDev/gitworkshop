@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { nip19, type NostrEvent } from "nostr-tools";
 import { useProfile } from "@/hooks/useProfile";
+import { useUserPath } from "@/hooks/useUserPath";
 import { genUserName } from "@/lib/genUserName";
 import { cn } from "@/lib/utils";
 
@@ -119,13 +120,13 @@ export function NoteContent({ event, className }: NoteContentProps) {
 // Helper component to display user mentions
 function NostrMention({ pubkey }: { pubkey: string }) {
   const profile = useProfile(pubkey);
-  const npub = nip19.npubEncode(pubkey);
+  const userPath = useUserPath(pubkey);
   const hasRealName = !!profile?.name;
   const displayName = profile?.name ?? genUserName(pubkey);
 
   return (
     <Link
-      to={`/${npub}`}
+      to={userPath}
       className={cn(
         "font-medium hover:underline",
         hasRealName ? "text-blue-500" : "text-gray-500 hover:text-gray-700",

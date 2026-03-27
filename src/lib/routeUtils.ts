@@ -283,6 +283,32 @@ function normalizeRelayHint(hint: string): string | undefined {
 // ---------------------------------------------------------------------------
 
 /**
+ * Build the URL-safe identity segment for a pubkey.
+ *
+ * Prefers a verified NIP-05 address when provided:
+ *   - "_@domain.com" → "domain.com"  (bare domain)
+ *   - "user@domain.com" → "user@domain.com"
+ *
+ * Falls back to the npub when no NIP-05 is available.
+ */
+export function pubkeyToIdentity(pubkey: string, nip05?: string): string {
+  if (nip05) {
+    return nip05.startsWith("_@") ? nip05.slice(2) : nip05;
+  }
+  return nip19.npubEncode(pubkey);
+}
+
+/**
+ * Generate a canonical user profile URL: /:nip05 or /:npub
+ *
+ * @param pubkey  - hex pubkey
+ * @param nip05   - optional verified NIP-05 address (standardised)
+ */
+export function userToPath(pubkey: string, nip05?: string): string {
+  return `/${pubkeyToIdentity(pubkey, nip05)}`;
+}
+
+/**
  * Generate a canonical repo URL.
  *
  * Prefers NIP-05 identity when provided (already verified by the caller):
@@ -307,15 +333,7 @@ export function repoToPath(
   relays: string[],
   nip05?: string,
 ): string {
-  // Build the identity segment: prefer NIP-05 over npub
-  let identity: string;
-  if (nip05) {
-    // Standardised form is user@domain.com or _@domain.com.
-    // Strip leading "_@" so bare domains appear as just "domain.com".
-    identity = nip05.startsWith("_@") ? nip05.slice(2) : nip05;
-  } else {
-    identity = nip19.npubEncode(pubkey);
-  }
+  const identity = pubkeyToIdentity(pubkey, nip05);
 
   const relay = relays[0];
   if (relay) {

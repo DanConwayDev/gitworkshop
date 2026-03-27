@@ -22,6 +22,7 @@ import { remarkNostrMentions } from "applesauce-content/markdown";
 import { decodePointer } from "applesauce-core/helpers";
 import type { Components } from "react-markdown";
 import { useProfile } from "@/hooks/useProfile";
+import { useUserPath } from "@/hooks/useUserPath";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { genUserName } from "@/lib/genUserName";
 import { cn, markdownUrlTransform } from "@/lib/utils";
@@ -32,6 +33,7 @@ import { cn, markdownUrlTransform } from "@/lib/utils";
 
 function NostrProfileMention({ pubkey }: { pubkey: string }) {
   const profile = useProfile(pubkey);
+  const userPath = useUserPath(pubkey);
   const npub = nip19.npubEncode(pubkey);
   const displayName =
     profile?.displayName ?? profile?.name ?? genUserName(pubkey);
@@ -40,7 +42,7 @@ function NostrProfileMention({ pubkey }: { pubkey: string }) {
 
   return (
     <Link
-      to={`/${npub}`}
+      to={userPath}
       className="inline-flex items-center gap-1 align-middle text-primary hover:underline font-medium"
     >
       <Avatar className="h-4 w-4 shrink-0">

@@ -22,6 +22,7 @@ import { decodePointer } from "applesauce-core/helpers";
 import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { useProfile } from "@/hooks/useProfile";
+import { useUserPath } from "@/hooks/useUserPath";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { genUserName } from "@/lib/genUserName";
 
@@ -229,6 +230,7 @@ function GitImage({
 
 function NostrProfileMention({ pubkey }: { pubkey: string }) {
   const profile = useProfile(pubkey);
+  const userPath = useUserPath(pubkey);
   const npub = nip19.npubEncode(pubkey);
   const displayName =
     profile?.displayName ?? profile?.name ?? genUserName(pubkey);
@@ -237,7 +239,7 @@ function NostrProfileMention({ pubkey }: { pubkey: string }) {
 
   return (
     <Link
-      to={`/${npub}`}
+      to={userPath}
       className="inline-flex items-center gap-1 align-middle text-primary hover:underline font-medium"
     >
       <Avatar className="h-4 w-4 shrink-0">
