@@ -1111,6 +1111,37 @@ export class GitGraspPool {
   }
 
   /**
+   * Get the full recursive tree for a commit using blob:none (lightweight —
+   * only tree metadata, no file content). Also returns the parsed commit.
+   *
+   * This is the same fetch strategy used by getCommitRange for diffing.
+   * The commit object is cached as a side-effect, so subsequent
+   * getSingleCommit calls for the same hash are instant.
+   *
+   * @param fallbackUrls - Extra URLs to try after the pool's own URLs if the
+   *   data is not found. Not tracked by the pool.
+   */
+  async getFullTree(
+    commitHash: string,
+    signal: AbortSignal,
+    fallbackUrls?: string[],
+  ): Promise<{ commit: Commit; tree: Tree } | null> {
+    return this.withFallback(
+      signal,
+      async (url) => {
+        const start = Date.now();
+        const result = await this.http.fetchFullTree(url, commitHash, signal);
+        if (result) {
+          const tracker = this.urlManager.get(url);
+          tracker?.recordOperationSuccess(Date.now() - start);
+        }
+        return result;
+      },
+      fallbackUrls,
+    );
+  }
+
+  /**
    * Get a blob by its object hash.
    *
    * @param fallbackUrls - Extra URLs to try after the pool's own URLs if the

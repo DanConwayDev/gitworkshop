@@ -330,32 +330,20 @@ export async function verifyPatchCommitHash(
     };
   }
 
-  // Step 1: Fetch parent commit to get its tree hash
-  const parentCommit = await pool.getSingleCommit(
+  // Step 1+2: Fetch parent commit + full recursive tree in one request.
+  // Uses blob:none (lightweight — only tree metadata, no file content).
+  const parentData = await pool.getFullTree(
     parentCommitId,
     signal,
     fallbackUrls,
   );
-  if (!parentCommit) {
+  if (!parentData) {
     return {
       status: "unavailable",
       reason: "Could not fetch parent commit from git server",
     };
   }
-
-  // Step 2: Fetch the parent tree (recursive)
-  const parentTree = await pool.getTree(
-    parentCommitId,
-    0,
-    signal,
-    fallbackUrls,
-  );
-  if (!parentTree) {
-    return {
-      status: "unavailable",
-      reason: "Could not fetch parent tree from git server",
-    };
-  }
+  const { tree: parentTree } = parentData;
 
   // Step 3: Parse the patch diff
   const patchDiff = extractPatchDiff(patch.content);
