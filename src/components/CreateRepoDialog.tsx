@@ -13,7 +13,6 @@ import {
   Circle,
   Loader2,
   X,
-  Copy,
   AlertTriangle,
   Server,
   Info,
@@ -149,27 +148,14 @@ function PurgatoryCountdown({ publishedAt }: { publishedAt: number }) {
 function SuccessActions({
   pubkey,
   identifier,
-  cloneUrl,
   onClose,
 }: {
   pubkey: string;
   identifier: string;
-  cloneUrl: string;
   onClose: () => void;
 }) {
   const navigate = useNavigate();
-  const [copied, setCopied] = useState(false);
   const repoPath = useRepoPath(pubkey, identifier, []);
-
-  const handleCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(cloneUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard API not available
-    }
-  }, [cloneUrl]);
 
   const handleViewRepo = useCallback(() => {
     onClose();
@@ -178,25 +164,6 @@ function SuccessActions({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border bg-muted/50 p-3">
-        <p className="text-xs text-muted-foreground mb-1">Clone URL</p>
-        <div className="flex items-center gap-2">
-          <code className="text-sm font-mono flex-1 truncate">{cloneUrl}</code>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            onClick={handleCopy}
-          >
-            {copied ? (
-              <Check className="h-3.5 w-3.5 text-green-500" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" />
-            )}
-          </Button>
-        </div>
-      </div>
-
       <Button onClick={handleViewRepo} className="w-full">
         View Repository
       </Button>
@@ -519,7 +486,6 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
                 <SuccessActions
                   pubkey={pubkey}
                   identifier={state.identifier}
-                  cloneUrl={state.cloneUrl}
                   onClose={onClose}
                 />
               )}
