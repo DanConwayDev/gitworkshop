@@ -1272,6 +1272,50 @@ export interface ResolvedIssue extends ResolvedIssueLite {
 }
 
 // ---------------------------------------------------------------------------
+// Shared detail-page helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Build rename items with old/new subjects for display.
+ *
+ * Used by both IssueDetailModel and PRDetailModel.
+ */
+export function buildRenameItems(
+  originalSubject: string,
+  subjectRenames: { createdAt: number; id: string; value: string }[],
+  essentialEvents: NostrEvent[],
+): { event: NostrEvent; oldSubject: string; newSubject: string }[] {
+  if (subjectRenames.length === 0) return [];
+
+  // Build a map of essential events by ID for quick lookup
+  const evById = new Map<string, NostrEvent>();
+  for (const ev of essentialEvents) evById.set(ev.id, ev);
+
+  let prevSubject = originalSubject;
+  return subjectRenames
+    .map((rename) => {
+      const ev = evById.get(rename.id);
+      if (!ev) return null;
+      const item = {
+        event: ev,
+        oldSubject: prevSubject,
+        newSubject: rename.value,
+      };
+      prevSubject = rename.value;
+      return item;
+    })
+    .filter(
+      (
+        item,
+      ): item is {
+        event: NostrEvent;
+        oldSubject: string;
+        newSubject: string;
+      } => item !== null,
+    );
+}
+
+// ---------------------------------------------------------------------------
 // ResolvedPR — full detail-page view of a PR or patch
 // ---------------------------------------------------------------------------
 

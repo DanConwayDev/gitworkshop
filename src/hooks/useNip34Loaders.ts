@@ -9,8 +9,13 @@ import { map } from "rxjs/operators";
 import {
   liveness,
   nip34ItemLoader,
+  pool,
   type Nip34ItemTier,
 } from "@/services/nostr";
+import { gitIndexRelays, relayCurationMode } from "@/services/settings";
+import { mapEventsToStore } from "applesauce-core";
+import { onlyEvents } from "applesauce-relay";
+import type { Filter } from "applesauce-core/helpers";
 
 /** Max healthy inbox relays to take for the item author. */
 const MAX_INBOX_RELAYS = 3;
@@ -304,4 +309,71 @@ export function useNip34ItemLoaderBatch(
       ...itemIds.map((id) => nip34ItemLoader(id, authorInboxDelta, "thread")),
     );
   }, [idsKey, inboxDeltaKey, tier === "thread"]);
+}
+
+// ---------------------------------------------------------------------------
+// Detail-page loader — shared by useResolvedIssue and useResolvedPR
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches a single NIP-34 item's root event from relays and triggers tiered
+ * loading (essentials + comments + thread).
+ *
+ * Shared between useResolvedIssue and useResolvedPR. Both hooks need the same
+ * three steps:
+ *   1. Fetch root event by ID from repoRelayGroup (or fallback gitIndexRelays)
+ *   2. In outbox mode, also fetch from extraRelaysForMaintainerMailboxCoverage
+ *   3. Trigger useNip34ItemLoader at "thread" tier
+ *
+ * @param itemId          - The event ID of the root issue / PR / patch
+ * @param repoRelayGroup  - Base relay group from useResolvedRepository
+ * @param extraRelaysForMaintainerMailboxCoverage - Delta relay group for outbox mode
+ * @param maintainers     - Effective maintainer set (used to derive a stable key)
+ * @returns maintainerKey - Stable string key for use in downstream use$() dep arrays
+ */
+export function useNip34ItemDetailLoader(
+  itemId: string | undefined,
+  repoRelayGroup: RelayGroup | undefined,
+  extraRelaysForMaintainerMailboxCoverage: RelayGroup | undefined,
+  maintainers: Set<string> | undefined,
+): string {
+  const store = useEventStore();
+  const curationMode = use$(relayCurationMode);
+
+  // ── 1. Fetch root event by ID from relays ──────────────────────────────
+  use$(() => {
+    if (!itemId) return undefined;
+    const filters: Filter[] = [{ ids: [itemId] }];
+    if (repoRelayGroup) {
+      return repoRelayGroup
+        .subscription(filters)
+        .pipe(onlyEvents(), mapEventsToStore(store));
+    }
+    return pool
+      .subscription(gitIndexRelays.getValue(), filters)
+      .pipe(onlyEvents(), mapEventsToStore(store));
+  }, [itemId, repoRelayGroup, store]);
+
+  // ── 2. In outbox mode, also fetch from extra maintainer mailbox relays ──
+  use$(() => {
+    if (
+      !itemId ||
+      curationMode !== "outbox" ||
+      !extraRelaysForMaintainerMailboxCoverage
+    )
+      return undefined;
+    const filters: Filter[] = [{ ids: [itemId] }];
+    return extraRelaysForMaintainerMailboxCoverage
+      .subscription(filters)
+      .pipe(onlyEvents(), mapEventsToStore(store));
+  }, [itemId, curationMode, extraRelaysForMaintainerMailboxCoverage, store]);
+
+  // ── 3. Trigger tiered loading (essentials + comments + thread) ──────────
+  useNip34ItemLoader(itemId, repoRelayGroup, {
+    tier: "thread",
+    includeAuthorNip65: curationMode === "outbox",
+  });
+
+  // Return a stable maintainer key for downstream use$() dep arrays
+  return maintainers ? [...maintainers].sort().join(",") : "loading";
 }

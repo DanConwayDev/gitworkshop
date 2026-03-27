@@ -14,6 +14,7 @@ import {
   resolveItemEssentials,
   extractBody,
   extractPatchDiff,
+  buildRenameItems,
   type ResolvedPR,
   type PRRevision,
   type PRTimelineNode,
@@ -390,44 +391,6 @@ function deduplicateUrls(urls: string[]): string[] {
     seen.add(u);
     return true;
   });
-}
-
-/**
- * Build rename items with old/new subjects for display.
- */
-function buildRenameItems(
-  originalSubject: string,
-  subjectRenames: { createdAt: number; id: string; value: string }[],
-  essentialEvents: NostrEvent[],
-): { event: NostrEvent; oldSubject: string; newSubject: string }[] {
-  if (subjectRenames.length === 0) return [];
-
-  // Build a map of essential events by ID for quick lookup
-  const evById = new Map<string, NostrEvent>();
-  for (const ev of essentialEvents) evById.set(ev.id, ev);
-
-  let prevSubject = originalSubject;
-  return subjectRenames
-    .map((rename) => {
-      const ev = evById.get(rename.id);
-      if (!ev) return null;
-      const item = {
-        event: ev,
-        oldSubject: prevSubject,
-        newSubject: rename.value,
-      };
-      prevSubject = rename.value;
-      return item;
-    })
-    .filter(
-      (
-        item,
-      ): item is {
-        event: NostrEvent;
-        oldSubject: string;
-        newSubject: string;
-      } => item !== null,
-    );
 }
 
 /**
