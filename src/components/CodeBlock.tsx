@@ -164,6 +164,12 @@ export const CodeBlock = memo(function CodeBlock({
     [plainLines],
   );
 
+  // Leading-whitespace character count per line — used for hanging indent in wrap mode
+  const indentWidths = useMemo(
+    () => plainLines.map((l) => l.length - l.trimStart().length),
+    [plainLines],
+  );
+
   const toggleWrap = useCallback(() => setWordWrap((w) => !w), []);
 
   // Alt+Z keyboard shortcut — scoped to this container
@@ -255,9 +261,17 @@ export const CodeBlock = memo(function CodeBlock({
                     className={cn(
                       "px-4 py-0",
                       wordWrap
-                        ? "whitespace-pre-wrap break-all"
+                        ? "whitespace-pre-wrap break-words"
                         : "whitespace-pre",
                     )}
+                    style={
+                      wordWrap && indentWidths[i] > 0
+                        ? {
+                            paddingLeft: `calc(1rem + ${indentWidths[i]}ch)`,
+                            textIndent: `-${indentWidths[i]}ch`,
+                          }
+                        : undefined
+                    }
                   >
                     {Array.isArray(line) ? (
                       // Highlighted tokens

@@ -834,8 +834,17 @@ function DiffLine({
       <td
         className={cn(
           "px-3 py-0",
-          wordWrap ? "whitespace-pre-wrap break-all" : "whitespace-pre",
+          wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
         )}
+        style={(() => {
+          if (!wordWrap) return undefined;
+          const indent = text.length - text.trimStart().length;
+          if (indent === 0) return undefined;
+          return {
+            paddingLeft: `calc(0.75rem + ${indent}ch)`,
+            textIndent: `-${indent}ch`,
+          };
+        })()}
       >
         {tokens ? (
           tokens.map((token, j) => (
