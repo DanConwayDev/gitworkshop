@@ -51,6 +51,7 @@ import {
 import { cn } from "@/lib/utils";
 import { relayUrlToSegment } from "@/lib/routeUtils";
 import { format } from "date-fns";
+import { useRepoContext } from "@/pages/repo/RepoContext";
 
 // ---------------------------------------------------------------------------
 // Helpers (shared)
@@ -140,7 +141,26 @@ export function RepoAboutPanel({ repo, variant }: RepoAboutPanelProps) {
   } catch {
     npub = undefined;
   }
-  const nostrCloneUrl = npub ? `nostr://${npub}/${repo.dTag}` : undefined;
+
+  // Prefer the NIP-05 address from the route (already verified by RepoLayoutNip05)
+  // over npub for the clone URL identity segment.
+  // Strip leading "_@" — bare domain is the canonical form for the URL.
+  const { nip05: routeNip05 } = useRepoContext();
+  const identitySegment = routeNip05
+    ? routeNip05.startsWith("_@")
+      ? routeNip05.slice(2)
+      : routeNip05
+    : npub;
+
+  // Extract a bare domain relay hint from the first declared relay (strip wss:// / ws://)
+  const relayHint = repo.relays[0]
+    ? repo.relays[0].replace(/^wss?:\/\//, "").replace(/\/$/, "")
+    : undefined;
+  const nostrCloneUrl = identitySegment
+    ? relayHint
+      ? `nostr://${identitySegment}/${relayHint}/${repo.dTag}`
+      : `nostr://${identitySegment}/${repo.dTag}`
+    : undefined;
   const nostrCloneCommand = nostrCloneUrl
     ? `git clone ${nostrCloneUrl}`
     : undefined;
