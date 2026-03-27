@@ -265,11 +265,13 @@ export default function PRPage() {
 
   // Behind: count commits on the default branch since the merge base.
   //
-  // Calls pool.countCommitsBehind() which walks parent links from the default
-  // branch HEAD (from git infoRefs — same source as findMergeBase) until it
-  // reaches the merge base. Individual commits are already cached by
-  // findMergeBase, so this is usually instant. Falls back to fetching
-  // individual commits for deep histories.
+  // countCommitsBehind reuses the default-branch history already cached by
+  // findMergeBase, so this is typically a single in-memory array lookup.
+  //
+  // We also depend on gitPoolState.latestCommit?.hash so the count refreshes
+  // if the default branch advances while the page is open (e.g. someone
+  // pushes to the repo).
+  const defaultBranchHead = gitPoolState.latestCommit?.hash;
   const [behindCount, setBehindCount] = useState<number | undefined>(undefined);
   const behindAbortRef = useRef<AbortController | null>(null);
 
@@ -294,7 +296,7 @@ export default function PRPage() {
       });
 
     return () => abort.abort();
-  }, [gitPool, effectiveMergeBase]);
+  }, [gitPool, effectiveMergeBase, defaultBranchHead]);
 
   // ── Patch-specific git data ────────────────────────────────────────────────
   // For patches with commit IDs in their tags, we can show a Files Changed tab

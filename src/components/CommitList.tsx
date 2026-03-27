@@ -6,7 +6,7 @@
  * The caller supplies `basePath`; commit links become `<basePath>/commit/<hash>`.
  */
 
-import { useMemo } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,10 +21,19 @@ import type { Commit } from "@fiatjaf/git-natural-api";
 export function CommitList({
   commits,
   basePath,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }: {
   commits: Commit[];
   /** Prefix for commit links — links become `<basePath>/commit/<hash>`. */
   basePath: string;
+  /** Whether there are more commits to load. */
+  hasMore?: boolean;
+  /** True while the next batch is being fetched. */
+  loadingMore?: boolean;
+  /** Called when the sentinel scrolls into view. */
+  onLoadMore?: () => void;
 }) {
   const grouped = useMemo(() => {
     const groups: { date: string; commits: Commit[] }[] = [];
@@ -45,6 +54,22 @@ export function CommitList({
 
     return groups;
   }, [commits]);
+
+  // IntersectionObserver sentinel — fires onLoadMore when visible.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!onLoadMore || !hasMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) onLoadMore();
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onLoadMore, hasMore]);
 
   return (
     <div className="space-y-6">
@@ -70,6 +95,18 @@ export function CommitList({
           </Card>
         </div>
       ))}
+
+      {/* Infinite scroll sentinel */}
+      {hasMore && (
+        <div ref={sentinelRef} className="flex justify-center py-4">
+          {loadingMore && (
+            <span className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading more commits…
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

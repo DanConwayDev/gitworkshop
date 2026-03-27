@@ -1341,19 +1341,27 @@ export class GitGraspPool {
   /**
    * Count how many commits the default branch is ahead of `mergeBase`.
    *
-   * Walks the default branch HEAD backwards through parent links until it
-   * reaches `mergeBase`, counting each step. Returns 0 when `mergeBase` IS
-   * the current HEAD (fully up-to-date). Returns null when the walk fails or
-   * the merge base is not found within `maxDepth` commits.
+   * Fast path: reuses the default-branch history already cached by
+   * `findMergeBase` (keyed at `batchSize=200`) — typically a single
+   * in-memory array lookup with no network traffic.
    *
-   * Individual commits are already cached by `findMergeBase`, so in the
-   * common case this walk is entirely in-memory. When a commit is missing
-   * from cache it is fetched individually via `getSingleCommit`.
+   * Lazy-load path: if the merge base is not found in the first batch,
+   * fetches additional 200-commit batches walking backwards from the tail
+   * of the previous batch. Each batch is cached individually so subsequent
+   * calls for the same or nearby merge bases are also fast.
+   *
+   * Returns 0 when `mergeBase` IS the current HEAD (fully up-to-date).
+   * Returns null when the walk fails, the server is unreachable, or the
+   * merge base is not found within `maxTotal` commits.
+   *
+   * @param batchSize - Commits per fetch (default 200, matches findMergeBase).
+   * @param maxTotal  - Hard cap on total commits walked (default 5000).
    */
   async countCommitsBehind(
     mergeBase: string,
     signal: AbortSignal,
-    maxDepth = 2000,
+    batchSize = 200,
+    maxTotal = 5000,
   ): Promise<number | null> {
     const info = this.getInfoRefs();
     if (!info) return null;
@@ -1366,28 +1374,34 @@ export class GitGraspPool {
 
     if (defaultBranchCommit === mergeBase) return 0;
 
-    let current = defaultBranchCommit;
-    let count = 0;
+    let offset = 0; // total commits walked so far
+    let batchStart = defaultBranchCommit;
 
-    while (count < maxDepth) {
+    while (offset < maxTotal) {
       if (signal.aborted) return null;
 
-      // getSingleCommit checks L1 → L2 → network.
-      const commit = await this.getSingleCommit(current, signal);
+      // getCommitHistory checks L1 → L2 → network, and caches the result.
+      const batch = await this.getCommitHistory(batchStart, batchSize, signal);
 
-      if (!commit || signal.aborted) return null;
+      if (!batch || batch.length === 0 || signal.aborted) return null;
 
-      // Each step away from HEAD is one commit the PR is "behind".
-      count++;
+      const idx = batch.findIndex((c) => c.hash === mergeBase);
+      if (idx !== -1) return offset + idx;
 
-      if (commit.parents.length === 0) return null; // reached root without finding merge base
+      offset += batch.length;
 
-      const parentHash = commit.parents[0];
-      if (parentHash === mergeBase) return count;
-      current = parentHash;
+      // The last commit in the batch is the oldest one fetched. Walk to its
+      // first parent to start the next batch without overlap.
+      const tail = batch[batch.length - 1];
+      if (tail.parents.length === 0) return null; // reached root
+
+      batchStart = tail.parents[0];
+
+      // If the tail itself is the merge base we would have caught it above;
+      // if its parent is the merge base we'll find it in the next batch.
     }
 
-    return null; // exceeded maxDepth
+    return null; // exceeded maxTotal
   }
 
   /**

@@ -1,7 +1,10 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRepoContext } from "./RepoContext";
-import { useCommitHistory, useGitExplorer } from "@/hooks/useGitExplorer";
+import {
+  useInfiniteCommitHistory,
+  useGitExplorer,
+} from "@/hooks/useGitExplorer";
 import { useGitPool } from "@/hooks/useGitPool";
 import { RefSelector } from "@/components/RefSelector";
 import { GitServerStatus } from "@/components/GitServerStatus";
@@ -63,7 +66,7 @@ export default function RepoCommitsPage() {
       : (explorer.commitHash ?? undefined)
     : (explorer.commitHash ?? undefined);
 
-  const history = useCommitHistory(pool, poolState, historyCommit, 50);
+  const history = useInfiniteCommitHistory(pool, poolState, historyCommit);
 
   // Build base path for commit links (strip /commits/... suffix)
   const basePath = useMemo(() => {
@@ -168,7 +171,13 @@ export default function RepoCommitsPage() {
       {history.loading && <CommitListLoading count={8} />}
 
       {!history.loading && history.commits.length > 0 && (
-        <CommitList commits={history.commits} basePath={basePath} />
+        <CommitList
+          commits={history.commits}
+          basePath={basePath}
+          hasMore={history.hasMore}
+          loadingMore={history.loadingMore}
+          onLoadMore={history.loadMore}
+        />
       )}
 
       {!history.loading && !history.error && history.commits.length === 0 && (

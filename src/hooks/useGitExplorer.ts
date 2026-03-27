@@ -1023,3 +1023,229 @@ export function useCommitHistory(
 
   return state;
 }
+
+// ---------------------------------------------------------------------------
+// useInfiniteCommitHistory
+// ---------------------------------------------------------------------------
+
+export interface InfiniteCommitHistoryState {
+  loading: boolean;
+  loadingMore: boolean;
+  error: string | null;
+  commits: Commit[];
+  /** True when there may be more commits to load (last batch was full). */
+  hasMore: boolean;
+  /** Call to fetch the next batch. No-op while already loading. */
+  loadMore: () => void;
+}
+
+const INFINITE_BATCH_SIZE = 50;
+
+/**
+ * Infinite-scroll commit history hook.
+ *
+ * Fetches commits in batches of `batchSize` (default 50), reusing the same
+ * cache as `countCommitsBehind` and `useCommitHistory`. Each batch is keyed
+ * by its starting commit hash, so previously fetched pages are instant on
+ * revisit.
+ *
+ * `loadMore()` walks to the first parent of the last fetched commit and
+ * fetches the next batch. The caller is responsible for triggering it (e.g.
+ * via an IntersectionObserver sentinel at the bottom of the list).
+ */
+export function useInfiniteCommitHistory(
+  pool: GitGraspPool | null,
+  poolState: PoolState,
+  ref: string | undefined,
+  batchSize: number = INFINITE_BATCH_SIZE,
+  fallbackUrls?: string[],
+): InfiniteCommitHistoryState {
+  const [commits, setCommits] = useState<Commit[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+
+  // The commit hash to start the NEXT batch from (first parent of last commit).
+  const nextBatchStartRef = useRef<string | null>(null);
+  // Abort controller for the in-flight fetch.
+  const abortRef = useRef<AbortController | null>(null);
+  // Track the ref+pool combination we last initialised for.
+  const lastInitKeyRef = useRef<string>("");
+
+  const hasInfoRefs = pool ? !!pool.getInfoRefs() : false;
+
+  // ── Initial load ──────────────────────────────────────────────────────────
+  // Re-runs when the ref or pool changes (e.g. branch switch).
+  useEffect(() => {
+    if (!pool || !ref) {
+      setCommits([]);
+      setLoading(false);
+      setError(null);
+      setHasMore(false);
+      nextBatchStartRef.current = null;
+      return;
+    }
+
+    abortRef.current?.abort();
+    const abort = new AbortController();
+    abortRef.current = abort;
+    const signal = abort.signal;
+
+    async function init() {
+      if (!pool || !ref) return;
+
+      // Wait for infoRefs if not yet available.
+      let info = pool.getInfoRefs();
+      if (!info) {
+        info = await new Promise<InfoRefsUploadPackResponse | null>(
+          (resolve) => {
+            if (signal.aborted) {
+              resolve(null);
+              return;
+            }
+            const sub = pool!.observable.subscribe((s) => {
+              if (signal.aborted) {
+                sub.unsubscribe();
+                resolve(null);
+                return;
+              }
+              const available =
+                pool!.getInfoRefs() ??
+                Object.values(s.urls).find((u) => u.infoRefs)?.infoRefs ??
+                null;
+              if (available) {
+                sub.unsubscribe();
+                resolve(available);
+                return;
+              }
+              if (!s.loading && s.health === "all-failed") {
+                sub.unsubscribe();
+                resolve(null);
+              }
+            });
+            signal.addEventListener("abort", () => {
+              sub.unsubscribe();
+              resolve(null);
+            });
+          },
+        );
+      }
+
+      if (signal.aborted || !info) {
+        if (!signal.aborted) {
+          setError("Could not reach any clone URL");
+          setLoading(false);
+        }
+        return;
+      }
+
+      // Resolve ref → commit hash (same logic as useCommitHistory).
+      const rawHash = ref.startsWith("refs/")
+        ? info.refs[ref]
+        : (info.refs[`refs/heads/${ref}`] ??
+          info.refs[`refs/tags/${ref}`] ??
+          ref);
+      const tagRefName = ref.startsWith("refs/")
+        ? ref
+        : info.refs[`refs/heads/${ref}`]
+          ? undefined
+          : `refs/tags/${ref}`;
+      const commitHash = tagRefName
+        ? (info.refs[`${tagRefName}^{}`] ?? rawHash)
+        : rawHash;
+
+      if (!commitHash) {
+        setError(`Ref "${ref}" not found`);
+        setLoading(false);
+        return;
+      }
+
+      const initKey = `${commitHash}:${pool.getInfoRefs()?.refs["HEAD"] ?? ""}`;
+      if (initKey === lastInitKeyRef.current) return;
+      lastInitKeyRef.current = initKey;
+
+      // Reset state for the new ref.
+      setCommits([]);
+      nextBatchStartRef.current = null;
+      setError(null);
+      setHasMore(false);
+
+      // Fast path: L1 cache hit.
+      const cached = pool.cache.peekCommitHistory(commitHash, batchSize);
+      if (cached && cached.length > 0) {
+        const tail = cached[cached.length - 1];
+        nextBatchStartRef.current =
+          tail.parents.length > 0 ? tail.parents[0] : null;
+        setCommits(cached);
+        setHasMore(cached.length >= batchSize && tail.parents.length > 0);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+
+      const batch = await pool.getCommitHistory(
+        commitHash,
+        batchSize,
+        signal,
+        fallbackUrls,
+      );
+      if (signal.aborted) return;
+
+      if (!batch || batch.length === 0) {
+        setError("No commits found");
+        setLoading(false);
+        return;
+      }
+
+      const tail = batch[batch.length - 1];
+      nextBatchStartRef.current =
+        tail.parents.length > 0 ? tail.parents[0] : null;
+      setCommits(batch);
+      setHasMore(batch.length >= batchSize && tail.parents.length > 0);
+      setLoading(false);
+    }
+
+    void init();
+    return () => abort.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pool, ref, batchSize, hasInfoRefs, fallbackUrls?.join(",")]);
+
+  // ── Load more ─────────────────────────────────────────────────────────────
+  const loadMore = useCallback(() => {
+    if (!pool || !nextBatchStartRef.current || loadingMore || loading) return;
+
+    const startHash = nextBatchStartRef.current;
+
+    abortRef.current?.abort();
+    const abort = new AbortController();
+    abortRef.current = abort;
+    const signal = abort.signal;
+
+    setLoadingMore(true);
+
+    pool
+      .getCommitHistory(startHash, batchSize, signal, fallbackUrls)
+      .then((batch) => {
+        if (signal.aborted) return;
+        if (!batch || batch.length === 0) {
+          setHasMore(false);
+          setLoadingMore(false);
+          return;
+        }
+        const tail = batch[batch.length - 1];
+        nextBatchStartRef.current =
+          tail.parents.length > 0 ? tail.parents[0] : null;
+        setCommits((prev) => [...prev, ...batch]);
+        setHasMore(batch.length >= batchSize && tail.parents.length > 0);
+        setLoadingMore(false);
+      })
+      .catch(() => {
+        if (!signal.aborted) setLoadingMore(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pool, batchSize, loadingMore, loading, fallbackUrls?.join(",")]);
+
+  return { loading, loadingMore, error, commits, hasMore, loadMore };
+}
