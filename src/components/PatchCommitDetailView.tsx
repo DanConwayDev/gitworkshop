@@ -8,9 +8,10 @@
  *
  * Includes:
  *   - A subtle banner indicating this commit is sourced from a Nostr patch event
- *   - Verification status: verified (blob hashes match), unverified (no index
- *     lines to check), or warning (mismatch detected)
- *   - Graceful handling of hash mismatches — shows a warning, not an error
+ *   - Verification status: verified (blob hashes match) or warning with
+ *     actual vs expected hashes when a mismatch is detected
+ *   - No badge shown when verification isn't possible (no new files with
+ *     index lines)
  *
  * Used by PRCommitPage when the commit doesn't exist on the git server
  * (which is the normal case for patch-type PRs).
@@ -37,14 +38,13 @@ import {
   Hash,
   Radio,
   ShieldCheck,
-  ShieldQuestion,
   ShieldAlert,
 } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
 import {
   verifyPatchDiffBlobs,
-  type VerificationStatus,
+  type VerificationResult,
 } from "@/lib/patch-verify";
 import type { Commit } from "@fiatjaf/git-natural-api";
 
@@ -71,49 +71,58 @@ export interface PatchCommitDetailViewProps {
 // Verification badge
 // ---------------------------------------------------------------------------
 
-function VerificationBadge({ status }: { status: VerificationStatus }) {
-  if (status === "pending") return null;
+function VerificationBadge({ result }: { result: VerificationResult | null }) {
+  if (!result || result.status === "no-index") return null;
 
-  const config = {
-    verified: {
-      icon: ShieldCheck,
-      label: "Blob hashes verified",
-      tooltip:
-        "The applied patch content matches the expected blob hashes from the diff index lines.",
-      className: "text-green-600/70 dark:text-green-400/70 border-green-500/20",
-    },
-    unverified: {
-      icon: ShieldQuestion,
-      label: "Unverified",
-      tooltip:
-        "No index lines available to verify blob hashes. The patch content may still be correct.",
-      className: "text-muted-foreground/60 border-muted-foreground/20",
-    },
-    warning: {
-      icon: ShieldAlert,
-      label: "Hash mismatch",
-      tooltip:
-        "One or more blob hashes don't match the expected values from the diff index lines. The diff is still shown but may not be accurate.",
-      className: "text-amber-600/70 dark:text-amber-400/70 border-amber-500/20",
-    },
-  }[status];
+  if (result.status === "verified") {
+    return (
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-green-600/70 dark:text-green-400/70 border-green-500/20"
+            >
+              <ShieldCheck className="h-3 w-3" />
+              {result.fileCount} blob{result.fileCount !== 1 ? "s" : ""}{" "}
+              verified
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs max-w-64">
+            The applied patch content matches the expected blob hashes from the
+            diff index lines.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
 
-  const Icon = config.icon;
-
+  // warning
   return (
     <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
           <Badge
             variant="outline"
-            className={`text-[10px] px-1.5 py-0 h-4 font-normal gap-1 ${config.className}`}
+            className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-amber-600/70 dark:text-amber-400/70 border-amber-500/20"
           >
-            <Icon className="h-3 w-3" />
-            {config.label}
+            <ShieldAlert className="h-3 w-3" />
+            hash mismatch
           </Badge>
         </TooltipTrigger>
-        <TooltipContent side="bottom" className="text-xs max-w-64">
-          {config.tooltip}
+        <TooltipContent side="bottom" className="text-xs max-w-80">
+          <p className="mb-1">
+            Blob hash mismatch detected in {result.mismatches.length} file
+            {result.mismatches.length !== 1 ? "s" : ""}:
+          </p>
+          {result.mismatches.map((m) => (
+            <div key={m.path} className="font-mono text-[10px] mb-0.5">
+              <span className="text-foreground">{m.path}</span>
+              <br />
+              expected <span className="text-green-500">{m.expected}</span>, got{" "}
+              <span className="text-red-500">{m.actual}</span>
+            </div>
+          ))}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -133,8 +142,9 @@ export function PatchCommitDetailView({
   hasCommitId = true,
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
-  const [verification, setVerification] =
-    useState<VerificationStatus>("pending");
+  const [verification, setVerification] = useState<VerificationResult | null>(
+    null,
+  );
 
   const authorTs = commit.author.timestamp * 1000;
   const committerTs =
@@ -145,7 +155,7 @@ export function PatchCommitDetailView({
   // Run blob hash verification in the background
   useEffect(() => {
     if (!patchDiff) {
-      setVerification("unverified");
+      setVerification({ status: "no-index" });
       return;
     }
 
@@ -194,7 +204,7 @@ export function PatchCommitDetailView({
           )}
         </span>
         <div className="ml-auto shrink-0">
-          <VerificationBadge status={verification} />
+          <VerificationBadge result={verification} />
         </div>
       </div>
 
@@ -312,17 +322,33 @@ export function PatchCommitDetailView({
       </Card>
 
       {/* Hash mismatch warning */}
-      {verification === "warning" && (
+      {verification?.status === "warning" && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
           <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
             <p className="font-medium">Blob hash mismatch detected</p>
             <p className="text-xs mt-0.5 opacity-80">
               The applied patch content doesn't match the expected blob hashes.
-              The diff below may not be fully accurate. This can happen when
-              patches are generated by different git clients or when the patch
-              was modified after creation.
+              The diff below may not be fully accurate.
             </p>
+            <div className="mt-2 space-y-1">
+              {verification.mismatches.map((m) => (
+                <div
+                  key={m.path}
+                  className="font-mono text-[11px] bg-amber-500/10 rounded px-2 py-1"
+                >
+                  <span className="text-foreground">{m.path}</span>
+                  <span className="opacity-60"> — expected </span>
+                  <span className="text-green-600 dark:text-green-400">
+                    {m.expected}
+                  </span>
+                  <span className="opacity-60">, got </span>
+                  <span className="text-red-600 dark:text-red-400">
+                    {m.actual}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

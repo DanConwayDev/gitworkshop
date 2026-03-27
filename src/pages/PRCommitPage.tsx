@@ -12,6 +12,10 @@
  * Commit from its metadata, and render the patch's embedded diff via
  * PatchCommitDetailView.
  *
+ * Supports direct URL navigation: subscribes to relays to fetch the root
+ * event when it's not already in the store (e.g. user navigated directly
+ * to the commit URL without visiting the PR page first).
+ *
  * The "All commits" back link returns to the PR's commits tab
  * (prs/<prId>/commits) rather than the repo-wide commits page.
  */
@@ -24,13 +28,16 @@ import { useGitPool } from "@/hooks/useGitPool";
 import { CommitDetailView } from "@/components/CommitDetailView";
 import { PatchCommitDetailView } from "@/components/PatchCommitDetailView";
 import { useEventStore } from "@/hooks/useEventStore";
+import { use$ } from "@/hooks/use$";
 import { usePatchChain } from "@/hooks/usePatchChain";
+import { mapEventsToStore } from "applesauce-core";
+import { onlyEvents } from "applesauce-relay";
 import { PATCH_KIND, PR_KIND, extractPatchDiff } from "@/lib/nip34";
 import {
   buildSyntheticCommit,
   buildSyntheticCommitFallback,
 } from "@/lib/patch-commits";
-import type { NostrEvent } from "nostr-tools";
+import type { Filter } from "applesauce-core/helpers";
 import type { Patch } from "@/casts/Patch";
 
 export default function PRCommitPage() {
@@ -40,23 +47,31 @@ export default function PRCommitPage() {
 
   const { pool } = useGitPool(cloneUrls);
 
-  // Determine if the root event is a patch (kind:1617) or PR (kind:1618).
-  // The root event should already be in the store from the PR list page.
-  const rootEventKind = useMemo(() => {
+  // Subscribe to fetch the root event from relays. This ensures the page
+  // works on direct URL navigation (when the event isn't already in the store
+  // from the PR list page). We query for both patch and PR kinds.
+  use$(() => {
     if (!prId) return undefined;
-    // Check for patch first, then PR
-    const patchEvents = store.getByFilters([
-      { kinds: [PATCH_KIND], ids: [prId] },
-    ]) as NostrEvent[];
-    if (patchEvents.length > 0) return PATCH_KIND;
-    const prEvents = store.getByFilters([
-      { kinds: [PR_KIND], ids: [prId] },
-    ]) as NostrEvent[];
-    if (prEvents.length > 0) return PR_KIND;
+    const filter: Filter = { kinds: [PATCH_KIND, PR_KIND], ids: [prId] };
+    if (resolved?.repoRelayGroup) {
+      return resolved.repoRelayGroup
+        .subscription([filter])
+        .pipe(onlyEvents(), mapEventsToStore(store));
+    }
     return undefined;
+  }, [prId, resolved?.repoRelayGroup, store]);
+
+  // Reactively determine if the root event is a patch or PR.
+  // Uses store.timeline() so it updates when the event arrives from relays.
+  const rootEvent = use$(() => {
+    if (!prId) return undefined;
+    const filter: Filter = { kinds: [PATCH_KIND, PR_KIND], ids: [prId] };
+    return store.timeline([filter]);
   }, [prId, store]);
 
+  const rootEventKind = rootEvent?.[0]?.kind;
   const isPatch = rootEventKind === PATCH_KIND;
+  const rootEventLoaded = rootEvent !== undefined && rootEvent.length > 0;
 
   // Load the patch chain when this is a patch-type item.
   // usePatchChain handles relay subscriptions to ensure patches are in the store.
@@ -123,6 +138,18 @@ export default function PRCommitPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  // Still loading the root event from relays
+  if (!rootEventLoaded) {
+    return (
+      <div className="container max-w-screen-xl px-4 md:px-8 py-6">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading…</span>
+        </div>
       </div>
     );
   }
