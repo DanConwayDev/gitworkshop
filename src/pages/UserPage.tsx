@@ -5,6 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserRepositories } from "@/hooks/useUserRepositories";
 import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
+import { useRepoPath } from "@/hooks/useRepoPath";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -207,8 +208,8 @@ export default function UserPage({ pubkey }: UserPageProps) {
 }
 
 function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
+  const repoPath = useRepoPath(repo.selectedMaintainer, repo.dTag, repo.relays);
   const navigate = useNavigate();
-  const npub = nip19.npubEncode(repo.selectedMaintainer);
   const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
     addSuffix: true,
   });
@@ -216,7 +217,7 @@ function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
   return (
     <div
       className="group block cursor-pointer"
-      onClick={() => navigate(`/${npub}/${repo.dTag}`)}
+      onClick={() => navigate(repoPath)}
     >
       <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20 group-hover:-translate-y-0.5">
         <CardContent className="p-5">

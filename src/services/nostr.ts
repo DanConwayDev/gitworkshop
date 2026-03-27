@@ -16,7 +16,7 @@ import type { NostrEvent } from "nostr-tools";
 import { verifyEvent } from "nostr-tools";
 import { Observable, merge } from "rxjs";
 import { cacheRequest, saveEvents } from "./cache";
-import { nip05IdbCache } from "./nip05IdbCache";
+import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
 import { extraRelays, lookupRelays } from "./settings";
 import { ISSUE_KIND, PR_ROOT_KINDS } from "@/lib/nip34";
 import { outboxStore } from "./outbox";
@@ -145,6 +145,17 @@ export const zapsLoader = createZapsLoader(pool, {
  */
 export const dnsIdentityLoader = new DnsIdentityLoader(nip05IdbCache);
 dnsIdentityLoader.expiration = 60 * 60 * 24 * 30; // 30 days in seconds
+
+// Warm the in-memory identity map from IDB on startup.
+// DnsIdentityLoader.loadIdentity() reads IDB but does NOT write back to the
+// in-memory map (this.identities), so getIdentity() would always miss on a
+// fresh page load even when IDB has data. Loading all entries upfront ensures
+// the synchronous getIdentity() check in useRepoPath hits on the first render.
+loadAllNip05FromIdb().then((entries) => {
+  for (const [address, identity] of Object.entries(entries)) {
+    dnsIdentityLoader.identities.set(address, identity);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // NIP-34 two-tier loaders for Issues, Patches, and PRs

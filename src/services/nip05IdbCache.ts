@@ -23,6 +23,36 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 /**
+ * Load all cached identities from IDB as a key→value map.
+ * Used to warm the DnsIdentityLoader's in-memory map on startup so that
+ * getIdentity() hits synchronously without waiting for individual loadIdentity
+ * calls (which read IDB but don't write back to the in-memory map).
+ */
+export async function loadAllNip05FromIdb(): Promise<Record<string, Identity>> {
+  try {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const store = tx.objectStore(STORE_NAME);
+      const keysReq = store.getAllKeys();
+      const valsReq = store.getAll();
+      tx.oncomplete = () => {
+        const keys = keysReq.result as string[];
+        const vals = valsReq.result as Identity[];
+        const result: Record<string, Identity> = {};
+        keys.forEach((k, i) => {
+          result[k] = vals[i];
+        });
+        resolve(result);
+      };
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    return {};
+  }
+}
+
+/**
  * AsyncIdentityCache backed by IndexedDB.
  *
  * DB: ngitstack  |  Store: nip05-identities  |  Key: "name@domain"
