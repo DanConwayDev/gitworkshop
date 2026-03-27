@@ -1,17 +1,27 @@
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useActiveAccount } from "applesauce-react/hooks";
 import { LoginArea } from "@/components/auth/LoginArea";
-import { GitBranch, Settings, Send } from "lucide-react";
+import { GitBranch, Settings, Send, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { OutboxPanel, OutboxPendingBadge } from "@/components/OutboxPanel";
+import { CreateRepoDialog } from "@/components/CreateRepoDialog";
 
 export function AppHeader() {
   const location = useLocation();
+  const activeAccount = useActiveAccount();
+  const [createRepoOpen, setCreateRepoOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
@@ -32,6 +42,24 @@ export function AppHeader() {
         </Link>
 
         <div className="flex items-center gap-2">
+          {/* Create repo button — only shown when logged in */}
+          {activeAccount && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  aria-label="Create repository"
+                  onClick={() => setCreateRepoOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>New repository</TooltipContent>
+            </Tooltip>
+          )}
+
           {/* Outbox button */}
           <Popover>
             <PopoverTrigger asChild>
@@ -71,6 +99,11 @@ export function AppHeader() {
           <LoginArea className="max-w-60" />
         </div>
       </div>
+
+      <CreateRepoDialog
+        isOpen={createRepoOpen}
+        onClose={() => setCreateRepoOpen(false)}
+      />
     </header>
   );
 }
