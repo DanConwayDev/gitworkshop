@@ -90,7 +90,7 @@ export default function PRCommitPage() {
         const commit =
           buildSyntheticCommit(patch) ?? buildSyntheticCommitFallback(patch);
         const diff = extractPatchDiff(patch.content);
-        return { commit, diff, hasCommitId: !!patch.commitId };
+        return { commit, diff, patch, hasCommitId: !!patch.commitId };
       }
       return undefined;
     };
@@ -173,6 +173,9 @@ export default function PRCommitPage() {
         <PatchCommitDetailView
           commit={patchMatch.commit}
           patchDiff={patchMatch.diff}
+          patch={patchMatch.patch}
+          pool={pool}
+          fallbackUrls={[...cloneUrls, ...prCloneUrls]}
           basePath={prBasePath ?? ""}
           backTo={prBasePath ? `${prBasePath}/commits` : ".."}
           hasCommitId={patchMatch.hasCommitId}

@@ -8,16 +8,16 @@
  *
  * Includes:
  *   - A subtle banner indicating this commit is sourced from a Nostr patch event
- *   - Verification status: verified (blob hashes match) or warning with
- *     actual vs expected hashes when a mismatch is detected
- *   - No badge shown when verification isn't possible (no new files with
- *     index lines)
+ *   - Commit hash verification: fetches the parent tree, applies the patch,
+ *     rebuilds the tree, and computes the commit hash to compare against the
+ *     claimed hash in the patch event's tags
+ *   - Shows match/mismatch/computing status next to the commit hash
  *
  * Used by PRCommitPage when the commit doesn't exist on the git server
  * (which is the normal case for patch-type PRs).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,14 +39,18 @@ import {
   Radio,
   ShieldCheck,
   ShieldAlert,
+  ShieldQuestion,
+  Loader2,
 } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
 import {
-  verifyPatchDiffBlobs,
-  type VerificationResult,
+  verifyPatchCommitHash,
+  type CommitHashResult,
 } from "@/lib/patch-verify";
 import type { Commit } from "@fiatjaf/git-natural-api";
+import type { Patch } from "@/casts/Patch";
+import type { GitGraspPool } from "@/lib/git-grasp-pool";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -57,6 +61,12 @@ export interface PatchCommitDetailViewProps {
   commit: Commit;
   /** Raw unified diff string from the patch event's content. */
   patchDiff: string;
+  /** The original Patch cast — needed for commit hash verification. */
+  patch: Patch;
+  /** GitGraspPool for fetching tree/blob data for verification. */
+  pool: GitGraspPool | null;
+  /** Extra clone URLs to try for fetching data. */
+  fallbackUrls?: string[];
   /** Prefix for parent commit links: `${basePath}/commit/${parentHash}` */
   basePath: string;
   /** href for the back navigation link */
@@ -68,13 +78,29 @@ export interface PatchCommitDetailViewProps {
 }
 
 // ---------------------------------------------------------------------------
-// Verification badge
+// Commit hash verification badge (shown next to the hash)
 // ---------------------------------------------------------------------------
 
-function VerificationBadge({ result }: { result: VerificationResult | null }) {
-  if (!result || result.status === "no-index") return null;
+function CommitHashBadge({
+  result,
+}: {
+  result: CommitHashResult | "computing" | null;
+}) {
+  if (!result) return null;
 
-  if (result.status === "verified") {
+  if (result === "computing") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-muted-foreground/60 border-muted-foreground/20"
+      >
+        <Loader2 className="h-3 w-3 animate-spin" />
+        verifying
+      </Badge>
+    );
+  }
+
+  if (result.status === "match") {
     return (
       <TooltipProvider delayDuration={300}>
         <Tooltip>
@@ -84,45 +110,73 @@ function VerificationBadge({ result }: { result: VerificationResult | null }) {
               className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-green-600/70 dark:text-green-400/70 border-green-500/20"
             >
               <ShieldCheck className="h-3 w-3" />
-              {result.fileCount} blob{result.fileCount !== 1 ? "s" : ""}{" "}
               verified
             </Badge>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs max-w-64">
-            The applied patch content matches the expected blob hashes from the
-            diff index lines.
+          <TooltipContent side="bottom" className="text-xs max-w-72">
+            Commit hash verified. We reconstructed the commit from the parent
+            tree + applied patch and the computed hash matches the claimed hash.
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
     );
   }
 
-  // warning
+  if (result.status === "mismatch") {
+    return (
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-amber-600/70 dark:text-amber-400/70 border-amber-500/20"
+            >
+              <ShieldAlert className="h-3 w-3" />
+              mismatch
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs max-w-80">
+            <p className="mb-1">
+              The computed commit hash doesn't match the claimed hash.
+            </p>
+            <p className="font-mono text-[10px]">
+              claimed:{" "}
+              <span className="text-foreground">
+                {result.claimed.slice(0, 12)}
+              </span>
+            </p>
+            <p className="font-mono text-[10px]">
+              computed:{" "}
+              <span className="text-foreground">
+                {result.computed.slice(0, 12)}
+              </span>
+            </p>
+            <p className="mt-1 opacity-70">
+              This can happen due to GPG signatures, different git
+              configurations, or modified patch content. The diff is still
+              shown.
+            </p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  // unavailable
   return (
     <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
           <Badge
             variant="outline"
-            className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-amber-600/70 dark:text-amber-400/70 border-amber-500/20"
+            className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-muted-foreground/50 border-muted-foreground/15"
           >
-            <ShieldAlert className="h-3 w-3" />
-            hash mismatch
+            <ShieldQuestion className="h-3 w-3" />
+            unverified
           </Badge>
         </TooltipTrigger>
-        <TooltipContent side="bottom" className="text-xs max-w-80">
-          <p className="mb-1">
-            Blob hash mismatch detected in {result.mismatches.length} file
-            {result.mismatches.length !== 1 ? "s" : ""}:
-          </p>
-          {result.mismatches.map((m) => (
-            <div key={m.path} className="font-mono text-[10px] mb-0.5">
-              <span className="text-foreground">{m.path}</span>
-              <br />
-              expected <span className="text-green-500">{m.expected}</span>, got{" "}
-              <span className="text-red-500">{m.actual}</span>
-            </div>
-          ))}
+        <TooltipContent side="bottom" className="text-xs max-w-64">
+          {result.reason}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -136,15 +190,19 @@ function VerificationBadge({ result }: { result: VerificationResult | null }) {
 export function PatchCommitDetailView({
   commit,
   patchDiff,
+  patch,
+  pool,
+  fallbackUrls,
   basePath,
   backTo,
   backLabel = "All commits",
   hasCommitId = true,
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
-  const [verification, setVerification] = useState<VerificationResult | null>(
-    null,
-  );
+  const [commitHashResult, setCommitHashResult] = useState<
+    CommitHashResult | "computing" | null
+  >(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const authorTs = commit.author.timestamp * 1000;
   const committerTs =
@@ -152,24 +210,31 @@ export function PatchCommitDetailView({
   const subject = commit.message.split("\n")[0];
   const body = commit.message.split("\n").slice(2).join("\n").trim();
 
-  // Run blob hash verification in the background
+  // Run commit hash verification in the background
   useEffect(() => {
-    if (!patchDiff) {
-      setVerification({ status: "no-index" });
+    abortRef.current?.abort();
+
+    if (!hasCommitId || !pool || !patch.commitId) {
+      setCommitHashResult(null);
       return;
     }
 
-    let cancelled = false;
+    const abort = new AbortController();
+    abortRef.current = abort;
+    setCommitHashResult("computing");
 
-    verifyPatchDiffBlobs(patchDiff).then((result) => {
-      if (cancelled) return;
-      setVerification(result);
-    });
+    verifyPatchCommitHash(patch, pool, abort.signal, fallbackUrls).then(
+      (result) => {
+        if (abort.signal.aborted) return;
+        setCommitHashResult(result);
+      },
+    );
 
     return () => {
-      cancelled = true;
+      abort.abort();
     };
-  }, [patchDiff]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasCommitId, pool, patch.id, fallbackUrls?.join(",")]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(commit.hash);
@@ -203,9 +268,6 @@ export function PatchCommitDetailView({
             </span>
           )}
         </span>
-        <div className="ml-auto shrink-0">
-          <VerificationBadge result={verification} />
-        </div>
       </div>
 
       {/* Header card */}
@@ -278,7 +340,7 @@ export function PatchCommitDetailView({
               )}
           </div>
 
-          {/* Hash + parent links */}
+          {/* Hash + verification + parent links */}
           <div className="mt-4 pt-3 border-t border-border/40 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <Hash className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -301,7 +363,23 @@ export function PatchCommitDetailView({
                   )}
                 </Button>
               )}
+              <CommitHashBadge result={commitHashResult} />
             </div>
+
+            {/* Show computed hash when there's a mismatch */}
+            {commitHashResult !== null &&
+              commitHashResult !== "computing" &&
+              commitHashResult.status === "mismatch" && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Hash className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                  <span className="text-xs text-muted-foreground">
+                    computed:
+                  </span>
+                  <code className="text-xs font-mono text-amber-600 dark:text-amber-400 break-all">
+                    {commitHashResult.computed}
+                  </code>
+                </div>
+              )}
 
             {commit.parents && commit.parents.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
@@ -320,38 +398,6 @@ export function PatchCommitDetailView({
           </div>
         </CardContent>
       </Card>
-
-      {/* Hash mismatch warning */}
-      {verification?.status === "warning" && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
-          <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
-          <div>
-            <p className="font-medium">Blob hash mismatch detected</p>
-            <p className="text-xs mt-0.5 opacity-80">
-              The applied patch content doesn't match the expected blob hashes.
-              The diff below may not be fully accurate.
-            </p>
-            <div className="mt-2 space-y-1">
-              {verification.mismatches.map((m) => (
-                <div
-                  key={m.path}
-                  className="font-mono text-[11px] bg-amber-500/10 rounded px-2 py-1"
-                >
-                  <span className="text-foreground">{m.path}</span>
-                  <span className="opacity-60"> — expected </span>
-                  <span className="text-green-600 dark:text-green-400">
-                    {m.expected}
-                  </span>
-                  <span className="opacity-60">, got </span>
-                  <span className="text-red-600 dark:text-red-400">
-                    {m.actual}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Diff from patch content */}
       {patchDiff ? (
