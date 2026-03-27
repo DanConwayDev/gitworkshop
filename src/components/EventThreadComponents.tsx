@@ -4,6 +4,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { formatDistanceToNow, format } from "date-fns";
 import type { NostrEvent } from "nostr-tools";
+import { Link } from "react-router-dom";
 import { UserLink } from "@/components/UserAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,13 +20,21 @@ const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 // EventBodyCard — the main body card for an issue or PR/patch
 // ---------------------------------------------------------------------------
 
+interface CommitEntry {
+  hash: string;
+  subject: string;
+  href?: string;
+}
+
 interface EventBodyCardProps {
   event: NostrEvent;
   /** Pre-extracted body text (e.g. from extractBody for patches). Defaults to event.content. */
   content?: string;
+  /** Optional list of commits to display below the body (for PRs). */
+  commits?: CommitEntry[];
 }
 
-export function EventBodyCard({ event, content }: EventBodyCardProps) {
+export function EventBodyCard({ event, content, commits }: EventBodyCardProps) {
   const body = content ?? event.content;
   const createdAt = new Date(event.created_at * 1000);
 
@@ -46,7 +55,7 @@ export function EventBodyCard({ event, content }: EventBodyCardProps) {
           <EventCardActions event={event} />
         </div>
       </CardHeader>
-      <CardContent className="min-w-0">
+      <CardContent className="min-w-0 space-y-4">
         {body ? (
           <Suspense
             fallback={<div className="h-16 animate-pulse bg-muted rounded" />}
@@ -57,6 +66,44 @@ export function EventBodyCard({ event, content }: EventBodyCardProps) {
           <span className="text-muted-foreground italic text-sm">
             No description provided.
           </span>
+        )}
+
+        {commits && commits.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1.5">
+              {commits.length} commit{commits.length !== 1 ? "s" : ""}
+            </p>
+            <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 divide-y divide-border/30">
+              {commits.map((c) => {
+                const inner = (
+                  <>
+                    <span className="font-mono text-[11px] text-muted-foreground/70 shrink-0 w-16">
+                      {c.hash.slice(0, 7)}
+                    </span>
+                    <span className="text-sm text-foreground/80 truncate">
+                      {c.subject}
+                    </span>
+                  </>
+                );
+                return c.href ? (
+                  <Link
+                    key={c.hash}
+                    to={c.href}
+                    className="flex items-center gap-2 py-0.5 min-w-0 hover:bg-muted/40 rounded px-1 -mx-1 transition-colors"
+                  >
+                    {inner}
+                  </Link>
+                ) : (
+                  <div
+                    key={c.hash}
+                    className="flex items-center gap-2 py-0.5 min-w-0"
+                  >
+                    {inner}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>

@@ -55,7 +55,6 @@ import {
 } from "lucide-react";
 import {
   PatchSetPushEvent,
-  PROpenPushEvent,
   PRUpdatePushEvent,
 } from "@/components/PushEventComponents";
 import { cn } from "@/lib/utils";
@@ -424,13 +423,6 @@ export default function PRPage() {
         ts: number;
       }
     | {
-        type: "pr-open";
-        pr: NonNullable<typeof pr>;
-        superseded: boolean;
-        commits: Array<{ hash: string; subject: string }>;
-        ts: number;
-      }
-    | {
         type: "pr-update";
         update: NonNullable<typeof prUpdates>[0];
         superseded: boolean;
@@ -479,25 +471,13 @@ export default function PRPage() {
         }
       });
     } else if (itemType === "pr") {
-      // Initial push node: the PR event itself (like GitHub's "opened this PR")
+      // PR Updates (kind:1619) — force-push events shown in the timeline.
       if (pr) {
         const sortedUpdates = prUpdates
           ? [...prUpdates].sort(
               (a, b) => a.event.created_at - b.event.created_at,
             )
           : [];
-        // The initial push is superseded if any PR Update exists
-        const initialSuperseded = sortedUpdates.length > 0;
-        nodes.push({
-          type: "pr-open",
-          pr,
-          superseded: initialSuperseded,
-          commits: prCommits.map((c) => ({
-            hash: c.hash,
-            subject: c.message.split("\n")[0],
-          })),
-          ts: pr.event.created_at,
-        });
 
         sortedUpdates.forEach((update, idx) => {
           // A PR Update is superseded only if a later update changes the tip
@@ -531,7 +511,7 @@ export default function PRPage() {
       if (a.ts !== b.ts) return a.ts - b.ts;
       // Stable tie-break: push events before comments at same timestamp
       const typeOrder = (t: TimelineNode["type"]) =>
-        t === "patch-push" || t === "pr-open" || t === "pr-update" ? 0 : 1;
+        t === "patch-push" || t === "pr-update" ? 0 : 1;
       return typeOrder(a.type) - typeOrder(b.type);
     });
 
@@ -540,7 +520,6 @@ export default function PRPage() {
     itemType,
     patchChain.allRevisions,
     pr,
-    prCommits,
     prUpdates,
     threadTree,
     renameItems,
@@ -718,7 +697,21 @@ export default function PRPage() {
             <TabsContent value="conversation" className="space-y-4 mt-0">
               {/* PR / patch body */}
               {prEvent ? (
-                <EventBodyCard event={prEvent} content={body} />
+                <EventBodyCard
+                  event={prEvent}
+                  content={body}
+                  commits={
+                    itemType === "pr" && prCommits.length > 0
+                      ? prCommits.map((c) => ({
+                          hash: c.hash,
+                          subject: c.message.split("\n")[0],
+                          href: prBasePath
+                            ? `${prBasePath}/commit/${c.hash}`
+                            : undefined,
+                        }))
+                      : undefined
+                  }
+                />
               ) : (
                 <EventBodyCardSkeleton />
               )}
@@ -749,17 +742,6 @@ export default function PRPage() {
                             key={`patch-push-${node.revision.rootPatch.id}`}
                             revision={node.revision}
                             superseded={node.superseded}
-                            basePath={prBasePath ?? undefined}
-                          />
-                        );
-                      }
-                      if (node.type === "pr-open") {
-                        return (
-                          <PROpenPushEvent
-                            key={`pr-open-${node.pr.id}`}
-                            pr={node.pr}
-                            superseded={node.superseded}
-                            commits={node.commits}
                             basePath={prBasePath ?? undefined}
                           />
                         );
