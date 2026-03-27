@@ -40,7 +40,6 @@ import {
   PRUpdatePushEvent,
 } from "@/components/PushEventComponents";
 import { cn } from "@/lib/utils";
-import { DiffView } from "@/components/DiffView";
 import { PRFilesTab } from "@/components/PRFilesTab";
 import { PatchFilesTab } from "@/components/PatchFilesTab";
 import { diffTrees } from "@/lib/git-grasp-pool";
@@ -93,7 +92,6 @@ export default function PRPage() {
     const p = location.pathname;
     if (p.endsWith("/commits")) return "commits";
     if (p.endsWith("/files")) return "files";
-    if (p.endsWith("/patch")) return "patch";
     return "conversation";
   }, [location.pathname]);
 
@@ -322,17 +320,6 @@ export default function PRPage() {
                   {patchChain.length}
                 </span>
               )}
-        </TabsTrigger>
-      )}
-
-      {/* Patch diff tab — only for patches */}
-      {pr?.patchDiff && (
-        <TabsTrigger
-          value="patch"
-          className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <GitCommitHorizontal className="h-3.5 w-3.5" />
-          Patch
         </TabsTrigger>
       )}
     </TabsList>
@@ -704,13 +691,6 @@ export default function PRPage() {
                 ) : (
                   <CommitListEmpty message="No patches found in this patch set." />
                 )}
-              </TabsContent>
-            )}
-
-            {/* Patch diff tab */}
-            {pr?.patchDiff && (
-              <TabsContent value="patch" className="mt-0">
-                <DiffView diff={pr.patchDiff} />
               </TabsContent>
             )}
           </div>
