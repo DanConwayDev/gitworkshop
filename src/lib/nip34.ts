@@ -1444,6 +1444,25 @@ export interface ResolvedPR extends ResolvedPRLite {
    * Undefined for PRs.
    */
   patchDiff?: string;
+
+  /**
+   * For patches: commits from the first (original) revision that were
+   * published at roughly the same time as the root event (within a few
+   * seconds). These are shown inline in the body card, matching the PR
+   * behaviour. Undefined when the first revision was published later (i.e.
+   * it was a separate push and should remain in the timeline).
+   */
+  initialPatchCommits?: Array<{
+    commitId: string | undefined;
+    subject: string;
+  }>;
+
+  /**
+   * True when the first patch revision has been inlined into the body card
+   * via `initialPatchCommits`. The timeline should skip rendering that
+   * revision as a separate push event.
+   */
+  firstRevisionInlined?: boolean;
 }
 
 // ---------------------------------------------------------------------------

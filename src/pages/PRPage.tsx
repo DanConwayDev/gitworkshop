@@ -423,7 +423,18 @@ export default function PRPage() {
                             ? `${prBasePath}/commit/${c.hash}`
                             : undefined,
                         }))
-                      : undefined
+                      : pr.itemType === "patch" &&
+                          pr.initialPatchCommits &&
+                          pr.initialPatchCommits.length > 0
+                        ? pr.initialPatchCommits.map((c) => ({
+                            hash: c.commitId ?? "",
+                            subject: c.subject,
+                            href:
+                              prBasePath && c.commitId
+                                ? `${prBasePath}/commit/${c.commitId}`
+                                : undefined,
+                          }))
+                        : undefined
                   }
                 />
               ) : (
@@ -456,6 +467,14 @@ export default function PRPage() {
                           node.revision.patches &&
                           node.revision.patches.length > 0
                         ) {
+                          // Skip the original (non-revision) patch-set when it
+                          // has been inlined into the body card.
+                          if (
+                            pr.firstRevisionInlined &&
+                            !node.revision.patches[0].isRootRevision
+                          ) {
+                            return null;
+                          }
                           const rootPatch = node.revision.patches[0];
                           return (
                             <PatchSetPushEvent

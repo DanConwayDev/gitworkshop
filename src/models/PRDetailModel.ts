@@ -305,6 +305,43 @@ export function PRDetailModel(
               ? extractPatchDiff(rootEvent.content)
               : undefined;
 
+          // ── Initial patch commits (inline in body card) ─────────────
+          // For patches: if the first revision's patches were all published
+          // within a few seconds of the root event, inline them in the body
+          // card (matching PR behaviour). If any patch in the first revision
+          // has a timestamp more than 10 seconds after the root event, treat
+          // the whole revision as a separate push event in the timeline.
+          // ngit publishes patches sequentially — each one takes a few seconds.
+          // Use a generous threshold so a multi-patch set published in one
+          // `ngit send` invocation is treated as simultaneous.
+          const INLINE_THRESHOLD_SECONDS = 60;
+          let initialPatchCommits:
+            | Array<{ commitId: string | undefined; subject: string }>
+            | undefined;
+          let firstRevisionInlined = false;
+
+          if (itemType === "patch" && revisions.length > 0) {
+            const firstRevision = revisions[0];
+            if (
+              firstRevision.type === "patch-set" &&
+              firstRevision.patches &&
+              firstRevision.patches.length > 0
+            ) {
+              const allSimultaneous = firstRevision.patches.every(
+                (p) =>
+                  Math.abs(p.event.created_at - rootEvent.created_at) <=
+                  INLINE_THRESHOLD_SECONDS,
+              );
+              if (allSimultaneous) {
+                initialPatchCommits = firstRevision.patches.map((p) => ({
+                  commitId: p.commitId,
+                  subject: p.subject || "(no subject)",
+                }));
+                firstRevisionInlined = true;
+              }
+            }
+          }
+
           return {
             // Core fields from resolveItemEssentials
             id: core.id,
@@ -340,6 +377,8 @@ export function PRDetailModel(
             rootEvent,
             maintainers: effectiveMaintainers,
             patchDiff: patchDiff || undefined,
+            initialPatchCommits,
+            firstRevisionInlined,
           } satisfies ResolvedPR;
         },
       ),
