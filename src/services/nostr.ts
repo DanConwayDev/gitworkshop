@@ -16,6 +16,7 @@ import type { NostrEvent } from "nostr-tools";
 import { verifyEvent } from "nostr-tools";
 import { Observable, merge } from "rxjs";
 import { cacheRequest, saveEvents } from "./cache";
+import { nip05IdbCache } from "./nip05IdbCache";
 import { extraRelays, lookupRelays } from "./settings";
 import { ISSUE_KIND, PR_ROOT_KINDS } from "@/lib/nip34";
 import { outboxStore } from "./outbox";
@@ -138,9 +139,12 @@ export const zapsLoader = createZapsLoader(pool, {
 
 /**
  * Loader for NIP-05 DNS identity lookups.
- * Caches results in memory for the session lifetime.
+ * Results are persisted to IndexedDB (ngitstack / nip05-identities) so that
+ * verified identities survive page reloads. Expiry is set to 30 days so
+ * stale entries are re-verified after a month.
  */
-export const dnsIdentityLoader = new DnsIdentityLoader();
+export const dnsIdentityLoader = new DnsIdentityLoader(nip05IdbCache);
+dnsIdentityLoader.expiration = 60 * 60 * 24 * 30; // 30 days in seconds
 
 // ---------------------------------------------------------------------------
 // NIP-34 two-tier loaders for Issues, Patches, and PRs

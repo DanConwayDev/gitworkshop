@@ -12,6 +12,7 @@ import PRPage from "@/pages/PRPage";
 import PRCommitPage from "@/pages/PRCommitPage";
 import { useIssues } from "@/hooks/useIssues";
 import { usePRs } from "@/hooks/usePRs";
+import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
 import { useDnsIdentity } from "@/hooks/useDnsIdentity";
 import { useRepositoryState } from "@/hooks/useRepositoryState";
 import { use$ } from "@/hooks/use$";
@@ -159,6 +160,10 @@ function RepoLayoutResolved({
   const store = useEventStore();
   const resolved = useResolvedRepository(pubkey, repoId, relayHints);
   const repo = resolved?.repo;
+
+  // Prefetch NIP-05 identities for all maintainers so useRepoPath can resolve
+  // them synchronously from the IDB cache on subsequent visits.
+  usePrefetchNip05(repo?.maintainerSet ?? []);
   const repoRelayGroup = resolved?.repoRelayGroup;
   const extraRelaysForMaintainerMailboxCoverage =
     resolved?.extraRelaysForMaintainerMailboxCoverage;

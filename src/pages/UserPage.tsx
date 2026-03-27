@@ -4,6 +4,7 @@ import { nip19 } from "nostr-tools";
 import { formatDistanceToNow } from "date-fns";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserRepositories } from "@/hooks/useUserRepositories";
+import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +29,9 @@ interface UserPageProps {
 export default function UserPage({ pubkey }: UserPageProps) {
   const profile = useProfile(pubkey);
   const repos = useUserRepositories(pubkey);
+
+  // Prefetch NIP-05 identity so useRepoPath resolves it from IDB on next visit
+  usePrefetchNip05([pubkey]);
   const npub = nip19.npubEncode(pubkey);
 
   const displayName =

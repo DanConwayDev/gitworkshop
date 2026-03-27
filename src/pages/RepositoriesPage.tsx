@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useAllRepositories } from "@/hooks/useAllRepositories";
 import { useRepoPath } from "@/hooks/useRepoPath";
+import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
 import { UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -208,6 +209,10 @@ function RepoCard({ repo }: { repo: ResolvedRepo }) {
   const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
     addSuffix: true,
   });
+
+  // Prefetch NIP-05 identities for all maintainers. UserLink already subscribes
+  // to each maintainer's User cast for the avatar, so this is effectively free.
+  usePrefetchNip05(repo.maintainerSet);
 
   return (
     <Link to={repoPath} className="group block">
