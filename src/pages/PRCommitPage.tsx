@@ -102,25 +102,35 @@ export default function PRCommitPage() {
     if (!isPatch || !prCommitId || patchChain.loading) return undefined;
 
     // Helper: check if a patch matches by commit ID or event ID
-    const matchPatch = (patch: Patch) => {
+    const matchPatch = (patch: Patch, superseded: boolean) => {
       if (patch.commitId === prCommitId || patch.event.id === prCommitId) {
         const commit =
           buildSyntheticCommit(patch) ?? buildSyntheticCommitFallback(patch);
         const diff = extractPatchDiff(patch.content);
-        return { commit, diff, patch, hasCommitId: !!patch.commitId };
+        return {
+          commit,
+          diff,
+          patch,
+          hasCommitId: !!patch.commitId,
+          superseded,
+        };
       }
       return undefined;
     };
 
+    // Check the latest chain first (not superseded)
     for (const patch of patchChain.chain) {
-      const result = matchPatch(patch);
+      const result = matchPatch(patch, false);
       if (result) return result;
     }
 
-    // Also check all revisions (not just the latest chain)
-    for (const revision of patchChain.allRevisions) {
+    // Also check all revisions — earlier ones are superseded
+    const latestRevisionIdx = patchChain.allRevisions.length - 1;
+    for (let i = 0; i < patchChain.allRevisions.length; i++) {
+      const revision = patchChain.allRevisions[i];
+      const isSuperseded = i < latestRevisionIdx;
       for (const patch of revision.chain) {
-        const result = matchPatch(patch);
+        const result = matchPatch(patch, isSuperseded);
         if (result) return result;
       }
     }
@@ -200,6 +210,7 @@ export default function PRCommitPage() {
           hasCommitId={patchMatch.hasCommitId}
           patchChain={patchChain.chain}
           defaultBranchHead={poolState.latestCommit?.hash}
+          superseded={patchMatch.superseded}
         />
       </div>
     );

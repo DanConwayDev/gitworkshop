@@ -436,6 +436,11 @@ export default function PRPage() {
                           }))
                         : undefined
                   }
+                  commitsSuperseded={
+                    pr.itemType === "patch" &&
+                    pr.firstRevisionInlined === true &&
+                    pr.revisions.length > 1
+                  }
                 />
               ) : (
                 <EventBodyCardSkeleton />

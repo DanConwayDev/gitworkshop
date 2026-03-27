@@ -8,11 +8,12 @@ import { Link } from "react-router-dom";
 import { UserLink } from "@/components/UserAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Clock, Pencil } from "lucide-react";
+import { Calendar, Clock, Pencil, RotateCcw } from "lucide-react";
 import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
 import { ThreadTree } from "@/components/ThreadTree";
 import type { ThreadTreeNode } from "@/lib/threadTree";
+import { cn } from "@/lib/utils";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -32,9 +33,19 @@ interface EventBodyCardProps {
   content?: string;
   /** Optional list of commits to display below the body (for PRs). */
   commits?: CommitEntry[];
+  /**
+   * When true, the commits section is dimmed and labelled "superseded" to
+   * indicate that a later revision has replaced this patch set.
+   */
+  commitsSuperseded?: boolean;
 }
 
-export function EventBodyCard({ event, content, commits }: EventBodyCardProps) {
+export function EventBodyCard({
+  event,
+  content,
+  commits,
+  commitsSuperseded,
+}: EventBodyCardProps) {
   const body = content ?? event.content;
   const createdAt = new Date(event.created_at * 1000);
 
@@ -69,10 +80,18 @@ export function EventBodyCard({ event, content, commits }: EventBodyCardProps) {
         )}
 
         {commits && commits.length > 0 && (
-          <div>
-            <p className="text-xs font-medium text-muted-foreground mb-1.5">
-              {commits.length} commit{commits.length !== 1 ? "s" : ""}
-            </p>
+          <div className={cn(commitsSuperseded && "opacity-50")}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <p className="text-xs font-medium text-muted-foreground">
+                {commits.length} commit{commits.length !== 1 ? "s" : ""}
+              </p>
+              {commitsSuperseded && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-muted-foreground/20 bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground/60 font-medium">
+                  <RotateCcw className="h-2.5 w-2.5" />
+                  superseded
+                </span>
+              )}
+            </div>
             <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 divide-y divide-border/30">
               {commits.map((c) => {
                 const inner = (

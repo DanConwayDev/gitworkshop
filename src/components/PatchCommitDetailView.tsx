@@ -45,6 +45,7 @@ import {
   Loader2,
   GitBranch,
   Braces,
+  RotateCcw,
 } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
@@ -91,6 +92,11 @@ export interface PatchCommitDetailViewProps {
   patchChain?: Patch[];
   /** HEAD commit hash of the default branch (for parent context). */
   defaultBranchHead?: string;
+  /**
+   * When true, a banner is shown indicating this commit belongs to a
+   * superseded revision (a newer revision has been pushed).
+   */
+  superseded?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +248,7 @@ export function PatchCommitDetailView({
   hasCommitId = true,
   patchChain,
   defaultBranchHead,
+  superseded = false,
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -395,6 +402,23 @@ export function PatchCommitDetailView({
           <Braces className="h-3.5 w-3.5" />
         </Button>
       </div>
+
+      {/* Superseded banner */}
+      {superseded && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+          <RotateCcw className="h-3.5 w-3.5 text-amber-500/70 shrink-0" />
+          <span className="text-xs text-amber-600/80 dark:text-amber-400/80">
+            This commit is from a superseded revision. A newer revision has been
+            pushed for this patch.
+          </span>
+          <Link
+            to={backTo}
+            className="ml-auto text-xs text-amber-600/70 dark:text-amber-400/70 hover:text-amber-600 dark:hover:text-amber-400 underline underline-offset-2 shrink-0"
+          >
+            View latest
+          </Link>
+        </div>
+      )}
 
       {/* Header card */}
       <Card>
