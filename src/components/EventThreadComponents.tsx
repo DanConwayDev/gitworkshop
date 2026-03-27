@@ -80,13 +80,13 @@ export function EventBodyCard({
         )}
 
         {commits && commits.length > 0 && (
-          <div className={cn(commitsSuperseded && "opacity-50")}>
+          <div>
             <div className="flex items-center gap-2 mb-1.5">
               <p className="text-xs font-medium text-muted-foreground">
                 {commits.length} commit{commits.length !== 1 ? "s" : ""}
               </p>
               {commitsSuperseded && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-muted-foreground/20 bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground/60 font-medium">
+                <span className="inline-flex items-center gap-1 rounded-full border border-red-500/25 bg-red-500/10 px-2 py-0.5 text-[11px] text-red-500/70 dark:text-red-400/70 font-medium">
                   <RotateCcw className="h-2.5 w-2.5" />
                   superseded
                 </span>
@@ -96,10 +96,30 @@ export function EventBodyCard({
               {commits.map((c) => {
                 const inner = (
                   <>
-                    <span className="font-mono text-[11px] text-muted-foreground/70 shrink-0 w-16">
+                    <span
+                      className={cn(
+                        "font-mono text-[11px] shrink-0 w-16",
+                        commitsSuperseded
+                          ? "text-red-500/70 dark:text-red-400/70"
+                          : "text-muted-foreground/70",
+                      )}
+                    >
                       {c.hash.slice(0, 7)}
                     </span>
-                    <span className="text-sm text-foreground/80 truncate">
+                    {commitsSuperseded && (
+                      <span className="inline-flex items-center gap-0.5 rounded border border-red-500/25 bg-red-500/10 px-1.5 py-0 text-[10px] font-medium text-red-500/70 dark:text-red-400/70 shrink-0 leading-4">
+                        <RotateCcw className="h-2 w-2" />
+                        superseded
+                      </span>
+                    )}
+                    <span
+                      className={cn(
+                        "text-sm truncate",
+                        commitsSuperseded
+                          ? "text-foreground/40"
+                          : "text-foreground/80",
+                      )}
+                    >
                       {c.subject}
                     </span>
                   </>
@@ -108,14 +128,22 @@ export function EventBodyCard({
                   <Link
                     key={c.hash}
                     to={c.href}
-                    className="flex items-center gap-2 py-0.5 min-w-0 hover:bg-muted/40 rounded px-1 -mx-1 transition-colors"
+                    className={cn(
+                      "flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1 transition-colors",
+                      commitsSuperseded
+                        ? "bg-red-500/5 hover:bg-red-500/10"
+                        : "hover:bg-muted/40",
+                    )}
                   >
                     {inner}
                   </Link>
                 ) : (
                   <div
                     key={c.hash}
-                    className="flex items-center gap-2 py-0.5 min-w-0"
+                    className={cn(
+                      "flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1",
+                      commitsSuperseded && "bg-red-500/5",
+                    )}
                   >
                     {inner}
                   </div>

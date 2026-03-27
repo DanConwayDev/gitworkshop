@@ -33,17 +33,39 @@ function CommitRow({
   shortHash,
   subject,
   href,
+  superseded,
 }: {
   shortHash: string;
   subject: string;
   href?: string;
+  superseded?: boolean;
 }) {
   const inner = (
     <>
-      <span className="font-mono text-[11px] text-muted-foreground/70 shrink-0 w-16">
+      <span
+        className={cn(
+          "font-mono text-[11px] shrink-0 w-16",
+          superseded
+            ? "text-red-500/70 dark:text-red-400/70"
+            : "text-muted-foreground/70",
+        )}
+      >
         {shortHash}
       </span>
-      <span className="text-sm text-foreground/80 truncate">{subject}</span>
+      {superseded && (
+        <span className="inline-flex items-center gap-0.5 rounded border border-red-500/25 bg-red-500/10 px-1.5 py-0 text-[10px] font-medium text-red-500/70 dark:text-red-400/70 shrink-0 leading-4">
+          <RotateCcw className="h-2 w-2" />
+          superseded
+        </span>
+      )}
+      <span
+        className={cn(
+          "text-sm truncate",
+          superseded ? "text-foreground/40" : "text-foreground/80",
+        )}
+      >
+        {subject}
+      </span>
     </>
   );
 
@@ -51,14 +73,26 @@ function CommitRow({
     return (
       <Link
         to={href}
-        className="flex items-center gap-2 py-0.5 min-w-0 hover:bg-muted/40 rounded px-1 -mx-1 transition-colors"
+        className={cn(
+          "flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1 transition-colors",
+          superseded ? "bg-red-500/5 hover:bg-red-500/10" : "hover:bg-muted/40",
+        )}
       >
         {inner}
       </Link>
     );
   }
 
-  return <div className="flex items-center gap-2 py-0.5 min-w-0">{inner}</div>;
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1",
+        superseded && "bg-red-500/5",
+      )}
+    >
+      {inner}
+    </div>
+  );
 }
 
 function SupersededBadge() {
@@ -108,12 +142,7 @@ export function PatchSetPushEvent({
   );
 
   return (
-    <div
-      className={cn(
-        "relative flex gap-3 py-2 pl-1",
-        superseded && "opacity-50",
-      )}
-    >
+    <div className="relative flex gap-3 py-2 pl-1">
       {/* Icon column */}
       <div className="flex items-start pt-0.5 shrink-0">
         <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-muted/40">
@@ -149,6 +178,7 @@ export function PatchSetPushEvent({
               key={c.id}
               shortHash={c.shortHash}
               subject={c.subject}
+              superseded={superseded}
               href={
                 basePath && c.commitId
                   ? `${basePath}/commit/${c.commitId}`
@@ -215,12 +245,7 @@ export function PROpenPushEvent({
   }, [commits, pr.tipCommitId, basePath]);
 
   return (
-    <div
-      className={cn(
-        "relative flex gap-3 py-2 pl-1",
-        superseded && "opacity-50",
-      )}
-    >
+    <div className="relative flex gap-3 py-2 pl-1">
       {/* Icon column */}
       <div className="flex items-start pt-0.5 shrink-0">
         <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-muted/40">
@@ -257,6 +282,7 @@ export function PROpenPushEvent({
                 key={r.key}
                 shortHash={r.shortHash}
                 subject={r.subject}
+                superseded={superseded}
                 href={r.href}
               />
             ))}
@@ -341,12 +367,7 @@ export function PRUpdatePushEvent({
   }, [commits, update.tipCommitId, basePath]);
 
   return (
-    <div
-      className={cn(
-        "relative flex gap-3 py-2 pl-1",
-        superseded && "opacity-50",
-      )}
-    >
+    <div className="relative flex gap-3 py-2 pl-1">
       {/* Icon column */}
       <div className="flex items-start pt-0.5 shrink-0">
         <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-muted/40">
@@ -383,6 +404,7 @@ export function PRUpdatePushEvent({
                 key={r.key}
                 shortHash={r.shortHash}
                 subject={r.subject}
+                superseded={superseded}
                 href={r.href}
               />
             ))}
