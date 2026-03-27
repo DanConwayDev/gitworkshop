@@ -50,7 +50,7 @@ import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
 import { UserLink } from "@/components/UserAvatar";
 import {
-  verifyPatchCommitHash,
+  verifyPatchChainCommitHashes,
   type CommitHashResult,
 } from "@/lib/patch-verify";
 import type { Commit } from "@fiatjaf/git-natural-api";
@@ -306,10 +306,25 @@ export function PatchCommitDetailView({
     abortRef.current = abort;
     setCommitHashResult("computing");
 
-    verifyPatchCommitHash(patch, pool, abort.signal, fallbackUrls)
-      .then((result) => {
+    // Verify the entire chain — patches 2+ need the tree built by patches
+    // before them, which only exists in the chain (not on the git server).
+    const chainToVerify = patchChain ?? [patch];
+
+    verifyPatchChainCommitHashes(
+      chainToVerify,
+      pool,
+      abort.signal,
+      fallbackUrls,
+    )
+      .then((results) => {
         if (abort.signal.aborted) return;
-        setCommitHashResult(result);
+        const myResult = results.get(patch.event.id);
+        setCommitHashResult(
+          myResult ?? {
+            status: "unavailable",
+            reason: "Verification produced no result for this patch",
+          },
+        );
       })
       .catch((err) => {
         if (abort.signal.aborted) return;
@@ -323,7 +338,14 @@ export function PatchCommitDetailView({
       abort.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasCommitId, pool, poolWinnerUrl, patch.id, fallbackUrls?.join(",")]);
+  }, [
+    hasCommitId,
+    pool,
+    poolWinnerUrl,
+    patch.id,
+    patchChain,
+    fallbackUrls?.join(","),
+  ]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(commit.hash);

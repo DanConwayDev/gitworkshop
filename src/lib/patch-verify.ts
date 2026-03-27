@@ -7,10 +7,12 @@
  *    verifies new-file blob hashes from the diff's `index` lines. Doesn't
  *    need a git server.
  *
- * 2. **Full commit hash verification** (verifyPatchCommitHash): Fetches the
- *    parent commit's tree from the git server, applies the patch to produce
- *    new blob hashes, rebuilds the tree bottom-up, constructs the commit
- *    object, and compares the computed hash to the claimed commit ID.
+ * 2. **Full commit hash verification** (verifyPatchChainCommitHashes): Walks
+ *    the entire patch chain, starting from the base tree fetched from the git
+ *    server. For each patch: applies the diff, rebuilds the tree, computes
+ *    the commit hash, and compares to the claimed hash. The output tree of
+ *    patch N becomes the input tree for patch N+1 — so patches whose parent
+ *    is another patch in the chain don't need the git server.
  */
 
 import parseDiff from "parse-diff";
@@ -34,13 +36,9 @@ import type { Tree } from "@fiatjaf/git-natural-api";
 // Blob verification types (lightweight, no git server needed)
 // ---------------------------------------------------------------------------
 
-/** A single file's verification result when a mismatch is detected. */
 export interface BlobMismatch {
-  /** File path */
   path: string;
-  /** Expected abbreviated hash from the index line */
   expected: string;
-  /** Actual full hash we computed */
   actual: string;
 }
 
@@ -87,13 +85,10 @@ function reconstructPerFileDiff(file: parseDiff.File): string {
 function parseResultBlobHash(file: parseDiff.File): string | undefined {
   const idx = file.index;
   if (!idx || !Array.isArray(idx) || idx.length === 0) return undefined;
-
   const hashPart = idx[0];
   if (typeof hashPart !== "string") return undefined;
-
   const dotDot = hashPart.indexOf("..");
   if (dotDot === -1) return undefined;
-
   const result = hashPart.substring(dotDot + 2);
   if (/^0+$/.test(result)) return undefined;
   return result;
@@ -103,6 +98,24 @@ function getFilePath(file: parseDiff.File): string {
   if (file.to && file.to !== "/dev/null") return file.to;
   if (file.from && file.from !== "/dev/null") return file.from;
   return "unknown";
+}
+
+function parsePersonTag(
+  patch: Patch,
+  tagName: string,
+): CommitPerson | undefined {
+  const tag = patch.event.tags.find(([t]) => t === tagName);
+  if (!tag) return undefined;
+  const [, name, email, tsStr, tzStr] = tag;
+  if (!name || !tsStr) return undefined;
+  const timestamp = parseInt(tsStr, 10);
+  if (isNaN(timestamp)) return undefined;
+  return {
+    name,
+    email: email ?? "",
+    timestamp,
+    timezone: formatTimezone(tzStr),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -162,36 +175,9 @@ export async function verifyPatchDiffBlobs(
 }
 
 // ---------------------------------------------------------------------------
-// Full commit hash verification
+// Tree rebuilding
 // ---------------------------------------------------------------------------
 
-/**
- * Parse a person tag from a patch event for commit serialization.
- */
-function parsePersonTag(
-  patch: Patch,
-  tagName: string,
-): CommitPerson | undefined {
-  const tag = patch.event.tags.find(([t]) => t === tagName);
-  if (!tag) return undefined;
-  const [, name, email, tsStr, tzStr] = tag;
-  if (!name || !tsStr) return undefined;
-  const timestamp = parseInt(tsStr, 10);
-  if (isNaN(timestamp)) return undefined;
-  return {
-    name,
-    email: email ?? "",
-    timestamp,
-    timezone: formatTimezone(tzStr),
-  };
-}
-
-/**
- * Rebuild a tree hash bottom-up after replacing blob hashes for changed files.
- *
- * Takes the original tree and a map of path → new blob hash for changed files.
- * Returns the new root tree hash.
- */
 async function rebuildTreeHash(
   tree: Tree,
   changedBlobs: Map<string, string>,
@@ -207,13 +193,10 @@ async function rebuildTreeHash(
     entries.push({ mode: "100644", name: file.name, hash });
   }
 
-  // Add new files that are in this directory but weren't in the original tree
   for (const [path, hash] of changedBlobs) {
     if (!path.startsWith(prefix)) continue;
     const relative = path.slice(prefix.length);
-    // Only files directly in this directory (no "/" in relative path)
     if (!relative.includes("/")) {
-      // Check if already added from the original tree
       if (!entries.some((e) => e.name === relative)) {
         entries.push({ mode: "100644", name: relative, hash });
       }
@@ -222,8 +205,6 @@ async function rebuildTreeHash(
 
   for (const dir of tree.directories) {
     const dirPrefix = prefix + dir.name + "/";
-
-    // Check if any files in this directory were changed/added/deleted
     if (dir.content) {
       const subHash = await rebuildTreeHash(
         dir.content,
@@ -233,13 +214,10 @@ async function rebuildTreeHash(
       );
       entries.push({ mode: "40000", name: dir.name, hash: subHash });
     } else {
-      // No content loaded — use original hash (no changes in this subtree)
       entries.push({ mode: "40000", name: dir.name, hash: dir.hash });
     }
   }
 
-  // Add new directories that weren't in the original tree
-  // Collect all new directory names at this level
   const existingDirNames = new Set(tree.directories.map((d) => d.name));
   const newDirFiles = new Map<string, Map<string, string>>();
 
@@ -247,7 +225,7 @@ async function rebuildTreeHash(
     if (!path.startsWith(prefix)) continue;
     const relative = path.slice(prefix.length);
     const slashIdx = relative.indexOf("/");
-    if (slashIdx === -1) continue; // file, not dir
+    if (slashIdx === -1) continue;
     const dirName = relative.slice(0, slashIdx);
     if (existingDirNames.has(dirName)) continue;
     if (!newDirFiles.has(dirName)) newDirFiles.set(dirName, new Map());
@@ -262,10 +240,6 @@ async function rebuildTreeHash(
   return gitTreeHash(entries);
 }
 
-/**
- * Build a tree hash for a completely new directory (not in the original tree).
- * Takes a map of relative-path → blob hash.
- */
 async function buildNewDirTreeHash(
   files: Map<string, string>,
 ): Promise<string> {
@@ -292,102 +266,197 @@ async function buildNewDirTreeHash(
   return gitTreeHash(entries);
 }
 
+// ---------------------------------------------------------------------------
+// Mutate a Tree in-place to reflect changed/added/deleted blobs.
+// Returns a new Tree (shallow copy) with updated hashes.
+// ---------------------------------------------------------------------------
+
+function applyBlobChangesToTree(
+  tree: Tree,
+  changedBlobs: Map<string, string>,
+  deletedPaths: Set<string>,
+  prefix: string = "",
+): Tree {
+  const newFiles = tree.files
+    .filter((f) => !deletedPaths.has(prefix + f.name))
+    .map((f) => {
+      const fullPath = prefix + f.name;
+      const newHash = changedBlobs.get(fullPath);
+      return newHash ? { ...f, hash: newHash, content: null } : f;
+    });
+
+  // Add new files at this level
+  for (const [path, hash] of changedBlobs) {
+    if (!path.startsWith(prefix)) continue;
+    const relative = path.slice(prefix.length);
+    if (!relative.includes("/") && !newFiles.some((f) => f.name === relative)) {
+      newFiles.push({ name: relative, hash, content: null });
+    }
+  }
+
+  const newDirs = tree.directories.map((dir) => {
+    const dirPrefix = prefix + dir.name + "/";
+    if (dir.content) {
+      return {
+        ...dir,
+        content: applyBlobChangesToTree(
+          dir.content,
+          changedBlobs,
+          deletedPaths,
+          dirPrefix,
+        ),
+      };
+    }
+    return dir;
+  });
+
+  // Add new directories
+  const existingDirNames = new Set(tree.directories.map((d) => d.name));
+  for (const [path] of changedBlobs) {
+    if (!path.startsWith(prefix)) continue;
+    const relative = path.slice(prefix.length);
+    const slashIdx = relative.indexOf("/");
+    if (slashIdx === -1) continue;
+    const dirName = relative.slice(0, slashIdx);
+    if (
+      !existingDirNames.has(dirName) &&
+      !newDirs.some((d) => d.name === dirName)
+    ) {
+      // Build a minimal tree for the new directory
+      const subTree = buildNewDirTree(changedBlobs, prefix + dirName + "/");
+      newDirs.push({ name: dirName, hash: "", content: subTree });
+    }
+  }
+
+  return { files: newFiles, directories: newDirs };
+}
+
+function buildNewDirTree(
+  changedBlobs: Map<string, string>,
+  prefix: string,
+): Tree {
+  const files: Tree["files"] = [];
+  const dirs: Tree["directories"] = [];
+  const subdirNames = new Set<string>();
+
+  for (const [path, hash] of changedBlobs) {
+    if (!path.startsWith(prefix)) continue;
+    const relative = path.slice(prefix.length);
+    const slashIdx = relative.indexOf("/");
+    if (slashIdx === -1) {
+      files.push({ name: relative, hash, content: null });
+    } else {
+      const dirName = relative.slice(0, slashIdx);
+      if (!subdirNames.has(dirName)) {
+        subdirNames.add(dirName);
+        const subTree = buildNewDirTree(changedBlobs, prefix + dirName + "/");
+        dirs.push({ name: dirName, hash: "", content: subTree });
+      }
+    }
+  }
+
+  return { files, directories: dirs };
+}
+
+// ---------------------------------------------------------------------------
+// Core: apply a single patch to a tree and compute the commit hash
+// ---------------------------------------------------------------------------
+
+interface ApplyPatchResult {
+  /** The tree after applying this patch */
+  newTree: Tree;
+  /** The computed tree hash */
+  treeHash: string;
+  /** The verification result for this patch */
+  result: CommitHashResult;
+}
+
 /**
- * Verify a patch's claimed commit hash by reconstructing the commit from
- * the parent tree + applied diff + commit metadata.
+ * Apply a single patch to a parent tree and verify the commit hash.
  *
- * Steps:
- *   1. Fetch the parent commit to get its tree hash
- *   2. Fetch the parent tree (recursive) to get all file hashes
- *   3. Parse the patch diff to find changed files
- *   4. For each changed file: fetch original content, apply patch, compute
- *      new blob hash
- *   5. Rebuild the tree bottom-up with new blob hashes
- *   6. Construct the commit object with tree hash + metadata from patch tags
- *   7. Hash it and compare to the claimed commit ID
- *
- * @param patch - The patch event to verify
- * @param pool - GitGraspPool for fetching tree/blob data
- * @param signal - AbortSignal for cancellation
- * @param fallbackUrls - Extra clone URLs to try
+ * @param patch - The patch to apply
+ * @param parentTree - The parent tree (from git server or previous patch)
+ * @param parentCommitId - The parent commit hash (for the commit object)
+ * @param pool - GitGraspPool for fetching original file content
+ * @param signal - AbortSignal
+ * @param fallbackUrls - Extra clone URLs
+ * @param baseCommitId - The original base commit on the git server (for
+ *   fetching file content via getObjectByPath — we always fetch from the
+ *   base commit since intermediate patch commits don't exist on the server)
+ * @param fileContents - Accumulated file contents from previous patches in
+ *   the chain. Updated in-place with new file contents from this patch.
  */
-export async function verifyPatchCommitHash(
+async function applyPatchToTree(
   patch: Patch,
+  parentTree: Tree,
+  parentCommitId: string,
   pool: GitGraspPool,
   signal: AbortSignal,
-  fallbackUrls?: string[],
-): Promise<CommitHashResult> {
+  fallbackUrls: string[] | undefined,
+  baseCommitId: string,
+  fileContents: Map<string, string>,
+): Promise<ApplyPatchResult | { error: CommitHashResult }> {
   const claimedHash = patch.commitId;
   if (!claimedHash) {
-    return { status: "unavailable", reason: "No commit ID tag on this patch" };
-  }
-
-  const parentCommitId = patch.parentCommitId;
-  if (!parentCommitId) {
     return {
-      status: "unavailable",
-      reason: "No parent-commit tag — cannot reconstruct tree",
+      error: {
+        status: "unavailable",
+        reason: "No commit ID tag on this patch",
+      },
     };
   }
 
-  // Step 1+2: Fetch parent commit + full recursive tree in one request.
-  // Uses blob:none (lightweight — only tree metadata, no file content).
-  const parentData = await pool.getFullTree(
-    parentCommitId,
-    signal,
-    fallbackUrls,
-  );
-  if (!parentData) {
-    return {
-      status: "unavailable",
-      reason: "Could not fetch parent commit from git server",
-    };
-  }
-  const { tree: parentTree } = parentData;
-
-  // Step 3: Parse the patch diff
   const patchDiff = extractPatchDiff(patch.content);
   if (!patchDiff) {
-    return { status: "unavailable", reason: "No diff content in patch" };
+    return {
+      error: { status: "unavailable", reason: "No diff content in patch" },
+    };
   }
 
   const stripped = stripTrailer(patchDiff);
   const files = parseDiff(stripped);
 
-  // Step 4: For each changed file, compute new blob hash
   const changedBlobs = new Map<string, string>();
   const deletedPaths = new Set<string>();
 
   for (const file of files) {
     if (signal.aborted) {
-      return { status: "unavailable", reason: "Aborted" };
+      return { error: { status: "unavailable", reason: "Aborted" } };
     }
 
     const filePath = getFilePath(file);
 
     if (file.deleted) {
       deletedPaths.add(filePath);
+      fileContents.delete(filePath);
       continue;
     }
 
-    // Get original content
+    // Get original content: first check accumulated contents from previous
+    // patches, then fetch from the git server using the base commit
     let originalContent = "";
     if (!file.new && file.from && file.from !== "/dev/null") {
-      try {
-        const obj = await pool.getObjectByPath(
-          parentCommitId,
-          file.from,
-          signal,
-          fallbackUrls,
-        );
-        if (obj?.data) {
-          originalContent = new TextDecoder().decode(obj.data);
+      if (fileContents.has(file.from)) {
+        originalContent = fileContents.get(file.from)!;
+      } else {
+        try {
+          const obj = await pool.getObjectByPath(
+            baseCommitId,
+            file.from,
+            signal,
+            fallbackUrls,
+          );
+          if (obj?.data) {
+            originalContent = new TextDecoder().decode(obj.data);
+          }
+        } catch {
+          return {
+            error: {
+              status: "unavailable",
+              reason: `Could not fetch original content for ${file.from}`,
+            },
+          };
         }
-      } catch {
-        return {
-          status: "unavailable",
-          reason: `Could not fetch original content for ${file.from}`,
-        };
       }
     }
 
@@ -398,44 +467,51 @@ export async function verifyPatchCommitHash(
       result = applyPatch(originalContent, diffString, { fuzzFactor: 3 });
       if (result === false) {
         return {
-          status: "unavailable",
-          reason: `Patch failed to apply for ${filePath}`,
+          error: {
+            status: "unavailable",
+            reason: `Patch failed to apply for ${filePath}`,
+          },
         };
       }
     }
 
-    // Compute new blob hash
     const newHash = await gitBlobHashFromString(result);
     changedBlobs.set(filePath, newHash);
+    fileContents.set(filePath, result);
   }
 
-  // Step 5: Rebuild tree hash
-  const newTreeHash = await rebuildTreeHash(
+  // Rebuild tree
+  const treeHash = await rebuildTreeHash(
+    parentTree,
+    changedBlobs,
+    deletedPaths,
+  );
+  const newTree = applyBlobChangesToTree(
     parentTree,
     changedBlobs,
     deletedPaths,
   );
 
-  // Step 6: Build commit object
+  // Build commit object
   const author = parsePersonTag(patch, "author");
   const committer = parsePersonTag(patch, "committer");
 
   if (!author) {
     return {
-      status: "unavailable",
-      reason: "No author tag — cannot reconstruct commit object",
+      error: {
+        status: "unavailable",
+        reason: "No author tag — cannot reconstruct commit object",
+      },
     };
   }
 
-  // Extract commit message from patch
   const subject = patch.subject;
   const body = patch.body;
   const message = body ? `${subject}\n\n${body}` : subject;
-
   const gpgSig = extractGpgSignature(patch);
 
   const commitData: CommitData = {
-    treeHash: newTreeHash,
+    treeHash,
     parentHashes: [parentCommitId],
     author,
     committer: committer ?? author,
@@ -443,12 +519,132 @@ export async function verifyPatchCommitHash(
     gpgSignature: gpgSig,
   };
 
-  // Step 7: Hash and compare
   const computedHash = await gitCommitHash(commitData);
 
-  if (computedHash === claimedHash) {
-    return { status: "match", computed: computedHash, claimed: claimedHash };
+  const result: CommitHashResult =
+    computedHash === claimedHash
+      ? { status: "match", computed: computedHash, claimed: claimedHash }
+      : { status: "mismatch", computed: computedHash, claimed: claimedHash };
+
+  return { newTree, treeHash, result };
+}
+
+// ---------------------------------------------------------------------------
+// Public API: verify an entire patch chain
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify commit hashes for all patches in a chain.
+ *
+ * Walks the chain from first to last:
+ *   1. Fetches the base tree from the git server (first patch's parent)
+ *   2. For each patch: applies the diff to the current tree, computes the
+ *      commit hash, compares to the claimed hash
+ *   3. The output tree of patch N becomes the input for patch N+1
+ *
+ * Returns a Map of patch event ID → CommitHashResult.
+ */
+export async function verifyPatchChainCommitHashes(
+  chain: Patch[],
+  pool: GitGraspPool,
+  signal: AbortSignal,
+  fallbackUrls?: string[],
+): Promise<Map<string, CommitHashResult>> {
+  const results = new Map<string, CommitHashResult>();
+
+  if (chain.length === 0) return results;
+
+  // Find the base commit (first patch's parent-commit tag)
+  const baseCommitId = chain[0].parentCommitId;
+  if (!baseCommitId) {
+    for (const patch of chain) {
+      results.set(patch.event.id, {
+        status: "unavailable",
+        reason: "No parent-commit tag on root patch",
+      });
+    }
+    return results;
   }
 
-  return { status: "mismatch", computed: computedHash, claimed: claimedHash };
+  // Fetch the base tree from the git server
+  const baseData = await pool.getFullTree(baseCommitId, signal, fallbackUrls);
+  if (!baseData) {
+    for (const patch of chain) {
+      results.set(patch.event.id, {
+        status: "unavailable",
+        reason: "Could not fetch base commit from git server",
+      });
+    }
+    return results;
+  }
+
+  let currentTree = baseData.tree;
+  let currentParentCommitId = baseCommitId;
+  const fileContents = new Map<string, string>();
+
+  for (const patch of chain) {
+    if (signal.aborted) {
+      results.set(patch.event.id, {
+        status: "unavailable",
+        reason: "Aborted",
+      });
+      continue;
+    }
+
+    const patchResult = await applyPatchToTree(
+      patch,
+      currentTree,
+      currentParentCommitId,
+      pool,
+      signal,
+      fallbackUrls,
+      baseCommitId,
+      fileContents,
+    );
+
+    if ("error" in patchResult) {
+      results.set(patch.event.id, patchResult.error);
+      // Can't continue the chain if this patch failed
+      for (const remaining of chain.slice(chain.indexOf(patch) + 1)) {
+        results.set(remaining.event.id, {
+          status: "unavailable",
+          reason: "Previous patch in chain failed verification",
+        });
+      }
+      break;
+    }
+
+    results.set(patch.event.id, patchResult.result);
+    currentTree = patchResult.newTree;
+    currentParentCommitId = patch.commitId ?? currentParentCommitId;
+  }
+
+  return results;
+}
+
+/**
+ * Verify a single patch's commit hash. Convenience wrapper that handles
+ * the common case of verifying just one patch (the root patch).
+ *
+ * For patches that are part of a chain, use verifyPatchChainCommitHashes
+ * instead — it builds parent trees incrementally.
+ */
+export async function verifyPatchCommitHash(
+  patch: Patch,
+  pool: GitGraspPool,
+  signal: AbortSignal,
+  fallbackUrls?: string[],
+): Promise<CommitHashResult> {
+  const results = await verifyPatchChainCommitHashes(
+    [patch],
+    pool,
+    signal,
+    fallbackUrls,
+  );
+  return (
+    results.get(patch.event.id) ?? {
+      status: "unavailable",
+      reason: "Verification produced no result",
+    }
+  );
 }
