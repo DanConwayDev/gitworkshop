@@ -24,39 +24,39 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * Convert a human-readable repo name to a kebab-case identifier suitable
- * for the NIP-34 `d` tag.
+ * Derive a repository identifier (d-tag) from a human-readable name.
  *
- * Rules:
- *   - Lowercase
- *   - Spaces and underscores → hyphens
- *   - Strip non-alphanumeric characters (except hyphens)
- *   - Collapse consecutive hyphens
- *   - Trim leading/trailing hyphens
- *   - Max 100 characters
+ * Matches the algorithm used by ngit CLI (`identifier_from_name`):
+ *   - Spaces → hyphens
+ *   - Non-ASCII-alphanumeric characters (except `/`) → hyphens
+ *   - Case is preserved (NOT lowercased)
+ *   - Consecutive hyphens are NOT collapsed
+ *   - Forward slashes are preserved
  *
- * Returns the slug, or an empty string if the input sanitizes to nothing.
+ * @see ngit/src/bin/ngit/sub_commands/init.rs `identifier_from_name`
  */
-export function toRepoSlug(name: string): string {
+export function toRepoIdentifier(name: string): string {
   return name
-    .toLowerCase()
-    .replace(/[\s_]+/g, "-") // spaces and underscores → hyphens
-    .replace(/[^a-z0-9-]/g, "") // strip everything else
-    .replace(/-{2,}/g, "-") // collapse consecutive hyphens
-    .replace(/^-+|-+$/g, "") // trim leading/trailing hyphens
-    .slice(0, 100);
+    .replace(/ /g, "-")
+    .split("")
+    .map((c) => {
+      if (/[a-zA-Z0-9/]/.test(c)) return c;
+      return "-";
+    })
+    .join("");
 }
 
 /**
- * Validate a repo identifier (d-tag slug).
+ * Validate a repo identifier (d-tag).
  * Returns an error message or undefined if valid.
  */
-export function validateRepoSlug(slug: string): string | undefined {
-  if (slug.length === 0) return "Repository name is required";
-  if (slug.length > 100) return "Identifier must be 100 characters or fewer";
-  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(slug)) {
-    return "Identifier must be lowercase alphanumeric with hyphens, not starting or ending with a hyphen";
-  }
+export function validateRepoIdentifier(identifier: string): string | undefined {
+  if (identifier.length === 0) return "Repository name is required";
+  if (identifier.length > 100)
+    return "Identifier must be 100 characters or fewer";
+  // Must contain at least one alphanumeric character
+  if (!/[a-zA-Z0-9]/.test(identifier))
+    return "Identifier must contain at least one alphanumeric character";
   return undefined;
 }
 

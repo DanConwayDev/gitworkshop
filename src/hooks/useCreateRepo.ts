@@ -188,16 +188,12 @@ export function useCreateRepo() {
 
         if (abort.signal.aborted) return;
 
-        // ── Step 5: Push packfile ─────────────────────────────────────
+        // ── Step 5: Push packfile to ALL Grasp servers ─────────────────
         setState({
           step: "pushing",
           publishedAt,
           identifier: input.identifier,
         });
-
-        // Push to the first Grasp server (primary). The Grasp server
-        // handles cross-server sync per GRASP-01.
-        const primaryCloneUrl = cloneUrls[0];
 
         const refUpdates: RefUpdate[] = [
           {
@@ -207,31 +203,55 @@ export function useCreateRepo() {
           },
         ];
 
-        const pushResult = await pushToGitServer(
-          primaryCloneUrl,
-          refUpdates,
-          packfile,
-          abort.signal,
+        // Push to every Grasp server in parallel. Each server has its
+        // own purgatory state event, so each needs the git data.
+        const pushResults = await Promise.allSettled(
+          cloneUrls.map((url) =>
+            pushToGitServer(url, refUpdates, packfile, abort.signal),
+          ),
         );
 
-        if (!pushResult.unpackOk) {
-          const failedRefs = pushResult.refResults
-            .filter((r) => !r.ok)
-            .map((r) => `${r.refName}: ${r.reason ?? "unknown error"}`)
-            .join(", ");
+        // Collect errors — at least one server must succeed
+        const errors: string[] = [];
+        let anySuccess = false;
+
+        for (let i = 0; i < pushResults.length; i++) {
+          const result = pushResults[i];
+          const url = cloneUrls[i];
+
+          if (result.status === "rejected") {
+            errors.push(
+              `${url}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+            );
+            continue;
+          }
+
+          const pushResult = result.value;
+          if (!pushResult.unpackOk) {
+            errors.push(`${url}: unpack failed`);
+            continue;
+          }
+
+          const failedRefs = pushResult.refResults.filter((r) => !r.ok);
+          if (failedRefs.length > 0) {
+            const reasons = failedRefs
+              .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
+              .join(", ");
+            errors.push(`${url}: ${reasons}`);
+            continue;
+          }
+
+          anySuccess = true;
+        }
+
+        if (!anySuccess) {
           throw new Error(
-            `Git push failed: unpack ${pushResult.unpackOk ? "ok" : "failed"}${failedRefs ? `. Refs: ${failedRefs}` : ""}`,
+            `Git push failed on all servers:\n${errors.join("\n")}`,
           );
         }
 
-        // Check individual ref results
-        const failedRefs = pushResult.refResults.filter((r) => !r.ok);
-        if (failedRefs.length > 0) {
-          const reasons = failedRefs
-            .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
-            .join(", ");
-          throw new Error(`Git push ref update failed: ${reasons}`);
-        }
+        // Use the first clone URL as the canonical one for display
+        const primaryCloneUrl = cloneUrls[0];
 
         // ── Done ──────────────────────────────────────────────────────
         setState({
@@ -288,7 +308,9 @@ export function useCreateRepo() {
           npub,
         });
 
-        const primaryCloneUrl = `https://${input.graspServers[0].domain}/${npub}/${input.identifier}.git`;
+        const cloneUrls = input.graspServers.map(
+          (s) => `https://${s.domain}/${npub}/${input.identifier}.git`,
+        );
 
         const refUpdates: RefUpdate[] = [
           {
@@ -298,24 +320,46 @@ export function useCreateRepo() {
           },
         ];
 
-        const pushResult = await pushToGitServer(
-          primaryCloneUrl,
-          refUpdates,
-          result.packfile,
-          abort.signal,
+        // Push to all Grasp servers in parallel
+        const pushResults = await Promise.allSettled(
+          cloneUrls.map((url) =>
+            pushToGitServer(url, refUpdates, result.packfile, abort.signal),
+          ),
         );
 
-        if (!pushResult.unpackOk) {
-          throw new Error("Git push failed: unpack error");
+        let anySuccess = false;
+        const errors: string[] = [];
+
+        for (let i = 0; i < pushResults.length; i++) {
+          const pr = pushResults[i];
+          const url = cloneUrls[i];
+          if (pr.status === "rejected") {
+            errors.push(
+              `${url}: ${pr.reason instanceof Error ? pr.reason.message : String(pr.reason)}`,
+            );
+            continue;
+          }
+          if (!pr.value.unpackOk) {
+            errors.push(`${url}: unpack failed`);
+            continue;
+          }
+          const failedRefs = pr.value.refResults.filter((r) => !r.ok);
+          if (failedRefs.length > 0) {
+            errors.push(
+              `${url}: ${failedRefs.map((r) => r.reason ?? "unknown").join(", ")}`,
+            );
+            continue;
+          }
+          anySuccess = true;
         }
 
-        const failedRefs = pushResult.refResults.filter((r) => !r.ok);
-        if (failedRefs.length > 0) {
-          const reasons = failedRefs
-            .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
-            .join(", ");
-          throw new Error(`Git push ref update failed: ${reasons}`);
+        if (!anySuccess) {
+          throw new Error(
+            `Git push failed on all servers:\n${errors.join("\n")}`,
+          );
         }
+
+        const primaryCloneUrl = cloneUrls[0];
 
         setState({
           step: "done",

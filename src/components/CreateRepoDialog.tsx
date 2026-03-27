@@ -37,7 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toRepoSlug, validateRepoSlug } from "@/lib/create-repo";
+import { toRepoIdentifier, validateRepoIdentifier } from "@/lib/create-repo";
 import {
   useCreateRepo,
   type CreateRepoStep,
@@ -224,11 +224,11 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
   const [description, setDescription] = useState("");
   const [selectedServer, setSelectedServer] = useState<string>("");
 
-  // Derived slug
-  const slug = useMemo(() => toRepoSlug(name), [name]);
-  const slugError = useMemo(
-    () => (name.trim() ? validateRepoSlug(slug) : undefined),
-    [name, slug],
+  // Derived identifier
+  const identifier = useMemo(() => toRepoIdentifier(name), [name]);
+  const identifierError = useMemo(
+    () => (name.trim() ? validateRepoIdentifier(identifier) : undefined),
+    [name, identifier],
   );
 
   // Auto-select first server when servers load
@@ -267,9 +267,17 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
 
   const canSubmit =
     name.trim().length > 0 &&
-    !slugError &&
+    !identifierError &&
     selectedGraspServer &&
     state.step === "idle";
+
+  // Reorder servers so the selected one is first (primary for display),
+  // but all servers are included in the announcement and pushed to.
+  const orderedServers = useMemo(() => {
+    if (!selectedGraspServer) return servers;
+    const rest = servers.filter((s) => s.domain !== selectedGraspServer.domain);
+    return [selectedGraspServer, ...rest];
+  }, [servers, selectedGraspServer]);
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || !selectedGraspServer) return;
@@ -277,8 +285,8 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
     const input: CreateRepoFormInput = {
       name: name.trim(),
       description: description.trim(),
-      identifier: slug,
-      graspServers: servers, // publish to all servers from the user's list
+      identifier,
+      graspServers: orderedServers,
     };
 
     await execute(input);
@@ -286,8 +294,8 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
     canSubmit,
     name,
     description,
-    slug,
-    servers,
+    identifier,
+    orderedServers,
     selectedGraspServer,
     execute,
   ]);
@@ -298,12 +306,19 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
     const input: CreateRepoFormInput = {
       name: name.trim(),
       description: description.trim(),
-      identifier: slug,
-      graspServers: servers,
+      identifier,
+      graspServers: orderedServers,
     };
 
     await retryPush(input, state.commitHash);
-  }, [state.commitHash, name, description, slug, servers, retryPush]);
+  }, [
+    state.commitHash,
+    name,
+    description,
+    identifier,
+    orderedServers,
+    retryPush,
+  ]);
 
   const isInProgress =
     state.step !== "idle" && state.step !== "done" && state.step !== "error";
@@ -341,12 +356,14 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
               />
               {name.trim() && (
                 <div className="flex items-center gap-1.5">
-                  {slugError ? (
-                    <p className="text-xs text-red-500">{slugError}</p>
+                  {identifierError ? (
+                    <p className="text-xs text-red-500">{identifierError}</p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
                       Identifier:{" "}
-                      <code className="font-mono text-foreground">{slug}</code>
+                      <code className="font-mono text-foreground">
+                        {identifier}
+                      </code>
                     </p>
                   )}
                 </div>
