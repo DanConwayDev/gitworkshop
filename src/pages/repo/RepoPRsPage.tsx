@@ -31,7 +31,7 @@ const TYPE_OPTIONS: MultiSelectOption[] = [
 const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open", "draft"];
 
 export default function RepoPRsPage() {
-  const { pubkey, repoId, resolved, prs } = useRepoContext();
+  const { pubkey, repoId, resolved, prs, nip05 } = useRepoContext();
   const repo = resolved?.repo;
 
   // Filters — all multi-select; status defaults to open+draft
@@ -235,7 +235,7 @@ export default function RepoPRsPage() {
               <PRRow
                 key={pr.id}
                 pr={pr}
-                repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [])}
+                repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)}
                 repoRelays={repo?.relays ?? []}
               />
             ))}

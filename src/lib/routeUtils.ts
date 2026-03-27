@@ -7,8 +7,9 @@
  *   /:nip05/:repoId                nip05 = user@domain.com or domain.com
  *   /:nip05/:relayHint/:repoId
  *
- * Generated links always use:
- *   /:npub/:relayHint/:repoId      where relayHint = first repo relay with wss:// stripped
+ * Generated links prefer:
+ *   /:nip05/:relayHint/:repoId     when a verified NIP-05 identity is available
+ *   /:npub/:relayHint/:repoId      fallback when no NIP-05 is available
  *
  * Issue / PR / commit identifiers in URLs are nevent1-encoded for shareability.
  * Internally the app always works with raw hex event IDs.
@@ -282,21 +283,45 @@ function normalizeRelayHint(hint: string): string | undefined {
 // ---------------------------------------------------------------------------
 
 /**
- * Generate a canonical repo URL: /:npub/:relayHint/:repoId
+ * Generate a canonical repo URL.
+ *
+ * Prefers NIP-05 identity when provided (already verified by the caller):
+ *   /:nip05/:relayHint/:repoId   (e.g. /fiatjaf.com/relay.damus.io/myrepo)
+ *
+ * Falls back to npub when no NIP-05 is available:
+ *   /:npub/:relayHint/:repoId
+ *
  * The relay hint is the first repo relay with wss:// stripped.
- * If no relays are available, falls back to /:npub/:repoId.
+ * If no relays are available the relay segment is omitted.
+ *
+ * @param pubkey  - hex pubkey of the repo maintainer
+ * @param repoId  - the repo d-tag identifier
+ * @param relays  - relay list (first entry used as hint)
+ * @param nip05   - optional verified NIP-05 address (standardised user@domain.com
+ *                  or _@domain.com). When provided it is used as the identity
+ *                  segment instead of the npub. Strip leading "_@" for bare domains.
  */
 export function repoToPath(
   pubkey: string,
   repoId: string,
   relays: string[],
+  nip05?: string,
 ): string {
-  const npub = nip19.npubEncode(pubkey);
+  // Build the identity segment: prefer NIP-05 over npub
+  let identity: string;
+  if (nip05) {
+    // Standardised form is user@domain.com or _@domain.com.
+    // Strip leading "_@" so bare domains appear as just "domain.com".
+    identity = nip05.startsWith("_@") ? nip05.slice(2) : nip05;
+  } else {
+    identity = nip19.npubEncode(pubkey);
+  }
+
   const relay = relays[0];
   if (relay) {
     // Strip scheme — wss://relay.damus.io → relay.damus.io
     const hint = relay.replace(/^wss?:\/\//, "");
-    return `/${npub}/${hint}/${repoId}`;
+    return `/${identity}/${hint}/${repoId}`;
   }
-  return `/${npub}/${repoId}`;
+  return `/${identity}/${repoId}`;
 }

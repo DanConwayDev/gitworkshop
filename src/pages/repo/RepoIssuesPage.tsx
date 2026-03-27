@@ -36,7 +36,7 @@ import type { IssueStatus, ResolvedIssue } from "@/lib/nip34";
 const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open"];
 
 export default function RepoIssuesPage() {
-  const { pubkey, repoId, resolved, issues } = useRepoContext();
+  const { pubkey, repoId, resolved, issues, nip05 } = useRepoContext();
   const repo = resolved?.repo;
   const account = useActiveAccount();
 
@@ -265,7 +265,7 @@ export default function RepoIssuesPage() {
               <IssueRow
                 key={issue.id}
                 issue={issue}
-                repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [])}
+                repoPath={repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)}
                 repoRelays={repo?.relays ?? []}
               />
             ))}

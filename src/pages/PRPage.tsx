@@ -83,8 +83,16 @@ import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
 
 export default function PRPage() {
-  const { pubkey, repoId, resolved, prId, cloneUrls, prBasePath, repoState } =
-    useRepoContext();
+  const {
+    pubkey,
+    repoId,
+    resolved,
+    prId,
+    cloneUrls,
+    prBasePath,
+    repoState,
+    nip05,
+  } = useRepoContext();
   const location = useLocation();
   const navigate = useNavigate();
   const repo = resolved?.repo;
@@ -930,7 +938,7 @@ export default function PRPage() {
                       commits={prCommits}
                       basePath={
                         prBasePath ??
-                        repoToPath(pubkey, repoId, repo?.relays ?? [])
+                        repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)
                       }
                     />
                   )
@@ -944,7 +952,7 @@ export default function PRPage() {
                     patches={patchChain.chain}
                     basePath={
                       prBasePath ??
-                      repoToPath(pubkey, repoId, repo?.relays ?? [])
+                      repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)
                     }
                   />
                 )}
@@ -1089,7 +1097,7 @@ export default function PRPage() {
 
             {/* Back link */}
             <Link
-              to={`${repoToPath(pubkey, repoId, repo?.relays ?? [])}/prs`}
+              to={`${repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)}/prs`}
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" />

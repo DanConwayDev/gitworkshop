@@ -8,12 +8,8 @@ import { Navigate, useParams } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import { eventStore, pool } from "../services/nostr";
 import { REPO_KIND, ISSUE_KIND, PATCH_KIND, PR_KIND } from "../lib/nip34";
-import {
-  repoToPath,
-  eventIdToNevent,
-  isNip05,
-  standardizeNip05,
-} from "../lib/routeUtils";
+import { eventIdToNevent, isNip05, standardizeNip05 } from "../lib/routeUtils";
+import { useRepoPath } from "../hooks/useRepoPath";
 import UserPage from "./UserPage";
 import NotFound from "./NotFound";
 import { mapEventsToStore } from "applesauce-core";
@@ -49,16 +45,49 @@ function parseRepoCoord(
 }
 
 /**
- * Build a repo path from a repo coordinate, using relay hints from the
- * nevent identifier if available.
+ * Redirect component that resolves a repo coordinate to a path (with NIP-05
+ * preference) and navigates to the target sub-path.
+ *
+ * Using a component lets us call the useRepoPath hook after the event is loaded.
  */
-function repoCoordToPath(
-  coord: string,
-  hintRelays: string[],
-): string | undefined {
+function RepoCoordRedirect({
+  coord,
+  hintRelays,
+  subPath,
+}: {
+  coord: string;
+  hintRelays: string[];
+  /** Path segment appended after the repo root, e.g. "/issues/nevent1..." */
+  subPath: string;
+}) {
   const parsed = parseRepoCoord(coord);
-  if (!parsed) return undefined;
-  return repoToPath(parsed.pubkey, parsed.dTag, hintRelays);
+  if (!parsed) return <NotFound />;
+  return (
+    <RepoPathRedirect
+      pubkey={parsed.pubkey}
+      repoId={parsed.dTag}
+      relays={hintRelays}
+      subPath={subPath}
+    />
+  );
+}
+
+/**
+ * Inner redirect: calls useRepoPath (which may prefer NIP-05) then navigates.
+ */
+function RepoPathRedirect({
+  pubkey,
+  repoId,
+  relays,
+  subPath,
+}: {
+  pubkey: string;
+  repoId: string;
+  relays: string[];
+  subPath: string;
+}) {
+  const repoPath = useRepoPath(pubkey, repoId, relays);
+  return <Navigate to={`${repoPath}${subPath}`} replace />;
 }
 
 /** Get the uppercase `E` root tag from a NIP-22 comment (kind 1111). */
@@ -129,22 +158,30 @@ function EventRedirect({
   if (kind === ISSUE_KIND) {
     const coord = getRepoCoord(event);
     if (!coord) return <NotFound />;
-    const repoPath = repoCoordToPath(coord, hintRelays);
-    if (!repoPath) return <NotFound />;
     const nevent = eventIdToNevent(eventId, hintRelays);
     const fragment = commentId ? `#${commentId.slice(0, 15)}` : "";
-    return <Navigate to={`${repoPath}/issues/${nevent}${fragment}`} replace />;
+    return (
+      <RepoCoordRedirect
+        coord={coord}
+        hintRelays={hintRelays}
+        subPath={`/issues/${nevent}${fragment}`}
+      />
+    );
   }
 
   // PR or root patch
   if (kind === PR_KIND || kind === PATCH_KIND) {
     const coord = getRepoCoord(event);
     if (!coord) return <NotFound />;
-    const repoPath = repoCoordToPath(coord, hintRelays);
-    if (!repoPath) return <NotFound />;
     const nevent = eventIdToNevent(eventId, hintRelays);
     const fragment = commentId ? `#${commentId.slice(0, 15)}` : "";
-    return <Navigate to={`${repoPath}/prs/${nevent}${fragment}`} replace />;
+    return (
+      <RepoCoordRedirect
+        coord={coord}
+        hintRelays={hintRelays}
+        subPath={`/prs/${nevent}${fragment}`}
+      />
+    );
   }
 
   // NIP-22 comment (kind 1111) — resolve the root event
@@ -196,10 +233,16 @@ export function NIP19Page() {
     try {
       const decoded = nip19.decode(identifier);
       if (decoded.type === "naddr") {
-        const { kind, pubkey, identifier: dTag } = decoded.data;
+        const { kind, pubkey, identifier: dTag, relays } = decoded.data;
         if (kind === REPO_KIND) {
-          const npub = nip19.npubEncode(pubkey);
-          return <Navigate to={`/${npub}/${dTag}`} replace />;
+          return (
+            <RepoPathRedirect
+              pubkey={pubkey}
+              repoId={dTag}
+              relays={relays ?? []}
+              subPath=""
+            />
+          );
         }
       }
     } catch {

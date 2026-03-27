@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useAllRepositories } from "@/hooks/useAllRepositories";
-import { repoToPath } from "@/lib/routeUtils";
+import { useRepoPath } from "@/hooks/useRepoPath";
 import { UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -204,7 +204,7 @@ export default function RepositoriesPage({
 }
 
 function RepoCard({ repo }: { repo: ResolvedRepo }) {
-  const repoPath = repoToPath(repo.selectedMaintainer, repo.dTag, repo.relays);
+  const repoPath = useRepoPath(repo.selectedMaintainer, repo.dTag, repo.relays);
   const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
     addSuffix: true,
   });

@@ -46,7 +46,7 @@ import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
 
 export default function IssuePage() {
-  const { pubkey, repoId, resolved, issueId } = useRepoContext();
+  const { pubkey, repoId, resolved, issueId, nip05 } = useRepoContext();
   const repo = resolved?.repo;
   const repoRelayGroup = resolved?.repoRelayGroup;
   const extraRelaysForMaintainerMailboxCoverage =
@@ -398,7 +398,7 @@ export default function IssuePage() {
 
             {/* Back link */}
             <Link
-              to={`${repoToPath(pubkey, repoId, repo?.relays ?? [])}/issues`}
+              to={`${repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)}/issues`}
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
