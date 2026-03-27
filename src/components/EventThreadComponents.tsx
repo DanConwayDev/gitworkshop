@@ -34,10 +34,15 @@ interface EventBodyCardProps {
   /** Optional list of commits to display below the body (for PRs). */
   commits?: CommitEntry[];
   /**
-   * When true, the commits section is dimmed and labelled "superseded" to
+   * When true, the commits section is dimmed and labelled "outdated" to
    * indicate that a later revision has replaced this patch set.
    */
   commitsSuperseded?: boolean;
+  /**
+   * When commitsSuperseded is true, this href is used to link the "outdated"
+   * badge to the latest commits (e.g. the PR's commits tab).
+   */
+  commitsLatestHref?: string;
 }
 
 export function EventBodyCard({
@@ -45,6 +50,7 @@ export function EventBodyCard({
   content,
   commits,
   commitsSuperseded,
+  commitsLatestHref,
 }: EventBodyCardProps) {
   const body = content ?? event.content;
   const createdAt = new Date(event.created_at * 1000);
@@ -86,10 +92,20 @@ export function EventBodyCard({
                 {commits.length} commit{commits.length !== 1 ? "s" : ""}
               </p>
               {commitsSuperseded && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-red-500/25 bg-red-500/10 px-2 py-0.5 text-[11px] text-red-500/70 dark:text-red-400/70 font-medium">
-                  <RotateCcw className="h-2.5 w-2.5" />
-                  superseded
-                </span>
+                <>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-600/80 dark:text-amber-400/80 font-medium">
+                    <RotateCcw className="h-2.5 w-2.5" />
+                    outdated
+                  </span>
+                  {commitsLatestHref && (
+                    <Link
+                      to={commitsLatestHref}
+                      className="text-[11px] text-amber-600/70 dark:text-amber-400/70 hover:text-amber-600 dark:hover:text-amber-400 underline underline-offset-2"
+                    >
+                      view latest
+                    </Link>
+                  )}
+                </>
               )}
             </div>
             <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 divide-y divide-border/30">
@@ -98,25 +114,19 @@ export function EventBodyCard({
                   <>
                     <span
                       className={cn(
-                        "font-mono text-[11px] shrink-0 w-16",
+                        "font-mono text-[11px] shrink-0",
                         commitsSuperseded
-                          ? "text-red-500/70 dark:text-red-400/70"
+                          ? "line-through text-muted-foreground/50"
                           : "text-muted-foreground/70",
                       )}
                     >
                       {c.hash.slice(0, 7)}
                     </span>
-                    {commitsSuperseded && (
-                      <span className="inline-flex items-center gap-0.5 rounded border border-red-500/25 bg-red-500/10 px-1.5 py-0 text-[10px] font-medium text-red-500/70 dark:text-red-400/70 shrink-0 leading-4">
-                        <RotateCcw className="h-2 w-2" />
-                        superseded
-                      </span>
-                    )}
                     <span
                       className={cn(
                         "text-sm truncate",
                         commitsSuperseded
-                          ? "text-foreground/40"
+                          ? "line-through text-foreground/40"
                           : "text-foreground/80",
                       )}
                     >
@@ -128,22 +138,14 @@ export function EventBodyCard({
                   <Link
                     key={c.hash}
                     to={c.href}
-                    className={cn(
-                      "flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1 transition-colors",
-                      commitsSuperseded
-                        ? "bg-red-500/5 hover:bg-red-500/10"
-                        : "hover:bg-muted/40",
-                    )}
+                    className="flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1 transition-colors hover:bg-muted/40"
                   >
                     {inner}
                   </Link>
                 ) : (
                   <div
                     key={c.hash}
-                    className={cn(
-                      "flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1",
-                      commitsSuperseded && "bg-red-500/5",
-                    )}
+                    className="flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1"
                   >
                     {inner}
                   </div>

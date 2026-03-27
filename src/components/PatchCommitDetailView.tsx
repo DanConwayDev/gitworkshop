@@ -403,12 +403,12 @@ export function PatchCommitDetailView({
         </Button>
       </div>
 
-      {/* Superseded banner */}
+      {/* Outdated banner */}
       {superseded && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
           <RotateCcw className="h-3.5 w-3.5 text-amber-500/70 shrink-0" />
           <span className="text-xs text-amber-600/80 dark:text-amber-400/80">
-            This commit is from a superseded revision. A newer revision has been
+            This commit is from an outdated revision. A newer revision has been
             pushed for this patch.
           </span>
           <Link

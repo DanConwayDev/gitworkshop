@@ -44,24 +44,18 @@ function CommitRow({
     <>
       <span
         className={cn(
-          "font-mono text-[11px] shrink-0 w-16",
+          "font-mono text-[11px] shrink-0",
           superseded
-            ? "text-red-500/70 dark:text-red-400/70"
+            ? "line-through text-muted-foreground/50"
             : "text-muted-foreground/70",
         )}
       >
         {shortHash}
       </span>
-      {superseded && (
-        <span className="inline-flex items-center gap-0.5 rounded border border-red-500/25 bg-red-500/10 px-1.5 py-0 text-[10px] font-medium text-red-500/70 dark:text-red-400/70 shrink-0 leading-4">
-          <RotateCcw className="h-2 w-2" />
-          superseded
-        </span>
-      )}
       <span
         className={cn(
           "text-sm truncate",
-          superseded ? "text-foreground/40" : "text-foreground/80",
+          superseded ? "line-through text-foreground/40" : "text-foreground/80",
         )}
       >
         {subject}
@@ -73,10 +67,7 @@ function CommitRow({
     return (
       <Link
         to={href}
-        className={cn(
-          "flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1 transition-colors",
-          superseded ? "bg-red-500/5 hover:bg-red-500/10" : "hover:bg-muted/40",
-        )}
+        className="flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1 transition-colors hover:bg-muted/40"
       >
         {inner}
       </Link>
@@ -84,24 +75,27 @@ function CommitRow({
   }
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1",
-        superseded && "bg-red-500/5",
-      )}
-    >
+    <div className="flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1">
       {inner}
     </div>
   );
 }
 
-function SupersededBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-muted-foreground/20 bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground/60 font-medium shrink-0">
+function OutdatedBadge({ commitsHref }: { commitsHref?: string }) {
+  const inner = (
+    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-600/80 dark:text-amber-400/80 font-medium shrink-0">
       <RotateCcw className="h-2.5 w-2.5" />
-      superseded
+      outdated
     </span>
   );
+  if (commitsHref) {
+    return (
+      <Link to={commitsHref} className="shrink-0">
+        {inner}
+      </Link>
+    );
+  }
+  return inner;
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +169,11 @@ export function PatchSetPushEvent({
             )}
           </span>
           <span className="text-xs text-muted-foreground/50">{timeAgo}</span>
-          {superseded && <SupersededBadge />}
+          {superseded && (
+            <OutdatedBadge
+              commitsHref={basePath ? `${basePath}/commits` : undefined}
+            />
+          )}
         </div>
 
         {/* Commit list */}
@@ -278,7 +276,11 @@ export function PROpenPushEvent({
             )}
           </span>
           <span className="text-xs text-muted-foreground/50">{timeAgo}</span>
-          {superseded && <SupersededBadge />}
+          {superseded && (
+            <OutdatedBadge
+              commitsHref={basePath ? `${basePath}/commits` : undefined}
+            />
+          )}
         </div>
 
         {/* Commit list */}
@@ -403,7 +405,11 @@ export function PRUpdatePushEvent({
             )}
           </span>
           <span className="text-xs text-muted-foreground/50">{timeAgo}</span>
-          {superseded && <SupersededBadge />}
+          {superseded && (
+            <OutdatedBadge
+              commitsHref={basePath ? `${basePath}/commits` : undefined}
+            />
+          )}
         </div>
 
         {/* Commit list */}

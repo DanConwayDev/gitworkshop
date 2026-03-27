@@ -447,6 +447,14 @@ export default function PRPage() {
                     pr.firstRevisionInlined === true &&
                     pr.revisions.length > 1
                   }
+                  commitsLatestHref={
+                    pr.itemType === "patch" &&
+                    pr.firstRevisionInlined === true &&
+                    pr.revisions.length > 1 &&
+                    prBasePath
+                      ? `${prBasePath}/commits`
+                      : undefined
+                  }
                 />
               ) : (
                 <EventBodyCardSkeleton />
