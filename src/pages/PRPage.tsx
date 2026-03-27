@@ -54,6 +54,7 @@ import {
 import { PatchCommitList } from "@/components/PatchCommitList";
 import { useCommitHistory } from "@/hooks/useGitExplorer";
 import { usePRMergeBase } from "@/hooks/usePRMergeBase";
+import { MergePanel } from "@/components/MergePanel";
 
 export default function PRPage() {
   const {
@@ -247,6 +248,12 @@ export default function PRPage() {
   const canEdit = useMemo(() => {
     if (!activeAccount || !pr) return false;
     return pr.authorisedUsers.has(activeAccount.pubkey);
+  }, [activeAccount, pr]);
+
+  // Maintainer check: only maintainers (not just PR author) can merge
+  const isMaintainer = useMemo(() => {
+    if (!activeAccount || !pr) return false;
+    return pr.maintainers.has(activeAccount.pubkey);
   }, [activeAccount, pr]);
 
   // ── SEO ───────────────────────────────────────────────────────────────
@@ -572,6 +579,27 @@ export default function PRPage() {
                   </div>
                 )}
               </div>
+
+              {/* Merge panel — shown for patch-type PRs on Grasp repos, for maintainers */}
+              {pr &&
+                repo &&
+                repoState &&
+                pr.itemType === "patch" &&
+                repo.graspCloneUrls.length > 0 &&
+                isMaintainer &&
+                (pr.status === "open" || pr.status === "draft") &&
+                patchChain &&
+                patchChain.length > 0 && (
+                  <MergePanel
+                    pr={pr}
+                    repo={repo}
+                    repoState={repoState}
+                    patchChain={patchChain}
+                    gitPool={gitPool}
+                    effectiveCloneUrls={effectiveCloneUrls}
+                    behindCount={behindCount}
+                  />
+                )}
 
               {/* Reply box */}
               {activeAccount && pr && (
