@@ -576,7 +576,17 @@ export default function PRPage() {
               {/* Reply box */}
               {activeAccount && pr && (
                 <ReplyBox
-                  rootEvent={pr.rootEvent}
+                  rootEvent={
+                    // For patches with multiple revisions, comments go to the
+                    // latest revision's root patch event (not the original root).
+                    // PR / PR Update kinds don't have this concept — they always
+                    // thread under the original root event.
+                    pr.itemType === "patch" &&
+                    pr.revisions.length > 1 &&
+                    pr.revisions[pr.revisions.length - 1].rootPatchEvent
+                      ? pr.revisions[pr.revisions.length - 1].rootPatchEvent!
+                      : pr.rootEvent
+                  }
                   repoRelays={repo?.relays ?? []}
                 />
               )}
