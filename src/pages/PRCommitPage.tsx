@@ -192,7 +192,7 @@ export default function PRCommitPage() {
           patchDiff={patchMatch.diff}
           patch={patchMatch.patch}
           pool={pool}
-          poolLoading={poolState.loading}
+          poolWinnerUrl={poolState.winnerUrl}
           fallbackUrls={[...cloneUrls, ...prCloneUrls]}
           basePath={prBasePath ?? ""}
           repoBasePath={repoBasePath}

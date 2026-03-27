@@ -7,13 +7,11 @@
  * tree-based diffing.
  *
  * Features:
- *   - Subtle banner indicating this commit is sourced from a Nostr patch event
- *   - Full commit hash verification (fetches parent tree, applies patch,
- *     rebuilds tree, computes commit hash)
- *   - Verification reason shown inline when unavailable (not hidden in tooltip)
- *   - Smart parent commit links: links to repo commit page when parent is on
- *     the default branch, to PR-scoped page when parent is another patch
- *   - "View raw event" button linking to the Nostr event
+ *   - Source banner: "Sourced from a Nostr patch event by Avatar Name timeago {}"
+ *   - Full commit hash verification (reactive — retries when pool connects)
+ *   - Verification reason shown inline when unavailable
+ *   - Smart parent commit links (repo-level vs PR-scoped)
+ *   - Raw event JSON modal (Braces icon)
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -21,6 +19,12 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -35,21 +39,20 @@ import {
   Copy,
   Check,
   Hash,
-  Radio,
   ShieldCheck,
   ShieldAlert,
   ShieldQuestion,
   Loader2,
-  ExternalLink,
   GitBranch,
+  Braces,
 } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
+import { UserLink } from "@/components/UserAvatar";
 import {
   verifyPatchCommitHash,
   type CommitHashResult,
 } from "@/lib/patch-verify";
-import { nip19 } from "nostr-tools";
 import type { Commit } from "@fiatjaf/git-natural-api";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
@@ -67,8 +70,11 @@ export interface PatchCommitDetailViewProps {
   patch: Patch;
   /** GitGraspPool for fetching tree/blob data for verification. */
   pool: GitGraspPool | null;
-  /** True while the pool is still connecting to git servers. */
-  poolLoading?: boolean;
+  /**
+   * The pool's current winner URL. Used as a reactive dependency — when
+   * this changes from null to a URL, verification is (re-)triggered.
+   */
+  poolWinnerUrl?: string | null;
   /** Extra clone URLs to try for fetching data. */
   fallbackUrls?: string[];
   /** Prefix for PR-scoped commit links: `${basePath}/commit/${hash}` */
@@ -101,9 +107,7 @@ function resolveParentContext(
   basePath: string,
   repoBasePath: string,
   patchChain: Patch[] | undefined,
-  _defaultBranchHead: string | undefined,
 ): ParentContext {
-  // Check if parent is another patch in the chain
   if (patchChain) {
     const parentPatch = patchChain.find((p) => p.commitId === parentCommitId);
     if (parentPatch) {
@@ -115,8 +119,6 @@ function resolveParentContext(
     }
   }
 
-  // If the parent is the default branch HEAD, or we just assume it's on the
-  // repo (since the git server should have it), link to the repo commit page
   return {
     kind: "default-branch",
     commitId: parentCommitId,
@@ -186,6 +188,43 @@ function CommitHashBadge({
 }
 
 // ---------------------------------------------------------------------------
+// Raw event JSON modal
+// ---------------------------------------------------------------------------
+
+function RawEventJsonDialog({
+  event,
+  open,
+  onOpenChange,
+}: {
+  event: {
+    id: string;
+    pubkey: string;
+    kind: number;
+    created_at: number;
+    content: string;
+    tags: string[][];
+    sig: string;
+  };
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Patch event JSON</DialogTitle>
+        </DialogHeader>
+        <div className="overflow-auto rounded-md border bg-muted/40 p-4 min-h-0">
+          <pre className="text-xs font-mono whitespace-pre-wrap break-all">
+            {JSON.stringify(event, null, 2)}
+          </pre>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -194,7 +233,7 @@ export function PatchCommitDetailView({
   patchDiff,
   patch,
   pool,
-  poolLoading,
+  poolWinnerUrl,
   fallbackUrls,
   basePath,
   repoBasePath,
@@ -205,6 +244,7 @@ export function PatchCommitDetailView({
   defaultBranchHead,
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
+  const [jsonOpen, setJsonOpen] = useState(false);
   const [commitHashResult, setCommitHashResult] = useState<
     CommitHashResult | "computing" | null
   >(null);
@@ -220,38 +260,25 @@ export function PatchCommitDetailView({
   const parentContexts = useMemo(() => {
     if (!commit.parents || commit.parents.length === 0) return [];
     return commit.parents.map((parentId) =>
-      resolveParentContext(
-        parentId,
-        basePath,
-        repoBasePath,
-        patchChain,
-        defaultBranchHead,
-      ),
+      resolveParentContext(parentId, basePath, repoBasePath, patchChain),
     );
-  }, [commit.parents, basePath, repoBasePath, patchChain, defaultBranchHead]);
+  }, [commit.parents, basePath, repoBasePath, patchChain]);
 
-  // Build nevent1 for the raw event link
-  const neventId = useMemo(() => {
-    try {
-      return nip19.neventEncode({ id: patch.event.id });
-    } catch {
-      return null;
-    }
-  }, [patch.event.id]);
-
-  // Run commit hash verification in the background.
-  // Wait for the pool to finish connecting before starting — otherwise the
-  // pool has no URLs to fetch from and verification fails immediately.
+  // Run commit hash verification reactively.
+  // Depends on poolWinnerUrl — re-runs when the pool connects to a server.
+  // This means if the first attempt fails (pool not ready), it automatically
+  // retries when the pool establishes a connection.
   useEffect(() => {
     abortRef.current?.abort();
 
-    if (!hasCommitId || !pool || !patch.commitId || poolLoading) {
-      // Show "computing" while pool is still loading (not null — that hides the badge)
-      if (poolLoading && hasCommitId && patch.commitId) {
-        setCommitHashResult("computing");
-      } else {
-        setCommitHashResult(null);
-      }
+    if (!hasCommitId || !pool || !patch.commitId) {
+      setCommitHashResult(null);
+      return;
+    }
+
+    // If pool has no winner yet, show computing and wait for re-trigger
+    if (!poolWinnerUrl) {
+      setCommitHashResult("computing");
       return;
     }
 
@@ -270,13 +297,18 @@ export function PatchCommitDetailView({
       abort.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasCommitId, pool, poolLoading, patch.id, fallbackUrls?.join(",")]);
+  }, [hasCommitId, pool, poolWinnerUrl, patch.id, fallbackUrls?.join(",")]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(commit.hash);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const eventCreatedAt = patch.event.created_at;
+  const relativeTime = safeFormatDistanceToNow(eventCreatedAt, {
+    addSuffix: true,
+  });
 
   return (
     <div className="space-y-4">
@@ -291,30 +323,29 @@ export function PatchCommitDetailView({
 
       {/* Patch source banner */}
       <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-muted/30 px-3 py-2">
-        <Radio className="h-3.5 w-3.5 text-violet-500 shrink-0" />
         <span className="text-xs text-muted-foreground">
-          This commit is sourced from a{" "}
-          <span className="font-medium text-foreground/80">
-            Nostr patch event
-          </span>
-          {!hasCommitId && (
-            <span>
-              {" "}
-              — no git commit hash available, showing event data only
-            </span>
-          )}
+          Sourced from a Nostr patch event by
         </span>
-        {neventId && (
-          <a
-            href={`https://njump.me/${neventId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-foreground/80 transition-colors"
-          >
-            <ExternalLink className="h-3 w-3" />
-            raw event
-          </a>
-        )}
+        <UserLink
+          pubkey={patch.pubkey}
+          avatarSize="sm"
+          nameClassName="text-xs"
+        />
+        <span
+          className="text-xs text-muted-foreground"
+          title={safeFormat(eventCreatedAt, "PPpp") ?? undefined}
+        >
+          {relativeTime}
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 ml-auto shrink-0 text-muted-foreground/50 hover:text-foreground"
+          title="View raw event JSON"
+          onClick={() => setJsonOpen(true)}
+        >
+          <Braces className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
       {/* Header card */}
@@ -494,6 +525,13 @@ export function PatchCommitDetailView({
           No diff content available for this patch.
         </div>
       )}
+
+      {/* Raw event JSON modal */}
+      <RawEventJsonDialog
+        event={patch.event}
+        open={jsonOpen}
+        onOpenChange={setJsonOpen}
+      />
     </div>
   );
 }
