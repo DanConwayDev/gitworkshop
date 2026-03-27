@@ -1339,6 +1339,58 @@ export class GitGraspPool {
   }
 
   /**
+   * Count how many commits the default branch is ahead of `mergeBase`.
+   *
+   * Walks the default branch HEAD backwards through parent links until it
+   * reaches `mergeBase`, counting each step. Returns 0 when `mergeBase` IS
+   * the current HEAD (fully up-to-date). Returns null when the walk fails or
+   * the merge base is not found within `maxDepth` commits.
+   *
+   * Individual commits are already cached by `findMergeBase`, so in the
+   * common case this walk is entirely in-memory. When a commit is missing
+   * from cache it is fetched individually via `getSingleCommit`.
+   */
+  async countCommitsBehind(
+    mergeBase: string,
+    signal: AbortSignal,
+    maxDepth = 2000,
+  ): Promise<number | null> {
+    const info = this.getInfoRefs();
+    if (!info) return null;
+
+    const headRef = info.symrefs["HEAD"];
+    const defaultBranchCommit = headRef
+      ? info.refs[headRef]
+      : Object.values(info.refs)[0];
+    if (!defaultBranchCommit) return null;
+
+    if (defaultBranchCommit === mergeBase) return 0;
+
+    let current = defaultBranchCommit;
+    let count = 0;
+
+    while (count < maxDepth) {
+      if (signal.aborted) return null;
+
+      // getSingleCommit checks L1 → L2 → network.
+      const commit = await this.getSingleCommit(current, signal);
+
+      if (!commit || signal.aborted) return null;
+
+      // Each step away from HEAD is one commit the PR is "behind".
+      count++;
+
+      if (commit.parents.length === 0) return null; // reached root without finding merge base
+
+      const parentHash = commit.parents[0];
+      if (parentHash === mergeBase) return count;
+      current = parentHash;
+    }
+
+    return null; // exceeded maxDepth
+  }
+
+  /**
    * Fetch the data needed to compute a diff between two commits.
    *
    * Returns both commits and both complete recursive directory trees

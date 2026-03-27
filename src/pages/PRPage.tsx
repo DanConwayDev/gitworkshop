@@ -83,7 +83,7 @@ import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
 
 export default function PRPage() {
-  const { pubkey, repoId, resolved, prId, cloneUrls, prBasePath } =
+  const { pubkey, repoId, resolved, prId, cloneUrls, prBasePath, repoState } =
     useRepoContext();
   const location = useLocation();
   const navigate = useNavigate();
@@ -240,6 +240,61 @@ export default function PRPage() {
       ? prCommitHistory.commits
       : prCommitHistory.commits.slice(0, idx);
   }, [prCommitHistory.commits, effectiveMergeBase]);
+
+  // ── Ahead / behind counts ─────────────────────────────────────────────────
+  // "Ahead" = commits in the PR branch not yet in the default branch.
+  // "Behind" = commits in the default branch not yet in the PR branch.
+  //
+  // Both are derived from git history so they always reflect the current tip
+  // (including force-pushes via kind:1619 PR Updates).
+  //
+  // Ahead: prCommits is already sliced to [mergeBase..tip], so its length is
+  // the ahead count. Only meaningful for PRs (kind:1618) — patches use the
+  // patch chain length instead.
+  const aheadCount =
+    itemType === "pr"
+      ? prCommits.length > 0
+        ? prCommits.length
+        : undefined
+      : patchChain.chain.length > 0
+        ? patchChain.chain.length
+        : undefined;
+
+  // Default branch name from the git pool state (already reactive).
+  const defaultBranchName = gitPoolState.defaultBranch ?? repoState?.headBranch;
+
+  // Behind: count commits on the default branch since the merge base.
+  //
+  // Calls pool.countCommitsBehind() which walks parent links from the default
+  // branch HEAD (from git infoRefs — same source as findMergeBase) until it
+  // reaches the merge base. Individual commits are already cached by
+  // findMergeBase, so this is usually instant. Falls back to fetching
+  // individual commits for deep histories.
+  const [behindCount, setBehindCount] = useState<number | undefined>(undefined);
+  const behindAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!gitPool || !effectiveMergeBase) {
+      setBehindCount(undefined);
+      return;
+    }
+
+    behindAbortRef.current?.abort();
+    const abort = new AbortController();
+    behindAbortRef.current = abort;
+
+    gitPool
+      .countCommitsBehind(effectiveMergeBase, abort.signal)
+      .then((result) => {
+        if (abort.signal.aborted) return;
+        setBehindCount(result ?? undefined);
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) setBehindCount(undefined);
+      });
+
+    return () => abort.abort();
+  }, [gitPool, effectiveMergeBase]);
 
   // ── Patch-specific git data ────────────────────────────────────────────────
   // For patches with commit IDs in their tags, we can show a Files Changed tab
@@ -926,6 +981,42 @@ export default function PRPage() {
                     ]}
                     repoRelays={repo?.relays}
                   />
+                )}
+
+                {/* Ahead / behind the default branch */}
+                {(aheadCount !== undefined || behindCount !== undefined) && (
+                  <>
+                    <Separator />
+                    <div className="flex items-start gap-2 text-sm">
+                      <GitCommitHorizontal className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div className="space-y-0.5">
+                        {aheadCount !== undefined && (
+                          <p className="text-foreground font-medium">
+                            {aheadCount} commit{aheadCount !== 1 ? "s" : ""}{" "}
+                            <span className="font-normal text-muted-foreground">
+                              ahead
+                            </span>
+                          </p>
+                        )}
+                        {behindCount !== undefined && (
+                          <p className="text-foreground font-medium">
+                            {behindCount} commit{behindCount !== 1 ? "s" : ""}{" "}
+                            <span className="font-normal text-muted-foreground">
+                              behind
+                            </span>
+                          </p>
+                        )}
+                        {defaultBranchName && (
+                          <p className="text-xs text-muted-foreground">
+                            vs{" "}
+                            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                              {defaultBranchName}
+                            </code>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 <Separator />
