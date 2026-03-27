@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { IdentityStatus } from "applesauce-loaders/helpers";
 import { dnsIdentityLoader } from "@/services/nostr";
 import { repoToPath, standardizeNip05 } from "@/lib/routeUtils";
-import { useProfile } from "./useProfile";
+import { useUser } from "./useUser";
+import { use$ } from "./use$";
 
 /**
  * Returns the canonical path for a repository, preferring a verified NIP-05
@@ -22,8 +23,11 @@ export function useRepoPath(
   repoId: string,
   relays: string[],
 ): string {
-  const profile = useProfile(pubkey);
-  const rawNip05 = profile?.nip05;
+  const user = useUser(pubkey);
+  const profile = use$(() => user?.profile$, [user?.pubkey]);
+  // Access nip05 from the Profile cast's metadata (the raw ProfileContent)
+  // rather than going through useProfile, which has a mismatched return type.
+  const rawNip05 = profile?.metadata?.nip05;
 
   // Attempt to get a verified NIP-05 for this pubkey.
   // We check the loader's synchronous cache first so there's no flicker when
@@ -40,8 +44,8 @@ export function useRepoPath(
 
     const standardized = standardizeNip05(rawNip05);
 
-    // Check cache synchronously first
-    const cached = getVerifiedNip05FromCache(standardized, pubkey);
+    // Check cache synchronously first (pass raw value — the helper standardizes internally)
+    const cached = getVerifiedNip05FromCache(rawNip05, pubkey);
     if (cached !== undefined) {
       setVerifiedNip05(cached);
       return;

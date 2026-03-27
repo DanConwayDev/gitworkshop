@@ -1,4 +1,3 @@
-import { map } from "rxjs/operators";
 import { use$ } from "./use$";
 import { useUser } from "./useUser";
 import type { ProfileContent } from "applesauce-core/helpers";
@@ -32,13 +31,7 @@ export function useProfile(
 ): ProfileContent | undefined {
   const user = useUser(pubkey);
 
-  // profile$ emits the Profile cast; map to .metadata to get the plain
-  // ProfileContent object (which has the nip05 field, unlike the cast which
-  // exposes it as dnsIdentity).
-  const profile = use$(
-    () => user?.profile$.pipe(map((p) => p?.metadata)),
-    [user?.pubkey],
-  );
+  const profile = use$(() => user?.profile$, [user?.pubkey]);
 
   return profile;
 }
@@ -72,10 +65,7 @@ import { useMyUser } from "./useUser";
 export function useMyProfile(): ProfileContent | undefined {
   const user = useMyUser();
 
-  const profile = use$(
-    () => user?.profile$.pipe(map((p) => p?.metadata)),
-    [user?.pubkey],
-  );
+  const profile = use$(() => user?.profile$, [user?.pubkey]);
 
   return profile;
 }
