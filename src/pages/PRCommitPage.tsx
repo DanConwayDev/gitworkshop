@@ -22,6 +22,7 @@
 
 import { useMemo } from "react";
 import { useRepoContext } from "@/pages/repo/RepoContext";
+import { repoToPath } from "@/lib/routeUtils";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useGitPool } from "@/hooks/useGitPool";
@@ -41,11 +42,27 @@ import type { Filter } from "applesauce-core/helpers";
 import type { Patch } from "@/casts/Patch";
 
 export default function PRCommitPage() {
-  const { cloneUrls, prCommitId, prBasePath, prId, resolved } =
-    useRepoContext();
+  const {
+    cloneUrls,
+    prCommitId,
+    prBasePath,
+    prId,
+    resolved,
+    pubkey,
+    repoId,
+    nip05,
+  } = useRepoContext();
   const store = useEventStore();
 
-  const { pool } = useGitPool(cloneUrls);
+  const { pool, poolState } = useGitPool(cloneUrls);
+
+  // Repo base path for linking to repo-level commits (not PR-scoped)
+  const repoBasePath = repoToPath(
+    pubkey,
+    repoId,
+    resolved?.repo?.relays ?? [],
+    nip05,
+  );
 
   // Subscribe to fetch the root event from relays. This ensures the page
   // works on direct URL navigation (when the event isn't already in the store
@@ -177,8 +194,11 @@ export default function PRCommitPage() {
           pool={pool}
           fallbackUrls={[...cloneUrls, ...prCloneUrls]}
           basePath={prBasePath ?? ""}
+          repoBasePath={repoBasePath}
           backTo={prBasePath ? `${prBasePath}/commits` : ".."}
           hasCommitId={patchMatch.hasCommitId}
+          patchChain={patchChain.chain}
+          defaultBranchHead={poolState.latestCommit?.hash}
         />
       </div>
     );
