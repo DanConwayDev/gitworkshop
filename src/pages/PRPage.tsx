@@ -583,7 +583,6 @@ export default function PRPage() {
               {/* Merge panel — shown for patch-type PRs on Grasp repos, for maintainers */}
               {pr &&
                 repo &&
-                repoState &&
                 pr.itemType === "patch" &&
                 repo.graspCloneUrls.length > 0 &&
                 isMaintainer &&
@@ -593,11 +592,14 @@ export default function PRPage() {
                   <MergePanel
                     pr={pr}
                     repo={repo}
-                    repoState={repoState}
                     patchChain={patchChain}
                     gitPool={gitPool}
                     effectiveCloneUrls={effectiveCloneUrls}
                     behindCount={behindCount}
+                    defaultBranchName={defaultBranchName ?? "main"}
+                    defaultBranchHead={
+                      defaultBranchHead ?? repoState?.headCommitId
+                    }
                   />
                 )}
 

@@ -62,7 +62,6 @@ import type { CommitPerson } from "@/lib/git-objects";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 import type { ResolvedPR, ResolvedRepo } from "@/lib/nip34";
-import type { RepositoryState } from "@/casts/RepositoryState";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -73,8 +72,6 @@ interface MergePanelProps {
   pr: ResolvedPR;
   /** The resolved repository */
   repo: ResolvedRepo;
-  /** The current repo state event (kind:30618) */
-  repoState: RepositoryState | null;
   /** The patch chain (cover letters excluded) */
   patchChain: Patch[];
   /** GitGraspPool for fetching base tree / file content */
@@ -83,6 +80,10 @@ interface MergePanelProps {
   effectiveCloneUrls: string[];
   /** Behind count (how many commits the default branch moved since the patch base) */
   behindCount: number | undefined;
+  /** The default branch name (e.g. "main") */
+  defaultBranchName: string;
+  /** The current HEAD commit of the default branch */
+  defaultBranchHead: string | undefined;
 }
 
 type MergeStep =
@@ -151,11 +152,12 @@ const STEP_LABELS: Record<MergeStep, string> = {
 export function MergePanel({
   pr,
   repo,
-  repoState,
   patchChain,
   gitPool,
   effectiveCloneUrls,
   behindCount,
+  defaultBranchName,
+  defaultBranchHead,
 }: MergePanelProps) {
   const account = useActiveAccount();
   const profile = useMyProfile();
@@ -173,9 +175,6 @@ export function MergePanel({
     true,
   );
 
-  // Derive the default branch info from the repo state
-  const defaultBranchName = repoState?.headBranch ?? "main";
-  const defaultBranchHead = repoState?.headCommitId;
   const defaultBranchRef = `refs/heads/${defaultBranchName}`;
 
   // Grasp relay URLs: repo relays whose hostname matches a Grasp server domain
