@@ -265,33 +265,59 @@ export function PatchCommitDetailView({
   }, [commit.parents, basePath, repoBasePath, patchChain]);
 
   // Run commit hash verification reactively.
-  // Depends on poolWinnerUrl — re-runs when the pool connects to a server.
-  // This means if the first attempt fails (pool not ready), it automatically
-  // retries when the pool establishes a connection.
+  //
+  // The pool may not be connected yet when this component first mounts.
+  // We depend on poolWinnerUrl so the effect re-runs when the pool
+  // establishes a connection. If verification fails because the pool
+  // isn't ready, the next poolWinnerUrl change will retry.
+  //
+  // If verification returns "unavailable" but the pool later connects
+  // (poolWinnerUrl changes), we retry — the "unavailable" result might
+  // have been due to the pool not being ready.
+  const prevWinnerRef = useRef<string | null | undefined>(undefined);
+
   useEffect(() => {
+    // Skip if no commit ID or no pool
+    if (!hasCommitId || !patch.commitId || !pool) {
+      if (!pool && hasCommitId && patch.commitId) {
+        setCommitHashResult("computing");
+      } else {
+        setCommitHashResult(null);
+      }
+      return;
+    }
+
+    // If we already have a definitive result (match/mismatch) and the
+    // winner URL hasn't changed, don't re-run.
+    const winnerChanged = poolWinnerUrl !== prevWinnerRef.current;
+    prevWinnerRef.current = poolWinnerUrl;
+
+    if (
+      !winnerChanged &&
+      commitHashResult !== null &&
+      commitHashResult !== "computing" &&
+      commitHashResult.status !== "unavailable"
+    ) {
+      return;
+    }
+
     abortRef.current?.abort();
-
-    if (!hasCommitId || !pool || !patch.commitId) {
-      setCommitHashResult(null);
-      return;
-    }
-
-    // If pool has no winner yet, show computing and wait for re-trigger
-    if (!poolWinnerUrl) {
-      setCommitHashResult("computing");
-      return;
-    }
-
     const abort = new AbortController();
     abortRef.current = abort;
     setCommitHashResult("computing");
 
-    verifyPatchCommitHash(patch, pool, abort.signal, fallbackUrls).then(
-      (result) => {
+    verifyPatchCommitHash(patch, pool, abort.signal, fallbackUrls)
+      .then((result) => {
         if (abort.signal.aborted) return;
         setCommitHashResult(result);
-      },
-    );
+      })
+      .catch((err) => {
+        if (abort.signal.aborted) return;
+        setCommitHashResult({
+          status: "unavailable",
+          reason: err instanceof Error ? err.message : "Verification failed",
+        });
+      });
 
     return () => {
       abort.abort();
