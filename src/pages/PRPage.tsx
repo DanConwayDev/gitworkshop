@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
@@ -465,83 +465,96 @@ export default function PRPage() {
                     className="min-w-0 border-l pl-1 space-y-0.5"
                     style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
                   >
-                    {pr.timelineNodes.map((node, idx) => {
-                      if (node.type === "revision") {
-                        if (
-                          node.revision.type === "patch-set" &&
-                          node.revision.patches &&
-                          node.revision.patches.length > 0
-                        ) {
-                          // Skip the original (non-revision) patch-set when it
-                          // has been inlined into the body card.
+                    {((): React.ReactNode => {
+                      // Track revision number (1-based) as we walk the timeline.
+                      let revisionCounter = 0;
+                      return pr.timelineNodes.map((node, idx) => {
+                        if (node.type === "revision") {
                           if (
-                            pr.firstRevisionInlined &&
-                            !node.revision.patches[0].isRootRevision
+                            node.revision.type === "patch-set" &&
+                            node.revision.patches &&
+                            node.revision.patches.length > 0
                           ) {
-                            return null;
+                            // Always count this revision, even if we skip rendering it
+                            // (inlined into the body card), so subsequent revisions
+                            // get the correct revision number.
+                            revisionCounter += 1;
+                            // Skip the original (non-revision) patch-set when it
+                            // has been inlined into the body card.
+                            if (
+                              pr.firstRevisionInlined &&
+                              !node.revision.patches[0].isRootRevision
+                            ) {
+                              return null;
+                            }
+                            const currentRevNum = revisionCounter;
+                            const rootPatch = node.revision.patches[0];
+                            return (
+                              <PatchSetPushEvent
+                                key={`patch-push-${node.revision.rootPatchEvent?.id ?? idx}`}
+                                revision={{
+                                  rootPatch,
+                                  chain: node.revision.patches,
+                                  isRevision:
+                                    node.revision.superseded ||
+                                    rootPatch.isRootRevision,
+                                }}
+                                superseded={node.revision.superseded}
+                                basePath={prBasePath ?? undefined}
+                                revisionNumber={currentRevNum}
+                              />
+                            );
                           }
-                          const rootPatch = node.revision.patches[0];
+                          if (
+                            node.revision.type === "pr-update" &&
+                            node.revision.updateEvent
+                          ) {
+                            revisionCounter += 1;
+                            const currentRevNum = revisionCounter;
+                            return (
+                              <PRUpdatePushEvent
+                                key={`pr-update-${node.revision.updateEvent.id}`}
+                                update={{
+                                  event: node.revision.updateEvent,
+                                  pubkey: node.revision.pubkey,
+                                  tipCommitId: node.revision.tipCommitId,
+                                  mergeBase: node.revision.mergeBase,
+                                }}
+                                superseded={node.revision.superseded}
+                                basePath={prBasePath ?? undefined}
+                                revisionNumber={currentRevNum}
+                              />
+                            );
+                          }
+                          return null;
+                        }
+                        if (node.type === "rename") {
                           return (
-                            <PatchSetPushEvent
-                              key={`patch-push-${node.revision.rootPatchEvent?.id ?? idx}`}
-                              revision={{
-                                rootPatch,
-                                chain: node.revision.patches,
-                                isRevision:
-                                  node.revision.superseded ||
-                                  rootPatch.isRootRevision,
-                              }}
-                              superseded={node.revision.superseded}
-                              basePath={prBasePath ?? undefined}
+                            <SubjectRenameCard
+                              key={node.event.id}
+                              event={node.event}
+                              oldSubject={node.oldSubject}
+                              newSubject={node.newSubject}
                             />
                           );
                         }
-                        if (
-                          node.revision.type === "pr-update" &&
-                          node.revision.updateEvent
-                        ) {
-                          return (
-                            <PRUpdatePushEvent
-                              key={`pr-update-${node.revision.updateEvent.id}`}
-                              update={{
-                                event: node.revision.updateEvent,
-                                pubkey: node.revision.pubkey,
-                                tipCommitId: node.revision.tipCommitId,
-                                mergeBase: node.revision.mergeBase,
-                              }}
-                              superseded={node.revision.superseded}
-                              basePath={prBasePath ?? undefined}
-                            />
-                          );
-                        }
-                        return null;
-                      }
-                      if (node.type === "rename") {
+                        // thread node
                         return (
-                          <SubjectRenameCard
-                            key={node.event.id}
-                            event={node.event}
-                            oldSubject={node.oldSubject}
-                            newSubject={node.newSubject}
+                          <ThreadTree
+                            key={`thread-${node.node.event.id}-${idx}`}
+                            node={node.node}
+                            threadContext={
+                              activeAccount && pr
+                                ? {
+                                    rootEvent: pr.rootEvent,
+                                    repoRelays: repo?.relays ?? [],
+                                  }
+                                : undefined
+                            }
                           />
                         );
-                      }
-                      // thread node
-                      return (
-                        <ThreadTree
-                          key={`thread-${node.node.event.id}-${idx}`}
-                          node={node.node}
-                          threadContext={
-                            activeAccount && pr
-                              ? {
-                                  rootEvent: pr.rootEvent,
-                                  repoRelays: repo?.relays ?? [],
-                                }
-                              : undefined
-                          }
-                        />
-                      );
-                    })}
+                      });
+                    })()}
                   </div>
                 )}
               </div>

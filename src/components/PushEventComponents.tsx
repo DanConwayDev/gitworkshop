@@ -111,17 +111,20 @@ function SupersededBadge() {
 /**
  * Renders a patch-set revision as a push timeline node.
  *
- * @param revision   - The PatchRevision (rootPatch + chain)
- * @param superseded - True when a later revision exists
+ * @param revision       - The PatchRevision (rootPatch + chain)
+ * @param superseded     - True when a later revision exists
+ * @param revisionNumber - 1-based revision index (1 = original, 2 = first force push, …)
  */
 export function PatchSetPushEvent({
   revision,
   superseded,
   basePath,
+  revisionNumber,
 }: {
   revision: PatchRevision;
   superseded: boolean;
   basePath?: string;
+  revisionNumber?: number;
 }) {
   const { rootPatch, chain } = revision;
 
@@ -140,6 +143,8 @@ export function PatchSetPushEvent({
       })),
     [chain],
   );
+
+  const isForcePush = revision.isRevision;
 
   return (
     <div className="relative flex gap-3 py-2 pl-1">
@@ -160,10 +165,10 @@ export function PatchSetPushEvent({
             nameClassName="text-sm font-medium text-foreground"
           />
           <span className="text-sm text-muted-foreground">
-            pushed {commits.length} commit{commits.length !== 1 ? "s" : ""}
-            {revision.isRevision && (
+            {isForcePush ? "force pushed" : "opened this patch"}
+            {revisionNumber !== undefined && revisionNumber > 1 && (
               <span className="ml-1 text-xs text-muted-foreground/60">
-                (new revision)
+                (revision {revisionNumber})
               </span>
             )}
           </span>
@@ -310,9 +315,10 @@ export function PROpenPushEvent({
  * if the tip commit ID changed in a later update, this one is superseded.
  * The caller is responsible for computing `superseded`.
  *
- * @param update     - The PRUpdate cast
- * @param superseded - True when a later PR Update has a different tip
- * @param commits    - Optional resolved commit list (subject + short hash)
+ * @param update         - The PRUpdate cast
+ * @param superseded     - True when a later PR Update has a different tip
+ * @param commits        - Optional resolved commit list (subject + short hash)
+ * @param revisionNumber - 1-based revision index (2 = first force push, …)
  */
 /**
  * Minimal interface for a PR Update — satisfied by both the PRUpdate cast
@@ -330,11 +336,13 @@ export function PRUpdatePushEvent({
   superseded,
   commits,
   basePath,
+  revisionNumber,
 }: {
   update: PRUpdate | PRUpdateLike;
   superseded: boolean;
   commits?: Array<{ hash: string; subject: string }>;
   basePath?: string;
+  revisionNumber?: number;
 }) {
   const timeAgo = formatDistanceToNow(
     new Date(update.event.created_at * 1000),
@@ -386,9 +394,9 @@ export function PRUpdatePushEvent({
           />
           <span className="text-sm text-muted-foreground">
             force pushed
-            {update.mergeBase && (
+            {revisionNumber !== undefined && revisionNumber > 1 && (
               <span className="ml-1 text-xs text-muted-foreground/60">
-                · base {update.mergeBase.slice(0, 7)}
+                (revision {revisionNumber})
               </span>
             )}
           </span>
