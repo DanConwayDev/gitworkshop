@@ -33,7 +33,7 @@ import { Search, MessageCircle, Users, CircleDot, X, Plus } from "lucide-react";
 import { UserAvatar } from "@/components/UserAvatar";
 import type { IssueStatus, ResolvedIssue } from "@/lib/nip34";
 
-const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open", "draft"];
+const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open"];
 
 export default function RepoIssuesPage() {
   const { pubkey, repoId, resolved, issues } = useRepoContext();
@@ -43,7 +43,7 @@ export default function RepoIssuesPage() {
   // New issue dialog
   const [newIssueOpen, setNewIssueOpen] = useState(false);
 
-  // Filters — all multi-select; status defaults to open+draft
+  // Filters — all multi-select; status defaults to open
   const [statusFilter, setStatusFilter] = useState<IssueStatus[]>(
     DEFAULT_STATUS_FILTER,
   );
