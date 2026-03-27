@@ -67,6 +67,8 @@ export interface PatchCommitDetailViewProps {
   patch: Patch;
   /** GitGraspPool for fetching tree/blob data for verification. */
   pool: GitGraspPool | null;
+  /** True while the pool is still connecting to git servers. */
+  poolLoading?: boolean;
   /** Extra clone URLs to try for fetching data. */
   fallbackUrls?: string[];
   /** Prefix for PR-scoped commit links: `${basePath}/commit/${hash}` */
@@ -192,6 +194,7 @@ export function PatchCommitDetailView({
   patchDiff,
   patch,
   pool,
+  poolLoading,
   fallbackUrls,
   basePath,
   repoBasePath,
@@ -236,12 +239,19 @@ export function PatchCommitDetailView({
     }
   }, [patch.event.id]);
 
-  // Run commit hash verification in the background
+  // Run commit hash verification in the background.
+  // Wait for the pool to finish connecting before starting — otherwise the
+  // pool has no URLs to fetch from and verification fails immediately.
   useEffect(() => {
     abortRef.current?.abort();
 
-    if (!hasCommitId || !pool || !patch.commitId) {
-      setCommitHashResult(null);
+    if (!hasCommitId || !pool || !patch.commitId || poolLoading) {
+      // Show "computing" while pool is still loading (not null — that hides the badge)
+      if (poolLoading && hasCommitId && patch.commitId) {
+        setCommitHashResult("computing");
+      } else {
+        setCommitHashResult(null);
+      }
       return;
     }
 
@@ -260,7 +270,7 @@ export function PatchCommitDetailView({
       abort.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasCommitId, pool, patch.id, fallbackUrls?.join(",")]);
+  }, [hasCommitId, pool, poolLoading, patch.id, fallbackUrls?.join(",")]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(commit.hash);
