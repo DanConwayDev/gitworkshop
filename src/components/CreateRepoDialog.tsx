@@ -55,6 +55,51 @@ import { DEFAULT_GRASP_SERVERS } from "@/services/settings";
 const GRASP_LIST_KIND = 10317;
 
 // ---------------------------------------------------------------------------
+// NIP-11 Grasp validation
+// ---------------------------------------------------------------------------
+
+interface Nip11Document {
+  supported_grasps?: string[];
+  [key: string]: unknown;
+}
+
+/**
+ * Fetch the NIP-11 relay information document for a domain and verify it
+ * advertises at least GRASP-01 support.
+ *
+ * Returns `null` on success, or an error string to display to the user.
+ */
+async function validateGraspServer(domain: string): Promise<string | null> {
+  const url = `https://${domain}`;
+  let doc: Nip11Document;
+
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/nostr+json" },
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!res.ok) {
+      return `Server returned HTTP ${res.status} — is it a Nostr relay?`;
+    }
+
+    doc = (await res.json()) as Nip11Document;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "TimeoutError") {
+      return "Server did not respond in time";
+    }
+    return "Could not reach server — check the domain and try again";
+  }
+
+  const grasps = doc.supported_grasps;
+  if (!Array.isArray(grasps) || !grasps.includes("GRASP-01")) {
+    return "Server does not advertise Grasp support (missing GRASP-01 in NIP-11)";
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
@@ -209,6 +254,7 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
   const [customDomainError, setCustomDomainError] = useState<
     string | undefined
   >();
+  const [validatingDomain, setValidatingDomain] = useState(false);
   // Whether to save these servers as the user's default grasp list
   const [saveAsDefaults, setSaveAsDefaults] = useState(false);
 
@@ -243,6 +289,7 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
       setSelectedDomains(resolvedServers.map((s) => s.domain));
       setCustomDomain("");
       setCustomDomainError(undefined);
+      setValidatingDomain(false);
       setSaveAsDefaults(false);
       setAdvancedOpen(false);
       reset();
@@ -276,7 +323,7 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
     state.step === "idle";
 
   // Add a custom domain to the selection
-  const handleAddCustomDomain = useCallback(() => {
+  const handleAddCustomDomain = useCallback(async () => {
     const raw = customDomain.trim().toLowerCase();
     if (!raw) return;
 
@@ -290,6 +337,17 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
 
     if (selectedDomains.includes(domain)) {
       setCustomDomainError("Already in the list");
+      return;
+    }
+
+    // Validate NIP-11 Grasp support before adding
+    setValidatingDomain(true);
+    setCustomDomainError(undefined);
+    const validationError = await validateGraspServer(domain);
+    setValidatingDomain(false);
+
+    if (validationError) {
+      setCustomDomainError(validationError);
       return;
     }
 
@@ -564,6 +622,7 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
                         <Input
                           placeholder="relay.example.com"
                           value={customDomain}
+                          disabled={validatingDomain}
                           onChange={(e) => {
                             setCustomDomain(e.target.value);
                             setCustomDomainError(undefined);
@@ -571,7 +630,7 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.preventDefault();
-                              handleAddCustomDomain();
+                              void handleAddCustomDomain();
                             }
                           }}
                           className="h-8 text-sm font-mono"
@@ -580,10 +639,15 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={handleAddCustomDomain}
+                          onClick={() => void handleAddCustomDomain()}
+                          disabled={validatingDomain}
                           className="h-8 px-2.5 shrink-0"
                         >
-                          <Plus className="h-3.5 w-3.5" />
+                          {validatingDomain ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Plus className="h-3.5 w-3.5" />
+                          )}
                         </Button>
                       </div>
                       {customDomainError && (
