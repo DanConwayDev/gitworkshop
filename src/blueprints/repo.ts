@@ -22,7 +22,11 @@
  */
 
 import { blueprint } from "applesauce-core/event-factory";
-import { includeAltTag, modifyPublicTags } from "applesauce-core/operations";
+import {
+  includeAltTag,
+  includeSingletonTag,
+  modifyPublicTags,
+} from "applesauce-core/operations";
 import { REPO_KIND, REPO_STATE_KIND } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
@@ -58,10 +62,9 @@ export function RepoAnnouncementBlueprint(
 ) {
   return blueprint(
     REPO_KIND,
-    // d tag (identifier)
-    modifyPublicTags((tags) => [...tags, ["d", identifier]]),
-    // r tag with EUC marker — earliest unique commit
-    modifyPublicTags((tags) => [...tags, ["r", eucCommitHash, "euc"]]),
+    // d tag (identifier) — use includeSingletonTag so it replaces any
+    // auto-generated d tag the factory adds for addressable events
+    includeSingletonTag(["d", identifier]),
     // name tag
     modifyPublicTags((tags) => [...tags, ["name", name]]),
     // description tag (include even if empty — matches ngit behaviour)
@@ -72,6 +75,8 @@ export function RepoAnnouncementBlueprint(
     modifyPublicTags((tags) => [...tags, ["relays", ...relayUrls]]),
     // NIP-31 alt tag
     includeAltTag(`git repository: ${name}`),
+    // r tag with EUC marker — earliest unique commit
+    modifyPublicTags((tags) => [...tags, ["r", eucCommitHash, "euc"]]),
   );
 }
 
@@ -98,8 +103,9 @@ export function RepoStateBlueprint(
 ) {
   return blueprint(
     REPO_STATE_KIND,
-    // d tag (identifier)
-    modifyPublicTags((tags) => [...tags, ["d", identifier]]),
+    // d tag (identifier) — use includeSingletonTag so it replaces any
+    // auto-generated d tag the factory adds for addressable events
+    includeSingletonTag(["d", identifier]),
     // ref tag for the default branch
     modifyPublicTags((tags) => [
       ...tags,
