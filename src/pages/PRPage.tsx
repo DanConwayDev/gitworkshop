@@ -42,7 +42,9 @@ import {
 import { cn } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
 import { PRFilesTab } from "@/components/PRFilesTab";
+import { PatchFilesTab } from "@/components/PatchFilesTab";
 import { diffTrees } from "@/lib/git-grasp-pool";
+import { computePatchFileChanges } from "@/lib/patch-diff-merge";
 import {
   CommitList,
   CommitListLoading,
@@ -179,11 +181,25 @@ export default function PRPage() {
     return () => abort.abort();
   }, [gitPool, effectiveMergeBase, defaultBranchHead]);
 
+  // Patch chain — needed for both file count and Commits tab
+  const patchChain =
+    pr?.itemType === "patch" && pr.revisions.length > 0
+      ? pr.revisions[pr.revisions.length - 1].patches
+      : undefined;
+
   // ── File count (eager for tab badge) ──────────────────────────────────
   const [fileCount, setFileCount] = useState<number | undefined>(undefined);
   const fileCountAbortRef = useRef<AbortController | null>(null);
 
+  // For patches: compute file count synchronously from the patch chain
+  const patchFileCount = useMemo(() => {
+    if (pr?.itemType !== "patch" || !patchChain || patchChain.length === 0)
+      return undefined;
+    return computePatchFileChanges(patchChain).length;
+  }, [pr?.itemType, patchChain]);
+
   useEffect(() => {
+    if (pr?.itemType === "patch") return; // patches use patchFileCount instead
     if (!gitPool || !pr?.tip.commitId || !effectiveMergeBase) return;
 
     fileCountAbortRef.current?.abort();
@@ -208,7 +224,17 @@ export default function PRPage() {
     return () => {
       abort.abort();
     };
-  }, [gitPool, pr?.tip.commitId, effectiveMergeBase, effectiveCloneUrls]);
+  }, [
+    pr?.itemType,
+    gitPool,
+    pr?.tip.commitId,
+    effectiveMergeBase,
+    effectiveCloneUrls,
+  ]);
+
+  // Effective file count: use patch-derived count for patches, git-derived for PRs
+  const effectiveFileCount =
+    pr?.itemType === "patch" ? patchFileCount : fileCount;
 
   // ── Auth ──────────────────────────────────────────────────────────────
   const activeAccount = useActiveAccount();
@@ -229,16 +255,6 @@ export default function PRPage() {
   const TypeIcon =
     pr?.itemType === "patch" ? GitCommitHorizontal : GitPullRequest;
 
-  // Does this patch have git commit IDs for the Files Changed tab?
-  const patchHasGitData =
-    pr?.itemType === "patch" && pr.tip.commitId && effectiveMergeBase;
-
-  // Patch chain for the Commits tab
-  const patchChain =
-    pr?.itemType === "patch" && pr.revisions.length > 0
-      ? pr.revisions[pr.revisions.length - 1].patches
-      : undefined;
-
   // Tab bar
   const tabList = (
     <TabsList className="h-auto bg-transparent p-0 gap-0 rounded-none border-0">
@@ -255,17 +271,18 @@ export default function PRPage() {
         )}
       </TabsTrigger>
 
-      {/* Files Changed tab — for PRs and patches with commit IDs */}
-      {(pr?.itemType === "pr" || patchHasGitData) && (
+      {/* Files Changed tab — for PRs and all patches */}
+      {(pr?.itemType === "pr" ||
+        (pr?.itemType === "patch" && patchChain && patchChain.length > 0)) && (
         <TabsTrigger
           value="files"
           className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
         >
           <FileDiff className="h-3.5 w-3.5" />
           Files Changed
-          {fileCount !== undefined && fileCount > 0 && (
+          {effectiveFileCount !== undefined && effectiveFileCount > 0 && (
             <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
-              {fileCount}
+              {effectiveFileCount}
             </span>
           )}
         </TabsTrigger>
@@ -515,9 +532,24 @@ export default function PRPage() {
             </TabsContent>
 
             {/* Files Changed tab */}
-            {(pr?.itemType === "pr" || patchHasGitData) && (
+            {(pr?.itemType === "pr" ||
+              (pr?.itemType === "patch" &&
+                patchChain &&
+                patchChain.length > 0)) && (
               <TabsContent value="files" className="mt-0 min-w-0">
-                {!pr?.tip.commitId ? (
+                {pr?.itemType === "patch" && patchChain ? (
+                  <PatchFilesTab
+                    chain={patchChain}
+                    baseCommitId={
+                      patchChain[0]?.parentCommitId ?? effectiveMergeBase
+                    }
+                    pool={gitPool}
+                    onFileCountChange={(count) => {
+                      if (pr?.itemType === "patch") setFileCount(count);
+                    }}
+                    fallbackUrls={effectiveCloneUrls}
+                  />
+                ) : !pr?.tip.commitId ? (
                   <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
                     {pr
                       ? "This item does not include a tip commit ID."
