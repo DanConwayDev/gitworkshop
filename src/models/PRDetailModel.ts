@@ -333,10 +333,12 @@ export function PRDetailModel(
                   INLINE_THRESHOLD_SECONDS,
               );
               if (allSimultaneous) {
-                initialPatchCommits = firstRevision.patches.map((p) => ({
-                  commitId: p.commitId,
-                  subject: p.subject || "(no subject)",
-                }));
+                initialPatchCommits = firstRevision.patches
+                  .filter((p) => !p.isCoverLetter)
+                  .map((p) => ({
+                    commitId: p.commitId,
+                    subject: p.subject || "(no subject)",
+                  }));
                 firstRevisionInlined = true;
               }
             }

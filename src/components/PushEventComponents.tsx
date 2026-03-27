@@ -135,12 +135,14 @@ export function PatchSetPushEvent({
 
   const commits = useMemo(
     () =>
-      chain.map((p) => ({
-        id: p.id,
-        commitId: p.commitId,
-        shortHash: p.commitId?.slice(0, 7) ?? p.id.slice(0, 7),
-        subject: p.subject || "(no subject)",
-      })),
+      chain
+        .filter((p) => !p.isCoverLetter)
+        .map((p) => ({
+          id: p.id,
+          commitId: p.commitId,
+          shortHash: p.commitId?.slice(0, 7) ?? p.id.slice(0, 7),
+          subject: p.subject || "(no subject)",
+        })),
     [chain],
   );
 

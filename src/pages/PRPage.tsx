@@ -149,7 +149,9 @@ export default function PRPage() {
         ? prCommits.length
         : undefined
       : pr?.revisions.length
-        ? pr.revisions[pr.revisions.length - 1].patches?.length
+        ? pr.revisions[pr.revisions.length - 1].patches?.filter(
+            (p) => !p.isCoverLetter,
+          ).length
         : undefined;
 
   const defaultBranchName = gitPoolState.defaultBranch ?? repoState?.headBranch;
@@ -181,10 +183,14 @@ export default function PRPage() {
     return () => abort.abort();
   }, [gitPool, effectiveMergeBase, defaultBranchHead]);
 
-  // Patch chain — needed for both file count and Commits tab
+  // Patch chain — needed for both file count and Commits tab.
+  // Cover-letter patches (t:cover-letter) are excluded — they carry no diff
+  // and should not appear in commit lists or counts.
   const patchChain =
     pr?.itemType === "patch" && pr.revisions.length > 0
-      ? pr.revisions[pr.revisions.length - 1].patches
+      ? pr.revisions[pr.revisions.length - 1].patches?.filter(
+          (p) => !p.isCoverLetter,
+        )
       : undefined;
 
   // ── File count (eager for tab badge) ──────────────────────────────────

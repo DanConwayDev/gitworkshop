@@ -21,6 +21,7 @@ const BodySymbol = Symbol.for("patch-body");
 const PatchDiffSymbol = Symbol.for("patch-diff");
 const IsRootSymbol = Symbol.for("patch-is-root");
 const IsRootRevisionSymbol = Symbol.for("patch-is-root-revision");
+const IsCoverLetterSymbol = Symbol.for("patch-is-cover-letter");
 const LabelsSymbol = Symbol.for("patch-labels");
 const RepoCoordSymbol = Symbol.for("patch-repo-coord");
 const RepoCoordsSymbol = Symbol.for("patch-repo-coords");
@@ -91,6 +92,16 @@ export class Patch extends EventCast<PatchEvent> {
   get isRoot(): boolean {
     return getOrComputeCachedValue(this.event, IsRootSymbol, () =>
       hasNameValueTag(this.event, "t", "root"),
+    );
+  }
+
+  /**
+   * True when this patch is a cover letter (no diff, just a description).
+   * NIP-34: `["t", "cover-letter"]` tag.
+   */
+  get isCoverLetter(): boolean {
+    return getOrComputeCachedValue(this.event, IsCoverLetterSymbol, () =>
+      hasNameValueTag(this.event, "t", "cover-letter"),
     );
   }
 
