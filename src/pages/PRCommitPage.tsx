@@ -26,8 +26,12 @@ import { PatchCommitDetailView } from "@/components/PatchCommitDetailView";
 import { useEventStore } from "@/hooks/useEventStore";
 import { usePatchChain } from "@/hooks/usePatchChain";
 import { PATCH_KIND, PR_KIND, extractPatchDiff } from "@/lib/nip34";
-import { buildSyntheticCommit } from "@/lib/patch-commits";
+import {
+  buildSyntheticCommit,
+  buildSyntheticCommitFallback,
+} from "@/lib/patch-commits";
 import type { NostrEvent } from "nostr-tools";
+import type { Patch } from "@/casts/Patch";
 
 export default function PRCommitPage() {
   const { cloneUrls, prCommitId, prBasePath, prId, resolved } =
@@ -61,30 +65,31 @@ export default function PRCommitPage() {
     resolved?.repoRelayGroup,
   );
 
-  // Find the patch whose commit tag matches the requested commit ID.
+  // Find the patch whose commit tag or event ID matches the requested commit ID.
   const patchMatch = useMemo(() => {
     if (!isPatch || !prCommitId || patchChain.loading) return undefined;
 
-    for (const patch of patchChain.chain) {
-      if (patch.commitId === prCommitId) {
-        const commit = buildSyntheticCommit(patch);
-        if (commit) {
-          const diff = extractPatchDiff(patch.content);
-          return { commit, diff };
-        }
+    // Helper: check if a patch matches by commit ID or event ID
+    const matchPatch = (patch: Patch) => {
+      if (patch.commitId === prCommitId || patch.event.id === prCommitId) {
+        const commit =
+          buildSyntheticCommit(patch) ?? buildSyntheticCommitFallback(patch);
+        const diff = extractPatchDiff(patch.content);
+        return { commit, diff, hasCommitId: !!patch.commitId };
       }
+      return undefined;
+    };
+
+    for (const patch of patchChain.chain) {
+      const result = matchPatch(patch);
+      if (result) return result;
     }
 
     // Also check all revisions (not just the latest chain)
     for (const revision of patchChain.allRevisions) {
       for (const patch of revision.chain) {
-        if (patch.commitId === prCommitId) {
-          const commit = buildSyntheticCommit(patch);
-          if (commit) {
-            const diff = extractPatchDiff(patch.content);
-            return { commit, diff };
-          }
-        }
+        const result = matchPatch(patch);
+        if (result) return result;
       }
     }
 
@@ -143,6 +148,7 @@ export default function PRCommitPage() {
           patchDiff={patchMatch.diff}
           basePath={prBasePath ?? ""}
           backTo={prBasePath ? `${prBasePath}/commits` : ".."}
+          hasCommitId={patchMatch.hasCommitId}
         />
       </div>
     );

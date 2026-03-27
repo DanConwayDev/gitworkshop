@@ -12,6 +12,13 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Clock, User, GitCommit } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import type { Patch } from "@/casts/Patch";
@@ -148,18 +155,35 @@ function PatchCommitRow({
             </span>
           </div>
         </div>
-        {commitId ? (
-          <Link
-            to={`${basePath}/commit/${commitId}`}
-            className="shrink-0 font-mono text-xs bg-muted hover:bg-muted/70 px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {shortHash}
-          </Link>
-        ) : (
-          <span className="shrink-0 font-mono text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
-            <GitCommit className="h-3 w-3 inline" />
-          </span>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1.5 py-0 h-4 font-normal text-muted-foreground/70 border-muted-foreground/20"
+                >
+                  patch
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                Sourced from a Nostr patch event
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          {commitId ? (
+            <Link
+              to={`${basePath}/commit/${commitId}`}
+              className="font-mono text-xs bg-muted hover:bg-muted/70 px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {shortHash}
+            </Link>
+          ) : (
+            <span className="font-mono text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
+              <GitCommit className="h-3 w-3 inline" />
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

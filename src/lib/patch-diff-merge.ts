@@ -22,6 +22,7 @@
 import parseDiff from "parse-diff";
 import { applyPatch, createTwoFilesPatch } from "diff";
 import { extractPatchDiff } from "@/lib/nip34";
+import { gitBlobHash } from "@/lib/git-objects";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 import type { FileChange, FileChangeStatus } from "@/lib/git-grasp-pool";
@@ -392,19 +393,10 @@ export async function mergePatchChainDiff(
       let hashVerified = true;
       if (!error) {
         const expectedPrefix = lastEntry.resultBlobHashPrefix;
-        if (expectedPrefix && typeof crypto !== "undefined") {
+        if (expectedPrefix) {
           try {
             const contentBytes = new TextEncoder().encode(content);
-            const header = new TextEncoder().encode(
-              `blob ${contentBytes.length}\0`,
-            );
-            const full = new Uint8Array(header.length + contentBytes.length);
-            full.set(header);
-            full.set(contentBytes, header.length);
-            const hashBuffer = await crypto.subtle.digest("SHA-1", full);
-            const hashHex = Array.from(new Uint8Array(hashBuffer))
-              .map((b) => b.toString(16).padStart(2, "0"))
-              .join("");
+            const hashHex = await gitBlobHash(contentBytes);
             if (!hashHex.startsWith(expectedPrefix)) {
               hashVerified = false;
               // Don't treat as error — the diff is still useful, just unverified

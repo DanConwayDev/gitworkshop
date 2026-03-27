@@ -6,14 +6,27 @@
  * The diff comes from the patch's embedded format-patch content, not from
  * tree-based diffing.
  *
+ * Includes:
+ *   - A subtle banner indicating this commit is sourced from a Nostr patch event
+ *   - Verification status: verified (blob hashes match), unverified (no index
+ *     lines to check), or warning (mismatch detected)
+ *   - Graceful handling of hash mismatches — shows a warning, not an error
+ *
  * Used by PRCommitPage when the commit doesn't exist on the git server
  * (which is the normal case for patch-type PRs).
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   GitCommit,
   User,
@@ -22,9 +35,17 @@ import {
   Copy,
   Check,
   Hash,
+  Radio,
+  ShieldCheck,
+  ShieldQuestion,
+  ShieldAlert,
 } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
+import {
+  verifyPatchDiffBlobs,
+  type VerificationStatus,
+} from "@/lib/patch-verify";
 import type { Commit } from "@fiatjaf/git-natural-api";
 
 // ---------------------------------------------------------------------------
@@ -42,6 +63,61 @@ export interface PatchCommitDetailViewProps {
   backTo: string;
   /** Label for the back navigation link */
   backLabel?: string;
+  /** Whether the commit has a real git commit ID (vs event ID placeholder) */
+  hasCommitId?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Verification badge
+// ---------------------------------------------------------------------------
+
+function VerificationBadge({ status }: { status: VerificationStatus }) {
+  if (status === "pending") return null;
+
+  const config = {
+    verified: {
+      icon: ShieldCheck,
+      label: "Blob hashes verified",
+      tooltip:
+        "The applied patch content matches the expected blob hashes from the diff index lines.",
+      className: "text-green-600/70 dark:text-green-400/70 border-green-500/20",
+    },
+    unverified: {
+      icon: ShieldQuestion,
+      label: "Unverified",
+      tooltip:
+        "No index lines available to verify blob hashes. The patch content may still be correct.",
+      className: "text-muted-foreground/60 border-muted-foreground/20",
+    },
+    warning: {
+      icon: ShieldAlert,
+      label: "Hash mismatch",
+      tooltip:
+        "One or more blob hashes don't match the expected values from the diff index lines. The diff is still shown but may not be accurate.",
+      className: "text-amber-600/70 dark:text-amber-400/70 border-amber-500/20",
+    },
+  }[status];
+
+  const Icon = config.icon;
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant="outline"
+            className={`text-[10px] px-1.5 py-0 h-4 font-normal gap-1 ${config.className}`}
+          >
+            <Icon className="h-3 w-3" />
+            {config.label}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs max-w-64">
+          {config.tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -54,14 +130,36 @@ export function PatchCommitDetailView({
   basePath,
   backTo,
   backLabel = "All commits",
+  hasCommitId = true,
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
+  const [verification, setVerification] =
+    useState<VerificationStatus>("pending");
 
   const authorTs = commit.author.timestamp * 1000;
   const committerTs =
     (commit.committer?.timestamp ?? commit.author.timestamp) * 1000;
   const subject = commit.message.split("\n")[0];
   const body = commit.message.split("\n").slice(2).join("\n").trim();
+
+  // Run blob hash verification in the background
+  useEffect(() => {
+    if (!patchDiff) {
+      setVerification("unverified");
+      return;
+    }
+
+    let cancelled = false;
+
+    verifyPatchDiffBlobs(patchDiff).then((result) => {
+      if (cancelled) return;
+      setVerification(result);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [patchDiff]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(commit.hash);
@@ -79,6 +177,26 @@ export function PatchCommitDetailView({
         <ArrowLeft className="h-3.5 w-3.5" />
         {backLabel}
       </Link>
+
+      {/* Patch source banner */}
+      <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-muted/30 px-3 py-2">
+        <Radio className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+        <span className="text-xs text-muted-foreground">
+          This commit is sourced from a{" "}
+          <span className="font-medium text-foreground/80">
+            Nostr patch event
+          </span>
+          {!hasCommitId && (
+            <span>
+              {" "}
+              — no git commit hash available, showing event data only
+            </span>
+          )}
+        </span>
+        <div className="ml-auto shrink-0">
+          <VerificationBadge status={verification} />
+        </div>
+      </div>
 
       {/* Header card */}
       <Card>
@@ -155,20 +273,24 @@ export function PatchCommitDetailView({
             <div className="flex items-center gap-2 flex-wrap">
               <Hash className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               <code className="text-xs font-mono text-muted-foreground break-all">
-                {commit.hash}
+                {hasCommitId
+                  ? commit.hash
+                  : `(event: ${commit.hash.slice(0, 16)}…)`}
               </code>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 shrink-0"
-                onClick={handleCopy}
-              >
-                {copied ? (
-                  <Check className="h-3 w-3 text-green-500" />
-                ) : (
-                  <Copy className="h-3 w-3 text-muted-foreground" />
-                )}
-              </Button>
+              {hasCommitId && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  onClick={handleCopy}
+                >
+                  {copied ? (
+                    <Check className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <Copy className="h-3 w-3 text-muted-foreground" />
+                  )}
+                </Button>
+              )}
             </div>
 
             {commit.parents && commit.parents.length > 0 && (
@@ -188,6 +310,22 @@ export function PatchCommitDetailView({
           </div>
         </CardContent>
       </Card>
+
+      {/* Hash mismatch warning */}
+      {verification === "warning" && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+          <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">Blob hash mismatch detected</p>
+            <p className="text-xs mt-0.5 opacity-80">
+              The applied patch content doesn't match the expected blob hashes.
+              The diff below may not be fully accurate. This can happen when
+              patches are generated by different git clients or when the patch
+              was modified after creation.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Diff from patch content */}
       {patchDiff ? (
