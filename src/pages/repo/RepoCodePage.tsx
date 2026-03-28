@@ -910,8 +910,8 @@ function FileContentViewer({
   const canToggle = mediaType?.kind === "markdown" || mediaType?.kind === "svg";
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="py-2.5 px-4 border-b border-border/40 bg-muted/20">
+    <Card>
+      <CardHeader className="py-2.5 px-4 border-b border-border/40 bg-muted/80 backdrop-blur-sm sticky top-14 z-10 rounded-t-lg">
         <div className="flex items-center gap-2 flex-wrap">
           <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="text-sm font-medium truncate min-w-0">
@@ -1029,7 +1029,7 @@ function FileContentViewer({
         </div>
       </CardHeader>
 
-      <CardContent className="p-0">
+      <CardContent className="p-0 overflow-hidden rounded-b-lg">
         <FileContentBody
           filename={filename}
           filePath={filePath}

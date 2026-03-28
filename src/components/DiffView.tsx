@@ -237,8 +237,8 @@ function FileDiffCardHeader({
     <div
       className={cn(
         "flex items-center gap-2 w-full px-3 py-2",
-        "bg-muted/30 hover:bg-muted/50 transition-colors",
-        "text-sm",
+        "bg-muted/80 hover:bg-muted/90 backdrop-blur-sm transition-colors",
+        "text-sm sticky top-14 z-10 rounded-t-lg",
       )}
     >
       <button
@@ -350,7 +350,7 @@ export const FileDiffCardLoading = memo(function FileDiffCardLoading({
   const isDeleted = change.status === "deleted";
 
   return (
-    <div className="rounded-lg border border-border/60 overflow-hidden">
+    <div className="rounded-lg border border-border/60">
       <FileDiffCardHeader
         collapsed={collapsed}
         onToggle={toggle}
@@ -360,7 +360,7 @@ export const FileDiffCardLoading = memo(function FileDiffCardLoading({
         filename={change.path}
       />
       {!collapsed && (
-        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground border-t border-border/40 bg-muted/10">
+        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground border-t border-border/40 bg-muted/10 rounded-b-lg overflow-hidden">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>Loading diff…</span>
         </div>
@@ -605,7 +605,7 @@ const FileDiffCard = memo(function FileDiffCard({
       id={fileDiffCardId(filename)}
       tabIndex={-1}
       className={cn(
-        "rounded-lg border overflow-hidden scroll-mt-20 transition-colors",
+        "rounded-lg border scroll-mt-20 transition-colors",
         isActive
           ? "border-violet-500/60 ring-1 ring-violet-500/30"
           : "border-border/60",
@@ -627,60 +627,62 @@ const FileDiffCard = memo(function FileDiffCard({
         onToggleWrap={toggleWrap}
       />
 
-      {/* Large diff notice — shown instead of content until user loads it */}
-      {!collapsed && hidden && (
-        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-amber-500/5 border-t border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
-          <span className="flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            Large diff ({totalChanges.toLocaleString()} lines) not rendered by
-            default.
-          </span>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setHidden(false);
-            }}
-            className="shrink-0 rounded px-2 py-1 font-medium bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
+      <div className="overflow-hidden rounded-b-lg">
+        {/* Large diff notice — shown instead of content until user loads it */}
+        {!collapsed && hidden && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-amber-500/5 border-t border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
+            <span className="flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              Large diff ({totalChanges.toLocaleString()} lines) not rendered by
+              default.
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setHidden(false);
+              }}
+              className="shrink-0 rounded px-2 py-1 font-medium bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
+            >
+              Load diff
+            </button>
+          </div>
+        )}
+
+        {/* Diff content */}
+        {!collapsed && !hidden && (
+          <SyncedScrollArea
+            className={cn(
+              "[&::-webkit-scrollbar]:hidden",
+              !wordWrap && "overflow-x-auto",
+            )}
           >
-            Load diff
-          </button>
-        </div>
-      )}
+            <table className="w-full border-collapse text-[13px] leading-[1.6] font-mono">
+              <tbody>
+                {file.chunks.map((chunk, ci) => (
+                  <ChunkRows
+                    key={ci}
+                    chunk={chunk}
+                    tokenMap={tokenMap}
+                    isFirstChunk={ci === 0}
+                    wordWrap={wordWrap}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </SyncedScrollArea>
+        )}
 
-      {/* Diff content */}
-      {!collapsed && !hidden && (
-        <SyncedScrollArea
-          className={cn(
-            "[&::-webkit-scrollbar]:hidden",
-            !wordWrap && "overflow-x-auto",
-          )}
-        >
-          <table className="w-full border-collapse text-[13px] leading-[1.6] font-mono">
-            <tbody>
-              {file.chunks.map((chunk, ci) => (
-                <ChunkRows
-                  key={ci}
-                  chunk={chunk}
-                  tokenMap={tokenMap}
-                  isFirstChunk={ci === 0}
-                  wordWrap={wordWrap}
-                />
-              ))}
-            </tbody>
-          </table>
-        </SyncedScrollArea>
-      )}
-
-      {/* Binary / empty diff */}
-      {!collapsed && !hidden && file.chunks.length === 0 && (
-        <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-          {isNew
-            ? "Empty file added"
-            : isDeleted
-              ? "File deleted"
-              : "Binary file changed"}
-        </div>
-      )}
+        {/* Binary / empty diff */}
+        {!collapsed && !hidden && file.chunks.length === 0 && (
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+            {isNew
+              ? "Empty file added"
+              : isDeleted
+                ? "File deleted"
+                : "Binary file changed"}
+          </div>
+        )}
+      </div>
     </div>
   );
 });
