@@ -178,9 +178,11 @@ function CommitDetail({
               <GitCommit className="h-5 w-5 text-violet-500" />
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-semibold leading-snug">{subject}</h1>
+              <h1 className="text-xl font-semibold leading-snug break-words">
+                {subject}
+              </h1>
               {body && (
-                <pre className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed">
+                <pre className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed break-words">
                   {body}
                 </pre>
               )}
