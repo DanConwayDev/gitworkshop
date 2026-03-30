@@ -378,7 +378,13 @@ function RelayRow({ relay }: { relay: OutboxRelayEntry }) {
   );
 }
 
-function OutboxItemRow({ item }: { item: OutboxItem }) {
+function OutboxItemRow({
+  item,
+  onClose,
+}: {
+  item: OutboxItem;
+  onClose: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const status = itemStatus(item);
   const successCount = item.relays.filter((r) => r.status === "success").length;
@@ -414,6 +420,7 @@ function OutboxItemRow({ item }: { item: OutboxItem }) {
                 to={context.path}
                 className="text-xs text-muted-foreground hover:text-foreground truncate flex items-center gap-1 min-w-0"
                 title={context.label}
+                onClick={onClose}
               >
                 <span className="truncate">{context.label}</span>
                 <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
@@ -499,7 +506,7 @@ function OutboxItemRow({ item }: { item: OutboxItem }) {
 
 type FilterMode = "all" | "pending" | "failed";
 
-export function OutboxPanel() {
+export function OutboxPanel({ onClose }: { onClose: () => void }) {
   const items = use$(outboxStore.items$) ?? [];
   const [filter, setFilter] = useState<FilterMode>("all");
 
@@ -573,7 +580,9 @@ export function OutboxPanel() {
             {filter === "all" ? "No published events yet" : "Nothing here"}
           </div>
         ) : (
-          filtered.map((item) => <OutboxItemRow key={item.id} item={item} />)
+          filtered.map((item) => (
+            <OutboxItemRow key={item.id} item={item} onClose={onClose} />
+          ))
         )}
       </ScrollArea>
     </div>

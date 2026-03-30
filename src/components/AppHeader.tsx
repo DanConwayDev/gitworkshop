@@ -22,6 +22,7 @@ export function AppHeader() {
   const location = useLocation();
   const activeAccount = useActiveAccount();
   const [createRepoOpen, setCreateRepoOpen] = useState(false);
+  const [outboxOpen, setOutboxOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
@@ -61,7 +62,7 @@ export function AppHeader() {
           )}
 
           {/* Outbox button */}
-          <Popover>
+          <Popover open={outboxOpen} onOpenChange={setOutboxOpen}>
             <PopoverTrigger asChild>
               <Button
                 variant="ghost"
@@ -76,7 +77,7 @@ export function AppHeader() {
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-96 p-0">
-              <OutboxPanel />
+              <OutboxPanel onClose={() => setOutboxOpen(false)} />
             </PopoverContent>
           </Popover>
 
