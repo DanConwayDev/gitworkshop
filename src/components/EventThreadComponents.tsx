@@ -9,8 +9,6 @@ import { UserLink } from "@/components/UserAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Clock, Pencil, RotateCcw } from "lucide-react";
-import { CommitHashBadge } from "@/components/CommitHashBadge";
-import type { CommitHashResult } from "@/lib/patch-verify";
 import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
 import { ThreadTree } from "@/components/ThreadTree";
@@ -27,7 +25,6 @@ interface CommitEntry {
   hash: string;
   subject: string;
   href?: string;
-  hashResult?: CommitHashResult | "computing" | null;
 }
 
 interface EventBodyCardProps {
@@ -135,11 +132,6 @@ export function EventBodyCard({
                     >
                       {c.subject}
                     </span>
-                    {c.hashResult != null && (
-                      <span className="shrink-0 ml-auto">
-                        <CommitHashBadge result={c.hashResult} />
-                      </span>
-                    )}
                   </>
                 );
                 return c.href ? (
