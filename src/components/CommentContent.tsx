@@ -26,6 +26,7 @@ import { useUserPath } from "@/hooks/useUserPath";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { genUserName } from "@/lib/genUserName";
 import { cn, markdownUrlTransform } from "@/lib/utils";
+import { WrappableCodeBlock } from "@/components/WrappableCodeBlock";
 
 // ---------------------------------------------------------------------------
 // Inline Nostr profile mention — avatar + @name
@@ -136,11 +137,7 @@ const components: Components = {
   },
 
   // Code block — no syntax highlighting
-  pre: ({ children }) => (
-    <pre className="max-w-full overflow-x-auto rounded-lg border border-border bg-muted p-3 text-sm leading-relaxed my-2">
-      {children}
-    </pre>
-  ),
+  pre: ({ children }) => <WrappableCodeBlock>{children}</WrappableCodeBlock>,
 
   // Blockquote
   blockquote: ({ children }) => (

@@ -20,6 +20,7 @@ import { remarkNostrMentions } from "applesauce-content/markdown";
 import type { Components } from "react-markdown";
 import { decodePointer } from "applesauce-core/helpers";
 import { getOrCreatePool } from "@/lib/git-grasp-pool";
+import { WrappableCodeBlock } from "@/components/WrappableCodeBlock";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserPath } from "@/hooks/useUserPath";
@@ -367,14 +368,7 @@ function buildComponents(
     },
 
     // Code block wrapper
-    pre: ({ children, ...props }) => (
-      <pre
-        className="max-w-full overflow-x-auto rounded-lg border border-border bg-muted p-4 text-sm leading-relaxed"
-        {...props}
-      >
-        {children}
-      </pre>
-    ),
+    pre: ({ children }) => <WrappableCodeBlock>{children}</WrappableCodeBlock>,
 
     // Blockquote
     blockquote: ({ children, ...props }) => (

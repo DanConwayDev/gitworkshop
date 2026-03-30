@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { formatDistanceToNow, format } from "date-fns";
+import { isValidElement, Children, type ReactNode } from "react";
 
 /**
  * Custom urlTransform for react-markdown@10.
@@ -40,6 +41,22 @@ export function safeFormatDistanceToNow(
  * Returns null when the timestamp produces an invalid Date (e.g. 0 or NaN).
  * @param timestampSeconds Unix timestamp in seconds
  */
+/**
+ * Recursively extract plain text from a React node tree.
+ * Used to measure line lengths from react-markdown's children without
+ * needing access to the original source string.
+ */
+export function extractText(node: ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (isValidElement(node)) {
+    const { children } = node.props as { children?: ReactNode };
+    return children ? extractText(Children.toArray(children)) : "";
+  }
+  return "";
+}
+
 export function safeFormat(
   timestampSeconds: number,
   formatStr: string,
