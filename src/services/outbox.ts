@@ -24,6 +24,38 @@
 import { BehaviorSubject, Subscription } from "rxjs";
 import type { NostrEvent } from "nostr-tools";
 import type { RelayPool, PublishResponse } from "applesauce-relay";
+import { normalizeURL } from "applesauce-core/helpers";
+
+// ---------------------------------------------------------------------------
+// URL normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a relay URL and strip trailing slashes for deduplication.
+ *
+ * Wraps Applesauce's `normalizeURL` (which lowercases the scheme/host and
+ * removes default ports) then additionally strips trailing slashes.
+ * Applesauce intentionally preserves trailing slashes, but different sources
+ * (repo announcements, NIP-65 mailboxes, user input) are inconsistent about
+ * them, so `wss://relay.damus.io` and `wss://relay.damus.io/` must be
+ * treated as the same relay for deduplication.
+ */
+function normalizeAndStripTrailingSlash(url: string): string {
+  return normalizeURL(url).replace(/\/+$/, "");
+}
+
+/**
+ * Normalize all relay URLs in a relay group map.
+ */
+function normalizeRelayGroups(
+  groups: Record<string, string[]>,
+): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  for (const [group, urls] of Object.entries(groups)) {
+    result[group] = [...new Set(urls.map(normalizeAndStripTrailingSlash))];
+  }
+  return result;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -253,9 +285,11 @@ class OutboxStore {
     event: NostrEvent,
     relayGroups: Record<string, string[]>,
   ): Promise<void> {
+    const normalized = normalizeRelayGroups(relayGroups);
+
     // Deduplicate relay URLs across groups — a relay can serve multiple groups
     const relayToGroups = new Map<string, string[]>();
-    for (const [group, urls] of Object.entries(relayGroups)) {
+    for (const [group, urls] of Object.entries(normalized)) {
       for (const url of urls) {
         const existing = relayToGroups.get(url) ?? [];
         if (!existing.includes(group)) existing.push(group);
@@ -278,7 +312,7 @@ class OutboxStore {
       broadlySent: false,
       relays,
       createdAt: Math.floor(Date.now() / 1000),
-      relayGroupDefs: relayGroups,
+      relayGroupDefs: normalized,
     };
 
     await this.upsert(item);
@@ -293,6 +327,8 @@ class OutboxStore {
     id: string,
     relayGroups: Record<string, string[]>,
   ): Promise<void> {
+    const normalized = normalizeRelayGroups(relayGroups);
+
     const current = this.items$.getValue();
     const item = current.find((i) => i.id === id);
     if (!item) return;
@@ -301,7 +337,7 @@ class OutboxStore {
     const updatedRelays = [...item.relays];
     const newUrls: string[] = [];
 
-    for (const [group, urls] of Object.entries(relayGroups)) {
+    for (const [group, urls] of Object.entries(normalized)) {
       for (const url of urls) {
         if (existingUrls.has(url)) {
           const idx = updatedRelays.findIndex((r) => r.url === url);
@@ -328,7 +364,7 @@ class OutboxStore {
     const updatedGroupDefs: Record<string, string[]> = {
       ...item.relayGroupDefs,
     };
-    for (const [group, urls] of Object.entries(relayGroups)) {
+    for (const [group, urls] of Object.entries(normalized)) {
       const existing = updatedGroupDefs[group] ?? [];
       updatedGroupDefs[group] = [...new Set([...existing, ...urls])];
     }
@@ -482,8 +518,9 @@ class OutboxStore {
     const item = current.find((i) => i.id === itemId);
     if (!item) return;
 
+    const fromUrl = normalizeAndStripTrailingSlash(response.from);
     const updatedRelays = item.relays.map((relay) => {
-      if (relay.url !== response.from) return relay;
+      if (relay.url !== fromUrl) return relay;
 
       if (response.ok) {
         return {
