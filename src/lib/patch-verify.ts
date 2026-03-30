@@ -533,6 +533,54 @@ async function applyPatchToTree(
 // Public API: verify an entire patch chain
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// sessionStorage cache for chain verification results
+// ---------------------------------------------------------------------------
+
+const CACHE_PREFIX = "patch-verify-v1:";
+
+function chainCacheKey(chain: Patch[]): string {
+  // Stable key: base commit + sorted patch event IDs
+  const baseCommitId = chain[0]?.parentCommitId ?? "unknown";
+  const ids = chain.map((p) => p.event.id).join(",");
+  return CACHE_PREFIX + baseCommitId + ":" + ids;
+}
+
+function readCachedResults(key: string): Map<string, CommitHashResult> | null {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Array<[string, CommitHashResult]>;
+    return new Map(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedResults(
+  key: string,
+  results: Map<string, CommitHashResult>,
+): void {
+  try {
+    // Only cache definitive results (match/mismatch), not unavailable ones —
+    // unavailable may be transient (pool not ready, network error).
+    const definitive = [...results.entries()].filter(
+      ([, r]) => r.status === "match" || r.status === "mismatch",
+    );
+    if (definitive.length === 0) return;
+    sessionStorage.setItem(key, JSON.stringify(definitive));
+  } catch {
+    // sessionStorage full or unavailable — silently skip
+  }
+}
+
+// ---------------------------------------------------------------------------
+// In-flight deduplication: if the same chain is already being verified,
+// return the same promise rather than starting a second run.
+// ---------------------------------------------------------------------------
+
+const inFlight = new Map<string, Promise<Map<string, CommitHashResult>>>();
+
 /**
  * Verify commit hashes for all patches in a chain.
  *
@@ -542,6 +590,9 @@ async function applyPatchToTree(
  *      commit hash, compares to the claimed hash
  *   3. The output tree of patch N becomes the input for patch N+1
  *
+ * Results are cached in sessionStorage keyed by chain fingerprint so
+ * revisiting the same commit detail page is instant.
+ *
  * Returns a Map of patch event ID → CommitHashResult.
  */
 export async function verifyPatchChainCommitHashes(
@@ -549,6 +600,32 @@ export async function verifyPatchChainCommitHashes(
   pool: GitGraspPool,
   signal: AbortSignal,
   fallbackUrls?: string[],
+): Promise<Map<string, CommitHashResult>> {
+  const results = new Map<string, CommitHashResult>();
+
+  if (chain.length === 0) return results;
+
+  // Check sessionStorage cache first
+  const cacheKey = chainCacheKey(chain);
+  const cached = readCachedResults(cacheKey);
+  if (cached && cached.size > 0) return cached;
+
+  // Deduplicate concurrent calls for the same chain
+  const existing = inFlight.get(cacheKey);
+  if (existing) return existing;
+
+  const promise = runVerification(chain, pool, signal, fallbackUrls, cacheKey);
+  inFlight.set(cacheKey, promise);
+  promise.finally(() => inFlight.delete(cacheKey));
+  return promise;
+}
+
+async function runVerification(
+  chain: Patch[],
+  pool: GitGraspPool,
+  signal: AbortSignal,
+  fallbackUrls: string[] | undefined,
+  cacheKey: string,
 ): Promise<Map<string, CommitHashResult>> {
   const results = new Map<string, CommitHashResult>();
 
@@ -619,6 +696,7 @@ export async function verifyPatchChainCommitHashes(
     currentParentCommitId = patch.commitId ?? currentParentCommitId;
   }
 
+  writeCachedResults(cacheKey, results);
   return results;
 }
 

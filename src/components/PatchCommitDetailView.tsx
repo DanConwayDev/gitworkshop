@@ -397,32 +397,48 @@ export function PatchCommitDetailView({
     // before them, which only exists in the chain (not on the git server).
     const chainToVerify = patchChain ?? [patch];
 
-    verifyPatchChainCommitHashes(
-      chainToVerify,
-      pool,
-      abort.signal,
-      fallbackUrls,
-    )
-      .then((results) => {
-        if (abort.signal.aborted) return;
-        const myResult = results.get(patch.event.id);
-        setCommitHashResult(
-          myResult ?? {
+    const run = () => {
+      if (abort.signal.aborted) return;
+      verifyPatchChainCommitHashes(
+        chainToVerify,
+        pool,
+        abort.signal,
+        fallbackUrls,
+      )
+        .then((results) => {
+          if (abort.signal.aborted) return;
+          const myResult = results.get(patch.event.id);
+          setCommitHashResult(
+            myResult ?? {
+              status: "unavailable",
+              reason: "Verification produced no result for this patch",
+            },
+          );
+        })
+        .catch((err) => {
+          if (abort.signal.aborted) return;
+          setCommitHashResult({
             status: "unavailable",
-            reason: "Verification produced no result for this patch",
-          },
-        );
-      })
-      .catch((err) => {
-        if (abort.signal.aborted) return;
-        setCommitHashResult({
-          status: "unavailable",
-          reason: err instanceof Error ? err.message : "Verification failed",
+            reason: err instanceof Error ? err.message : "Verification failed",
+          });
         });
-      });
+    };
+
+    // Defer until the browser is idle so verification doesn't compete with
+    // the initial render. Falls back to setTimeout for environments without
+    // requestIdleCallback (e.g. Safari < 16).
+    const idleId =
+      typeof requestIdleCallback !== "undefined"
+        ? requestIdleCallback(run, { timeout: 2000 })
+        : setTimeout(run, 200);
 
     return () => {
       abort.abort();
+      if (typeof requestIdleCallback !== "undefined") {
+        cancelIdleCallback(idleId as number);
+      } else {
+        clearTimeout(idleId as ReturnType<typeof setTimeout>);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
