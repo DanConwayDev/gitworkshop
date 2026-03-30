@@ -3,7 +3,12 @@
  *
  * Shows all events that have been published (or are pending publish) with
  * a breakdown of which relays succeeded and which failed. Failed relays are
- * retried automatically by the outbox store.
+ * retried automatically by the outbox store (unless permanently rejected).
+ *
+ * Relay groups use semantic IDs:
+ *   - 64-char hex pubkey → "your outbox" (if own pubkey) or "<name>'s inbox"
+ *   - "30617:<pubkey>:<d>" → repo relay coord
+ *   - Other strings → displayed as-is
  */
 
 import { use$ } from "@/hooks/use$";
@@ -16,6 +21,7 @@ import {
   X,
   ChevronDown,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -69,20 +75,45 @@ function kindLabel(kind: number): string {
   }
 }
 
+/**
+ * Render a human-readable label for a relay group ID.
+ *
+ * Group IDs follow the convention in OutboxRelayLog.groups:
+ *   - 64-char hex pubkey → "your outbox" (own) or "inbox: <short pubkey>"
+ *   - "30617:<pubkey>:<d>" → "repo: <d>"
+ *   - Other strings → displayed as-is
+ */
+function groupLabel(groupId: string, eventPubkey: string): string {
+  if (/^[0-9a-f]{64}$/.test(groupId)) {
+    if (groupId === eventPubkey) return "your outbox";
+    return `inbox: ${groupId.slice(0, 8)}…`;
+  }
+  if (groupId.startsWith("30617:")) {
+    const parts = groupId.split(":");
+    const d = parts[2] ?? groupId;
+    return `repo: ${d}`;
+  }
+  return groupId;
+}
+
 function itemStatus(
   item: OutboxItem,
-): "success" | "partial" | "pending" | "failed" {
+): "success" | "partial" | "pending" | "failed" | "permanent" {
   const anySuccess = item.relayLogs.some((l) => l.success);
-  const anyPending = item.relayLogs.some(
-    (l) => !l.success && l.attempts.length === 0,
+  const anyPermanent = item.relayLogs.some(
+    (l) => l.permanentFailure && !l.success,
   );
-  const anyFailed = item.relayLogs.some(
-    (l) => !l.success && l.attempts.length > 0,
+  const anyPending = item.relayLogs.some(
+    (l) => !l.success && !l.permanentFailure && l.attempts.length === 0,
+  );
+  const anyRetrying = item.relayLogs.some(
+    (l) => !l.success && !l.permanentFailure && l.tryAfterTimestamp,
   );
 
   if (item.broadlySent) return "success";
-  if (anySuccess && (anyPending || anyFailed)) return "partial";
-  if (anyPending) return "pending";
+  if (anySuccess && (anyPending || anyRetrying)) return "partial";
+  if (anyPending || anyRetrying) return "pending";
+  if (anyPermanent && !anySuccess) return "permanent";
   return "failed";
 }
 
@@ -100,6 +131,8 @@ function StatusIcon({ status }: { status: ReturnType<typeof itemStatus> }) {
       return (
         <Clock className="h-4 w-4 text-muted-foreground shrink-0 animate-pulse" />
       );
+    case "permanent":
+      return <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />;
     case "failed":
       return <XCircle className="h-4 w-4 text-destructive shrink-0" />;
   }
@@ -107,11 +140,17 @@ function StatusIcon({ status }: { status: ReturnType<typeof itemStatus> }) {
 
 function RelayLogRow({ log }: { log: OutboxItem["relayLogs"][number] }) {
   const lastAttempt = log.attempts[log.attempts.length - 1];
+  const isPermanent = !!log.permanentFailure && !log.success;
+  const isRetrying =
+    !log.success && !log.permanentFailure && !!log.tryAfterTimestamp;
+
   return (
     <div className="flex items-start gap-2 py-1 text-xs">
       {log.success ? (
         <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0 mt-0.5" />
-      ) : log.attempts.length === 0 ? (
+      ) : isPermanent ? (
+        <AlertTriangle className="h-3 w-3 text-orange-500 shrink-0 mt-0.5" />
+      ) : log.attempts.length === 0 || isRetrying ? (
         <Clock className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5 animate-pulse" />
       ) : (
         <XCircle className="h-3 w-3 text-destructive shrink-0 mt-0.5" />
@@ -120,9 +159,14 @@ function RelayLogRow({ log }: { log: OutboxItem["relayLogs"][number] }) {
         <span className="font-mono text-muted-foreground truncate block">
           {log.url}
         </span>
-        {lastAttempt && !log.success && lastAttempt.msg && (
+        {isPermanent && (
+          <span className="text-orange-500/80 truncate block">
+            {log.permanentFailure}
+          </span>
+        )}
+        {!log.success && !isPermanent && lastAttempt?.msg && (
           <span className="text-destructive/80 truncate block">
-            {lastAttempt.msg}
+            {isRetrying ? `retrying… (${lastAttempt.msg})` : lastAttempt.msg}
           </span>
         )}
       </div>
@@ -136,20 +180,14 @@ function OutboxItemRow({ item }: { item: OutboxItem }) {
   const successCount = item.relayLogs.filter((l) => l.success).length;
   const totalCount = item.relayLogs.length;
 
-  // Group relay logs by their group label
-  const groups = item.relayLogs.reduce<Record<string, OutboxItem["relayLogs"]>>(
-    (acc, log) => {
-      (acc[log.group] ??= []).push(log);
-      return acc;
-    },
-    {},
-  );
+  // Collect all unique group IDs across all relay logs
+  const allGroupIds = [...new Set(item.relayLogs.flatMap((l) => l.groups))];
 
   return (
     <div
       className={
         "border-b last:border-b-0 " +
-        (status === "failed"
+        (status === "failed" || status === "permanent"
           ? "bg-destructive/5"
           : status === "partial"
             ? "bg-yellow-500/5"
@@ -201,18 +239,28 @@ function OutboxItemRow({ item }: { item: OutboxItem }) {
 
       {expanded && (
         <div className="px-3 pb-3 space-y-3">
-          {Object.entries(groups).map(([group, logs]) => (
-            <div key={group}>
-              <div className="text-xs font-medium text-muted-foreground mb-1 capitalize">
-                {group}
+          {allGroupIds.map((groupId) => {
+            const logsForGroup = item.relayLogs.filter((l) =>
+              l.groups.includes(groupId),
+            );
+            const label = groupLabel(groupId, item.event.pubkey);
+            const groupSuccess = logsForGroup.filter((l) => l.success).length;
+            return (
+              <div key={groupId}>
+                <div className="text-xs font-medium text-muted-foreground mb-1 capitalize flex items-center gap-1">
+                  <span>{label}</span>
+                  <span className="text-muted-foreground/60">
+                    ({groupSuccess}/{logsForGroup.length})
+                  </span>
+                </div>
+                <div className="space-y-0.5">
+                  {logsForGroup.map((log) => (
+                    <RelayLogRow key={log.url} log={log} />
+                  ))}
+                </div>
               </div>
-              <div className="space-y-0.5">
-                {logs.map((log) => (
-                  <RelayLogRow key={log.url} log={log} />
-                ))}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -231,13 +279,17 @@ export function OutboxPanel() {
 
   const pendingCount = items.filter((i) => !i.broadlySent).length;
   const failedCount = items.filter((i) =>
-    i.relayLogs.every((l) => !l.success && l.attempts.length > 0),
+    i.relayLogs.every(
+      (l) => (!l.success && l.attempts.length > 0) || l.permanentFailure,
+    ),
   ).length;
 
   const filtered = items.filter((item) => {
     if (filter === "pending") return !item.broadlySent;
     if (filter === "failed")
-      return item.relayLogs.every((l) => !l.success && l.attempts.length > 0);
+      return item.relayLogs.every(
+        (l) => (!l.success && l.attempts.length > 0) || l.permanentFailure,
+      );
     return true;
   });
 

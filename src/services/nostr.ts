@@ -14,12 +14,20 @@ import type { RelayGroup } from "applesauce-relay";
 import { NostrConnectSigner } from "applesauce-signers";
 import type { NostrEvent } from "nostr-tools";
 import { verifyEvent } from "nostr-tools";
-import { Observable, merge } from "rxjs";
+import {
+  Observable,
+  merge,
+  distinctUntilChanged,
+  firstValueFrom,
+  of,
+} from "rxjs";
+import { map, timeout } from "rxjs/operators";
+import { MailboxesModel } from "applesauce-core/models";
 import { cacheRequest, saveEvents } from "./cache";
 import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
 import { extraRelays, lookupRelays } from "./settings";
 import { ISSUE_KIND, PR_ROOT_KINDS } from "@/lib/nip34";
-import { outboxStore } from "./outbox";
+import { outboxStore, type RelayGroupResolver } from "./outbox";
 
 /**
  * Global EventStore instance for all Nostr events.
@@ -65,6 +73,84 @@ NostrConnectSigner.pool = pool;
 // Inject the pool into the outbox store so it can publish to relays.
 // This is done here (after pool is created) to avoid a circular dependency.
 outboxStore.pool = pool;
+
+/**
+ * Relay group resolver for the outbox store.
+ *
+ * Resolves a group ID to the current set of relay URLs:
+ *   - 64-char hex pubkey → MailboxesModel outboxes (own pubkey) or inboxes (other)
+ *   - "30617:<pubkey>:<d>" → repo's declared relays from the EventStore
+ *   - Other strings → [] (no dynamic resolution)
+ *
+ * This is called by outboxStore.reResolveRelayGroups() when relay lists change.
+ */
+const relayGroupResolver: RelayGroupResolver = async (groupId, eventPubkey) => {
+  // 64-char hex pubkey
+  if (/^[0-9a-f]{64}$/.test(groupId)) {
+    try {
+      const mailboxes = await firstValueFrom(
+        eventStore
+          .model(MailboxesModel, groupId)
+          .pipe(timeout({ first: 500, with: () => of(undefined) })),
+      );
+      if (!mailboxes) return [];
+      const isOwn = groupId === eventPubkey;
+      const relays = isOwn ? mailboxes.outboxes : mailboxes.inboxes;
+      return relays.slice(0, 5);
+    } catch {
+      return [];
+    }
+  }
+
+  // Repo coord: "30617:<pubkey>:<d>"
+  if (groupId.startsWith("30617:")) {
+    const parts = groupId.split(":");
+    const pubkey = parts[1];
+    const d = parts[2];
+    if (!pubkey || !d) return [];
+    const repoEvents = eventStore.getByFilters({
+      kinds: [30617],
+      authors: [pubkey],
+      "#d": [d],
+    } as Filter);
+    const repoEvent = repoEvents[0];
+    if (!repoEvent) return [];
+    return repoEvent.tags
+      .filter(([t]) => t === "relay")
+      .map(([, url]) => url)
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+outboxStore.relayGroupResolver = relayGroupResolver;
+
+/**
+ * Watch for changes to the current user's NIP-65 relay list and re-resolve
+ * relay groups for any pending outbox items. This ensures that if the user
+ * updates their relay list, pending events are sent to any newly-added relays.
+ *
+ * We track the serialized outbox URL list so we only trigger on actual changes,
+ * not on every MailboxesModel emission.
+ */
+function watchUserMailboxesForOutboxReResolve(pubkey: string): () => void {
+  const sub = eventStore
+    .model(MailboxesModel, pubkey)
+    .pipe(
+      map((m) => JSON.stringify([...(m?.outboxes ?? [])].sort())),
+      distinctUntilChanged(),
+    )
+    .subscribe(() => {
+      outboxStore.reResolveRelayGroups().catch((err) => {
+        console.warn("[outbox] reResolveRelayGroups failed:", err);
+      });
+    });
+  return () => sub.unsubscribe();
+}
+
+// Exported so accounts.ts (or App.tsx) can call it when the active account changes.
+export { watchUserMailboxesForOutboxReResolve };
 
 /**
  * Publish an event to the configured relays.

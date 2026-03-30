@@ -69,15 +69,18 @@ async function getUserOutboxRelays(pubkey: string): Promise<string[]> {
  * the store as a side-effect, so MailboxesModel picks it up once it arrives.
  * A 3-second timeout gives relay round-trips time to complete.
  *
- * Returns a map of group label → relay URLs (one entry per pubkey that has
- * inbox relays, labelled "notification inboxes").
+ * Returns a map of pubkey → relay URLs (one entry per pubkey that has inbox
+ * relays). Keying by pubkey lets the outbox store re-resolve each recipient's
+ * inbox independently when their relay list changes.
  */
 async function resolveNotificationInboxes(
   pubkeys: string[],
 ): Promise<Record<string, string[]>> {
   if (pubkeys.length === 0) return {};
 
-  const allInboxes = await Promise.all(
+  const groups: Record<string, string[]> = {};
+
+  await Promise.all(
     pubkeys.map(async (pubkey) => {
       try {
         // Kick off a relay fetch. addressLoader writes into the EventStore as
@@ -92,36 +95,52 @@ async function resolveNotificationInboxes(
         );
 
         fetchSub.unsubscribe();
-        return mailboxes?.inboxes.slice(0, MAX_INBOX_RELAYS) ?? [];
+        const inboxes = mailboxes?.inboxes.slice(0, MAX_INBOX_RELAYS) ?? [];
+        if (inboxes.length > 0) {
+          groups[pubkey] = inboxes;
+        }
       } catch {
-        return [];
+        // ignore
       }
     }),
   );
 
-  const flat = [...new Set(allInboxes.flat())];
-  if (flat.length === 0) return {};
-  return { "notification inboxes": flat };
+  return groups;
 }
 
 /**
  * Build the immediate (phase 1) relay groups: user outbox + repo relays.
  * Both are available synchronously — no network wait required.
+ *
+ * Group IDs use semantic identifiers so the outbox store can re-resolve them
+ * when relay lists change:
+ *   - signerPubkey → user's own NIP-65 outbox relays
+ *   - repoCoord    → repo's declared relays (one entry per coord)
  */
 async function buildImmediateRelayGroups(
   signerPubkey: string,
   repoRelays: string[],
+  repoCoords?: string[],
 ): Promise<Record<string, string[]>> {
   const userOutboxes = await getUserOutboxRelays(signerPubkey);
 
   const groups: Record<string, string[]> = {};
 
   if (userOutboxes.length > 0) {
-    groups["your outbox"] = userOutboxes;
+    // Keyed by pubkey so the outbox store can re-resolve via MailboxesModel
+    groups[signerPubkey] = userOutboxes;
   }
 
   if (repoRelays.length > 0) {
-    groups["repo relays"] = repoRelays;
+    if (repoCoords && repoCoords.length > 0) {
+      // Key each repo coord separately so coverage is tracked per-repo
+      for (const coord of repoCoords) {
+        groups[coord] = repoRelays;
+      }
+    } else {
+      // Fallback: no coord available, use a well-known string
+      groups["repo relays"] = repoRelays;
+    }
   }
 
   return groups;
@@ -157,10 +176,13 @@ export function CreateIssue(
     const signed = await sign(draft);
 
     // Phase 1 — publish immediately
-    const immediateGroups = await buildImmediateRelayGroups(self, repoRelays);
+    const immediateGroups = await buildImmediateRelayGroups(self, repoRelays, [
+      repoCoord,
+    ]);
     await outboxStore.publish(signed, immediateGroups);
 
     // Phase 2 — notify owner's inbox relays (fire-and-forget)
+    // Keyed by pubkey so the outbox store can re-resolve via MailboxesModel
     const notifyPubkeys = ownerPubkey !== self ? [ownerPubkey] : [];
     if (notifyPubkeys.length > 0) {
       resolveNotificationInboxes(notifyPubkeys).then((inboxGroups) => {
@@ -198,10 +220,15 @@ export function ChangeIssueStatus(
     const signed = await sign(draft);
 
     // Phase 1 — publish immediately
-    const immediateGroups = await buildImmediateRelayGroups(self, repoRelays);
+    const immediateGroups = await buildImmediateRelayGroups(
+      self,
+      repoRelays,
+      repoCoords,
+    );
     await outboxStore.publish(signed, immediateGroups);
 
     // Phase 2 — notify item author + repo owners (fire-and-forget)
+    // Keyed by pubkey so the outbox store can re-resolve via MailboxesModel
     const repoOwners = repoCoords
       .map((c) => c.split(":")[1])
       .filter((pk): pk is string => !!pk);
@@ -227,6 +254,7 @@ export function RenameIssueSubject(
   issueId: string,
   newSubject: string,
   repoRelays: string[],
+  repoCoords?: string[],
 ): Action {
   return async ({ factory, sign, self }) => {
     const draft = await factory.create(
@@ -236,7 +264,11 @@ export function RenameIssueSubject(
     );
     const signed = await sign(draft);
 
-    const immediateGroups = await buildImmediateRelayGroups(self, repoRelays);
+    const immediateGroups = await buildImmediateRelayGroups(
+      self,
+      repoRelays,
+      repoCoords,
+    );
     await outboxStore.publish(signed, immediateGroups);
   };
 }
@@ -250,12 +282,17 @@ export function AttachIssueLabels(
   issueId: string,
   labels: string[],
   repoRelays: string[],
+  repoCoords?: string[],
 ): Action {
   return async ({ factory, sign, self }) => {
     const draft = await factory.create(IssueLabelBlueprint, issueId, labels);
     const signed = await sign(draft);
 
-    const immediateGroups = await buildImmediateRelayGroups(self, repoRelays);
+    const immediateGroups = await buildImmediateRelayGroups(
+      self,
+      repoRelays,
+      repoCoords,
+    );
     await outboxStore.publish(signed, immediateGroups);
   };
 }
@@ -291,7 +328,14 @@ export function CreateComment(
     const signed = await sign(draft);
 
     // Phase 1 — publish immediately to user outbox + repo relays
-    const immediateGroups = await buildImmediateRelayGroups(self, repoRelays);
+    // repoCoord is extracted from the parent event's 'a' tag if available
+    const parentRepoCoord = parent.tags.find(([t]) => t === "a")?.[1];
+    const repoCoords = parentRepoCoord ? [parentRepoCoord] : undefined;
+    const immediateGroups = await buildImmediateRelayGroups(
+      self,
+      repoRelays,
+      repoCoords,
+    );
     await outboxStore.publish(signed, immediateGroups);
 
     // Phase 2 — notify the root event author and (if different) the parent
