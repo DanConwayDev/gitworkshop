@@ -18,7 +18,6 @@ import {
   type OutboxRelayEntry,
   type RelayStatus as OutboxRelayStatus,
 } from "@/services/outbox";
-import { formatDistanceToNow } from "date-fns";
 import {
   CheckCircle2,
   XCircle,
@@ -29,6 +28,7 @@ import {
   AlertTriangle,
   RotateCw,
   GitFork,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,9 +45,13 @@ import {
   COMMENT_KIND,
   REPO_KIND,
   getRepoName,
+  extractSubject,
 } from "@/lib/nip34";
 import { useEventStore } from "@/hooks/useEventStore";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
+import { useRelativeTime } from "@/hooks/useRelativeTime";
+import { eventIdToNevent } from "@/lib/routeUtils";
+import { Link } from "react-router-dom";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -84,6 +88,112 @@ function kindLabel(kind: number): string {
     default:
       return `Kind ${kind}`;
   }
+}
+
+/** Reactive relative-time span (e.g. "3 minutes ago"). */
+function RelativeTime({ unixSeconds }: { unixSeconds: number }) {
+  const label = useRelativeTime(unixSeconds);
+  return (
+    <span className="text-xs text-muted-foreground truncate">{label}</span>
+  );
+}
+
+/**
+ * Extract the repo name from the relay groups already resolved for this item.
+ *
+ * The relay groups map contains entries like "30617:<pubkey>:<d>" which we
+ * already look up in GroupLabel. Reuse that work here instead of re-parsing
+ * the event's `a` tag and calling getReplaceable again.
+ */
+function repoNameFromGroups(
+  relayGroups: Record<string, string[]>,
+  store: ReturnType<typeof useEventStore>,
+): string | undefined {
+  for (const groupId of Object.keys(relayGroups)) {
+    if (!groupId.startsWith("30617:")) continue;
+    const parts = groupId.split(":");
+    const pubkey = parts[1] ?? "";
+    const dTag = parts[2] ?? "";
+    if (!pubkey || !dTag) continue;
+    const repoEvent = store.getReplaceable(REPO_KIND, pubkey, dTag);
+    if (repoEvent) return getRepoName(repoEvent) || dTag;
+    // Repo event not in store yet — fall back to the d-tag
+    return dTag;
+  }
+  return undefined;
+}
+
+/**
+ * Extract a human-readable context line for an outbox item.
+ *
+ * - Issues / Patches / PRs: "<repo name>: <subject>"
+ * - Comments (kind 1111): "re: <parent subject>" (parent looked up from store)
+ * - Status events: "<parent subject>" (parent looked up from store)
+ * - Everything else: undefined (no context shown)
+ *
+ * Repo name is sourced from the relay groups already resolved on the item,
+ * avoiding a redundant getReplaceable call.
+ */
+function useEventContext(
+  item: OutboxItem,
+): { label: string; path: string } | undefined {
+  const store = useEventStore();
+  const { event, relayGroupDefs } = item;
+  const kind = event.kind;
+
+  // Direct git events — subject is on the event itself
+  if (kind === ISSUE_KIND || kind === PATCH_KIND || kind === PR_KIND) {
+    const subject = extractSubject(event);
+    const repoName = repoNameFromGroups(relayGroupDefs, store);
+    const nevent = eventIdToNevent(event.id);
+    const label = repoName ? `${repoName}: ${subject}` : subject;
+    return { label, path: `/${nevent}` };
+  }
+
+  // Comments (kind 1111) — label shows the root context, link goes to the
+  // comment itself so the anchor highlight and scroll-to work correctly.
+  if (kind === COMMENT_KIND) {
+    const rootId = event.tags.find(([t]) => t === "E")?.[1];
+    if (rootId) {
+      const rootEvent = store.getEvent(rootId);
+      if (rootEvent) {
+        const subject = extractSubject(rootEvent);
+        const repoName = repoNameFromGroups(relayGroupDefs, store);
+        // Link to the comment event itself — the page uses the nevent to
+        // scroll to and highlight the specific reply.
+        const nevent = eventIdToNevent(event.id);
+        const label = repoName
+          ? `${repoName}: re: ${subject}`
+          : `re: ${subject}`;
+        return { label, path: `/${nevent}` };
+      }
+    }
+    return undefined;
+  }
+
+  // Status events (1630–1633) — same pattern: label shows the root subject,
+  // link goes to the status event itself for direct highlighting.
+  if (
+    kind === STATUS_OPEN ||
+    kind === STATUS_RESOLVED ||
+    kind === STATUS_CLOSED ||
+    kind === STATUS_DRAFT
+  ) {
+    const rootId = event.tags.find(([t]) => t === "e")?.[1];
+    if (rootId) {
+      const rootEvent = store.getEvent(rootId);
+      if (rootEvent) {
+        const subject = extractSubject(rootEvent);
+        const repoName = repoNameFromGroups(relayGroupDefs, store);
+        const nevent = eventIdToNevent(event.id);
+        const label = repoName ? `${repoName}: ${subject}` : subject;
+        return { label, path: `/${nevent}` };
+      }
+    }
+    return undefined;
+  }
+
+  return undefined;
 }
 
 /**
@@ -272,6 +382,7 @@ function OutboxItemRow({ item }: { item: OutboxItem }) {
   const status = itemStatus(item);
   const successCount = item.relays.filter((r) => r.status === "success").length;
   const totalCount = item.relays.length;
+  const context = useEventContext(item);
 
   // Collect all unique group IDs across all relays
   const allGroupIds = [...new Set(item.relays.flatMap((r) => r.groups))];
@@ -290,19 +401,33 @@ function OutboxItemRow({ item }: { item: OutboxItem }) {
       <div className="flex items-center gap-2 px-3 py-2">
         <StatusIcon status={status} />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className="text-xs py-0 h-5 shrink-0">
               {kindLabel(item.event.kind)}
             </Badge>
-            <span className="text-xs text-muted-foreground truncate">
-              {formatDistanceToNow(new Date(item.createdAt * 1000), {
-                addSuffix: true,
-              })}
-            </span>
+            <RelativeTime unixSeconds={item.createdAt} />
           </div>
-          <div className="text-xs text-muted-foreground mt-0.5">
-            {successCount}/{totalCount} relays
-          </div>
+          {context ? (
+            <div className="flex items-center gap-1 mt-0.5 min-w-0">
+              <Link
+                to={context.path}
+                className="text-xs text-muted-foreground hover:text-foreground truncate flex items-center gap-1 min-w-0"
+                title={context.label}
+              >
+                <span className="truncate">{context.label}</span>
+                <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
+              </Link>
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {successCount}/{totalCount} relays
+            </div>
+          )}
+          {context && (
+            <div className="text-xs text-muted-foreground">
+              {successCount}/{totalCount} relays
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <Button
