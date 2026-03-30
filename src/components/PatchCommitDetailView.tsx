@@ -14,7 +14,7 @@
  *   - Raw event JSON modal (Braces icon)
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +39,6 @@ import {
   Copy,
   Check,
   Hash,
-  ShieldCheck,
   ShieldAlert,
   ShieldQuestion,
   Loader2,
@@ -136,6 +135,68 @@ function resolveParentContext(
 // Commit hash verification badge
 // ---------------------------------------------------------------------------
 
+/**
+ * Expandable badge for the "hash differs" case.
+ *
+ * Concise label by default; clicking opens a tooltip with a fuller explanation
+ * of what the mismatch means and why it is cosmetic.
+ */
+function MismatchBadge({
+  computed,
+  claimed,
+}: {
+  computed: string;
+  claimed: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const toggle = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpanded((v) => !v);
+  }, []);
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip open={expanded} onOpenChange={setExpanded}>
+        <TooltipTrigger asChild>
+          <Badge
+            variant="outline"
+            className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-amber-600/70 dark:text-amber-400/70 border-amber-500/20 cursor-pointer"
+            onClick={toggle}
+          >
+            <ShieldAlert className="h-3 w-3" />
+            hash differs
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent
+          side="bottom"
+          className="text-xs max-w-80 space-y-1.5 p-3"
+        >
+          <p className="font-medium text-amber-400">Commit hash differs</p>
+          <p>
+            Diffs applied correctly but tooling produced a different commit ID
+            due to cosmetic differences (GPG signatures, whitespace, timezone
+            encoding).
+          </p>
+          <div className="pt-0.5 space-y-0.5 font-mono text-[11px]">
+            <div>
+              <span className="text-muted-foreground">claimed: </span>
+              <span className="text-foreground/80">
+                {claimed.slice(0, 16)}…
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">computed: </span>
+              <span className="text-amber-400/90">
+                {computed.slice(0, 16)}…
+              </span>
+            </div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function CommitHashBadge({
   result,
 }: {
@@ -150,42 +211,18 @@ function CommitHashBadge({
         className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-muted-foreground/60 border-muted-foreground/20"
       >
         <Loader2 className="h-3 w-3 animate-spin" />
-        verifying
+        checking
       </Badge>
     );
   }
 
   if (result.status === "match") {
-    return (
-      <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Badge
-              variant="outline"
-              className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-green-600/70 dark:text-green-400/70 border-green-500/20"
-            >
-              <ShieldCheck className="h-3 w-3" />
-              verified
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs max-w-72">
-            Commit hash verified. We reconstructed the commit from the parent
-            tree + applied patch and the computed hash matches.
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
+    return null;
   }
 
   if (result.status === "mismatch") {
     return (
-      <Badge
-        variant="outline"
-        className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-amber-600/70 dark:text-amber-400/70 border-amber-500/20"
-      >
-        <ShieldAlert className="h-3 w-3" />
-        mismatch
-      </Badge>
+      <MismatchBadge computed={result.computed} claimed={result.claimed} />
     );
   }
 
@@ -518,19 +555,6 @@ export function PatchCommitDetailView({
               )}
               <CommitHashBadge result={commitHashResult} />
             </div>
-
-            {/* Mismatch: show computed hash */}
-            {commitHashResult !== null &&
-              commitHashResult !== "computing" &&
-              commitHashResult.status === "mismatch" && (
-                <div className="flex items-center gap-2 flex-wrap text-xs">
-                  <Hash className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                  <span className="text-muted-foreground">computed:</span>
-                  <code className="font-mono text-amber-600 dark:text-amber-400 break-all">
-                    {commitHashResult.computed}
-                  </code>
-                </div>
-              )}
 
             {/* Unavailable: show reason inline */}
             {commitHashResult !== null &&

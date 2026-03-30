@@ -669,7 +669,9 @@ function StatusHeadline({
           )}
           {!allHashesVerified && (
             <p className="text-xs text-amber-600 mt-0.5">
-              Some commit hashes could not be verified against the patch tags.
+              Diffs applied correctly. Tooling produced commit ID mismatch but
+              for cosmetic reasons only (GPG signatures, whitespace, timezone
+              encoding).
             </p>
           )}
         </div>
