@@ -56,6 +56,7 @@ import { DiffView } from "@/components/DiffView";
 import { UserLink } from "@/components/UserAvatar";
 import {
   verifyPatchChainCommitHashes,
+  readCachedChainResults,
   type CommitHashResult,
 } from "@/lib/patch-verify";
 import type { Commit } from "@fiatjaf/git-natural-api";
@@ -332,9 +333,15 @@ export function PatchCommitDetailView({
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
+  const chainToVerify = patchChain ?? [patch];
   const [commitHashResult, setCommitHashResult] = useState<
     CommitHashResult | "computing" | null
-  >(null);
+  >(() => {
+    // Initialise from cache synchronously — avoids a "checking" flash on refresh
+    if (!hasCommitId || !patch.commitId) return null;
+    const cached = readCachedChainResults(chainToVerify);
+    return cached?.get(patch.event.id) ?? null;
+  });
   const abortRef = useRef<AbortController | null>(null);
 
   const authorTs = commit.author.timestamp * 1000;
@@ -391,11 +398,15 @@ export function PatchCommitDetailView({
     abortRef.current?.abort();
     const abort = new AbortController();
     abortRef.current = abort;
-    setCommitHashResult("computing");
 
-    // Verify the entire chain — patches 2+ need the tree built by patches
-    // before them, which only exists in the chain (not on the git server).
-    const chainToVerify = patchChain ?? [patch];
+    // Only show "checking" if we don't already have a cached result
+    if (
+      commitHashResult === null ||
+      commitHashResult === "computing" ||
+      commitHashResult.status === "unavailable"
+    ) {
+      setCommitHashResult("computing");
+    }
 
     const run = () => {
       if (abort.signal.aborted) return;

@@ -546,6 +546,18 @@ function chainCacheKey(chain: Patch[]): string {
   return CACHE_PREFIX + baseCommitId + ":" + ids;
 }
 
+/**
+ * Synchronously read cached verification results for a chain.
+ * Returns null if not cached. Use this to initialise component state
+ * before the async verification runs.
+ */
+export function readCachedChainResults(
+  chain: Patch[],
+): Map<string, CommitHashResult> | null {
+  if (chain.length === 0) return null;
+  return readCachedResults(chainCacheKey(chain));
+}
+
 function readCachedResults(key: string): Map<string, CommitHashResult> | null {
   try {
     const raw = sessionStorage.getItem(key);
