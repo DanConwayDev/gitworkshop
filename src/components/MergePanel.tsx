@@ -655,7 +655,7 @@ function StatusHeadline({
       return (
         <div>
           <p className="text-sm font-medium text-green-600">
-            Ready to merge into{" "}
+            No merge conflicts with{" "}
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
               {defaultBranchName}
             </code>
