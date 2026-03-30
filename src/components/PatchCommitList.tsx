@@ -61,10 +61,8 @@ export function PatchCommitList({
     const groups: { date: string; patches: Patch[] }[] = [];
     let currentDate = "";
 
-    // Render newest first (reverse the oldest-first chain), skipping cover letters
-    for (const patch of [...patches]
-      .reverse()
-      .filter((p) => !p.isCoverLetter)) {
+    // Render oldest first (natural patch chain order), skipping cover letters
+    for (const patch of patches.filter((p) => !p.isCoverLetter)) {
       const committer = parseCommitterTag(patch);
       const ts = committer?.timestamp ?? patch.event.created_at;
       const dateStr = safeFormat(ts, "MMMM d, yyyy") ?? "Unknown date";

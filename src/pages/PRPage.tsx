@@ -131,14 +131,19 @@ export default function PRPage() {
     effectiveCloneUrls,
   );
   const prCommits = useMemo(() => {
-    if (!effectiveMergeBase || !prCommitHistory.commits.length)
-      return prCommitHistory.commits;
-    const idx = prCommitHistory.commits.findIndex(
-      (c) => c.hash === effectiveMergeBase,
-    );
-    return idx === -1
-      ? prCommitHistory.commits
-      : prCommitHistory.commits.slice(0, idx);
+    const trimmed = (() => {
+      if (!effectiveMergeBase || !prCommitHistory.commits.length)
+        return prCommitHistory.commits;
+      const idx = prCommitHistory.commits.findIndex(
+        (c) => c.hash === effectiveMergeBase,
+      );
+      return idx === -1
+        ? prCommitHistory.commits
+        : prCommitHistory.commits.slice(0, idx);
+    })();
+    // Reverse to oldest-first (git walks newest-first from tip).
+    // Matches GitHub's PR commits tab convention and the patch body card order.
+    return [...trimmed].reverse();
   }, [prCommitHistory.commits, effectiveMergeBase]);
 
   // ── Ahead / behind counts ─────────────────────────────────────────────
