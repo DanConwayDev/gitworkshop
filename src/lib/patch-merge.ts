@@ -28,6 +28,7 @@ import {
 } from "@/lib/git-objects";
 import { packBlob, packCommit, type PackableObject } from "@/lib/git-packfile";
 import { extractPatchDiff } from "@/lib/nip34";
+import { normalizeDiffPrefix } from "@/lib/patch-verify";
 import { formatTimezone, extractGpgSignature } from "@/lib/patch-commits";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
@@ -163,7 +164,13 @@ async function rebuildTreeCollecting(
   // Existing subdirectories
   for (const dir of tree.directories) {
     const dirPrefix = prefix + dir.name + "/";
-    if (dir.content) {
+    // Only recurse if this directory contains a changed or deleted path.
+    // If nothing changed under it, use the original hash to preserve the
+    // exact subtree (including non-standard file modes like 100755).
+    const hasChanges = [...changedBlobs.keys(), ...deletedPaths].some((p) =>
+      p.startsWith(dirPrefix),
+    );
+    if (dir.content && hasChanges) {
       const subHash = await rebuildTreeCollecting(
         dir.content,
         changedBlobs,
@@ -409,7 +416,7 @@ export async function buildPatchChainObjects(
       };
     }
 
-    const stripped = stripTrailer(patchDiff);
+    const stripped = normalizeDiffPrefix(stripTrailer(patchDiff));
     const files = parseDiff(stripped);
 
     const changedBlobs = new Map<string, string>();

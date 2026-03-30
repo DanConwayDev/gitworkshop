@@ -64,6 +64,83 @@ function stripTrailer(diffStr: string): string {
   return diffStr.replace(/\n-- \n[\s\S]*$/, "").replace(/\n--\n[\s\S]*$/, "");
 }
 
+/**
+ * Normalize a diff that uses no-prefix format (produced by libgit2 with
+ * `diff.noprefix = true`, e.g. `diff --git src/foo.rs src/foo.rs`) to the
+ * standard `a/`/`b/` prefix format.
+ *
+ * If the diff already uses standard prefixes this is a no-op.
+ *
+ * Mirrors the `normalize_diff_prefix` function in ngit's src/lib/git/mod.rs.
+ */
+export function normalizeDiffPrefix(diffStr: string): string {
+  // Check whether any diff header is missing the a/ prefix.
+  const needsNormalization = diffStr
+    .split("\n")
+    .filter((l) => l.startsWith("diff --git "))
+    .some((l) => {
+      const rest = l.slice("diff --git ".length);
+      return !rest.startsWith("a/");
+    });
+
+  if (!needsNormalization) return diffStr;
+
+  const lines = diffStr.split("\n");
+  const out: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("diff --git ")) {
+      const rest = line.slice("diff --git ".length);
+      const [old, nw] = splitDiffGitPaths(rest);
+      out.push(`diff --git a/${old} b/${nw}`);
+    } else if (line.startsWith("--- ")) {
+      const rest = line.slice(4);
+      out.push(rest === "/dev/null" ? line : `--- a/${rest}`);
+    } else if (line.startsWith("+++ ")) {
+      const rest = line.slice(4);
+      out.push(rest === "/dev/null" ? line : `+++ b/${rest}`);
+    } else {
+      out.push(line);
+    }
+  }
+
+  // Preserve trailing-newline behaviour of the original
+  const result = out.join("\n");
+  if (!diffStr.endsWith("\n") && result.endsWith("\n")) {
+    return result.slice(0, -1);
+  }
+  return result;
+}
+
+/**
+ * Split the path portion of a `diff --git <old> <new>` line into [old, new].
+ *
+ * For paths without spaces this is trivial. For paths with spaces we try each
+ * space as a candidate split and return the first where old === new (which is
+ * always the case for non-rename patches). Falls back to splitting at the
+ * first space.
+ */
+function splitDiffGitPaths(rest: string): [string, string] {
+  const firstSpace = rest.indexOf(" ");
+  if (firstSpace === -1) return [rest, rest];
+
+  const old = rest.slice(0, firstSpace);
+  const nw = rest.slice(firstSpace + 1);
+
+  if (!old.includes(" ")) return [old, nw];
+
+  // Paths contain spaces — try each space as a split point
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === " ") {
+      const candidateOld = rest.slice(0, i);
+      const candidateNew = rest.slice(i + 1);
+      if (candidateOld === candidateNew) return [candidateOld, candidateNew];
+    }
+  }
+
+  return [old, nw];
+}
+
 function reconstructPerFileDiff(file: parseDiff.File): string {
   const oldName =
     file.from === "/dev/null" ? "/dev/null" : `a/${file.from ?? "unknown"}`;
@@ -128,7 +205,7 @@ export async function verifyPatchDiffBlobs(
   if (!patchDiff) return { status: "no-index" };
 
   try {
-    const stripped = stripTrailer(patchDiff);
+    const stripped = normalizeDiffPrefix(stripTrailer(patchDiff));
     const files = parseDiff(stripped);
 
     let verifiedCount = 0;
@@ -205,7 +282,13 @@ async function rebuildTreeHash(
 
   for (const dir of tree.directories) {
     const dirPrefix = prefix + dir.name + "/";
-    if (dir.content) {
+    // Only recurse if this directory contains a changed or deleted path.
+    // If nothing changed under it, use the original hash to preserve the
+    // exact subtree (including non-standard file modes like 100755).
+    const hasChanges = [...changedBlobs.keys(), ...deletedPaths].some((p) =>
+      p.startsWith(dirPrefix),
+    );
+    if (dir.content && hasChanges) {
       const subHash = await rebuildTreeHash(
         dir.content,
         changedBlobs,
@@ -413,7 +496,7 @@ async function applyPatchToTree(
     };
   }
 
-  const stripped = stripTrailer(patchDiff);
+  const stripped = normalizeDiffPrefix(stripTrailer(patchDiff));
   const files = parseDiff(stripped);
 
   const changedBlobs = new Map<string, string>();
