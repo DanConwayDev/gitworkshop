@@ -1,9 +1,10 @@
 /**
  * Outbox — persistent publish queue with per-relay status tracking.
  *
- * Each event published through the app is recorded as an OutboxItem in
- * IndexedDB. For every relay the event is sent to, an OutboxRelayLog entry
- * tracks whether the publish succeeded and stores the full attempt history.
+ * Uses Applesauce's `pool.event()` observable for real-time per-relay publish
+ * responses. Each event published through the app is recorded as an OutboxItem
+ * in IndexedDB. For every relay the event is sent to, a relay entry tracks
+ * whether the publish succeeded and stores the response message.
  *
  * On page load, any items that were not fully broadcast are retried
  * automatically. Rate-limited or timed-out relays are retried after a delay.
@@ -20,50 +21,38 @@
  * reactively display the outbox state without polling.
  */
 
-import { BehaviorSubject } from "rxjs";
+import { BehaviorSubject, Subscription } from "rxjs";
 import type { NostrEvent } from "nostr-tools";
-import type { RelayPool } from "applesauce-relay";
+import type { RelayPool, PublishResponse } from "applesauce-relay";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface OutboxSendAttempt {
-  /** Unix seconds */
-  timestamp: number;
-  success: boolean;
-  /** Relay response message */
-  msg: string;
-}
+export type RelayStatus =
+  | "pending"
+  | "success"
+  | "failed"
+  | "retrying"
+  | "permanent";
 
-export interface OutboxRelayLog {
+export interface OutboxRelayEntry {
   url: string;
-  /** True once at least one attempt succeeded */
-  success: boolean;
-  /**
-   * Semantic group IDs this relay serves for this event.
-   * A relay can belong to multiple groups simultaneously.
-   *
-   * Values are one of:
-   *   - 64-char hex pubkey  → author's outbox (if pubkey === event.pubkey)
-   *                           or recipient's inbox (if pubkey !== event.pubkey)
-   *   - "30617:<pubkey>:<d>" → repo relay coord
-   *   - "your outbox"        → user's own NIP-65 write relays (legacy / fallback)
-   *   - "notification inboxes" → deferred notification delivery
-   */
+  status: RelayStatus;
+  /** Semantic group IDs this relay serves for this event. */
   groups: string[];
-  attempts: OutboxSendAttempt[];
+  /** Last response message from the relay (OK or error). */
+  message: string;
   /**
    * Unix seconds. When set, do not retry before this time.
    * Used for rate-limit and timeout backoff.
    */
-  tryAfterTimestamp?: number;
+  retryAfter?: number;
   /**
    * When set, this relay permanently rejected the event and should not be
-   * retried. The value is the human-readable reason (e.g. "paid relay",
-   * "proof of work required").
+   * retried. The value is the human-readable reason.
    */
-  permanentFailure?: string;
+  permanentReason?: string;
 }
 
 export interface OutboxItem {
@@ -74,15 +63,12 @@ export interface OutboxItem {
    * A group is "covered" when ≥1 relay in that group succeeded.
    */
   broadlySent: boolean;
-  relayLogs: OutboxRelayLog[];
+  relays: OutboxRelayEntry[];
   createdAt: number;
   /**
    * The original relay group definitions used to publish this event.
    * Keys are group IDs (pubkey, repo coord, or well-known string).
    * Values are the relay URLs that were resolved for that group at publish time.
-   *
-   * Stored so that when relay lists change we can re-resolve and discover
-   * new relays that should also receive this event.
    */
   relayGroupDefs: Record<string, string[]>;
 }
@@ -107,7 +93,6 @@ const PERMANENT_FAILURE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 
 /**
  * Patterns that indicate a transient failure that should be retried.
- * Rate limits and timeouts are expected to resolve on their own.
  */
 const TRANSIENT_FAILURE_PATTERNS: RegExp[] = [
   /rate.?limit/i,
@@ -117,39 +102,37 @@ const TRANSIENT_FAILURE_PATTERNS: RegExp[] = [
   /try.?again/i,
 ];
 
+/** Retry delay for rate-limited or timed-out relays (65 seconds) */
+const RETRY_DELAY_MS = 65_000;
+
 /**
  * Classify a relay rejection message.
- *
- * Returns:
- *   - `{ kind: "permanent", reason }` — do not retry
- *   - `{ kind: "transient", delayMs }` — retry after delay
- *   - `{ kind: "unknown" }` — retry with standard delay
  */
-export function classifyFailure(
+function classifyFailure(
   msg: string,
 ):
   | { kind: "permanent"; reason: string }
   | { kind: "transient"; delayMs: number }
+  | { kind: "duplicate" }
   | { kind: "unknown" } {
   for (const { pattern, reason } of PERMANENT_FAILURE_PATTERNS) {
     if (pattern.test(msg)) return { kind: "permanent", reason };
   }
   for (const pattern of TRANSIENT_FAILURE_PATTERNS) {
     if (pattern.test(msg))
-      return { kind: "transient", delayMs: RATE_LIMIT_RETRY_DELAY_MS };
+      return { kind: "transient", delayMs: RETRY_DELAY_MS };
   }
-  // "duplicate" is a success-equivalent — the relay already has it
-  if (/duplicate/i.test(msg)) return { kind: "permanent", reason: "duplicate" };
+  if (/duplicate/i.test(msg)) return { kind: "duplicate" };
   return { kind: "unknown" };
 }
 
 // ---------------------------------------------------------------------------
-// IndexedDB setup
+// IndexedDB persistence
 // ---------------------------------------------------------------------------
 
 const DB_NAME = "ngitstack-outbox";
-const DB_VERSION = 3; // bumped: wipe pre-semantic-group-ID data
-const STORE_OUTBOX = "outbox";
+const DB_VERSION = 4; // bumped: new schema
+const STORE_NAME = "outbox";
 
 let db: IDBDatabase | null = null;
 
@@ -159,13 +142,10 @@ async function getDb(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => {
       const database = (e.target as IDBOpenDBRequest).result;
-      // Drop and recreate the store on any upgrade — old items used legacy
-      // string group IDs that the resolver cannot re-resolve, so there is no
-      // value in migrating them.
-      if (database.objectStoreNames.contains(STORE_OUTBOX)) {
-        database.deleteObjectStore(STORE_OUTBOX);
+      if (database.objectStoreNames.contains(STORE_NAME)) {
+        database.deleteObjectStore(STORE_NAME);
       }
-      database.createObjectStore(STORE_OUTBOX, { keyPath: "id" });
+      database.createObjectStore(STORE_NAME, { keyPath: "id" });
     };
     req.onsuccess = (e) => {
       db = (e.target as IDBOpenDBRequest).result;
@@ -178,8 +158,8 @@ async function getDb(): Promise<IDBDatabase> {
 async function idbGetAll(): Promise<OutboxItem[]> {
   const database = await getDb();
   return new Promise((resolve, reject) => {
-    const tx = database.transaction(STORE_OUTBOX, "readonly");
-    const req = tx.objectStore(STORE_OUTBOX).getAll();
+    const tx = database.transaction(STORE_NAME, "readonly");
+    const req = tx.objectStore(STORE_NAME).getAll();
     req.onsuccess = () => resolve(req.result as OutboxItem[]);
     req.onerror = () => reject(req.error);
   });
@@ -188,8 +168,8 @@ async function idbGetAll(): Promise<OutboxItem[]> {
 async function idbPut(item: OutboxItem): Promise<void> {
   const database = await getDb();
   return new Promise((resolve, reject) => {
-    const tx = database.transaction(STORE_OUTBOX, "readwrite");
-    const req = tx.objectStore(STORE_OUTBOX).put(item);
+    const tx = database.transaction(STORE_NAME, "readwrite");
+    const req = tx.objectStore(STORE_NAME).put(item);
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
   });
@@ -198,8 +178,8 @@ async function idbPut(item: OutboxItem): Promise<void> {
 async function idbDelete(id: string): Promise<void> {
   const database = await getDb();
   return new Promise((resolve, reject) => {
-    const tx = database.transaction(STORE_OUTBOX, "readwrite");
-    const req = tx.objectStore(STORE_OUTBOX).delete(id);
+    const tx = database.transaction(STORE_NAME, "readwrite");
+    const req = tx.objectStore(STORE_NAME).delete(id);
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
   });
@@ -209,21 +189,13 @@ async function idbDelete(id: string): Promise<void> {
 // OutboxStore
 // ---------------------------------------------------------------------------
 
-/** Retry delay for rate-limited or timed-out relays (65 seconds) */
-const RATE_LIMIT_RETRY_DELAY_MS = 65_000;
-
 /** Prune items that have been broadly sent for longer than this */
 const PRUNE_AFTER_MS = 48 * 60 * 60 * 1000; // 48 hours
 
 /**
  * Callback type for resolving relay URLs for a given group ID.
  *
- * The outbox store calls this when it needs to re-resolve relay groups for
- * pending items (e.g. after a user's NIP-65 relay list changes). The callback
- * should return the current relay URLs for the given group ID, or an empty
- * array if the group is unknown or has no relays.
- *
- * Group IDs follow the same convention as OutboxRelayLog.groups:
+ * Group IDs follow the same convention as OutboxRelayEntry.groups:
  *   - 64-char hex pubkey → resolve to that pubkey's outbox or inbox relays
  *   - "30617:<pubkey>:<d>" → resolve to that repo's relays
  *   - Other strings → return [] (no dynamic resolution)
@@ -246,6 +218,12 @@ class OutboxStore {
    */
   relayGroupResolver: RelayGroupResolver | null = null;
 
+  /** Active publish subscriptions keyed by `${eventId}:${relayUrl}` */
+  private activePublishes = new Map<string, Subscription>();
+
+  /** Pending retry timers keyed by `${eventId}:${relayUrl}` */
+  private retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   constructor() {
     this.init();
   }
@@ -266,11 +244,10 @@ class OutboxStore {
   // -------------------------------------------------------------------------
 
   /**
-   * Record a new publish attempt and fire-and-forget the relay sends.
+   * Record a new publish attempt and send to relays via pool.event().
    *
    * @param event       - The signed event to publish
    * @param relayGroups - Map of group ID → relay URLs
-   *                      e.g. { "<pubkey>": ["wss://..."], "30617:...": ["wss://..."] }
    */
   async publish(
     event: NostrEvent,
@@ -286,15 +263,20 @@ class OutboxStore {
       }
     }
 
-    const relayLogs: OutboxRelayLog[] = Array.from(relayToGroups.entries()).map(
-      ([url, groups]) => ({ url, groups, success: false, attempts: [] }),
+    const relays: OutboxRelayEntry[] = Array.from(relayToGroups.entries()).map(
+      ([url, groups]) => ({
+        url,
+        groups,
+        status: "pending" as const,
+        message: "",
+      }),
     );
 
     const item: OutboxItem = {
       id: event.id,
       event,
       broadlySent: false,
-      relayLogs,
+      relays,
       createdAt: Math.floor(Date.now() / 1000),
       relayGroupDefs: relayGroups,
     };
@@ -306,16 +288,6 @@ class OutboxStore {
   /**
    * Add relay groups to an already-published outbox item and send to any new
    * relays that weren't in the original publish call.
-   *
-   * This is used for deferred relay resolution — e.g. notification inboxes
-   * that require a network round-trip to fetch the recipient's kind:10002.
-   * The initial publish goes out immediately to known relays; once the inbox
-   * relays are resolved this method adds them and fires the sends.
-   *
-   * Also merges the new group definitions into relayGroupDefs so future
-   * re-resolution picks them up.
-   *
-   * No-ops silently if the item is not found (already dismissed / pruned).
    */
   async addRelays(
     id: string,
@@ -325,30 +297,26 @@ class OutboxStore {
     const item = current.find((i) => i.id === id);
     if (!item) return;
 
-    // Collect relay URLs already tracked for this item
-    const existingUrls = new Set(item.relayLogs.map((l) => l.url));
-
-    // Build new relay logs for URLs not yet tracked; add groups to existing ones
-    const updatedLogs = [...item.relayLogs];
+    const existingUrls = new Set(item.relays.map((r) => r.url));
+    const updatedRelays = [...item.relays];
     const newUrls: string[] = [];
 
     for (const [group, urls] of Object.entries(relayGroups)) {
       for (const url of urls) {
         if (existingUrls.has(url)) {
-          // Add the group to the existing log entry if not already present
-          const logIdx = updatedLogs.findIndex((l) => l.url === url);
-          if (logIdx >= 0 && !updatedLogs[logIdx].groups.includes(group)) {
-            updatedLogs[logIdx] = {
-              ...updatedLogs[logIdx],
-              groups: [...updatedLogs[logIdx].groups, group],
+          const idx = updatedRelays.findIndex((r) => r.url === url);
+          if (idx >= 0 && !updatedRelays[idx].groups.includes(group)) {
+            updatedRelays[idx] = {
+              ...updatedRelays[idx],
+              groups: [...updatedRelays[idx].groups, group],
             };
           }
         } else {
-          updatedLogs.push({
+          updatedRelays.push({
             url,
             groups: [group],
-            success: false,
-            attempts: [],
+            status: "pending",
+            message: "",
           });
           existingUrls.add(url);
           newUrls.push(url);
@@ -356,28 +324,24 @@ class OutboxStore {
       }
     }
 
-    // Merge new group defs into relayGroupDefs
+    // Merge new group defs
     const updatedGroupDefs: Record<string, string[]> = {
       ...item.relayGroupDefs,
     };
     for (const [group, urls] of Object.entries(relayGroups)) {
       const existing = updatedGroupDefs[group] ?? [];
-      const merged = [...new Set([...existing, ...urls])];
-      updatedGroupDefs[group] = merged;
+      updatedGroupDefs[group] = [...new Set([...existing, ...urls])];
     }
 
     const updatedItem: OutboxItem = {
       ...item,
-      relayLogs: updatedLogs,
+      relays: updatedRelays,
       relayGroupDefs: updatedGroupDefs,
-      // Recompute: a relay that already succeeded may now cover a newly-added
-      // group, flipping broadlySent to true without any new publish needed.
-      broadlySent: this.computeBroadlySent(updatedLogs),
+      broadlySent: this.computeBroadlySent(updatedRelays),
     };
 
     await this.upsert(updatedItem);
 
-    // Only send to genuinely new relay URLs
     if (newUrls.length > 0) {
       this.sendToSpecificRelays(updatedItem, newUrls);
     }
@@ -385,20 +349,12 @@ class OutboxStore {
 
   /**
    * Re-resolve relay groups for pending items using the current relay lists.
-   *
-   * When `changedPubkey` is provided, only items whose relayGroupDefs contain
-   * that pubkey as a key are re-resolved — avoiding redundant work when only
-   * one user's relay list changed.
-   *
-   * All unique group IDs across the relevant items are resolved in parallel in
-   * a single pass, then the results are distributed to each item's addRelays().
    */
   async reResolveRelayGroups(changedPubkey?: string): Promise<void> {
     if (!this.relayGroupResolver) return;
 
     const pendingItems = this.items$.getValue().filter((i) => !i.broadlySent);
 
-    // Filter to only items that reference the changed pubkey (if provided)
     const items = changedPubkey
       ? pendingItems.filter((i) =>
           Object.keys(i.relayGroupDefs).includes(changedPubkey),
@@ -407,9 +363,8 @@ class OutboxStore {
 
     if (items.length === 0) return;
 
-    // Collect all unique (groupId, eventPubkey) pairs across all relevant items.
-    // eventPubkey is needed to distinguish own-outbox vs other-inbox for pubkey groups.
-    const uniquePairs = new Map<string, string>(); // groupId → eventPubkey (first seen)
+    // Collect all unique (groupId, eventPubkey) pairs
+    const uniquePairs = new Map<string, string>();
     for (const item of items) {
       for (const groupId of Object.keys(item.relayGroupDefs)) {
         if (!uniquePairs.has(groupId)) {
@@ -450,12 +405,168 @@ class OutboxStore {
 
   /** Remove an item from the outbox (user-initiated dismiss) */
   async dismiss(id: string): Promise<void> {
+    // Cancel any active publishes and retry timers for this item
+    this.cancelPublishesForItem(id);
     await idbDelete(id);
     this.items$.next(this.items$.getValue().filter((i) => i.id !== id));
   }
 
   // -------------------------------------------------------------------------
-  // Internal helpers
+  // Internal: sending via pool.event()
+  // -------------------------------------------------------------------------
+
+  /**
+   * Send an event to all pending relays using pool.event().
+   *
+   * Uses the observable-based pool.event() which streams per-relay responses
+   * as they arrive, giving real-time status updates in the UI.
+   */
+  private sendToRelays(item: OutboxItem): void {
+    const now = Math.floor(Date.now() / 1000);
+    const pendingUrls = item.relays
+      .filter(
+        (r) =>
+          r.status !== "success" &&
+          r.status !== "permanent" &&
+          (!r.retryAfter || r.retryAfter <= now),
+      )
+      .map((r) => r.url);
+
+    this.sendToSpecificRelays(item, pendingUrls);
+  }
+
+  /**
+   * Send an event to specific relay URLs using pool.event().
+   *
+   * pool.event() returns an Observable<PublishResponse> that emits one
+   * response per relay as they arrive, then completes. This gives us
+   * real-time per-relay status updates for the UI.
+   */
+  private sendToSpecificRelays(item: OutboxItem, urls: string[]): void {
+    if (!this.pool) {
+      console.warn("[outbox] pool not injected yet, skipping relay send");
+      return;
+    }
+    if (urls.length === 0) return;
+
+    const subscription = this.pool.event(urls, item.event).subscribe({
+      next: (response: PublishResponse) => {
+        this.handleResponse(item.id, response);
+      },
+      error: (err) => {
+        // Connection-level error — mark all targeted relays as failed
+        const msg = err instanceof Error ? err.message : String(err);
+        for (const url of urls) {
+          this.handleResponse(item.id, { ok: false, message: msg, from: url });
+        }
+      },
+    });
+
+    // Track the subscription so we can cancel on dismiss
+    const key = `${item.id}:${urls.join(",")}`;
+    this.activePublishes.get(key)?.unsubscribe();
+    this.activePublishes.set(key, subscription);
+  }
+
+  /**
+   * Handle a single relay's publish response.
+   *
+   * Updates the relay entry status and persists to IndexedDB.
+   * Schedules retries for transient failures.
+   */
+  private async handleResponse(
+    itemId: string,
+    response: PublishResponse,
+  ): Promise<void> {
+    const current = this.items$.getValue();
+    const item = current.find((i) => i.id === itemId);
+    if (!item) return;
+
+    const updatedRelays = item.relays.map((relay) => {
+      if (relay.url !== response.from) return relay;
+
+      if (response.ok) {
+        return {
+          ...relay,
+          status: "success" as const,
+          message: response.message ?? "OK",
+        };
+      }
+
+      const msg = response.message ?? "unknown error";
+      const classification = classifyFailure(msg);
+
+      switch (classification.kind) {
+        case "duplicate":
+          // Relay already has the event — counts as delivered
+          return { ...relay, status: "success" as const, message: "duplicate" };
+
+        case "permanent":
+          return {
+            ...relay,
+            status: "permanent" as const,
+            message: msg,
+            permanentReason: classification.reason,
+          };
+
+        case "transient": {
+          const retryAfter =
+            Math.floor(Date.now() / 1000) +
+            Math.ceil(classification.delayMs / 1000);
+
+          // Schedule a retry
+          this.scheduleRetry(itemId, relay.url, classification.delayMs);
+
+          return {
+            ...relay,
+            status: "retrying" as const,
+            message: msg,
+            retryAfter,
+          };
+        }
+
+        default:
+          // Unknown failure — will be retried on next page load
+          return { ...relay, status: "failed" as const, message: msg };
+      }
+    });
+
+    const updatedItem: OutboxItem = {
+      ...item,
+      relays: updatedRelays,
+      broadlySent: this.computeBroadlySent(updatedRelays),
+    };
+
+    await this.upsert(updatedItem);
+  }
+
+  /**
+   * Schedule a retry for a specific relay after a delay.
+   */
+  private scheduleRetry(
+    itemId: string,
+    relayUrl: string,
+    delayMs: number,
+  ): void {
+    const timerKey = `${itemId}:${relayUrl}`;
+
+    // Clear any existing timer
+    const existing = this.retryTimers.get(timerKey);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(() => {
+      this.retryTimers.delete(timerKey);
+      const latest = this.items$.getValue().find((i) => i.id === itemId);
+      if (latest) {
+        this.sendToSpecificRelays(latest, [relayUrl]);
+      }
+    }, delayMs);
+
+    this.retryTimers.set(timerKey, timer);
+  }
+
+  // -------------------------------------------------------------------------
+  // Internal: state management
   // -------------------------------------------------------------------------
 
   private async upsert(item: OutboxItem): Promise<void> {
@@ -469,127 +580,35 @@ class OutboxStore {
     this.items$.next(next.sort((a, b) => b.createdAt - a.createdAt));
   }
 
-  private sendToRelays(item: OutboxItem): void {
-    const now = Math.floor(Date.now() / 1000);
-    const pendingUrls = item.relayLogs
-      .filter(
-        (l) =>
-          !l.success &&
-          !l.permanentFailure &&
-          (!l.tryAfterTimestamp || l.tryAfterTimestamp <= now),
-      )
-      .map((l) => l.url);
-
-    this.sendToSpecificRelays(item, pendingUrls);
-  }
-
-  private sendToSpecificRelays(item: OutboxItem, urls: string[]): void {
-    if (!this.pool) {
-      console.warn("[outbox] pool not injected yet, skipping relay send");
-      return;
-    }
-    if (urls.length === 0) return;
-
-    this.pool
-      .publish(urls, item.event)
-      .then((responses) => {
-        for (const res of responses) {
-          this.recordAttempt(item.id, res.from, res.ok, res.message ?? "");
-        }
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        for (const url of urls) {
-          this.recordAttempt(item.id, url, false, msg);
-        }
-      });
-  }
-
-  private async recordAttempt(
-    id: string,
-    relayUrl: string,
-    success: boolean,
-    msg: string,
-  ): Promise<void> {
-    const current = this.items$.getValue();
-    const item = current.find((i) => i.id === id);
-    if (!item) return;
-
-    let retryScheduled = false;
-
-    const updatedLogs = item.relayLogs.map((log) => {
-      if (log.url !== relayUrl) return log;
-
-      // Classify before building the attempt so the recorded success value
-      // reflects the true outcome (e.g. "duplicate" → success-equivalent).
-      let effectiveSuccess = success;
-      let permanentFailure: string | undefined;
-      let tryAfterTimestamp: number | undefined;
-
-      if (!success) {
-        const classification = classifyFailure(msg);
-        if (classification.kind === "permanent") {
-          if (classification.reason === "duplicate") {
-            // Relay already has the event — counts as delivered
-            effectiveSuccess = true;
-          } else {
-            permanentFailure = classification.reason;
-          }
-        } else if (classification.kind === "transient") {
-          tryAfterTimestamp =
-            Math.floor(Date.now() / 1000) +
-            Math.ceil(classification.delayMs / 1000);
-          if (!retryScheduled) {
-            retryScheduled = true;
-            setTimeout(() => {
-              const latest = this.items$.getValue().find((i) => i.id === id);
-              if (latest) this.sendToRelays(latest);
-            }, classification.delayMs);
-          }
-        }
-        // "unknown" failures: retry on next page load (no immediate schedule)
-      }
-
-      const attempt: OutboxSendAttempt = {
-        timestamp: Math.floor(Date.now() / 1000),
-        success: effectiveSuccess,
-        msg,
-      };
-
-      const updated: OutboxRelayLog = {
-        ...log,
-        attempts: [...log.attempts, attempt],
-        success: log.success || effectiveSuccess,
-        ...(permanentFailure !== undefined && { permanentFailure }),
-        ...(tryAfterTimestamp !== undefined && { tryAfterTimestamp }),
-      };
-
-      return updated;
-    });
-
-    const updatedItem: OutboxItem = {
-      ...item,
-      relayLogs: updatedLogs,
-      broadlySent: this.computeBroadlySent(updatedLogs),
-    };
-
-    await this.upsert(updatedItem);
-  }
-
   /**
    * An item is "broadly sent" when every distinct relay group has at least
-   * one relay that succeeded (or is a permanent duplicate).
+   * one relay that succeeded.
    */
-  private computeBroadlySent(logs: OutboxRelayLog[]): boolean {
-    const groups = new Set(logs.flatMap((l) => l.groups));
+  private computeBroadlySent(relays: OutboxRelayEntry[]): boolean {
+    const groups = new Set(relays.flatMap((r) => r.groups));
     for (const group of groups) {
-      const groupLogs = logs.filter((l) => l.groups.includes(group));
-      if (!groupLogs.some((l) => l.success)) return false;
+      const groupRelays = relays.filter((r) => r.groups.includes(group));
+      if (!groupRelays.some((r) => r.status === "success")) return false;
     }
     return true;
   }
 
-  private async retryPendingItems(): Promise<void> {
+  private cancelPublishesForItem(itemId: string): void {
+    for (const [key, sub] of this.activePublishes) {
+      if (key.startsWith(`${itemId}:`)) {
+        sub.unsubscribe();
+        this.activePublishes.delete(key);
+      }
+    }
+    for (const [key, timer] of this.retryTimers) {
+      if (key.startsWith(`${itemId}:`)) {
+        clearTimeout(timer);
+        this.retryTimers.delete(key);
+      }
+    }
+  }
+
+  private retryPendingItems(): void {
     const items = this.items$.getValue();
     for (const item of items) {
       if (!item.broadlySent) {
