@@ -147,7 +147,7 @@ async function rebuildTreeCollecting(
     const fullPath = prefix + file.name;
     if (deletedPaths.has(fullPath)) continue;
     const hash = changedBlobs.get(fullPath) ?? file.hash;
-    entries.push({ mode: "100644", name: file.name, hash });
+    entries.push({ mode: file.mode, name: file.name, hash });
   }
 
   // New files at this level
@@ -178,9 +178,9 @@ async function rebuildTreeCollecting(
         collector,
         dirPrefix,
       );
-      entries.push({ mode: "40000", name: dir.name, hash: subHash });
+      entries.push({ mode: dir.mode, name: dir.name, hash: subHash });
     } else {
-      entries.push({ mode: "40000", name: dir.name, hash: dir.hash });
+      entries.push({ mode: dir.mode, name: dir.name, hash: dir.hash });
     }
   }
 
@@ -271,7 +271,7 @@ function applyBlobChangesToTree(
     if (!path.startsWith(prefix)) continue;
     const relative = path.slice(prefix.length);
     if (!relative.includes("/") && !newFiles.some((f) => f.name === relative)) {
-      newFiles.push({ name: relative, hash, content: null });
+      newFiles.push({ name: relative, hash, mode: "100644", content: null });
     }
   }
 
@@ -303,7 +303,12 @@ function applyBlobChangesToTree(
       !newDirs.some((d) => d.name === dirName)
     ) {
       const subTree = buildNewDirTree(changedBlobs, prefix + dirName + "/");
-      newDirs.push({ name: dirName, hash: "", content: subTree });
+      newDirs.push({
+        name: dirName,
+        hash: "",
+        mode: "40000",
+        content: subTree,
+      });
     }
   }
 
@@ -323,13 +328,13 @@ function buildNewDirTree(
     const relative = path.slice(prefix.length);
     const slashIdx = relative.indexOf("/");
     if (slashIdx === -1) {
-      files.push({ name: relative, hash, content: null });
+      files.push({ name: relative, hash, mode: "100644", content: null });
     } else {
       const dirName = relative.slice(0, slashIdx);
       if (!subdirNames.has(dirName)) {
         subdirNames.add(dirName);
         const subTree = buildNewDirTree(changedBlobs, prefix + dirName + "/");
-        dirs.push({ name: dirName, hash: "", content: subTree });
+        dirs.push({ name: dirName, hash: "", mode: "40000", content: subTree });
       }
     }
   }

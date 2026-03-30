@@ -345,7 +345,7 @@ function findInTree(tree: Tree, segments: string[]): TreeEntry | undefined {
   if (isLast) {
     for (const file of tree.files) {
       if (file.name === head)
-        return { path: head, mode: "100644", isDir: false, hash: file.hash };
+        return { path: head, mode: file.mode, isDir: false, hash: file.hash };
     }
   }
   return undefined;
