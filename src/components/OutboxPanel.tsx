@@ -28,6 +28,7 @@ import {
   ChevronRight,
   AlertTriangle,
   RotateCw,
+  GitFork,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +43,11 @@ import {
   STATUS_CLOSED,
   STATUS_DRAFT,
   COMMENT_KIND,
+  REPO_KIND,
+  getRepoName,
 } from "@/lib/nip34";
+import { useEventStore } from "@/hooks/useEventStore";
+import { UserAvatar, UserName } from "@/components/UserAvatar";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -82,19 +87,68 @@ function kindLabel(kind: number): string {
 }
 
 /**
- * Render a human-readable label for a relay group ID.
+ * Render a rich label for a relay group ID.
+ *
+ * - 64-char hex pubkey → Avatar + username (inbox)
+ * - "30617:<pubkey>:<d>" → maintainer avatar + "maintainer/repo-name"
+ * - Other strings → displayed as-is
  */
-function groupLabel(groupId: string, eventPubkey: string): string {
+function GroupLabel({
+  groupId,
+  eventPubkey,
+}: {
+  groupId: string;
+  eventPubkey: string;
+}) {
+  const store = useEventStore();
+
+  // Inbox/outbox group: a pubkey
   if (/^[0-9a-f]{64}$/.test(groupId)) {
-    if (groupId === eventPubkey) return "your outbox";
-    return `inbox: ${groupId.slice(0, 8)}…`;
+    const isOwn = groupId === eventPubkey;
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="text-muted-foreground/60 text-xs">
+          {isOwn ? "outbox:" : "inbox:"}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+          <UserAvatar pubkey={groupId} size="sm" className="h-4 w-4" />
+          <UserName pubkey={groupId} className="text-xs font-medium" />
+        </span>
+      </span>
+    );
   }
+
+  // Repo group: "30617:<pubkey>:<d>"
   if (groupId.startsWith("30617:")) {
     const parts = groupId.split(":");
-    const d = parts[2] ?? groupId;
-    return `repo: ${d}`;
+    const pubkey = parts[1] ?? "";
+    const dTag = parts[2] ?? groupId;
+    const repoEvent = pubkey
+      ? store.getReplaceable(REPO_KIND, pubkey, dTag)
+      : undefined;
+    const repoName = repoEvent ? getRepoName(repoEvent) || dTag : dTag;
+
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="text-muted-foreground/60 text-xs">repo:</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+          <GitFork className="h-3 w-3 shrink-0" />
+          {pubkey ? (
+            <>
+              <UserName pubkey={pubkey} className="text-xs font-medium" />
+              <span className="text-muted-foreground font-normal">
+                /{repoName}
+              </span>
+            </>
+          ) : (
+            <span>{repoName}</span>
+          )}
+        </span>
+      </span>
+    );
   }
-  return groupId;
+
+  return <span className="text-xs text-muted-foreground">{groupId}</span>;
 }
 
 function itemStatus(
@@ -252,24 +306,29 @@ function OutboxItemRow({ item }: { item: OutboxItem }) {
       </div>
 
       {expanded && (
-        <div className="px-3 pb-3 space-y-3">
+        <div className="px-3 pb-3 space-y-2 pt-1">
           {allGroupIds.map((groupId) => {
             const relaysForGroup = item.relays.filter((r) =>
               r.groups.includes(groupId),
             );
-            const label = groupLabel(groupId, item.event.pubkey);
             const groupSuccess = relaysForGroup.filter(
               (r) => r.status === "success",
             ).length;
             return (
-              <div key={groupId}>
-                <div className="text-xs font-medium text-muted-foreground mb-1 capitalize flex items-center gap-1">
-                  <span>{label}</span>
-                  <span className="text-muted-foreground/60">
-                    ({groupSuccess}/{relaysForGroup.length})
+              <div
+                key={groupId}
+                className="rounded border border-border bg-muted/30"
+              >
+                <div className="flex items-center justify-between px-2 py-1 border-b border-border">
+                  <GroupLabel
+                    groupId={groupId}
+                    eventPubkey={item.event.pubkey}
+                  />
+                  <span className="text-muted-foreground/60 text-xs tabular-nums">
+                    {groupSuccess}/{relaysForGroup.length}
                   </span>
                 </div>
-                <div className="space-y-0.5">
+                <div className="px-2 py-1 space-y-0.5">
                   {relaysForGroup.map((relay) => (
                     <RelayRow key={relay.url} relay={relay} />
                   ))}
