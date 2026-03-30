@@ -328,9 +328,13 @@ export function CreateComment(
     const signed = await sign(draft);
 
     // Phase 1 — publish immediately to user outbox + repo relays
-    // repoCoord is extracted from the parent event's 'a' tag if available
-    const parentRepoCoord = parent.tags.find(([t]) => t === "a")?.[1];
-    const repoCoords = parentRepoCoord ? [parentRepoCoord] : undefined;
+    // Prefer the root event's 'a' tag (always the issue/PR); fall back to
+    // the parent's 'a' tag. Comments (kind:1111) don't have 'a' tags so
+    // without this we'd lose the coord when replying to a comment.
+    const rootRepoCoord = (rootEvent ?? parent).tags.find(
+      ([t]) => t === "a",
+    )?.[1];
+    const repoCoords = rootRepoCoord ? [rootRepoCoord] : undefined;
     const immediateGroups = await buildImmediateRelayGroups(
       self,
       repoRelays,

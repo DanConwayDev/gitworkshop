@@ -61,6 +61,7 @@ import { StatusChangeBlueprint, STATUS_KIND_MAP } from "@/blueprints/status";
 import type { CommitPerson } from "@/lib/git-objects";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
+import { repoCoordinate } from "@/lib/nip34";
 import type { ResolvedPR, ResolvedRepo } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
@@ -351,11 +352,12 @@ export function MergePanel({
       const indexRelays = gitIndexRelays.getValue();
       const relayGroups: Record<string, string[]> = {};
 
+      const repoCoord = repoCoordinate(repo.selectedMaintainer, repo.dTag);
       if (indexRelays.length > 0) {
         relayGroups["git index"] = indexRelays;
       }
       if (repo.relays.length > 0) {
-        relayGroups["repo relays"] = repo.relays;
+        relayGroups[repoCoord] = repo.relays;
       }
 
       await outboxStore.publish(signedStatus, relayGroups);
@@ -366,7 +368,7 @@ export function MergePanel({
 
       const broadcastGroups: Record<string, string[]> = {};
       if (nonGraspRelayUrls.length > 0) {
-        broadcastGroups["repo relays"] = nonGraspRelayUrls;
+        broadcastGroups[repoCoord] = nonGraspRelayUrls;
       }
       if (indexRelays.length > 0) {
         broadcastGroups["git index"] = indexRelays;

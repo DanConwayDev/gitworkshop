@@ -15,6 +15,8 @@ interface EditableSubjectProps {
   canEdit: boolean;
   /** Relay URLs declared in the repository announcement */
   repoRelays?: string[];
+  /** Repository coordinate(s) for outbox group tracking */
+  repoCoords?: string[];
 }
 
 /**
@@ -30,6 +32,7 @@ export function EditableSubject({
   currentSubject,
   canEdit,
   repoRelays = [],
+  repoCoords,
 }: EditableSubjectProps) {
   const { toast } = useToast();
 
@@ -84,7 +87,13 @@ export function EditableSubject({
 
     setIsPending(true);
     try {
-      await runner.run(RenameIssueSubject, issueId, trimmed, repoRelays);
+      await runner.run(
+        RenameIssueSubject,
+        issueId,
+        trimmed,
+        repoRelays,
+        repoCoords,
+      );
 
       toast({
         title: "Issue renamed",
@@ -103,7 +112,7 @@ export function EditableSubject({
     } finally {
       setIsPending(false);
     }
-  }, [value, currentSubject, issueId, repoRelays, toast]);
+  }, [value, currentSubject, issueId, repoRelays, repoCoords, toast]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {

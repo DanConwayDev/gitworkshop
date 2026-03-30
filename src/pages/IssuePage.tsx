@@ -70,6 +70,7 @@ export default function IssuePage() {
                   currentSubject={issue.currentSubject || issue.originalSubject}
                   canEdit={canEdit}
                   repoRelays={repo?.relays}
+                  repoCoords={issue.repoCoords}
                 />
               </div>
 

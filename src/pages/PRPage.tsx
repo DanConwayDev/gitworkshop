@@ -350,6 +350,7 @@ export default function PRPage() {
                     currentSubject={pr.currentSubject || pr.originalSubject}
                     canEdit={canEdit}
                     repoRelays={repo?.relays}
+                    repoCoords={pr.repoCoords}
                   />
                 </div>
 
