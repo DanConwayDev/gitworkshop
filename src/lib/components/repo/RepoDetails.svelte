@@ -352,9 +352,12 @@
 			<div>none</div>
 		{:else}
 			<h4 class="text-xs opacity-50">websites</h4>
-			{#each item.web as site (site)}
+			{#each item.web as site, i (site)}
+				{#if i > 0}
+					<div class="border-base-300 my-1 border-t"></div>
+				{/if}
 				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external URLs known safe -->
-				<a href={site} target="_blank" class="link link-primary my-2 text-sm break-words">
+				<a href={site} target="_blank" class="link link-primary block py-1 text-sm break-all">
 					{site}
 				</a>
 			{/each}
