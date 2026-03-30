@@ -369,6 +369,7 @@ export function PatchCommitDetailView({
   // (poolWinnerUrl changes), we retry — the "unavailable" result might
   // have been due to the pool not being ready.
   const prevWinnerRef = useRef<string | null | undefined>(undefined);
+  const fallbackUrlsKey = fallbackUrls?.join(",");
 
   useEffect(() => {
     // Skip if no commit ID or no pool
@@ -451,14 +452,21 @@ export function PatchCommitDetailView({
         clearTimeout(idleId as ReturnType<typeof setTimeout>);
       }
     };
+    // commitHashResult is intentionally omitted: it is read only as a guard
+    // to avoid redundant re-runs, but adding it would cause an infinite loop
+    // because the effect also calls setCommitHashResult.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     hasCommitId,
     pool,
     poolWinnerUrl,
     patch.id,
+    patch.commitId,
+    patch.event.id,
     patchChain,
-    fallbackUrls?.join(","),
+    chainToVerify,
+    fallbackUrlsKey,
+    fallbackUrls,
   ]);
 
   const handleCopy = async () => {
