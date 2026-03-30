@@ -26,6 +26,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -46,7 +51,7 @@ import {
   Braces,
   RotateCcw,
 } from "lucide-react";
-import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
+import { cn, safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
 import { UserLink } from "@/components/UserAvatar";
 import {
@@ -141,6 +146,46 @@ function resolveParentContext(
  * Concise label by default; clicking opens a tooltip with a fuller explanation
  * of what the mismatch means and why it is cosmetic.
  */
+function CopyableHash({
+  label,
+  hash,
+  className,
+}: {
+  label: string;
+  hash: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(async () => {
+    await navigator.clipboard.writeText(hash);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [hash]);
+
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-muted-foreground">{label}: </span>
+      <code className={cn("font-mono text-[11px]", className)}>
+        {hash.slice(0, 12)}
+      </code>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          void copy();
+        }}
+        className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+        title="Copy full hash"
+      >
+        {copied ? (
+          <Check className="h-2.5 w-2.5 text-green-500" />
+        ) : (
+          <Copy className="h-2.5 w-2.5" />
+        )}
+      </button>
+    </div>
+  );
+}
+
 function MismatchBadge({
   computed,
   claimed,
@@ -148,51 +193,49 @@ function MismatchBadge({
   computed: string;
   claimed: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const toggle = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setExpanded((v) => !v);
-  }, []);
-
   return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip open={expanded} onOpenChange={setExpanded}>
-        <TooltipTrigger asChild>
-          <Badge
-            variant="outline"
-            className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-amber-600/70 dark:text-amber-400/70 border-amber-500/20 cursor-pointer"
-            onClick={toggle}
-          >
-            <ShieldAlert className="h-3 w-3" />
-            hash differs
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent
-          side="bottom"
-          className="text-xs max-w-80 space-y-1.5 p-3"
-        >
+    <TooltipProvider delayDuration={400}>
+      <Popover>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <button className="focus:outline-none">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 text-amber-600/70 dark:text-amber-400/70 border-amber-500/20 cursor-pointer"
+                >
+                  <ShieldAlert className="h-3 w-3" />
+                  hash differs
+                </Badge>
+              </button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">
+            Click for details
+          </TooltipContent>
+        </Tooltip>
+        <PopoverContent side="bottom" className="text-xs w-80 space-y-2 p-3">
           <p className="font-medium text-amber-400">Commit hash differs</p>
-          <p>
-            Diffs applied correctly but tooling produced a different commit ID
-            due to cosmetic differences (GPG signatures, whitespace, timezone
+          <p className="text-muted-foreground leading-relaxed">
+            When our tooling applies this patch as a commit it produces a
+            different commit ID. The diffs apply correctly but there must be
+            cosmetic differences (GPG signatures, whitespace, timezone
             encoding).
           </p>
-          <div className="pt-0.5 space-y-0.5 font-mono text-[11px]">
-            <div>
-              <span className="text-muted-foreground">claimed: </span>
-              <span className="text-foreground/80">
-                {claimed.slice(0, 16)}…
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">computed: </span>
-              <span className="text-amber-400/90">
-                {computed.slice(0, 16)}…
-              </span>
-            </div>
+          <div className="pt-0.5 space-y-1">
+            <CopyableHash
+              label="claimed"
+              hash={claimed}
+              className="text-foreground/80"
+            />
+            <CopyableHash
+              label="computed"
+              hash={computed}
+              className="text-amber-400/90"
+            />
           </div>
-        </TooltipContent>
-      </Tooltip>
+        </PopoverContent>
+      </Popover>
     </TooltipProvider>
   );
 }
