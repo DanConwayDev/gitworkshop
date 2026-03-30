@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useState } from "react";
 import {
   ISSUE_KIND,
@@ -517,7 +518,7 @@ export function OutboxPanel() {
   });
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b">
         <span className="text-sm font-medium flex-1">Outbox</span>
@@ -566,7 +567,7 @@ export function OutboxPanel() {
       </div>
 
       {/* Items */}
-      <div className="flex-1 overflow-y-auto">
+      <ScrollArea className="max-h-[440px]">
         {filtered.length === 0 ? (
           <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
             {filter === "all" ? "No published events yet" : "Nothing here"}
@@ -574,7 +575,7 @@ export function OutboxPanel() {
         ) : (
           filtered.map((item) => <OutboxItemRow key={item.id} item={item} />)
         )}
-      </div>
+      </ScrollArea>
     </div>
   );
 }

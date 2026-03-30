@@ -75,10 +75,7 @@ export function AppHeader() {
                 </span>
               </Button>
             </PopoverTrigger>
-            <PopoverContent
-              align="end"
-              className="w-96 p-0 max-h-[480px] overflow-hidden flex flex-col"
-            >
+            <PopoverContent align="end" className="w-96 p-0">
               <OutboxPanel />
             </PopoverContent>
           </Popover>
