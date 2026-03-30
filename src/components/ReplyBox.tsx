@@ -71,7 +71,7 @@ export function ReplyBox({
 
       setIsPending(true);
       try {
-        await runner.run(CreateComment, parent, trimmed, repoRelays);
+        await runner.run(CreateComment, parent, trimmed, repoRelays, rootEvent);
 
         toast({
           title: "Comment posted",
@@ -93,7 +93,7 @@ export function ReplyBox({
         setIsPending(false);
       }
     },
-    [body, parent, repoRelays, onSubmitted, toast],
+    [body, parent, rootEvent, repoRelays, onSubmitted, toast],
   );
 
   return (

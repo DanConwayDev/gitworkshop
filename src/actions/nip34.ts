@@ -1,21 +1,21 @@
 /**
- * NIP-34 Actions — CreateIssue, ChangeIssueStatus, RenameIssueSubject.
+ * NIP-34 Actions — CreateIssue, ChangeIssueStatus, RenameIssueSubject, CreateComment.
  *
- * These are proper applesauce Action functions. They use the action context to:
- *   1. Get the current user's NIP-65 outbox relays (where their events should live)
- *   2. Accept repo-declared relays as a parameter (where the repo's events live)
- *   3. Derive tagged-pubkey inbox relays for notification delivery
+ * Relay strategy (two-phase):
  *
- * The publish() call in each action receives a relay-groups map so the outbox
- * store can track per-relay success and retry failed relays.
+ *   Phase 1 — immediate publish (synchronous, no network wait):
+ *     - "your outbox"  → user's NIP-65 write relays (kind:10002 outboxes)
+ *     - "repo relays"  → relays declared in the repository announcement
  *
- * Relay selection strategy:
- *   - "your outbox"  → user's NIP-65 write relays (kind:10002 outboxes)
- *   - "repo relays"  → relays declared in the repository announcement
- *   - "git index"    → wss://index.ngit.dev (always included as fallback)
+ *   Phase 2 — deferred notification delivery (async, after phase 1 returns):
+ *     - "notification inboxes" → inbox relays of pubkeys being notified
+ *       (fetched via addressLoader if not already in the EventStore)
  *
- * The outbox store (src/services/outbox.ts) receives the relay groups map and
- * tracks per-relay success, retrying rate-limited relays automatically.
+ * The git index (wss://index.ngit.dev) is intentionally NOT a publish target —
+ * it syncs from other relays and should not receive direct publishes.
+ *
+ * Phase 2 uses outboxStore.addRelays() so the outbox panel shows the inbox
+ * relays appearing and being sent to after the initial publish completes.
  */
 
 import type { Action } from "applesauce-actions";
@@ -28,9 +28,8 @@ import {
   IssueLabelBlueprint,
 } from "@/blueprints/label";
 import type { IssueStatus } from "@/lib/nip34";
-import { gitIndexRelays } from "@/services/settings";
 import { outboxStore } from "@/services/outbox";
-import { eventStore } from "@/services/nostr";
+import { eventStore, addressLoader } from "@/services/nostr";
 import { MailboxesModel } from "applesauce-core/models";
 import { firstValueFrom, of, timeout } from "rxjs";
 
@@ -46,7 +45,8 @@ const MAX_INBOX_RELAYS = 3;
 
 /**
  * Get the current user's NIP-65 outbox relays from the EventStore.
- * Returns an empty array if no kind:10002 event is found within 500ms.
+ * The user's own kind:10002 is loaded on login so this should always hit
+ * the cache. Falls back to empty if not found within 500ms.
  */
 async function getUserOutboxRelays(pubkey: string): Promise<string[]> {
   try {
@@ -62,67 +62,66 @@ async function getUserOutboxRelays(pubkey: string): Promise<string[]> {
 }
 
 /**
- * Get the inbox relays for a set of pubkeys (for notification delivery).
- * Returns a flat deduplicated array.
+ * Fetch inbox relays for a set of pubkeys (for notification delivery).
+ *
+ * Triggers an addressLoader fetch for each pubkey's kind:10002 in parallel
+ * with reading from the EventStore. The addressLoader writes the result into
+ * the store as a side-effect, so MailboxesModel picks it up once it arrives.
+ * A 3-second timeout gives relay round-trips time to complete.
+ *
+ * Returns a map of group label → relay URLs (one entry per pubkey that has
+ * inbox relays, labelled "notification inboxes").
  */
-async function getInboxRelaysForPubkeys(pubkeys: string[]): Promise<string[]> {
-  const results = await Promise.all(
+async function resolveNotificationInboxes(
+  pubkeys: string[],
+): Promise<Record<string, string[]>> {
+  if (pubkeys.length === 0) return {};
+
+  const allInboxes = await Promise.all(
     pubkeys.map(async (pubkey) => {
       try {
+        // Kick off a relay fetch. addressLoader writes into the EventStore as
+        // a side-effect; we don't await it — the MailboxesModel timeout below
+        // is the deadline.
+        const fetchSub = addressLoader({ kind: 10002, pubkey }).subscribe();
+
         const mailboxes = await firstValueFrom(
           eventStore
             .model(MailboxesModel, pubkey)
-            .pipe(timeout({ first: 500, with: () => of(undefined) })),
+            .pipe(timeout({ first: 3000, with: () => of(undefined) })),
         );
+
+        fetchSub.unsubscribe();
         return mailboxes?.inboxes.slice(0, MAX_INBOX_RELAYS) ?? [];
       } catch {
         return [];
       }
     }),
   );
-  // Deduplicate
-  return [...new Set(results.flat())];
+
+  const flat = [...new Set(allInboxes.flat())];
+  if (flat.length === 0) return {};
+  return { "notification inboxes": flat };
 }
 
 /**
- * Build the relay groups map for a NIP-34 event publish.
- *
- * @param signerPubkey  - The publishing user's pubkey
- * @param repoRelays    - Relays declared in the repository announcement
- * @param notifyPubkeys - Pubkeys to notify (their inbox relays are included)
+ * Build the immediate (phase 1) relay groups: user outbox + repo relays.
+ * Both are available synchronously — no network wait required.
  */
-async function buildRelayGroups(
+async function buildImmediateRelayGroups(
   signerPubkey: string,
   repoRelays: string[],
-  notifyPubkeys: string[],
 ): Promise<Record<string, string[]>> {
-  const [userOutboxes, notifyInboxes] = await Promise.all([
-    getUserOutboxRelays(signerPubkey),
-    getInboxRelaysForPubkeys(notifyPubkeys),
-  ]);
-
-  const gitIndex = gitIndexRelays.getValue();
+  const userOutboxes = await getUserOutboxRelays(signerPubkey);
 
   const groups: Record<string, string[]> = {};
 
-  // Always include git index as a reliable fallback
-  if (gitIndex.length > 0) {
-    groups["git index"] = gitIndex;
-  }
-
-  // User's own outbox relays
   if (userOutboxes.length > 0) {
     groups["your outbox"] = userOutboxes;
   }
 
-  // Repo-declared relays
   if (repoRelays.length > 0) {
     groups["repo relays"] = repoRelays;
-  }
-
-  // Notification inboxes for tagged pubkeys
-  if (notifyInboxes.length > 0) {
-    groups["notification inboxes"] = notifyInboxes;
   }
 
   return groups;
@@ -135,7 +134,8 @@ async function buildRelayGroups(
 /**
  * Create a NIP-34 git issue (kind:1621).
  *
- * Publishes to: git index + user's outbox relays + repo relays + owner's inbox.
+ * Phase 1: user outbox + repo relays (immediate).
+ * Phase 2: repo owner's inbox relays (deferred).
  */
 export function CreateIssue(
   repoCoord: string,
@@ -156,19 +156,27 @@ export function CreateIssue(
     );
     const signed = await sign(draft);
 
-    const notifyPubkeys = ownerPubkey !== self ? [ownerPubkey] : [];
-    const relayGroups = await buildRelayGroups(self, repoRelays, notifyPubkeys);
+    // Phase 1 — publish immediately
+    const immediateGroups = await buildImmediateRelayGroups(self, repoRelays);
+    await outboxStore.publish(signed, immediateGroups);
 
-    await outboxStore.publish(signed, relayGroups);
-    // Also add to local store immediately for optimistic UI
-    // (outboxStore.publish fires-and-forgets the relay sends)
+    // Phase 2 — notify owner's inbox relays (fire-and-forget)
+    const notifyPubkeys = ownerPubkey !== self ? [ownerPubkey] : [];
+    if (notifyPubkeys.length > 0) {
+      resolveNotificationInboxes(notifyPubkeys).then((inboxGroups) => {
+        if (Object.keys(inboxGroups).length > 0) {
+          outboxStore.addRelays(signed.id, inboxGroups);
+        }
+      });
+    }
   };
 }
 
 /**
  * Change the status of a NIP-34 issue or PR (kinds 1630–1633).
  *
- * Publishes to: git index + user's outbox relays + repo relays + item author's inbox.
+ * Phase 1: user outbox + repo relays (immediate).
+ * Phase 2: item author's + repo owners' inbox relays (deferred).
  */
 export function ChangeIssueStatus(
   itemId: string,
@@ -189,23 +197,31 @@ export function ChangeIssueStatus(
     );
     const signed = await sign(draft);
 
-    // Collect all pubkeys to notify: item author + repo owners
+    // Phase 1 — publish immediately
+    const immediateGroups = await buildImmediateRelayGroups(self, repoRelays);
+    await outboxStore.publish(signed, immediateGroups);
+
+    // Phase 2 — notify item author + repo owners (fire-and-forget)
     const repoOwners = repoCoords
       .map((c) => c.split(":")[1])
       .filter((pk): pk is string => !!pk);
     const notifyPubkeys = [
       ...new Set([itemAuthorPubkey, ...repoOwners].filter((pk) => pk !== self)),
     ];
-
-    const relayGroups = await buildRelayGroups(self, repoRelays, notifyPubkeys);
-    await outboxStore.publish(signed, relayGroups);
+    if (notifyPubkeys.length > 0) {
+      resolveNotificationInboxes(notifyPubkeys).then((inboxGroups) => {
+        if (Object.keys(inboxGroups).length > 0) {
+          outboxStore.addRelays(signed.id, inboxGroups);
+        }
+      });
+    }
   };
 }
 
 /**
  * Rename a NIP-34 issue subject via a NIP-32 label event (kind:1985).
  *
- * Publishes to: git index + user's outbox relays + repo relays.
+ * Phase 1: user outbox + repo relays (immediate). No notification needed.
  */
 export function RenameIssueSubject(
   issueId: string,
@@ -220,15 +236,15 @@ export function RenameIssueSubject(
     );
     const signed = await sign(draft);
 
-    const relayGroups = await buildRelayGroups(self, repoRelays, []);
-    await outboxStore.publish(signed, relayGroups);
+    const immediateGroups = await buildImmediateRelayGroups(self, repoRelays);
+    await outboxStore.publish(signed, immediateGroups);
   };
 }
 
 /**
  * Attach labels to a NIP-34 issue via a NIP-32 label event (kind:1985).
  *
- * Publishes to: git index + user's outbox relays + repo relays.
+ * Phase 1: user outbox + repo relays (immediate). No notification needed.
  */
 export function AttachIssueLabels(
   issueId: string,
@@ -239,8 +255,8 @@ export function AttachIssueLabels(
     const draft = await factory.create(IssueLabelBlueprint, issueId, labels);
     const signed = await sign(draft);
 
-    const relayGroups = await buildRelayGroups(self, repoRelays, []);
-    await outboxStore.publish(signed, relayGroups);
+    const immediateGroups = await buildImmediateRelayGroups(self, repoRelays);
+    await outboxStore.publish(signed, immediateGroups);
   };
 }
 
@@ -248,17 +264,21 @@ export function AttachIssueLabels(
  * Post a NIP-22 comment (kind:1111) on a NIP-34 issue, PR/patch, or an
  * existing comment.
  *
- * Publishes to: git index + user's outbox relays + repo relays + root author's inbox.
+ * Phase 1: user outbox + repo relays (immediate).
+ * Phase 2: root event author's + parent comment author's inbox relays (deferred).
  *
- * @param parent      - The event being commented on (root issue/PR or a comment)
- * @param content     - Markdown body of the comment
- * @param repoRelays  - Relays declared in the repository announcement
- * @param options     - Optional: CommentBlueprintOptions (alt, expiration, etc.)
+ * @param parent     - The event being commented on (root issue/PR or a comment)
+ * @param content    - Markdown body of the comment
+ * @param repoRelays - Relays declared in the repository announcement
+ * @param rootEvent  - The root issue/PR/patch event — used to notify its author
+ *                     when `parent` is a reply-to-comment rather than the root itself
+ * @param options    - Optional CommentBlueprintOptions (alt, expiration, etc.)
  */
 export function CreateComment(
   parent: NostrEvent,
   content: string,
   repoRelays: string[],
+  rootEvent?: NostrEvent,
   options?: CommentOptions,
 ): Action {
   return async ({ factory, sign, self }) => {
@@ -270,9 +290,23 @@ export function CreateComment(
     );
     const signed = await sign(draft);
 
-    // Notify the root event author (unless they're the commenter)
-    const notifyPubkeys = parent.pubkey !== self ? [parent.pubkey] : [];
-    const relayGroups = await buildRelayGroups(self, repoRelays, notifyPubkeys);
-    await outboxStore.publish(signed, relayGroups);
+    // Phase 1 — publish immediately to user outbox + repo relays
+    const immediateGroups = await buildImmediateRelayGroups(self, repoRelays);
+    await outboxStore.publish(signed, immediateGroups);
+
+    // Phase 2 — notify the root event author and (if different) the parent
+    // comment author. rootEvent.pubkey is the PR/patch/issue author; when
+    // parent IS the root they're the same person.
+    const rootPubkey = rootEvent?.pubkey ?? parent.pubkey;
+    const notifyPubkeys = [
+      ...new Set([rootPubkey, parent.pubkey].filter((pk) => pk !== self)),
+    ];
+    if (notifyPubkeys.length > 0) {
+      resolveNotificationInboxes(notifyPubkeys).then((inboxGroups) => {
+        if (Object.keys(inboxGroups).length > 0) {
+          outboxStore.addRelays(signed.id, inboxGroups);
+        }
+      });
+    }
   };
 }

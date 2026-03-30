@@ -178,6 +178,50 @@ class OutboxStore {
     this.sendToRelays(item);
   }
 
+  /**
+   * Add relay groups to an already-published outbox item and send to any new
+   * relays that weren't in the original publish call.
+   *
+   * This is used for deferred relay resolution — e.g. notification inboxes
+   * that require a network round-trip to fetch the recipient's kind:10002.
+   * The initial publish goes out immediately to known relays; once the inbox
+   * relays are resolved this method adds them and fires the sends.
+   *
+   * No-ops silently if the item is not found (already dismissed / pruned).
+   */
+  async addRelays(
+    id: string,
+    relayGroups: Record<string, string[]>,
+  ): Promise<void> {
+    const current = this.items$.getValue();
+    const item = current.find((i) => i.id === id);
+    if (!item) return;
+
+    // Collect relay URLs already tracked for this item
+    const existingUrls = new Set(item.relayLogs.map((l) => l.url));
+
+    // Build new relay logs for URLs not yet tracked
+    const newLogs: OutboxRelayLog[] = [];
+    for (const [group, urls] of Object.entries(relayGroups)) {
+      for (const url of urls) {
+        if (!existingUrls.has(url)) {
+          newLogs.push({ url, group, success: false, attempts: [] });
+          existingUrls.add(url);
+        }
+      }
+    }
+
+    if (newLogs.length === 0) return;
+
+    const updatedItem: OutboxItem = {
+      ...item,
+      relayLogs: [...item.relayLogs, ...newLogs],
+    };
+
+    await this.upsert(updatedItem);
+    this.sendToRelays(updatedItem);
+  }
+
   /** Remove an item from the outbox (user-initiated dismiss) */
   async dismiss(id: string): Promise<void> {
     await idbDelete(id);
