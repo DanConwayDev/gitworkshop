@@ -54,6 +54,10 @@ import { PatchCommitList } from "@/components/PatchCommitList";
 import { useCommitHistory } from "@/hooks/useGitExplorer";
 import { usePRMergeBase } from "@/hooks/usePRMergeBase";
 import { MergePanel } from "@/components/MergePanel";
+import {
+  verifyPatchChainCommitHashes,
+  type CommitHashResult,
+} from "@/lib/patch-verify";
 
 export default function PRPage() {
   const {
@@ -191,6 +195,70 @@ export default function PRPage() {
           (p) => !p.isCoverLetter,
         )
       : undefined;
+
+  // ── Patch chain hash verification (shared across conversation + commits tabs) ──
+  const [patchHashResults, setPatchHashResults] = useState<
+    Map<string, CommitHashResult | "computing">
+  >(new Map());
+  const patchHashAbortRef = useRef<AbortController | null>(null);
+  const patchHashPrevWinnerRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!gitPool || !patchChain || patchChain.length === 0) {
+      setPatchHashResults(new Map());
+      return;
+    }
+
+    const winnerChanged =
+      gitPoolState.winnerUrl !== patchHashPrevWinnerRef.current;
+    patchHashPrevWinnerRef.current = gitPoolState.winnerUrl;
+
+    const allDefinitive =
+      patchHashResults.size > 0 &&
+      [...patchHashResults.values()].every(
+        (r) =>
+          r !== "computing" &&
+          (r.status === "match" || r.status === "mismatch"),
+      );
+    if (!winnerChanged && allDefinitive) return;
+
+    patchHashAbortRef.current?.abort();
+    const abort = new AbortController();
+    patchHashAbortRef.current = abort;
+
+    setPatchHashResults((prev) => {
+      const next = new Map(prev);
+      for (const p of patchChain) {
+        if (p.commitId) next.set(p.event.id, "computing");
+      }
+      return next;
+    });
+
+    verifyPatchChainCommitHashes(
+      patchChain,
+      gitPool,
+      abort.signal,
+      effectiveCloneUrls,
+    )
+      .then((results) => {
+        if (abort.signal.aborted) return;
+        setPatchHashResults(results);
+      })
+      .catch(() => {
+        if (abort.signal.aborted) return;
+        setPatchHashResults(new Map());
+      });
+
+    return () => {
+      abort.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    gitPool,
+    gitPoolState.winnerUrl,
+    patchChain,
+    effectiveCloneUrls.join(","),
+  ]);
 
   // ── File count (eager for tab badge) ──────────────────────────────────
   const [fileCount, setFileCount] = useState<number | undefined>(undefined);
@@ -426,14 +494,25 @@ export default function PRPage() {
                       : pr.itemType === "patch" &&
                           pr.initialPatchCommits &&
                           pr.initialPatchCommits.length > 0
-                        ? pr.initialPatchCommits.map((c) => ({
-                            hash: c.commitId ?? "",
-                            subject: c.subject,
-                            href:
-                              prBasePath && c.commitId
-                                ? `${prBasePath}/commit/${c.commitId}`
-                                : undefined,
-                          }))
+                        ? pr.initialPatchCommits.map((c) => {
+                            // Look up hash result by commitId via patchChain
+                            const matchingPatch = patchChain?.find(
+                              (p) => p.commitId === c.commitId,
+                            );
+                            const hashResult = matchingPatch
+                              ? (patchHashResults.get(matchingPatch.event.id) ??
+                                null)
+                              : null;
+                            return {
+                              hash: c.commitId ?? "",
+                              subject: c.subject,
+                              href:
+                                prBasePath && c.commitId
+                                  ? `${prBasePath}/commit/${c.commitId}`
+                                  : undefined,
+                              hashResult,
+                            };
+                          })
                         : undefined
                   }
                   commitsSuperseded={
@@ -687,6 +766,7 @@ export default function PRPage() {
                       prBasePath ??
                       repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)
                     }
+                    hashResults={patchHashResults}
                   />
                 ) : (
                   <CommitListEmpty message="No patches found in this patch set." />
