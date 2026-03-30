@@ -27,6 +27,7 @@ import { cacheRequest, saveEvents } from "./cache";
 import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
 import { extraRelays, lookupRelays } from "./settings";
 import { ISSUE_KIND, PR_ROOT_KINDS } from "@/lib/nip34";
+import { Repository, isValidRepository } from "@/casts/Repository";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
 
 /**
@@ -114,11 +115,8 @@ const relayGroupResolver: RelayGroupResolver = async (groupId, eventPubkey) => {
       "#d": [d],
     } as Filter);
     const repoEvent = repoEvents[0];
-    if (!repoEvent) return [];
-    return repoEvent.tags
-      .filter(([t]) => t === "relay")
-      .map(([, url]) => url)
-      .filter(Boolean);
+    if (!repoEvent || !isValidRepository(repoEvent)) return [];
+    return new Repository(repoEvent, eventStore).relays;
   }
 
   return [];
@@ -142,7 +140,8 @@ function watchUserMailboxesForOutboxReResolve(pubkey: string): () => void {
       distinctUntilChanged(),
     )
     .subscribe(() => {
-      outboxStore.reResolveRelayGroups().catch((err) => {
+      // Pass the pubkey so only items referencing this user's relay group are re-resolved
+      outboxStore.reResolveRelayGroups(pubkey).catch((err) => {
         console.warn("[outbox] reResolveRelayGroups failed:", err);
       });
     });

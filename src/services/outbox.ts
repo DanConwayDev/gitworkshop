@@ -371,6 +371,9 @@ class OutboxStore {
       ...item,
       relayLogs: updatedLogs,
       relayGroupDefs: updatedGroupDefs,
+      // Recompute: a relay that already succeeded may now cover a newly-added
+      // group, flipping broadlySent to true without any new publish needed.
+      broadlySent: this.computeBroadlySent(updatedLogs),
     };
 
     await this.upsert(updatedItem);
@@ -382,33 +385,68 @@ class OutboxStore {
   }
 
   /**
-   * Re-resolve relay groups for all pending items using the current relay
-   * lists. Call this when a user's NIP-65 relay list changes.
+   * Re-resolve relay groups for pending items using the current relay lists.
    *
-   * For each pending item, re-resolves every group in relayGroupDefs and
-   * calls addRelays() with any newly-discovered URLs.
+   * When `changedPubkey` is provided, only items whose relayGroupDefs contain
+   * that pubkey as a key are re-resolved — avoiding redundant work when only
+   * one user's relay list changed.
+   *
+   * All unique group IDs across the relevant items are resolved in parallel in
+   * a single pass, then the results are distributed to each item's addRelays().
    */
-  async reResolveRelayGroups(): Promise<void> {
+  async reResolveRelayGroups(changedPubkey?: string): Promise<void> {
     if (!this.relayGroupResolver) return;
 
-    const items = this.items$.getValue().filter((i) => !i.broadlySent);
+    const pendingItems = this.items$.getValue().filter((i) => !i.broadlySent);
+
+    // Filter to only items that reference the changed pubkey (if provided)
+    const items = changedPubkey
+      ? pendingItems.filter((i) =>
+          Object.keys(i.relayGroupDefs).includes(changedPubkey),
+        )
+      : pendingItems;
+
+    if (items.length === 0) return;
+
+    // Collect all unique (groupId, eventPubkey) pairs across all relevant items.
+    // eventPubkey is needed to distinguish own-outbox vs other-inbox for pubkey groups.
+    const uniquePairs = new Map<string, string>(); // groupId → eventPubkey (first seen)
     for (const item of items) {
-      const newGroups: Record<string, string[]> = {};
       for (const groupId of Object.keys(item.relayGroupDefs)) {
+        if (!uniquePairs.has(groupId)) {
+          uniquePairs.set(groupId, item.event.pubkey);
+        }
+      }
+    }
+
+    // Resolve all unique groups in parallel
+    const resolved = new Map<string, string[]>();
+    await Promise.all(
+      Array.from(uniquePairs.entries()).map(async ([groupId, eventPubkey]) => {
         try {
-          const urls = await this.relayGroupResolver(
-            groupId,
-            item.event.pubkey,
-          );
-          if (urls.length > 0) newGroups[groupId] = urls;
+          const urls = await this.relayGroupResolver!(groupId, eventPubkey);
+          if (urls.length > 0) resolved.set(groupId, urls);
         } catch {
           // ignore resolution errors
         }
-      }
-      if (Object.keys(newGroups).length > 0) {
-        await this.addRelays(item.id, newGroups);
-      }
-    }
+      }),
+    );
+
+    if (resolved.size === 0) return;
+
+    // Distribute resolved URLs to each item
+    await Promise.all(
+      items.map(async (item) => {
+        const newGroups: Record<string, string[]> = {};
+        for (const groupId of Object.keys(item.relayGroupDefs)) {
+          const urls = resolved.get(groupId);
+          if (urls) newGroups[groupId] = urls;
+        }
+        if (Object.keys(newGroups).length > 0) {
+          await this.addRelays(item.id, newGroups);
+        }
+      }),
+    );
   }
 
   /** Remove an item from the outbox (user-initiated dismiss) */
@@ -478,38 +516,30 @@ class OutboxStore {
     const item = current.find((i) => i.id === id);
     if (!item) return;
 
-    const attempt: OutboxSendAttempt = {
-      timestamp: Math.floor(Date.now() / 1000),
-      success,
-      msg,
-    };
-
     let retryScheduled = false;
 
     const updatedLogs = item.relayLogs.map((log) => {
       if (log.url !== relayUrl) return log;
 
-      const updated: OutboxRelayLog = {
-        ...log,
-        attempts: [...log.attempts, attempt],
-        success: log.success || success,
-      };
+      // Classify before building the attempt so the recorded success value
+      // reflects the true outcome (e.g. "duplicate" → success-equivalent).
+      let effectiveSuccess = success;
+      let permanentFailure: string | undefined;
+      let tryAfterTimestamp: number | undefined;
 
       if (!success) {
         const classification = classifyFailure(msg);
         if (classification.kind === "permanent") {
-          // "duplicate" means the relay already has it — treat as success for
-          // coverage purposes but mark as permanent so we don't retry
           if (classification.reason === "duplicate") {
-            updated.success = true;
+            // Relay already has the event — counts as delivered
+            effectiveSuccess = true;
           } else {
-            updated.permanentFailure = classification.reason;
+            permanentFailure = classification.reason;
           }
         } else if (classification.kind === "transient") {
-          const retryAt =
+          tryAfterTimestamp =
             Math.floor(Date.now() / 1000) +
             Math.ceil(classification.delayMs / 1000);
-          updated.tryAfterTimestamp = retryAt;
           if (!retryScheduled) {
             retryScheduled = true;
             setTimeout(() => {
@@ -520,6 +550,20 @@ class OutboxStore {
         }
         // "unknown" failures: retry on next page load (no immediate schedule)
       }
+
+      const attempt: OutboxSendAttempt = {
+        timestamp: Math.floor(Date.now() / 1000),
+        success: effectiveSuccess,
+        msg,
+      };
+
+      const updated: OutboxRelayLog = {
+        ...log,
+        attempts: [...log.attempts, attempt],
+        success: log.success || effectiveSuccess,
+        ...(permanentFailure !== undefined && { permanentFailure }),
+        ...(tryAfterTimestamp !== undefined && { tryAfterTimestamp }),
+      };
 
       return updated;
     });

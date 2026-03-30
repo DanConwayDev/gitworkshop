@@ -16,6 +16,7 @@ import {
   getRepoCloneUrls,
   getRepoWebUrls,
   getRepoMaintainers,
+  getRepoRelays,
 } from "@/lib/nip34";
 
 type RepositoryEvent = KnownEvent<typeof REPO_KIND>;
@@ -23,6 +24,7 @@ type RepositoryEvent = KnownEvent<typeof REPO_KIND>;
 // Cache symbols for cast-specific computed values not covered by nip34 extractors
 const DTagSymbol = Symbol.for("repo-d-tag");
 const LabelsSymbol = Symbol.for("repo-labels");
+const RelaysSymbol = Symbol.for("repo-relays");
 
 /** Validate that a raw event is a well-formed repository announcement */
 export function isValidRepository(event: NostrEvent): event is RepositoryEvent {
@@ -54,6 +56,12 @@ export class Repository extends EventCast<RepositoryEvent> {
 
   get description(): string {
     return getRepoDescription(this.event);
+  }
+
+  get relays(): string[] {
+    return getOrComputeCachedValue(this.event, RelaysSymbol, () =>
+      getRepoRelays(this.event),
+    );
   }
 
   get cloneUrls(): string[] {

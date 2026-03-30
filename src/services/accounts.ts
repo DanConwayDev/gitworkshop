@@ -5,7 +5,7 @@ import {
 } from "applesauce-accounts/accounts";
 // Import pool to ensure NostrConnectSigner.pool is set before fromJSON runs,
 // so restored NostrConnectAccount signers can be constructed successfully.
-import "@/services/nostr";
+import { watchUserMailboxesForOutboxReResolve } from "@/services/nostr";
 
 /**
  * Global AccountManager instance for multi-account support.
@@ -62,5 +62,17 @@ registerCommonAccountTypes(accounts);
   // Persist active account id whenever it changes
   accounts.active$.subscribe((account) => {
     localStorage.setItem("active-account", account?.id ?? "");
+  });
+
+  // Watch the active account's NIP-65 relay list and re-resolve relay groups
+  // for any pending outbox items when it changes. Tear down the previous
+  // subscription when the account switches.
+  let unwatchMailboxes: (() => void) | null = null;
+  accounts.active$.subscribe((account) => {
+    unwatchMailboxes?.();
+    unwatchMailboxes = null;
+    if (account?.pubkey) {
+      unwatchMailboxes = watchUserMailboxesForOutboxReResolve(account.pubkey);
+    }
   });
 })();
