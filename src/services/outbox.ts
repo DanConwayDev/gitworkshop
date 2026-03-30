@@ -148,7 +148,7 @@ export function classifyFailure(
 // ---------------------------------------------------------------------------
 
 const DB_NAME = "ngitstack-outbox";
-const DB_VERSION = 2; // bumped: OutboxRelayLog.group → groups[]
+const DB_VERSION = 3; // bumped: wipe pre-semantic-group-ID data
 const STORE_OUTBOX = "outbox";
 
 let db: IDBDatabase | null = null;
@@ -159,12 +159,13 @@ async function getDb(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => {
       const database = (e.target as IDBOpenDBRequest).result;
-      if (!database.objectStoreNames.contains(STORE_OUTBOX)) {
-        database.createObjectStore(STORE_OUTBOX, { keyPath: "id" });
+      // Drop and recreate the store on any upgrade — old items used legacy
+      // string group IDs that the resolver cannot re-resolve, so there is no
+      // value in migrating them.
+      if (database.objectStoreNames.contains(STORE_OUTBOX)) {
+        database.deleteObjectStore(STORE_OUTBOX);
       }
-      // v1 → v2: migrate OutboxRelayLog.group (string) to groups (string[])
-      // We do this by reading and rewriting all items after the store is open.
-      // The actual migration runs in init() after getDb() resolves.
+      database.createObjectStore(STORE_OUTBOX, { keyPath: "id" });
     };
     req.onsuccess = (e) => {
       db = (e.target as IDBOpenDBRequest).result;
@@ -251,9 +252,7 @@ class OutboxStore {
 
   private async init() {
     try {
-      const rawItems = await idbGetAll();
-      // Migrate v1 items: OutboxRelayLog.group (string) → groups (string[])
-      const items = rawItems.map((item) => migrateItem(item));
+      const items = await idbGetAll();
       this.items$.next(items.sort((a, b) => b.createdAt - a.createdAt));
       this.pruneOldItems();
       this.retryPendingItems();
@@ -611,44 +610,6 @@ class OutboxStore {
       this.items$.next(items.filter((i) => !deleteIds.has(i.id)));
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// v1 → v2 migration helper
-// ---------------------------------------------------------------------------
-
-/**
- * Migrate an OutboxItem from the v1 schema (group: string) to v2 (groups: string[]).
- * Also backfills relayGroupDefs if missing.
- */
-function migrateItem(raw: unknown): OutboxItem {
-  const item = raw as OutboxItem & {
-    relayLogs: Array<OutboxRelayLog & { group?: string }>;
-  };
-
-  const migratedLogs: OutboxRelayLog[] = item.relayLogs.map((log) => {
-    if (Array.isArray(log.groups)) return log as OutboxRelayLog;
-    // v1: group was a single string
-    const legacyGroup =
-      (log as OutboxRelayLog & { group?: string }).group ?? "unknown";
-    const { group: _dropped, ...rest } = log as OutboxRelayLog & {
-      group?: string;
-    };
-    void _dropped;
-    return { ...rest, groups: [legacyGroup] };
-  });
-
-  // Backfill relayGroupDefs from migrated logs
-  const relayGroupDefs: Record<string, string[]> = item.relayGroupDefs ?? {};
-  if (Object.keys(relayGroupDefs).length === 0) {
-    for (const log of migratedLogs) {
-      for (const group of log.groups) {
-        (relayGroupDefs[group] ??= []).push(log.url);
-      }
-    }
-  }
-
-  return { ...item, relayLogs: migratedLogs, relayGroupDefs };
 }
 
 // ---------------------------------------------------------------------------
