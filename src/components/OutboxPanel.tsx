@@ -148,6 +148,31 @@ function GroupLabel({
     );
   }
 
+  // Fallback for generic "relays" group (publish() with no coord)
+  if (groupId === "relays") {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="text-muted-foreground/60 text-xs">outbox:</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+          <span>relays</span>
+        </span>
+      </span>
+    );
+  }
+
+  // Fallback for "repo relays" well-known string (no coord available)
+  if (groupId === "repo relays") {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="text-muted-foreground/60 text-xs">repo:</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+          <GitFork className="h-3 w-3 shrink-0" />
+          <span>relays</span>
+        </span>
+      </span>
+    );
+  }
+
   return <span className="text-xs text-muted-foreground">{groupId}</span>;
 }
 
