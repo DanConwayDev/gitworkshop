@@ -74,22 +74,10 @@ export function ReplyBox({
   // For a top-level comment that's the root; for a reply it's the comment.
   const parent = parentEvent ?? rootEvent;
 
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-
-      const trimmed = body.trim();
-      if (!trimmed) return;
-
-      // Not logged in and not anonymous — open auth modal instead
-      if (!isLoggedIn && !anonMode) {
-        openAuthModal();
-        return;
-      }
-
-      // Determine which runner to use: ephemeral key for anon, global for logged-in
+  const submitComment = useCallback(
+    async (trimmed: string, useAnonMode: boolean) => {
       const activeRunner =
-        !isLoggedIn && anonMode ? createAnonRunner() : runner;
+        !isLoggedIn && useAnonMode ? createAnonRunner() : runner;
 
       setIsPending(true);
       try {
@@ -121,17 +109,25 @@ export function ReplyBox({
         setIsPending(false);
       }
     },
-    [
-      body,
-      parent,
-      rootEvent,
-      repoRelays,
-      onSubmitted,
-      toast,
-      isLoggedIn,
-      anonMode,
-      openAuthModal,
-    ],
+    [parent, rootEvent, repoRelays, onSubmitted, toast, isLoggedIn],
+  );
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+
+      const trimmed = body.trim();
+      if (!trimmed) return;
+
+      // Not logged in and not anonymous — open auth modal and retry on success
+      if (!isLoggedIn && !anonMode) {
+        openAuthModal("landing", () => submitComment(trimmed, false));
+        return;
+      }
+
+      await submitComment(trimmed, anonMode);
+    },
+    [body, isLoggedIn, anonMode, openAuthModal, submitComment],
   );
 
   return (

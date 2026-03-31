@@ -51,7 +51,7 @@ type CreateAccountStep = "display-name" | "secure" | "publishing";
 // ---------------------------------------------------------------------------
 
 export function AuthModal() {
-  const { isOpen, initialView, closeAuthModal } = useAuthModal();
+  const { isOpen, initialView, onAuthSuccess, closeAuthModal } = useAuthModal();
 
   const [view, setView] = useState<AuthModalView>(initialView);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
@@ -101,7 +101,8 @@ export function AuthModal() {
   const handleLoginSuccess = useCallback(() => {
     setLoginDialogOpen(false);
     closeAuthModal();
-  }, [closeAuthModal]);
+    onAuthSuccess?.();
+  }, [closeAuthModal, onAuthSuccess]);
 
   // ---------------------------------------------------------------------------
   // Create-account flow
@@ -196,6 +197,7 @@ export function AuthModal() {
       });
 
       closeAuthModal();
+      onAuthSuccess?.();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to create account";
@@ -217,6 +219,7 @@ export function AuthModal() {
     displayName,
     login,
     closeAuthModal,
+    onAuthSuccess,
   ]);
 
   // ---------------------------------------------------------------------------

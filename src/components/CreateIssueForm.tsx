@@ -162,33 +162,18 @@ export function CreateIssueForm({
     [addLabel],
   );
 
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-
-      const trimmedSubject = subject.trim();
-      if (!trimmedSubject) {
-        toast({
-          title: "Title required",
-          description: "Please provide a title for the issue.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Not logged in and not anonymous — open auth modal instead
-      if (!isLoggedIn && !anonMode) {
-        openAuthModal();
-        return;
-      }
-
-      // Determine which runner to use: ephemeral key for anon, global for logged-in
+  const submitIssue = useCallback(
+    async (
+      trimmedSubject: string,
+      trimmedContent: string,
+      allLabels: string[],
+      useAnonMode: boolean,
+    ) => {
       const activeRunner =
-        !isLoggedIn && anonMode ? createAnonRunner() : runner;
+        !isLoggedIn && useAnonMode ? createAnonRunner() : runner;
 
       setIsPending(true);
       try {
-        const trimmedContent = content.trim();
         await activeRunner.run(
           CreateIssue,
           repoCoord,
@@ -197,7 +182,7 @@ export function CreateIssueForm({
           trimmedContent,
           repoRelays,
           {
-            labels: [...new Set([...contentLabels, ...labels])],
+            labels: allLabels,
             contentTags: extractContentTags(trimmedContent),
           },
         );
@@ -220,19 +205,46 @@ export function CreateIssueForm({
         setIsPending(false);
       }
     },
+    [repoCoord, ownerPubkey, repoRelays, toast, onSuccess, isLoggedIn],
+  );
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+
+      const trimmedSubject = subject.trim();
+      if (!trimmedSubject) {
+        toast({
+          title: "Title required",
+          description: "Please provide a title for the issue.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const trimmedContent = content.trim();
+      const allLabels = [...new Set([...contentLabels, ...labels])];
+
+      // Not logged in and not anonymous — open auth modal and retry on success
+      if (!isLoggedIn && !anonMode) {
+        openAuthModal("landing", () =>
+          submitIssue(trimmedSubject, trimmedContent, allLabels, false),
+        );
+        return;
+      }
+
+      await submitIssue(trimmedSubject, trimmedContent, allLabels, anonMode);
+    },
     [
       subject,
       content,
       contentLabels,
       labels,
-      repoCoord,
-      ownerPubkey,
-      repoRelays,
       toast,
-      onSuccess,
       isLoggedIn,
       anonMode,
       openAuthModal,
+      submitIssue,
     ],
   );
 
