@@ -13,10 +13,14 @@
  * This hook adds three layers of protection that the default action omits:
  *
  * 1. CONNECTIVITY THRESHOLD CHECK
- *    Before attempting any write, we verify that we are connected to at least
- *    MIN_CONNECTED_FRACTION of the user's outbox + lookup relays (minimum
- *    MIN_CONNECTED_RELAYS). If connectivity is insufficient we throw a
- *    descriptive error rather than risk a partial or stale write.
+ *    Before attempting any write, we verify connectivity against the user's
+ *    outbox relays and lookup/index relays independently. The rules are:
+ *      - No outbox relays configured → error (can't trust we have latest kind:3)
+ *      - 1 outbox connected → also need ≥2 lookup relays as backup
+ *      - >1 outbox connected → pass if ≥50% OR ≥3 outboxes reachable
+ *    navigator.onLine is checked first as a fast-fail for offline mode.
+ *    If connectivity is insufficient we throw a descriptive error rather
+ *    than risk a partial or stale write.
  *
  * 2. FRESH FETCH FROM ALL OUTBOX + LOOKUP RELAYS
  *    We use addressLoader to fetch the latest kind:3 from the user's outbox
@@ -50,17 +54,20 @@ import type { ProfilePointer } from "applesauce-core/helpers";
 // ---------------------------------------------------------------------------
 
 /**
- * Minimum fraction of the user's relay set that must be healthy (online or
- * not in backoff) before we allow a contacts list write.
- * 0.5 = at least half.
+ * When only 1 outbox relay is connected, we require this many lookup/index
+ * relays to also be connected before allowing a contacts list write.
+ * A single outbox relay is not enough confidence on its own.
  */
-const MIN_CONNECTED_FRACTION = 0.5;
+const MIN_INDEX_RELAYS_FOR_SINGLE_OUTBOX = 2;
 
 /**
- * Absolute minimum number of healthy relays required regardless of fraction.
- * Prevents the fraction check from passing on a 1-relay set where 1/1 = 100%.
+ * When >1 outbox relays are connected, we pass if either:
+ *   - at least this fraction of the user's outbox relays are connected, OR
+ *   - at least MIN_OUTBOX_ABSOLUTE are connected (caps the requirement for
+ *     large relay sets — e.g. 30 outboxes should not need 15 connected).
  */
-const MIN_CONNECTED_RELAYS = 1;
+const MIN_OUTBOX_FRACTION = 0.5;
+const MIN_OUTBOX_ABSOLUTE = 3;
 
 /**
  * How long (ms) to wait for the addressLoader to return the latest kind:3
@@ -96,74 +103,102 @@ export function useRobustFollowActions(): RobustFollowActionsResult {
     [account?.pubkey, store],
   );
 
-  const getRelaySet = useCallback((): string[] => {
+  const getRelaySets = useCallback((): {
+    outboxes: string[];
+    lookup: string[];
+  } => {
     const outboxes = mailboxes?.outboxes ?? [];
-    const lookup = lookupRelays.getValue();
-    // Deduplicate: outboxes first, then lookup relays not already in outboxes
-    const seen = new Set(outboxes);
-    const combined = [...outboxes];
-    for (const r of lookup) {
-      if (!seen.has(r)) combined.push(r);
-    }
-    return combined;
+    const outboxSet = new Set(outboxes);
+    // Lookup relays that are not already in the outbox set
+    const lookup = lookupRelays.getValue().filter((r) => !outboxSet.has(r));
+    return { outboxes, lookup };
   }, [mailboxes]);
+
+  /**
+   * Returns the number of healthy connections in a relay list.
+   * A relay is healthy if: WebSocket is open (pool) AND not dead/backoff (liveness).
+   */
+  const countHealthy = useCallback((relays: string[]): number => {
+    const connected = relays.filter(
+      (url) => pool.relays.get(url)?.connected === true,
+    );
+    return liveness.filter(connected).length;
+  }, []);
 
   /**
    * Check that we are connected to enough relays to safely write.
    *
-   * Three-layer check (fastest-to-slowest):
-   *   1. navigator.onLine — immediate OS/browser network state. DevTools
-   *      offline mode sets this to false instantly, before any WebSocket
-   *      close events fire. Fast-fail here avoids the race where sockets
-   *      appear connected for several seconds after going offline.
-   *   2. Pool connection state — is the WebSocket actually open right now?
-   *      Relays not yet in the pool (never connected this session) count as
-   *      disconnected. Catches the case where relays were never reached.
-   *   3. Liveness backoff — skip relays that liveness has marked as dead or
-   *      in backoff (repeated failures even while nominally online).
+   * Connectivity rules (applied after navigator.onLine fast-fail):
    *
-   * A relay is considered "healthy" only if all applicable layers pass.
+   *   • No outbox relays found → error: we can't be confident we have the
+   *     user's latest kind:3 without knowing where they publish.
+   *
+   *   • Exactly 1 outbox connected → also require ≥2 lookup/index relays.
+   *     A single outbox relay is not enough confidence on its own.
+   *
+   *   • >1 outbox connected → pass if (≥50% of outboxes OR ≥3 outboxes).
+   *     The absolute floor prevents requiring 15/30 on large relay sets.
    *
    * Throws a user-facing error if the threshold is not met.
    */
-  const assertConnectivity = useCallback((relays: string[]) => {
-    if (relays.length === 0) {
-      throw new Error(
-        "No relay configuration found. Cannot safely update your follow list — please check your relay settings.",
-      );
-    }
+  const assertConnectivity = useCallback(
+    (outboxes: string[], lookup: string[]) => {
+      // Layer 1: fast-fail on navigator.onLine (catches DevTools offline mode
+      // immediately, before WebSocket close events have had time to propagate)
+      if (!navigator.onLine) {
+        throw new Error(
+          "You appear to be offline. Please check your internet connection and try again.",
+        );
+      }
 
-    // Layer 1: fast-fail on navigator.onLine (catches DevTools offline mode
-    // immediately, before WebSocket close events have had time to propagate)
-    if (!navigator.onLine) {
-      throw new Error(
-        "You appear to be offline. Please check your internet connection and try again.",
-      );
-    }
+      // No outbox relay list found — we can't be confident we have the latest kind:3
+      if (outboxes.length === 0) {
+        throw new Error(
+          "Could not find your relay list (NIP-65). Without knowing where you publish, " +
+            "we can't be confident we have your latest follow list. " +
+            "Please add outbox relays in your relay settings and try again.",
+        );
+      }
 
-    // Layer 2: pool connection state (WebSocket open = actually connected now)
-    const connectedRelays = relays.filter((url) => {
-      const relay = pool.relays.get(url);
-      return relay?.connected === true;
-    });
+      const healthyOutboxes = countHealthy(outboxes);
+      const healthyLookup = countHealthy(lookup);
 
-    // Layer 3: liveness filter (removes dead / backoff relays from the connected set)
-    const healthyRelays = liveness.filter(connectedRelays);
-    const healthyCount = healthyRelays.length;
-    const fraction = healthyCount / relays.length;
+      if (healthyOutboxes === 0) {
+        throw new Error(
+          `None of your ${outboxes.length} outbox relay(s) are reachable. ` +
+            "Please check your internet connection and try again.",
+        );
+      }
 
-    if (
-      healthyCount < MIN_CONNECTED_RELAYS ||
-      fraction < MIN_CONNECTED_FRACTION
-    ) {
-      throw new Error(
-        `Connection is not stable enough to safely update your follow list. ` +
-          `Only ${healthyCount} of ${relays.length} relay(s) are reachable ` +
-          `(need at least ${Math.ceil(relays.length * MIN_CONNECTED_FRACTION)}). ` +
-          `Please check your internet connection and try again.`,
-      );
-    }
-  }, []);
+      if (healthyOutboxes === 1) {
+        // Single outbox connection — require backup coverage from index relays
+        if (healthyLookup < MIN_INDEX_RELAYS_FOR_SINGLE_OUTBOX) {
+          throw new Error(
+            `Only 1 of your ${outboxes.length} outbox relay(s) is reachable and ` +
+              `only ${healthyLookup} of ${lookup.length} lookup relay(s) are reachable ` +
+              `(need at least ${MIN_INDEX_RELAYS_FOR_SINGLE_OUTBOX} lookup relays as backup). ` +
+              "Please check your internet connection and try again.",
+          );
+        }
+        return; // 1 outbox + ≥2 lookup is sufficient
+      }
+
+      // >1 outbox connected — pass if ≥50% OR ≥3 absolute
+      const fraction = healthyOutboxes / outboxes.length;
+      if (
+        healthyOutboxes < MIN_OUTBOX_ABSOLUTE &&
+        fraction < MIN_OUTBOX_FRACTION
+      ) {
+        throw new Error(
+          `Connection is not stable enough to safely update your follow list. ` +
+            `Only ${healthyOutboxes} of ${outboxes.length} outbox relay(s) are reachable ` +
+            `(need at least ${MIN_OUTBOX_ABSOLUTE} or ${Math.round(MIN_OUTBOX_FRACTION * 100)}%). ` +
+            "Please check your internet connection and try again.",
+        );
+      }
+    },
+    [countHealthy],
+  );
 
   /**
    * Fetch the latest kind:3 from the user's relay set and wait for it to land
@@ -212,13 +247,14 @@ export function useRobustFollowActions(): RobustFollowActionsResult {
 
       setPending(true);
       try {
-        const relays = getRelaySet();
+        const { outboxes, lookup } = getRelaySets();
 
         // 1. Connectivity check — fail fast with a clear error
-        assertConnectivity(relays);
+        assertConnectivity(outboxes, lookup);
 
         // 2. Fetch latest kind:3 from all outbox + lookup relays
-        await prefetchContacts(account.pubkey, relays);
+        const allRelays = [...outboxes, ...lookup];
+        await prefetchContacts(account.pubkey, allRelays);
 
         // 3. Run the action — now guaranteed to start from the freshest state
         await action(target);
@@ -226,7 +262,7 @@ export function useRobustFollowActions(): RobustFollowActionsResult {
         setPending(false);
       }
     },
-    [account?.pubkey, getRelaySet, assertConnectivity, prefetchContacts],
+    [account?.pubkey, getRelaySets, assertConnectivity, prefetchContacts],
   );
 
   const follow = useCallback(
