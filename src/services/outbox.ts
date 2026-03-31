@@ -68,6 +68,16 @@ export type RelayStatus =
   | "retrying"
   | "permanent";
 
+/** A single publish attempt recorded for a relay. */
+export interface RelayAttempt {
+  /** Unix seconds when the response was received. */
+  at: number;
+  /** Whether the relay accepted the event. */
+  ok: boolean;
+  /** Raw message returned by the relay. */
+  message: string;
+}
+
 export interface OutboxRelayEntry {
   url: string;
   status: RelayStatus;
@@ -85,6 +95,11 @@ export interface OutboxRelayEntry {
    * retried. The value is the human-readable reason.
    */
   permanentReason?: string;
+  /**
+   * Full history of publish attempts for this relay, oldest first.
+   * Each entry records the timestamp, ok/fail, and raw relay message.
+   */
+  attempts: RelayAttempt[];
 }
 
 export interface OutboxItem {
@@ -163,7 +178,7 @@ function classifyFailure(
 // ---------------------------------------------------------------------------
 
 const DB_NAME = "ngitstack-outbox";
-const DB_VERSION = 4; // bumped: new schema
+const DB_VERSION = 5; // bumped: added attempts[] to OutboxRelayEntry
 const STORE_NAME = "outbox";
 
 let db: IDBDatabase | null = null;
@@ -303,6 +318,7 @@ class OutboxStore {
         groups,
         status: "pending" as const,
         message: "",
+        attempts: [],
       }),
     );
 
@@ -353,6 +369,7 @@ class OutboxStore {
             groups: [group],
             status: "pending",
             message: "",
+            attempts: [],
           });
           existingUrls.add(url);
           newUrls.push(url);
@@ -439,6 +456,53 @@ class OutboxStore {
     );
   }
 
+  /**
+   * Manually retry a specific relay for an outbox item.
+   *
+   * Clears any pending backoff timer, resets the relay status to "pending",
+   * and immediately sends the event to that relay. Works for any non-success,
+   * non-permanent relay status (including "failed", "retrying", and "pending").
+   * Permanent rejections are intentionally not retryable via this method.
+   */
+  async retryRelay(itemId: string, relayUrl: string): Promise<void> {
+    const current = this.items$.getValue();
+    const item = current.find((i) => i.id === itemId);
+    if (!item) return;
+
+    const relay = item.relays.find((r) => r.url === relayUrl);
+    if (!relay || relay.status === "success" || relay.status === "permanent")
+      return;
+
+    // Cancel any scheduled retry timer for this relay
+    const timerKey = `${itemId}:${relayUrl}`;
+    const existing = this.retryTimers.get(timerKey);
+    if (existing) {
+      clearTimeout(existing);
+      this.retryTimers.delete(timerKey);
+    }
+
+    // Reset relay status to pending
+    const updatedRelays = item.relays.map((r) =>
+      r.url === relayUrl
+        ? {
+            ...r,
+            status: "pending" as const,
+            message: "",
+            retryAfter: undefined,
+          }
+        : r,
+    );
+    const updatedItem: OutboxItem = {
+      ...item,
+      relays: updatedRelays,
+      broadlySent: this.computeBroadlySent(updatedRelays),
+    };
+    await this.upsert(updatedItem);
+
+    // Send immediately
+    this.sendToSpecificRelays(updatedItem, [relayUrl]);
+  }
+
   /** Remove an item from the outbox (user-initiated dismiss) */
   async dismiss(id: string): Promise<void> {
     // Cancel any active publishes and retry timers for this item
@@ -519,24 +583,39 @@ class OutboxStore {
     if (!item) return;
 
     const fromUrl = normalizeAndStripTrailingSlash(response.from);
+    const now = Math.floor(Date.now() / 1000);
+
     const updatedRelays = item.relays.map((relay) => {
       if (relay.url !== fromUrl) return relay;
+
+      const attempt: RelayAttempt = {
+        at: now,
+        ok: response.ok,
+        message: response.message ?? (response.ok ? "OK" : "unknown error"),
+      };
+      const attempts = [...(relay.attempts ?? []), attempt];
 
       if (response.ok) {
         return {
           ...relay,
           status: "success" as const,
-          message: response.message ?? "OK",
+          message: attempt.message,
+          attempts,
         };
       }
 
-      const msg = response.message ?? "unknown error";
+      const msg = attempt.message;
       const classification = classifyFailure(msg);
 
       switch (classification.kind) {
         case "duplicate":
           // Relay already has the event — counts as delivered
-          return { ...relay, status: "success" as const, message: "duplicate" };
+          return {
+            ...relay,
+            status: "success" as const,
+            message: "duplicate",
+            attempts,
+          };
 
         case "permanent":
           return {
@@ -544,6 +623,7 @@ class OutboxStore {
             status: "permanent" as const,
             message: msg,
             permanentReason: classification.reason,
+            attempts,
           };
 
         case "transient": {
@@ -559,12 +639,18 @@ class OutboxStore {
             status: "retrying" as const,
             message: msg,
             retryAfter,
+            attempts,
           };
         }
 
         default:
           // Unknown failure — will be retried on next page load
-          return { ...relay, status: "failed" as const, message: msg };
+          return {
+            ...relay,
+            status: "failed" as const,
+            message: msg,
+            attempts,
+          };
       }
     });
 

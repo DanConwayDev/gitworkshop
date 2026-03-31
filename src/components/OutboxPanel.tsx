@@ -16,6 +16,7 @@ import {
   outboxStore,
   type OutboxItem,
   type OutboxRelayEntry,
+  type RelayAttempt,
   type RelayStatus as OutboxRelayStatus,
 } from "@/services/outbox";
 import {
@@ -350,30 +351,134 @@ function RelayStatusIcon({ status }: { status: OutboxRelayStatus }) {
   }
 }
 
-function RelayRow({ relay }: { relay: OutboxRelayEntry }) {
+/**
+ * Condense a raw relay message to a short (≤3 word) summary label.
+ * The full message is shown in the expanded detail section.
+ */
+function shortSummary(
+  status: OutboxRelayStatus,
+  relay: OutboxRelayEntry,
+): string {
+  switch (status) {
+    case "success":
+      return relay.message === "duplicate" ? "already stored" : "accepted";
+    case "permanent":
+      return relay.permanentReason ?? "rejected";
+    case "retrying":
+      return "rate limited";
+    case "pending":
+      return "sending…";
+    case "failed": {
+      const msg = relay.message.toLowerCase();
+      if (msg.includes("timeout") || msg.includes("timed out"))
+        return "timed out";
+      if (msg.includes("connect") || msg.includes("refused"))
+        return "connection failed";
+      if (msg.includes("auth")) return "auth required";
+      if (msg.includes("invalid")) return "invalid event";
+      if (msg.includes("error")) return "relay error";
+      return "failed";
+    }
+  }
+}
+
+function AttemptRow({ attempt }: { attempt: RelayAttempt }) {
+  const label = useRelativeTime(attempt.at);
   return (
-    <div className="flex items-start gap-2 py-1 text-xs">
-      <RelayStatusIcon status={relay.status} />
-      <div className="min-w-0 flex-1">
-        <span className="font-mono text-muted-foreground truncate block">
+    <div className="flex items-start gap-2 py-0.5">
+      {attempt.ok ? (
+        <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0 mt-0.5" />
+      ) : (
+        <XCircle className="h-3 w-3 text-destructive shrink-0 mt-0.5" />
+      )}
+      <span className="text-muted-foreground/60 shrink-0">{label}</span>
+      <span className="break-all">{attempt.message}</span>
+    </div>
+  );
+}
+
+function RelayRow({
+  relay,
+  itemId,
+}: {
+  relay: OutboxRelayEntry;
+  itemId: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const canRetry = relay.status === "failed" || relay.status === "retrying";
+  const hasDetail =
+    relay.message.length > 0 || (relay.attempts?.length ?? 0) > 0;
+  const summary = shortSummary(relay.status, relay);
+
+  const summaryColor =
+    relay.status === "success"
+      ? "text-green-600 dark:text-green-400"
+      : relay.status === "permanent"
+        ? "text-orange-500"
+        : relay.status === "failed"
+          ? "text-destructive"
+          : relay.status === "retrying"
+            ? "text-yellow-500"
+            : "text-muted-foreground";
+
+  return (
+    <div className="py-1 text-xs">
+      {/* Main row */}
+      <div className="flex items-center gap-2">
+        <RelayStatusIcon status={relay.status} />
+        <span className="font-mono text-muted-foreground truncate flex-1 min-w-0">
           {relay.url}
         </span>
-        {relay.status === "permanent" && relay.permanentReason && (
-          <span className="text-orange-500/80 truncate block">
-            {relay.permanentReason}
-          </span>
+        <span className={`shrink-0 font-medium ${summaryColor}`}>
+          {summary}
+        </span>
+        {hasDetail && (
+          <button
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={() => setExpanded((v) => !v)}
+            aria-label={expanded ? "Hide detail" : "Show detail"}
+          >
+            {expanded ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+          </button>
         )}
-        {relay.status === "retrying" && relay.message && (
-          <span className="text-muted-foreground/80 truncate block">
-            retrying… ({relay.message})
-          </span>
-        )}
-        {relay.status === "failed" && relay.message && (
-          <span className="text-destructive/80 truncate block">
-            {relay.message}
-          </span>
+        {canRetry && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={() => outboxStore.retryRelay(itemId, relay.url)}
+            aria-label="Retry relay"
+            title="Retry now"
+          >
+            <RotateCw className="h-3 w-3" />
+          </Button>
         )}
       </div>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="mt-1 ml-5 space-y-1 rounded border border-border bg-muted/40 px-2 py-1.5">
+          {/* Full current message */}
+          {relay.message && (
+            <p className="break-all text-muted-foreground">{relay.message}</p>
+          )}
+          {/* Attempt history */}
+          {(relay.attempts?.length ?? 0) > 0 && (
+            <div className="mt-1 space-y-0.5">
+              <p className="text-muted-foreground/50 uppercase tracking-wide text-[10px] font-semibold mb-1">
+                Attempt history
+              </p>
+              {relay.attempts.map((a, i) => (
+                <AttemptRow key={i} attempt={a} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -488,7 +593,7 @@ function OutboxItemRow({
                 </div>
                 <div className="px-2 py-1 space-y-0.5">
                   {relaysForGroup.map((relay) => (
-                    <RelayRow key={relay.url} relay={relay} />
+                    <RelayRow key={relay.url} relay={relay} itemId={item.id} />
                   ))}
                 </div>
               </div>
