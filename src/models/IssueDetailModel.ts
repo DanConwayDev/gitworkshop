@@ -9,6 +9,7 @@ import {
   DELETION_KIND,
   STATUS_KINDS,
   COMMENT_KIND,
+  LEGACY_REPLY_KINDS,
   resolveItemEssentials,
   extractBody,
   buildRenameItems,
@@ -24,7 +25,7 @@ import { getThreadTree } from "@/lib/threadTree";
  * Subscribes to the EventStore for:
  * - The root event (kind:1621)
  * - Essentials (status, labels, deletions)
- * - Comments (kind:1111)
+ * - Comments (kind:1111 via #E, legacy kinds 1/1622 via #e)
  * - Zaps (kind:9735)
  *
  * Emits a `ResolvedIssue` whenever any of these change.
@@ -52,85 +53,108 @@ export function IssueDetailModel(
       { kinds: [...ESSENTIALS_KINDS], "#e": [rootId] } as Filter,
     ]);
 
-    // Comments (kind:1111) rooted at this issue
+    // Comments (kind:1111) rooted at this issue via NIP-22 #E tag
     const comments$ = store.timeline([
       { kinds: [COMMENT_KIND], "#E": [rootId] } as Filter,
+    ]);
+
+    // Legacy replies (kind 1, 1622) via NIP-10 #e tag
+    const legacyReplies$ = store.timeline([
+      { kinds: [...LEGACY_REPLY_KINDS], "#e": [rootId] } as Filter,
     ]);
 
     // Zaps
     const zaps$ = store.timeline([{ kinds: [9735], "#e": [rootId] } as Filter]);
 
-    return combineLatest([root$, essentials$, comments$, zaps$]).pipe(
+    return combineLatest([
+      root$,
+      essentials$,
+      comments$,
+      legacyReplies$,
+      zaps$,
+    ]).pipe(
       auditTime(50),
-      map(([rootEvents, essentialEvents, commentEvents, zapEvents]) => {
-        const roots = rootEvents as NostrEvent[];
-        const rootEvent = roots[0];
-        if (!rootEvent) return undefined;
+      map(
+        ([
+          rootEvents,
+          essentialEvents,
+          commentEvents,
+          legacyReplyEvents,
+          zapEvents,
+        ]) => {
+          const roots = rootEvents as NostrEvent[];
+          const rootEvent = roots[0];
+          if (!rootEvent) return undefined;
 
-        const essentials = essentialEvents as NostrEvent[];
-        const allComments = commentEvents as NostrEvent[];
-        const zaps = zapEvents as NostrEvent[];
+          const essentials = essentialEvents as NostrEvent[];
+          // Merge NIP-22 comments and legacy replies into a single list
+          const allComments = [
+            ...(commentEvents as NostrEvent[]),
+            ...(legacyReplyEvents as NostrEvent[]),
+          ];
+          const zaps = zapEvents as NostrEvent[];
 
-        // Effective maintainer set (use provided or empty while loading)
-        const effectiveMaintainers = maintainers ?? new Set<string>();
+          // Effective maintainer set (use provided or empty while loading)
+          const effectiveMaintainers = maintainers ?? new Set<string>();
 
-        // Resolve core essentials using the shared pure function
-        const core = resolveItemEssentials(
-          rootEvent,
-          essentials,
-          allComments,
-          zaps,
-          effectiveMaintainers,
-        );
+          // Resolve core essentials using the shared pure function
+          const core = resolveItemEssentials(
+            rootEvent,
+            essentials,
+            allComments,
+            zaps,
+            effectiveMaintainers,
+          );
 
-        // ── Build rename items ──────────────────────────────────────
-        const renameItems = buildRenameItems(
-          core.originalSubject,
-          core.subjectRenames,
-          essentials,
-        );
+          // ── Build rename items ──────────────────────────────────────
+          const renameItems = buildRenameItems(
+            core.originalSubject,
+            core.subjectRenames,
+            essentials,
+          );
 
-        // ── Build timeline nodes ────────────────────────────────────
-        const timelineNodes = buildTimelineNodes(
-          rootEvent,
-          allComments,
-          renameItems,
-        );
+          // ── Build timeline nodes ────────────────────────────────────
+          const timelineNodes = buildTimelineNodes(
+            rootEvent,
+            allComments,
+            renameItems,
+          );
 
-        // ── Participants ────────────────────────────────────────────
-        const participantSet = new Set<string>();
-        participantSet.add(rootEvent.pubkey);
-        for (const c of allComments) participantSet.add(c.pubkey);
+          // ── Participants ────────────────────────────────────────────
+          const participantSet = new Set<string>();
+          participantSet.add(rootEvent.pubkey);
+          for (const c of allComments) participantSet.add(c.pubkey);
 
-        return {
-          // Core fields from resolveItemEssentials
-          id: core.id,
-          pubkey: core.pubkey,
-          event: core.event,
-          originalSubject: core.originalSubject,
-          currentSubject: core.currentSubject,
-          content: core.content,
-          createdAt: core.createdAt,
-          lastActivityAt: core.lastActivityAt,
-          status: core.status,
-          labels: core.labels,
-          repoCoords: core.repoCoords,
-          commentCount: allComments.length,
-          participantCount: participantSet.size,
-          zapCount: core.zapCount,
-          authorisedUsers: core.authorisedUsers,
+          return {
+            // Core fields from resolveItemEssentials
+            id: core.id,
+            pubkey: core.pubkey,
+            event: core.event,
+            originalSubject: core.originalSubject,
+            currentSubject: core.currentSubject,
+            content: core.content,
+            createdAt: core.createdAt,
+            lastActivityAt: core.lastActivityAt,
+            status: core.status,
+            labels: core.labels,
+            repoCoords: core.repoCoords,
+            commentCount: allComments.length,
+            participantCount: participantSet.size,
+            zapCount: core.zapCount,
+            authorisedUsers: core.authorisedUsers,
 
-          // Detail fields
-          body: extractBody(rootEvent),
-          timelineNodes,
-          comments: allComments,
-          zaps,
-          renameItems,
-          participants: Array.from(participantSet),
-          rootEvent,
-          maintainers: effectiveMaintainers,
-        } satisfies ResolvedIssue;
-      }),
+            // Detail fields
+            body: extractBody(rootEvent),
+            timelineNodes,
+            comments: allComments,
+            zaps,
+            renameItems,
+            participants: Array.from(participantSet),
+            rootEvent,
+            maintainers: effectiveMaintainers,
+          } satisfies ResolvedIssue;
+        },
+      ),
     );
   };
 }

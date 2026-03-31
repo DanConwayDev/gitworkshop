@@ -7,6 +7,7 @@ import {
   DELETION_KIND,
   STATUS_KINDS,
   COMMENT_KIND,
+  LEGACY_REPLY_KINDS,
   pubkeyFromCoordinate,
   buildResolvedIssues,
   type ResolvedIssueLite,
@@ -86,25 +87,37 @@ export function IssueListModel(
 
         const ids = events.map((e) => e.id);
 
-        // All three inner streams are scoped to the current issue IDs.
+        // All inner streams are scoped to the current issue IDs.
         const essentials$ = store.timeline([
           { kinds: [...ESSENTIALS_KINDS], "#e": ids } as Filter,
         ]);
         const comments$ = store.timeline([
           { kinds: [COMMENT_KIND], "#E": ids } as Filter,
         ]);
+        const legacyReplies$ = store.timeline([
+          { kinds: [...LEGACY_REPLY_KINDS], "#e": ids } as Filter,
+        ]);
         const zaps$ = store.timeline([{ kinds: [9735], "#e": ids } as Filter]);
 
-        return combineLatest([essentials$, comments$, zaps$]).pipe(
-          map(([essentialEvents, commentEvents, zapEvents]) =>
-            buildResolvedIssues(
-              events,
-              essentialEvents as NostrEvent[],
-              commentEvents as NostrEvent[],
-              zapEvents as NostrEvent[],
-              maintainerSet,
-              options,
-            ),
+        return combineLatest([
+          essentials$,
+          comments$,
+          legacyReplies$,
+          zaps$,
+        ]).pipe(
+          map(
+            ([essentialEvents, commentEvents, legacyReplyEvents, zapEvents]) =>
+              buildResolvedIssues(
+                events,
+                essentialEvents as NostrEvent[],
+                [
+                  ...(commentEvents as NostrEvent[]),
+                  ...(legacyReplyEvents as NostrEvent[]),
+                ],
+                zapEvents as NostrEvent[],
+                maintainerSet,
+                options,
+              ),
           ),
         );
       }),

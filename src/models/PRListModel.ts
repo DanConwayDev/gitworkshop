@@ -9,6 +9,7 @@ import {
   DELETION_KIND,
   STATUS_KINDS,
   COMMENT_KIND,
+  LEGACY_REPLY_KINDS,
   pubkeyFromCoordinate,
   buildResolvedPRs,
   type ResolvedPRLite,
@@ -76,26 +77,43 @@ export function PRListModel(coordsCacheKey: string): Model<ResolvedPRLite[]> {
         const commentsAndUpdates$ = store.timeline([
           { kinds: [COMMENT_KIND, PR_UPDATE_KIND], "#E": ids } as Filter,
         ]);
+        // Legacy replies (kind 1, 1622) via NIP-10 #e tag
+        const legacyReplies$ = store.timeline([
+          { kinds: [...LEGACY_REPLY_KINDS], "#e": ids } as Filter,
+        ]);
         const zaps$ = store.timeline([{ kinds: [9735], "#e": ids } as Filter]);
 
-        return combineLatest([essentials$, commentsAndUpdates$, zaps$]).pipe(
-          map(([essentialEvents, commentsAndUpdates, zapEvents]) => {
-            const allCommentEvents = commentsAndUpdates as NostrEvent[];
-            const commentEvents = allCommentEvents.filter(
-              (ev) => ev.kind === COMMENT_KIND,
-            );
-            const prUpdateEvents = allCommentEvents.filter(
-              (ev) => ev.kind === PR_UPDATE_KIND,
-            );
-            return buildResolvedPRs(
-              events,
-              essentialEvents as NostrEvent[],
-              commentEvents,
-              zapEvents as NostrEvent[],
-              maintainerSet,
-              prUpdateEvents,
-            );
-          }),
+        return combineLatest([
+          essentials$,
+          commentsAndUpdates$,
+          legacyReplies$,
+          zaps$,
+        ]).pipe(
+          map(
+            ([
+              essentialEvents,
+              commentsAndUpdates,
+              legacyReplyEvents,
+              zapEvents,
+            ]) => {
+              const allCommentEvents = commentsAndUpdates as NostrEvent[];
+              const commentEvents = [
+                ...allCommentEvents.filter((ev) => ev.kind === COMMENT_KIND),
+                ...(legacyReplyEvents as NostrEvent[]),
+              ];
+              const prUpdateEvents = allCommentEvents.filter(
+                (ev) => ev.kind === PR_UPDATE_KIND,
+              );
+              return buildResolvedPRs(
+                events,
+                essentialEvents as NostrEvent[],
+                commentEvents,
+                zapEvents as NostrEvent[],
+                maintainerSet,
+                prUpdateEvents,
+              );
+            },
+          ),
         );
       }),
     );

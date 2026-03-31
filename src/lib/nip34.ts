@@ -167,6 +167,15 @@ export const PR_ROOT_KINDS = [PATCH_KIND, PR_KIND] as const;
 /** NIP-22 comment (kind 1111) */
 export const COMMENT_KIND = 1111;
 
+/**
+ * Legacy NIP-34 reply kinds — pre-NIP-22 replies that use NIP-10 #e tagging.
+ * Kind 1622 is the original NIP-34 reply kind; kind 1 is a generic text note
+ * sometimes used as a reply in older clients. Both thread correctly via the
+ * NIP-10 root/reply markers already handled by threadTree.ts.
+ */
+export const LEGACY_REPLY_KIND = 1622;
+export const LEGACY_REPLY_KINDS = [1, LEGACY_REPLY_KIND] as const;
+
 /** Status kinds */
 export const STATUS_OPEN = 1630;
 export const STATUS_RESOLVED = 1631;

@@ -10,6 +10,7 @@ import {
   DELETION_KIND,
   STATUS_KINDS,
   COMMENT_KIND,
+  LEGACY_REPLY_KINDS,
   PATCH_KIND,
   resolveItemEssentials,
   extractBody,
@@ -31,7 +32,7 @@ import { getThreadTree } from "@/lib/threadTree";
  * Subscribes to the EventStore for:
  * - The root event (kind 1617 or 1618)
  * - Essentials (status, labels, deletions)
- * - Comments (kind:1111, cross-revision merged)
+ * - Comments (kind:1111 via #E, legacy kinds 1/1622 via #e, cross-revision merged)
  * - PR Updates (kind:1619) or patch chain patches (kind:1617 #e)
  * - Zaps (kind:9735)
  *
@@ -65,9 +66,14 @@ export function PRDetailModel(
     ]);
 
     // Comments (kind:1111) — we'll merge cross-revision later
-    // Start with comments rooted at the original root
+    // Start with comments rooted at the original root via NIP-22 #E tag
     const comments$ = store.timeline([
       { kinds: [COMMENT_KIND], "#E": [rootId] } as Filter,
+    ]);
+
+    // Legacy replies (kind 1, 1622) via NIP-10 #e tag
+    const legacyReplies$ = store.timeline([
+      { kinds: [...LEGACY_REPLY_KINDS], "#e": [rootId] } as Filter,
     ]);
 
     // PR Updates (kind:1619) and patch chain patches (kind:1617 #e)
@@ -79,13 +85,21 @@ export function PRDetailModel(
     // Zaps
     const zaps$ = store.timeline([{ kinds: [9735], "#e": [rootId] } as Filter]);
 
-    return combineLatest([root$, essentials$, comments$, updates$, zaps$]).pipe(
+    return combineLatest([
+      root$,
+      essentials$,
+      comments$,
+      legacyReplies$,
+      updates$,
+      zaps$,
+    ]).pipe(
       auditTime(50),
       map(
         ([
           rootEvents,
           essentialEvents,
           commentEvents,
+          legacyReplyEvents,
           updateEvents,
           zapEvents,
         ]) => {
@@ -94,7 +108,11 @@ export function PRDetailModel(
           if (!rootEvent) return undefined;
 
           const essentials = essentialEvents as NostrEvent[];
-          const allComments = commentEvents as NostrEvent[];
+          // Merge NIP-22 comments and legacy replies into a single list
+          const allComments = [
+            ...(commentEvents as NostrEvent[]),
+            ...(legacyReplyEvents as NostrEvent[]),
+          ];
           const updates = updateEvents as NostrEvent[];
           const zaps = zapEvents as NostrEvent[];
 
@@ -252,19 +270,24 @@ export function PRDetailModel(
                   .map((r) => r.rootPatchEvent!.id)
               : [];
 
-          // allComments already has comments rooted at rootId.
+          // allComments already has comments rooted at rootId (NIP-22 + legacy).
           // We need to also check for comments rooted at revision roots.
-          // Note: these may not be in allComments$ since that only queries #E:[rootId].
-          // The useResolvedPR hook will handle fetching revision-root comments
-          // via useNip34ItemLoaderBatch. For now, we work with what's in the store.
+          // Note: these may not be in allComments$ since that only queries
+          // #E:[rootId] and #e:[rootId]. The useResolvedPR hook handles
+          // fetching revision-root comments via useNip34ItemLoaderBatch.
+          // For now, we work with what's in the store.
           let mergedComments = [...allComments];
           if (revisionRootIds.length > 0) {
             // Query revision-root comments from the store synchronously
+            // (both NIP-22 and legacy reply kinds)
             for (const revId of revisionRootIds) {
               const revComments = store.getByFilters([
                 { kinds: [COMMENT_KIND], "#E": [revId] } as Filter,
               ]) as NostrEvent[];
-              mergedComments.push(...revComments);
+              const revLegacy = store.getByFilters([
+                { kinds: [...LEGACY_REPLY_KINDS], "#e": [revId] } as Filter,
+              ]) as NostrEvent[];
+              mergedComments.push(...revComments, ...revLegacy);
             }
             // Deduplicate
             const seenIds = new Set<string>();

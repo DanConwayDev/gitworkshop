@@ -26,7 +26,7 @@ import { MailboxesModel } from "applesauce-core/models";
 import { cacheRequest, saveEvents } from "./cache";
 import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
 import { extraRelays, lookupRelays } from "./settings";
-import { ISSUE_KIND, PR_ROOT_KINDS } from "@/lib/nip34";
+import { ISSUE_KIND, PR_ROOT_KINDS, LEGACY_REPLY_KINDS } from "@/lib/nip34";
 import { Repository, isValidRepository } from "@/casts/Repository";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
 
@@ -268,14 +268,21 @@ const NIP34_THREAD_BUFFER = 500;
 
 /**
  * Essentials loader (#e tag).
- * Fetches status (1630-1633), NIP-32 labels (1985), and deletion requests (5)
- * for issues/patches/PRs in a single batched relay subscription per buffer
- * window.
+ * Fetches status (1630-1633), NIP-32 labels (1985), deletion requests (5),
+ * and legacy NIP-34 replies (kind 1 and 1622) for issues/patches/PRs in a
+ * single batched relay subscription per buffer window.
+ *
+ * Legacy replies use NIP-10 #e tagging (not NIP-22 #E), so they must be
+ * fetched via this #e loader rather than the #E comments loader. Including
+ * them here is a bit of a hack — semantically they're comments, not
+ * essentials, and they arrive earlier (100ms buffer vs 500ms for comments).
+ * But legacy replies are an edge case in practice, so this is a reasonable
+ * tradeoff vs. creating an additional singleton loader and subscription.
  */
 export const nip34EssentialsLoader = createTagValueLoader(pool, "e", {
   cacheRequest,
   eventStore,
-  kinds: [1630, 1631, 1632, 1633, 1985, 5],
+  kinds: [1630, 1631, 1632, 1633, 1985, 5, ...LEGACY_REPLY_KINDS],
   bufferTime: NIP34_ESSENTIALS_BUFFER,
 });
 
