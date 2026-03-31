@@ -194,8 +194,19 @@ const TRANSIENT_FAILURE_PATTERNS: Array<{
   },
 ];
 
-/** Retry delay for transient relay failures (65 seconds) */
-const RETRY_DELAY_MS = 65_000;
+/**
+ * Exponential backoff schedule for transient relay failures.
+ *
+ * Index = number of failed attempts so far (after the response is recorded).
+ * After the last entry the relay is left as "failed" — no more automatic
+ * retries until the user clicks retry or reloads the page.
+ *
+ *   1st failure → retry after 65 s
+ *   2nd failure → retry after 5 min
+ *   3rd failure → retry after 1 hr
+ *   4th+ failure → stop, leave as failed
+ */
+const BACKOFF_SCHEDULE_MS = [65_000, 5 * 60_000, 60 * 60_000];
 
 /**
  * Classify a relay rejection message.
@@ -204,7 +215,6 @@ function classifyFailure(msg: string):
   | { kind: "permanent"; reason: string }
   | {
       kind: "transient";
-      delayMs: number;
       subkind:
         | "publish-timeout"
         | "connection-timeout"
@@ -217,8 +227,7 @@ function classifyFailure(msg: string):
     if (pattern.test(msg)) return { kind: "permanent", reason };
   }
   for (const { pattern, subkind } of TRANSIENT_FAILURE_PATTERNS) {
-    if (pattern.test(msg))
-      return { kind: "transient", delayMs: RETRY_DELAY_MS, subkind };
+    if (pattern.test(msg)) return { kind: "transient", subkind };
   }
   if (/duplicate/i.test(msg)) return { kind: "duplicate" };
   return { kind: "unknown" };
@@ -678,12 +687,25 @@ class OutboxStore {
           };
 
         case "transient": {
-          const retryAfter =
-            Math.floor(Date.now() / 1000) +
-            Math.ceil(classification.delayMs / 1000);
+          // Use attempt count (after recording this one) to pick backoff delay.
+          // attempts[] already includes the current attempt at this point.
+          const delayMs = BACKOFF_SCHEDULE_MS[attempts.length - 1];
 
-          // Schedule a retry
-          this.scheduleRetry(itemId, relay.url, classification.delayMs);
+          if (delayMs === undefined) {
+            // Exhausted automatic retries — leave as failed, manual retry only
+            return {
+              ...relay,
+              status: "failed" as const,
+              message: msg,
+              transientSubkind: classification.subkind,
+              attempts,
+            };
+          }
+
+          const retryAfter =
+            Math.floor(Date.now() / 1000) + Math.ceil(delayMs / 1000);
+
+          this.scheduleRetry(itemId, relay.url, delayMs);
 
           return {
             ...relay,
