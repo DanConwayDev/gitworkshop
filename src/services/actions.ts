@@ -1,6 +1,9 @@
 import { ActionRunner, Actions } from "applesauce-actions";
 import { EventFactory } from "applesauce-core";
+import { kinds } from "nostr-tools";
+import type { NostrEvent } from "nostr-tools";
 import { eventStore, publish } from "./nostr";
+import { lookupRelays } from "./settings";
 import { accounts } from "./accounts";
 
 /**
@@ -14,6 +17,26 @@ export const factory = new EventFactory({
 });
 
 /**
+ * Publish function passed to the ActionRunner.
+ *
+ * For kind:3 (contacts) events, lookup/index relays are added as a separate
+ * "User Index Relays" group so that the updated follow list reaches
+ * well-connected index relays in addition to the user's own outbox relays.
+ * This improves the chance that other clients can discover the latest list
+ * even if they don't know all of the user's outbox relays.
+ *
+ * For all other events the call is forwarded to publish() unchanged.
+ */
+function runnerPublish(event: NostrEvent, relays?: string[]): Promise<void> {
+  if (event.kind === kinds.Contacts) {
+    return publish(event, relays, {
+      "User Index Relays": lookupRelays.getValue(),
+    });
+  }
+  return publish(event, relays);
+}
+
+/**
  * Global ActionRunner instance for executing pre-built Nostr actions.
  * Examples: UpdateProfile, CreateNote, etc.
  *
@@ -24,7 +47,7 @@ export const factory = new EventFactory({
  * await runner.run(Actions.UpdateProfile, { name: 'Alice' });
  * ```
  */
-export const runner = new ActionRunner(eventStore, factory, publish);
+export const runner = new ActionRunner(eventStore, factory, runnerPublish);
 
 // Export Actions for convenience
 export { Actions };

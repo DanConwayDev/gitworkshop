@@ -164,18 +164,28 @@ export { watchUserMailboxesForOutboxReResolve };
  * Action functions in src/actions/nip34.ts which resolve the correct relay
  * groups (user outbox + repo relays + notification inboxes) automatically.
  *
- * @param event  - The signed Nostr event to publish
- * @param relays - Optional relay URLs; falls back to extraRelays if omitted
+ * @param event       - The signed Nostr event to publish
+ * @param relays      - Optional relay URLs; falls back to extraRelays if omitted.
+ *                      When provided by the ActionRunner these are the user's
+ *                      NIP-65 outbox relays and are stored under the "Outbox"
+ *                      group label in the outbox store.
+ * @param extraGroups - Additional named relay groups to publish to alongside
+ *                      the primary relay set (e.g. "User Index Relays").
  */
 export async function publish(
   event: NostrEvent,
   relays?: string[],
+  extraGroups?: Record<string, string[]>,
 ): Promise<void> {
   // Add to local store immediately for optimistic updates
   eventStore.add(event);
 
-  const targetRelays = relaySet(extraRelays.getValue(), relays);
-  await outboxStore.publish(event, { relays: [...targetRelays] });
+  const outboxRelays = relaySet(extraRelays.getValue(), relays);
+  const relayGroups: Record<string, string[]> = {
+    Outbox: [...outboxRelays],
+    ...extraGroups,
+  };
+  await outboxStore.publish(event, relayGroups);
 }
 
 /**
