@@ -13,7 +13,14 @@
  * comments don't get their own Card border. Each comment is separated by a
  * subtle top border. This keeps deep threads compact (matching gitworkshop).
  */
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { formatDistanceToNow } from "date-fns";
 import {
   ChevronUp,
@@ -21,6 +28,7 @@ import {
   AlertTriangle,
   Calendar,
   Reply,
+  Trash2,
 } from "lucide-react";
 import type { NostrEvent } from "nostr-tools";
 import type { ThreadTreeNode } from "@/lib/threadTree";
@@ -32,6 +40,21 @@ import { ReplyBox } from "@/components/ReplyBox";
 import type { ThreadContext } from "@/components/EventThreadComponents";
 import { OutboxStatusBadge } from "@/components/OutboxStatusStrip";
 import { ReactionsBar } from "@/components/ReactionsBar";
+import { useActiveAccount } from "applesauce-react/hooks";
+import { DeleteEvent } from "@/actions/nip34";
+import { runner } from "@/services/actions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 // ---------------------------------------------------------------------------
 // Thread context — passes root info down without prop-drilling
@@ -160,9 +183,34 @@ function ThreadComment({ event }: { event: NostrEvent }) {
     isTargeted ? "strong" : "none",
   );
   const [replying, setReplying] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const ctx = useContext(ThreadCtx);
   const canReply = !!ctx;
+  const activeAccount = useActiveAccount();
+  const isOwn = !!activeAccount && activeAccount.pubkey === event.pubkey;
+
+  const confirmDelete = useCallback(async () => {
+    if (deleting || !ctx) return;
+    setDeleting(true);
+    try {
+      await runner.run(
+        DeleteEvent,
+        [event],
+        ctx.repoRelays,
+        ctx.repoCoords,
+        deleteReason.trim() || undefined,
+      );
+    } catch (err) {
+      console.error("[ThreadComment] failed to delete comment:", err);
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+      setDeleteReason("");
+    }
+  }, [deleting, ctx, event, deleteReason]);
 
   useEffect(() => {
     if (!isTargeted || !elRef.current) return;
@@ -268,6 +316,17 @@ function ThreadComment({ event }: { event: NostrEvent }) {
               <span className="hidden sm:inline">Reply</span>
             </button>
           )}
+          {isOwn && ctx && (
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(true)}
+              className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-destructive transition-colors px-1.5 py-0.5 rounded"
+              aria-label="Delete comment"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Delete</span>
+            </button>
+          )}
           <EventCardActions event={event} />
         </div>
       </div>
@@ -295,6 +354,53 @@ function ThreadComment({ event }: { event: NostrEvent }) {
           />
         </div>
       )}
+
+      {/* Delete comment dialog */}
+      <AlertDialog
+        open={deleteOpen}
+        onOpenChange={(v) => !v && setDeleteOpen(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete comment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will send a deletion request (NIP-09). Not all relays honour
+              deletion requests — the comment may remain visible on some
+              clients.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5 py-1">
+            <Label htmlFor="delete-comment-reason" className="text-sm">
+              Reason{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Textarea
+              id="delete-comment-reason"
+              placeholder="Why are you deleting this comment?"
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              rows={2}
+              className="resize-none text-sm"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setDeleteOpen(false);
+                setDeleteReason("");
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "Sending…" : "Send deletion request"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

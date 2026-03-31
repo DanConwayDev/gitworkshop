@@ -27,6 +27,7 @@ import {
   IssueSubjectRenameBlueprint,
   IssueLabelBlueprint,
 } from "@/blueprints/label";
+import { DeletionBlueprint } from "@/blueprints/deletion";
 import type { IssueStatus } from "@/lib/nip34";
 import { outboxStore } from "@/services/outbox";
 import { eventStore, addressLoader } from "@/services/nostr";
@@ -423,5 +424,51 @@ export function CreateComment(
         }
       });
     }
+  };
+}
+
+/**
+ * Send a NIP-09 deletion request (kind:5) for one or more events.
+ *
+ * The deletion request is published to the same relay groups as the original
+ * event so relays that hold the event receive the request.
+ *
+ * Phase 1: user outbox + repo relays (immediate).
+ * No phase 2 notification — deletion requests are not social interactions.
+ *
+ * @param events     - The event(s) to request deletion of (must be authored by self)
+ * @param repoRelays - Relays declared in the repository announcement
+ * @param repoCoords - Repo coordinate strings for relay group keying
+ * @param reason     - Optional human-readable reason (written to content field)
+ */
+export function DeleteEvent(
+  events: NostrEvent[],
+  repoRelays: string[],
+  repoCoords?: string[],
+  reason?: string,
+): Action {
+  return async ({ factory, sign, self }) => {
+    // Validate: all events must be authored by the signer
+    for (const ev of events) {
+      if (ev.pubkey !== self) {
+        throw new Error(
+          `Cannot delete event ${ev.id.slice(0, 8)}: not authored by current account`,
+        );
+      }
+    }
+
+    const draft = await factory.create(DeletionBlueprint, events, reason);
+    const signed = await sign(draft);
+
+    // Add to local store immediately so the UI can react
+    eventStore.add(signed);
+
+    // Phase 1 — publish to user outbox + repo relays
+    const immediateGroups = await buildImmediateRelayGroups(
+      self,
+      repoRelays,
+      repoCoords,
+    );
+    await outboxStore.publish(signed, immediateGroups);
   };
 }

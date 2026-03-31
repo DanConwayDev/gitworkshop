@@ -82,6 +82,8 @@ function kindLabel(kind: number): string {
       return "Comment";
     case 7:
       return "Reaction";
+    case 5:
+      return "Deletion";
     case 0:
       return "Profile";
     case 1:
@@ -170,6 +172,47 @@ function useEventContext(
         const label = repoName
           ? `${repoName}: re: ${subject}`
           : `re: ${subject}`;
+        return { label, path: `/${nevent}` };
+      }
+    }
+    return undefined;
+  }
+
+  // Deletion requests (kind 5) — label shows what was deleted, link goes to
+  // the deleted event's thread if it can be resolved from the store.
+  if (kind === 5) {
+    const eTags = event.tags.filter(([t]) => t === "e");
+    const targetId = eTags[0]?.[1];
+    if (targetId) {
+      const targetEvent = store.getEvent(targetId);
+      if (targetEvent) {
+        const repoName = repoNameFromGroups(relayGroupDefs, store);
+        const nevent = eventIdToNevent(targetId);
+        let subject: string;
+        if (targetEvent.kind === COMMENT_KIND) {
+          const rootId = targetEvent.tags.find(([t]) => t === "E")?.[1];
+          const rootEvent = rootId ? store.getEvent(rootId) : undefined;
+          subject = rootEvent
+            ? `re: ${extractSubject(rootEvent)}`
+            : `re: (unknown)`;
+        } else if (targetEvent.kind === 7) {
+          // Deleting a reaction — walk up to the reacted-to event
+          const reactedId = targetEvent.tags
+            .filter(([t]) => t === "e")
+            .at(-1)?.[1];
+          const reactedEvent = reactedId
+            ? store.getEvent(reactedId)
+            : undefined;
+          const emoji = targetEvent.content || "+";
+          subject = reactedEvent
+            ? `${emoji} on "${extractSubject(reactedEvent)}"`
+            : `reaction ${emoji}`;
+        } else {
+          subject = extractSubject(targetEvent);
+        }
+        const label = repoName
+          ? `${repoName}: delete "${subject}"`
+          : `delete "${subject}"`;
         return { label, path: `/${nevent}` };
       }
     }

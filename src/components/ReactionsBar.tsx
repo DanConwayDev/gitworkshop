@@ -25,7 +25,7 @@ import { ReactionsModel } from "applesauce-common/models";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import { useActiveAccount } from "applesauce-react/hooks";
-import { CreateReaction } from "@/actions/nip34";
+import { CreateReaction, DeleteEvent } from "@/actions/nip34";
 import { runner } from "@/services/actions";
 import { UserLink } from "@/components/UserAvatar";
 import {
@@ -43,6 +43,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { Heart, X } from "lucide-react";
 
@@ -106,6 +108,8 @@ export function ReactionsBar({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<NostrEvent | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const myPubkey = activeAccount?.pubkey;
 
@@ -124,6 +128,26 @@ export function ReactionsBar({
     },
     [sending, activeAccount, event, repoRelays, repoCoords],
   );
+
+  const confirmDeleteReaction = useCallback(async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      await runner.run(
+        DeleteEvent,
+        [deleteTarget],
+        repoRelays,
+        repoCoords,
+        deleteReason.trim() || undefined,
+      );
+    } catch (err) {
+      console.error("[ReactionsBar] failed to delete reaction:", err);
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+      setDeleteReason("");
+    }
+  }, [deleteTarget, deleting, repoRelays, repoCoords, deleteReason]);
 
   // Find the current user's reaction event for a given emoji (for deletion)
   const myReactionEvent = useCallback(
@@ -233,11 +257,14 @@ export function ReactionsBar({
       {/* Delete confirmation dialog */}
       <DeleteReactionDialog
         open={!!deleteTarget}
-        onConfirm={() => {
-          // TODO: wire up DeleteEvent action when available
+        reason={deleteReason}
+        onReasonChange={setDeleteReason}
+        onConfirm={confirmDeleteReaction}
+        onCancel={() => {
           setDeleteTarget(null);
+          setDeleteReason("");
         }}
-        onCancel={() => setDeleteTarget(null)}
+        isPending={deleting}
       />
     </div>
   );
@@ -355,12 +382,18 @@ function ReactionGroup({
 
 function DeleteReactionDialog({
   open,
+  reason,
+  onReasonChange,
   onConfirm,
   onCancel,
+  isPending,
 }: {
   open: boolean;
+  reason: string;
+  onReasonChange: (v: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
+  isPending?: boolean;
 }) {
   return (
     <AlertDialog open={open} onOpenChange={(v) => !v && onCancel()}>
@@ -368,14 +401,32 @@ function DeleteReactionDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Remove reaction?</AlertDialogTitle>
           <AlertDialogDescription>
-            This will send a deletion request. Not all relays honour deletion
-            requests.
+            This will send a deletion request (NIP-09). Not all relays honour
+            deletion requests.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <div className="space-y-1.5 py-1">
+          <Label htmlFor="delete-reaction-reason" className="text-sm">
+            Reason{" "}
+            <span className="text-muted-foreground font-normal">
+              (optional)
+            </span>
+          </Label>
+          <Textarea
+            id="delete-reaction-reason"
+            placeholder="Why are you removing this reaction?"
+            value={reason}
+            onChange={(e) => onReasonChange(e.target.value)}
+            rows={2}
+            className="resize-none text-sm"
+          />
+        </div>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onCancel}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>
-            Send deletion request
+          <AlertDialogCancel onClick={onCancel} disabled={isPending}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} disabled={isPending}>
+            {isPending ? "Sending…" : "Send deletion request"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
