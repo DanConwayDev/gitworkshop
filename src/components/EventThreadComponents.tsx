@@ -399,6 +399,8 @@ export interface RenameItem {
 export interface ThreadContext {
   rootEvent: NostrEvent;
   repoRelays: string[];
+  /** Repo coordinate strings (e.g. "30617:<pubkey>:<d>") for relay group keying */
+  repoCoords?: string[];
 }
 
 /**

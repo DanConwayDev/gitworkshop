@@ -562,6 +562,7 @@ export default function PRPage() {
                                 ? {
                                     rootEvent: pr.rootEvent,
                                     repoRelays: repo?.relays ?? [],
+                                    repoCoords: pr.repoCoords,
                                   }
                                 : undefined
                             }

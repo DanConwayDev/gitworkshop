@@ -31,6 +31,7 @@ import { CommentContent } from "@/components/CommentContent";
 import { ReplyBox } from "@/components/ReplyBox";
 import type { ThreadContext } from "@/components/EventThreadComponents";
 import { OutboxStatusBadge } from "@/components/OutboxStatusStrip";
+import { ReactionsBar } from "@/components/ReactionsBar";
 
 // ---------------------------------------------------------------------------
 // Thread context — passes root info down without prop-drilling
@@ -274,6 +275,13 @@ function ThreadComment({ event }: { event: NostrEvent }) {
           UserLink uses w-8 avatar + gap-1.5 = 38px before the name text. */}
       <div className="sm:ml-[38px]">
         <CommentContent content={event.content} />
+        {ctx && (
+          <ReactionsBar
+            event={event}
+            repoRelays={ctx.repoRelays}
+            repoCoords={ctx.repoCoords}
+          />
+        )}
       </div>
 
       {/* Inline reply composer */}

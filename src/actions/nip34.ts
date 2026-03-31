@@ -314,6 +314,53 @@ export function AttachIssueLabels(
 }
 
 /**
+ * React to a NIP-34 event (issue, PR, patch, or comment) with a kind:7
+ * reaction event.
+ *
+ * Phase 1: user outbox + repo relays (immediate).
+ * Phase 2: event author's inbox relays (deferred notification).
+ *
+ * @param targetEvent - The event being reacted to
+ * @param emoji       - Reaction emoji (defaults to "+")
+ * @param repoRelays  - Relays declared in the repository announcement
+ * @param repoCoords  - Repo coordinate strings for relay group keying
+ */
+export function CreateReaction(
+  targetEvent: NostrEvent,
+  emoji: string,
+  repoRelays: string[],
+  repoCoords?: string[],
+): Action {
+  return async ({ factory, sign, self }) => {
+    const { ReactionBlueprint } = await import("applesauce-common/blueprints");
+    const draft = await factory.create(ReactionBlueprint, targetEvent, emoji);
+    const signed = await sign(draft);
+
+    // Add to local store immediately for optimistic UI
+    eventStore.add(signed);
+
+    // Phase 1 — publish immediately to user outbox + repo relays
+    const immediateGroups = await buildImmediateRelayGroups(
+      self,
+      repoRelays,
+      repoCoords,
+    );
+    await outboxStore.publish(signed, immediateGroups);
+
+    // Phase 2 — notify the event author's inbox relays (fire-and-forget)
+    const notifyPubkeys =
+      targetEvent.pubkey !== self ? [targetEvent.pubkey] : [];
+    if (notifyPubkeys.length > 0) {
+      resolveNotificationInboxes(notifyPubkeys).then((inboxGroups) => {
+        if (Object.keys(inboxGroups).length > 0) {
+          outboxStore.addRelays(signed.id, inboxGroups);
+        }
+      });
+    }
+  };
+}
+
+/**
  * Post a NIP-22 comment (kind:1111) on a NIP-34 issue, PR/patch, or an
  * existing comment.
  *

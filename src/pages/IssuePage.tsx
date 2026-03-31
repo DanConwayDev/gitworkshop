@@ -174,6 +174,7 @@ export default function IssuePage() {
                             ? {
                                 rootEvent: issue.rootEvent,
                                 repoRelays: repo?.relays ?? [],
+                                repoCoords: issue.repoCoords,
                               }
                             : undefined
                         }
