@@ -408,14 +408,20 @@ function shortSummary(
 function AttemptRow({ attempt }: { attempt: RelayAttempt }) {
   const label = useRelativeTime(attempt.at);
   return (
-    <div className="flex items-start gap-2 py-0.5">
+    <div className="flex items-start gap-1.5 py-0.5">
       {attempt.ok ? (
         <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0 mt-0.5" />
       ) : (
         <XCircle className="h-3 w-3 text-destructive shrink-0 mt-0.5" />
       )}
-      <span className="text-muted-foreground/60 shrink-0">{label}</span>
-      <span className="break-all">{attempt.message}</span>
+      <div className="min-w-0">
+        <span className="text-muted-foreground/60 shrink-0">{label}</span>
+        {attempt.message && (
+          <span className="text-muted-foreground break-words block">
+            {attempt.message}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

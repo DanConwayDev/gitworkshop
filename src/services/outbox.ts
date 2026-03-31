@@ -138,7 +138,7 @@ export interface OutboxItem {
  * These should never be retried — the relay has a policy that won't change.
  */
 const PERMANENT_FAILURE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /paid|subscription|member/i, reason: "paid relay" },
+  { pattern: /\bpay\b|paid|subscription|member/i, reason: "paid relay" },
   { pattern: /proof.of.work|pow/i, reason: "proof of work required" },
   { pattern: /white.?list|allowlist/i, reason: "not on whitelist" },
   { pattern: /black.?list|banned|blocked/i, reason: "blocked" },
@@ -229,7 +229,7 @@ function classifyFailure(msg: string):
 // ---------------------------------------------------------------------------
 
 const DB_NAME = "ngitstack-outbox";
-const DB_VERSION = 5; // bumped: added attempts[] to OutboxRelayEntry
+const DB_VERSION = 6; // bumped: corrected permanent failure reason labels
 const STORE_NAME = "outbox";
 
 let db: IDBDatabase | null = null;
