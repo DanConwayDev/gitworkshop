@@ -152,40 +152,30 @@ export function AuthModal() {
     }
   }, [nsec]);
 
-  const copyKeyToClipboard = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(nsec);
-      setHasSaved(true);
-      setFieldCopied(true);
-      setTimeout(() => setFieldCopied(false), 2000);
-    } catch {
-      toast({
-        title: "Copy failed",
-        description:
-          "Could not copy to clipboard. Please download the key instead.",
-        variant: "destructive",
-      });
-    }
-  }, [nsec]);
+  const copyKeyToClipboard = useCallback(
+    async (description?: string) => {
+      try {
+        await navigator.clipboard.writeText(nsec);
+        setHasSaved(true);
+        setFieldCopied(true);
+        setTimeout(() => setFieldCopied(false), 2000);
+        toast({ title: "Key copied", description });
+      } catch {
+        toast({
+          title: "Copy failed",
+          description:
+            "Could not copy to clipboard. Please download the key instead.",
+          variant: "destructive",
+        });
+      }
+    },
+    [nsec],
+  );
 
-  // Used by the warning-box copy button — checkboxes are already required there
-  const handleCopyKey = useCallback(async () => {
-    try {
-      await copyKeyToClipboard();
-      setHasSaved(true);
-      toast({
-        title: "Key copied",
-        description: "Paste it into your password manager now.",
-      });
-    } catch {
-      toast({
-        title: "Copy failed",
-        description:
-          "Could not copy to clipboard. Please download the key instead.",
-        variant: "destructive",
-      });
-    }
-  }, [copyKeyToClipboard]);
+  const handleCopyKey = useCallback(
+    () => copyKeyToClipboard("Paste it into your password manager now."),
+    [copyKeyToClipboard],
+  );
 
   const handleCreateAccount = useCallback(async () => {
     if (!hasSaved || !ackLoss || !ackExposure) return;
@@ -369,7 +359,11 @@ export function AuthModal() {
                       variant="ghost"
                       size="icon"
                       className={`h-full px-2.5 hover:bg-transparent transition-colors ${fieldCopied ? "text-green-500" : "text-muted-foreground"}`}
-                      onClick={copyKeyToClipboard}
+                      onClick={() =>
+                        copyKeyToClipboard(
+                          "Paste it into your password manager now.",
+                        )
+                      }
                       aria-label="Copy key"
                     >
                       {fieldCopied ? (
