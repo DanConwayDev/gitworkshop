@@ -11,7 +11,7 @@ import { useRef, useCallback, useMemo, useState } from "react";
 import { nip19 } from "nostr-tools";
 import { AlertTriangle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { CommentContent } from "@/components/CommentContent";
 import { MentionAutocomplete } from "@/components/MentionAutocomplete";
 import { useProfile } from "@/hooks/useProfile";
@@ -288,18 +288,10 @@ function ProfileChip({ pubkey }: { pubkey: string }) {
     profile?.displayName ??
     profile?.name ??
     genUserName(pubkey);
-  const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted pl-0.5 pr-2 py-0.5 text-xs">
-      <Avatar className="h-4 w-4 shrink-0">
-        {profile?.picture && (
-          <AvatarImage src={profile.picture} alt={displayName} />
-        )}
-        <AvatarFallback className="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 text-foreground font-medium text-[8px]">
-          {initials}
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar pubkey={pubkey} size="xs" className="shrink-0" />
       <span className="font-medium text-foreground">{displayName}</span>
     </span>
   );

@@ -6,6 +6,9 @@ import { useProfile } from "@/hooks/useProfile";
 import { useUserRepositories } from "@/hooks/useUserRepositories";
 import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
 import { useRepoPath } from "@/hooks/useRepoPath";
+import { useIsFollowing } from "@/hooks/useIsFollowing";
+import { useRobustFollowActions } from "@/hooks/useRobustFollowActions";
+import { useToast } from "@/hooks/useToast";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,8 +22,12 @@ import {
   Copy,
   Check,
   ArrowLeft,
+  UserPlus,
+  UserMinus,
+  Loader2,
 } from "lucide-react";
 import { useState } from "react";
+import { useActiveAccount } from "applesauce-react/hooks";
 import type { ResolvedRepo } from "@/lib/nip34";
 
 interface UserPageProps {
@@ -151,9 +158,10 @@ export default function UserPage({ pubkey }: UserPageProps) {
                 </div>
               )}
 
-              {/* Npub copy */}
-              <div className="mt-4">
+              {/* Npub copy + follow */}
+              <div className="mt-4 flex items-center gap-2 flex-wrap">
                 <CopyNpub npub={npub} />
+                <FollowButton pubkey={pubkey} />
               </div>
             </div>
           </div>
@@ -319,6 +327,64 @@ function CopyNpub({ npub }: { npub: string }) {
       ) : (
         <Copy className="h-3 w-3" />
       )}
+    </Button>
+  );
+}
+
+/**
+ * Follow / Unfollow button for a user profile page.
+ *
+ * Uses useRobustFollowActions which:
+ *  - Checks that enough outbox + lookup relays are reachable before writing
+ *  - Fetches the latest kind:3 from those relays first so we never overwrite
+ *    changes made on another client
+ *  - Shows a clear error toast if connectivity is insufficient
+ *
+ * Only rendered when a different user is logged in (hides for own profile and
+ * when logged out).
+ */
+function FollowButton({ pubkey }: { pubkey: string }) {
+  const account = useActiveAccount();
+  const isFollowing = useIsFollowing(pubkey);
+  const { follow, unfollow, pending } = useRobustFollowActions();
+  const { toast } = useToast();
+
+  // Don't show for own profile or when logged out
+  if (!account || account.pubkey === pubkey) return null;
+
+  const handleClick = async () => {
+    try {
+      if (isFollowing) {
+        await unfollow(pubkey);
+      } else {
+        await follow(pubkey);
+      }
+    } catch (err) {
+      toast({
+        title: isFollowing ? "Failed to unfollow" : "Failed to follow",
+        description:
+          err instanceof Error ? err.message : "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <Button
+      variant={isFollowing ? "outline" : "default"}
+      size="sm"
+      className="h-7 text-xs gap-1.5"
+      onClick={handleClick}
+      disabled={pending || isFollowing === undefined}
+    >
+      {pending ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : isFollowing ? (
+        <UserMinus className="h-3 w-3" />
+      ) : (
+        <UserPlus className="h-3 w-3" />
+      )}
+      {isFollowing ? "Unfollow" : "Follow"}
     </Button>
   );
 }

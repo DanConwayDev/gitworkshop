@@ -34,6 +34,7 @@ This project is a Nostr client application built with React 18.x, TailwindCSS 3.
   - `useLocalStorage`: Persistent local storage
   - `useLoggedInAccounts`: Manage multiple accounts
   - `useLoginActions`: Authentication actions (extension, nsec, bunker)
+  - `useIsFollowing`: Check if the logged-in user follows a given pubkey (reactive, updates on follow/unfollow)
   - `useIsMobile`: Responsive design helper
 - `/src/blueprints/`: Custom event blueprints for standardized event creation
 - `/src/operations/`: Custom event operations for composable event building
@@ -55,7 +56,7 @@ The project uses shadcn/ui components located in `@/components/ui`. These are un
 - **Alert**: Displays important messages to users
 - **AlertDialog**: Modal dialog for critical actions requiring confirmation
 - **AspectRatio**: Maintains consistent width-to-height ratio
-- **Avatar**: User profile pictures with fallback support
+- **Avatar**: Low-level primitive for profile pictures with fallback support. **Do not use `Avatar` directly to render another Nostr user's picture** — use `UserAvatar` (or `UserLink`) from `@/components/UserAvatar` instead. Those components automatically show the follow-indicator badge for users the current account follows, which helps distinguish known contacts from impersonators. Raw `Avatar` is only appropriate when rendering your _own_ account (e.g. `AccountSwitcher`, compose-box self-avatar) or non-user imagery.
 - **Badge**: Small status descriptors for UI elements
 - **Breadcrumb**: Navigation aid showing current location in hierarchy
 - **Button**: Customizable button with multiple variants and sizes

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { nip19 } from "nostr-tools";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { useContactSearch } from "@/hooks/useContactSearch";
 import { genUserName } from "@/lib/genUserName";
 import { cn } from "@/lib/utils";
@@ -345,7 +345,6 @@ function MentionItem({
   const nip05 = profile?.nip05;
   const npub = nip19.npubEncode(pubkey);
   const identifier = nip05 ?? `${npub.slice(0, 12)}…`;
-  const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
     <button
@@ -360,14 +359,7 @@ function MentionItem({
       onClick={onClick}
       onMouseDown={(e) => e.preventDefault()}
     >
-      <Avatar className="h-8 w-8 shrink-0">
-        {profile?.picture && (
-          <AvatarImage src={profile.picture} alt={displayName} />
-        )}
-        <AvatarFallback className="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 text-foreground font-medium text-xs">
-          {initials}
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar pubkey={pubkey} size="md" className="shrink-0" />
 
       <div className="flex-1 min-w-0">
         <div className="font-semibold text-sm truncate">{displayName}</div>

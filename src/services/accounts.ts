@@ -3,9 +3,16 @@ import {
   NostrConnectAccount,
   registerCommonAccountTypes,
 } from "applesauce-accounts/accounts";
+import { switchMap, distinctUntilChanged, map } from "rxjs/operators";
+import { of } from "rxjs";
 // Import pool to ensure NostrConnectSigner.pool is set before fromJSON runs,
 // so restored NostrConnectAccount signers can be constructed successfully.
-import { watchUserMailboxesForOutboxReResolve } from "@/services/nostr";
+import {
+  watchUserMailboxesForOutboxReResolve,
+  eventStore,
+} from "@/services/nostr";
+import { startUserIdentitySubscription } from "@/services/userIdentitySubscription";
+import { MailboxesModel } from "applesauce-core/models";
 
 /**
  * Global AccountManager instance for multi-account support.
@@ -75,4 +82,43 @@ registerCommonAccountTypes(accounts);
       unwatchMailboxes = watchUserMailboxesForOutboxReResolve(account.pubkey);
     }
   });
+
+  // Keep a persistent subscription open for the active user's identity events
+  // (kind 0, 3, 10002, 10317) on their outbox relays.
+  //
+  // Strategy: whenever the active account changes OR their NIP-65 outbox relay
+  // list changes, tear down the previous subscription and start a fresh one on
+  // the updated relay set. This ensures kind:3 is always as fresh as possible
+  // from ALL of the user's outbox relays — the prerequisite for safe follow
+  // list edits.
+  let stopIdentitySub: (() => void) | null = null;
+
+  accounts.active$
+    .pipe(
+      switchMap((account) => {
+        if (!account?.pubkey) return of(null);
+        const pubkey = account.pubkey;
+        return eventStore.model(MailboxesModel, pubkey).pipe(
+          map((mailboxes) => ({ pubkey, outboxes: mailboxes?.outboxes ?? [] })),
+          // Only restart when the serialised outbox list actually changes
+          distinctUntilChanged(
+            (a, b) =>
+              a.pubkey === b.pubkey &&
+              JSON.stringify([...a.outboxes].sort()) ===
+                JSON.stringify([...b.outboxes].sort()),
+          ),
+        );
+      }),
+    )
+    .subscribe((value) => {
+      // Tear down the previous identity subscription before starting a new one
+      stopIdentitySub?.();
+      stopIdentitySub = null;
+      if (value) {
+        stopIdentitySub = startUserIdentitySubscription(
+          value.pubkey,
+          value.outboxes,
+        );
+      }
+    });
 })();

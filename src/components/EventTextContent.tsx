@@ -7,13 +7,12 @@
  * MarkdownContent for those).
  */
 import { Link } from "react-router-dom";
-import { nip19 } from "nostr-tools";
 import { useRenderedContent, type ComponentMap } from "applesauce-react/hooks";
 import type { NostrEvent } from "nostr-tools";
 import { cn } from "@/lib/utils";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserPath } from "@/hooks/useUserPath";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { genUserName } from "@/lib/genUserName";
 
 // ---------------------------------------------------------------------------
@@ -23,26 +22,16 @@ import { genUserName } from "@/lib/genUserName";
 function MentionComponent({ pubkey }: { pubkey: string }) {
   const profile = useProfile(pubkey);
   const userPath = useUserPath(pubkey);
-  const npub = nip19.npubEncode(pubkey);
   const displayName =
     profile?.displayName ?? profile?.name ?? genUserName(pubkey);
-  const initials =
-    profile?.name?.slice(0, 2).toUpperCase() ?? npub.slice(5, 7).toUpperCase();
 
   return (
     <Link
       to={userPath}
       className="inline-flex items-center gap-1 align-middle text-primary hover:underline font-medium"
     >
-      <Avatar className="h-4 w-4 shrink-0">
-        {profile?.picture && (
-          <AvatarImage src={profile.picture} alt={displayName} />
-        )}
-        <AvatarFallback className="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 text-foreground font-medium text-[8px]">
-          {initials}
-        </AvatarFallback>
-      </Avatar>
-      @{displayName}
+      <UserAvatar pubkey={pubkey} size="xs" className="shrink-0" />@
+      {displayName}
     </Link>
   );
 }
