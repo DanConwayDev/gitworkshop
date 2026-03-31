@@ -254,8 +254,12 @@ loadAllNip05FromIdb().then((entries) => {
 //   Comments (#E tag, bufferTime: 500ms): NIP-22 comments (1111) and PR
 //   updates (1619). The longer buffer ensures essentials land first.
 //
-// Thread level — reactions + zaps (#e tag, bufferTime: 500ms)
-//   Reactions (7) and zaps (9735). Only fired on detail pages.
+// Thread level — all child events, no kind restriction (detail pages only)
+//   Three loaders for the three tag names used to reference thread members:
+//   #e (lowercase), #E (uppercase/NIP-22 root), #q (quote).
+//   No kind restriction — fetches reactions, zaps, deletions, and any other
+//   events that tag a thread member. Will overlap with essentials/comments
+//   data already fetched, but the EventStore deduplicates on receipt.
 // ---------------------------------------------------------------------------
 
 const NIP34_ESSENTIALS_BUFFER = 100;
@@ -290,14 +294,33 @@ export const nip34CommentsLoader = createTagValueLoader(pool, "E", {
 });
 
 /**
- * Thread loader (#e tag) — reactions (7) and zaps (9735).
- * Both use the lowercase `#e` tag, so they share one loader and one
- * batched relay subscription. Only fired on detail pages.
+ * Thread loader — replies (#e tag). All events referencing a thread member
+ * via lowercase `e` tag. No kind restriction. Only fired on detail pages.
  */
-export const nip34ThreadLoader = createTagValueLoader(pool, "e", {
+const nip34ThreadReplyLoader = createTagValueLoader(pool, "e", {
   cacheRequest,
   eventStore,
-  kinds: [7, 9735],
+  bufferTime: NIP34_THREAD_BUFFER,
+});
+
+/**
+ * Thread loader — root references (#E tag). All events referencing a thread
+ * member via uppercase `E` tag (NIP-22 root reference). No kind restriction.
+ * Only fired on detail pages.
+ */
+const nip34ThreadRootLoader = createTagValueLoader(pool, "E", {
+  cacheRequest,
+  eventStore,
+  bufferTime: NIP34_THREAD_BUFFER,
+});
+
+/**
+ * Thread loader — quotes (#q tag). All events quoting a thread member.
+ * No kind restriction. Only fired on detail pages.
+ */
+const nip34ThreadQuoteLoader = createTagValueLoader(pool, "q", {
+  cacheRequest,
+  eventStore,
   bufferTime: NIP34_THREAD_BUFFER,
 });
 
@@ -313,18 +336,18 @@ export const nip34ThreadLoader = createTagValueLoader(pool, "e", {
 //                        Also used by nip34RepoLoader to fire both loaders
 //                        for each newly discovered item.
 //
-//   nip34ThreadItemLoader — thread level: reactions + zaps on the root AND
-//                        recursively on each comment. Only fired on detail
-//                        pages. Does NOT re-fire essentials or comments.
+//   nip34ThreadItemLoader — thread level: ALL events referencing the root
+//                        or any comment via #e, #E, or #q tags (no kind
+//                        restriction). Recursively fetches child events
+//                        for each comment. Only fired on detail pages.
 //
 //   nip34RepoLoader    — repo level: subscribes to all items for a set of
 //                        repo coordinates and pipes each newly discovered
 //                        item ID into nip34ListLoader.
 //
-// Filter merging: because nip34EssentialsLoader / nip34CommentsLoader /
-// nip34ThreadLoader are singleton instances, calls that arrive within the
-// same buffer window are automatically merged into a single relay
-// subscription by applesauce — even across issues and PRs.
+// Filter merging: because all loaders are singleton instances, calls that
+// arrive within the same buffer window are automatically merged into a
+// single relay subscription by applesauce — even across issues and PRs.
 // ---------------------------------------------------------------------------
 
 /** All root item kinds tracked at the repo level (issues + PR root kinds). */
@@ -404,20 +427,39 @@ export function nip34RepoLoader(
 }
 
 /**
+ * Fire all three thread loaders (#e, #E, #q) for a single event ID.
+ * Returns a merged observable of all child events discovered via any tag.
+ */
+function nip34ThreadLoadAll(
+  itemId: string,
+  relays: string[],
+): Observable<NostrEvent> {
+  return merge(
+    nip34ThreadReplyLoader({ value: itemId, relays }),
+    nip34ThreadRootLoader({ value: itemId, relays }),
+    nip34ThreadQuoteLoader({ value: itemId, relays }),
+  );
+}
+
+/**
  * Thread-level loader for a single item (detail pages only).
  *
- * Fetches reactions (kind:7) and zaps (kind:9735) for the root item AND
- * recursively for each comment discovered by nip34CommentsLoader.
+ * Fetches ALL events that reference the root item or any of its comments
+ * via #e, #E, or #q tags — no kind restriction. This includes reactions,
+ * zaps, deletions, quotes, and any other referencing events.
  *
  * Does NOT re-fire essentials or comments — those are handled separately
- * by nip34ListLoader (already called at the repo/list level).
+ * by nip34ListLoader (already called at the repo/list level). The no-kind
+ * thread loaders will return some of the same events (the EventStore
+ * deduplicates on receipt).
  *
- * Comment events emitted by nip34CommentsLoader are piped into
- * nip34ThreadLoader so that child events on individual comments are fetched.
- * A seenCommentIds set prevents duplicate loader calls within the same
- * subscription lifetime. Because nip34ThreadLoader is a singleton batching
- * loader, all per-comment calls within its bufferTime window are collapsed
- * into a single relay subscription.
+ * For each comment discovered by nip34CommentsLoader, all three thread
+ * loaders are fired recursively so child events on individual comments
+ * (reactions, zaps, deletions, etc.) are also fetched. A seenIds set
+ * prevents duplicate loader calls within the same subscription lifetime.
+ * Because the thread loaders are singleton batching loaders, all per-comment
+ * calls within their bufferTime window are collapsed into a single relay
+ * subscription per tag name.
  *
  * @param itemId - The event ID of the issue / patch / PR
  * @param relays - Relay URLs to query
@@ -427,17 +469,17 @@ export function nip34ThreadItemLoader(
   relays: string[],
 ): Observable<NostrEvent> {
   return merge(
-    // Reactions + zaps on the root item itself
-    nip34ThreadLoader({ value: itemId, relays }),
-    // Recursively fetch reactions + zaps for each comment
+    // All child events on the root item itself
+    nip34ThreadLoadAll(itemId, relays),
+    // Recursively fetch child events for each comment
     new Observable<NostrEvent>((subscriber) => {
-      const seenCommentIds = new Set<string>();
+      const seenIds = new Set<string>();
       const sub = nip34CommentsLoader({ value: itemId, relays }).subscribe({
         next: (event) => {
           const ev = event as NostrEvent;
-          if (!seenCommentIds.has(ev.id)) {
-            seenCommentIds.add(ev.id);
-            nip34ThreadLoader({ value: ev.id, relays }).subscribe(subscriber);
+          if (!seenIds.has(ev.id)) {
+            seenIds.add(ev.id);
+            nip34ThreadLoadAll(ev.id, relays).subscribe(subscriber);
           }
         },
         error: (err) => subscriber.error(err),
