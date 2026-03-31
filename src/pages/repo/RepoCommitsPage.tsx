@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
 import {
   useInfiniteCommitHistory,
@@ -67,6 +68,15 @@ export default function RepoCommitsPage() {
     : (explorer.commitHash ?? undefined);
 
   const history = useInfiniteCommitHistory(pool, poolState, historyCommit);
+
+  useSeoMeta({
+    title: repo
+      ? resolvedRef
+        ? `Commits on ${resolvedRef} - ${repo.name} - ngit`
+        : `Commits - ${repo.name} - ngit`
+      : "Commits - ngit",
+    description: repo?.description ?? "Browse commit history",
+  });
 
   // Build base path for commit links (strip /commits/... suffix)
   const basePath = useMemo(() => {

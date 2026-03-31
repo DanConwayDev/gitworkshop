@@ -21,6 +21,7 @@
  */
 
 import { useMemo } from "react";
+import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { repoToPath } from "@/lib/routeUtils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,6 +54,14 @@ export default function PRCommitPage() {
     nip05,
   } = useRepoContext();
   const store = useEventStore();
+  const repo = resolved?.repo;
+
+  useSeoMeta({
+    title: repo
+      ? `${prCommitId?.slice(0, 8) ?? "Commit"} - ${repo.name} - ngit`
+      : "Commit - ngit",
+    description: `View PR commit details${repo ? ` for ${repo.name}` : ""}`,
+  });
 
   const { pool, poolState } = useGitPool(cloneUrls);
 

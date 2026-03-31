@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
@@ -6,7 +7,15 @@ import { useGitPool } from "@/hooks/useGitPool";
 import { CommitDetailView } from "@/components/CommitDetailView";
 
 export default function RepoCommitPage() {
-  const { cloneUrls, commitId } = useRepoContext();
+  const { cloneUrls, commitId, resolved } = useRepoContext();
+  const repo = resolved?.repo;
+
+  useSeoMeta({
+    title: repo
+      ? `${commitId?.slice(0, 8) ?? "Commit"} - ${repo.name} - ngit`
+      : "Commit - ngit",
+    description: `View commit details${repo ? ` for ${repo.name}` : ""}`,
+  });
 
   const basePath = useMemo(() => {
     const pathname = window.location.pathname;

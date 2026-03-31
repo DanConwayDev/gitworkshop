@@ -1,5 +1,6 @@
 import type React from "react";
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useSeoMeta } from "@unhead/react";
 import {
   Card,
   CardContent,
@@ -665,6 +666,11 @@ function ExtraRelaysSection() {
 }
 
 export default function Settings() {
+  useSeoMeta({
+    title: "Settings - ngit",
+    description: "Manage relay configurations and application settings.",
+  });
+
   return (
     <div className="container mx-auto p-6 space-y-8 max-w-4xl">
       <div className="space-y-2">

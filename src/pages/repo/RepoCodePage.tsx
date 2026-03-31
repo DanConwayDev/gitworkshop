@@ -8,6 +8,7 @@ import {
   useCallback,
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
 import { useGitPool } from "@/hooks/useGitPool";
 import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
@@ -96,6 +97,22 @@ export default function RepoCodePage() {
   const explorer = useGitExplorer(pool, poolState, {
     refAndPath: treeRefAndPath,
     knownHeadCommit: effectiveHeadCommit,
+  });
+
+  // Page title: "<repo>/<path> at <ref> - ngit" or "<repo> - ngit" at root
+  const seoTitle = useMemo(() => {
+    const name = repo?.name ?? repoId;
+    const ref = explorer.resolvedRef;
+    const path = explorer.resolvedPath;
+    if (ref && path) return `${name}/${path} at ${ref} - ngit`;
+    if (ref) return `${name} at ${ref} - ngit`;
+    return `${name} - ngit`;
+  }, [repo?.name, repoId, explorer.resolvedRef, explorer.resolvedPath]);
+
+  useSeoMeta({
+    title: seoTitle,
+    description:
+      repo?.description ?? `Browse the source code of ${repo?.name ?? repoId}`,
   });
 
   // Build the base URL for this repo (without /tree/...)
