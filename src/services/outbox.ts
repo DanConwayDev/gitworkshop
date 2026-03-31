@@ -11,6 +11,11 @@
  * Permanent failures (paid relay, PoW required, whitelist/blacklist) are
  * never retried.
  *
+ * Broadly-sent items are pruned after 48 hours. Items that were never broadly
+ * sent are expired after 7 days: a final publish attempt is made (waiting for
+ * pool.event() to complete so relays that came back online get one last
+ * chance), then the item is removed from IndexedDB.
+ *
  * Relay groups are tracked by semantic ID (pubkey hex for author outbox/inbox,
  * repo coord for repo relays). A relay URL can belong to multiple groups (e.g.
  * a relay that is both the author's outbox and a repo relay). When a user's
@@ -22,6 +27,7 @@
  */
 
 import { BehaviorSubject, Subscription } from "rxjs";
+import { ignoreElements } from "rxjs/operators";
 import type { NostrEvent } from "nostr-tools";
 import type { RelayPool, PublishResponse } from "applesauce-relay";
 import { normalizeURL } from "applesauce-core/helpers";
@@ -296,8 +302,15 @@ async function idbDelete(id: string): Promise<void> {
 // OutboxStore
 // ---------------------------------------------------------------------------
 
-/** Prune items that have been broadly sent for longer than this */
-const PRUNE_AFTER_MS = 48 * 60 * 60 * 1000; // 48 hours
+/** Prune broadly-sent items after this long */
+const PRUNE_BROADLY_SENT_AFTER_MS = 48 * 60 * 60 * 1000; // 48 hours
+
+/**
+ * Expire items that were never broadly sent after this long.
+ * A final publish attempt is made before deletion so any relays that have
+ * come back online get one last chance to accept the event.
+ */
+const EXPIRE_UNSENT_AFTER_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /**
  * Callback type for resolving relay URLs for a given group ID.
@@ -814,14 +827,52 @@ class OutboxStore {
   }
 
   private async pruneOldItems(): Promise<void> {
-    const cutoff = Math.floor((Date.now() - PRUNE_AFTER_MS) / 1000);
+    const now = Date.now();
+    const broadlySentCutoff = Math.floor(
+      (now - PRUNE_BROADLY_SENT_AFTER_MS) / 1000,
+    );
+    const expiryCutoff = Math.floor((now - EXPIRE_UNSENT_AFTER_MS) / 1000);
     const items = this.items$.getValue();
-    const toDelete = items.filter((i) => i.broadlySent && i.createdAt < cutoff);
-    for (const item of toDelete) {
+
+    // Broadly-sent items older than 48 h — delete immediately
+    const broadlySentToDelete = items.filter(
+      (i) => i.broadlySent && i.createdAt < broadlySentCutoff,
+    );
+
+    // Non-broadly-sent items older than 7 days — final attempt then delete
+    const expiredUnsent = items.filter(
+      (i) => !i.broadlySent && i.createdAt < expiryCutoff,
+    );
+
+    for (const item of broadlySentToDelete) {
       await idbDelete(item.id);
     }
-    if (toDelete.length > 0) {
-      const deleteIds = new Set(toDelete.map((i) => i.id));
+
+    // For expired-unsent items: make one final publish attempt and wait for
+    // pool.event() to complete (it has its own per-relay timeout), then delete.
+    for (const item of expiredUnsent) {
+      if (this.pool) {
+        const retryUrls = item.relays
+          .filter((r) => r.status !== "success" && r.status !== "permanent")
+          .map((r) => r.url);
+
+        if (retryUrls.length > 0) {
+          await new Promise<void>((resolve) => {
+            this.pool!.event(retryUrls, item.event)
+              .pipe(ignoreElements())
+              .subscribe({ complete: resolve, error: resolve });
+          });
+        }
+      }
+      await idbDelete(item.id);
+    }
+
+    const deleteIds = new Set([
+      ...broadlySentToDelete.map((i) => i.id),
+      ...expiredUnsent.map((i) => i.id),
+    ]);
+
+    if (deleteIds.size > 0) {
       this.items$.next(items.filter((i) => !deleteIds.has(i.id)));
     }
   }
