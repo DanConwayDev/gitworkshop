@@ -140,24 +140,21 @@ export function ReactionsBar({
 
   return (
     <div className={cn("flex flex-wrap items-center gap-1.5 pt-2", className)}>
-      {/* Existing reaction groups */}
-      {Array.from(grouped.entries()).map(([emoji, pubkeys]) => {
-        const iMine = myPubkey ? pubkeys.has(myPubkey) : false;
-        return (
-          <ReactionPill
-            key={emoji}
-            emoji={emoji}
-            pubkeys={pubkeys}
-            isMine={iMine}
-            disabled={sending}
-            onClickMine={() => {
-              const ev = myReactionEvent(emoji);
-              if (ev) setDeleteTarget(ev);
-            }}
-            onClickOther={() => sendReaction(emoji)}
-          />
-        );
-      })}
+      {/* Existing reaction groups — collapsed view */}
+      {!pickerOpen &&
+        Array.from(grouped.entries()).map(([emoji, pubkeys]) => {
+          const iMine = myPubkey ? pubkeys.has(myPubkey) : false;
+          return (
+            <ReactionPill
+              key={emoji}
+              emoji={emoji}
+              pubkeys={pubkeys}
+              isMine={iMine}
+              disabled={sending}
+              onClick={() => setPickerOpen(true)}
+            />
+          );
+        })}
 
       {/* Add reaction / picker toggle — only shown when logged in */}
       {activeAccount && (
@@ -178,32 +175,56 @@ export function ReactionsBar({
               <Heart className="h-3 w-3" />
             </button>
           ) : (
-            <div className="flex flex-wrap items-center gap-1">
-              {PRESET_EMOJIS.map((emoji) => (
+            <div className="flex flex-col gap-2 w-full">
+              {/* Row 1: existing reactions with who reacted */}
+              {grouped.size > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {Array.from(grouped.entries()).map(([emoji, pubkeys]) => {
+                    const iMine = myPubkey ? pubkeys.has(myPubkey) : false;
+                    return (
+                      <ReactionGroup
+                        key={emoji}
+                        emoji={emoji}
+                        pubkeys={pubkeys}
+                        isMine={iMine}
+                        disabled={sending}
+                        onClickMine={() => {
+                          const ev = myReactionEvent(emoji);
+                          if (ev) setDeleteTarget(ev);
+                        }}
+                        onClickOther={() => sendReaction(emoji)}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+              {/* Row 2: unused preset emojis to pick from + close */}
+              <div className="flex flex-wrap items-center gap-1">
+                {PRESET_EMOJIS.filter((emoji) => !grouped.has(emoji)).map(
+                  (emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      disabled={sending}
+                      onClick={() => sendReaction(emoji)}
+                      className={cn(
+                        "rounded border border-border/40 px-1.5 py-0.5 text-sm",
+                        "hover:bg-muted/60 transition-colors disabled:opacity-40 text-foreground",
+                      )}
+                    >
+                      {emoji === "+" ? "👍" : emoji}
+                    </button>
+                  ),
+                )}
                 <button
-                  key={emoji}
                   type="button"
-                  disabled={sending}
-                  onClick={() => sendReaction(emoji)}
-                  className={cn(
-                    "rounded border border-border/40 px-1.5 py-0.5 text-sm",
-                    "hover:bg-muted/60 transition-colors disabled:opacity-40",
-                    myPubkey && grouped.get(emoji)?.has(myPubkey)
-                      ? "border-primary/50 bg-primary/10 text-primary"
-                      : "text-foreground",
-                  )}
+                  onClick={() => setPickerOpen(false)}
+                  className="rounded border border-border/30 p-0.5 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                  aria-label="Close reaction picker"
                 >
-                  {emoji === "+" ? "👍" : emoji}
+                  <X className="h-3 w-3" />
                 </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setPickerOpen(false)}
-                className="rounded border border-border/30 p-0.5 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                aria-label="Close reaction picker"
-              >
-                <X className="h-3 w-3" />
-              </button>
+              </div>
             </div>
           )}
         </>
@@ -223,10 +244,48 @@ export function ReactionsBar({
 }
 
 // ---------------------------------------------------------------------------
-// ReactionPill — a single grouped emoji pill with tooltip
+// ReactionPill — collapsed emoji pill (clicking opens the expanded view)
 // ---------------------------------------------------------------------------
 
 function ReactionPill({
+  emoji,
+  pubkeys,
+  isMine,
+  disabled,
+  onClick,
+}: {
+  emoji: string;
+  pubkeys: Set<string>;
+  isMine: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const display = emoji === "+" ? "👍" : emoji;
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
+        "transition-colors disabled:opacity-40",
+        isMine
+          ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
+          : "border-border/40 bg-muted/30 text-foreground hover:bg-muted/60",
+      )}
+    >
+      <span>{display}</span>
+      <span className="text-muted-foreground">{pubkeys.size}</span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ReactionGroup — expanded view: emoji button + list of who reacted
+// ---------------------------------------------------------------------------
+
+function ReactionGroup({
   emoji,
   pubkeys,
   isMine,
@@ -244,37 +303,49 @@ function ReactionPill({
   const display = emoji === "+" ? "👍" : emoji;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={isMine ? onClickMine : onClickOther}
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
-            "transition-colors disabled:opacity-40",
-            isMine
-              ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
-              : "border-border/40 bg-muted/30 text-foreground hover:bg-muted/60",
-          )}
-        >
-          <span>{display}</span>
-          <span className="text-muted-foreground">{pubkeys.size}</span>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-xs">
-        <div className="flex flex-wrap gap-1.5 p-0.5">
-          {Array.from(pubkeys).map((pk) => (
-            <UserLink
-              key={pk}
-              pubkey={pk}
-              avatarSize="sm"
-              nameClassName="text-xs"
-            />
-          ))}
-        </div>
-      </TooltipContent>
-    </Tooltip>
+    <div
+      className={cn(
+        "inline-flex items-center rounded-lg border overflow-hidden",
+        isMine ? "border-primary/50" : "border-border/40",
+      )}
+    >
+      {/* Emoji button — add or remove own reaction */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={isMine ? onClickMine : onClickOther}
+            className={cn(
+              "px-2.5 py-1 text-sm font-medium transition-colors disabled:opacity-40",
+              isMine
+                ? "bg-primary/20 text-primary hover:bg-primary/30"
+                : "bg-muted text-foreground hover:bg-muted/70",
+            )}
+            aria-label={
+              isMine ? `Remove ${display} reaction` : `React with ${display}`
+            }
+          >
+            {display}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          {isMine ? "Remove reaction" : "Add reaction"}
+        </TooltipContent>
+      </Tooltip>
+
+      {/* Who reacted — visually recessed so the emoji button stands out */}
+      <div className="flex items-center gap-1.5 px-2 py-1 bg-background/60">
+        {Array.from(pubkeys).map((pk) => (
+          <UserLink
+            key={pk}
+            pubkey={pk}
+            avatarSize="sm"
+            nameClassName="text-xs"
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
