@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { nip19 } from "nostr-tools";
+import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserRepositories } from "@/hooks/useUserRepositories";
@@ -27,7 +28,6 @@ import {
   UserPlus,
   UserMinus,
   Loader2,
-  GitCommitHorizontal,
 } from "lucide-react";
 import { useState } from "react";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -174,8 +174,8 @@ export default function UserPage({ pubkey }: UserPageProps) {
               {/* Npub copy + follow buttons */}
               <div className="mt-4 flex items-center gap-2 flex-wrap">
                 <CopyNpub npub={npub} />
-                <FollowButton pubkey={pubkey} />
                 <GitAuthorFollowButton pubkey={pubkey} />
+                <FollowButton pubkey={pubkey} />
               </div>
             </div>
           </div>
@@ -414,9 +414,14 @@ function FollowButton({ pubkey }: { pubkey: string }) {
   return (
     <>
       <Button
-        variant={isFollowing ? "outline" : "default"}
+        variant="outline"
         size="sm"
-        className="h-7 text-xs gap-1.5"
+        className={cn(
+          "h-7 text-xs gap-1.5",
+          isFollowing
+            ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"
+            : "text-muted-foreground hover:text-foreground",
+        )}
         onClick={handleClick}
         disabled={pending}
       >
@@ -427,7 +432,7 @@ function FollowButton({ pubkey }: { pubkey: string }) {
         ) : (
           <UserPlus className="h-3 w-3" />
         )}
-        {isFollowing ? "Unfollow" : "Follow"}
+        {isFollowing ? "Unfollow for Social" : "Follow for Social"}
       </Button>
 
       <AlertDialog open={showNoListDialog} onOpenChange={setShowNoListDialog}>
@@ -519,27 +524,24 @@ function GitAuthorFollowButton({ pubkey }: { pubkey: string }) {
 
   return (
     <Button
-      variant={isGitAuthorFollowing ? "outline" : "secondary"}
+      variant={isGitAuthorFollowing ? "outline" : "default"}
       size="sm"
-      className={
-        isGitAuthorFollowing
-          ? "h-7 text-xs gap-1.5 border-orange-500/40 text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"
-          : "h-7 text-xs gap-1.5"
-      }
+      className={cn(
+        "h-7 text-xs gap-1.5",
+        isGitAuthorFollowing &&
+          "border-violet-500/40 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 hover:text-violet-600 dark:hover:text-violet-400",
+      )}
       onClick={handleClick}
       disabled={pending}
-      title={
-        isGitAuthorFollowing
-          ? "Remove from git authors list"
-          : "Add to git authors list"
-      }
     >
       {pending ? (
         <Loader2 className="h-3 w-3 animate-spin" />
+      ) : isGitAuthorFollowing ? (
+        <UserMinus className="h-3 w-3" />
       ) : (
-        <GitCommitHorizontal className="h-3 w-3" />
+        <UserPlus className="h-3 w-3" />
       )}
-      {isGitAuthorFollowing ? "Git Author" : "Follow as Git Author"}
+      {isGitAuthorFollowing ? "Unfollow for Git" : "Follow for Git"}
     </Button>
   );
 }

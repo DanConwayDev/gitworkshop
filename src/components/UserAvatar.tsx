@@ -11,7 +11,7 @@ import { useIsFollowing } from "@/hooks/useIsFollowing";
 import { useIsGitAuthorFollowing } from "@/hooks/useIsGitAuthorFollowing";
 import { cn } from "@/lib/utils";
 import { nip19 } from "nostr-tools";
-import { UserCheck, GitCommitHorizontal } from "lucide-react";
+import { UserCheck } from "lucide-react";
 
 interface UserAvatarProps {
   pubkey: string;
@@ -34,12 +34,39 @@ const sizeClasses = {
   lg: "h-10 w-10 text-sm",
 };
 
-/** Icon sizes for the follow indicator badge, keyed by avatar size */
-const indicatorSizeClasses = {
-  xs: "h-2 w-2 -bottom-px -right-px",
-  sm: "h-3 w-3 -bottom-0.5 -right-0.5",
-  md: "h-3.5 w-3.5 -bottom-0.5 -right-0.5",
-  lg: "h-4 w-4 -bottom-1 -right-1",
+/** Badge size classes, keyed by avatar size */
+const badgeSizeClasses = {
+  xs: "h-2 w-2",
+  sm: "h-3 w-3",
+  md: "h-3.5 w-3.5",
+  lg: "h-4 w-4",
+};
+
+/**
+ * Position for a single badge (bottom-right corner).
+ * When both badges are shown the git badge sits here (front),
+ * and the social badge is offset slightly behind/left of it.
+ */
+const gitBadgePosClasses = {
+  xs: "-bottom-px -right-px",
+  sm: "-bottom-0.5 -right-0.5",
+  md: "-bottom-0.5 -right-0.5",
+  lg: "-bottom-1 -right-1",
+};
+
+/** Social badge position when shown alone (same corner as git). */
+const socialBadgeSoloPosClasses = gitBadgePosClasses;
+
+/**
+ * Social badge position when shown alongside the git badge.
+ * Offset enough to show a visible green crescent behind the violet badge,
+ * but never covering more than ~1/3 of the avatar.
+ */
+const socialBadgeDualPosClasses = {
+  xs: "-bottom-px right-0.5",
+  sm: "-bottom-0.5 right-1",
+  md: "-bottom-0.5 right-1.5",
+  lg: "-bottom-1 right-2",
 };
 
 export function UserAvatar({
@@ -72,61 +99,70 @@ export function UserAvatar({
     </Avatar>
   );
 
-  // Git author follow takes precedence over social follow for the indicator.
-  // - Orange badge with git icon  → in git authors list (kind:10017)
-  // - Green badge with check icon → social follow only (kind:3)
-  const showGitAuthor = showFollowIndicator && isGitAuthorFollowing;
-  const showSocialOnly =
-    showFollowIndicator && !isGitAuthorFollowing && isFollowing;
+  const showGit = showFollowIndicator && isGitAuthorFollowing;
+  const showSocial = showFollowIndicator && isFollowing;
+  const showBoth = showGit && showSocial;
 
-  const avatar = showGitAuthor ? (
+  // Build tooltip label
+  const tooltipLabel = showBoth
+    ? "You follow for Git and Social"
+    : showGit
+      ? "You follow for Git"
+      : showSocial
+        ? "You follow for Social"
+        : null;
+
+  const avatar = tooltipLabel ? (
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="relative inline-flex shrink-0">
           {avatarEl}
-          <span
-            className={cn(
-              "absolute flex items-center justify-center rounded-full",
-              "bg-orange-500 ring-1 ring-background",
-              indicatorSizeClasses[size],
-            )}
-            aria-label="Git author you follow"
-          >
-            <GitCommitHorizontal
-              className="text-white"
-              style={{ width: "65%", height: "65%" }}
-              strokeWidth={2.5}
-            />
-          </span>
+
+          {/* Social badge — green, behind git badge when both shown */}
+          {showSocial && (
+            <span
+              className={cn(
+                "absolute flex items-center justify-center rounded-full",
+                "bg-emerald-500 ring-1 ring-background",
+                badgeSizeClasses[size],
+                showBoth
+                  ? socialBadgeDualPosClasses[size]
+                  : socialBadgeSoloPosClasses[size],
+                showBoth && "z-10",
+              )}
+              aria-label="Social follow"
+            >
+              <UserCheck
+                className="text-white"
+                style={{ width: "65%", height: "65%" }}
+                strokeWidth={2.5}
+              />
+            </span>
+          )}
+
+          {/* Git badge — violet, always in front at bottom-right */}
+          {showGit && (
+            <span
+              className={cn(
+                "absolute flex items-center justify-center rounded-full",
+                "bg-violet-500 ring-1 ring-background",
+                badgeSizeClasses[size],
+                gitBadgePosClasses[size],
+                "z-20",
+              )}
+              aria-label="Git author follow"
+            >
+              <UserCheck
+                className="text-white"
+                style={{ width: "65%", height: "65%" }}
+                strokeWidth={2.5}
+              />
+            </span>
+          )}
         </span>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="text-xs">
-        Git author you follow
-      </TooltipContent>
-    </Tooltip>
-  ) : showSocialOnly ? (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="relative inline-flex shrink-0">
-          {avatarEl}
-          <span
-            className={cn(
-              "absolute flex items-center justify-center rounded-full",
-              "bg-emerald-500 ring-1 ring-background",
-              indicatorSizeClasses[size],
-            )}
-            aria-label="You follow this user"
-          >
-            <UserCheck
-              className="text-white"
-              style={{ width: "65%", height: "65%" }}
-              strokeWidth={2.5}
-            />
-          </span>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="text-xs">
-        You follow this user
+        {tooltipLabel}
       </TooltipContent>
     </Tooltip>
   ) : (
