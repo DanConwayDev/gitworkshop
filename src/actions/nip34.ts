@@ -175,6 +175,10 @@ export function CreateIssue(
     );
     const signed = await sign(draft);
 
+    // Add to local store immediately so the UI reflects the new issue without
+    // waiting for a relay round-trip.
+    eventStore.add(signed);
+
     // Phase 1 — publish immediately
     const immediateGroups = await buildImmediateRelayGroups(self, repoRelays, [
       repoCoord,
@@ -218,6 +222,10 @@ export function ChangeIssueStatus(
       self,
     );
     const signed = await sign(draft);
+
+    // Add to local store immediately so the UI reflects the status change
+    // without waiting for a relay round-trip.
+    eventStore.add(signed);
 
     // Phase 1 — publish immediately
     const immediateGroups = await buildImmediateRelayGroups(
@@ -264,6 +272,10 @@ export function RenameIssueSubject(
     );
     const signed = await sign(draft);
 
+    // Add to local store immediately so the rename is reflected in the UI
+    // without waiting for a relay round-trip.
+    eventStore.add(signed);
+
     const immediateGroups = await buildImmediateRelayGroups(
       self,
       repoRelays,
@@ -287,6 +299,10 @@ export function AttachIssueLabels(
   return async ({ factory, sign, self }) => {
     const draft = await factory.create(IssueLabelBlueprint, issueId, labels);
     const signed = await sign(draft);
+
+    // Add to local store immediately so the label change is reflected in the
+    // UI without waiting for a relay round-trip.
+    eventStore.add(signed);
 
     const immediateGroups = await buildImmediateRelayGroups(
       self,
@@ -326,6 +342,10 @@ export function CreateComment(
       options,
     );
     const signed = await sign(draft);
+
+    // Add to local store immediately so the comment appears in the thread
+    // without waiting for a relay round-trip.
+    eventStore.add(signed);
 
     // Phase 1 — publish immediately to user outbox + repo relays
     // Prefer the root event's 'a' tag (always the issue/PR); fall back to

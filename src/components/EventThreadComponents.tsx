@@ -14,6 +14,7 @@ import { CommentContent } from "@/components/CommentContent";
 import { ThreadTree } from "@/components/ThreadTree";
 import type { ThreadTreeNode } from "@/lib/threadTree";
 import { cn } from "@/lib/utils";
+import { OutboxStatusBadge } from "@/components/OutboxStatusStrip";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -59,15 +60,18 @@ export function EventBodyCard({
     <Card className="overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <UserLink
               pubkey={event.pubkey}
               avatarSize="md"
               nameClassName="text-sm"
             />
-            <p className="text-xs text-muted-foreground">
-              {format(createdAt, "MMM d, yyyy 'at' h:mm a")}
-            </p>
+            <span className="inline-flex items-center gap-1.5 flex-wrap">
+              <p className="text-xs text-muted-foreground">
+                {format(createdAt, "MMM d, yyyy 'at' h:mm a")}
+              </p>
+              <OutboxStatusBadge event={event} />
+            </span>
           </div>
           <EventCardActions event={event} />
         </div>
@@ -287,15 +291,18 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2 mb-1.5">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <UserLink
                   pubkey={comment.pubkey}
                   avatarSize="md"
                   nameClassName="text-sm"
                 />
-                <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  {timeAgo}
+                <span className="inline-flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {timeAgo}
+                  </span>
+                  <OutboxStatusBadge event={comment} />
                 </span>
               </div>
               <EventCardActions event={comment} />

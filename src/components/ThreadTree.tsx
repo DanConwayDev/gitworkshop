@@ -30,6 +30,7 @@ import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
 import { ReplyBox } from "@/components/ReplyBox";
 import type { ThreadContext } from "@/components/EventThreadComponents";
+import { OutboxStatusBadge } from "@/components/OutboxStatusStrip";
 
 // ---------------------------------------------------------------------------
 // Thread context — passes root info down without prop-drilling
@@ -246,9 +247,12 @@ function ThreadComment({ event }: { event: NostrEvent }) {
             avatarSize="md"
             nameClassName="text-sm"
           />
-          <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
-            <Calendar className="h-3 w-3" />
-            {timeAgo}
+          <span className="inline-flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {timeAgo}
+            </span>
+            <OutboxStatusBadge event={event} />
           </span>
         </div>
         <div className="flex items-center gap-1">
