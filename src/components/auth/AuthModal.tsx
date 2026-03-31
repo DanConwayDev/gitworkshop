@@ -185,7 +185,7 @@ export function AuthModal() {
 
     try {
       // Log in with the generated key first so the factory has a signer
-      login.nsec(nsec);
+      await login.nsec(nsec);
 
       // Publish kind:0 + kind:10002 via the CreateAccount action
       await runner.run(CreateAccount, displayName.trim());
