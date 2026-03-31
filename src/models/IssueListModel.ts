@@ -36,9 +36,9 @@ const ESSENTIALS_KINDS = [...STATUS_KINDS, LABEL_KIND, DELETION_KIND] as const;
  *      zaps into a single stream that re-emits whenever any of the three
  *      updates. buildResolvedIssues is called on each emission.
  *
- * Comment and zap counts are 0 until useNip34ItemLoader (tier: "thread")
- * fetches those events into the store. The model reacts to whatever is
- * present — no special casing.
+ * Comment counts are 0 until nip34ListLoader fetches comment events into
+ * the store. Zap counts are 0 until nip34ThreadItemLoader fetches them.
+ * The model reacts to whatever is present — no special casing.
  *
  * Used for both the list page (many issues) and the detail page (one issue,
  * passed as a single-element coord set). PatchListModel will be structurally

@@ -117,7 +117,7 @@ export function useResolvedPR(
   }, [resolved, prId]);
 
   useNip34ItemLoaderBatch(revisionRootIds, repoRelayGroup, {
-    tier: "thread",
+    includeThread: true,
     includeAuthorNip65: curationMode === "outbox",
   });
 

@@ -107,10 +107,10 @@ export function useIssues(
   const cacheKey = coords ? coordsCacheKey(coords) : "";
 
   // Fetch issues from relay and pipe each newly discovered issue ID into
-  // nip34EssentialsLoader via nip34RepoLoader. The factory handles dedup
-  // (seenIds in closure) and closes cleanly on unsubscribe. Filter merging
-  // with nip34ItemLoader calls from useNip34ItemLoader is automatic because
-  // both share the same singleton loader instances.
+  // nip34ListLoader via nip34RepoLoader. The factory handles dedup (seenIds
+  // in closure) and closes cleanly on unsubscribe. Filter merging with
+  // useNip34ItemLoader calls is automatic because both share the same
+  // singleton loader instances.
   use$(() => {
     if (!coords || coords.length === 0 || !repoRelayGroup) return undefined;
     return nip34RepoLoader(coords, repoRelayGroup);

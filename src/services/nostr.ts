@@ -243,26 +243,27 @@ loadAllNip05FromIdb().then((entries) => {
 });
 
 // ---------------------------------------------------------------------------
-// NIP-34 two-tier loaders for Issues, Patches, and PRs
+// NIP-34 singleton loaders for Issues, Patches, and PRs
 //
-// Each tier is a SINGLE loader instance per tag name, so all per-item calls
+// Each loader is a SINGLE instance per tag name, so all per-item calls
 // within the buffer window are collapsed into one relay subscription.
 //
-// Tier 1 — essentials (#e tag, bufferTime: 100ms)
-//   One subscription covers status (1630-1633), labels (1985), and deletions
-//   (5) for every item on the page: { kinds: [...], "#e": ["id1","id2",...] }
+// List level — essentials + comments
+//   Essentials (#e tag, bufferTime: 100ms): status (1630-1633), labels (1985),
+//   and deletions (5) for every item on the page.
+//   Comments (#E tag, bufferTime: 500ms): NIP-22 comments (1111) and PR
+//   updates (1619). The longer buffer ensures essentials land first.
 //
-// Tier 2 — thread (#E and #e tags, bufferTime: 500ms)
-//   Comments use the uppercase #E root tag (NIP-22), so they need their own
-//   loader. Reactions (7) and zaps (9735) share a single #e loader.
-//   The longer buffer ensures essentials always land first.
+// Thread level — reactions + zaps (#e tag, bufferTime: 500ms)
+//   Reactions (7) and zaps (9735). Only fired on detail pages.
 // ---------------------------------------------------------------------------
 
 const NIP34_ESSENTIALS_BUFFER = 100;
+const NIP34_COMMENTS_BUFFER = 500;
 const NIP34_THREAD_BUFFER = 500;
 
 /**
- * Tier 1 — essentials loader.
+ * Essentials loader (#e tag).
  * Fetches status (1630-1633), NIP-32 labels (1985), and deletion requests (5)
  * for issues/patches/PRs in a single batched relay subscription per buffer
  * window.
@@ -275,21 +276,23 @@ export const nip34EssentialsLoader = createTagValueLoader(pool, "e", {
 });
 
 /**
- * Tier 2 — thread loader for NIP-22 comments (kind 1111).
+ * Comments loader (#E tag).
+ * Fetches NIP-22 comments (kind 1111) and PR updates (kind 1619).
  * Uses the uppercase `E` root tag, so it needs its own loader instance
- * separate from the `#e` thread loader.
+ * separate from the `#e` loaders. The longer buffer ensures essentials
+ * land first.
  */
 export const nip34CommentsLoader = createTagValueLoader(pool, "E", {
   cacheRequest,
   eventStore,
   kinds: [1111, 1619],
-  bufferTime: NIP34_THREAD_BUFFER,
+  bufferTime: NIP34_COMMENTS_BUFFER,
 });
 
 /**
- * Tier 2 — thread loader for reactions (7) and zaps (9735).
+ * Thread loader (#e tag) — reactions (7) and zaps (9735).
  * Both use the lowercase `#e` tag, so they share one loader and one
- * batched relay subscription.
+ * batched relay subscription. Only fired on detail pages.
  */
 export const nip34ThreadLoader = createTagValueLoader(pool, "e", {
   cacheRequest,
@@ -301,44 +304,63 @@ export const nip34ThreadLoader = createTagValueLoader(pool, "e", {
 // ---------------------------------------------------------------------------
 // NIP-34 observable factories
 //
-// These are pure RxJS observable factories — no React, no hooks. They are
-// consumed by React hooks via use$(), which handles subscription lifecycle.
+// Pure RxJS observable factories — no React, no hooks. Consumed by React
+// hooks via use$(), which handles subscription lifecycle.
 //
-// Two factories cover the three loading tiers:
+// Two levels, each non-additive (no overlap):
 //
-//   nip34RepoLoader   — repo level: subscribes to all items for a set of repo
-//                       coordinates and pipes each newly discovered item ID
-//                       into nip34EssentialsLoader. Called from useIssues /
-//                       usePRs. seenIds in the closure ensures each ID is only
-//                       submitted to the loader once per subscription lifetime.
-//                       Closes and resets when the component unmounts (e.g.
-//                       navigating away from the repo).
+//   nip34ListLoader    — list level: essentials + comments for a single item.
+//                        Also used by nip34RepoLoader to fire both loaders
+//                        for each newly discovered item.
 //
-//   nip34ItemLoader   — item level: fires loader tiers for a single known item
-//                       ID. Tiers are additive — calling with a higher tier
-//                       fires any tiers not yet seen without re-firing lower
-//                       ones. seenTiers in the closure prevents duplicate
-//                       relay requests within the same subscription lifetime.
-//                       Separate instances for repo relays vs inbox delta
-//                       relays keep relay-group dedup independent.
+//   nip34ThreadItemLoader — thread level: reactions + zaps on the root AND
+//                        recursively on each comment. Only fired on detail
+//                        pages. Does NOT re-fire essentials or comments.
+//
+//   nip34RepoLoader    — repo level: subscribes to all items for a set of
+//                        repo coordinates and pipes each newly discovered
+//                        item ID into nip34ListLoader.
 //
 // Filter merging: because nip34EssentialsLoader / nip34CommentsLoader /
-// nip34ThreadLoader are singleton instances, calls from nip34RepoLoader and
-// nip34ItemLoader that arrive within the same buffer window are automatically
-// merged into a single relay subscription by applesauce — even across issues
-// and PRs.
+// nip34ThreadLoader are singleton instances, calls that arrive within the
+// same buffer window are automatically merged into a single relay
+// subscription by applesauce — even across issues and PRs.
 // ---------------------------------------------------------------------------
 
 /** All root item kinds tracked at the repo level (issues + PR root kinds). */
 const REPO_ITEM_KINDS = [ISSUE_KIND, ...PR_ROOT_KINDS] as const;
 
 /**
+ * List-level loader for a single item.
+ *
+ * Fires nip34EssentialsLoader (status, labels, deletions) and
+ * nip34CommentsLoader (NIP-22 comments, PR updates) for the given item ID.
+ * Essentials use a shorter bufferTime (100ms) so they land before comments
+ * (500ms).
+ *
+ * Called by nip34RepoLoader for each discovered item, and by the hook layer
+ * for detail pages. Because both use the same singleton loader instances,
+ * calls within the same buffer window are merged automatically.
+ *
+ * @param itemId - The event ID of the issue / patch / PR
+ * @param relays - Relay URLs to query
+ */
+export function nip34ListLoader(
+  itemId: string,
+  relays: string[],
+): Observable<NostrEvent> {
+  return merge(
+    nip34EssentialsLoader({ value: itemId, relays }),
+    nip34CommentsLoader({ value: itemId, relays }),
+  );
+}
+
+/**
  * Repo-level observable factory.
  *
  * Subscribes to all NIP-34 root items (issues + PR/patch roots) for the given
  * repository coordinates via the relay group. For each newly discovered item
- * ID, calls nip34EssentialsLoader so status, labels, and deletion events are
- * fetched and written into the EventStore.
+ * ID, calls nip34ListLoader so essentials and comments are fetched.
  *
  * Deduplication: a seenIds Set in the closure ensures each item ID is
  * submitted to the loaders exactly once, regardless of how many times the
@@ -346,13 +368,10 @@ const REPO_ITEM_KINDS = [ISSUE_KIND, ...PR_ROOT_KINDS] as const;
  * navigating away and back creates a new observable with a new set,
  * triggering a fresh fetch.
  *
- * Both essentials and comments are fired immediately for each discovered item.
  * Because nip34EssentialsLoader and nip34CommentsLoader are singleton
  * instances backed by batchLoader, all per-item calls within each loader's
  * bufferTime window are collapsed into a single relay subscription — so N
  * items produce one essentials REQ and one comments REQ, not 2N REQs.
- * Calls from nip34ItemLoader (detail pages) that arrive within the same
- * window are merged into the same subscriptions automatically.
  *
  * @param coords     - Sorted array of repo coordinate strings
  * @param relayGroup - Relay group from useResolvedRepository
@@ -373,17 +392,7 @@ export function nip34RepoLoader(
           const ev = event as NostrEvent;
           if (!seenIds.has(ev.id)) {
             seenIds.add(ev.id);
-            // These per-item calls are batched by the singleton loader
-            // instances: all IDs pushed within the bufferTime window are
-            // collapsed into a single relay subscription automatically.
-            nip34EssentialsLoader({
-              value: ev.id,
-              relays: relayUrls,
-            }).subscribe(subscriber);
-            nip34CommentsLoader({
-              value: ev.id,
-              relays: relayUrls,
-            }).subscribe(subscriber);
+            nip34ListLoader(ev.id, relayUrls).subscribe(subscriber);
           }
         },
         error: (err) => subscriber.error(err),
@@ -395,90 +404,46 @@ export function nip34RepoLoader(
 }
 
 /**
- * The loading tier for a single NIP-34 item.
+ * Thread-level loader for a single item (detail pages only).
  *
- * - essentials: status (1630-1633), labels (1985), deletions (5)
- * - comments:   essentials + NIP-22 comments (1111)
- * - thread:     comments + reactions (7) + zaps (9735)
+ * Fetches reactions (kind:7) and zaps (kind:9735) for the root item AND
+ * recursively for each comment discovered by nip34CommentsLoader.
+ *
+ * Does NOT re-fire essentials or comments — those are handled separately
+ * by nip34ListLoader (already called at the repo/list level).
+ *
+ * Comment events emitted by nip34CommentsLoader are piped into
+ * nip34ThreadLoader so that child events on individual comments are fetched.
+ * A seenCommentIds set prevents duplicate loader calls within the same
+ * subscription lifetime. Because nip34ThreadLoader is a singleton batching
+ * loader, all per-comment calls within its bufferTime window are collapsed
+ * into a single relay subscription.
+ *
+ * @param itemId - The event ID of the issue / patch / PR
+ * @param relays - Relay URLs to query
  */
-export type Nip34ItemTier = "essentials" | "comments" | "thread";
-
-/**
- * Item-level observable factory.
- *
- * Merges the appropriate singleton loader observables for a single known item
- * ID at the requested tier. Tiers are additive:
- *
- *   essentials  →  nip34EssentialsLoader only
- *   comments    →  essentials + nip34CommentsLoader
- *   thread      →  comments  + nip34ThreadLoader (reactions + zaps on root
- *                   AND on each comment discovered by nip34CommentsLoader)
- *
- * At the "thread" tier, comment events emitted by nip34CommentsLoader are
- * piped into nip34ThreadLoader so that reactions (kind:7), zaps (kind:9735),
- * and other child events on individual comments are fetched recursively.
- * A seenIds set prevents duplicate loader calls within the same subscription
- * lifetime. Because nip34ThreadLoader is a singleton batching loader, all
- * per-comment calls within its bufferTime window are collapsed into a single
- * relay subscription.
- *
- * Tier upgrade / deduplication: the hook layer (useNip34ItemLoader) manages
- * which tiers have already been subscribed via separate use$() calls keyed on
- * the tier. When the user navigates to a higher-tier page (e.g. list → detail)
- * only the new tier's use$() fires — lower tiers remain open and are not
- * re-subscribed. On navigation away from the repo, all use$() calls
- * unsubscribe and the next visit starts fresh.
- *
- * Relay-group independence: pass repo relays and inbox-delta relays as
- * separate nip34ItemLoader calls so each has its own subscription and
- * deduplication is independent per relay set.
- *
- * Filter merging: because nip34EssentialsLoader / nip34CommentsLoader /
- * nip34ThreadLoader are singleton instances, concurrent calls from multiple
- * components within the same buffer window are merged into a single relay
- * subscription automatically.
- *
- * @param itemId   - The event ID of the issue / patch / PR
- * @param relays   - Relay URLs to query
- * @param tier     - The desired loading tier
- */
-export function nip34ItemLoader(
+export function nip34ThreadItemLoader(
   itemId: string,
   relays: string[],
-  tier: Nip34ItemTier,
 ): Observable<NostrEvent> {
-  const observables: Observable<NostrEvent>[] = [
-    nip34EssentialsLoader({ value: itemId, relays }),
-  ];
-
-  if (tier === "comments" || tier === "thread") {
-    observables.push(nip34CommentsLoader({ value: itemId, relays }));
-  }
-
-  if (tier === "thread") {
-    observables.push(nip34ThreadLoader({ value: itemId, relays }));
-
-    // Recursively fetch child events (reactions, zaps, deletions) for each
-    // comment discovered by nip34CommentsLoader. Each comment ID is piped
-    // into the singleton nip34ThreadLoader which batches them automatically.
-    observables.push(
-      new Observable<NostrEvent>((subscriber) => {
-        const seenCommentIds = new Set<string>();
-        const sub = nip34CommentsLoader({ value: itemId, relays }).subscribe({
-          next: (event) => {
-            const ev = event as NostrEvent;
-            if (!seenCommentIds.has(ev.id)) {
-              seenCommentIds.add(ev.id);
-              nip34ThreadLoader({ value: ev.id, relays }).subscribe(subscriber);
-            }
-          },
-          error: (err) => subscriber.error(err),
-          complete: () => subscriber.complete(),
-        });
-        return () => sub.unsubscribe();
-      }),
-    );
-  }
-
-  return merge(...observables);
+  return merge(
+    // Reactions + zaps on the root item itself
+    nip34ThreadLoader({ value: itemId, relays }),
+    // Recursively fetch reactions + zaps for each comment
+    new Observable<NostrEvent>((subscriber) => {
+      const seenCommentIds = new Set<string>();
+      const sub = nip34CommentsLoader({ value: itemId, relays }).subscribe({
+        next: (event) => {
+          const ev = event as NostrEvent;
+          if (!seenCommentIds.has(ev.id)) {
+            seenCommentIds.add(ev.id);
+            nip34ThreadLoader({ value: ev.id, relays }).subscribe(subscriber);
+          }
+        },
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+      return () => sub.unsubscribe();
+    }),
+  );
 }

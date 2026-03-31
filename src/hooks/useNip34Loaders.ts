@@ -8,9 +8,9 @@ import { of, merge } from "rxjs";
 import { map } from "rxjs/operators";
 import {
   liveness,
-  nip34ItemLoader,
+  nip34ListLoader,
+  nip34ThreadItemLoader,
   pool,
-  type Nip34ItemTier,
 } from "@/services/nostr";
 import { gitIndexRelays, relayCurationMode } from "@/services/settings";
 import { mapEventsToStore } from "applesauce-core";
@@ -28,20 +28,12 @@ const INBOX_COVERAGE_THRESHOLD = 2;
 
 export interface Nip34ItemLoaderOptions {
   /**
-   * Loading tier — controls which relay subscriptions are opened.
-   *
-   *   essentials  status (1630-1633), labels (1985), deletions (5)
-   *   comments    essentials + NIP-22 comments (1111)
-   *   thread      comments + reactions (7) + zaps (9735)
-   *
-   * Tiers are additive within a subscription lifetime: upgrading from
-   * "essentials" to "thread" opens only the new tiers without re-firing
-   * lower ones. On navigation away from the repo all subscriptions close;
-   * the next visit starts fresh.
-   *
-   * Default: "essentials"
+   * When true, also fires nip34ThreadItemLoader to fetch reactions (kind:7)
+   * and zaps (kind:9735) on the root item and recursively on each comment.
+   * Enable on detail pages (IssuePage / PRPage).
+   * Default: false.
    */
-  tier?: Nip34ItemTier;
+  includeThread?: boolean;
   /**
    * When true, also fetches from the NIP-65 inbox relays of the item author
    * when those relays are not already sufficiently covered by the group.
@@ -102,34 +94,27 @@ function useAuthorInboxDeltaRelays(
 }
 
 /**
- * Triggers tiered loading for a single NIP-34 item (issue, patch, or PR).
+ * Triggers loading for a single NIP-34 item (issue, patch, or PR).
  *
- * Loading tiers (see Nip34ItemLoaderOptions.tier):
+ * Two non-additive levels:
  *
- *   essentials (default) — status, labels, deletions
- *     Called from list pages. Merges automatically with nip34RepoLoader
+ *   list (always) — essentials (status, labels, deletions) + comments.
+ *     Fires nip34ListLoader. Merges automatically with nip34RepoLoader
  *     calls from useIssues / usePRs because both use the same singleton
  *     loader instances — applesauce batches them into one relay subscription.
  *
- *   comments — essentials + NIP-22 comments
- *     Called when comment counts are needed on list pages.
+ *   thread (when includeThread is true) — reactions + zaps on root and
+ *     recursively on each comment. Fires nip34ThreadItemLoader. Does NOT
+ *     re-fire essentials or comments.
  *
- *   thread — comments + reactions + zaps
- *     Called from detail pages (IssuePage / PRPage).
- *
- * Tier upgrades: each tier is a separate use$() call keyed on its own dep
- * string. When the user navigates to a higher-tier page, only the new tier's
- * use$() fires — lower tiers remain open. All subscriptions close when the
- * user navigates away from the repo; the next visit starts fresh.
- *
- * NIP-65 author inbox relays: when includeAuthorNip65 is true, a second
- * nip34ItemLoader is fired against the delta inbox relays (those not already
- * covered by the group). This is a separate observable with its own
- * subscription — the shared relay group is never mutated.
+ * NIP-65 author inbox relays: when includeAuthorNip65 is true, both levels
+ * are also fired against the delta inbox relays (those not already covered
+ * by the group). This is a separate observable with its own subscription —
+ * the shared relay group is never mutated.
  *
  * @param itemId         - The event ID of the issue / patch / PR
  * @param repoRelayGroup - The base relay group from useResolvedRepository
- * @param options        - Tier and NIP-65 options
+ * @param options        - Thread and NIP-65 options
  */
 export function useNip34ItemLoader(
   itemId: string | undefined,
@@ -137,45 +122,31 @@ export function useNip34ItemLoader(
   options?: Nip34ItemLoaderOptions,
 ): void {
   const store = useEventStore();
-  const tier = options?.tier ?? "essentials";
+  const includeThread = options?.includeThread ?? false;
 
   const repoRelays = repoRelayGroup?.relays.map((r) => r.url) ?? [];
   const repoRelayKey = repoRelays.join(",");
 
   // ── Repo relay loaders ────────────────────────────────────────────────────
-  // One use$() per tier so lower tiers stay open when upgrading to a higher
-  // tier on a detail page. Each dep array is stable for its tier — the
-  // boolean coercion means the dep only changes when the tier threshold is
-  // crossed, not on every render.
 
-  // Tier: essentials (always fires when itemId + relays are known)
+  // List level: essentials + comments (always fires)
   use$(() => {
     if (!itemId || repoRelays.length === 0) return undefined;
-    return nip34ItemLoader(itemId, repoRelays, "essentials");
+    return nip34ListLoader(itemId, repoRelays);
   }, [itemId, repoRelayKey]);
 
-  // Tier: comments (fires when tier is "comments" or "thread")
+  // Thread level: reactions + zaps on root + recursively on comments
   use$(() => {
-    if (!itemId || repoRelays.length === 0) return undefined;
-    if (tier !== "comments" && tier !== "thread") return undefined;
-    return nip34ItemLoader(itemId, repoRelays, "comments");
-  }, [itemId, repoRelayKey, tier === "comments" || tier === "thread"]);
-
-  // Tier: thread (fires only when tier is "thread")
-  use$(() => {
-    if (!itemId || repoRelays.length === 0) return undefined;
-    if (tier !== "thread") return undefined;
-    return nip34ItemLoader(itemId, repoRelays, "thread");
-  }, [itemId, repoRelayKey, tier === "thread"]);
+    if (!itemId || repoRelays.length === 0 || !includeThread) return undefined;
+    return nip34ThreadItemLoader(itemId, repoRelays);
+  }, [itemId, repoRelayKey, includeThread]);
 
   // ── NIP-65 author inbox relay loaders ─────────────────────────────────────
-  // Reactively resolve the item author pubkey from the store.
   const authorPubkey = use$(() => {
     if (!itemId || !options?.includeAuthorNip65) return of(undefined);
     return store.event(itemId).pipe(map((ev) => ev?.pubkey));
   }, [itemId, options?.includeAuthorNip65, store]);
 
-  // Delta: author inbox relays not already sufficiently covered by the group.
   const authorInboxDelta = useAuthorInboxDeltaRelays(
     authorPubkey,
     repoRelayGroup,
@@ -184,41 +155,35 @@ export function useNip34ItemLoader(
 
   const inboxDeltaKey = authorInboxDelta.join(",");
 
-  // Tier: essentials on inbox delta relays
+  // List level on inbox delta relays
   use$(() => {
     if (!itemId || authorInboxDelta.length === 0) return undefined;
-    return nip34ItemLoader(itemId, authorInboxDelta, "essentials");
+    return nip34ListLoader(itemId, authorInboxDelta);
   }, [itemId, inboxDeltaKey]);
 
-  // Tier: comments on inbox delta relays
+  // Thread level on inbox delta relays
   use$(() => {
-    if (!itemId || authorInboxDelta.length === 0) return undefined;
-    if (tier !== "comments" && tier !== "thread") return undefined;
-    return nip34ItemLoader(itemId, authorInboxDelta, "comments");
-  }, [itemId, inboxDeltaKey, tier === "comments" || tier === "thread"]);
-
-  // Tier: thread on inbox delta relays
-  use$(() => {
-    if (!itemId || authorInboxDelta.length === 0) return undefined;
-    if (tier !== "thread") return undefined;
-    return nip34ItemLoader(itemId, authorInboxDelta, "thread");
-  }, [itemId, inboxDeltaKey, tier === "thread"]);
+    if (!itemId || authorInboxDelta.length === 0 || !includeThread)
+      return undefined;
+    return nip34ThreadItemLoader(itemId, authorInboxDelta);
+  }, [itemId, inboxDeltaKey, includeThread]);
 }
 
 // ---------------------------------------------------------------------------
-// Batch loader — fire nip34ItemLoader for multiple item IDs at once
+// Batch loader — fire loaders for multiple item IDs at once
 // ---------------------------------------------------------------------------
 
 /**
- * Triggers tiered loading for multiple NIP-34 item IDs simultaneously.
+ * Triggers loading for multiple NIP-34 item IDs simultaneously.
  *
- * Internally calls nip34ItemLoader for each ID. Because the singleton loader
- * instances batch all calls within their buffer window, this results in a
- * single merged relay subscription rather than N separate ones.
+ * Internally calls nip34ListLoader (and optionally nip34ThreadItemLoader)
+ * for each ID. Because the singleton loader instances batch all calls within
+ * their buffer window, this results in a single merged relay subscription
+ * rather than N separate ones.
  *
  * @param itemIds        - Array of event IDs to load
  * @param repoRelayGroup - The base relay group from useResolvedRepository
- * @param options        - Tier and NIP-65 options (applied to all IDs)
+ * @param options        - Thread and NIP-65 options (applied to all IDs)
  */
 export function useNip34ItemLoaderBatch(
   itemIds: string[],
@@ -226,35 +191,25 @@ export function useNip34ItemLoaderBatch(
   options?: Nip34ItemLoaderOptions,
 ): void {
   const store = useEventStore();
-  const tier = options?.tier ?? "essentials";
+  const includeThread = options?.includeThread ?? false;
 
   const repoRelays = repoRelayGroup?.relays.map((r) => r.url) ?? [];
   const repoRelayKey = repoRelays.join(",");
   // Stable key for the ID list — re-subscribes only when IDs actually change
   const idsKey = [...itemIds].sort().join(",");
 
+  // List level: essentials + comments for all IDs
   use$(() => {
     if (itemIds.length === 0 || repoRelays.length === 0) return undefined;
-    return merge(
-      ...itemIds.map((id) => nip34ItemLoader(id, repoRelays, "essentials")),
-    );
+    return merge(...itemIds.map((id) => nip34ListLoader(id, repoRelays)));
   }, [idsKey, repoRelayKey]);
 
+  // Thread level: reactions + zaps for all IDs
   use$(() => {
-    if (itemIds.length === 0 || repoRelays.length === 0) return undefined;
-    if (tier !== "comments" && tier !== "thread") return undefined;
-    return merge(
-      ...itemIds.map((id) => nip34ItemLoader(id, repoRelays, "comments")),
-    );
-  }, [idsKey, repoRelayKey, tier === "comments" || tier === "thread"]);
-
-  use$(() => {
-    if (itemIds.length === 0 || repoRelays.length === 0) return undefined;
-    if (tier !== "thread") return undefined;
-    return merge(
-      ...itemIds.map((id) => nip34ItemLoader(id, repoRelays, "thread")),
-    );
-  }, [idsKey, repoRelayKey, tier === "thread"]);
+    if (itemIds.length === 0 || repoRelays.length === 0 || !includeThread)
+      return undefined;
+    return merge(...itemIds.map((id) => nip34ThreadItemLoader(id, repoRelays)));
+  }, [idsKey, repoRelayKey, includeThread]);
 
   // NIP-65 author inbox relay loading per item
   // (Only fires when includeAuthorNip65 is true — resolves each item's author
@@ -285,30 +240,20 @@ export function useNip34ItemLoaderBatch(
   );
   const inboxDeltaKey = authorInboxDelta.join(",");
 
+  // List level on inbox delta relays
   use$(() => {
     if (itemIds.length === 0 || authorInboxDelta.length === 0) return undefined;
-    return merge(
-      ...itemIds.map((id) =>
-        nip34ItemLoader(id, authorInboxDelta, "essentials"),
-      ),
-    );
+    return merge(...itemIds.map((id) => nip34ListLoader(id, authorInboxDelta)));
   }, [idsKey, inboxDeltaKey]);
 
+  // Thread level on inbox delta relays
   use$(() => {
-    if (itemIds.length === 0 || authorInboxDelta.length === 0) return undefined;
-    if (tier !== "comments" && tier !== "thread") return undefined;
+    if (itemIds.length === 0 || authorInboxDelta.length === 0 || !includeThread)
+      return undefined;
     return merge(
-      ...itemIds.map((id) => nip34ItemLoader(id, authorInboxDelta, "comments")),
+      ...itemIds.map((id) => nip34ThreadItemLoader(id, authorInboxDelta)),
     );
-  }, [idsKey, inboxDeltaKey, tier === "comments" || tier === "thread"]);
-
-  use$(() => {
-    if (itemIds.length === 0 || authorInboxDelta.length === 0) return undefined;
-    if (tier !== "thread") return undefined;
-    return merge(
-      ...itemIds.map((id) => nip34ItemLoader(id, authorInboxDelta, "thread")),
-    );
-  }, [idsKey, inboxDeltaKey, tier === "thread"]);
+  }, [idsKey, inboxDeltaKey, includeThread]);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,14 +261,14 @@ export function useNip34ItemLoaderBatch(
 // ---------------------------------------------------------------------------
 
 /**
- * Fetches a single NIP-34 item's root event from relays and triggers tiered
- * loading (essentials + comments + thread).
+ * Fetches a single NIP-34 item's root event from relays and triggers
+ * list + thread loading.
  *
  * Shared between useResolvedIssue and useResolvedPR. Both hooks need the same
  * three steps:
  *   1. Fetch root event by ID from repoRelayGroup (or fallback gitIndexRelays)
  *   2. In outbox mode, also fetch from extraRelaysForMaintainerMailboxCoverage
- *   3. Trigger useNip34ItemLoader at "thread" tier
+ *   3. Trigger useNip34ItemLoader with includeThread: true
  *
  * @param itemId          - The event ID of the root issue / PR / patch
  * @param repoRelayGroup  - Base relay group from useResolvedRepository
@@ -368,9 +313,9 @@ export function useNip34ItemDetailLoader(
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [itemId, curationMode, extraRelaysForMaintainerMailboxCoverage, store]);
 
-  // ── 3. Trigger tiered loading (essentials + comments + thread) ──────────
+  // ── 3. Trigger loading (list + thread) ───────────────────────────────────
   useNip34ItemLoader(itemId, repoRelayGroup, {
-    tier: "thread",
+    includeThread: true,
     includeAuthorNip65: curationMode === "outbox",
   });
 
