@@ -80,6 +80,8 @@ function kindLabel(kind: number): string {
       return "Status: Draft";
     case COMMENT_KIND:
       return "Comment";
+    case 7:
+      return "Reaction";
     case 0:
       return "Profile";
     case 1:
@@ -168,6 +170,39 @@ function useEventContext(
         const label = repoName
           ? `${repoName}: re: ${subject}`
           : `re: ${subject}`;
+        return { label, path: `/${nevent}` };
+      }
+    }
+    return undefined;
+  }
+
+  // Reactions (kind 7) — label shows what was reacted to, link is the reaction's
+  // own nevent permalink which resolves to the target thread (with anchor if the
+  // target is a comment).
+  if (kind === 7) {
+    const eTags = event.tags.filter(([t]) => t === "e");
+    const targetId = eTags[eTags.length - 1]?.[1];
+    if (targetId) {
+      const targetEvent = store.getEvent(targetId);
+      if (targetEvent) {
+        const repoName = repoNameFromGroups(relayGroupDefs, store);
+        const emoji = event.content || "+";
+        const nevent = eventIdToNevent(event.id);
+        // If the reaction targets a comment (kind 1111), walk up to the root
+        // event for the subject and prefix with "re:" to show the hierarchy.
+        let subject: string;
+        if (targetEvent.kind === COMMENT_KIND) {
+          const rootId = targetEvent.tags.find(([t]) => t === "E")?.[1];
+          const rootEvent = rootId ? store.getEvent(rootId) : undefined;
+          subject = rootEvent
+            ? `re: ${extractSubject(rootEvent)}`
+            : `re: (unknown)`;
+        } else {
+          subject = extractSubject(targetEvent);
+        }
+        const label = repoName
+          ? `${repoName}: ${emoji} on "${subject}"`
+          : `${emoji} on "${subject}"`;
         return { label, path: `/${nevent}` };
       }
     }

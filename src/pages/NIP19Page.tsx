@@ -198,6 +198,34 @@ function EventRedirect({
     );
   }
 
+  // NIP-25 reaction (kind 7) — resolve the target event (last `e` tag per spec)
+  if (kind === 7) {
+    const eTags = event.tags.filter(([t]) => t === "e");
+    const lastETag = eTags[eTags.length - 1];
+    const targetId = lastETag?.[1];
+    const targetRelay = lastETag?.[2];
+    if (!targetId) return <NotFound />;
+    const relays = targetRelay
+      ? [targetRelay, ...hintRelays.filter((r) => r !== targetRelay)]
+      : hintRelays;
+    // Use the `k` tag to check whether the reaction targets a comment (kind 1111).
+    // If so, pass the target ID as commentId so the redirect anchors to that
+    // comment in the thread. For direct issue/PR reactions there is no
+    // per-reaction anchor in the UI so we don't pass a commentId.
+    const targetKind = parseInt(
+      event.tags.find(([t]) => t === "k")?.[1] ?? "",
+      10,
+    );
+    const resolvedCommentId = targetKind === 1111 ? targetId : undefined;
+    return (
+      <EventRedirect
+        eventId={targetId}
+        hintRelays={relays}
+        commentId={resolvedCommentId}
+      />
+    );
+  }
+
   return <NotFound />;
 }
 
