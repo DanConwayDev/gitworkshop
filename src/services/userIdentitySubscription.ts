@@ -1,25 +1,28 @@
 /**
  * userIdentitySubscription — persistent relay subscription for the active
- * user's own identity events.
+ * user's own replaceable events.
  *
- * Keeps a live subscription open on the user's outbox relays (and the
- * configured lookup relays as a fallback) for the four event kinds that
- * define who the user is and where they publish:
+ * Keeps a live subscription open on the UNION of the user's outbox relays AND
+ * the configured lookup/index relays for all replaceable event kinds that
+ * define who the user is, where they publish, and what they follow:
  *
  *   kind 0     — profile metadata
- *   kind 3     — contact / follow list  ← most critical for safe follow edits
+ *   kind 3     — contact / follow list
  *   kind 10002 — NIP-65 relay list (mailboxes)
+ *   kind 10017 — NIP-51 Git authors follow list
+ *   kind 10018 — NIP-51 Git repositories follow list
  *   kind 10317 — Grasp server list
  *
  * Events are piped directly into the EventStore (and therefore the IndexedDB
  * cache via persistEventsToCache) so they are immediately available to any
  * model or action that reads from the store.
  *
- * This is the foundation for the robust follow action: by keeping kind:3
- * continuously up-to-date from ALL of the user's outbox relays, we ensure
- * that a follow/unfollow action always starts from the freshest known state —
- * even if the user updated their contact list on a different client that
- * publishes to relays we haven't queried yet.
+ * This is the foundation for robust replaceable-event actions: by keeping
+ * these kinds continuously up-to-date from ALL of the user's outbox relays
+ * AND index relays, we ensure that any action that modifies a replaceable
+ * event always starts from the freshest known state — even if the user
+ * updated the event on a different client that publishes to relays we
+ * haven't queried yet.
  *
  * Usage (called from accounts.ts on active account change):
  *
@@ -35,23 +38,30 @@ import { eventStore, pool } from "./nostr";
 import { lookupRelays } from "./settings";
 import type { Filter } from "applesauce-core/helpers";
 
-/** Event kinds that define the user's identity and relay configuration. */
-export const USER_IDENTITY_KINDS = [
+/**
+ * All replaceable event kinds that define the user's identity, relay
+ * configuration, and list preferences. Any kind added here will be
+ * persistently subscribed to for the active user's session.
+ *
+ * This is the single source of truth — import it from here when you need
+ * to check whether a kind is a "user replaceable" kind.
+ */
+export const USER_REPLACEABLE_KINDS = [
   0, // profile metadata
   3, // contact / follow list
   10002, // NIP-65 relay list (mailboxes)
+  10017, // NIP-51 Git authors follow list
+  10018, // NIP-51 Git repositories follow list
   10317, // Grasp server list
 ] as const;
 
 /**
- * Minimum number of relays we must be able to subscribe to.
- * If the outbox relay list is empty we fall back to lookupRelays.
- */
-const MIN_RELAY_COUNT = 1;
-
-/**
- * Open a persistent subscription for the user's identity events on their
- * outbox relays (falling back to lookup relays when none are known yet).
+ * Open a persistent subscription for the user's replaceable events on the
+ * UNION of their outbox relays and the configured lookup/index relays.
+ *
+ * Using both relay sets (not one as fallback for the other) ensures we
+ * catch updates published from other clients that may have written to
+ * index relays but not to all of the user's outbox relays, or vice versa.
  *
  * Returns a cleanup function — call it when the account changes or logs out.
  */
@@ -59,17 +69,13 @@ export function startUserIdentitySubscription(
   pubkey: string,
   outboxRelays: string[],
 ): () => void {
-  // Use outbox relays when available, otherwise fall back to lookup relays
-  // so we still get data even before the user's NIP-65 list is loaded.
-  const relays =
-    outboxRelays.length >= MIN_RELAY_COUNT
-      ? outboxRelays
-      : lookupRelays.getValue();
+  // Union of outbox relays and lookup/index relays, deduplicated
+  const relays = [...new Set([...outboxRelays, ...lookupRelays.getValue()])];
 
   if (relays.length === 0) return () => {};
 
   const filter: Filter = {
-    kinds: [...USER_IDENTITY_KINDS],
+    kinds: [...USER_REPLACEABLE_KINDS],
     authors: [pubkey],
   };
 

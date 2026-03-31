@@ -83,14 +83,14 @@ registerCommonAccountTypes(accounts);
     }
   });
 
-  // Keep a persistent subscription open for the active user's identity events
-  // (kind 0, 3, 10002, 10317) on their outbox relays.
+  // Keep a persistent subscription open for the active user's replaceable
+  // events (kinds 0, 3, 10002, 10017, 10018, 10317) on the union of their
+  // outbox relays and lookup/index relays.
   //
   // Strategy: whenever the active account changes OR their NIP-65 outbox relay
   // list changes, tear down the previous subscription and start a fresh one on
-  // the updated relay set. This ensures kind:3 is always as fresh as possible
-  // from ALL of the user's outbox relays — the prerequisite for safe follow
-  // list edits.
+  // the updated relay set. This ensures all user replaceable events are always
+  // as fresh as possible — the prerequisite for safe replaceable event edits.
   let stopIdentitySub: (() => void) | null = null;
 
   accounts.active$

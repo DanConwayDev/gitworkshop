@@ -1,10 +1,13 @@
 import { ActionRunner, Actions } from "applesauce-actions";
 import { EventFactory } from "applesauce-core";
-import { kinds } from "nostr-tools";
 import type { NostrEvent } from "nostr-tools";
 import { eventStore, publish } from "./nostr";
 import { lookupRelays } from "./settings";
 import { accounts } from "./accounts";
+import { USER_REPLACEABLE_KINDS } from "./userIdentitySubscription";
+
+/** Set of user replaceable kinds for fast lookup in runnerPublish. */
+const USER_REPLACEABLE_SET = new Set<number>(USER_REPLACEABLE_KINDS);
 
 /**
  * Global EventFactory instance for creating signed events.
@@ -19,16 +22,17 @@ export const factory = new EventFactory({
 /**
  * Publish function passed to the ActionRunner.
  *
- * For kind:3 (contacts) events, lookup/index relays are added as a separate
- * "User Index Relays" group so that the updated follow list reaches
+ * For any user replaceable event kind (contacts, relay list, grasp list,
+ * git authors, git repositories, etc.), lookup/index relays are added as a
+ * separate "User Index Relays" group so that the updated event reaches
  * well-connected index relays in addition to the user's own outbox relays.
- * This improves the chance that other clients can discover the latest list
+ * This improves the chance that other clients can discover the latest event
  * even if they don't know all of the user's outbox relays.
  *
  * For all other events the call is forwarded to publish() unchanged.
  */
 function runnerPublish(event: NostrEvent, relays?: string[]): Promise<void> {
-  if (event.kind === kinds.Contacts) {
+  if (USER_REPLACEABLE_SET.has(event.kind)) {
     return publish(event, relays, {
       "User Index Relays": lookupRelays.getValue(),
     });

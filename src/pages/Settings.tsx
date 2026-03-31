@@ -27,6 +27,8 @@ import { useAccount } from "@/hooks/useAccount";
 import { useUser } from "@/hooks/useUser";
 import { useGraspServers } from "@/hooks/useGraspServers";
 import { usePublish } from "@/hooks/usePublish";
+import { useRobustReplaceableAction } from "@/hooks/useRobustReplaceableAction";
+import { useToast } from "@/hooks/useToast";
 import {
   AddInboxRelay,
   AddOutboxRelay,
@@ -188,12 +190,30 @@ function DiscoveryRelaysSection() {
   );
 }
 
+/** kind:10002 — NIP-65 relay list */
+const MAILBOXES_KIND = 10002;
+
 function OutboxRelaysSection() {
   const account = useAccount();
   const user = useUser(account?.pubkey);
   const outboxes = use$(user?.outboxes$);
+  const { execute } = useRobustReplaceableAction();
+  const { toast } = useToast();
 
   if (!account) return null;
+
+  const safeRun = async (action: () => Promise<void>) => {
+    try {
+      await execute(MAILBOXES_KIND, action);
+    } catch (err) {
+      toast({
+        title: "Failed to update relay list",
+        description:
+          err instanceof Error ? err.message : "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <Card>
@@ -209,11 +229,15 @@ function OutboxRelaysSection() {
             <RelayItem
               key={index}
               relay={outbox}
-              onRemove={() => runner.run(RemoveOutboxRelay, outbox)}
+              onRemove={() =>
+                safeRun(() => runner.run(RemoveOutboxRelay, outbox))
+              }
             />
           ))}
         </div>
-        <NewRelayForm onAdd={(relay) => runner.run(AddOutboxRelay, relay)} />
+        <NewRelayForm
+          onAdd={(relay) => safeRun(() => runner.run(AddOutboxRelay, relay))}
+        />
       </CardContent>
     </Card>
   );
@@ -223,8 +247,23 @@ function InboxRelaysSection() {
   const account = useAccount();
   const user = useUser(account?.pubkey);
   const inboxes = use$(user?.inboxes$);
+  const { execute } = useRobustReplaceableAction();
+  const { toast } = useToast();
 
   if (!account) return null;
+
+  const safeRun = async (action: () => Promise<void>) => {
+    try {
+      await execute(MAILBOXES_KIND, action);
+    } catch (err) {
+      toast({
+        title: "Failed to update relay list",
+        description:
+          err instanceof Error ? err.message : "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <Card>
@@ -240,11 +279,15 @@ function InboxRelaysSection() {
             <RelayItem
               key={index}
               relay={inbox}
-              onRemove={() => runner.run(RemoveInboxRelay, inbox)}
+              onRemove={() =>
+                safeRun(() => runner.run(RemoveInboxRelay, inbox))
+              }
             />
           ))}
         </div>
-        <NewRelayForm onAdd={(relay) => runner.run(AddInboxRelay, relay)} />
+        <NewRelayForm
+          onAdd={(relay) => safeRun(() => runner.run(AddInboxRelay, relay))}
+        />
       </CardContent>
     </Card>
   );
@@ -257,6 +300,8 @@ function GraspRelaysSection() {
   const pubkey = account?.pubkey;
   const { servers, isFromUserList, isLoading } = useGraspServers(pubkey);
   const { publishEvent } = usePublish();
+  const { execute } = useRobustReplaceableAction();
+  const { toast } = useToast();
 
   // ---------------------------------------------------------------------------
   // Draft state — local edits before the user hits Save
@@ -405,19 +450,30 @@ function GraspRelaysSection() {
       if (!account) return;
       setPublishing(true);
       try {
-        const tags = domains.map((d) => ["g", `wss://${d}`]);
-        await publishEvent({
-          kind: GRASP_LIST_KIND,
-          content: "",
-          tags,
-          created_at: Math.floor(Date.now() / 1000),
+        await execute(GRASP_LIST_KIND, async () => {
+          const tags = domains.map((d) => ["g", `wss://${d}`]);
+          await publishEvent({
+            kind: GRASP_LIST_KIND,
+            content: "",
+            tags,
+            created_at: Math.floor(Date.now() / 1000),
+          });
         });
         setDraftDomains(null); // close draft on success
+      } catch (err) {
+        toast({
+          title: "Failed to update grasp server list",
+          description:
+            err instanceof Error
+              ? err.message
+              : "An unexpected error occurred.",
+          variant: "destructive",
+        });
       } finally {
         setPublishing(false);
       }
     },
-    [account, publishEvent],
+    [account, publishEvent, execute, toast],
   );
 
   const handleSave = useCallback(async () => {

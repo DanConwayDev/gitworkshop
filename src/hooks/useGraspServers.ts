@@ -1,9 +1,13 @@
 /**
  * useGraspServers — resolve the user's preferred Grasp servers.
  *
- * Reads the user's kind:10317 (User Grasp List) event from the EventStore
- * and relay network. Falls back to DEFAULT_GRASP_SERVERS when the user
- * has no grasp list published.
+ * Reads the user's kind:10317 (User Grasp List) event from the EventStore.
+ * The persistent subscription in userIdentitySubscription.ts keeps this
+ * event fresh from the user's outbox + index relays for the session lifetime,
+ * so this hook only needs to read from the store — no relay subscription.
+ *
+ * Falls back to DEFAULT_GRASP_SERVERS when the user has no grasp list
+ * published.
  *
  * Returns an array of GraspServer objects with both the WebSocket URL
  * and the bare domain.
@@ -13,12 +17,7 @@ import { useMemo } from "react";
 import { map } from "rxjs/operators";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
-import { pool } from "@/services/nostr";
-import { onlyEvents } from "applesauce-relay";
-import { mapEventsToStore } from "applesauce-core";
-import { extraRelays, lookupRelays } from "@/services/settings";
 import { DEFAULT_GRASP_SERVERS } from "@/services/settings";
-import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 
 // ---------------------------------------------------------------------------
@@ -90,13 +89,16 @@ function defaultServers(): GraspServer[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch and resolve the user's Grasp server list.
+ * Resolve the user's Grasp server list from the EventStore.
+ *
+ * The persistent subscription (userIdentitySubscription.ts) keeps kind:10317
+ * fresh in the store, so this hook only reads — no relay subscription needed.
  *
  * @param pubkey - The user's hex pubkey (pass undefined when not logged in)
  * @returns Object with:
  *   - `servers`: The resolved GraspServer array (from kind:10317 or defaults)
  *   - `isFromUserList`: Whether the servers came from the user's published list
- *   - `isLoading`: Whether we're still waiting for the relay response
+ *   - `isLoading`: Whether we're still waiting for the store to emit
  */
 export function useGraspServers(pubkey: string | undefined): {
   servers: GraspServer[];
@@ -105,32 +107,14 @@ export function useGraspServers(pubkey: string | undefined): {
 } {
   const store = useEventStore();
 
-  // Subscribe to relay to fetch the user's kind:10317 event
-  use$(() => {
-    if (!pubkey) return undefined;
-    const relays = [...extraRelays.getValue(), ...lookupRelays.getValue()];
-    const filter = { kinds: [GRASP_LIST_KIND], authors: [pubkey] } as Filter;
-    return pool
-      .subscription(relays, [filter])
-      .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [pubkey, store]);
-
-  // Read the kind:10317 event from the store reactively
+  // Read the kind:10317 event from the store reactively.
+  // The persistent subscription in userIdentitySubscription.ts ensures this
+  // event is kept up-to-date from outbox + index relays.
   const graspListEvent = use$(() => {
     if (!pubkey) return undefined;
-    const filter = {
-      kinds: [GRASP_LIST_KIND],
-      authors: [pubkey],
-    } as Filter;
-    return store.timeline([filter]).pipe(
-      map((events) => {
-        if (!events || events.length === 0) return null;
-        // Replaceable event — take the latest
-        return events.reduce((latest, ev) =>
-          ev.created_at > latest.created_at ? ev : latest,
-        );
-      }),
-    );
+    return store
+      .replaceable(GRASP_LIST_KIND, pubkey)
+      .pipe(map((event) => event ?? null));
   }, [pubkey, store]);
 
   return useMemo(() => {
