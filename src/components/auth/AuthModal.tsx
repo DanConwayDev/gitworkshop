@@ -219,7 +219,15 @@ export function AuthModal() {
     } finally {
       setIsPublishing(false);
     }
-  }, [hasSaved, nsec, displayName, login, closeAuthModal]);
+  }, [
+    hasSaved,
+    ackLoss,
+    ackExposure,
+    nsec,
+    displayName,
+    login,
+    closeAuthModal,
+  ]);
 
   // ---------------------------------------------------------------------------
   // Render helpers
