@@ -42,6 +42,7 @@ import type { Filter as NostrFilter } from "applesauce-core/helpers";
 import { relayCurationMode } from "@/services/settings";
 import { cn } from "@/lib/utils";
 import { StarButton } from "@/components/StarButton";
+import { FollowRepoButton } from "@/components/FollowRepoButton";
 import {
   parseRepoRoute,
   decodeEventIdentifier,
@@ -412,14 +413,17 @@ function RepoLayoutResolved({
                 basePath={basePath}
                 nip05={nip05}
               />
-              <StarButton
-                targetAnnouncement={repo.announcements.find(
-                  (a) => a.pubkey === repo.selectedMaintainer,
-                )}
-                allAnnouncements={repo.announcements}
-                repoRelays={repo.relays}
-                repoCoords={repo.allCoordinates}
-              />
+              <div className="flex items-center gap-2">
+                <FollowRepoButton allCoords={repo.allCoordinates} />
+                <StarButton
+                  targetAnnouncement={repo.announcements.find(
+                    (a) => a.pubkey === repo.selectedMaintainer,
+                  )}
+                  allAnnouncements={repo.announcements}
+                  repoRelays={repo.relays}
+                  repoCoords={repo.allCoordinates}
+                />
+              </div>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 mb-4">

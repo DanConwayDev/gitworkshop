@@ -421,6 +421,9 @@ const REPO_ITEM_KINDS = [ISSUE_KIND, ...PR_ROOT_KINDS] as const;
 /** Kind 7 reaction — used for repo stars. */
 const REACTION_KIND = 7;
 
+/** Kind 10018 — NIP-51 Git repositories follow list; used for repo follower counts. */
+const GIT_REPOS_FOLLOW_KIND = 10018 as const;
+
 /**
  * List-level loader for a single item.
  *
@@ -499,13 +502,22 @@ export function nip34RepoLoader(
         complete: () => subscriber.complete(),
       });
 
-    // Subscribe to kind 7 reactions (stars) on the repo announcement
-    // coordinates. These are self-contained — no per-item loading needed.
-    const starSub = relayGroup
-      .subscription([{ kinds: [REACTION_KIND], "#a": coords } as Filter], {
-        reconnect: Infinity,
-        resubscribe: Infinity,
-      })
+    // Subscribe to self-contained repo-level events: kind 7 reactions (stars)
+    // and kind 10018 follow lists. Both are keyed by the announcement `a` tag
+    // and need no per-item loading, so they share a single subscription.
+    const repoMetaSub = relayGroup
+      .subscription(
+        [
+          {
+            kinds: [REACTION_KIND, GIT_REPOS_FOLLOW_KIND],
+            "#a": coords,
+          } as Filter,
+        ],
+        {
+          reconnect: Infinity,
+          resubscribe: Infinity,
+        },
+      )
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
       .subscribe({
         error: (err) => subscriber.error(err),
@@ -513,7 +525,7 @@ export function nip34RepoLoader(
 
     return () => {
       itemSub.unsubscribe();
-      starSub.unsubscribe();
+      repoMetaSub.unsubscribe();
     };
   });
 }
