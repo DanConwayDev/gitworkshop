@@ -26,6 +26,8 @@ const GIT_REPOS_KIND = 10018;
 export interface RepoFollowersResult {
   /** Deduplicated follower count across all maintainer announcement coordinates. */
   count: number;
+  /** Deduplicated list of pubkeys that have followed this repo. */
+  followers: string[];
 }
 
 /**
@@ -53,7 +55,7 @@ export function useRepoFollowers(
   }, [coordKey, store]);
 
   return useMemo(() => {
-    if (!followers) return { count: 0 };
+    if (!followers) return { count: 0, followers: [] };
 
     // Deduplicate by pubkey — a user who followed multiple announcements
     // for the same repo (one per maintainer) is counted only once.
@@ -62,6 +64,6 @@ export function useRepoFollowers(
       seenPubkeys.add(ev.pubkey);
     }
 
-    return { count: seenPubkeys.size };
+    return { count: seenPubkeys.size, followers: [...seenPubkeys] };
   }, [followers]);
 }

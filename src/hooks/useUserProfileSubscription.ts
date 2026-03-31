@@ -31,7 +31,6 @@ import { pool } from "@/services/nostr";
 import { gitIndexRelays, lookupRelays } from "@/services/settings";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
-import { MailboxesModel } from "applesauce-core/models";
 import { switchMap, of } from "rxjs";
 import { map } from "rxjs/operators";
 import type { Filter } from "applesauce-core/helpers";
@@ -89,7 +88,7 @@ export function useUserProfileSubscription(pubkey: string | undefined): void {
   use$(() => {
     if (!pubkey || isOwnProfile) return undefined;
 
-    return store.model(MailboxesModel, pubkey).pipe(
+    return store.mailboxes(pubkey).pipe(
       map((mailboxes) => mailboxes?.outboxes ?? []),
       switchMap((outboxes) => {
         if (outboxes.length === 0) return of(undefined);

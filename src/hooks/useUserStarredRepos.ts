@@ -6,9 +6,15 @@
  * "30617:<pubkey>:<dtag>".
  *
  * Strategy:
- *   Layer 1a — fetch the user's kind:7 reactions (k=30617) from git index relays.
+ *   Layer 1a — subscribe to the user's kind:7 reactions (k=30617) on their
+ *              outbox relays (discovered via MailboxesModel). kind:7 is a
+ *              regular event published to the user's own outbox, NOT to git
+ *              index relays. We use the same two-phase pattern as
+ *              useUserProfileSubscription: lookup relays first (to get
+ *              kind:10002), then outbox relays once known.
  *   Layer 1b — watch those reactions reactively; when coords change, fetch the
- *              corresponding repo announcements from git index relays.
+ *              corresponding repo announcements from git index relays (where
+ *              kind:30617 announcements live).
  *   Layer 2  — read both reactions and repo announcements from the EventStore
  *              reactively and return resolved repos filtered to starred coords.
  *
@@ -19,9 +25,10 @@
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { pool } from "@/services/nostr";
-import { gitIndexRelays } from "@/services/settings";
+import { gitIndexRelays, lookupRelays } from "@/services/settings";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+
 import {
   REPO_KIND,
   groupIntoResolvedRepos,
@@ -35,6 +42,15 @@ import { switchMap, map, of } from "rxjs";
 /** kind:7 — NIP-25 reaction */
 const REACTION_KIND = 7;
 
+/** Filter for kind:7 reactions targeting kind:30617 repo announcements. */
+function starReactionFilter(pubkey: string): Filter {
+  return {
+    kinds: [REACTION_KIND],
+    authors: [pubkey],
+    "#k": ["30617"],
+  } as Filter;
+}
+
 /**
  * Return the list of repositories starred by the given user.
  *
@@ -46,38 +62,55 @@ export function useUserStarredRepos(
 ): ResolvedRepo[] | undefined {
   const store = useEventStore();
 
-  // Layer 1a: fetch the user's kind:7 reactions targeting kind:30617 events
-  // from the git index relays.
+  // Layer 1a — Phase 1: query lookup relays immediately so we can discover
+  // the user's kind:10002 outbox relay list. kind:7 reactions are regular
+  // events published to the user's own outbox, not to git index relays.
   use$(() => {
     if (!pubkey) return undefined;
 
-    const filter = {
-      kinds: [REACTION_KIND],
-      authors: [pubkey],
-      "#k": ["30617"],
-    } as Filter;
+    const relays = [
+      ...new Set([...gitIndexRelays.getValue(), ...lookupRelays.getValue()]),
+    ];
 
     return pool
-      .subscription(gitIndexRelays.getValue(), [filter], {
+      .subscription(relays, [starReactionFilter(pubkey)], {
         reconnect: Infinity,
         resubscribe: Infinity,
       })
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [pubkey, store]);
 
-  // Layer 1b: watch the reactions in the store; when the starred coords change,
-  // fetch the corresponding repo announcements from git index relays.
+  // Layer 1a — Phase 2: once we have their kind:10002, subscribe on their
+  // outbox relays. switchMap tears down the previous subscription when the
+  // outbox list changes (e.g. after phase 1 delivers their kind:10002).
   use$(() => {
     if (!pubkey) return undefined;
 
-    const reactionFilter = {
-      kinds: [REACTION_KIND],
-      authors: [pubkey],
-      "#k": ["30617"],
-    } as Filter;
+    return store.mailboxes(pubkey).pipe(
+      map((mailboxes) => mailboxes?.outboxes ?? []),
+      switchMap((outboxes) => {
+        if (outboxes.length === 0) return of(undefined);
+
+        return pool
+          .subscription(outboxes, [starReactionFilter(pubkey)], {
+            reconnect: Infinity,
+            resubscribe: Infinity,
+          })
+          .pipe(onlyEvents(), mapEventsToStore(store));
+      }),
+    );
+  }, [pubkey, store]);
+
+  // Layer 1b: watch the reactions in the store; when the starred coords change,
+  // fetch the corresponding repo announcements from git index relays (where
+  // kind:30617 announcements are published).
+  use$(() => {
+    if (!pubkey) return undefined;
 
     return (
-      store.timeline([reactionFilter]) as unknown as Observable<NostrEvent[]>
+      store.timeline([starReactionFilter(pubkey)]) as unknown as Observable<
+        NostrEvent[]
+      >
     ).pipe(
       map((reactions) =>
         reactions
@@ -116,14 +149,10 @@ export function useUserStarredRepos(
   return use$(() => {
     if (!pubkey) return undefined;
 
-    const reactionFilter = {
-      kinds: [REACTION_KIND],
-      authors: [pubkey],
-      "#k": ["30617"],
-    } as Filter;
-
     return (
-      store.timeline([reactionFilter]) as unknown as Observable<NostrEvent[]>
+      store.timeline([starReactionFilter(pubkey)]) as unknown as Observable<
+        NostrEvent[]
+      >
     ).pipe(
       map((reactions) =>
         reactions
