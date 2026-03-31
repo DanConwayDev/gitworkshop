@@ -5,6 +5,10 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserRepositories } from "@/hooks/useUserRepositories";
+import { useUserProfileSubscription } from "@/hooks/useUserProfileSubscription";
+import { useUserFollowedRepos } from "@/hooks/useUserFollowedRepos";
+import { useUserGitAuthorFollows } from "@/hooks/useUserGitAuthorFollows";
+import { useUserStarredRepos } from "@/hooks/useUserStarredRepos";
 import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
 import { useRepoPath } from "@/hooks/useRepoPath";
 import { useIsFollowing } from "@/hooks/useIsFollowing";
@@ -12,7 +16,7 @@ import { useIsGitAuthorFollowing } from "@/hooks/useIsGitAuthorFollowing";
 import { useRobustFollowActions } from "@/hooks/useRobustFollowActions";
 import { useRobustGitAuthorFollowActions } from "@/hooks/useRobustGitAuthorFollowActions";
 import { useToast } from "@/hooks/useToast";
-import { UserAvatar, UserLink } from "@/components/UserAvatar";
+import { UserAvatar, UserLink, UserName } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +88,15 @@ export default function UserPage({ pubkey }: UserPageProps) {
   const setTab = (tab: TabId) => {
     setSearchParams(tab === "repositories" ? {} : { tab });
   };
+
+  // Subscribe to this user's replaceable events (kind 0, 3, 10002, 10017,
+  // 10018) for the duration of the profile page visit. No-op for own profile.
+  useUserProfileSubscription(pubkey);
+
+  // Reactive data for the three non-repository tabs
+  const followedRepos = useUserFollowedRepos(pubkey);
+  const gitAuthorFollows = useUserGitAuthorFollows(pubkey);
+  const starredRepos = useUserStarredRepos(pubkey);
 
   // Prefetch NIP-05 identity so useRepoPath resolves it from IDB on next visit
   usePrefetchNip05([pubkey]);
@@ -223,7 +236,15 @@ export default function UserPage({ pubkey }: UserPageProps) {
             {TABS.map((tab) => {
               const isActive = activeTab === tab.id;
               const count =
-                tab.id === "repositories" && repos ? repos.length : null;
+                tab.id === "repositories"
+                  ? (repos?.length ?? null)
+                  : tab.id === "followed"
+                    ? (followedRepos?.length ?? null)
+                    : tab.id === "starred"
+                      ? (starredRepos?.length ?? null)
+                      : tab.id === "git-follows"
+                        ? (gitAuthorFollows?.length ?? null)
+                        : null;
               return (
                 <button
                   key={tab.id}
@@ -247,18 +268,6 @@ export default function UserPage({ pubkey }: UserPageProps) {
                       )}
                     >
                       {count}
-                    </Badge>
-                  )}
-                  {count === null && tab.id !== "repositories" && (
-                    <Badge
-                      variant="secondary"
-                      className="text-[10px] px-1.5 py-0 h-4 min-w-4"
-                    >
-                      {tab.id === "followed"
-                        ? 5
-                        : tab.id === "starred"
-                          ? 12
-                          : 7}
                     </Badge>
                   )}
                 </button>
@@ -304,39 +313,99 @@ export default function UserPage({ pubkey }: UserPageProps) {
         )}
 
         {activeTab === "followed" && (
-          <Card className="border-dashed">
-            <CardContent className="py-12 px-8 text-center">
-              <Users className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-              <p className="text-muted-foreground">Followed repositories</p>
-              <p className="text-muted-foreground/60 text-sm mt-1">
-                Coming soon.
-              </p>
-            </CardContent>
-          </Card>
+          <>
+            {!followedRepos ? (
+              <div className="grid gap-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <RepoSkeleton key={i} />
+                ))}
+              </div>
+            ) : followedRepos.length === 0 ? (
+              <Card className="border-dashed">
+                <CardContent className="py-12 px-8 text-center">
+                  <Eye className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+                  <p className="text-muted-foreground">
+                    No followed repositories found.
+                  </p>
+                  <p className="text-muted-foreground/60 text-sm mt-1">
+                    This user hasn&apos;t followed any repositories yet.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3">
+                {followedRepos.map((repo) => (
+                  <UserRepoCard
+                    key={`${repo.selectedMaintainer}:${repo.dTag}`}
+                    repo={repo}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {activeTab === "starred" && (
-          <Card className="border-dashed">
-            <CardContent className="py-12 px-8 text-center">
-              <Star className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-              <p className="text-muted-foreground">Starred repositories</p>
-              <p className="text-muted-foreground/60 text-sm mt-1">
-                Coming soon.
-              </p>
-            </CardContent>
-          </Card>
+          <>
+            {!starredRepos ? (
+              <div className="grid gap-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <RepoSkeleton key={i} />
+                ))}
+              </div>
+            ) : starredRepos.length === 0 ? (
+              <Card className="border-dashed">
+                <CardContent className="py-12 px-8 text-center">
+                  <Star className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+                  <p className="text-muted-foreground">
+                    No starred repositories found.
+                  </p>
+                  <p className="text-muted-foreground/60 text-sm mt-1">
+                    This user hasn&apos;t starred any repositories yet.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3">
+                {starredRepos.map((repo) => (
+                  <UserRepoCard
+                    key={`${repo.selectedMaintainer}:${repo.dTag}`}
+                    repo={repo}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {activeTab === "git-follows" && (
-          <Card className="border-dashed">
-            <CardContent className="py-12 px-8 text-center">
-              <GitBranch className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-              <p className="text-muted-foreground">Git author follows</p>
-              <p className="text-muted-foreground/60 text-sm mt-1">
-                Coming soon.
-              </p>
-            </CardContent>
-          </Card>
+          <>
+            {!gitAuthorFollows ? (
+              <div className="grid gap-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <GitAuthorSkeleton key={i} />
+                ))}
+              </div>
+            ) : gitAuthorFollows.length === 0 ? (
+              <Card className="border-dashed">
+                <CardContent className="py-12 px-8 text-center">
+                  <Users className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+                  <p className="text-muted-foreground">
+                    No followed git authors found.
+                  </p>
+                  <p className="text-muted-foreground/60 text-sm mt-1">
+                    This user hasn&apos;t followed any git authors yet.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {gitAuthorFollows.map((followedPubkey) => (
+                  <GitAuthorCard key={followedPubkey} pubkey={followedPubkey} />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -677,5 +746,50 @@ function RepoSkeleton() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function GitAuthorSkeleton() {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function GitAuthorCard({ pubkey }: { pubkey: string }) {
+  const navigate = useNavigate();
+  const npub = nip19.npubEncode(pubkey);
+
+  return (
+    <div
+      className="group block cursor-pointer"
+      onClick={() => navigate(`/${npub}`)}
+    >
+      <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20 group-hover:-translate-y-0.5">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3">
+            <UserAvatar pubkey={pubkey} size="md" className="shrink-0" />
+            <div className="flex-1 min-w-0">
+              <UserName
+                pubkey={pubkey}
+                className="text-sm font-medium group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors truncate block"
+              />
+              <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">
+                {npub.slice(0, 16)}...
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
