@@ -73,7 +73,7 @@ export function useResolvedPR(
     const filter = { kinds: [PATCH_KIND], "#e": [prId] } as Filter;
     if (repoRelayGroup) {
       return repoRelayGroup
-        .subscription([filter])
+        .subscription([filter], { reconnect: Infinity, resubscribe: Infinity })
         .pipe(onlyEvents(), mapEventsToStore(store));
     }
     return undefined;
@@ -85,7 +85,7 @@ export function useResolvedPR(
     const filter: Filter = { kinds: [PATCH_KIND], ids: [prId] };
     if (repoRelayGroup) {
       return repoRelayGroup
-        .subscription([filter])
+        .subscription([filter], { reconnect: Infinity, resubscribe: Infinity })
         .pipe(onlyEvents(), mapEventsToStore(store));
     }
     return undefined;

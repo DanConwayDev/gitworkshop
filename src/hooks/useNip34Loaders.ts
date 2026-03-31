@@ -291,11 +291,14 @@ export function useNip34ItemDetailLoader(
     const filters: Filter[] = [{ ids: [itemId] }];
     if (repoRelayGroup) {
       return repoRelayGroup
-        .subscription(filters)
+        .subscription(filters, { reconnect: Infinity, resubscribe: Infinity })
         .pipe(onlyEvents(), mapEventsToStore(store));
     }
     return pool
-      .subscription(gitIndexRelays.getValue(), filters)
+      .subscription(gitIndexRelays.getValue(), filters, {
+        reconnect: Infinity,
+        resubscribe: Infinity,
+      })
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [itemId, repoRelayGroup, store]);
 
@@ -309,7 +312,7 @@ export function useNip34ItemDetailLoader(
       return undefined;
     const filters: Filter[] = [{ ids: [itemId] }];
     return extraRelaysForMaintainerMailboxCoverage
-      .subscription(filters)
+      .subscription(filters, { reconnect: Infinity, resubscribe: Infinity })
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [itemId, curationMode, extraRelaysForMaintainerMailboxCoverage, store]);
 

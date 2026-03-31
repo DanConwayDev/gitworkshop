@@ -415,7 +415,10 @@ export function nip34RepoLoader(
     const relayUrls = relayGroup.relays.map((r) => r.url);
 
     const sub = relayGroup
-      .subscription([{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter])
+      .subscription([{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter], {
+        reconnect: Infinity,
+        resubscribe: Infinity,
+      })
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
       .subscribe({
         next: (event) => {
