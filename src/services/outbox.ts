@@ -530,8 +530,7 @@ class OutboxStore {
     if (!item) return;
 
     const relay = item.relays.find((r) => r.url === relayUrl);
-    if (!relay || relay.status === "success" || relay.status === "permanent")
-      return;
+    if (!relay || relay.status === "success") return;
 
     // Cancel any scheduled retry timer for this relay
     const timerKey = `${itemId}:${relayUrl}`;

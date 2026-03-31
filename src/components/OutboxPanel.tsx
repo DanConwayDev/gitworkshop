@@ -434,7 +434,10 @@ function RelayRow({
   itemId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const canRetry = relay.status === "failed" || relay.status === "retrying";
+  const canRetry =
+    relay.status === "failed" ||
+    relay.status === "retrying" ||
+    relay.status === "permanent";
   const hasDetail =
     relay.message.length > 0 || (relay.attempts?.length ?? 0) > 0;
   const summary = shortSummary(relay.status, relay);
@@ -485,16 +488,14 @@ function RelayRow({
           </button>
         )}
         {canRetry && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+          <button
+            className="shrink-0 text-muted-foreground hover:text-foreground"
             onClick={() => outboxStore.retryRelay(itemId, relay.url)}
             aria-label="Retry relay"
             title="Retry now"
           >
-            <RotateCw className="h-3 w-3" />
-          </Button>
+            <RotateCw className="h-2.5 w-2.5" />
+          </button>
         )}
       </div>
 
