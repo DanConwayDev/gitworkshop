@@ -36,7 +36,7 @@ const sizeClasses = {
 
 /** Badge size classes, keyed by avatar size */
 const badgeSizeClasses = {
-  xs: "h-2 w-2",
+  xs: "h-1.5 w-1.5",
   sm: "h-3 w-3",
   md: "h-3.5 w-3.5",
   lg: "h-4 w-4",
@@ -63,7 +63,7 @@ const socialBadgeSoloPosClasses = gitBadgePosClasses;
  * but never covering more than ~1/3 of the avatar.
  */
 const socialBadgeDualPosClasses = {
-  xs: "-bottom-px right-0.5",
+  xs: "-bottom-px right-[3px]",
   sm: "-bottom-0.5 right-1",
   md: "-bottom-0.5 right-1.5",
   lg: "-bottom-1 right-2",
@@ -132,11 +132,13 @@ export function UserAvatar({
               )}
               aria-label="Social follow"
             >
-              <UserCheck
-                className="text-white"
-                style={{ width: "65%", height: "65%" }}
-                strokeWidth={2.5}
-              />
+              {size !== "xs" && (
+                <UserCheck
+                  className="text-white"
+                  style={{ width: "65%", height: "65%" }}
+                  strokeWidth={2.5}
+                />
+              )}
             </span>
           )}
 
@@ -152,11 +154,13 @@ export function UserAvatar({
               )}
               aria-label="Git author follow"
             >
-              <UserCheck
-                className="text-white"
-                style={{ width: "65%", height: "65%" }}
-                strokeWidth={2.5}
-              />
+              {size !== "xs" && (
+                <UserCheck
+                  className="text-white"
+                  style={{ width: "65%", height: "65%" }}
+                  strokeWidth={2.5}
+                />
+              )}
             </span>
           )}
         </span>

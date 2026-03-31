@@ -536,7 +536,7 @@ function ServerRow({
                 <>
                   <UserAvatar
                     pubkey={pubkey}
-                    size="sm"
+                    size="xs"
                     className="h-3.5 w-3.5 text-[6px] shrink-0"
                   />
                   <UserName
