@@ -309,22 +309,20 @@ function ThreadComment({ event }: { event: NostrEvent }) {
             <button
               type="button"
               onClick={() => setReplying((r) => !r)}
-              className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded"
+              className="flex items-center text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded"
               aria-label="Reply to comment"
             >
               <Reply className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Reply</span>
             </button>
           )}
           {isOwn && ctx && (
             <button
               type="button"
               onClick={() => setDeleteOpen(true)}
-              className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-destructive transition-colors px-1.5 py-0.5 rounded"
+              className="flex items-center text-xs text-muted-foreground/60 hover:text-destructive transition-colors px-1.5 py-0.5 rounded"
               aria-label="Delete comment"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Delete</span>
             </button>
           )}
           <EventCardActions event={event} />
