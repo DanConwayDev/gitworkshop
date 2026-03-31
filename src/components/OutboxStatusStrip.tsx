@@ -1,41 +1,79 @@
 /**
- * OutboxStatusStrip — inline send-status indicator for event cards.
+ * OutboxStatusBadge — inline send-status indicator for event cards.
  *
  * Renders next to the timestamp in the event header showing relay delivery
  * progress. Only shown for events authored by the currently logged-in user.
  * Silently returns null for other users' events or when not logged in.
  *
- * States:
- *   sending  — relays still pending (none succeeded yet)
- *   partial  — some relays succeeded, others still pending
- *   sent     — broadly sent: all groups covered
- *   failed   — all relays failed/permanent
+ * Clicking the badge opens a popover with the full per-relay breakdown
+ * (the same detail view used in the Outbox panel in the header).
+ *
+ * One-liner labels:
+ *   "publishing (0/5 relays)"        — nothing confirmed yet
+ *   "partially published (1/5 relays)" — some confirmed, still sending
+ *   "broadly published (3/5 relays)"  — broadlySent flag set
+ *   "failed (0/5 relays)"             — all relays failed/permanent
  *
  * Usage — drop next to the timestamp in any event header:
  *   <OutboxStatusBadge event={nostrEvent} />
  */
 
 import { useActiveAccount } from "applesauce-react/hooks";
-import { CheckCircle2, Send, XCircle } from "lucide-react";
+import { CheckCircle2, Send, XCircle, Loader2 } from "lucide-react";
 import { use$ } from "@/hooks/use$";
 import { outboxStore, type OutboxItem } from "@/services/outbox";
 import { cn } from "@/lib/utils";
 import type { NostrEvent } from "nostr-tools";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { OutboxItemDetail } from "@/components/OutboxPanel";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-type OutboxStatus = "sending" | "sent" | "partial" | "failed";
+type OutboxStatus = "publishing" | "broadly-published" | "partial" | "failed";
 
 function outboxSummaryStatus(item: OutboxItem): OutboxStatus {
-  if (item.broadlySent) return "sent";
+  if (item.broadlySent) return "broadly-published";
   const anyPending = item.relays.some(
     (r) => r.status === "pending" || r.status === "retrying",
   );
   const anySuccess = item.relays.some((r) => r.status === "success");
-  if (anyPending) return anySuccess ? "partial" : "sending";
+  if (anyPending) return anySuccess ? "partial" : "publishing";
   return "failed";
+}
+
+// ---------------------------------------------------------------------------
+// StatusIcon — live animated indicator
+// ---------------------------------------------------------------------------
+
+function StatusIcon({
+  status,
+  className,
+}: {
+  status: OutboxStatus;
+  className?: string;
+}) {
+  switch (status) {
+    case "publishing":
+      return (
+        <Loader2
+          className={cn("h-2.5 w-2.5 shrink-0 animate-spin", className)}
+        />
+      );
+    case "partial":
+      return (
+        <Send className={cn("h-2.5 w-2.5 shrink-0 animate-pulse", className)} />
+      );
+    case "broadly-published":
+      return <CheckCircle2 className={cn("h-2.5 w-2.5 shrink-0", className)} />;
+    case "failed":
+      return <XCircle className={cn("h-2.5 w-2.5 shrink-0", className)} />;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -59,40 +97,50 @@ export function OutboxStatusBadge({ event }: { event: NostrEvent }) {
   const totalCount = item.relays.length;
 
   const label = {
-    sending: `sending… ${successCount}/${totalCount}`,
-    partial: `sending… ${successCount}/${totalCount}`,
-    sent: `published ${successCount}/${totalCount}`,
-    failed: `failed ${successCount}/${totalCount}`,
+    publishing: `publishing (${successCount}/${totalCount} relays)`,
+    partial: `partially published (${successCount}/${totalCount} relays)`,
+    "broadly-published": `broadly published (${successCount}/${totalCount} relays)`,
+    failed: `failed (${successCount}/${totalCount} relays)`,
+  }[status];
+
+  const colorClass = {
+    publishing: "text-muted-foreground/60",
+    partial: "text-yellow-600/80 dark:text-yellow-400/80",
+    "broadly-published": "text-green-600/80 dark:text-green-400/80",
+    failed: "text-destructive/80",
   }[status];
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 text-xs",
-        status === "sending" && "text-muted-foreground/60",
-        status === "partial" && "text-yellow-600/80 dark:text-yellow-400/80",
-        status === "sent" && "text-green-600/80 dark:text-green-400/80",
-        status === "failed" && "text-destructive/80",
-      )}
-      title={
-        status === "failed"
-          ? "Failed to send to some relays — check outbox"
-          : undefined
-      }
-    >
-      {(status === "sending" || status === "partial") && (
-        <Send className="h-2.5 w-2.5 shrink-0 animate-pulse" />
-      )}
-      {status === "sent" && <CheckCircle2 className="h-2.5 w-2.5 shrink-0" />}
-      {status === "failed" && <XCircle className="h-2.5 w-2.5 shrink-0" />}
-      {label}
-    </span>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(
+            "inline-flex items-center gap-1 text-xs cursor-pointer hover:opacity-80 transition-opacity",
+            colorClass,
+          )}
+          aria-label={`Relay delivery status: ${label}`}
+        >
+          <StatusIcon status={status} />
+          {label}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-96 p-3">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 pb-1 border-b border-border">
+            <StatusIcon status={status} className={colorClass} />
+            <span className={cn("text-xs font-medium", colorClass)}>
+              {label}
+            </span>
+          </div>
+          <OutboxItemDetail item={item} />
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Keep old names as aliases so existing import sites still compile
-// while we migrate them to use OutboxStatusBadge directly.
+// Keep old names as aliases so existing import sites still compile.
 // ---------------------------------------------------------------------------
 
 /** @deprecated Use OutboxStatusBadge instead */

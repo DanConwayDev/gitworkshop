@@ -529,9 +529,6 @@ function OutboxItemRow({
   const totalCount = item.relays.length;
   const context = useEventContext(item);
 
-  // Collect all unique group IDs across all relays
-  const allGroupIds = [...new Set(item.relays.flatMap((r) => r.groups))];
-
   return (
     <div
       className={
@@ -602,38 +599,54 @@ function OutboxItemRow({
       </div>
 
       {expanded && (
-        <div className="px-3 pb-3 space-y-2 pt-1">
-          {allGroupIds.map((groupId) => {
-            const relaysForGroup = item.relays.filter((r) =>
-              r.groups.includes(groupId),
-            );
-            const groupSuccess = relaysForGroup.filter(
-              (r) => r.status === "success",
-            ).length;
-            return (
-              <div
-                key={groupId}
-                className="rounded border border-border bg-muted/30"
-              >
-                <div className="flex items-center justify-between px-2 py-1 border-b border-border">
-                  <GroupLabel
-                    groupId={groupId}
-                    eventPubkey={item.event.pubkey}
-                  />
-                  <span className="text-muted-foreground/60 text-xs tabular-nums">
-                    {groupSuccess}/{relaysForGroup.length}
-                  </span>
-                </div>
-                <div className="px-2 py-1 space-y-0.5">
-                  {relaysForGroup.map((relay) => (
-                    <RelayRow key={relay.url} relay={relay} itemId={item.id} />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+        <div className="px-3 pb-3 pt-1">
+          <OutboxItemDetail item={item} />
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OutboxItemDetail — exported so OutboxStatusBadge can embed it in a popover
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders the per-relay-group breakdown for a single outbox item.
+ * Used both in the expanded row inside OutboxPanel and in the popover
+ * attached to OutboxStatusBadge on event cards.
+ */
+export function OutboxItemDetail({ item }: { item: OutboxItem }) {
+  const allGroupIds = [...new Set(item.relays.flatMap((r) => r.groups))];
+
+  return (
+    <div className="space-y-2">
+      {allGroupIds.map((groupId) => {
+        const relaysForGroup = item.relays.filter((r) =>
+          r.groups.includes(groupId),
+        );
+        const groupSuccess = relaysForGroup.filter(
+          (r) => r.status === "success",
+        ).length;
+        return (
+          <div
+            key={groupId}
+            className="rounded border border-border bg-muted/30"
+          >
+            <div className="flex items-center justify-between px-2 py-1 border-b border-border">
+              <GroupLabel groupId={groupId} eventPubkey={item.event.pubkey} />
+              <span className="text-muted-foreground/60 text-xs tabular-nums">
+                {groupSuccess}/{relaysForGroup.length}
+              </span>
+            </div>
+            <div className="px-2 py-1 space-y-0.5">
+              {relaysForGroup.map((relay) => (
+                <RelayRow key={relay.url} relay={relay} itemId={item.id} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
