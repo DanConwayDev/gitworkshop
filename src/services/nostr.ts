@@ -28,6 +28,7 @@ import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
 import { extraRelays, lookupRelays } from "./settings";
 import { ISSUE_KIND, PR_ROOT_KINDS, LEGACY_REPLY_KINDS } from "@/lib/nip34";
 import { Repository, isValidRepository } from "@/casts/Repository";
+import { createTagValueSubscription } from "@/lib/tagValueSubscription";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
 
 /**
@@ -332,6 +333,53 @@ const nip34ThreadQuoteLoader = createTagValueLoader(pool, "q", {
 });
 
 // ---------------------------------------------------------------------------
+// NIP-34 persistent subscriptions
+//
+// Mirror of the five loaders above, but backed by pool.subscription() instead
+// of pool.request(). Each batch window opens a relay subscription that stays
+// alive (reconnect/resubscribe: Infinity) for as long as the caller remains
+// subscribed — i.e. for the lifetime of the repo or detail-page route.
+//
+// The loaders handle the initial historical fetch (cache + EOSE).
+// The subscriptions handle live updates arriving after EOSE.
+//
+// Both are called together from nip34ListLoader / nip34ThreadItemLoader so
+// that callers don't need to know about the two-layer approach.
+// ---------------------------------------------------------------------------
+
+/** Persistent essentials subscription (#e tag, same kinds as nip34EssentialsLoader). */
+const nip34EssentialsSubscription = createTagValueSubscription(pool, "e", {
+  eventStore,
+  kinds: [1630, 1631, 1632, 1633, 1985, 5, ...LEGACY_REPLY_KINDS],
+  bufferTime: NIP34_ESSENTIALS_BUFFER,
+});
+
+/** Persistent comments subscription (#E tag, same kinds as nip34CommentsLoader). */
+const nip34CommentsSubscription = createTagValueSubscription(pool, "E", {
+  eventStore,
+  kinds: [1111, 1619],
+  bufferTime: NIP34_COMMENTS_BUFFER,
+});
+
+/** Persistent thread-reply subscription (#e tag, no kind restriction). */
+const nip34ThreadReplySubscription = createTagValueSubscription(pool, "e", {
+  eventStore,
+  bufferTime: NIP34_THREAD_BUFFER,
+});
+
+/** Persistent thread-root subscription (#E tag, no kind restriction). */
+const nip34ThreadRootSubscription = createTagValueSubscription(pool, "E", {
+  eventStore,
+  bufferTime: NIP34_THREAD_BUFFER,
+});
+
+/** Persistent thread-quote subscription (#q tag, no kind restriction). */
+const nip34ThreadQuoteSubscription = createTagValueSubscription(pool, "q", {
+  eventStore,
+  bufferTime: NIP34_THREAD_BUFFER,
+});
+
+// ---------------------------------------------------------------------------
 // NIP-34 observable factories
 //
 // Pure RxJS observable factories — no React, no hooks. Consumed by React
@@ -363,14 +411,14 @@ const REPO_ITEM_KINDS = [ISSUE_KIND, ...PR_ROOT_KINDS] as const;
 /**
  * List-level loader for a single item.
  *
- * Fires nip34EssentialsLoader (status, labels, deletions) and
- * nip34CommentsLoader (NIP-22 comments, PR updates) for the given item ID.
- * Essentials use a shorter bufferTime (100ms) so they land before comments
- * (500ms).
+ * Fires both the one-shot loaders (historical fetch, completes at EOSE) and
+ * the persistent subscriptions (live updates, stays open until unsubscribed)
+ * for essentials and comments.
  *
  * Called by nip34RepoLoader for each discovered item, and by the hook layer
- * for detail pages. Because both use the same singleton loader instances,
- * calls within the same buffer window are merged automatically.
+ * for detail pages. Because all singleton instances share the same buffer
+ * windows, calls within the same window are merged into one REQ/subscription
+ * per relay automatically.
  *
  * @param itemId - The event ID of the issue / patch / PR
  * @param relays - Relay URLs to query
@@ -380,8 +428,12 @@ export function nip34ListLoader(
   relays: string[],
 ): Observable<NostrEvent> {
   return merge(
+    // Historical fetch — completes at EOSE
     nip34EssentialsLoader({ value: itemId, relays }),
     nip34CommentsLoader({ value: itemId, relays }),
+    // Live updates — stays open for the caller's lifetime
+    nip34EssentialsSubscription({ value: itemId, relays }),
+    nip34CommentsSubscription({ value: itemId, relays }),
   );
 }
 
@@ -437,17 +489,26 @@ export function nip34RepoLoader(
 }
 
 /**
- * Fire all three thread loaders (#e, #E, #q) for a single event ID.
- * Returns a merged observable of all child events discovered via any tag.
+ * Fire all three thread loaders and their persistent subscription counterparts
+ * for a single event ID. Returns a merged observable of all child events
+ * discovered via #e, #E, and #q tags.
+ *
+ * The loaders handle the historical fetch (completes at EOSE); the
+ * subscriptions stay open for live updates.
  */
 function nip34ThreadLoadAll(
   itemId: string,
   relays: string[],
 ): Observable<NostrEvent> {
   return merge(
+    // Historical fetch — completes at EOSE
     nip34ThreadReplyLoader({ value: itemId, relays }),
     nip34ThreadRootLoader({ value: itemId, relays }),
     nip34ThreadQuoteLoader({ value: itemId, relays }),
+    // Live updates — stays open for the caller's lifetime
+    nip34ThreadReplySubscription({ value: itemId, relays }),
+    nip34ThreadRootSubscription({ value: itemId, relays }),
+    nip34ThreadQuoteSubscription({ value: itemId, relays }),
   );
 }
 
@@ -481,21 +542,43 @@ export function nip34ThreadItemLoader(
   return merge(
     // All child events on the root item itself
     nip34ThreadLoadAll(itemId, relays),
-    // Recursively fetch child events for each comment
+    // Recursively fetch child events for each comment.
+    // Merges the one-shot loader (historical) and the persistent subscription
+    // (live) so that comments arriving after EOSE also trigger thread loading.
     new Observable<NostrEvent>((subscriber) => {
       const seenIds = new Set<string>();
-      const sub = nip34CommentsLoader({ value: itemId, relays }).subscribe({
-        next: (event) => {
-          const ev = event as NostrEvent;
-          if (!seenIds.has(ev.id)) {
-            seenIds.add(ev.id);
-            nip34ThreadLoadAll(ev.id, relays).subscribe(subscriber);
-          }
-        },
+
+      const handleComment = (event: NostrEvent) => {
+        if (!seenIds.has(event.id)) {
+          seenIds.add(event.id);
+          nip34ThreadLoadAll(event.id, relays).subscribe(subscriber);
+        }
+      };
+
+      // Historical comments (completes at EOSE)
+      const historicalSub = nip34CommentsLoader({
+        value: itemId,
+        relays,
+      }).subscribe({
+        next: handleComment,
+        error: (err) => subscriber.error(err),
+        // Don't forward complete — the persistent sub below keeps us alive
+      });
+
+      // Live comments (stays open for the caller's lifetime)
+      const liveSub = nip34CommentsSubscription({
+        value: itemId,
+        relays,
+      }).subscribe({
+        next: handleComment,
         error: (err) => subscriber.error(err),
         complete: () => subscriber.complete(),
       });
-      return () => sub.unsubscribe();
+
+      return () => {
+        historicalSub.unsubscribe();
+        liveSub.unsubscribe();
+      };
     }),
   );
 }
