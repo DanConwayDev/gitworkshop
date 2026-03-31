@@ -41,6 +41,7 @@ import { PATCH_KIND, PR_KIND, type RepoQueryOptions } from "@/lib/nip34";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
 import { relayCurationMode } from "@/services/settings";
 import { cn } from "@/lib/utils";
+import { StarButton } from "@/components/StarButton";
 import {
   parseRepoRoute,
   decodeEventIdentifier,
@@ -404,12 +405,22 @@ function RepoLayoutResolved({
 
         <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-0">
           {repo ? (
-            <RepoBreadcrumb
-              pubkey={pubkey}
-              repoName={repo.name}
-              basePath={basePath}
-              nip05={nip05}
-            />
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <RepoBreadcrumb
+                pubkey={pubkey}
+                repoName={repo.name}
+                basePath={basePath}
+                nip05={nip05}
+              />
+              <StarButton
+                targetAnnouncement={repo.announcements.find(
+                  (a) => a.pubkey === repo.selectedMaintainer,
+                )}
+                allAnnouncements={repo.announcements}
+                repoRelays={repo.relays}
+                repoCoords={repo.allCoordinates}
+              />
+            </div>
           ) : (
             <div className="flex items-center gap-1.5 mb-4">
               <Skeleton className="h-5 w-24" />
@@ -640,7 +651,7 @@ function RepoBreadcrumb({
     npub.slice(0, 12) + "…";
 
   return (
-    <div className="flex items-center gap-2 mb-4">
+    <div className="flex items-center gap-2">
       <Link
         to={userPath}
         className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"

@@ -408,6 +408,9 @@ const nip34ThreadQuoteSubscription = createTagValueSubscription(pool, "q", {
 /** All root item kinds tracked at the repo level (issues + PR root kinds). */
 const REPO_ITEM_KINDS = [ISSUE_KIND, ...PR_ROOT_KINDS] as const;
 
+/** Kind 7 reaction — used for repo stars. */
+const REACTION_KIND = 7;
+
 /**
  * List-level loader for a single item.
  *
@@ -466,7 +469,9 @@ export function nip34RepoLoader(
     const seenIds = new Set<string>();
     const relayUrls = relayGroup.relays.map((r) => r.url);
 
-    const sub = relayGroup
+    // Subscribe to issues, patches, and PRs — pipe each new item into the
+    // per-item essentials + comments loaders.
+    const itemSub = relayGroup
       .subscription([{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter], {
         reconnect: Infinity,
         resubscribe: Infinity,
@@ -484,7 +489,22 @@ export function nip34RepoLoader(
         complete: () => subscriber.complete(),
       });
 
-    return () => sub.unsubscribe();
+    // Subscribe to kind 7 reactions (stars) on the repo announcement
+    // coordinates. These are self-contained — no per-item loading needed.
+    const starSub = relayGroup
+      .subscription([{ kinds: [REACTION_KIND], "#a": coords } as Filter], {
+        reconnect: Infinity,
+        resubscribe: Infinity,
+      })
+      .pipe(onlyEvents(), mapEventsToStore(eventStore))
+      .subscribe({
+        error: (err) => subscriber.error(err),
+      });
+
+    return () => {
+      itemSub.unsubscribe();
+      starSub.unsubscribe();
+    };
   });
 }
 
