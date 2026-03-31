@@ -12,6 +12,7 @@
  */
 
 import { use$ } from "@/hooks/use$";
+import { useCountdown } from "@/hooks/useCountdown";
 import {
   outboxStore,
   type OutboxItem,
@@ -365,14 +366,36 @@ function shortSummary(
     case "permanent":
       return relay.permanentReason ?? "rejected";
     case "retrying":
-      return "rate limited";
+      switch (relay.transientSubkind) {
+        case "publish-timeout":
+          return "no response";
+        case "connection-timeout":
+          return "connection timeout";
+        case "connection-error":
+          return "connection failed";
+        default:
+          return "rate limited";
+      }
     case "pending":
       return "sending…";
     case "failed": {
+      // "Timeout" is the exact string emitted by applesauce when no OK arrives
+      if (relay.message === "Timeout") return "no response";
       const msg = relay.message.toLowerCase();
+      if (
+        /err_address_unreachable|err_name_not_resolved|err_connection_refused|econnrefused|enotfound|enetunreach|ehostunreach/i.test(
+          relay.message,
+        )
+      )
+        return "connection timeout";
       if (msg.includes("timeout") || msg.includes("timed out"))
-        return "timed out";
-      if (msg.includes("connect") || msg.includes("refused"))
+        return "no response";
+      if (
+        msg.includes("websocket") ||
+        msg.includes("connect") ||
+        msg.includes("refused") ||
+        msg.includes("socket")
+      )
         return "connection failed";
       if (msg.includes("auth")) return "auth required";
       if (msg.includes("invalid")) return "invalid event";
@@ -409,6 +432,7 @@ function RelayRow({
   const hasDetail =
     relay.message.length > 0 || (relay.attempts?.length ?? 0) > 0;
   const summary = shortSummary(relay.status, relay);
+  const countdown = useCountdown(relay.retryAfter);
 
   const summaryColor =
     relay.status === "success"
@@ -421,6 +445,9 @@ function RelayRow({
             ? "text-yellow-500"
             : "text-muted-foreground";
 
+  // Attempts newest-first
+  const attempts = relay.attempts ? [...relay.attempts].reverse() : [];
+
   return (
     <div className="py-1 text-xs">
       {/* Main row */}
@@ -432,6 +459,12 @@ function RelayRow({
         <span className={`shrink-0 font-medium ${summaryColor}`}>
           {summary}
         </span>
+        {/* Countdown to next automatic retry */}
+        {relay.status === "retrying" && countdown && (
+          <span className="shrink-0 tabular-nums text-muted-foreground/60">
+            {countdown}
+          </span>
+        )}
         {hasDetail && (
           <button
             className="shrink-0 text-muted-foreground hover:text-foreground"
@@ -462,17 +495,10 @@ function RelayRow({
       {/* Expanded detail */}
       {expanded && (
         <div className="mt-1 ml-5 space-y-1 rounded border border-border bg-muted/40 px-2 py-1.5">
-          {/* Full current message */}
-          {relay.message && (
-            <p className="break-all text-muted-foreground">{relay.message}</p>
-          )}
-          {/* Attempt history */}
-          {(relay.attempts?.length ?? 0) > 0 && (
-            <div className="mt-1 space-y-0.5">
-              <p className="text-muted-foreground/50 uppercase tracking-wide text-[10px] font-semibold mb-1">
-                Attempt history
-              </p>
-              {relay.attempts.map((a, i) => (
+          {/* Attempt history, newest first */}
+          {attempts.length > 0 && (
+            <div className="space-y-0.5">
+              {attempts.map((a, i) => (
                 <AttemptRow key={i} attempt={a} />
               ))}
             </div>

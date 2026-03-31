@@ -96,6 +96,15 @@ export interface OutboxRelayEntry {
    */
   permanentReason?: string;
   /**
+   * For transient failures, the sub-classification used by the UI to show
+   * a precise label.
+   */
+  transientSubkind?:
+    | "publish-timeout"
+    | "connection-timeout"
+    | "connection-error"
+    | "rate-limit";
+  /**
    * Full history of publish attempts for this relay, oldest first.
    * Each entry records the timestamp, ok/fail, and raw relay message.
    */
@@ -140,34 +149,76 @@ const PERMANENT_FAILURE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 
 /**
  * Patterns that indicate a transient failure that should be retried.
+ *
+ * Each entry carries a `subkind` that the UI uses to show a precise label
+ * without having to re-parse the message string.
+ *
+ * Sub-kinds:
+ *   "publish-timeout"    — event was sent but no OK was received in time
+ *                          (applesauce emits the literal string "Timeout")
+ *   "connection-timeout" — address unreachable / relay never became ready,
+ *                          so the connection attempt itself timed out
+ *   "connection-error"   — WebSocket closed / refused before OK was received
+ *   "rate-limit"         — relay asked us to slow down
+ *
+ * Order matters: more-specific patterns must come before broader ones.
  */
-const TRANSIENT_FAILURE_PATTERNS: RegExp[] = [
-  /rate.?limit/i,
-  /too many/i,
-  /timeout/i,
-  /slow.?down/i,
-  /try.?again/i,
+const TRANSIENT_FAILURE_PATTERNS: Array<{
+  pattern: RegExp;
+  subkind:
+    | "publish-timeout"
+    | "connection-timeout"
+    | "connection-error"
+    | "rate-limit";
+}> = [
+  // Browser/OS-level unreachability — address not routable, DNS failure, etc.
+  {
+    pattern:
+      /ERR_ADDRESS_UNREACHABLE|ERR_NAME_NOT_RESOLVED|ERR_CONNECTION_REFUSED|ERR_INTERNET_DISCONNECTED|ERR_NETWORK_CHANGED|ECONNREFUSED|ENOTFOUND|ENETUNREACH|EHOSTUNREACH/i,
+    subkind: "connection-timeout",
+  },
+  // WebSocket / network-level connection failures (generic)
+  {
+    pattern: /websocket|connection|connect|refused|network|socket/i,
+    subkind: "connection-error",
+  },
+  // Exact "Timeout" emitted by applesauce relay.event() when no OK arrives
+  // after the event was sent (publish-level timeout, not connection-level)
+  { pattern: /^Timeout$/, subkind: "publish-timeout" },
+  // Generic timeout wording from relay messages
+  { pattern: /timed?\s*out/i, subkind: "publish-timeout" },
+  // Rate-limiting / back-pressure
+  {
+    pattern: /rate.?limit|too many|slow.?down|try.?again/i,
+    subkind: "rate-limit",
+  },
 ];
 
-/** Retry delay for rate-limited or timed-out relays (65 seconds) */
+/** Retry delay for transient relay failures (65 seconds) */
 const RETRY_DELAY_MS = 65_000;
 
 /**
  * Classify a relay rejection message.
  */
-function classifyFailure(
-  msg: string,
-):
+function classifyFailure(msg: string):
   | { kind: "permanent"; reason: string }
-  | { kind: "transient"; delayMs: number }
+  | {
+      kind: "transient";
+      delayMs: number;
+      subkind:
+        | "publish-timeout"
+        | "connection-timeout"
+        | "connection-error"
+        | "rate-limit";
+    }
   | { kind: "duplicate" }
   | { kind: "unknown" } {
   for (const { pattern, reason } of PERMANENT_FAILURE_PATTERNS) {
     if (pattern.test(msg)) return { kind: "permanent", reason };
   }
-  for (const pattern of TRANSIENT_FAILURE_PATTERNS) {
+  for (const { pattern, subkind } of TRANSIENT_FAILURE_PATTERNS) {
     if (pattern.test(msg))
-      return { kind: "transient", delayMs: RETRY_DELAY_MS };
+      return { kind: "transient", delayMs: RETRY_DELAY_MS, subkind };
   }
   if (/duplicate/i.test(msg)) return { kind: "duplicate" };
   return { kind: "unknown" };
@@ -639,6 +690,7 @@ class OutboxStore {
             status: "retrying" as const,
             message: msg,
             retryAfter,
+            transientSubkind: classification.subkind,
             attempts,
           };
         }
