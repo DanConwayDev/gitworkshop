@@ -8,8 +8,8 @@ importers:
   .:
     dependencies:
       "@fiatjaf/git-natural-api":
-        specifier: npm:@jsr/fiatjaf__git-natural-api@^0.2.3
-        version: "@jsr/fiatjaf__git-natural-api@0.2.3"
+        specifier: npm:@jsr/fiatjaf__git-natural-api@^0.2.4
+        version: "@jsr/fiatjaf__git-natural-api@0.2.4"
       "@fontsource-variable/inter":
         specifier: ^5.2.8
         version: 5.2.8
@@ -914,11 +914,11 @@ packages:
         integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==,
       }
 
-  "@jsr/fiatjaf__git-natural-api@0.2.3":
+  "@jsr/fiatjaf__git-natural-api@0.2.4":
     resolution:
       {
-        integrity: sha512-Au1X5PQyh6RQWaFoTkEfNlH0xIyFDdTDzwz0pc9ZtSS8s1ezTPoWiqYil5scgk40vN6MKda2L1YNERDU1FdBlg==,
-        tarball: https://npm.jsr.io/~/11/@jsr/fiatjaf__git-natural-api/0.2.3.tgz,
+        integrity: sha512-Vg/bTWCj4cH21h0iWXLejmVxNd5UBM3+Y4S4ch1LNheodeJzqUG6F3vRl/ignQGintj5ATI/84PCJs0KYRFuwA==,
+        tarball: https://npm.jsr.io/~/11/@jsr/fiatjaf__git-natural-api/0.2.4.tgz,
       }
 
   "@modelcontextprotocol/sdk@1.27.1":
@@ -6899,7 +6899,7 @@ snapshots:
       "@jridgewell/resolve-uri": 3.1.2
       "@jridgewell/sourcemap-codec": 1.5.5
 
-  "@jsr/fiatjaf__git-natural-api@0.2.3":
+  "@jsr/fiatjaf__git-natural-api@0.2.4":
     dependencies:
       "@noble/hashes": 2.0.1
       fflate: 0.8.2
