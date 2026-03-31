@@ -111,15 +111,18 @@ export function useRobustFollowActions(): RobustFollowActionsResult {
   /**
    * Check that we are connected to enough relays to safely write.
    *
-   * Two-layer check:
-   *   1. Pool connection state — is the WebSocket actually open right now?
+   * Three-layer check (fastest-to-slowest):
+   *   1. navigator.onLine — immediate OS/browser network state. DevTools
+   *      offline mode sets this to false instantly, before any WebSocket
+   *      close events fire. Fast-fail here avoids the race where sockets
+   *      appear connected for several seconds after going offline.
+   *   2. Pool connection state — is the WebSocket actually open right now?
    *      Relays not yet in the pool (never connected this session) count as
-   *      disconnected. This catches the offline-mode case where liveness has
-   *      no state for a relay and would otherwise treat it as healthy.
-   *   2. Liveness backoff — even if the socket is open, skip relays that
-   *      liveness has marked as dead or in backoff.
+   *      disconnected. Catches the case where relays were never reached.
+   *   3. Liveness backoff — skip relays that liveness has marked as dead or
+   *      in backoff (repeated failures even while nominally online).
    *
-   * A relay is considered "healthy" only if BOTH conditions pass.
+   * A relay is considered "healthy" only if all applicable layers pass.
    *
    * Throws a user-facing error if the threshold is not met.
    */
@@ -130,13 +133,21 @@ export function useRobustFollowActions(): RobustFollowActionsResult {
       );
     }
 
-    // Layer 1: pool connection state (WebSocket open = actually connected now)
+    // Layer 1: fast-fail on navigator.onLine (catches DevTools offline mode
+    // immediately, before WebSocket close events have had time to propagate)
+    if (!navigator.onLine) {
+      throw new Error(
+        "You appear to be offline. Please check your internet connection and try again.",
+      );
+    }
+
+    // Layer 2: pool connection state (WebSocket open = actually connected now)
     const connectedRelays = relays.filter((url) => {
       const relay = pool.relays.get(url);
       return relay?.connected === true;
     });
 
-    // Layer 2: liveness filter (removes dead / backoff relays from the connected set)
+    // Layer 3: liveness filter (removes dead / backoff relays from the connected set)
     const healthyRelays = liveness.filter(connectedRelays);
     const healthyCount = healthyRelays.length;
     const fraction = healthyCount / relays.length;
