@@ -32,7 +32,7 @@ export function useUserGitAuthorFollows(
 
     return store.replaceable(GIT_AUTHORS_KIND, pubkey).pipe(
       map((event) => {
-        if (!event) return undefined;
+        if (!event) return [];
         return event.tags
           .filter(([t]) => t === "p")
           .map(([, v]) => v)
