@@ -28,6 +28,16 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useActiveAccount } from "applesauce-react/hooks";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { ResolvedRepo } from "@/lib/nip34";
 
 interface UserPageProps {
@@ -340,6 +350,11 @@ function CopyNpub({ npub }: { npub: string }) {
  *    changes made on another client
  *  - Shows a clear error toast if connectivity is insufficient
  *
+ * When no kind:3 contact list is found in the store (isFollowing === undefined),
+ * clicking Follow shows a confirmation dialog warning the user that we couldn't
+ * find an existing follow list. This guards against accidentally creating a
+ * fresh list that overwrites one stored on relays we haven't connected to.
+ *
  * Only rendered when a different user is logged in (hides for own profile and
  * when logged out).
  */
@@ -348,20 +363,17 @@ function FollowButton({ pubkey }: { pubkey: string }) {
   const isFollowing = useIsFollowing(pubkey);
   const { follow, unfollow, pending } = useRobustFollowActions();
   const { toast } = useToast();
+  const [showNoListDialog, setShowNoListDialog] = useState(false);
 
   // Don't show for own profile or when logged out
   if (!account || account.pubkey === pubkey) return null;
 
-  const handleClick = async () => {
+  const doFollow = async () => {
     try {
-      if (isFollowing) {
-        await unfollow(pubkey);
-      } else {
-        await follow(pubkey);
-      }
+      await follow(pubkey);
     } catch (err) {
       toast({
-        title: isFollowing ? "Failed to unfollow" : "Failed to follow",
+        title: "Failed to follow",
         description:
           err instanceof Error ? err.message : "An unexpected error occurred.",
         variant: "destructive",
@@ -369,23 +381,81 @@ function FollowButton({ pubkey }: { pubkey: string }) {
     }
   };
 
+  const handleClick = async () => {
+    if (isFollowing) {
+      try {
+        await unfollow(pubkey);
+      } catch (err) {
+        toast({
+          title: "Failed to unfollow",
+          description:
+            err instanceof Error
+              ? err.message
+              : "An unexpected error occurred.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+
+    // No kind:3 found in the store — warn before creating a fresh list
+    if (isFollowing === undefined) {
+      setShowNoListDialog(true);
+      return;
+    }
+
+    await doFollow();
+  };
+
   return (
-    <Button
-      variant={isFollowing ? "outline" : "default"}
-      size="sm"
-      className="h-7 text-xs gap-1.5"
-      onClick={handleClick}
-      disabled={pending || isFollowing === undefined}
-    >
-      {pending ? (
-        <Loader2 className="h-3 w-3 animate-spin" />
-      ) : isFollowing ? (
-        <UserMinus className="h-3 w-3" />
-      ) : (
-        <UserPlus className="h-3 w-3" />
-      )}
-      {isFollowing ? "Unfollow" : "Follow"}
-    </Button>
+    <>
+      <Button
+        variant={isFollowing ? "outline" : "default"}
+        size="sm"
+        className="h-7 text-xs gap-1.5"
+        onClick={handleClick}
+        disabled={pending}
+      >
+        {pending ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : isFollowing ? (
+          <UserMinus className="h-3 w-3" />
+        ) : (
+          <UserPlus className="h-3 w-3" />
+        )}
+        {isFollowing ? "Unfollow" : "Follow"}
+      </Button>
+
+      <AlertDialog open={showNoListDialog} onOpenChange={setShowNoListDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>No follow list found</AlertDialogTitle>
+            <AlertDialogDescription>
+              We couldn&apos;t find an existing follow list (kind:3) for your
+              account on any connected relay. Have you followed anyone on Nostr
+              before?
+              <br />
+              <br />
+              If you have an existing follow list on other relays, continuing
+              will create a new list with only this person, which may overwrite
+              your previous follows. If this is a brand-new account, it&apos;s
+              safe to continue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowNoListDialog(false);
+                void doFollow();
+              }}
+            >
+              Follow anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
