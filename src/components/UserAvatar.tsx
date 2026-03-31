@@ -8,9 +8,10 @@ import {
 import { useProfile } from "@/hooks/useProfile";
 import { useUserPath } from "@/hooks/useUserPath";
 import { useIsFollowing } from "@/hooks/useIsFollowing";
+import { useIsGitAuthorFollowing } from "@/hooks/useIsGitAuthorFollowing";
 import { cn } from "@/lib/utils";
 import { nip19 } from "nostr-tools";
-import { UserCheck } from "lucide-react";
+import { UserCheck, GitCommitHorizontal } from "lucide-react";
 
 interface UserAvatarProps {
   pubkey: string;
@@ -51,6 +52,9 @@ export function UserAvatar({
   const profile = useProfile(pubkey);
   const userPath = useUserPath(pubkey);
   const isFollowing = useIsFollowing(showFollowIndicator ? pubkey : undefined);
+  const isGitAuthorFollowing = useIsGitAuthorFollowing(
+    showFollowIndicator ? pubkey : undefined,
+  );
   const npub = pubkey ? nip19.npubEncode(pubkey) : undefined;
   const initials =
     profile?.name?.slice(0, 2).toUpperCase() ??
@@ -68,36 +72,66 @@ export function UserAvatar({
     </Avatar>
   );
 
-  // Wrap in a relative container so we can position the indicator badge
-  const avatar =
-    showFollowIndicator && isFollowing ? (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="relative inline-flex shrink-0">
-            {avatarEl}
-            <span
-              className={cn(
-                "absolute flex items-center justify-center rounded-full",
-                "bg-emerald-500 ring-1 ring-background",
-                indicatorSizeClasses[size],
-              )}
-              aria-label="You follow this user"
-            >
-              <UserCheck
-                className="text-white"
-                style={{ width: "65%", height: "65%" }}
-                strokeWidth={2.5}
-              />
-            </span>
+  // Git author follow takes precedence over social follow for the indicator.
+  // - Orange badge with git icon  → in git authors list (kind:10017)
+  // - Green badge with check icon → social follow only (kind:3)
+  const showGitAuthor = showFollowIndicator && isGitAuthorFollowing;
+  const showSocialOnly =
+    showFollowIndicator && !isGitAuthorFollowing && isFollowing;
+
+  const avatar = showGitAuthor ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="relative inline-flex shrink-0">
+          {avatarEl}
+          <span
+            className={cn(
+              "absolute flex items-center justify-center rounded-full",
+              "bg-orange-500 ring-1 ring-background",
+              indicatorSizeClasses[size],
+            )}
+            aria-label="Git author you follow"
+          >
+            <GitCommitHorizontal
+              className="text-white"
+              style={{ width: "65%", height: "65%" }}
+              strokeWidth={2.5}
+            />
           </span>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="text-xs">
-          You follow this user
-        </TooltipContent>
-      </Tooltip>
-    ) : (
-      avatarEl
-    );
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="text-xs">
+        Git author you follow
+      </TooltipContent>
+    </Tooltip>
+  ) : showSocialOnly ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="relative inline-flex shrink-0">
+          {avatarEl}
+          <span
+            className={cn(
+              "absolute flex items-center justify-center rounded-full",
+              "bg-emerald-500 ring-1 ring-background",
+              indicatorSizeClasses[size],
+            )}
+            aria-label="You follow this user"
+          >
+            <UserCheck
+              className="text-white"
+              style={{ width: "65%", height: "65%" }}
+              strokeWidth={2.5}
+            />
+          </span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="text-xs">
+        You follow this user
+      </TooltipContent>
+    </Tooltip>
+  ) : (
+    avatarEl
+  );
 
   if (linkToProfile && pubkey) {
     return (

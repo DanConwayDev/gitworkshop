@@ -7,7 +7,9 @@ import { useUserRepositories } from "@/hooks/useUserRepositories";
 import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
 import { useRepoPath } from "@/hooks/useRepoPath";
 import { useIsFollowing } from "@/hooks/useIsFollowing";
+import { useIsGitAuthorFollowing } from "@/hooks/useIsGitAuthorFollowing";
 import { useRobustFollowActions } from "@/hooks/useRobustFollowActions";
+import { useRobustGitAuthorFollowActions } from "@/hooks/useRobustGitAuthorFollowActions";
 import { useToast } from "@/hooks/useToast";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +27,7 @@ import {
   UserPlus,
   UserMinus,
   Loader2,
+  GitCommitHorizontal,
 } from "lucide-react";
 import { useState } from "react";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -168,10 +171,11 @@ export default function UserPage({ pubkey }: UserPageProps) {
                 </div>
               )}
 
-              {/* Npub copy + follow */}
+              {/* Npub copy + follow buttons */}
               <div className="mt-4 flex items-center gap-2 flex-wrap">
                 <CopyNpub npub={npub} />
                 <FollowButton pubkey={pubkey} />
+                <GitAuthorFollowButton pubkey={pubkey} />
               </div>
             </div>
           </div>
@@ -456,6 +460,87 @@ function FollowButton({ pubkey }: { pubkey: string }) {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+/**
+ * Git Author Follow / Unfollow button for a user profile page.
+ *
+ * Manages the NIP-51 Git authors follow list (kind:10017). Unlike the social
+ * follow (kind:3), we do NOT warn when no existing list is found — kind:10017
+ * is new and most users won't have one yet, so silently creating a fresh list
+ * is the expected behaviour.
+ *
+ * Uses useRobustGitAuthorFollowActions which applies the same connectivity and
+ * freshness safeguards as the social follow button.
+ *
+ * Only rendered when a different user is logged in (hides for own profile and
+ * when logged out).
+ */
+function GitAuthorFollowButton({ pubkey }: { pubkey: string }) {
+  const account = useActiveAccount();
+  const isGitAuthorFollowing = useIsGitAuthorFollowing(pubkey);
+  const { addGitAuthor, removeGitAuthor, pending } =
+    useRobustGitAuthorFollowActions();
+  const { toast } = useToast();
+
+  // Don't show for own profile or when logged out
+  if (!account || account.pubkey === pubkey) return null;
+
+  const handleClick = async () => {
+    if (isGitAuthorFollowing) {
+      try {
+        await removeGitAuthor(pubkey);
+      } catch (err) {
+        toast({
+          title: "Failed to remove git author",
+          description:
+            err instanceof Error
+              ? err.message
+              : "An unexpected error occurred.",
+          variant: "destructive",
+        });
+      }
+    } else {
+      try {
+        await addGitAuthor(pubkey);
+      } catch (err) {
+        toast({
+          title: "Failed to add git author",
+          description:
+            err instanceof Error
+              ? err.message
+              : "An unexpected error occurred.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  return (
+    <Button
+      variant={isGitAuthorFollowing ? "outline" : "secondary"}
+      size="sm"
+      className={
+        isGitAuthorFollowing
+          ? "h-7 text-xs gap-1.5 border-orange-500/40 text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"
+          : "h-7 text-xs gap-1.5"
+      }
+      onClick={handleClick}
+      disabled={pending}
+      title={
+        isGitAuthorFollowing
+          ? "Remove from git authors list"
+          : "Add to git authors list"
+      }
+    >
+      {pending ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <GitCommitHorizontal className="h-3 w-3" />
+      )}
+      {isGitAuthorFollowing ? "Git Author" : "Follow as Git Author"}
+    </Button>
   );
 }
 
