@@ -97,10 +97,10 @@ export function OutboxStatusBadge({ event }: { event: NostrEvent }) {
   const totalCount = item.relays.length;
 
   const label = {
-    publishing: `publishing (${successCount}/${totalCount} relays)`,
-    partial: `partially published (${successCount}/${totalCount} relays)`,
-    "broadly-published": `broadly published (${successCount}/${totalCount} relays)`,
-    failed: `failed (${successCount}/${totalCount} relays)`,
+    publishing: `publishing... (${successCount}/${totalCount})`,
+    partial: `publishing... (${successCount}/${totalCount})`,
+    "broadly-published": "published",
+    failed: `failed (${successCount}/${totalCount})`,
   }[status];
 
   const colorClass = {
