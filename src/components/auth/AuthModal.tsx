@@ -15,6 +15,8 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
+  Check,
+  Copy,
   Download,
   Eye,
   EyeOff,
@@ -60,7 +62,10 @@ export function AuthModal() {
   const [displayName, setDisplayName] = useState("");
   const [nsec, setNsec] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [hasDownloaded, setHasDownloaded] = useState(false);
+  const [hasSaved, setHasSaved] = useState(false);
+  const [fieldCopied, setFieldCopied] = useState(false);
+  const [ackLoss, setAckLoss] = useState(false);
+  const [ackExposure, setAckExposure] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [nameError, setNameError] = useState("");
 
@@ -75,7 +80,10 @@ export function AuthModal() {
       setDisplayName("");
       setNsec("");
       setShowKey(false);
-      setHasDownloaded(false);
+      setHasSaved(false);
+      setFieldCopied(false);
+      setAckLoss(false);
+      setAckExposure(false);
       setIsPublishing(false);
       setNameError("");
     }
@@ -133,7 +141,7 @@ export function AuthModal() {
       globalThis.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      setHasDownloaded(true);
+      setHasSaved(true);
     } catch {
       toast({
         title: "Download failed",
@@ -144,8 +152,43 @@ export function AuthModal() {
     }
   }, [nsec]);
 
+  const copyKeyToClipboard = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(nsec);
+      setHasSaved(true);
+      setFieldCopied(true);
+      setTimeout(() => setFieldCopied(false), 2000);
+    } catch {
+      toast({
+        title: "Copy failed",
+        description:
+          "Could not copy to clipboard. Please download the key instead.",
+        variant: "destructive",
+      });
+    }
+  }, [nsec]);
+
+  // Used by the warning-box copy button — checkboxes are already required there
+  const handleCopyKey = useCallback(async () => {
+    try {
+      await copyKeyToClipboard();
+      setHasSaved(true);
+      toast({
+        title: "Key copied",
+        description: "Paste it into your password manager now.",
+      });
+    } catch {
+      toast({
+        title: "Copy failed",
+        description:
+          "Could not copy to clipboard. Please download the key instead.",
+        variant: "destructive",
+      });
+    }
+  }, [copyKeyToClipboard]);
+
   const handleCreateAccount = useCallback(async () => {
-    if (!hasDownloaded) return;
+    if (!hasSaved || !ackLoss || !ackExposure) return;
 
     setCreateStep("publishing");
     setIsPublishing(true);
@@ -176,7 +219,7 @@ export function AuthModal() {
     } finally {
       setIsPublishing(false);
     }
-  }, [hasDownloaded, nsec, displayName, login, closeAuthModal]);
+  }, [hasSaved, nsec, displayName, login, closeAuthModal]);
 
   // ---------------------------------------------------------------------------
   // Render helpers
@@ -310,64 +353,115 @@ export function AuthModal() {
                     type={showKey ? "text" : "password"}
                     value={nsec}
                     readOnly
-                    className="pr-10 font-mono text-sm"
+                    className={`pr-20 font-mono text-sm transition-colors ${fieldCopied ? "border-green-500" : ""}`}
                   />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() => setShowKey(!showKey)}
-                  >
-                    {showKey ? (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </Button>
+                  <div className="absolute right-0 top-0 h-full flex items-center">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={`h-full px-2.5 hover:bg-transparent transition-colors ${fieldCopied ? "text-green-500" : "text-muted-foreground"}`}
+                      onClick={copyKeyToClipboard}
+                      aria-label="Copy key"
+                    >
+                      {fieldCopied ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-full px-2.5 hover:bg-transparent"
+                      onClick={() => setShowKey(!showKey)}
+                      aria-label={showKey ? "Hide key" : "Show key"}
+                    >
+                      {showKey ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
 
-                {/* Warning */}
+                {/* Warning + save actions — all in one box so users read before acting */}
                 <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4 space-y-3">
                   <div className="flex items-center gap-2">
-                    <ShieldAlert className="h-4 w-4 text-amber-700 dark:text-amber-400 shrink-0" />
+                    <ShieldAlert className="h-5 w-5 text-amber-700 dark:text-amber-400 shrink-0" />
                     <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">
-                      Your account IS a Nostr secret key
+                      This key is your account
                     </span>
                   </div>
-                  <p className="text-xs text-amber-900 dark:text-amber-300 leading-relaxed">
-                    Download it and keep it safe — if you lose it, you lose your
-                    account permanently. There is no password reset.
-                  </p>
-                  <p className="text-xs text-amber-900 dark:text-amber-300 leading-relaxed">
-                    If anyone else accesses it, they also have permanent access
-                    to your account. With great power comes great
-                    responsibility.
-                  </p>
+
+                  {/* Acknowledgement checkboxes */}
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={ackLoss}
+                      onChange={(e) => setAckLoss(e.target.checked)}
+                      className="mt-0.5 accent-amber-600"
+                    />
+                    <span className="text-xs text-amber-900 dark:text-amber-300 leading-relaxed">
+                      If I lose this key I lose my account permanently — there
+                      is no password reset.
+                    </span>
+                  </label>
+
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={ackExposure}
+                      onChange={(e) => setAckExposure(e.target.checked)}
+                      className="mt-0.5 accent-amber-600"
+                    />
+                    <span className="text-xs text-amber-900 dark:text-amber-300 leading-relaxed">
+                      If anyone else sees this key they permanently control my
+                      account.
+                    </span>
+                  </label>
+
+                  {/* Save buttons — enabled once both boxes are checked */}
+                  <div
+                    className={`grid grid-cols-2 gap-2 pt-1 transition-opacity duration-200 ${ackLoss && ackExposure ? "opacity-100" : "opacity-40 pointer-events-none"}`}
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                      onClick={handleCopyKey}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy key
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                      onClick={handleDownloadKey}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </Button>
+                  </div>
                 </div>
 
-                {/* Download button */}
-                <Button
-                  className="w-full h-12 gap-2"
-                  variant={hasDownloaded ? "outline" : "default"}
-                  onClick={handleDownloadKey}
-                >
-                  <Download className="h-4 w-4" />
-                  {hasDownloaded ? "Download again" : "Download key"}
-                </Button>
-
-                {/* Continue — only enabled after download */}
+                {/* Continue — only enabled after saving */}
                 <Button
                   className="w-full h-12"
-                  disabled={!hasDownloaded}
+                  disabled={!hasSaved || !ackLoss || !ackExposure}
                   onClick={handleCreateAccount}
                 >
                   Create account
                 </Button>
 
-                {!hasDownloaded && (
+                {(!hasSaved || !ackLoss || !ackExposure) && (
                   <p className="text-xs text-center text-muted-foreground">
-                    You must download your key before continuing.
+                    {ackLoss && ackExposure
+                      ? "Copy or download your key to continue."
+                      : "Confirm you understand the above to continue."}
                   </p>
                 )}
               </div>
