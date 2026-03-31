@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { nip19 } from "nostr-tools";
 import { cn } from "@/lib/utils";
@@ -28,8 +28,11 @@ import {
   UserPlus,
   UserMinus,
   Loader2,
+  Star,
+  Users,
+  Eye,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useActiveAccount } from "applesauce-react/hooks";
 import {
   AlertDialog,
@@ -47,9 +50,40 @@ interface UserPageProps {
   pubkey: string;
 }
 
+type TabId = "repositories" | "followed" | "starred" | "git-follows";
+
+const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
+  {
+    id: "repositories",
+    label: "Repositories",
+    icon: <GitBranch className="h-3.5 w-3.5" />,
+  },
+  {
+    id: "followed",
+    label: "Followed",
+    icon: <Eye className="h-3.5 w-3.5" />,
+  },
+  {
+    id: "starred",
+    label: "Starred",
+    icon: <Star className="h-3.5 w-3.5" />,
+  },
+  {
+    id: "git-follows",
+    label: "Followed Authors",
+    icon: <Users className="h-3.5 w-3.5" />,
+  },
+];
+
 export default function UserPage({ pubkey }: UserPageProps) {
   const profile = useProfile(pubkey);
   const repos = useUserRepositories(pubkey);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = (searchParams.get("tab") as TabId | null) ?? "repositories";
+
+  const setTab = (tab: TabId) => {
+    setSearchParams(tab === "repositories" ? {} : { tab });
+  };
 
   // Prefetch NIP-05 identity so useRepoPath resolves it from IDB on next visit
   usePrefetchNip05([pubkey]);
@@ -182,47 +216,127 @@ export default function UserPage({ pubkey }: UserPageProps) {
         </div>
       </div>
 
-      {/* Repositories section */}
-      <div className="container max-w-screen-xl px-4 md:px-8 py-8">
-        <div className="flex items-center gap-2.5 mb-6">
-          <div className="p-1.5 rounded-md bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10">
-            <GitBranch className="h-4 w-4 text-violet-500" />
-          </div>
-          <h2 className="text-xl font-semibold tracking-tight">Repositories</h2>
-          {repos && (
-            <Badge variant="secondary" className="text-xs">
-              {repos.length}
-            </Badge>
-          )}
+      {/* Tabs nav */}
+      <div className="border-b border-border/60">
+        <div className="container max-w-screen-xl px-4 md:px-8">
+          <nav className="flex gap-1 -mb-px" aria-label="Profile tabs">
+            {TABS.map((tab) => {
+              const isActive = activeTab === tab.id;
+              const count =
+                tab.id === "repositories" && repos ? repos.length : null;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setTab(tab.id)}
+                  className={cn(
+                    "inline-flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors",
+                    isActive
+                      ? "border-violet-500 text-violet-600 dark:text-violet-400"
+                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+                  )}
+                >
+                  {tab.icon}
+                  {tab.label}
+                  {count !== null && (
+                    <Badge
+                      variant={isActive ? "default" : "secondary"}
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 h-4 min-w-4",
+                        isActive &&
+                          "bg-violet-500/20 text-violet-600 dark:text-violet-400 border-0",
+                      )}
+                    >
+                      {count}
+                    </Badge>
+                  )}
+                  {count === null && tab.id !== "repositories" && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] px-1.5 py-0 h-4 min-w-4"
+                    >
+                      {tab.id === "followed"
+                        ? 5
+                        : tab.id === "starred"
+                          ? 12
+                          : 7}
+                    </Badge>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
         </div>
+      </div>
 
-        {!repos ? (
-          <div className="grid gap-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <RepoSkeleton key={i} />
-            ))}
-          </div>
-        ) : repos.length === 0 ? (
+      {/* Tab content */}
+      <div className="container max-w-screen-xl px-4 md:px-8 py-8">
+        {activeTab === "repositories" && (
+          <>
+            {!repos ? (
+              <div className="grid gap-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <RepoSkeleton key={i} />
+                ))}
+              </div>
+            ) : repos.length === 0 ? (
+              <Card className="border-dashed">
+                <CardContent className="py-12 px-8 text-center">
+                  <GitBranch className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+                  <p className="text-muted-foreground">
+                    No repository announcements found for this user.
+                  </p>
+                  <p className="text-muted-foreground/60 text-sm mt-1">
+                    They may not have published any repositories yet.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3">
+                {repos.map((repo) => (
+                  <UserRepoCard
+                    key={`${repo.selectedMaintainer}:${repo.dTag}`}
+                    repo={repo}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === "followed" && (
           <Card className="border-dashed">
             <CardContent className="py-12 px-8 text-center">
-              <GitBranch className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-              <p className="text-muted-foreground">
-                No repository announcements found for this user.
-              </p>
+              <Users className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+              <p className="text-muted-foreground">Followed repositories</p>
               <p className="text-muted-foreground/60 text-sm mt-1">
-                They may not have published any repositories yet.
+                Coming soon.
               </p>
             </CardContent>
           </Card>
-        ) : (
-          <div className="grid gap-3">
-            {repos.map((repo) => (
-              <UserRepoCard
-                key={`${repo.selectedMaintainer}:${repo.dTag}`}
-                repo={repo}
-              />
-            ))}
-          </div>
+        )}
+
+        {activeTab === "starred" && (
+          <Card className="border-dashed">
+            <CardContent className="py-12 px-8 text-center">
+              <Star className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+              <p className="text-muted-foreground">Starred repositories</p>
+              <p className="text-muted-foreground/60 text-sm mt-1">
+                Coming soon.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "git-follows" && (
+          <Card className="border-dashed">
+            <CardContent className="py-12 px-8 text-center">
+              <GitBranch className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+              <p className="text-muted-foreground">Git author follows</p>
+              <p className="text-muted-foreground/60 text-sm mt-1">
+                Coming soon.
+              </p>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>
