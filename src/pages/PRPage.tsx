@@ -596,8 +596,8 @@ export default function PRPage() {
                   />
                 )}
 
-              {/* Reply box */}
-              {activeAccount && pr && (
+              {/* Reply box — always shown; anonymous posting handled inside */}
+              {pr && (
                 <ReplyBox
                   rootEvent={
                     // For patches with multiple revisions, comments go to the

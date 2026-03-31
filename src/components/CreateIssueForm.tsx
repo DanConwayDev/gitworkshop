@@ -1,10 +1,14 @@
 import { useState, useCallback, useMemo, useRef } from "react";
+import { useActiveAccount } from "applesauce-react/hooks";
 import { runner } from "@/services/actions";
+import { createAnonRunner } from "@/lib/anonPublish";
 import { CreateIssue } from "@/actions/nip34";
 import { useToast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import LoginDialog from "@/components/auth/LoginDialog";
 import { LabelBadge } from "@/components/LabelBadge";
 import { NostrComposer } from "@/components/NostrComposer";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
@@ -88,6 +92,9 @@ export function CreateIssueForm({
 }: CreateIssueFormProps) {
   const { toast } = useToast();
 
+  const account = useActiveAccount();
+  const isLoggedIn = !!account;
+
   const [subject, setSubject] = useState("");
   const [content, setContent] = useState("");
   const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
@@ -95,6 +102,8 @@ export function CreateIssueForm({
   const [labelError, setLabelError] = useState<string | null>(null);
   const [labels, setLabels] = useState<string[]>([]);
   const [isPending, setIsPending] = useState(false);
+  const [anonMode, setAnonMode] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
   const [showHashtagHint, setShowHashtagHint] = useState(false);
   const hashtagHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -167,10 +176,20 @@ export function CreateIssueForm({
         return;
       }
 
+      // Not logged in and not anonymous — open login dialog instead
+      if (!isLoggedIn && !anonMode) {
+        setLoginOpen(true);
+        return;
+      }
+
+      // Determine which runner to use: ephemeral key for anon, global for logged-in
+      const activeRunner =
+        !isLoggedIn && anonMode ? createAnonRunner() : runner;
+
       setIsPending(true);
       try {
         const trimmedContent = content.trim();
-        await runner.run(
+        await activeRunner.run(
           CreateIssue,
           repoCoord,
           ownerPubkey,
@@ -211,6 +230,8 @@ export function CreateIssueForm({
       repoRelays,
       toast,
       onSuccess,
+      isLoggedIn,
+      anonMode,
     ],
   );
 
@@ -345,37 +366,66 @@ export function CreateIssueForm({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-2 pt-1">
-        {onCancel && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onCancel}
-            disabled={isPending}
-          >
-            Cancel
-          </Button>
+      <div className="flex items-center justify-between gap-2 pt-1">
+        {/* Anonymous checkbox — only shown when not logged in */}
+        {!isLoggedIn ? (
+          <div className="flex items-center gap-1.5">
+            <Checkbox
+              id="issue-anon"
+              checked={anonMode}
+              onCheckedChange={(checked) => setAnonMode(checked === true)}
+              disabled={isPending}
+              className="h-3.5 w-3.5"
+            />
+            <Label
+              htmlFor="issue-anon"
+              className="text-xs text-muted-foreground cursor-pointer select-none"
+            >
+              Anonymous
+            </Label>
+          </div>
+        ) : (
+          <span />
         )}
-        <Button
-          type="submit"
-          size="sm"
-          disabled={isPending || !subject.trim() || composerHasNsec(content)}
-          className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
-        >
-          {isPending ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Publishing...
-            </>
-          ) : (
-            <>
-              <CircleDot className="h-3.5 w-3.5" />
-              Submit issue
-            </>
+
+        <div className="flex items-center gap-2">
+          {onCancel && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
           )}
-        </Button>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={isPending || !subject.trim() || composerHasNsec(content)}
+            className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+          >
+            {isPending ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Publishing...
+              </>
+            ) : (
+              <>
+                <CircleDot className="h-3.5 w-3.5" />
+                Submit issue
+              </>
+            )}
+          </Button>
+        </div>
       </div>
+
+      <LoginDialog
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onLogin={() => setLoginOpen(false)}
+      />
     </form>
   );
 }

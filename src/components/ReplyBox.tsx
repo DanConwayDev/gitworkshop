@@ -4,12 +4,17 @@
  * Uses the CreateComment action (blueprint + outbox relay logic) rather than
  * raw usePublish, so comments are published to the same relay groups as other
  * NIP-34 events (git index + user outbox + repo relays + root author inbox).
+ *
+ * When no account is logged in, an "Anonymous" checkbox appears. Checking it
+ * signs the comment with a fresh ephemeral key so the user can post without
+ * creating a Nostr identity first.
  */
 
 import { useCallback, useState } from "react";
 import type { NostrEvent } from "nostr-tools";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { runner } from "@/services/actions";
+import { createAnonRunner } from "@/lib/anonPublish";
 import { useToast } from "@/hooks/useToast";
 import { useProfile } from "@/hooks/useProfile";
 import { CreateComment } from "@/actions/nip34";
@@ -17,6 +22,9 @@ import { NostrComposer } from "@/components/NostrComposer";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import LoginDialog from "@/components/auth/LoginDialog";
 import { Loader2 } from "lucide-react";
 import { genUserName } from "@/lib/genUserName";
 
@@ -45,10 +53,14 @@ export function ReplyBox({
   const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
   const [focused, setFocused] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [anonMode, setAnonMode] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
   const { toast } = useToast();
 
   const account = useActiveAccount();
   const profile = useProfile(account?.pubkey);
+
+  const isLoggedIn = !!account;
 
   const displayName =
     profile?.displayName ??
@@ -69,9 +81,25 @@ export function ReplyBox({
       const trimmed = body.trim();
       if (!trimmed) return;
 
+      // Not logged in and not anonymous — open login dialog instead
+      if (!isLoggedIn && !anonMode) {
+        setLoginOpen(true);
+        return;
+      }
+
+      // Determine which runner to use: ephemeral key for anon, global for logged-in
+      const activeRunner =
+        !isLoggedIn && anonMode ? createAnonRunner() : runner;
+
       setIsPending(true);
       try {
-        await runner.run(CreateComment, parent, trimmed, repoRelays, rootEvent);
+        await activeRunner.run(
+          CreateComment,
+          parent,
+          trimmed,
+          repoRelays,
+          rootEvent,
+        );
 
         toast({
           title: "Comment posted",
@@ -93,7 +121,16 @@ export function ReplyBox({
         setIsPending(false);
       }
     },
-    [body, parent, rootEvent, repoRelays, onSubmitted, toast],
+    [
+      body,
+      parent,
+      rootEvent,
+      repoRelays,
+      onSubmitted,
+      toast,
+      isLoggedIn,
+      anonMode,
+    ],
   );
 
   return (
@@ -122,7 +159,7 @@ export function ReplyBox({
           onFocusChange={setFocused}
         />
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <div
             className={`flex items-center gap-1 transition-opacity duration-200 ${showToggle ? "opacity-100" : "opacity-0 pointer-events-none"}`}
           >
@@ -141,23 +178,51 @@ export function ReplyBox({
               </button>
             ))}
           </div>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={isPending || !body.trim() || composerHasNsec(body)}
-            className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
-          >
-            {isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Posting...
-              </>
-            ) : (
-              "Comment"
+
+          <div className="flex items-center gap-3 ml-auto">
+            {/* Anonymous checkbox — only shown when not logged in */}
+            {!isLoggedIn && (
+              <div className="flex items-center gap-1.5">
+                <Checkbox
+                  id="reply-anon"
+                  checked={anonMode}
+                  onCheckedChange={(checked) => setAnonMode(checked === true)}
+                  disabled={isPending}
+                  className="h-3.5 w-3.5"
+                />
+                <Label
+                  htmlFor="reply-anon"
+                  className="text-xs text-muted-foreground cursor-pointer select-none"
+                >
+                  Anonymous
+                </Label>
+              </div>
             )}
-          </Button>
+
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isPending || !body.trim() || composerHasNsec(body)}
+              className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Posting...
+                </>
+              ) : (
+                "Comment"
+              )}
+            </Button>
+          </div>
         </div>
       </form>
+
+      <LoginDialog
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onLogin={() => setLoginOpen(false)}
+      />
     </div>
   );
 }

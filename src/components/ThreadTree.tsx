@@ -30,7 +30,6 @@ import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
 import { ReplyBox } from "@/components/ReplyBox";
 import type { ThreadContext } from "@/components/EventThreadComponents";
-import { useActiveAccount } from "applesauce-react/hooks";
 
 // ---------------------------------------------------------------------------
 // Thread context — passes root info down without prop-drilling
@@ -161,8 +160,7 @@ function ThreadComment({ event }: { event: NostrEvent }) {
   const [replying, setReplying] = useState(false);
 
   const ctx = useContext(ThreadCtx);
-  const activeAccount = useActiveAccount();
-  const canReply = !!activeAccount && !!ctx;
+  const canReply = !!ctx;
 
   useEffect(() => {
     if (!isTargeted || !elRef.current) return;

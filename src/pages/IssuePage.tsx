@@ -184,8 +184,8 @@ export default function IssuePage() {
               )}
             </div>
 
-            {/* Reply box — only for logged-in users */}
-            {activeAccount && issue && (
+            {/* Reply box — always shown; anonymous posting handled inside */}
+            {issue && (
               <ReplyBox
                 rootEvent={issue.rootEvent}
                 repoRelays={repo?.relays ?? []}
