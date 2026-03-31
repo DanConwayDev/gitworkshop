@@ -50,6 +50,7 @@ import {
   getRepoName,
   extractSubject,
 } from "@/lib/nip34";
+import { nip19 } from "nostr-tools";
 import { useEventStore } from "@/hooks/useEventStore";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
@@ -92,6 +93,10 @@ function kindLabel(kind: number): string {
       return "Contacts";
     case 10002:
       return "Relay List";
+    case 10017:
+      return "Git Authors List";
+    case 10018:
+      return "Git Repos List";
     default:
       return `Kind ${kind}`;
   }
@@ -219,17 +224,27 @@ function useEventContext(
     return undefined;
   }
 
-  // Reactions (kind 7) — label shows what was reacted to, link is the reaction's
-  // own nevent permalink which resolves to the target thread (with anchor if the
-  // target is a comment).
+  // Reactions (kind 7) — label shows what was reacted to.
+  // Stars on repo announcements (kind:30617) link directly to the repo page.
+  // All other reactions link to the reaction's own nevent permalink.
   if (kind === 7) {
     const eTags = event.tags.filter(([t]) => t === "e");
     const targetId = eTags[eTags.length - 1]?.[1];
     if (targetId) {
       const targetEvent = store.getEvent(targetId);
       if (targetEvent) {
-        const repoName = repoNameFromGroups(relayGroupDefs, store);
         const emoji = event.content || "+";
+
+        // Star on a repo announcement — nevent permalink redirects to the repo
+        // page and highlights this stargazer in the popover.
+        if (targetEvent.kind === REPO_KIND) {
+          const repoName = getRepoName(targetEvent) || "repo";
+          const nevent = eventIdToNevent(event.id);
+          const label = `${emoji} ${repoName}`;
+          return { label, path: `/${nevent}` };
+        }
+
+        const repoName = repoNameFromGroups(relayGroupDefs, store);
         const nevent = eventIdToNevent(event.id);
         // If the reaction targets a comment (kind 1111), walk up to the root
         // event for the subject and prefix with "re:" to show the hierarchy.
@@ -250,6 +265,20 @@ function useEventContext(
       }
     }
     return undefined;
+  }
+
+  // Git authors follow list (kind 10017) — link to the publisher's profile
+  // "Followed Authors" tab.
+  if (kind === 10017) {
+    const npub = nip19.npubEncode(event.pubkey);
+    return { label: "Followed Authors list", path: `/${npub}?tab=git-follows` };
+  }
+
+  // Git repos follow list (kind 10018) — link to the publisher's profile
+  // "Followed" tab.
+  if (kind === 10018) {
+    const npub = nip19.npubEncode(event.pubkey);
+    return { label: "Followed Repos list", path: `/${npub}?tab=followed` };
   }
 
   // Status events (1630–1633) — same pattern: label shows the root subject,

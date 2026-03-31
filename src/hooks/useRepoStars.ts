@@ -25,6 +25,8 @@ export interface RepoStarsResult {
   isStarred: boolean;
   /** The current user's star event (for deletion), or undefined. */
   myStarEvent: NostrEvent | undefined;
+  /** Deduplicated list of pubkeys that have starred this repo. */
+  stargazers: string[];
 }
 
 /**
@@ -59,7 +61,12 @@ export function useRepoStars(
 
   return useMemo(() => {
     if (!allReactionSets) {
-      return { count: 0, isStarred: false, myStarEvent: undefined };
+      return {
+        count: 0,
+        isStarred: false,
+        myStarEvent: undefined,
+        stargazers: [],
+      };
     }
 
     // Flatten all reaction events across all announcements, keeping only "+"
@@ -84,6 +91,7 @@ export function useRepoStars(
       count: seenPubkeys.size,
       isStarred: myPubkey ? seenPubkeys.has(myPubkey) : false,
       myStarEvent,
+      stargazers: [...seenPubkeys],
     };
   }, [allReactionSets, myPubkey]);
 }

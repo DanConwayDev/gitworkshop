@@ -18,6 +18,7 @@ import { gitIndexRelays } from "../services/settings";
 import { useDnsIdentity } from "../hooks/useDnsIdentity";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
+import { getReplaceableIdentifier } from "applesauce-core/helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,11 +55,14 @@ function RepoCoordRedirect({
   coord,
   hintRelays,
   subPath,
+  stargazerPubkey,
 }: {
   coord: string;
   hintRelays: string[];
   /** Path segment appended after the repo root, e.g. "/issues/nevent1..." */
   subPath: string;
+  /** When set, appends ?stargazer=<pubkey> to open the stargazers popover. */
+  stargazerPubkey?: string;
 }) {
   const parsed = parseRepoCoord(coord);
   if (!parsed) return <NotFound />;
@@ -68,6 +72,7 @@ function RepoCoordRedirect({
       repoId={parsed.dTag}
       relays={hintRelays}
       subPath={subPath}
+      stargazerPubkey={stargazerPubkey}
     />
   );
 }
@@ -80,14 +85,18 @@ function RepoPathRedirect({
   repoId,
   relays,
   subPath,
+  stargazerPubkey,
 }: {
   pubkey: string;
   repoId: string;
   relays: string[];
   subPath: string;
+  /** When set, appends ?stargazer=<pubkey> to open the stargazers popover. */
+  stargazerPubkey?: string;
 }) {
   const repoPath = useRepoPath(pubkey, repoId, relays);
-  return <Navigate to={`${repoPath}${subPath}`} replace />;
+  const search = stargazerPubkey ? `?stargazer=${stargazerPubkey}` : "";
+  return <Navigate to={`${repoPath}${subPath}${search}`} replace />;
 }
 
 /** Get the uppercase `E` root tag from a NIP-22 comment (kind 1111). */
@@ -118,11 +127,14 @@ function EventRedirect({
   eventId,
   hintRelays,
   commentId,
+  stargazerPubkey,
 }: {
   eventId: string;
   hintRelays: string[];
   /** If set, this is a comment permalink — we're resolving the root event. */
   commentId?: string;
+  /** If set, this is a star reaction permalink — open the stargazers popover. */
+  stargazerPubkey?: string;
 }) {
   // Fetch the event from hint relays (if any) and git index relays in parallel.
   // Hint relays are tried first but we don't skip the index — the event may
@@ -153,6 +165,23 @@ function EventRedirect({
   }
 
   const kind = event.kind;
+
+  // Repo announcement (kind 30617) — redirect to the repo landing page.
+  // When arriving via a star reaction permalink, append ?stargazer=<pubkey>
+  // so the StarButton can open the popover and highlight that user.
+  if (kind === REPO_KIND) {
+    const dTag = getReplaceableIdentifier(event);
+    if (!dTag) return <NotFound />;
+    const coord = `${REPO_KIND}:${event.pubkey}:${dTag}`;
+    return (
+      <RepoCoordRedirect
+        coord={coord}
+        hintRelays={hintRelays}
+        subPath=""
+        stargazerPubkey={stargazerPubkey}
+      />
+    );
+  }
 
   // Issue
   if (kind === ISSUE_KIND) {
@@ -208,14 +237,23 @@ function EventRedirect({
     const relays = targetRelay
       ? [targetRelay, ...hintRelays.filter((r) => r !== targetRelay)]
       : hintRelays;
-    // Use the `k` tag to check whether the reaction targets a comment (kind 1111).
-    // If so, pass the target ID as commentId so the redirect anchors to that
-    // comment in the thread. For direct issue/PR reactions there is no
-    // per-reaction anchor in the UI so we don't pass a commentId.
+    // Use the `k` tag to determine what was reacted to.
     const targetKind = parseInt(
       event.tags.find(([t]) => t === "k")?.[1] ?? "",
       10,
     );
+    // Star on a repo announcement — pass the reactor's pubkey so the repo
+    // page can open the stargazers popover and highlight them.
+    if (targetKind === REPO_KIND) {
+      return (
+        <EventRedirect
+          eventId={targetId}
+          hintRelays={relays}
+          stargazerPubkey={event.pubkey}
+        />
+      );
+    }
+    // Reaction on a comment — anchor to that comment in the thread.
     const resolvedCommentId = targetKind === 1111 ? targetId : undefined;
     return (
       <EventRedirect
