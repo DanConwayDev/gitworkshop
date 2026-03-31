@@ -411,7 +411,16 @@ export type Nip34ItemTier = "essentials" | "comments" | "thread";
  *
  *   essentials  →  nip34EssentialsLoader only
  *   comments    →  essentials + nip34CommentsLoader
- *   thread      →  comments  + nip34ThreadLoader (reactions + zaps)
+ *   thread      →  comments  + nip34ThreadLoader (reactions + zaps on root
+ *                   AND on each comment discovered by nip34CommentsLoader)
+ *
+ * At the "thread" tier, comment events emitted by nip34CommentsLoader are
+ * piped into nip34ThreadLoader so that reactions (kind:7), zaps (kind:9735),
+ * and other child events on individual comments are fetched recursively.
+ * A seenIds set prevents duplicate loader calls within the same subscription
+ * lifetime. Because nip34ThreadLoader is a singleton batching loader, all
+ * per-comment calls within its bufferTime window are collapsed into a single
+ * relay subscription.
  *
  * Tier upgrade / deduplication: the hook layer (useNip34ItemLoader) manages
  * which tiers have already been subscribed via separate use$() calls keyed on
@@ -448,6 +457,27 @@ export function nip34ItemLoader(
 
   if (tier === "thread") {
     observables.push(nip34ThreadLoader({ value: itemId, relays }));
+
+    // Recursively fetch child events (reactions, zaps, deletions) for each
+    // comment discovered by nip34CommentsLoader. Each comment ID is piped
+    // into the singleton nip34ThreadLoader which batches them automatically.
+    observables.push(
+      new Observable<NostrEvent>((subscriber) => {
+        const seenCommentIds = new Set<string>();
+        const sub = nip34CommentsLoader({ value: itemId, relays }).subscribe({
+          next: (event) => {
+            const ev = event as NostrEvent;
+            if (!seenCommentIds.has(ev.id)) {
+              seenCommentIds.add(ev.id);
+              nip34ThreadLoader({ value: ev.id, relays }).subscribe(subscriber);
+            }
+          },
+          error: (err) => subscriber.error(err),
+          complete: () => subscriber.complete(),
+        });
+        return () => sub.unsubscribe();
+      }),
+    );
   }
 
   return merge(...observables);
