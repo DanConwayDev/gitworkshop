@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import LoginDialog from "@/components/auth/LoginDialog";
+import { useAuthModal } from "@/contexts/AuthModalContext";
 import { LabelBadge } from "@/components/LabelBadge";
 import { NostrComposer } from "@/components/NostrComposer";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
@@ -103,8 +103,8 @@ export function CreateIssueForm({
   const [labels, setLabels] = useState<string[]>([]);
   const [isPending, setIsPending] = useState(false);
   const [anonMode, setAnonMode] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
   const [showHashtagHint, setShowHashtagHint] = useState(false);
+  const { openAuthModal } = useAuthModal();
   const hashtagHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -176,9 +176,9 @@ export function CreateIssueForm({
         return;
       }
 
-      // Not logged in and not anonymous — open login dialog instead
+      // Not logged in and not anonymous — open auth modal instead
       if (!isLoggedIn && !anonMode) {
-        setLoginOpen(true);
+        openAuthModal();
         return;
       }
 
@@ -232,6 +232,7 @@ export function CreateIssueForm({
       onSuccess,
       isLoggedIn,
       anonMode,
+      openAuthModal,
     ],
   );
 
@@ -420,12 +421,6 @@ export function CreateIssueForm({
           </Button>
         </div>
       </div>
-
-      <LoginDialog
-        isOpen={loginOpen}
-        onClose={() => setLoginOpen(false)}
-        onLogin={() => setLoginOpen(false)}
-      />
     </form>
   );
 }

@@ -15,6 +15,8 @@ import { accounts } from "@/services/accounts";
 import { runner, factory } from "@/services/actions";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthModalProvider } from "@/contexts/AuthModalContext";
+import { AuthModal } from "@/components/auth/AuthModal";
 import AppRouter from "./AppRouter";
 
 const head = createHead({
@@ -28,12 +30,15 @@ export function App() {
         <AccountsProvider manager={accounts}>
           <ActionsProvider runner={runner}>
             <FactoryProvider factory={factory}>
-              <TooltipProvider>
-                <Toaster />
-                <Suspense>
-                  <AppRouter />
-                </Suspense>
-              </TooltipProvider>
+              <AuthModalProvider>
+                <TooltipProvider>
+                  <Toaster />
+                  <AuthModal />
+                  <Suspense>
+                    <AppRouter />
+                  </Suspense>
+                </TooltipProvider>
+              </AuthModalProvider>
             </FactoryProvider>
           </ActionsProvider>
         </AccountsProvider>

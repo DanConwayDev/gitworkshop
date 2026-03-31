@@ -24,7 +24,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import LoginDialog from "@/components/auth/LoginDialog";
+import { useAuthModal } from "@/contexts/AuthModalContext";
 import { Loader2 } from "lucide-react";
 import { genUserName } from "@/lib/genUserName";
 
@@ -54,8 +54,8 @@ export function ReplyBox({
   const [focused, setFocused] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [anonMode, setAnonMode] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
   const { toast } = useToast();
+  const { openAuthModal } = useAuthModal();
 
   const account = useActiveAccount();
   const profile = useProfile(account?.pubkey);
@@ -81,9 +81,9 @@ export function ReplyBox({
       const trimmed = body.trim();
       if (!trimmed) return;
 
-      // Not logged in and not anonymous — open login dialog instead
+      // Not logged in and not anonymous — open auth modal instead
       if (!isLoggedIn && !anonMode) {
-        setLoginOpen(true);
+        openAuthModal();
         return;
       }
 
@@ -130,6 +130,7 @@ export function ReplyBox({
       toast,
       isLoggedIn,
       anonMode,
+      openAuthModal,
     ],
   );
 
@@ -217,12 +218,6 @@ export function ReplyBox({
           </div>
         </div>
       </form>
-
-      <LoginDialog
-        isOpen={loginOpen}
-        onClose={() => setLoginOpen(false)}
-        onLogin={() => setLoginOpen(false)}
-      />
     </div>
   );
 }
