@@ -4,12 +4,17 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  "@jsr/fiatjaf__git-natural-api":
+    hash: e6a9784d914604ca85d2bd2cdf1a092302b9dc30b419b03bc473a17329939574
+    path: patches/@jsr__fiatjaf__git-natural-api.patch
+
 importers:
   .:
     dependencies:
       "@fiatjaf/git-natural-api":
         specifier: npm:@jsr/fiatjaf__git-natural-api@^0.2.4
-        version: "@jsr/fiatjaf__git-natural-api@0.2.4"
+        version: "@jsr/fiatjaf__git-natural-api@0.2.4(patch_hash=e6a9784d914604ca85d2bd2cdf1a092302b9dc30b419b03bc473a17329939574)"
       "@fontsource-variable/inter":
         specifier: ^5.2.8
         version: 5.2.8
@@ -6899,7 +6904,7 @@ snapshots:
       "@jridgewell/resolve-uri": 3.1.2
       "@jridgewell/sourcemap-codec": 1.5.5
 
-  "@jsr/fiatjaf__git-natural-api@0.2.4":
+  "@jsr/fiatjaf__git-natural-api@0.2.4(patch_hash=e6a9784d914604ca85d2bd2cdf1a092302b9dc30b419b03bc473a17329939574)":
     dependencies:
       "@noble/hashes": 2.0.1
       fflate: 0.8.2

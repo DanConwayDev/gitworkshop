@@ -114,5 +114,10 @@
     "typescript-eslint": "^8.57.0",
     "vite": "^6.4.1",
     "vitest": "^3.2.4"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@jsr/fiatjaf__git-natural-api": "patches/@jsr__fiatjaf__git-natural-api.patch"
+    }
   }
 }

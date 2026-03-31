@@ -1,0 +1,152 @@
+diff --git a/_dist/tree.d.ts b/_dist/tree.d.ts
+index 3244d9a4f1146a24935a575888eb77b607d8cd23..3f40b7524a63f9f0e49e88e76cfb26c8edcd6146 100755
+--- a/_dist/tree.d.ts
++++ b/_dist/tree.d.ts
+@@ -9,11 +9,13 @@ import type { ObjectGetterByHash, ParsedObject } from "./parse-packfile.js";
+   directories: Array<{
+     name: string;
+     hash: string;
++    mode: string;
+     content: null | Tree;
+   }>;
+   files: Array<{
+     name: string;
+     hash: string;
++    mode: string;
+     content: null | Uint8Array;
+   }>;
+ };
+diff --git a/commits.js b/commits.js
+index 8e79a4ff68067c81002ce0f6833b21c9cef3f43a..ac8883f4ba452bd0e3cef8b9b41e98449be4383f 100755
+--- a/commits.js
++++ b/commits.js
+@@ -50,12 +50,15 @@
+  * @param line The author/committer line without the prefix
+  * @returns Parsed person information
+  */ function parsePerson(line) {
+-  const [name, email, timestamp, timezone] = line.split(" ");
+-  return {
+-    name,
+-    email: email.slice(1, -1),
+-    timestamp: parseInt(timestamp, 10),
+-    timezone: timezone
+-  };
++  const mailOpen = line.indexOf("<");
++  if (mailOpen === -1) return { name: line.trim(), email: "", timestamp: NaN, timezone: "" };
++  const name = line.slice(0, mailOpen).trimEnd();
++  const mailClose = line.lastIndexOf(">");
++  const email = line.slice(mailOpen + 1, mailClose);
++  const tail = line.slice(mailClose + 1).trimStart();
++  const tailMatch = tail.match(/^(\d+)\s+([+-]\d+)$/);
++  const timestamp = tailMatch ? parseInt(tailMatch[1], 10) : NaN;
++  const timezone = tailMatch ? tailMatch[2] : "";
++  return { name, email, timestamp, timezone };
+ }
+ //# sourceMappingURL=commits.js.map
+\ No newline at end of file
+diff --git a/commits.ts b/commits.ts
+index 247030b375c11172168a1076dadbe0789877aaaf..95aa2b3875e87abc11db0ce19727f30c17b70c1c 100755
+--- a/commits.ts
++++ b/commits.ts
+@@ -76,18 +76,35 @@ export function parseCommit(data: Uint8Array, hash: string): Commit {
+ 
+ /**
+  * Parses author/committer line from Git commit header.
+- * Format: "Name <email> timestamp timezone"
+- * @param line The author/committer line without the prefix
++ * Format: "Name With Spaces <email> timestamp timezone"
++ *
++ * Mirrors git's split_ident_line (ident.c):
++ *  - name  = everything before the first "<", trailing whitespace trimmed
++ *  - email = between first "<" and the *last* ">" (handles broken idents
++ *            where the email itself contains a stray ">")
++ *  - timestamp and timezone are parsed from the tail after the last ">",
++ *    and are optional — git treats their absence as valid ("person_only")
++ *
++ * @param line The author/committer line without the "author "/"committer " prefix
+  * @returns Parsed person information
+  */
+ function parsePerson(
+   line: string,
+ ): { name: string; email: string; timestamp: number; timezone: string } {
+-  const [name, email, timestamp, timezone] = line.split(" ");
+-  return {
+-    name,
+-    email: email.slice(1, -1),
+-    timestamp: parseInt(timestamp, 10),
+-    timezone: timezone,
+-  };
++  const mailOpen = line.indexOf("<");
++  if (mailOpen === -1) return { name: line.trim(), email: "", timestamp: NaN, timezone: "" };
++
++  const name = line.slice(0, mailOpen).trimEnd();
++
++  // Use the *last* ">" as the mail boundary (git's broken-ident handling)
++  const mailClose = line.lastIndexOf(">");
++  const email = line.slice(mailOpen + 1, mailClose);
++
++  // Parse optional "timestamp timezone" tail after the last ">"
++  const tail = line.slice(mailClose + 1).trimStart();
++  const tailMatch = tail.match(/^(\d+)\s+([+-]\d+)$/);
++  const timestamp = tailMatch ? parseInt(tailMatch[1], 10) : NaN;
++  const timezone = tailMatch ? tailMatch[2] : "";
++
++  return { name, email, timestamp, timezone };
+ }
+diff --git a/tree.js b/tree.js
+index c3a1fb77c5e1fd3c7e5ae28674c24ed01aef50a6..dac0e2dd0a5ea17c9f1d57a586513cee18f47b9c 100755
+--- a/tree.js
++++ b/tree.js
+@@ -15,12 +15,14 @@
+       directories.push({
+         name: entry.path,
+         hash: entry.hash,
++        mode: entry.mode,
+         content: obj && (depth === undefined || depth > 0) ? loadTree(obj, objects, depth !== undefined ? depth - 1 : undefined) : null
+       });
+     } else {
+       files.push({
+         name: entry.path,
+         hash: entry.hash,
++        mode: entry.mode,
+         content: obj ? obj.data : null
+       });
+     }
+diff --git a/tree.ts b/tree.ts
+index 6643dad2330cd0e92fac707370438485e3b977be..09570c86b6382decd7a13f4181375b58c1cef707 100755
+--- a/tree.ts
++++ b/tree.ts
+@@ -13,11 +13,18 @@ export type Tree = {
+   directories: Array<{
+     name: string;
+     hash: string;
++    /** Unix file mode for the directory entry (e.g., "40000") */
++    mode: string;
+     content: null | Tree; // Nested tree structure
+   }>;
+   files: Array<{
+     name: string;
+     hash: string;
++    /**
++     * Unix file mode (e.g., "100644" regular, "100755" executable,
++     * "120000" symlink, "160000" gitlink/submodule)
++     */
++    mode: string;
+     content: null | Uint8Array; // File content
+   }>;
+ };
+@@ -41,12 +48,14 @@ export function loadTree(obj: ParsedObject, objects: ObjectGetterByHash, depth?:
+       directories.push({
+         name: entry.path,
+         hash: entry.hash,
++        mode: entry.mode,
+         content: obj && (depth === undefined || depth > 0) ? loadTree(obj, objects, depth !== undefined ? depth - 1 : undefined) : null,
+       });
+     } else {
+       files.push({
+         name: entry.path,
+         hash: entry.hash,
++        mode: entry.mode,
+         content: obj ? obj.data : null,
+       });
+     }
