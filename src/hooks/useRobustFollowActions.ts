@@ -41,7 +41,7 @@ import { useEventStore } from "@/hooks/useEventStore";
 import { use$ } from "@/hooks/use$";
 import { FollowUser, UnfollowUser } from "applesauce-actions/actions";
 import { MailboxesModel } from "applesauce-core/models";
-import { addressLoader, liveness } from "@/services/nostr";
+import { addressLoader, liveness, pool } from "@/services/nostr";
 import { lookupRelays } from "@/services/settings";
 import type { ProfilePointer } from "applesauce-core/helpers";
 
@@ -110,6 +110,17 @@ export function useRobustFollowActions(): RobustFollowActionsResult {
 
   /**
    * Check that we are connected to enough relays to safely write.
+   *
+   * Two-layer check:
+   *   1. Pool connection state — is the WebSocket actually open right now?
+   *      Relays not yet in the pool (never connected this session) count as
+   *      disconnected. This catches the offline-mode case where liveness has
+   *      no state for a relay and would otherwise treat it as healthy.
+   *   2. Liveness backoff — even if the socket is open, skip relays that
+   *      liveness has marked as dead or in backoff.
+   *
+   * A relay is considered "healthy" only if BOTH conditions pass.
+   *
    * Throws a user-facing error if the threshold is not met.
    */
   const assertConnectivity = useCallback((relays: string[]) => {
@@ -119,7 +130,14 @@ export function useRobustFollowActions(): RobustFollowActionsResult {
       );
     }
 
-    const healthyRelays = liveness.filter(relays);
+    // Layer 1: pool connection state (WebSocket open = actually connected now)
+    const connectedRelays = relays.filter((url) => {
+      const relay = pool.relays.get(url);
+      return relay?.connected === true;
+    });
+
+    // Layer 2: liveness filter (removes dead / backoff relays from the connected set)
+    const healthyRelays = liveness.filter(connectedRelays);
     const healthyCount = healthyRelays.length;
     const fraction = healthyCount / relays.length;
 
