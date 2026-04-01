@@ -35,6 +35,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
 } from "lucide-react";
+import { RepoBadge } from "@/components/RepoBadge";
 
 type ViewTab = "inbox" | "archived" | "all";
 
@@ -425,6 +426,20 @@ function useNotificationTitle(item: NotificationItem): string {
   return `Activity on ${item.rootId.slice(0, 8)}...`;
 }
 
+/**
+ * Extract the first repo coordinate ("30617:<pubkey>:<d-tag>") from a
+ * notification group. Checks the events in order, preferring root events
+ * (issue/PR/patch) which always carry an `a` tag, then falls back to
+ * comments which may also carry one.
+ */
+function getRepoCoord(item: NotificationItem): string | undefined {
+  for (const ev of item.events) {
+    const aTag = ev.tags.find(([t]) => t === "a")?.[1];
+    if (aTag?.startsWith("30617:")) return aTag;
+  }
+  return undefined;
+}
+
 /** Get unique commenter pubkeys from the notification events */
 function getCommenters(item: NotificationItem): string[] {
   const pubkeys = new Set<string>();
@@ -446,6 +461,7 @@ function NotificationRow({
   const rootType = inferRootType(item);
   const title = useNotificationTitle(item);
   const commenters = getCommenters(item);
+  const repoCoord = getRepoCoord(item);
   const lastActive = formatDistanceToNow(new Date(item.latestActivity * 1000), {
     addSuffix: true,
   });
@@ -494,15 +510,27 @@ function NotificationRow({
             >
               {title.length > 70 ? `${title.slice(0, 67)}...` : title}
             </p>
-            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-              <span>active {lastActive}</span>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className="text-xs text-muted-foreground shrink-0">
+                active {lastActive}
+              </span>
               {item.events.length > 1 && (
                 <>
-                  <span className="text-muted-foreground/40">&middot;</span>
-                  <span className="inline-flex items-center gap-0.5">
+                  <span className="text-muted-foreground/40 text-xs">
+                    &middot;
+                  </span>
+                  <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
                     <MessageCircle className="h-3 w-3" />
                     {item.events.length}
                   </span>
+                </>
+              )}
+              {repoCoord && (
+                <>
+                  <span className="text-muted-foreground/40 text-xs">
+                    &middot;
+                  </span>
+                  <RepoBadge coord={repoCoord} />
                 </>
               )}
             </div>

@@ -53,6 +53,7 @@ import {
 import { nip19 } from "nostr-tools";
 import { useEventStore } from "@/hooks/useEventStore";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
+import { RepoBadge } from "@/components/RepoBadge";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import { Link } from "react-router-dom";
@@ -343,27 +344,16 @@ function GroupLabel({
     const parts = groupId.split(":");
     const pubkey = parts[1] ?? "";
     const dTag = parts[2] ?? groupId;
+    // Pre-resolve the name from the store so RepoBadge can skip its own lookup.
     const repoEvent = pubkey
       ? store.getReplaceable(REPO_KIND, pubkey, dTag)
       : undefined;
-    const repoName = repoEvent ? getRepoName(repoEvent) || dTag : dTag;
+    const resolvedName = repoEvent ? getRepoName(repoEvent) || dTag : undefined;
 
     return (
       <span className="flex items-center gap-1.5">
         <span className="text-muted-foreground/60 text-xs">repo:</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
-          <GitFork className="h-3 w-3 shrink-0" />
-          {pubkey ? (
-            <>
-              <UserName pubkey={pubkey} className="text-xs font-medium" />
-              <span className="text-muted-foreground font-normal">
-                /{repoName}
-              </span>
-            </>
-          ) : (
-            <span>{repoName}</span>
-          )}
-        </span>
+        <RepoBadge coord={groupId} repoName={resolvedName} />
       </span>
     );
   }
