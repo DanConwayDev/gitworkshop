@@ -21,7 +21,7 @@
  * Action implementations (markAsRead, etc.) live in notificationActions.ts.
  */
 
-import { BehaviorSubject, firstValueFrom, of } from "rxjs";
+import { BehaviorSubject, combineLatest, firstValueFrom, of } from "rxjs";
 import { timeout, map, switchMap, distinctUntilChanged } from "rxjs/operators";
 import { mapEventsToStore } from "applesauce-core";
 import { MailboxesModel } from "applesauce-core/models";
@@ -277,7 +277,7 @@ export function acquireNotificationStore(
   // Reactive list of the user's own repo coordinates, derived from the store.
   // Starts empty; populated once kind:30617 events arrive from the relay.
   // Used for two purposes:
-  //   1. Subscribing to repo-star (kind:7) events on git index relays
+  //   1. Subscribing to repo-star (kind:7) events on the repo's own relays
   //   2. Subscribing to thread notifications on each repo's own relays,
   //      so we don't miss activity on repos whose relays aren't in our inbox
   const repoCoords$ = new BehaviorSubject<string[]>([]);
@@ -312,51 +312,59 @@ export function acquireNotificationStore(
     )
     .subscribe((coords) => repoCoords$.next(coords));
 
-  // Reactive subscription for repo stars (kind:7).
-  // Stars are published to git index relays (where repo announcements live).
-  const repoStarSub = repoCoords$
+  // Derive the union of relay URLs declared across all of the user's repo
+  // announcements. This is the correct relay set for both star and thread
+  // subscriptions — repo activity is published to the repo's own relays, not
+  // to git index relays.
+  //
+  // We also include git index relays so that stars (which are published there
+  // alongside the repo announcement) are always covered.
+  const repoRelays$ = (
+    eventStore.timeline([ownRepoFilter]) as unknown as Observable<NostrEvent[]>
+  ).pipe(
+    map((events) => {
+      const urlSet = new Set<string>(gitIndexRelays.getValue());
+      for (const ev of events) {
+        for (const tag of ev.tags) {
+          if (tag[0] === "relays") {
+            for (let i = 1; i < tag.length; i++) {
+              if (tag[i]) urlSet.add(tag[i]);
+            }
+          }
+        }
+      }
+      return [...urlSet];
+    }),
+    distinctUntilChanged(
+      (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+    ),
+  );
+
+  // Reactive subscription for repo stars (kind:7) and thread notifications.
+  // Both are published to the repo's own relays (declared in the announcement).
+  // We combine coords and relays so a single switchMap re-subscribes whenever
+  // either the repo list or the relay list changes.
+  const threadFilters = buildNotificationFilters(pubkey);
+  const repoActivitySub = combineLatest([repoCoords$, repoRelays$])
     .pipe(
       distinctUntilChanged(
-        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+        ([coordsA, relaysA], [coordsB, relaysB]) =>
+          coordsA.length === coordsB.length &&
+          coordsA.every((v, i) => v === coordsB[i]) &&
+          relaysA.length === relaysB.length &&
+          relaysA.every((v, i) => v === relaysB[i]),
       ),
-      switchMap((coords) => {
-        if (coords.length === 0) return of(undefined);
+      switchMap(([coords, relays]) => {
+        if (coords.length === 0 || relays.length === 0) return of(undefined);
         return pool
           .subscription(
-            gitIndexRelays.getValue(),
-            [buildRepoStarFilter(coords)],
+            relays,
+            [...threadFilters, buildRepoStarFilter(coords)],
             {
               reconnect: Infinity,
               resubscribe: Infinity,
             },
           )
-          .pipe(onlyEvents(), mapEventsToStore(eventStore));
-      }),
-    )
-    .subscribe();
-
-  // Reactive subscription for thread notifications on repo relays.
-  // Issues, patches, and comments are published to the repo's own relays
-  // (declared in the repo announcement), which may differ from the user's
-  // NIP-65 inbox relays. Subscribing here ensures we don't miss activity
-  // on repos whose relays aren't already in our inbox.
-  const threadFilters = buildNotificationFilters(pubkey);
-  const repoThreadSub = repoCoords$
-    .pipe(
-      distinctUntilChanged(
-        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
-      ),
-      switchMap((coords) => {
-        if (coords.length === 0) return of(undefined);
-        // Fetch each repo announcement to get its declared relays, then
-        // subscribe to thread notifications on those relays.
-        // For now we use git index relays as a reasonable proxy — the index
-        // relay stores repo announcements and is likely to also store activity.
-        return pool
-          .subscription(gitIndexRelays.getValue(), threadFilters, {
-            reconnect: Infinity,
-            resubscribe: Infinity,
-          })
           .pipe(onlyEvents(), mapEventsToStore(eventStore));
       }),
     )
@@ -376,8 +384,7 @@ export function acquireNotificationStore(
       nip78WatchSub.unsubscribe();
       ownRepoSub.unsubscribe();
       repoCoordsStoreSub.unsubscribe();
-      repoStarSub.unsubscribe();
-      repoThreadSub.unsubscribe();
+      repoActivitySub.unsubscribe();
       repoCoords$.complete();
     },
     refCount: 1,
