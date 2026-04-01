@@ -426,20 +426,14 @@ function titleFromEvent(ev: {
 }
 
 /**
- * Hook that resolves the display title for a notification group.
- *
- * #7: Subscribes to the root event from the EventStore (always — no
- * conditional hook calls). If the root event is already in the group's
- * events array that's used as the display value directly; the store
- * subscription is the authoritative reactive source and also handles the
- * case where the root event arrives later (e.g. comment-only groups where
- * the issue/PR event wasn't in the notification batch).
+ * Hook that fetches the root event for a notification group from the
+ * EventStore. One subscription per row — both title and repo coord are
+ * derived from the same result so we never create duplicate subscriptions.
  *
  * Fires eventLoader for the rootId so the event is fetched if missing.
  */
-function useNotificationTitle(item: NotificationItem): string {
-  // Always subscribe — hooks must be called unconditionally.
-  // eventStore.timeline([{ ids: [rootId] }]) is cheap (single-ID filter).
+function useRootEvent(item: NotificationItem) {
+  // Single subscription — cheap single-ID filter.
   const rootEvents = use$(
     () => eventStore.timeline([{ ids: [item.rootId] }]),
     [item.rootId],
@@ -452,29 +446,38 @@ function useNotificationTitle(item: NotificationItem): string {
     }
   }, [item.rootId, rootEvents]);
 
-  // Prefer the root event from the store (most up-to-date)
-  if (rootEvents && rootEvents.length > 0) {
-    const title = titleFromEvent(rootEvents[0]);
+  return rootEvents?.[0];
+}
+
+/** Derive the display title from the root event + notification group events. */
+function resolveTitle(
+  rootEvent: ReturnType<typeof useRootEvent>,
+  item: NotificationItem,
+): string {
+  if (rootEvent) {
+    const title = titleFromEvent(rootEvent);
     if (title) return title;
   }
-
-  // Fast path fallback: root event is already in the notification group
-  // (e.g. the notification IS the issue/PR creation event)
+  // Fast path: root event is already in the notification group
   for (const ev of item.events) {
     const title = titleFromEvent(ev);
     if (title) return title;
   }
-
   return `Activity on ${item.rootId.slice(0, 8)}...`;
 }
 
-/**
- * Extract the first repo coordinate ("30617:<pubkey>:<d-tag>") from a
- * notification group. Checks the events in order, preferring root events
- * (issue/PR/patch) which always carry an `a` tag, then falls back to
- * comments which may also carry one.
- */
-function getRepoCoord(item: NotificationItem): string | undefined {
+/** Derive the repo coord from the root event + notification group events. */
+function resolveRepoCoord(
+  rootEvent: ReturnType<typeof useRootEvent>,
+  item: NotificationItem,
+): string | undefined {
+  // Check the root event first (most reliable source of the `a` tag)
+  if (rootEvent) {
+    const aTag = rootEvent.tags.find(([t]) => t === "a")?.[1];
+    if (aTag?.startsWith("30617:")) return aTag;
+  }
+  // Fall back to scanning notification events (works for root-kind notifications
+  // where the issue/PR/patch event itself is in the group)
   for (const ev of item.events) {
     const aTag = ev.tags.find(([t]) => t === "a")?.[1];
     if (aTag?.startsWith("30617:")) return aTag;
@@ -491,19 +494,67 @@ function getCommenters(item: NotificationItem): string[] {
   return Array.from(pubkeys).slice(0, 5);
 }
 
-interface UnreadSummary {
-  text: string;
+interface NotificationSummary {
+  /** Always-visible purpose label, e.g. "new issue", "new PR", "new commits pushed" */
+  purpose: string | undefined;
+  /** Unread activity text, e.g. "merged", "3 new comments" */
+  unreadText: string | undefined;
   hasMerge: boolean;
   hasClosed: boolean;
 }
 
 /**
- * Build a short human-readable summary of the unread events in a notification
- * group. Examples: "3 new comments", "merged", "closed · 2 new comments".
- * Also returns icon-selection flags so the caller doesn't need to re-derive them.
+ * Build a human-readable summary for a notification group.
+ *
+ * `purpose` describes what triggered the notification (always shown):
+ *   - "new issue" / "new PR" / "new patch" when the root event is in the group
+ *   - "new commits pushed" when a PR Update (kind:1619) is in the group
+ *   - undefined for comment-only notifications (the title already says it all)
+ *
+ * `unreadText` describes the unread activity (shown only when unread):
+ *   - "merged", "closed", "reopened", "marked draft"
+ *   - "new revision"
+ *   - "N new comment(s)"
+ *
+ * When both are present they are rendered separately so the caller can style
+ * them differently. The caller joins them with " · ".
  */
-function buildUnreadSummary(item: NotificationItem): UnreadSummary | undefined {
-  if (!item.unread || item.unreadEventIds.length === 0) return undefined;
+function buildNotificationSummary(item: NotificationItem): NotificationSummary {
+  // ── Determine purpose from all events in the group ──────────────────────
+  let purpose: string | undefined;
+  let hasNewCommits = false;
+
+  for (const ev of item.events) {
+    if (ev.kind === ISSUE_KIND) {
+      purpose = "new issue";
+      break;
+    }
+    if (ev.kind === PR_KIND) {
+      purpose = "new PR";
+      break;
+    }
+    if (ev.kind === PATCH_KIND) {
+      purpose = "new patch";
+      break;
+    }
+    if (ev.kind === PR_UPDATE_KIND) {
+      hasNewCommits = true;
+    }
+  }
+
+  if (!purpose && hasNewCommits) {
+    purpose = "new commits pushed";
+  }
+
+  // ── Determine unread activity ────────────────────────────────────────────
+  if (!item.unread || item.unreadEventIds.length === 0) {
+    return {
+      purpose,
+      unreadText: undefined,
+      hasMerge: false,
+      hasClosed: false,
+    };
+  }
 
   const unreadIdSet = new Set(item.unreadEventIds);
   const unreadEvents = item.events.filter((ev) => unreadIdSet.has(ev.id));
@@ -546,8 +597,8 @@ function buildUnreadSummary(item: NotificationItem): UnreadSummary | undefined {
     );
   }
 
-  if (parts.length === 0) return undefined;
-  return { text: parts.join(" · "), hasMerge: merged, hasClosed: closed };
+  const unreadText = parts.length > 0 ? parts.join(" · ") : undefined;
+  return { purpose, unreadText, hasMerge: merged, hasClosed: closed };
 }
 
 /**
@@ -577,14 +628,15 @@ function NotificationRow({
   currentView: ViewTab;
 }) {
   const rootType = inferRootType(item);
-  const title = useNotificationTitle(item);
+  const rootEvent = useRootEvent(item);
+  const title = resolveTitle(rootEvent, item);
+  const repoCoord = resolveRepoCoord(rootEvent, item);
   const commenters = getCommenters(item);
-  const repoCoord = getRepoCoord(item);
   const lastActive = formatDistanceToNow(new Date(item.latestActivity * 1000), {
     addSuffix: true,
   });
   const nevent = eventIdToNevent(item.rootId);
-  const unreadSummary = buildUnreadSummary(item);
+  const summary = buildNotificationSummary(item);
 
   // Determine the link path based on root type, with unread anchor
   const linkPath = buildNotificationLink(nevent, item);
@@ -633,29 +685,31 @@ function NotificationRow({
               <span className="text-xs text-muted-foreground shrink-0">
                 active {lastActive}
               </span>
-              {unreadSummary ? (
+              {/* Purpose label — always shown when available */}
+              {summary.purpose && (
+                <>
+                  <span className="text-muted-foreground/40 text-xs">
+                    &middot;
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {summary.purpose}
+                  </span>
+                </>
+              )}
+              {/* Unread activity — shown only when there is unread content */}
+              {summary.unreadText && (
                 <>
                   <span className="text-muted-foreground/40 text-xs">
                     &middot;
                   </span>
                   <UnreadSummaryBadge
-                    summary={unreadSummary.text}
-                    hasMerge={unreadSummary.hasMerge}
-                    hasClosed={unreadSummary.hasClosed}
+                    summary={summary.unreadText}
+                    hasMerge={summary.hasMerge}
+                    hasClosed={summary.hasClosed}
                     isUnread={item.unread}
                   />
                 </>
-              ) : item.events.length > 1 ? (
-                <>
-                  <span className="text-muted-foreground/40 text-xs">
-                    &middot;
-                  </span>
-                  <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
-                    <MessageCircle className="h-3 w-3" />
-                    {item.events.length}
-                  </span>
-                </>
-              ) : null}
+              )}
               {repoCoord && (
                 <>
                   <span className="text-muted-foreground/40 text-xs">
