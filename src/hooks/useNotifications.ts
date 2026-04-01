@@ -124,17 +124,20 @@ export function useNotifications(): {
   const pubkey = entry?.pubkey;
   const readState$ = entry?.readState$;
 
-  // #9: model cache key is pubkey only; readState$ is passed as a separate
-  // argument and is not part of the cache key. The BehaviorSubject reference
-  // is stable for the lifetime of the store entry.
+  const repoCoords$ = entry?.repoCoords$;
+
+  // #9: model cache key is pubkey only; readState$ and repoCoords$ are passed
+  // as separate arguments and are not part of the cache key. The BehaviorSubject
+  // references are stable for the lifetime of the store entry.
   const output = use$(() => {
-    if (!pubkey || !readState$) return undefined;
+    if (!pubkey || !readState$ || !repoCoords$) return undefined;
     return store.model(
       NotificationModel,
       pubkey,
       readState$,
+      repoCoords$,
     ) as unknown as Observable<NotificationModelOutput>;
-  }, [pubkey, readState$, store]);
+  }, [pubkey, readState$, repoCoords$, store]);
 
   const actions: NotificationActions = {
     markAsRead: (rootId) => entry && actionMarkAsRead(entry, rootId),
@@ -166,17 +169,19 @@ export function useUnreadNotificationCount(): number {
   const entry = useNotificationStoreEntry();
   const pubkey = entry?.pubkey;
   const readState$ = entry?.readState$;
+  const repoCoords$ = entry?.repoCoords$;
 
   const count = use$(() => {
-    if (!pubkey || !readState$) return undefined;
+    if (!pubkey || !readState$ || !repoCoords$) return undefined;
     return (
       store.model(
         NotificationModel,
         pubkey,
         readState$,
+        repoCoords$,
       ) as unknown as Observable<NotificationModelOutput>
     ).pipe(map((output) => output.unreadCount));
-  }, [pubkey, readState$, store]);
+  }, [pubkey, readState$, repoCoords$, store]);
 
   return count ?? 0;
 }

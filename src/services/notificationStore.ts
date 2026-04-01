@@ -22,14 +22,17 @@
  */
 
 import { BehaviorSubject, firstValueFrom, of } from "rxjs";
-import { timeout } from "rxjs/operators";
+import { timeout, map, switchMap, distinctUntilChanged } from "rxjs/operators";
 import { mapEventsToStore } from "applesauce-core";
 import { MailboxesModel } from "applesauce-core/models";
 import { onlyEvents } from "applesauce-relay";
 import { pool, eventStore, addressLoader } from "@/services/nostr";
-import { extraRelays, lookupRelays } from "@/services/settings";
+import { extraRelays, lookupRelays, gitIndexRelays } from "@/services/settings";
 import {
   buildNotificationFilters,
+  buildAuthorFollowFilter,
+  buildRepoStarFilter,
+  buildRepoFollowFilter,
   parseReadState,
   DEFAULT_READ_STATE,
   NIP78_KIND,
@@ -37,7 +40,10 @@ import {
   NOTIFICATION_NSEC_D_TAG,
   type NotificationReadState,
 } from "@/lib/notifications";
+import { REPO_KIND } from "@/lib/nip34";
 import type { Filter } from "applesauce-core/helpers";
+import type { NostrEvent } from "nostr-tools";
+import type { Observable } from "rxjs";
 import {
   schedulePublish,
   watchNip78Event,
@@ -81,6 +87,12 @@ function saveToLocalStorage(
 export interface NotificationStoreEntry {
   pubkey: string;
   readState$: BehaviorSubject<NotificationReadState>;
+  /**
+   * Reactive list of the user's own repo coordinates ("30617:<pubkey>:<dtag>").
+   * Updated whenever the EventStore sees new kind:30617 events authored by this
+   * user. Used by NotificationModel to group social notifications by repo.
+   */
+  repoCoords$: BehaviorSubject<string[]>;
   /** Debounce timer handle — owned here so notificationSync can clear it */
   publishTimer: ReturnType<typeof setTimeout> | null;
   /** Subscription teardown */
@@ -260,9 +272,85 @@ export function acquireNotificationStore(
   // Watch for the nsec envelope + state event in the store, decrypt, and merge
   const nip78WatchSub = watchNip78Event(pubkey, readState$);
 
+  // ---------------------------------------------------------------------------
+  // Social notifications — author follows, repo stars, repo follows
+  // ---------------------------------------------------------------------------
+
+  // Reactive list of the user's own repo coordinates, derived from the store.
+  // Starts empty; populated once kind:30617 events arrive from the relay.
+  const repoCoords$ = new BehaviorSubject<string[]>([]);
+
+  // Fetch the user's own repo announcements from git index relays so we know
+  // which repos to watch for stars and follows.
+  const ownRepoFilter: Filter = { kinds: [REPO_KIND], authors: [pubkey] };
+  const ownRepoSub = pool
+    .subscription(gitIndexRelays.getValue(), [ownRepoFilter], {
+      reconnect: Infinity,
+      resubscribe: Infinity,
+    })
+    .pipe(onlyEvents(), mapEventsToStore(eventStore))
+    .subscribe();
+
+  // Keep repoCoords$ in sync with the EventStore — update whenever new
+  // kind:30617 events authored by this user arrive.
+  const repoCoordsStoreSub = (
+    eventStore.timeline([ownRepoFilter]) as unknown as Observable<NostrEvent[]>
+  )
+    .pipe(
+      map((events) =>
+        events
+          .map((ev) => {
+            const d = ev.tags.find(([t]) => t === "d")?.[1];
+            return d ? `${REPO_KIND}:${ev.pubkey}:${d}` : undefined;
+          })
+          .filter((c): c is string => !!c),
+      ),
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+      ),
+    )
+    .subscribe((coords) => repoCoords$.next(coords));
+
+  // Static subscription for kind:10017 git-author follows (#p filter).
+  // This is a regular event so it goes to inbox relays.
+  let authorFollowSub = { unsubscribe: () => {} };
+  resolveNotificationRelays(pubkey).then((relays) => {
+    authorFollowSub = pool
+      .subscription(relays, [buildAuthorFollowFilter(pubkey)], {
+        reconnect: Infinity,
+        resubscribe: Infinity,
+      })
+      .pipe(onlyEvents(), mapEventsToStore(eventStore))
+      .subscribe();
+  });
+
+  // Reactive subscriptions for repo stars (kind:7) and repo follows (kind:10018).
+  // These depend on knowing the repo coords, so we switchMap on repoCoords$.
+  // Stars and follows are published to git index relays (where repo announcements
+  // live), not to the user's inbox relays.
+  const repoSocialSub = repoCoords$
+    .pipe(
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+      ),
+      switchMap((coords) => {
+        if (coords.length === 0) return of(undefined);
+        const starFilter = buildRepoStarFilter(coords);
+        const followFilter = buildRepoFollowFilter(coords);
+        return pool
+          .subscription(gitIndexRelays.getValue(), [starFilter, followFilter], {
+            reconnect: Infinity,
+            resubscribe: Infinity,
+          })
+          .pipe(onlyEvents(), mapEventsToStore(eventStore));
+      }),
+    )
+    .subscribe();
+
   const entry: NotificationStoreEntry = {
     pubkey,
     readState$,
+    repoCoords$,
     publishTimer: null,
     cleanup: () => {
       localSub.unsubscribe();
@@ -271,6 +359,11 @@ export function acquireNotificationStore(
       nsecOutboxSub.unsubscribe();
       stateEventSub.unsubscribe();
       nip78WatchSub.unsubscribe();
+      ownRepoSub.unsubscribe();
+      repoCoordsStoreSub.unsubscribe();
+      authorFollowSub.unsubscribe();
+      repoSocialSub.unsubscribe();
+      repoCoords$.complete();
     },
     refCount: 1,
   };

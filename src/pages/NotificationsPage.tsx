@@ -7,7 +7,10 @@ import {
   useNotifications,
   type NotificationActions,
 } from "@/hooks/useNotifications";
-import type { NotificationItem } from "@/lib/notifications";
+import type {
+  NotificationItem,
+  SocialNotificationItem,
+} from "@/lib/notifications";
 import { ISSUE_KIND, PATCH_KIND, PR_KIND } from "@/lib/nip34";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import { eventStore, eventLoader } from "@/services/nostr";
@@ -36,6 +39,9 @@ import {
   ChevronsRight,
   GitMerge,
   XCircle,
+  Star,
+  BookMarked,
+  UserPlus,
 } from "lucide-react";
 import { RepoBadge } from "@/components/RepoBadge";
 import {
@@ -432,16 +438,18 @@ function titleFromEvent(ev: {
  *
  * Fires eventLoader for the rootId so the event is fetched if missing.
  */
-function useRootEvent(item: NotificationItem) {
+function useRootEvent(item: { rootId: string }) {
   // Single subscription — cheap single-ID filter.
+  // For social items rootId is a synthetic string; the filter returns nothing.
   const rootEvents = use$(
     () => eventStore.timeline([{ ids: [item.rootId] }]),
     [item.rootId],
   );
 
-  // Fire the loader once if the root event isn't in the store yet
+  // Fire the loader once if the root event isn't in the store yet.
+  // Skip for synthetic social rootIds (they don't start with a hex event ID).
   useEffect(() => {
-    if (!rootEvents || rootEvents.length === 0) {
+    if (item.rootId.length === 64 && (!rootEvents || rootEvents.length === 0)) {
       eventLoader({ id: item.rootId }).subscribe();
     }
   }, [item.rootId, rootEvents]);
@@ -627,8 +635,21 @@ function NotificationRow({
   actions: NotificationActions;
   currentView: ViewTab;
 }) {
-  const rootType = inferRootType(item);
+  // Always call hooks unconditionally — React rules of hooks.
+  // For social items rootId is synthetic; useRootEvent returns undefined.
   const rootEvent = useRootEvent(item);
+
+  if (item.kind !== "thread") {
+    return (
+      <SocialNotificationRow
+        item={item}
+        actions={actions}
+        currentView={currentView}
+      />
+    );
+  }
+
+  const rootType = inferRootType(item);
   const title = resolveTitle(rootEvent, item);
   const repoCoord = resolveRepoCoord(rootEvent, item);
   const commenters = getCommenters(item);
@@ -738,6 +759,173 @@ function NotificationRow({
             )}
           </div>
         </Link>
+
+        {/* Action buttons — visible on hover */}
+        <div className="hidden md:group-hover:flex items-center gap-1 self-center pr-3 shrink-0">
+          {item.unread ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => actions.markAsRead(item.rootId)}
+            >
+              <Eye className="h-3 w-3 mr-1" />
+              Read
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => actions.markAsUnread(item.rootId)}
+            >
+              <EyeOff className="h-3 w-3 mr-1" />
+              Unread
+            </Button>
+          )}
+          {currentView === "inbox" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => actions.markAsArchived(item.rootId)}
+            >
+              <Archive className="h-3 w-3 mr-1" />
+              Archive
+            </Button>
+          )}
+          {currentView === "archived" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => actions.markAsUnarchived(item.rootId)}
+            >
+              <ArchiveRestore className="h-3 w-3 mr-1" />
+              Inbox
+            </Button>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Social notification row
+// ---------------------------------------------------------------------------
+
+function SocialNotificationRow({
+  item,
+  actions,
+  currentView,
+}: {
+  item: SocialNotificationItem;
+  actions: NotificationActions;
+  currentView: ViewTab;
+}) {
+  const lastActive = formatDistanceToNow(new Date(item.latestActivity * 1000), {
+    addSuffix: true,
+  });
+
+  // Unique pubkeys from the events, newest-first (events are already sorted)
+  const actorPubkeys = useMemo(() => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const ev of item.events) {
+      if (!seen.has(ev.pubkey)) {
+        seen.add(ev.pubkey);
+        result.push(ev.pubkey);
+      }
+    }
+    return result;
+  }, [item.events]);
+
+  const Icon =
+    item.kind === "author-follow"
+      ? UserPlus
+      : item.kind === "repo-star"
+        ? Star
+        : BookMarked;
+
+  const iconColor =
+    item.kind === "author-follow"
+      ? "text-blue-500"
+      : item.kind === "repo-star"
+        ? "text-yellow-500"
+        : "text-emerald-500";
+
+  const label =
+    item.kind === "author-follow"
+      ? "followed you as a git author"
+      : item.kind === "repo-star"
+        ? "starred"
+        : "followed";
+
+  return (
+    <li
+      className={cn(
+        "group transition-colors",
+        item.unread
+          ? "bg-accent/30 hover:bg-accent/50 border-l-2 border-l-violet-500"
+          : "hover:bg-accent/20 border-l-2 border-l-transparent",
+      )}
+    >
+      <div className="flex items-start">
+        <div
+          className="flex-1 flex items-start gap-3 px-3 py-3 min-w-0 cursor-default"
+          onClick={() => actions.markAsRead(item.rootId)}
+        >
+          {/* Unread dot */}
+          <div className="w-2 pt-1.5 shrink-0">
+            {item.unread && (
+              <div className="h-2 w-2 rounded-full bg-violet-500" />
+            )}
+          </div>
+
+          {/* Type icon */}
+          <div className="pt-0.5 shrink-0">
+            <Icon className={cn("h-4 w-4", iconColor)} />
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            {/* Actor avatars inline with label */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {actorPubkeys.slice(0, 5).map((pk) => (
+                <UserAvatar
+                  key={pk}
+                  pubkey={pk}
+                  size="sm"
+                  className="h-5 w-5 text-[8px]"
+                />
+              ))}
+              {actorPubkeys.length > 5 && (
+                <span className="text-xs text-muted-foreground">
+                  +{actorPubkeys.length - 5}
+                </span>
+              )}
+              <span
+                className={cn(
+                  "text-sm",
+                  item.unread
+                    ? "font-medium text-foreground"
+                    : "text-foreground/80",
+                )}
+              >
+                {label}
+              </span>
+              {item.repoCoord && (
+                <RepoBadge coord={item.repoCoord} repoNameOnly />
+              )}
+            </div>
+            <div className="mt-1">
+              <span className="text-xs text-muted-foreground">
+                {lastActive}
+              </span>
+            </div>
+          </div>
+        </div>
 
         {/* Action buttons — visible on hover */}
         <div className="hidden md:group-hover:flex items-center gap-1 self-center pr-3 shrink-0">

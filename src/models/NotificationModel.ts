@@ -18,7 +18,11 @@ import type { Model } from "applesauce-core/event-store";
 import type { NostrEvent } from "nostr-tools";
 import {
   buildNotificationFilters,
+  buildAuthorFollowFilter,
+  buildRepoStarFilter,
+  buildRepoFollowFilter,
   groupNotifications,
+  groupSocialNotifications,
   type NotificationItem,
   type NotificationReadState,
 } from "@/lib/notifications";
@@ -34,49 +38,89 @@ export interface NotificationModelOutput {
  * Create a NotificationModel that subscribes to notification events in the
  * store and combines them with the read state to produce grouped items.
  *
- * @param pubkey     - The user's pubkey
- * @param readState$ - Observable of the current read/archived state
+ * @param pubkey      - The user's pubkey
+ * @param readState$  - Observable of the current read/archived state
+ * @param repoCoords$ - Observable of the user's own repo coordinates
  *
- * Cache key: pubkey only (via getKey). The readState$ BehaviorSubject
- * reference is stable for the lifetime of the store entry, so including it
- * in the cache key would cause a new model instance to be created if the
- * entry is ever torn down and recreated for the same pubkey.
+ * Cache key: pubkey only (via getKey). The BehaviorSubject references are
+ * stable for the lifetime of the store entry.
  */
 export function NotificationModel(
   pubkey: string,
   readState$: Observable<NotificationReadState>,
+  repoCoords$: Observable<string[]>,
 ): Model<NotificationModelOutput> {
   return (store) => {
-    const filters = buildNotificationFilters(pubkey);
+    const threadFilters = buildNotificationFilters(pubkey);
+    const authorFollowFilter = buildAuthorFollowFilter(pubkey);
 
-    // Subscribe to all notification events in the store.
-    // We use separate timelines for each filter and merge the results
-    // because the store.timeline() only accepts a single filter array.
-    const events$ = store.timeline(filters);
+    // Thread events — static filters
+    const threadEvents$ = store.timeline(threadFilters);
 
-    return combineLatest([events$, readState$]).pipe(
+    // Author follow events — static filter
+    const authorFollowEvents$ = store.timeline([authorFollowFilter]);
+
+    // Reactive stream of repo coords — used to re-evaluate social events
+    // whenever the user's repo list changes.
+    const repoStarAndFollowEvents$ = repoCoords$.pipe(map((coords) => coords));
+
+    return combineLatest([
+      threadEvents$,
+      readState$,
+      authorFollowEvents$,
+      repoStarAndFollowEvents$,
+    ]).pipe(
       // Collapse rapid emissions (e.g. many events arriving at once)
       auditTime(100),
 
-      map(([events, readState]) => {
-        const allEvents = events as NostrEvent[];
-        const items = groupNotifications(allEvents, readState, pubkey);
+      map(([threadEventsRaw, readState, authorFollowEventsRaw, coords]) => {
+        const allThreadEvents = threadEventsRaw as NostrEvent[];
+        const allAuthorFollowEvents = authorFollowEventsRaw as NostrEvent[];
+
+        // Get repo social events synchronously from the store
+        let starEvents: NostrEvent[] = [];
+        let followEvents: NostrEvent[] = [];
+        if (coords.length > 0) {
+          starEvents = store.getByFilters([
+            buildRepoStarFilter(coords),
+          ]) as NostrEvent[];
+          followEvents = store.getByFilters([
+            buildRepoFollowFilter(coords),
+          ]) as NostrEvent[];
+        }
+
+        const threadItems = groupNotifications(
+          allThreadEvents,
+          readState,
+          pubkey,
+        );
+        const socialItems = groupSocialNotifications(
+          allAuthorFollowEvents,
+          starEvents,
+          followEvents,
+          coords,
+          readState,
+          pubkey,
+        );
+
+        // Merge and sort all items by latestActivity, newest first
+        const allItems: NotificationItem[] = [...threadItems, ...socialItems];
+        allItems.sort((a, b) => b.latestActivity - a.latestActivity);
 
         // Unread count = number of unread items that are NOT archived
-        const unreadCount = items.filter(
+        const unreadCount = allItems.filter(
           (item) => item.unread && !item.archived,
         ).length;
 
-        return { items, unreadCount };
+        return { items: allItems, unreadCount };
       }),
     );
   };
 }
 
 /**
- * Cache key: pubkey only. The readState$ argument is intentionally excluded
- * so the model instance is reused across acquire/release cycles for the same
- * pubkey rather than being recreated when the BehaviorSubject reference
- * changes (e.g. after an account switch back and forth).
+ * Cache key: pubkey only. The readState$ and repoCoords$ arguments are
+ * intentionally excluded so the model instance is reused across acquire/release
+ * cycles for the same pubkey.
  */
 NotificationModel.getKey = (pubkey: string) => pubkey;
