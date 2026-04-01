@@ -21,6 +21,10 @@
  *              is skipped entirely — useful when the caller already holds a
  *              ResolvedRepo or has the name from another source.
  *
+ * repoNameOnly When true, only the repo name is shown — the avatar, username
+ *              and "/" separator are hidden. Useful in contexts where the
+ *              author is already clear from surrounding UI (e.g. notifications).
+ *
  * className    Extra classes forwarded to the outer element.
  *
  * Efficiency
@@ -122,6 +126,13 @@ interface RepoBadgeProps {
    */
   repoName?: string;
 
+  /**
+   * When true, only the repo name is rendered — the avatar, username and "/"
+   * separator are omitted. Useful when the author is already clear from
+   * surrounding UI (e.g. a notifications list).
+   */
+  repoNameOnly?: boolean;
+
   /** Extra classes forwarded to the outer <span>. */
   className?: string;
 }
@@ -137,7 +148,12 @@ interface RepoBadgeProps {
  * <RepoBadge coord={repo.allCoordinates[0]} repoName={repo.name} />
  * ```
  */
-export function RepoBadge({ coord, repoName, className }: RepoBadgeProps) {
+export function RepoBadge({
+  coord,
+  repoName,
+  repoNameOnly,
+  className,
+}: RepoBadgeProps) {
   const parsed = parseCoord(coord);
 
   // Graceful fallback for malformed coords — show the raw string.
@@ -159,6 +175,7 @@ export function RepoBadge({ coord, repoName, className }: RepoBadgeProps) {
       pubkey={parsed.pubkey}
       dTag={parsed.dTag}
       repoName={repoName}
+      repoNameOnly={repoNameOnly}
       className={className}
     />
   );
@@ -169,11 +186,13 @@ function RepoBadgeInner({
   pubkey,
   dTag,
   repoName,
+  repoNameOnly,
   className,
 }: {
   pubkey: string;
   dTag: string;
   repoName?: string;
+  repoNameOnly?: boolean;
   className?: string;
 }) {
   const name = useRepoName(pubkey, dTag, repoName);
@@ -189,17 +208,21 @@ function RepoBadgeInner({
         className,
       )}
     >
-      <UserAvatar
-        pubkey={pubkey}
-        size="xs"
-        className="h-3.5 w-3.5 shrink-0"
-        showFollowIndicator={false}
-      />
-      <UserName
-        pubkey={pubkey}
-        className="text-xs text-muted-foreground font-normal"
-      />
-      <span className="text-muted-foreground/40 font-normal">/</span>
+      {!repoNameOnly && (
+        <>
+          <UserAvatar
+            pubkey={pubkey}
+            size="xs"
+            className="h-3.5 w-3.5 shrink-0"
+            showFollowIndicator={false}
+          />
+          <UserName
+            pubkey={pubkey}
+            className="text-xs text-muted-foreground font-normal"
+          />
+          <span className="text-muted-foreground/40 font-normal">/</span>
+        </>
+      )}
       <span className="font-medium">{name}</span>
     </Link>
   );

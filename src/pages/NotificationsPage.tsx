@@ -530,7 +530,7 @@ function NotificationRow({
                   <span className="text-muted-foreground/40 text-xs">
                     &middot;
                   </span>
-                  <RepoBadge coord={repoCoord} />
+                  <RepoBadge coord={repoCoord} repoNameOnly />
                 </>
               )}
             </div>
