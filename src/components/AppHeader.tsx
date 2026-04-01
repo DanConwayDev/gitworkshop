@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { OutboxPanel, OutboxPendingBadge } from "@/components/OutboxPanel";
+import { NavBarNotificationBadge } from "@/components/NavBarNotificationBadge";
 import { CreateRepoDialog } from "@/components/CreateRepoDialog";
 
 export function AppHeader() {
@@ -60,6 +61,9 @@ export function AppHeader() {
               <TooltipContent>New repository</TooltipContent>
             </Tooltip>
           )}
+
+          {/* Notifications — only shown when logged in */}
+          {activeAccount && <NavBarNotificationBadge />}
 
           {/* Outbox button */}
           <Popover open={outboxOpen} onOpenChange={setOutboxOpen}>

@@ -4,6 +4,7 @@ import { AppHeader } from "./components/AppHeader";
 import { AppFooter } from "./components/AppFooter";
 
 import RepositoriesPage from "./pages/RepositoriesPage";
+import NotificationsPage from "./pages/NotificationsPage";
 import RelayPage from "./pages/RelayPage";
 import RepoLayout from "./pages/repo/RepoLayout";
 import Settings from "./pages/Settings";
@@ -20,6 +21,7 @@ export function AppRouter() {
           <Routes>
             <Route path="/" element={<RepositoriesPage />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
             {/* /relay/:relaySegment — browse repos on a specific relay.
                 The segment uses the same format as relay hints: wss:// is stripped,
                 ws:// is URL-encoded. e.g. /relay/relay.ngit.dev
