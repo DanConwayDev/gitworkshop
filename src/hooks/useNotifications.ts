@@ -21,14 +21,16 @@ import { useEventStore } from "./useEventStore";
 import {
   acquireNotificationStore,
   releaseNotificationStore,
+  type NotificationStoreEntry,
+} from "@/services/notificationStore";
+import {
   actionMarkAsRead,
   actionMarkAsUnread,
   actionMarkAsArchived,
   actionMarkAsUnarchived,
   actionMarkAllAsRead,
   actionMarkAllAsArchived,
-  type NotificationStoreEntry,
-} from "@/services/notificationStore";
+} from "@/services/notificationActions";
 import {
   NotificationModel,
   type NotificationModelOutput,
