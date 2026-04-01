@@ -36,6 +36,11 @@ export interface NotificationModelOutput {
  *
  * @param pubkey     - The user's pubkey
  * @param readState$ - Observable of the current read/archived state
+ *
+ * Cache key: pubkey only (via getKey). The readState$ BehaviorSubject
+ * reference is stable for the lifetime of the store entry, so including it
+ * in the cache key would cause a new model instance to be created if the
+ * entry is ever torn down and recreated for the same pubkey.
  */
 export function NotificationModel(
   pubkey: string,
@@ -67,3 +72,11 @@ export function NotificationModel(
     );
   };
 }
+
+/**
+ * Cache key: pubkey only. The readState$ argument is intentionally excluded
+ * so the model instance is reused across acquire/release cycles for the same
+ * pubkey rather than being recreated when the BehaviorSubject reference
+ * changes (e.g. after an account switch back and forth).
+ */
+NotificationModel.getKey = (pubkey: string) => pubkey;

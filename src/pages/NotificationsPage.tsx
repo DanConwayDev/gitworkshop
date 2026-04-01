@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { useSeoMeta } from "@unhead/react";
@@ -10,6 +10,8 @@ import {
 import type { NotificationItem } from "@/lib/notifications";
 import { ISSUE_KIND, PATCH_KIND, PR_KIND } from "@/lib/nip34";
 import { eventIdToNevent } from "@/lib/routeUtils";
+import { eventStore, eventLoader } from "@/services/nostr";
+import { use$ } from "@/hooks/use$";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -65,11 +67,14 @@ export default function NotificationsPage() {
     }
   }, [items, currentView]);
 
-  // Pagination
+  // Pagination — reset currentPage when the list shrinks past it (#10)
   const totalPages = filteredItems
     ? Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE))
     : 1;
   const safePage = Math.min(currentPage, totalPages);
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
   const pageItems = filteredItems?.slice(
     (safePage - 1) * ITEMS_PER_PAGE,
     safePage * ITEMS_PER_PAGE,
@@ -355,31 +360,68 @@ function RootTypeIcon({
 }
 
 /**
- * Extract a display title from the notification events.
- * Looks for a subject tag on root events, or falls back to content preview.
+ * Extract a display title from a single event (issue/PR/patch).
  */
-function extractTitle(item: NotificationItem): string {
-  // Look for a root event with a subject tag
-  for (const ev of item.events) {
-    if (
-      ev.kind === ISSUE_KIND ||
-      ev.kind === PR_KIND ||
-      ev.kind === PATCH_KIND
-    ) {
-      const subject = ev.tags.find(([t]) => t === "subject")?.[1];
-      if (subject) return subject;
-      // Patches use description tag
-      const desc = ev.tags.find(([t]) => t === "description")?.[1];
-      if (desc) {
-        const firstLine = desc.split("\n")[0];
-        return firstLine || "(untitled)";
-      }
-      // Fall back to content first line
-      const firstLine = ev.content.split("\n")[0];
-      if (firstLine) return firstLine.slice(0, 80);
-    }
+function titleFromEvent(ev: {
+  kind: number;
+  tags: string[][];
+  content: string;
+}): string | undefined {
+  if (ev.kind !== ISSUE_KIND && ev.kind !== PR_KIND && ev.kind !== PATCH_KIND) {
+    return undefined;
   }
-  // No root event in the group — show a generic title
+  const subject = ev.tags.find(([t]) => t === "subject")?.[1];
+  if (subject) return subject;
+  const desc = ev.tags.find(([t]) => t === "description")?.[1];
+  if (desc) {
+    const firstLine = desc.split("\n")[0];
+    if (firstLine) return firstLine;
+  }
+  const firstLine = ev.content.split("\n")[0];
+  if (firstLine) return firstLine.slice(0, 80);
+  return undefined;
+}
+
+/**
+ * Hook that resolves the display title for a notification group.
+ *
+ * #7: Subscribes to the root event from the EventStore (always — no
+ * conditional hook calls). If the root event is already in the group's
+ * events array that's used as the display value directly; the store
+ * subscription is the authoritative reactive source and also handles the
+ * case where the root event arrives later (e.g. comment-only groups where
+ * the issue/PR event wasn't in the notification batch).
+ *
+ * Fires eventLoader for the rootId so the event is fetched if missing.
+ */
+function useNotificationTitle(item: NotificationItem): string {
+  // Always subscribe — hooks must be called unconditionally.
+  // eventStore.timeline([{ ids: [rootId] }]) is cheap (single-ID filter).
+  const rootEvents = use$(
+    () => eventStore.timeline([{ ids: [item.rootId] }]),
+    [item.rootId],
+  );
+
+  // Fire the loader once if the root event isn't in the store yet
+  useEffect(() => {
+    if (!rootEvents || rootEvents.length === 0) {
+      eventLoader({ id: item.rootId }).subscribe();
+    }
+  }, [item.rootId, rootEvents]);
+
+  // Prefer the root event from the store (most up-to-date)
+  if (rootEvents && rootEvents.length > 0) {
+    const title = titleFromEvent(rootEvents[0]);
+    if (title) return title;
+  }
+
+  // Fast path fallback: root event is already in the notification group
+  // (e.g. the notification IS the issue/PR creation event)
+  for (const ev of item.events) {
+    const title = titleFromEvent(ev);
+    if (title) return title;
+  }
+
   return `Activity on ${item.rootId.slice(0, 8)}...`;
 }
 
@@ -402,7 +444,7 @@ function NotificationRow({
   currentView: ViewTab;
 }) {
   const rootType = inferRootType(item);
-  const title = extractTitle(item);
+  const title = useNotificationTitle(item);
   const commenters = getCommenters(item);
   const lastActive = formatDistanceToNow(new Date(item.latestActivity * 1000), {
     addSuffix: true,

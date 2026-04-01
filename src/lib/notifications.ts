@@ -242,6 +242,8 @@ export function advanceReadCutoff(
   state: NotificationReadState,
   selfPubkey: string,
 ): Pick<NotificationReadState, "rb" | "ri"> {
+  // #5: build O(1) lookup map once instead of O(n) find() per ID
+  const eventById = new Map<string, NostrEvent>(events.map((e) => [e.id, e]));
   const readIdSet = new Set(state.ri);
   const threeDaysAgo = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 3;
 
@@ -263,9 +265,9 @@ export function advanceReadCutoff(
     newRb = threeDaysAgo;
   }
 
-  // Prune IDs older than the new cutoff
+  // Prune IDs older than the new cutoff — O(1) per ID via Map
   const newRi = state.ri.filter((id) => {
-    const ev = events.find((e) => e.id === id);
+    const ev = eventById.get(id);
     return ev && ev.created_at >= newRb;
   });
 
@@ -281,6 +283,8 @@ export function advanceArchivedCutoff(
   state: NotificationReadState,
   selfPubkey: string,
 ): Pick<NotificationReadState, "ab" | "ai"> {
+  // #5: build O(1) lookup map once instead of O(n) find() per ID
+  const eventById = new Map<string, NostrEvent>(events.map((e) => [e.id, e]));
   const archivedIdSet = new Set(state.ai);
   const threeDaysAgo = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 3;
 
@@ -301,8 +305,9 @@ export function advanceArchivedCutoff(
     newAb = threeDaysAgo;
   }
 
+  // Prune IDs older than the new cutoff — O(1) per ID via Map
   const newAi = state.ai.filter((id) => {
-    const ev = events.find((e) => e.id === id);
+    const ev = eventById.get(id);
     return ev && ev.created_at >= newAb;
   });
 
