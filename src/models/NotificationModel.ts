@@ -13,14 +13,12 @@
  */
 
 import { combineLatest, type Observable } from "rxjs";
-import { auditTime, map } from "rxjs/operators";
+import { auditTime, map, switchMap } from "rxjs/operators";
 import type { Model } from "applesauce-core/event-store";
 import type { NostrEvent } from "nostr-tools";
 import {
   buildNotificationFilters,
-  buildAuthorFollowFilter,
   buildRepoStarFilter,
-  buildRepoFollowFilter,
   groupNotifications,
   groupSocialNotifications,
   type NotificationItem,
@@ -52,42 +50,39 @@ export function NotificationModel(
 ): Model<NotificationModelOutput> {
   return (store) => {
     const threadFilters = buildNotificationFilters(pubkey);
-    const authorFollowFilter = buildAuthorFollowFilter(pubkey);
 
     // Thread events — static filters
     const threadEvents$ = store.timeline(threadFilters);
 
-    // Author follow events — static filter
-    const authorFollowEvents$ = store.timeline([authorFollowFilter]);
-
-    // Reactive stream of repo coords — used to re-evaluate social events
-    // whenever the user's repo list changes.
-    const repoStarAndFollowEvents$ = repoCoords$.pipe(map((coords) => coords));
+    // Repo star events — reactive: re-subscribes to the store timeline
+    // whenever the user's repo list changes, so new stars are picked up
+    // without needing an unrelated re-emit to trigger a snapshot.
+    const repoStarEvents$ = repoCoords$.pipe(
+      switchMap((coords) => {
+        if (coords.length === 0) {
+          // Return an observable that emits an empty array immediately
+          return store.timeline([{ kinds: [-1] }]) as unknown as Observable<
+            NostrEvent[]
+          >;
+        }
+        return store.timeline([
+          buildRepoStarFilter(coords),
+        ]) as unknown as Observable<NostrEvent[]>;
+      }),
+    );
 
     return combineLatest([
       threadEvents$,
       readState$,
-      authorFollowEvents$,
-      repoStarAndFollowEvents$,
+      repoStarEvents$,
+      repoCoords$,
     ]).pipe(
       // Collapse rapid emissions (e.g. many events arriving at once)
       auditTime(100),
 
-      map(([threadEventsRaw, readState, authorFollowEventsRaw, coords]) => {
+      map(([threadEventsRaw, readState, starEventsRaw, coords]) => {
         const allThreadEvents = threadEventsRaw as NostrEvent[];
-        const allAuthorFollowEvents = authorFollowEventsRaw as NostrEvent[];
-
-        // Get repo social events synchronously from the store
-        let starEvents: NostrEvent[] = [];
-        let followEvents: NostrEvent[] = [];
-        if (coords.length > 0) {
-          starEvents = store.getByFilters([
-            buildRepoStarFilter(coords),
-          ]) as NostrEvent[];
-          followEvents = store.getByFilters([
-            buildRepoFollowFilter(coords),
-          ]) as NostrEvent[];
-        }
+        const allStarEvents = starEventsRaw as NostrEvent[];
 
         const threadItems = groupNotifications(
           allThreadEvents,
@@ -95,9 +90,7 @@ export function NotificationModel(
           pubkey,
         );
         const socialItems = groupSocialNotifications(
-          allAuthorFollowEvents,
-          starEvents,
-          followEvents,
+          allStarEvents,
           coords,
           readState,
           pubkey,

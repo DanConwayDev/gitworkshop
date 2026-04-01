@@ -40,8 +40,6 @@ import {
   GitMerge,
   XCircle,
   Star,
-  BookMarked,
-  UserPlus,
 } from "lucide-react";
 import { RepoBadge } from "@/components/RepoBadge";
 import {
@@ -841,26 +839,9 @@ function SocialNotificationRow({
     return result;
   }, [item.events]);
 
-  const Icon =
-    item.kind === "author-follow"
-      ? UserPlus
-      : item.kind === "repo-star"
-        ? Star
-        : BookMarked;
-
-  const iconColor =
-    item.kind === "author-follow"
-      ? "text-blue-500"
-      : item.kind === "repo-star"
-        ? "text-yellow-500"
-        : "text-emerald-500";
-
-  const label =
-    item.kind === "author-follow"
-      ? "followed you as a git author"
-      : item.kind === "repo-star"
-        ? "starred"
-        : "followed";
+  const Icon = Star;
+  const iconColor = "text-yellow-500";
+  const label = "starred";
 
   return (
     <li

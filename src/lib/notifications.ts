@@ -11,15 +11,11 @@
  *      issue we authored, etc.)
  *   3. Legacy NIP-34 replies (kind:1622) that tag us via #p
  *
- * Social notifications — follows and stars:
- *   4. kind:10017 git-author follow lists that include our pubkey (#p)
- *   5. kind:7 reactions with content "+" targeting our repos (#k:30617, #a)
- *   6. kind:10018 git-repo follow lists that include our repos (#a)
+ * Social notifications — repo stars:
+ *   4. kind:7 reactions with content "+" targeting our repos (#k:30617, #a)
  *
  * Social items are grouped:
- *   - Author follows → single item with rootId "follows:self"
- *   - Repo stars     → one item per repo, rootId "stars:<repoCoord>"
- *   - Repo follows   → one item per repo, rootId "repofollows:<repoCoord>"
+ *   - Repo stars → one item per repo, rootId "stars:<repoCoord>"
  *
  * Read/archived state uses a concise high-water-mark model (inspired by
  * gitworkshop) stored in a NIP-78 event for cross-device sync:
@@ -68,23 +64,11 @@ export const NOTIFICATION_NSEC_D_TAG = "git-notifications-nsec";
 /** NIP-34 root kinds whose comments generate notifications */
 export const NIP34_ROOT_KINDS = [PATCH_KIND, PR_KIND, ISSUE_KIND] as const;
 
-/** NIP-51 kind:10017 — git author follow list */
-export const GIT_AUTHOR_FOLLOW_KIND = 10017;
-
-/** NIP-51 kind:10018 — git repository follow list */
-export const GIT_REPO_FOLLOW_KIND = 10018;
-
 /** NIP-25 kind:7 — reaction */
 export const REACTION_KIND = 7;
 
-/** Synthetic rootId for the single "author follows" notification group */
-export const AUTHOR_FOLLOWS_ROOT_ID = "follows:self";
-
 /** Prefix for repo-star notification rootIds */
 export const REPO_STARS_PREFIX = "stars:";
-
-/** Prefix for repo-follow notification rootIds */
-export const REPO_FOLLOWS_PREFIX = "repofollows:";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -130,23 +114,17 @@ export interface ThreadNotificationItem {
 }
 
 /**
- * A social notification group — author follows, repo stars, or repo follows.
+ * A social notification group — repo stars.
  * rootId is a synthetic string (not a Nostr event ID).
  */
 export interface SocialNotificationItem {
-  kind: "author-follow" | "repo-star" | "repo-follow";
+  kind: "repo-star";
   /**
-   * Synthetic root ID:
-   *   - author-follow: "follows:self"
-   *   - repo-star:     "stars:30617:<pubkey>:<dtag>"
-   *   - repo-follow:   "repofollows:30617:<pubkey>:<dtag>"
+   * Synthetic root ID: "stars:30617:<pubkey>:<dtag>"
    */
   rootId: string;
-  /**
-   * The repo coordinate for repo-star and repo-follow items.
-   * Undefined for author-follow items.
-   */
-  repoCoord: string | undefined;
+  /** The repo coordinate for this item */
+  repoCoord: string;
   /** All events in this group, sorted newest-first */
   events: NostrEvent[];
   /** Whether any event in this group is unread */
@@ -216,14 +194,6 @@ export function buildNotificationFilters(pubkey: string): Filter[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Filter for kind:10017 git-author follow lists that include our pubkey.
- * Static — doesn't require knowing repo coords.
- */
-export function buildAuthorFollowFilter(pubkey: string): Filter {
-  return { kinds: [GIT_AUTHOR_FOLLOW_KIND], "#p": [pubkey] } as Filter;
-}
-
-/**
  * Filter for kind:7 reactions (stars) targeting our repo announcements.
  * Requires knowing the repo coords.
  */
@@ -233,14 +203,6 @@ export function buildRepoStarFilter(repoCoords: string[]): Filter {
     "#k": [String(REPO_KIND)],
     "#a": repoCoords,
   } as Filter;
-}
-
-/**
- * Filter for kind:10018 git-repo follow lists that include our repos.
- * Requires knowing the repo coords.
- */
-export function buildRepoFollowFilter(repoCoords: string[]): Filter {
-  return { kinds: [GIT_REPO_FOLLOW_KIND], "#a": repoCoords } as Filter;
 }
 
 // ---------------------------------------------------------------------------
@@ -380,116 +342,70 @@ export function groupNotifications(
 // ---------------------------------------------------------------------------
 
 /**
- * Build a SocialNotificationItem from a group of social events.
- * Shared logic for author-follows, repo-stars, and repo-follows.
- */
-function buildSocialItem(
-  kind: SocialNotificationItem["kind"],
-  rootId: string,
-  repoCoord: string | undefined,
-  events: NostrEvent[],
-  state: NotificationReadState,
-  selfPubkey: string,
-): SocialNotificationItem {
-  const readIdSet = new Set(state.ri);
-  const archivedIdSet = new Set(state.ai);
-
-  // Sort newest-first, exclude self
-  const sorted = events
-    .filter((ev) => ev.pubkey !== selfPubkey)
-    .sort((a, b) => b.created_at - a.created_at);
-
-  const latestActivity = sorted[0]?.created_at ?? 0;
-
-  const unreadEvents = sorted.filter(
-    (ev) => !isEventRead(ev, state, readIdSet),
-  );
-  const unread = unreadEvents.length > 0;
-  const archived = sorted.every((ev) =>
-    isEventArchived(ev, state, archivedIdSet),
-  );
-  const unreadEventIds = unreadEvents.map((ev) => ev.id).reverse();
-
-  return {
-    kind,
-    rootId,
-    repoCoord,
-    events: sorted,
-    unread,
-    archived,
-    latestActivity,
-    unreadEventIds,
-  };
-}
-
-/**
- * Group social notification events (author follows, repo stars, repo follows)
- * into SocialNotificationItems.
+ * Group repo-star events (kind:7) into one SocialNotificationItem per repo.
  *
- * - All kind:10017 events → single "follows:self" item
- * - kind:7 reactions per repo coord → one "stars:<coord>" item each
- * - kind:10018 events per repo coord → one "repofollows:<coord>" item each
+ * Builds a Map<coord, events[]> in a single pass over repoStarEvents (O(n))
+ * rather than filtering per-coord (O(n×m)).
  *
- * @param authorFollowEvents  kind:10017 events that include our pubkey
- * @param repoStarEvents      kind:7 reactions targeting our repos
- * @param repoFollowEvents    kind:10018 events that include our repos
- * @param repoCoords          our own repo coordinates (for grouping)
+ * @param repoStarEvents  kind:7 reactions targeting our repos
+ * @param repoCoords      our own repo coordinates (used to validate grouping)
  */
 export function groupSocialNotifications(
-  authorFollowEvents: NostrEvent[],
   repoStarEvents: NostrEvent[],
-  repoFollowEvents: NostrEvent[],
   repoCoords: string[],
   state: NotificationReadState,
   selfPubkey: string,
 ): SocialNotificationItem[] {
+  if (repoStarEvents.length === 0 || repoCoords.length === 0) return [];
+
+  const readIdSet = new Set(state.ri);
+  const archivedIdSet = new Set(state.ai);
+  const coordSet = new Set(repoCoords);
+
+  // Build coord → events map in a single O(n) pass
+  const byCoord = new Map<string, NostrEvent[]>();
+  for (const ev of repoStarEvents) {
+    if (ev.pubkey === selfPubkey) continue;
+    for (const [t, v] of ev.tags) {
+      if (t === "a" && coordSet.has(v)) {
+        const bucket = byCoord.get(v);
+        if (bucket) {
+          bucket.push(ev);
+        } else {
+          byCoord.set(v, [ev]);
+        }
+        break; // each event belongs to at most one coord group
+      }
+    }
+  }
+
   const items: SocialNotificationItem[] = [];
 
-  // Author follows — single group
-  if (authorFollowEvents.length > 0) {
-    const item = buildSocialItem(
-      "author-follow",
-      AUTHOR_FOLLOWS_ROOT_ID,
-      undefined,
-      authorFollowEvents,
-      state,
-      selfPubkey,
-    );
-    if (item.events.length > 0) items.push(item);
-  }
+  for (const [coord, events] of byCoord) {
+    // Sort newest-first
+    events.sort((a, b) => b.created_at - a.created_at);
 
-  // Repo stars — group by repo coord
-  for (const coord of repoCoords) {
-    const coordEvents = repoStarEvents.filter((ev) =>
-      ev.tags.some(([t, v]) => t === "a" && v === coord),
+    const latestActivity = events[0]?.created_at ?? 0;
+    const unreadEvents = events.filter(
+      (ev) => !isEventRead(ev, state, readIdSet),
     );
-    if (coordEvents.length === 0) continue;
-    const item = buildSocialItem(
-      "repo-star",
-      `${REPO_STARS_PREFIX}${coord}`,
-      coord,
-      coordEvents,
-      state,
-      selfPubkey,
+    const unread = unreadEvents.length > 0;
+    const archived = events.every((ev) =>
+      isEventArchived(ev, state, archivedIdSet),
     );
-    if (item.events.length > 0) items.push(item);
-  }
+    // unreadEvents is newest-first; reverse gives oldest-first IDs
+    const unreadEventIds = unreadEvents.map((ev) => ev.id).reverse();
 
-  // Repo follows — group by repo coord
-  for (const coord of repoCoords) {
-    const coordEvents = repoFollowEvents.filter((ev) =>
-      ev.tags.some(([t, v]) => t === "a" && v === coord),
-    );
-    if (coordEvents.length === 0) continue;
-    const item = buildSocialItem(
-      "repo-follow",
-      `${REPO_FOLLOWS_PREFIX}${coord}`,
-      coord,
-      coordEvents,
-      state,
-      selfPubkey,
-    );
-    if (item.events.length > 0) items.push(item);
+    items.push({
+      kind: "repo-star",
+      rootId: `${REPO_STARS_PREFIX}${coord}`,
+      repoCoord: coord,
+      events,
+      unread,
+      archived,
+      latestActivity,
+      unreadEventIds,
+    });
   }
 
   return items;

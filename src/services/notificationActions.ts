@@ -8,17 +8,13 @@
 
 import {
   buildNotificationFilters,
-  buildAuthorFollowFilter,
   buildRepoStarFilter,
-  buildRepoFollowFilter,
   getNotificationRootId,
   isEventRead,
   isEventArchived,
   advanceReadCutoff,
   advanceArchivedCutoff,
-  AUTHOR_FOLLOWS_ROOT_ID,
   REPO_STARS_PREFIX,
-  REPO_FOLLOWS_PREFIX,
   type NotificationReadState,
 } from "@/lib/notifications";
 import { eventStore } from "@/services/nostr";
@@ -44,25 +40,11 @@ function getSocialEventsForRootId(
 ): NostrEvent[] {
   const coords = entry.repoCoords$.getValue();
 
-  if (rootId === AUTHOR_FOLLOWS_ROOT_ID) {
-    return eventStore.getByFilters([
-      buildAuthorFollowFilter(entry.pubkey),
-    ]) as NostrEvent[];
-  }
-
   if (rootId.startsWith(REPO_STARS_PREFIX)) {
     const coord = rootId.slice(REPO_STARS_PREFIX.length);
     if (!coords.includes(coord)) return [];
     return eventStore.getByFilters([
       buildRepoStarFilter([coord]),
-    ]) as NostrEvent[];
-  }
-
-  if (rootId.startsWith(REPO_FOLLOWS_PREFIX)) {
-    const coord = rootId.slice(REPO_FOLLOWS_PREFIX.length);
-    if (!coords.includes(coord)) return [];
-    return eventStore.getByFilters([
-      buildRepoFollowFilter([coord]),
     ]) as NostrEvent[];
   }
 
@@ -78,29 +60,16 @@ function getAllNotificationEvents(entry: NotificationStoreEntry): NostrEvent[] {
   const thread = eventStore.getByFilters(
     buildNotificationFilters(entry.pubkey),
   ) as NostrEvent[];
-  const authorFollows = eventStore.getByFilters([
-    buildAuthorFollowFilter(entry.pubkey),
-  ]) as NostrEvent[];
   const stars =
     coords.length > 0
       ? (eventStore.getByFilters([buildRepoStarFilter(coords)]) as NostrEvent[])
       : [];
-  const follows =
-    coords.length > 0
-      ? (eventStore.getByFilters([
-          buildRepoFollowFilter(coords),
-        ]) as NostrEvent[])
-      : [];
-  return [...thread, ...authorFollows, ...stars, ...follows];
+  return [...thread, ...stars];
 }
 
 /** True if rootId is a synthetic social rootId (not a Nostr event ID) */
 function isSocialRootId(rootId: string): boolean {
-  return (
-    rootId === AUTHOR_FOLLOWS_ROOT_ID ||
-    rootId.startsWith(REPO_STARS_PREFIX) ||
-    rootId.startsWith(REPO_FOLLOWS_PREFIX)
-  );
+  return rootId.startsWith(REPO_STARS_PREFIX);
 }
 
 // ---------------------------------------------------------------------------
