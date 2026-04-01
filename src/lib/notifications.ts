@@ -4,9 +4,10 @@
  * Notifications are events that reference the current user:
  *   1. NIP-22 comments (kind:1111) on issues/PRs/patches authored by us
  *      (uppercase #P tag + #K filter for NIP-34 root kinds)
- *   2. New issues/PRs/patches that tag us via #p (someone filed an issue
- *      on our repo, tagged us in a PR, etc.)
- *   3. Legacy replies (kind:1, kind:1622) that tag us via #p
+ *   2. New issues/PRs/patches/PR-updates/status-changes that tag us via #p
+ *      (someone filed an issue on our repo, pushed a PR update, closed an
+ *      issue we authored, etc.)
+ *   3. Legacy NIP-34 replies (kind:1622) that tag us via #p
  *
  * Read/archived state uses a concise high-water-mark model (inspired by
  * gitworkshop) stored in a NIP-78 event for cross-device sync:
@@ -25,8 +26,10 @@ import {
   ISSUE_KIND,
   PATCH_KIND,
   PR_KIND,
+  PR_UPDATE_KIND,
   COMMENT_KIND,
-  LEGACY_REPLY_KINDS,
+  LEGACY_REPLY_KIND,
+  STATUS_KINDS,
 } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
@@ -109,9 +112,13 @@ export const DEFAULT_READ_STATE: NotificationReadState = {
 /**
  * Build relay filters for notification events targeting a pubkey.
  *
- * Two filters (same as gitworkshop):
+ * Two filters:
  *   1. NIP-22 comments on NIP-34 root events authored by us (#P + #K)
- *   2. Events that tag us directly (#p) — new issues, PRs, patches, legacy replies
+ *   2. Events that tag us directly (#p) — new issues, PRs, patches,
+ *      PR updates (kind:1619), status changes (kinds:1630–1633), and
+ *      kind:1622 legacy NIP-34 replies. Kind:1 generic text notes are
+ *      intentionally excluded — they are not git-related and would flood
+ *      notifications with unrelated Nostr mentions.
  */
 export function buildNotificationFilters(pubkey: string): Filter[] {
   return [
@@ -121,9 +128,16 @@ export function buildNotificationFilters(pubkey: string): Filter[] {
       "#P": [pubkey],
       "#K": NIP34_ROOT_KINDS.map(String),
     } as Filter,
-    // Events that tag us directly
+    // Events that tag us directly (git-related kinds only)
     {
-      kinds: [ISSUE_KIND, PR_KIND, PATCH_KIND, ...LEGACY_REPLY_KINDS],
+      kinds: [
+        ISSUE_KIND,
+        PR_KIND,
+        PATCH_KIND,
+        PR_UPDATE_KIND,
+        ...STATUS_KINDS,
+        LEGACY_REPLY_KIND,
+      ],
       "#p": [pubkey],
     } as Filter,
   ];
@@ -138,7 +152,9 @@ export function buildNotificationFilters(pubkey: string): Filter[] {
  *
  * - If the event IS a root (issue/PR/patch kind), its own ID is the root.
  * - If it's a NIP-22 comment, the uppercase E root pointer is the root.
- * - If it's a legacy reply, the NIP-10 root #e tag is the root.
+ * - If it's a PR update (kind:1619), the uppercase E tag is the root PR.
+ * - If it's a status change (kinds:1630–1633), the NIP-10 root #e tag is the root.
+ * - If it's a legacy reply (kind:1622), the NIP-10 root #e tag is the root.
  * - Returns undefined if no root can be determined.
  */
 export function getNotificationRootId(ev: NostrEvent): string | undefined {
@@ -153,7 +169,13 @@ export function getNotificationRootId(ev: NostrEvent): string | undefined {
     return rootPointer && "id" in rootPointer ? rootPointer.id : undefined;
   }
 
-  // Legacy replies (kind:1, kind:1622) — NIP-10 root #e tag
+  // PR update (kind:1619) — uppercase E tag points to the root PR
+  if (ev.kind === PR_UPDATE_KIND) {
+    return ev.tags.find(([t]) => t === "E")?.[1];
+  }
+
+  // Status changes (kinds:1630–1633) and legacy NIP-34 replies (kind:1622)
+  // both use the NIP-10 root #e tag to reference their target.
   const nip10 = getNip10References(ev);
   return nip10.root?.e?.id;
 }
