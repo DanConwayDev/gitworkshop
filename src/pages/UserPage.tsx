@@ -143,8 +143,8 @@ export default function UserPage({ pubkey }: UserPageProps) {
               {profile ? (
                 <UserAvatar
                   pubkey={pubkey}
-                  size="lg"
-                  className="h-20 w-20 md:h-24 md:w-24 text-2xl ring-4 ring-background shadow-xl"
+                  size="xl"
+                  className="ring-4 ring-background shadow-xl"
                 />
               ) : (
                 <Skeleton className="h-20 w-20 md:h-24 md:w-24 rounded-full" />

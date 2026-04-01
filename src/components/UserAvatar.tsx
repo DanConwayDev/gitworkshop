@@ -16,7 +16,7 @@ import { UserCheck } from "lucide-react";
 interface UserAvatarProps {
   pubkey: string;
   className?: string;
-  size?: "xs" | "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
   /** When true, wraps the avatar in a link to the user's profile page */
   linkToProfile?: boolean;
   /**
@@ -32,14 +32,20 @@ const sizeClasses = {
   sm: "h-6 w-6 text-[10px]",
   md: "h-8 w-8 text-xs",
   lg: "h-10 w-10 text-sm",
+  xl: "h-24 w-24 text-2xl",
 };
 
-/** Badge size classes, keyed by avatar size */
+/**
+ * Badge size classes, keyed by avatar size.
+ * Kept at ~20% of the avatar dimension so the indicator is subtle
+ * but still visible at all sizes.
+ */
 const badgeSizeClasses = {
-  xs: "h-1.5 w-1.5",
-  sm: "h-3 w-3",
-  md: "h-3.5 w-3.5",
-  lg: "h-4 w-4",
+  xs: "h-1 w-1", // 4px on a 16px avatar  (~25%)
+  sm: "h-1.5 w-1.5", // 6px on a 24px avatar  (~25%)
+  md: "h-2 w-2", // 8px on a 32px avatar  (~25%)
+  lg: "h-3 w-3", // 12px on a 40px avatar (~30%)
+  xl: "h-5 w-5", // 20px on a 96px avatar (~21%)
 };
 
 /**
@@ -49,9 +55,10 @@ const badgeSizeClasses = {
  */
 const gitBadgePosClasses = {
   xs: "-bottom-px -right-px",
-  sm: "-bottom-0.5 -right-0.5",
+  sm: "-bottom-px -right-px",
   md: "-bottom-0.5 -right-0.5",
-  lg: "-bottom-1 -right-1",
+  lg: "-bottom-0.5 -right-0.5",
+  xl: "-bottom-1 -right-1",
 };
 
 /** Social badge position when shown alone (same corner as git). */
@@ -63,10 +70,11 @@ const socialBadgeSoloPosClasses = gitBadgePosClasses;
  * but never covering more than ~1/3 of the avatar.
  */
 const socialBadgeDualPosClasses = {
-  xs: "-bottom-px right-[3px]",
-  sm: "-bottom-0.5 right-1",
-  md: "-bottom-0.5 right-1.5",
-  lg: "-bottom-1 right-2",
+  xs: "-bottom-px right-[2px]",
+  sm: "-bottom-px right-[2px]",
+  md: "-bottom-0.5 right-[3px]",
+  lg: "-bottom-0.5 right-1",
+  xl: "-bottom-1 right-2",
 };
 
 export function UserAvatar({
@@ -132,11 +140,11 @@ export function UserAvatar({
               )}
               aria-label="Social follow"
             >
-              {size !== "xs" && (
+              {size !== "xs" && size !== "sm" && (
                 <UserCheck
                   className="text-white"
                   style={{ width: "65%", height: "65%" }}
-                  strokeWidth={2.5}
+                  strokeWidth={size === "xl" ? 2 : 2.5}
                 />
               )}
             </span>
@@ -154,11 +162,11 @@ export function UserAvatar({
               )}
               aria-label="Git author follow"
             >
-              {size !== "xs" && (
+              {size !== "xs" && size !== "sm" && (
                 <UserCheck
                   className="text-white"
                   style={{ width: "65%", height: "65%" }}
-                  strokeWidth={2.5}
+                  strokeWidth={size === "xl" ? 2 : 2.5}
                 />
               )}
             </span>
