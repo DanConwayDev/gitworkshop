@@ -283,13 +283,23 @@ export function acquireNotificationStore(
   const repoCoords$ = new BehaviorSubject<string[]>([]);
 
   // Fetch the user's own repo announcements from git index relays.
+  // switchMap on gitIndexRelays so the subscription re-opens if the user
+  // changes their configured index relays in Settings.
   const ownRepoFilter: Filter = { kinds: [REPO_KIND], authors: [pubkey] };
-  const ownRepoSub = pool
-    .subscription(gitIndexRelays.getValue(), [ownRepoFilter], {
-      reconnect: Infinity,
-      resubscribe: Infinity,
-    })
-    .pipe(onlyEvents(), mapEventsToStore(eventStore))
+  const ownRepoSub = gitIndexRelays
+    .pipe(
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+      ),
+      switchMap((relays) =>
+        pool
+          .subscription(relays, [ownRepoFilter], {
+            reconnect: Infinity,
+            resubscribe: Infinity,
+          })
+          .pipe(onlyEvents(), mapEventsToStore(eventStore)),
+      ),
+    )
     .subscribe();
 
   // Keep repoCoords$ in sync with the EventStore — update whenever new
@@ -317,13 +327,15 @@ export function acquireNotificationStore(
   // subscriptions — repo activity is published to the repo's own relays, not
   // to git index relays.
   //
-  // We also include git index relays so that stars (which are published there
-  // alongside the repo announcement) are always covered.
-  const repoRelays$ = (
-    eventStore.timeline([ownRepoFilter]) as unknown as Observable<NostrEvent[]>
-  ).pipe(
-    map((events) => {
-      const urlSet = new Set<string>(gitIndexRelays.getValue());
+  // We also include git index relays (reactively) so that stars (which are
+  // published there alongside the repo announcement) are always covered, and
+  // so the relay set updates if the user changes their index relays in Settings.
+  const repoRelays$ = combineLatest([
+    gitIndexRelays,
+    eventStore.timeline([ownRepoFilter]) as unknown as Observable<NostrEvent[]>,
+  ]).pipe(
+    map(([indexRelays, events]) => {
+      const urlSet = new Set<string>(indexRelays);
       for (const ev of events) {
         for (const tag of ev.tags) {
           if (tag[0] === "relays") {
