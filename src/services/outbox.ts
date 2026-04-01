@@ -133,6 +133,22 @@ export interface OutboxItem {
    * Values are the relay URLs that were resolved for that group at publish time.
    */
   relayGroupDefs: Record<string, string[]>;
+  /**
+   * When true, this item is excluded from the outbox panel UI and pending
+   * counts. Used for internal housekeeping events (e.g. notification state
+   * updates) that should still go through the outbox retry pipeline but
+   * aren't meaningful to the user.
+   */
+  hidden?: boolean;
+}
+
+/** Options for {@link OutboxStore.publish}. */
+export interface OutboxPublishOptions {
+  /**
+   * When true, the item is hidden from the outbox panel UI and pending
+   * counts. The event still goes through the full retry pipeline.
+   */
+  hidden?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -368,10 +384,12 @@ class OutboxStore {
    *
    * @param event       - The signed event to publish
    * @param relayGroups - Map of group ID → relay URLs
+   * @param options     - Optional settings (e.g. hidden from UI)
    */
   async publish(
     event: NostrEvent,
     relayGroups: Record<string, string[]>,
+    options?: OutboxPublishOptions,
   ): Promise<void> {
     const normalized = normalizeRelayGroups(relayGroups);
 
@@ -402,6 +420,7 @@ class OutboxStore {
       relays,
       createdAt: Math.floor(Date.now() / 1000),
       relayGroupDefs: normalized,
+      ...(options?.hidden ? { hidden: true } : {}),
     };
 
     await this.upsert(item);

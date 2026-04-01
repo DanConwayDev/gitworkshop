@@ -89,8 +89,8 @@ export function OutboxStatusBadge({ event }: { event: NostrEvent }) {
 
   const item = items.find((i) => i.id === event.id);
 
-  // Not in outbox — old event fetched from relay, nothing to show
-  if (!item) return null;
+  // Not in outbox, or hidden internal event — nothing to show
+  if (!item || item.hidden) return null;
 
   const status = outboxSummaryStatus(item);
   const successCount = item.relays.filter((r) => r.status === "success").length;

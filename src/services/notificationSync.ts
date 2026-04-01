@@ -32,11 +32,13 @@
  * acquireNotificationStore in notificationStore.ts.
  */
 
-import { BehaviorSubject } from "rxjs";
+import { BehaviorSubject, firstValueFrom, of } from "rxjs";
+import { timeout } from "rxjs/operators";
 import { generateSecretKey } from "nostr-tools";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { PrivateKeySigner } from "applesauce-signers/signers";
 import { EventFactory } from "applesauce-core/event-factory";
+import { MailboxesModel } from "applesauce-core/models";
 import { eventStore } from "@/services/nostr";
 import { lookupRelays } from "@/services/settings";
 import {
@@ -211,7 +213,7 @@ export async function getOrCreateNotificationSigner(
 
   try {
     const { factory } = await import("@/services/actions");
-    const { publish } = await import("@/services/nostr");
+    const { outboxStore } = await import("@/services/outbox");
     const { AppDataBlueprint } = await import("applesauce-common/blueprints");
 
     const draft = await factory.create(
@@ -221,9 +223,12 @@ export async function getOrCreateNotificationSigner(
       "nip44" as const,
     );
     const signed = await factory.sign(draft);
-    await publish(signed, undefined, {
-      "User Index Relays": lookupRelays.getValue(),
-    });
+
+    // Add to local store immediately
+    eventStore.add(signed);
+
+    const relayGroups = await buildNotificationRelayGroups(pubkey);
+    await outboxStore.publish(signed, relayGroups, { hidden: true });
 
     // Cache against the published event's metadata
     saveNsecCache(pubkey, {
@@ -250,6 +255,50 @@ export function evictNotificationSigner(pubkey: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// Relay resolution
+// ---------------------------------------------------------------------------
+
+/** Max outbox relays to use from the user's NIP-65 list */
+const MAX_OUTBOX_RELAYS = 5;
+
+/**
+ * Resolve relay groups for publishing notification events.
+ *
+ * Returns a map of group ID -> relay URLs following the same convention as
+ * nip34.ts so the outbox store can re-resolve when relay lists change:
+ *   - `pubkey` (64-char hex) -> user's NIP-65 outbox relays
+ *   - "User Index Relays"    -> configured lookup relays
+ */
+async function buildNotificationRelayGroups(
+  pubkey: string,
+): Promise<Record<string, string[]>> {
+  const groups: Record<string, string[]> = {};
+
+  // User's NIP-65 outbox relays — keyed by pubkey for re-resolution
+  try {
+    const mailboxes = await firstValueFrom(
+      eventStore
+        .model(MailboxesModel, pubkey)
+        .pipe(timeout({ first: 500, with: () => of(undefined) })),
+    );
+    const outboxes = mailboxes?.outboxes.slice(0, MAX_OUTBOX_RELAYS) ?? [];
+    if (outboxes.length > 0) {
+      groups[pubkey] = outboxes;
+    }
+  } catch {
+    // MailboxesModel not loaded yet — proceed with lookup relays only
+  }
+
+  // Lookup relays as a separate named group
+  const lookup = lookupRelays.getValue();
+  if (lookup.length > 0) {
+    groups["User Index Relays"] = lookup;
+  }
+
+  return groups;
+}
+
+// ---------------------------------------------------------------------------
 // Publish
 // ---------------------------------------------------------------------------
 
@@ -264,7 +313,7 @@ export async function publishReadState(
     if (!notifSigner) return;
 
     const { AppDataBlueprint } = await import("applesauce-common/blueprints");
-    const { publish } = await import("@/services/nostr");
+    const { outboxStore } = await import("@/services/outbox");
 
     // Use a temporary EventFactory backed by the dedicated notification signer
     const notifFactory = new EventFactory({ signer: notifSigner });
@@ -276,9 +325,12 @@ export async function publishReadState(
       "nip44" as const,
     );
     const signed = await notifFactory.sign(draft);
-    await publish(signed, undefined, {
-      "User Index Relays": lookupRelays.getValue(),
-    });
+
+    // Add to local store immediately for optimistic updates
+    eventStore.add(signed);
+
+    const relayGroups = await buildNotificationRelayGroups(pubkey);
+    await outboxStore.publish(signed, relayGroups, { hidden: true });
   } catch (err) {
     console.warn("[notifications] Failed to publish read state:", err);
   }

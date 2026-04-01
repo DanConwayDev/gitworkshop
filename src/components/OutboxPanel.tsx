@@ -50,6 +50,7 @@ import {
   getRepoName,
   extractSubject,
 } from "@/lib/nip34";
+import { NIP78_KIND } from "@/lib/notifications";
 import { nip19 } from "nostr-tools";
 import { useEventStore } from "@/hooks/useEventStore";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
@@ -98,6 +99,8 @@ function kindLabel(kind: number): string {
       return "Git Authors List";
     case 10018:
       return "Git Repos List";
+    case NIP78_KIND:
+      return "App Data";
     default:
       return `Kind ${kind}`;
   }
@@ -755,7 +758,9 @@ export function OutboxItemDetail({ item }: { item: OutboxItem }) {
 type FilterMode = "all" | "pending" | "failed";
 
 export function OutboxPanel({ onClose }: { onClose: () => void }) {
-  const items = use$(outboxStore.items$) ?? [];
+  const allItems = use$(outboxStore.items$) ?? [];
+  // Filter out hidden items (e.g. notification state updates) from the UI
+  const items = allItems.filter((i) => !i.hidden);
   const [filter, setFilter] = useState<FilterMode>("all");
 
   const pendingCount = items.filter((i) => !i.broadlySent).length;
@@ -842,8 +847,10 @@ export function OutboxPanel({ onClose }: { onClose: () => void }) {
  * Returns null when everything is sent.
  */
 export function OutboxPendingBadge() {
-  const items = use$(outboxStore.items$) ?? [];
-  const pendingCount = items.filter((i) => !i.broadlySent).length;
+  const allItems = use$(outboxStore.items$) ?? [];
+  const pendingCount = allItems.filter(
+    (i) => !i.hidden && !i.broadlySent,
+  ).length;
 
   if (pendingCount === 0) return null;
 
