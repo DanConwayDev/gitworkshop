@@ -17,10 +17,10 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
-  useRef,
   useState,
+  type RefObject,
 } from "react";
+import { useUnreadHighlight } from "@/hooks/useUnreadHighlight";
 import { formatDistanceToNow } from "date-fns";
 import {
   ChevronUp,
@@ -177,11 +177,9 @@ function ThreadComment({ event }: { event: NostrEvent }) {
   });
 
   const anchorId = event.id.slice(0, 15);
-  const elRef = useRef<HTMLDivElement>(null);
-  const isTargeted = window.location.hash === `#${anchorId}`;
-  const [highlight, setHighlight] = useState<"strong" | "subtle" | "none">(
-    isTargeted ? "strong" : "none",
-  );
+  const { ref, highlight: effectiveHighlight } = useUnreadHighlight(anchorId);
+  const elRef = ref as RefObject<HTMLDivElement>;
+
   const [replying, setReplying] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteReason, setDeleteReason] = useState("");
@@ -212,78 +210,14 @@ function ThreadComment({ event }: { event: NostrEvent }) {
     }
   }, [deleting, ctx, event, deleteReason]);
 
-  useEffect(() => {
-    if (!isTargeted || !elRef.current) return;
-
-    const el = elRef.current;
-
-    // Once the user intentionally scrolls, stop chasing them back to the
-    // target element.
-    let userScrolled = false;
-    const onUserScroll = () => {
-      userScrolled = true;
-    };
-    window.addEventListener("wheel", onUserScroll, {
-      passive: true,
-      once: true,
-    });
-    window.addEventListener("touchmove", onUserScroll, {
-      passive: true,
-      once: true,
-    });
-    window.addEventListener("keydown", onUserScroll, {
-      passive: true,
-      once: true,
-    });
-
-    const raf = requestAnimationFrame(() => {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-
-    let dimTimer: ReturnType<typeof setTimeout> | undefined;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            clearTimeout(dimTimer);
-            dimTimer = setTimeout(() => {
-              setHighlight("subtle");
-              observer.disconnect();
-            }, 3000);
-          } else if (dimTimer !== undefined && !userScrolled) {
-            // Pushed off-screen by new content before timer fired — scroll back
-            clearTimeout(dimTimer);
-            dimTimer = undefined;
-            el.scrollIntoView({ behavior: "smooth", block: "start" });
-          } else {
-            // User scrolled away — stop tracking
-            clearTimeout(dimTimer);
-            observer.disconnect();
-          }
-        }
-      },
-      { threshold: 0.5 },
-    );
-    observer.observe(el);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(dimTimer);
-      observer.disconnect();
-      window.removeEventListener("wheel", onUserScroll);
-      window.removeEventListener("touchmove", onUserScroll);
-      window.removeEventListener("keydown", onUserScroll);
-    };
-  }, [isTargeted]);
-
   return (
     <div
       id={anchorId}
       ref={elRef}
       className={`min-w-0 overflow-hidden border-t border-border/40 p-3 scroll-mt-20 transition-colors duration-700 ${
-        highlight === "strong"
+        effectiveHighlight === "strong"
           ? "bg-violet-500/10"
-          : highlight === "subtle"
+          : effectiveHighlight === "subtle"
             ? "bg-violet-500/5"
             : ""
       }`}

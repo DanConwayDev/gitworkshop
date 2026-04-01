@@ -73,6 +73,12 @@ export interface NotificationItem {
   archived: boolean;
   /** Most recent event timestamp in this group */
   latestActivity: number;
+  /**
+   * IDs of the specific events that are unread (subset of events[].id).
+   * Sorted oldest-first so the first entry is the oldest unread event —
+   * useful for anchor-scrolling to the first new content.
+   */
+  unreadEventIds: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -204,12 +210,18 @@ export function groupNotifications(
     // Sort events newest-first within each group
     group.events.sort((a, b) => b.created_at - a.created_at);
 
-    const unread = group.events.some(
+    const unreadEvents = group.events.filter(
       (ev) => !isEventRead(ev, state, readIdSet),
     );
+    const unread = unreadEvents.length > 0;
     const archived = group.events.every((ev) =>
       isEventArchived(ev, state, archivedIdSet),
     );
+
+    // unreadEvents is already newest-first (filtered from group.events which is
+    // sorted newest-first), so reversing gives oldest-first IDs without a
+    // second sort pass.
+    const unreadEventIds = unreadEvents.map((ev) => ev.id).reverse();
 
     items.push({
       rootId,
@@ -217,6 +229,7 @@ export function groupNotifications(
       unread,
       archived,
       latestActivity: group.latestActivity,
+      unreadEventIds,
     });
   }
 

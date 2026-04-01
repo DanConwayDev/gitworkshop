@@ -34,8 +34,18 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  GitMerge,
+  XCircle,
 } from "lucide-react";
 import { RepoBadge } from "@/components/RepoBadge";
+import {
+  COMMENT_KIND,
+  STATUS_RESOLVED,
+  STATUS_CLOSED,
+  STATUS_OPEN,
+  STATUS_DRAFT,
+  PR_UPDATE_KIND,
+} from "@/lib/nip34";
 
 type ViewTab = "inbox" | "archived" | "all";
 
@@ -361,6 +371,38 @@ function RootTypeIcon({
 }
 
 /**
+ * Renders the unread summary with an appropriate icon.
+ * Shows merge/close/reopen icons for status changes, comment icon for comments.
+ */
+function UnreadSummaryBadge({
+  summary,
+  hasMerge,
+  hasClosed,
+  isUnread,
+}: {
+  summary: string;
+  hasMerge: boolean;
+  hasClosed: boolean;
+  isUnread: boolean;
+}) {
+  const Icon = hasMerge ? GitMerge : hasClosed ? XCircle : MessageCircle;
+  const iconColor = hasMerge
+    ? "text-violet-500"
+    : hasClosed
+      ? "text-red-500"
+      : "text-muted-foreground";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 text-xs ${isUnread ? "text-violet-600 dark:text-violet-400 font-medium" : "text-muted-foreground"}`}
+    >
+      <Icon className={`h-3 w-3 ${iconColor}`} />
+      {summary}
+    </span>
+  );
+}
+
+/**
  * Extract a display title from a single event (issue/PR/patch).
  */
 function titleFromEvent(ev: {
@@ -449,6 +491,82 @@ function getCommenters(item: NotificationItem): string[] {
   return Array.from(pubkeys).slice(0, 5);
 }
 
+interface UnreadSummary {
+  text: string;
+  hasMerge: boolean;
+  hasClosed: boolean;
+}
+
+/**
+ * Build a short human-readable summary of the unread events in a notification
+ * group. Examples: "3 new comments", "merged", "closed · 2 new comments".
+ * Also returns icon-selection flags so the caller doesn't need to re-derive them.
+ */
+function buildUnreadSummary(item: NotificationItem): UnreadSummary | undefined {
+  if (!item.unread || item.unreadEventIds.length === 0) return undefined;
+
+  const unreadIdSet = new Set(item.unreadEventIds);
+  const unreadEvents = item.events.filter((ev) => unreadIdSet.has(ev.id));
+
+  let commentCount = 0;
+  let merged = false;
+  let closed = false;
+  let reopened = false;
+  let drafted = false;
+  let newRevision = false;
+
+  for (const ev of unreadEvents) {
+    if (ev.kind === COMMENT_KIND || ev.kind === 1 || ev.kind === 1622) {
+      commentCount++;
+    } else if (ev.kind === STATUS_RESOLVED) {
+      merged = true;
+    } else if (ev.kind === STATUS_CLOSED) {
+      closed = true;
+    } else if (ev.kind === STATUS_OPEN) {
+      reopened = true;
+    } else if (ev.kind === STATUS_DRAFT) {
+      drafted = true;
+    } else if (ev.kind === PR_UPDATE_KIND) {
+      newRevision = true;
+    }
+  }
+
+  const parts: string[] = [];
+
+  if (merged) parts.push("merged");
+  else if (closed) parts.push("closed");
+  else if (reopened) parts.push("reopened");
+  else if (drafted) parts.push("marked draft");
+
+  if (newRevision) parts.push("new revision");
+
+  if (commentCount > 0) {
+    parts.push(
+      `${commentCount} new ${commentCount === 1 ? "comment" : "comments"}`,
+    );
+  }
+
+  if (parts.length === 0) return undefined;
+  return { text: parts.join(" · "), hasMerge: merged, hasClosed: closed };
+}
+
+/**
+ * Build the link path for a notification item, appending an `?unread=` query
+ * param with the first 15 chars of each unread event ID (oldest-first).
+ * The first ID is also used as the hash anchor so the page scrolls to the
+ * oldest unread content.
+ */
+function buildNotificationLink(nevent: string, item: NotificationItem): string {
+  const base = `/${nevent}`;
+  if (item.unreadEventIds.length === 0) return base;
+
+  // Use first 15 chars of each ID — matches the anchor format in ThreadComment
+  const anchors = item.unreadEventIds.map((id) => id.slice(0, 15));
+  const params = new URLSearchParams({ unread: anchors.join(",") });
+  // Anchor to the oldest unread event (first in the oldest-first list)
+  return `${base}?${params.toString()}#${anchors[0]}`;
+}
+
 function NotificationRow({
   item,
   actions,
@@ -466,9 +584,10 @@ function NotificationRow({
     addSuffix: true,
   });
   const nevent = eventIdToNevent(item.rootId);
+  const unreadSummary = buildUnreadSummary(item);
 
-  // Determine the link path based on root type
-  const linkPath = `/${nevent}`;
+  // Determine the link path based on root type, with unread anchor
+  const linkPath = buildNotificationLink(nevent, item);
 
   return (
     <li
@@ -514,7 +633,19 @@ function NotificationRow({
               <span className="text-xs text-muted-foreground shrink-0">
                 active {lastActive}
               </span>
-              {item.events.length > 1 && (
+              {unreadSummary ? (
+                <>
+                  <span className="text-muted-foreground/40 text-xs">
+                    &middot;
+                  </span>
+                  <UnreadSummaryBadge
+                    summary={unreadSummary.text}
+                    hasMerge={unreadSummary.hasMerge}
+                    hasClosed={unreadSummary.hasClosed}
+                    isUnread={item.unread}
+                  />
+                </>
+              ) : item.events.length > 1 ? (
                 <>
                   <span className="text-muted-foreground/40 text-xs">
                     &middot;
@@ -524,7 +655,7 @@ function NotificationRow({
                     {item.events.length}
                   </span>
                 </>
-              )}
+              ) : null}
               {repoCoord && (
                 <>
                   <span className="text-muted-foreground/40 text-xs">

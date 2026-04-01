@@ -1,11 +1,12 @@
 /**
  * Shared components used in both IssuePage and PRPage thread views.
  */
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, type RefObject } from "react";
 import { formatDistanceToNow, format } from "date-fns";
 import type { NostrEvent } from "nostr-tools";
 import { Link } from "react-router-dom";
 import { UserLink } from "@/components/UserAvatar";
+import { useUnreadHighlight } from "@/hooks/useUnreadHighlight";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Clock, Pencil, RotateCcw } from "lucide-react";
@@ -195,94 +196,17 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
 
   // Permalink anchor: first 15 chars of the event ID, matching gitworkshop's convention.
   const anchorId = comment.id.slice(0, 15);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const isTargeted = window.location.hash === `#${anchorId}`;
-  // Two-phase highlight: "strong" on arrival → "subtle" persistent indicator.
-  // Handles async comment loading pushing the card off-screen before the user
-  // has seen it.
-  const [highlight, setHighlight] = useState<"strong" | "subtle" | "none">(
-    isTargeted ? "strong" : "none",
-  );
-
-  useEffect(() => {
-    if (!isTargeted || !cardRef.current) return;
-
-    const el = cardRef.current;
-
-    // Once the user intentionally scrolls, stop chasing them back to the
-    // target element.
-    let userScrolled = false;
-    const onUserScroll = () => {
-      userScrolled = true;
-    };
-    window.addEventListener("wheel", onUserScroll, {
-      passive: true,
-      once: true,
-    });
-    window.addEventListener("touchmove", onUserScroll, {
-      passive: true,
-      once: true,
-    });
-    window.addEventListener("keydown", onUserScroll, {
-      passive: true,
-      once: true,
-    });
-
-    // Scroll to the element immediately after paint.
-    const raf = requestAnimationFrame(() => {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-
-    // Transition to "subtle" only once the element is actually visible in the
-    // viewport. If more comments load and push it off-screen before the timer
-    // fires, re-scroll — but only if the user hasn't scrolled themselves.
-    let dimTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            // Element is visible — start the dim-down timer
-            clearTimeout(dimTimer);
-            dimTimer = setTimeout(() => {
-              setHighlight("subtle");
-              observer.disconnect();
-            }, 3000);
-          } else if (dimTimer !== undefined && !userScrolled) {
-            // Pushed off-screen by new content before timer fired — scroll back
-            clearTimeout(dimTimer);
-            dimTimer = undefined;
-            el.scrollIntoView({ behavior: "smooth", block: "start" });
-          } else {
-            // User scrolled away — stop tracking
-            clearTimeout(dimTimer);
-            observer.disconnect();
-          }
-        }
-      },
-      { threshold: 0.5 },
-    );
-
-    observer.observe(el);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(dimTimer);
-      observer.disconnect();
-      window.removeEventListener("wheel", onUserScroll);
-      window.removeEventListener("touchmove", onUserScroll);
-      window.removeEventListener("keydown", onUserScroll);
-    };
-  }, [isTargeted]);
+  const { ref, highlight: effectiveHighlight } = useUnreadHighlight(anchorId);
+  const cardRef = ref as RefObject<HTMLDivElement>;
 
   return (
     <Card
       id={anchorId}
       ref={cardRef}
       className={`overflow-hidden transition-all duration-700 hover:shadow-sm scroll-mt-20 ${
-        highlight === "strong"
+        effectiveHighlight === "strong"
           ? "ring-2 ring-violet-500/60 border-violet-500/40 shadow-lg shadow-violet-500/15"
-          : highlight === "subtle"
+          : effectiveHighlight === "subtle"
             ? "ring-1 ring-violet-500/25 border-violet-500/20"
             : ""
       }`}

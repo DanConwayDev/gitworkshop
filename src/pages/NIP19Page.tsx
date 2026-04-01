@@ -4,7 +4,7 @@ import {
   normalizeToAddressPointer,
 } from "applesauce-core/helpers";
 import { use$ } from "applesauce-react/hooks";
-import { Navigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useParams } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import { eventStore, pool } from "../services/nostr";
 import { REPO_KIND, ISSUE_KIND, PATCH_KIND, PR_KIND } from "../lib/nip34";
@@ -79,6 +79,10 @@ function RepoCoordRedirect({
 
 /**
  * Inner redirect: calls useRepoPath (which may prefer NIP-05) then navigates.
+ *
+ * Forwards the current location's search params and hash to the destination
+ * so that ?unread=... and #anchor fragments survive the redirect chain.
+ * The ?stargazer= param takes precedence over any forwarded search string.
  */
 function RepoPathRedirect({
   pubkey,
@@ -95,8 +99,24 @@ function RepoPathRedirect({
   stargazerPubkey?: string;
 }) {
   const repoPath = useRepoPath(pubkey, repoId, relays);
-  const search = stargazerPubkey ? `?stargazer=${stargazerPubkey}` : "";
-  return <Navigate to={`${repoPath}${subPath}${search}`} replace />;
+  const location = useLocation();
+
+  // Build the search string: stargazer takes precedence; otherwise forward
+  // whatever search params arrived on the current URL (e.g. ?unread=...).
+  let search = "";
+  if (stargazerPubkey) {
+    search = `?stargazer=${stargazerPubkey}`;
+  } else if (location.search) {
+    search = location.search;
+  }
+
+  // Forward the hash fragment too (e.g. #<anchorId> for comment permalinks).
+  // subPath may already contain a fragment (e.g. "/issues/nevent1...#abc123");
+  // only append location.hash if subPath doesn't already have one.
+  const subPathHasHash = subPath.includes("#");
+  const hash = !subPathHasHash && location.hash ? location.hash : "";
+
+  return <Navigate to={`${repoPath}${subPath}${search}${hash}`} replace />;
 }
 
 /** Get the uppercase `E` root tag from a NIP-22 comment (kind 1111). */
