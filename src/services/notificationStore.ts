@@ -217,7 +217,10 @@ export function acquireNotificationStore(
         identifier: NOTIFICATION_STATE_D_TAG,
       }).subscribe();
 
-      // Also query outbox relays for the state event
+      // Also query user outbox relays for the state event.
+      // Lookup relays (NIP-65 indexers) are not included here because the
+      // state event is authored by the notification keypair, not the user —
+      // indexers won't store events from an unknown pubkey.
       firstValueFrom(
         eventStore
           .model(MailboxesModel, pubkey)
@@ -225,10 +228,7 @@ export function acquireNotificationStore(
       )
         .then((mailboxes) => {
           const outboxes = mailboxes?.outboxes ?? [];
-          const relays = [
-            ...new Set([...outboxes, ...lookupRelays.getValue()]),
-          ];
-          if (relays.length === 0) return;
+          if (outboxes.length === 0) return;
 
           const stateFilter = {
             kinds: [NIP78_KIND],
@@ -237,7 +237,7 @@ export function acquireNotificationStore(
           } as Filter;
 
           const outboxStateSub = pool
-            .subscription(relays, [stateFilter])
+            .subscription(outboxes, [stateFilter])
             .pipe(onlyEvents(), mapEventsToStore(eventStore))
             .subscribe();
 

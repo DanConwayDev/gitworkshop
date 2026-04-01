@@ -40,7 +40,7 @@ import { PrivateKeySigner } from "applesauce-signers/signers";
 import { EventFactory } from "applesauce-core/event-factory";
 import { MailboxesModel } from "applesauce-core/models";
 import { eventStore } from "@/services/nostr";
-import { lookupRelays } from "@/services/settings";
+import { extraRelays, lookupRelays } from "@/services/settings";
 import {
   parseReadState,
   mergeReadStates,
@@ -227,7 +227,7 @@ export async function getOrCreateNotificationSigner(
     // Add to local store immediately
     eventStore.add(signed);
 
-    const relayGroups = await buildNotificationRelayGroups(pubkey);
+    const relayGroups = await buildNsecEnvelopeRelayGroups(pubkey);
     await outboxStore.publish(signed, relayGroups, { hidden: true });
 
     // Cache against the published event's metadata
@@ -262,37 +262,69 @@ export function evictNotificationSigner(pubkey: string): void {
 const MAX_OUTBOX_RELAYS = 5;
 
 /**
- * Resolve relay groups for publishing notification events.
- *
- * Returns a map of group ID -> relay URLs following the same convention as
- * nip34.ts so the outbox store can re-resolve when relay lists change:
- *   - `pubkey` (64-char hex) -> user's NIP-65 outbox relays
- *   - "User Index Relays"    -> configured lookup relays
+ * Get the user's NIP-65 outbox relays from the EventStore.
+ * Returns an empty array if not loaded within 500ms.
  */
-async function buildNotificationRelayGroups(
-  pubkey: string,
-): Promise<Record<string, string[]>> {
-  const groups: Record<string, string[]> = {};
-
-  // User's NIP-65 outbox relays — keyed by pubkey for re-resolution
+async function getUserOutboxRelays(pubkey: string): Promise<string[]> {
   try {
     const mailboxes = await firstValueFrom(
       eventStore
         .model(MailboxesModel, pubkey)
         .pipe(timeout({ first: 500, with: () => of(undefined) })),
     );
-    const outboxes = mailboxes?.outboxes.slice(0, MAX_OUTBOX_RELAYS) ?? [];
-    if (outboxes.length > 0) {
-      groups[pubkey] = outboxes;
-    }
+    return mailboxes?.outboxes.slice(0, MAX_OUTBOX_RELAYS) ?? [];
   } catch {
-    // MailboxesModel not loaded yet — proceed with lookup relays only
+    return [];
+  }
+}
+
+/**
+ * Relay groups for the nsec envelope (authored by the user's pubkey).
+ *
+ * Includes lookup relays (NIP-65 indexers like purplepag.es) because the
+ * envelope is authored by the user — indexers will store it and other
+ * devices can discover it there.
+ */
+async function buildNsecEnvelopeRelayGroups(
+  pubkey: string,
+): Promise<Record<string, string[]>> {
+  const groups: Record<string, string[]> = {};
+
+  const outboxes = await getUserOutboxRelays(pubkey);
+  if (outboxes.length > 0) {
+    groups[pubkey] = outboxes;
   }
 
-  // Lookup relays as a separate named group
   const lookup = lookupRelays.getValue();
   if (lookup.length > 0) {
     groups["User Index Relays"] = lookup;
+  }
+
+  return groups;
+}
+
+/**
+ * Relay groups for the notification state event (authored by the dedicated
+ * notification keypair, not the user).
+ *
+ * Only publishes to the user's outbox relays — lookup relays / NIP-65
+ * indexers won't store events from an unknown pubkey. Falls back to
+ * extraRelays if the user has no outbox relays configured.
+ */
+async function buildStateEventRelayGroups(
+  pubkey: string,
+): Promise<Record<string, string[]>> {
+  const groups: Record<string, string[]> = {};
+
+  const outboxes = await getUserOutboxRelays(pubkey);
+  if (outboxes.length > 0) {
+    groups[pubkey] = outboxes;
+  } else {
+    // Fallback — user has no NIP-65 outbox relays yet
+    const fallback = extraRelays.getValue();
+    if (fallback.length > 0) {
+      groups["Fallback Relays"] = fallback;
+    }
   }
 
   return groups;
@@ -329,7 +361,7 @@ export async function publishReadState(
     // Add to local store immediately for optimistic updates
     eventStore.add(signed);
 
-    const relayGroups = await buildNotificationRelayGroups(pubkey);
+    const relayGroups = await buildStateEventRelayGroups(pubkey);
     await outboxStore.publish(signed, relayGroups, { hidden: true });
   } catch (err) {
     console.warn("[notifications] Failed to publish read state:", err);
