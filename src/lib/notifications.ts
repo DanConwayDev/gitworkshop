@@ -36,8 +36,18 @@ import {
 /** NIP-78 kind for arbitrary app data */
 export const NIP78_KIND = 30078;
 
-/** d-tag for our notification read-state event */
+/** d-tag for our notification read-state event (signed by the dedicated nsec) */
 export const NOTIFICATION_STATE_D_TAG = "git-notifications-state";
+
+/**
+ * d-tag for the nsec envelope event.
+ *
+ * This NIP-78 event is encrypted with the user's own signer (NIP-44) and
+ * contains only the hex private key of a dedicated notification keypair.
+ * It is decrypted once and the plaintext is cached in localStorage so
+ * subsequent state updates never require the user's signer.
+ */
+export const NOTIFICATION_NSEC_D_TAG = "git-notifications-nsec";
 
 /** NIP-34 root kinds whose comments generate notifications */
 export const NIP34_ROOT_KINDS = [PATCH_KIND, PR_KIND, ISSUE_KIND] as const;

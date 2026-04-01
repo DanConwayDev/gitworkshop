@@ -5,6 +5,18 @@
  *   - Relay subscriptions for notification events (inbox relays + extra)
  *   - Reference counting (acquire/release)
  *
+ * ## Two-event NIP-78 architecture
+ *
+ * The notification state is stored in two NIP-78 events:
+ *
+ *   1. Nsec envelope (d: "git-notifications-nsec") — authored by the user,
+ *      encrypted with their signer. Contains a dedicated hex private key.
+ *      Fetched from lookup relays + user outbox relays.
+ *
+ *   2. State event (d: "git-notifications-state") — authored and encrypted
+ *      by the dedicated notification keypair. Fetched once the notification
+ *      pubkey is known (after the nsec envelope is decrypted).
+ *
  * NIP-78 publish and decrypt/merge logic lives in notificationSync.ts.
  * Action implementations (markAsRead, etc.) live in notificationActions.ts.
  */
@@ -15,17 +27,23 @@ import { mapEventsToStore } from "applesauce-core";
 import { MailboxesModel } from "applesauce-core/models";
 import { onlyEvents } from "applesauce-relay";
 import { pool, eventStore, addressLoader } from "@/services/nostr";
-import { extraRelays } from "@/services/settings";
+import { extraRelays, lookupRelays } from "@/services/settings";
 import {
   buildNotificationFilters,
   parseReadState,
   DEFAULT_READ_STATE,
   NIP78_KIND,
   NOTIFICATION_STATE_D_TAG,
+  NOTIFICATION_NSEC_D_TAG,
   type NotificationReadState,
 } from "@/lib/notifications";
 import type { Filter } from "applesauce-core/helpers";
-import { schedulePublish, watchNip78Event } from "./notificationSync";
+import {
+  schedulePublish,
+  watchNip78Event,
+  getOrCreateNotificationSigner,
+  evictNotificationSigner,
+} from "./notificationSync";
 
 // ---------------------------------------------------------------------------
 // localStorage helpers
@@ -144,16 +162,19 @@ export function acquireNotificationStore(
       .subscribe();
   });
 
-  // Fetch the NIP-78 read state from lookup relays
-  const nip78Sub = addressLoader({
+  // ---------------------------------------------------------------------------
+  // Fetch the nsec envelope from lookup relays + user outbox relays
+  // ---------------------------------------------------------------------------
+
+  // One-shot address loader for the nsec envelope (lookup relays)
+  const nsecEnvelopeSub = addressLoader({
     kind: NIP78_KIND,
     pubkey,
-    identifier: NOTIFICATION_STATE_D_TAG,
+    identifier: NOTIFICATION_NSEC_D_TAG,
   }).subscribe();
 
-  // Also query outbox relays for the NIP-78 event (catches state published
-  // from another device that went to the user's own outbox)
-  let nip78OutboxSub = { unsubscribe: () => {} };
+  // Also query outbox relays for the nsec envelope
+  let nsecOutboxSub = { unsubscribe: () => {} };
   firstValueFrom(
     eventStore
       .model(MailboxesModel, pubkey)
@@ -161,20 +182,82 @@ export function acquireNotificationStore(
   )
     .then((mailboxes) => {
       const outboxes = mailboxes?.outboxes ?? [];
-      if (outboxes.length === 0) return;
-      const nip78Filter = {
+      const relays = [...new Set([...outboxes, ...lookupRelays.getValue()])];
+      if (relays.length === 0) return;
+
+      const nsecFilter = {
         kinds: [NIP78_KIND],
         authors: [pubkey],
-        "#d": [NOTIFICATION_STATE_D_TAG],
+        "#d": [NOTIFICATION_NSEC_D_TAG],
       } as Filter;
-      nip78OutboxSub = pool
-        .subscription(outboxes, [nip78Filter])
+
+      nsecOutboxSub = pool
+        .subscription(relays, [nsecFilter])
         .pipe(onlyEvents(), mapEventsToStore(eventStore))
         .subscribe();
     })
     .catch(() => {});
 
-  // Watch for the NIP-78 event in the store, decrypt, and merge
+  // ---------------------------------------------------------------------------
+  // Once the nsec envelope is decrypted, fetch the state event authored by
+  // the notification keypair from the same relay sets.
+  // ---------------------------------------------------------------------------
+
+  let stateEventSub = { unsubscribe: () => {} };
+
+  getOrCreateNotificationSigner(pubkey)
+    .then(async (notifSigner) => {
+      if (!notifSigner) return;
+      const notifPubkey = await notifSigner.getPublicKey();
+
+      // Fetch state event from lookup relays
+      const stateSub = addressLoader({
+        kind: NIP78_KIND,
+        pubkey: notifPubkey,
+        identifier: NOTIFICATION_STATE_D_TAG,
+      }).subscribe();
+
+      // Also query outbox relays for the state event
+      firstValueFrom(
+        eventStore
+          .model(MailboxesModel, pubkey)
+          .pipe(timeout({ first: 1000, with: () => of(undefined) })),
+      )
+        .then((mailboxes) => {
+          const outboxes = mailboxes?.outboxes ?? [];
+          const relays = [
+            ...new Set([...outboxes, ...lookupRelays.getValue()]),
+          ];
+          if (relays.length === 0) return;
+
+          const stateFilter = {
+            kinds: [NIP78_KIND],
+            authors: [notifPubkey],
+            "#d": [NOTIFICATION_STATE_D_TAG],
+          } as Filter;
+
+          const outboxStateSub = pool
+            .subscription(relays, [stateFilter])
+            .pipe(onlyEvents(), mapEventsToStore(eventStore))
+            .subscribe();
+
+          // Combine both into stateEventSub for cleanup
+          const prevUnsub = stateEventSub.unsubscribe.bind(stateEventSub);
+          stateEventSub = {
+            unsubscribe: () => {
+              prevUnsub();
+              stateSub.unsubscribe();
+              outboxStateSub.unsubscribe();
+            },
+          };
+        })
+        .catch(() => {
+          stateEventSub = stateSub;
+        });
+    })
+    .catch(() => {});
+
+  // Watch for the nsec envelope + state event in the store, decrypt, and merge
   const nip78WatchSub = watchNip78Event(pubkey, readState$);
 
   const entry: NotificationStoreEntry = {
@@ -184,8 +267,9 @@ export function acquireNotificationStore(
     cleanup: () => {
       localSub.unsubscribe();
       relaySub.unsubscribe();
-      nip78Sub.unsubscribe();
-      nip78OutboxSub.unsubscribe();
+      nsecEnvelopeSub.unsubscribe();
+      nsecOutboxSub.unsubscribe();
+      stateEventSub.unsubscribe();
       nip78WatchSub.unsubscribe();
     },
     refCount: 1,
@@ -202,6 +286,7 @@ export function releaseNotificationStore(pubkey: string): void {
   if (entry.refCount <= 0) {
     entry.cleanup?.();
     if (entry.publishTimer) clearTimeout(entry.publishTimer);
+    evictNotificationSigner(pubkey);
     storeMap.delete(pubkey);
   }
 }
