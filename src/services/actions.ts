@@ -4,10 +4,21 @@ import type { NostrEvent } from "nostr-tools";
 import { eventStore, publish } from "./nostr";
 import { lookupRelays } from "./settings";
 import { accounts } from "./accounts";
-import { USER_REPLACEABLE_KINDS } from "./userIdentitySubscription";
 
-/** Set of user replaceable kinds for fast lookup in runnerPublish. */
-const USER_REPLACEABLE_SET = new Set<number>(USER_REPLACEABLE_KINDS);
+/**
+ * Kinds that user index relays (purplepag.es, etc.) are known to accept.
+ * These are profile, contact, relay, and list kinds. Kind 30078 (NIP-78 app
+ * data) is intentionally excluded — index relays reject application data
+ * events as they are not list information.
+ */
+const INDEX_RELAY_KINDS = new Set<number>([
+  0, // profile metadata
+  3, // contact / follow list
+  10002, // NIP-65 relay list (mailboxes)
+  10017, // NIP-51 Git authors follow list
+  10018, // NIP-51 Git repositories follow list
+  10317, // Grasp server list
+]);
 
 /**
  * Global EventFactory instance for creating signed events.
@@ -22,17 +33,18 @@ export const factory = new EventFactory({
 /**
  * Publish function passed to the ActionRunner.
  *
- * For any user replaceable event kind (contacts, relay list, grasp list,
- * git authors, git repositories, etc.), lookup/index relays are added as a
- * separate "User Index Relays" group so that the updated event reaches
+ * For profile, contact, relay, and list kinds, lookup/index relays are added
+ * as a separate "User Index Relays" group so that the updated event reaches
  * well-connected index relays in addition to the user's own outbox relays.
- * This improves the chance that other clients can discover the latest event
- * even if they don't know all of the user's outbox relays.
+ * This improves discoverability for other clients.
+ *
+ * Kind 30078 (NIP-78 app data) is intentionally excluded — index relays
+ * reject application data events as they are not list information.
  *
  * For all other events the call is forwarded to publish() unchanged.
  */
 function runnerPublish(event: NostrEvent, relays?: string[]): Promise<void> {
-  if (USER_REPLACEABLE_SET.has(event.kind)) {
+  if (INDEX_RELAY_KINDS.has(event.kind)) {
     return publish(event, relays, {
       "User Index Relays": lookupRelays.getValue(),
     });

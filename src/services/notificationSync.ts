@@ -40,7 +40,7 @@ import { PrivateKeySigner } from "applesauce-signers/signers";
 import { EventFactory } from "applesauce-core/event-factory";
 import { MailboxesModel } from "applesauce-core/models";
 import { eventStore } from "@/services/nostr";
-import { extraRelays, lookupRelays } from "@/services/settings";
+import { extraRelays } from "@/services/settings";
 import {
   parseReadState,
   mergeReadStates,
@@ -281,9 +281,8 @@ async function getUserOutboxRelays(pubkey: string): Promise<string[]> {
 /**
  * Relay groups for the nsec envelope (authored by the user's pubkey).
  *
- * Includes lookup relays (NIP-65 indexers like purplepag.es) because the
- * envelope is authored by the user — indexers will store it and other
- * devices can discover it there.
+ * Only publishes to the user's outbox relays — user index relays (purplepag.es
+ * etc.) will reject kind 30078 app data events.
  */
 async function buildNsecEnvelopeRelayGroups(
   pubkey: string,
@@ -293,11 +292,6 @@ async function buildNsecEnvelopeRelayGroups(
   const outboxes = await getUserOutboxRelays(pubkey);
   if (outboxes.length > 0) {
     groups[pubkey] = outboxes;
-  }
-
-  const lookup = lookupRelays.getValue();
-  if (lookup.length > 0) {
-    groups["User Index Relays"] = lookup;
   }
 
   return groups;
