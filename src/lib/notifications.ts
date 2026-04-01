@@ -37,7 +37,7 @@ import {
 export const NIP78_KIND = 30078;
 
 /** d-tag for our notification read-state event */
-export const NOTIFICATION_STATE_D_TAG = "ngitstack/notifications";
+export const NOTIFICATION_STATE_D_TAG = "git-notifications-state";
 
 /** NIP-34 root kinds whose comments generate notifications */
 export const NIP34_ROOT_KINDS = [PATCH_KIND, PR_KIND, ISSUE_KIND] as const;

@@ -9,10 +9,7 @@ Uses [NIP-78](https://github.com/nostr-protocol/nips/blob/master/78.md) (Arbitra
 ```json
 {
   "kind": 30078,
-  "tags": [
-    ["d", "ngitstack/notifications"],
-    ["alt", "ngitstack notification read state"]
-  ],
+  "tags": [["d", "git-notifications-state"]],
   "content": "<NIP-44 encrypted JSON>"
 }
 ```
