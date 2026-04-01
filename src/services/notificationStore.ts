@@ -159,12 +159,16 @@ export function acquireNotificationStore(
     saveToLocalStorage(pubkey, state);
   });
 
-  // Subscribe to notification events from inbox relays + extra relays
-  const filters = buildNotificationFilters(pubkey);
+  // Subscribe to notification events from inbox relays + extra relays.
+  // The resolved set is stored in inboxRelays$ so the repo-activity
+  // subscription can exclude already-covered relays for thread filters.
+  const inboxRelays$ = new BehaviorSubject<string[]>([]);
+  const threadFilters = buildNotificationFilters(pubkey);
   let relaySub = { unsubscribe: () => {} };
   resolveNotificationRelays(pubkey).then((relays) => {
+    inboxRelays$.next(relays);
     relaySub = pool
-      .subscription(relays, filters, {
+      .subscription(relays, threadFilters, {
         reconnect: Infinity,
         resubscribe: Infinity,
       })
@@ -314,7 +318,8 @@ export function acquireNotificationStore(
             const d = ev.tags.find(([t]) => t === "d")?.[1];
             return d ? `${REPO_KIND}:${ev.pubkey}:${d}` : undefined;
           })
-          .filter((c): c is string => !!c),
+          .filter((c): c is string => !!c)
+          .sort(),
       ),
       distinctUntilChanged(
         (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
@@ -345,39 +350,66 @@ export function acquireNotificationStore(
           }
         }
       }
-      return [...urlSet];
+      return [...urlSet].sort();
     }),
     distinctUntilChanged(
       (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
     ),
   );
 
-  // Reactive subscription for repo stars (kind:7) and thread notifications.
-  // Both are published to the repo's own relays (declared in the announcement).
-  // We combine coords and relays so a single switchMap re-subscribes whenever
-  // either the repo list or the relay list changes.
-  const threadFilters = buildNotificationFilters(pubkey);
-  const repoActivitySub = combineLatest([repoCoords$, repoRelays$])
+  // Reactive subscription for repo stars (kind:7) and thread notifications
+  // on repo relays. Stars are only fetched here (the inbox subscription
+  // doesn't include star filters). Thread filters are sent only to repo
+  // relays NOT already covered by the inbox subscription to avoid duplicate
+  // REQ messages for the same filters on the same relays.
+  const repoActivitySub = combineLatest([
+    repoCoords$,
+    repoRelays$,
+    inboxRelays$,
+  ])
     .pipe(
       distinctUntilChanged(
-        ([coordsA, relaysA], [coordsB, relaysB]) =>
+        ([coordsA, repoA, inboxA], [coordsB, repoB, inboxB]) =>
           coordsA.length === coordsB.length &&
           coordsA.every((v, i) => v === coordsB[i]) &&
-          relaysA.length === relaysB.length &&
-          relaysA.every((v, i) => v === relaysB[i]),
+          repoA.length === repoB.length &&
+          repoA.every((v, i) => v === repoB[i]) &&
+          inboxA.length === inboxB.length &&
+          inboxA.every((v, i) => v === inboxB[i]),
       ),
-      switchMap(([coords, relays]) => {
-        if (coords.length === 0 || relays.length === 0) return of(undefined);
-        return pool
-          .subscription(
-            relays,
-            [...threadFilters, buildRepoStarFilter(coords)],
-            {
+      switchMap(([coords, repoRelays, inboxRelays]) => {
+        if (coords.length === 0 || repoRelays.length === 0) {
+          return of(undefined);
+        }
+
+        const starFilter = buildRepoStarFilter(coords);
+        const inboxSet = new Set(inboxRelays);
+        // Repo relays not already covered by the inbox thread subscription
+        const extraRepoRelays = repoRelays.filter((r) => !inboxSet.has(r));
+
+        // Build subscriptions: stars go to all repo relays; thread filters
+        // only go to repo relays not already covered by the inbox sub.
+        const subs = [
+          pool
+            .subscription(repoRelays, [starFilter], {
               reconnect: Infinity,
               resubscribe: Infinity,
-            },
-          )
-          .pipe(onlyEvents(), mapEventsToStore(eventStore));
+            })
+            .pipe(onlyEvents(), mapEventsToStore(eventStore)),
+        ];
+
+        if (extraRepoRelays.length > 0) {
+          subs.push(
+            pool
+              .subscription(extraRepoRelays, threadFilters, {
+                reconnect: Infinity,
+                resubscribe: Infinity,
+              })
+              .pipe(onlyEvents(), mapEventsToStore(eventStore)),
+          );
+        }
+
+        return combineLatest(subs);
       }),
     )
     .subscribe();
@@ -398,6 +430,7 @@ export function acquireNotificationStore(
       repoCoordsStoreSub.unsubscribe();
       repoActivitySub.unsubscribe();
       repoCoords$.complete();
+      inboxRelays$.complete();
     },
     refCount: 1,
   };

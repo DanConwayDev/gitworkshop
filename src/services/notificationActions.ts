@@ -26,29 +26,9 @@ import { updateReadState } from "./notificationStore";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getNotificationEvents(pubkey: string): NostrEvent[] {
-  return eventStore.getByFilters(buildNotificationFilters(pubkey));
-}
-
-/**
- * Get all social notification events for a given synthetic rootId.
- * Returns the events that belong to that social group.
- */
-function getSocialEventsForRootId(
-  entry: NotificationStoreEntry,
-  rootId: string,
-): NostrEvent[] {
-  const coords = entry.repoCoords$.getValue();
-
-  if (rootId.startsWith(REPO_STARS_PREFIX)) {
-    const coord = rootId.slice(REPO_STARS_PREFIX.length);
-    if (!coords.includes(coord)) return [];
-    return eventStore.getByFilters([
-      buildRepoStarFilter([coord]),
-    ]) as NostrEvent[];
-  }
-
-  return [];
+/** True if rootId is a synthetic social rootId (not a Nostr event ID) */
+function isSocialRootId(rootId: string): boolean {
+  return rootId.startsWith(REPO_STARS_PREFIX);
 }
 
 /**
@@ -67,27 +47,29 @@ function getAllNotificationEvents(entry: NotificationStoreEntry): NostrEvent[] {
   return [...thread, ...stars];
 }
 
-/** True if rootId is a synthetic social rootId (not a Nostr event ID) */
-function isSocialRootId(rootId: string): boolean {
-  return rootId.startsWith(REPO_STARS_PREFIX);
-}
-
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
 
-/** Get the events belonging to a rootId, handling both thread and social. */
-function getEventsForRootId(
-  entry: NotificationStoreEntry,
+/**
+ * Extract the events belonging to a rootId from an already-fetched allEvents
+ * array, avoiding redundant EventStore queries.
+ */
+function filterEventsForRootId(
+  allEvents: NostrEvent[],
   rootId: string,
+  selfPubkey: string,
 ): NostrEvent[] {
   if (isSocialRootId(rootId)) {
-    return getSocialEventsForRootId(entry, rootId).filter(
-      (ev) => ev.pubkey !== entry.pubkey,
+    const coord = rootId.slice(REPO_STARS_PREFIX.length);
+    return allEvents.filter(
+      (ev) =>
+        ev.pubkey !== selfPubkey &&
+        ev.tags.some(([t, v]) => t === "a" && v === coord),
     );
   }
-  return getNotificationEvents(entry.pubkey).filter(
-    (ev) => ev.pubkey !== entry.pubkey && getNotificationRootId(ev) === rootId,
+  return allEvents.filter(
+    (ev) => ev.pubkey !== selfPubkey && getNotificationRootId(ev) === rootId,
   );
 }
 
@@ -97,7 +79,7 @@ export function actionMarkAsRead(
 ): void {
   updateReadState(entry, (prev) => {
     const allEvents = getAllNotificationEvents(entry);
-    const rootEvents = getEventsForRootId(entry, rootId);
+    const rootEvents = filterEventsForRootId(allEvents, rootId, entry.pubkey);
     const readIdSet = new Set(prev.ri);
     const newlyReadIds = rootEvents
       .filter((ev) => !isEventRead(ev, prev, readIdSet))
@@ -117,7 +99,7 @@ export function actionMarkAsUnread(
 ): void {
   updateReadState(entry, (prev) => {
     const allEvents = getAllNotificationEvents(entry);
-    const rootEvents = getEventsForRootId(entry, rootId);
+    const rootEvents = filterEventsForRootId(allEvents, rootId, entry.pubkey);
     if (rootEvents.length === 0) return prev;
 
     const rootEventIds = new Set(rootEvents.map((ev) => ev.id));
@@ -153,7 +135,7 @@ export function actionMarkAsArchived(
 ): void {
   updateReadState(entry, (prev) => {
     const allEvents = getAllNotificationEvents(entry);
-    const rootEvents = getEventsForRootId(entry, rootId);
+    const rootEvents = filterEventsForRootId(allEvents, rootId, entry.pubkey);
     const archivedIdSet = new Set(prev.ai);
 
     const newlyArchivedIds = rootEvents
@@ -191,7 +173,7 @@ export function actionMarkAsUnarchived(
 ): void {
   updateReadState(entry, (prev) => {
     const allEvents = getAllNotificationEvents(entry);
-    const rootEvents = getEventsForRootId(entry, rootId);
+    const rootEvents = filterEventsForRootId(allEvents, rootId, entry.pubkey);
     if (rootEvents.length === 0) return prev;
 
     const rootEventIds = new Set(rootEvents.map((ev) => ev.id));

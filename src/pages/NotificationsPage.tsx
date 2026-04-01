@@ -436,21 +436,23 @@ function titleFromEvent(ev: {
  *
  * Fires eventLoader for the rootId so the event is fetched if missing.
  */
-function useRootEvent(item: { rootId: string }) {
-  // Single subscription — cheap single-ID filter.
-  // For social items rootId is a synthetic string; the filter returns nothing.
-  const rootEvents = use$(
-    () => eventStore.timeline([{ ids: [item.rootId] }]),
-    [item.rootId],
-  );
+function useRootEvent(rootId: string) {
+  // A valid Nostr event ID is exactly 64 hex chars. Social notification
+  // rootIds are synthetic strings (e.g. "stars:30617:pk:dtag") — skip the
+  // subscription entirely for those to avoid dead timeline subscriptions.
+  const isEventId = rootId.length === 64;
+
+  const rootEvents = use$(() => {
+    if (!isEventId) return undefined;
+    return eventStore.timeline([{ ids: [rootId] }]);
+  }, [rootId, isEventId]);
 
   // Fire the loader once if the root event isn't in the store yet.
-  // Skip for synthetic social rootIds (they don't start with a hex event ID).
   useEffect(() => {
-    if (item.rootId.length === 64 && (!rootEvents || rootEvents.length === 0)) {
-      eventLoader({ id: item.rootId }).subscribe();
+    if (isEventId && (!rootEvents || rootEvents.length === 0)) {
+      eventLoader({ id: rootId }).subscribe();
     }
-  }, [item.rootId, rootEvents]);
+  }, [rootId, isEventId, rootEvents]);
 
   return rootEvents?.[0];
 }
@@ -635,7 +637,7 @@ function NotificationRow({
 }) {
   // Always call hooks unconditionally — React rules of hooks.
   // For social items rootId is synthetic; useRootEvent returns undefined.
-  const rootEvent = useRootEvent(item);
+  const rootEvent = useRootEvent(item.rootId);
 
   if (item.kind !== "thread") {
     return (

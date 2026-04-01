@@ -12,7 +12,7 @@
  * Cache key: the user's pubkey (one model per logged-in user).
  */
 
-import { combineLatest, type Observable } from "rxjs";
+import { combineLatest, of, type Observable } from "rxjs";
 import { auditTime, map, switchMap } from "rxjs/operators";
 import type { Model } from "applesauce-core/event-store";
 import type { NostrEvent } from "nostr-tools";
@@ -57,14 +57,12 @@ export function NotificationModel(
     // Repo star events — reactive: re-subscribes to the store timeline
     // whenever the user's repo list changes, so new stars are picked up
     // without needing an unrelated re-emit to trigger a snapshot.
+    // When there are no repos, of([]) emits once and completes — this is
+    // safe because combineLatest keeps using the last value from completed
+    // sources while the other sources continue to emit.
     const repoStarEvents$ = repoCoords$.pipe(
       switchMap((coords) => {
-        if (coords.length === 0) {
-          // Return an observable that emits an empty array immediately
-          return store.timeline([{ kinds: [-1] }]) as unknown as Observable<
-            NostrEvent[]
-          >;
-        }
+        if (coords.length === 0) return of([] as NostrEvent[]);
         return store.timeline([
           buildRepoStarFilter(coords),
         ]) as unknown as Observable<NostrEvent[]>;
