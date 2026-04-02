@@ -156,6 +156,36 @@ export const DEFAULT_READ_STATE: NotificationReadState = {
 // ---------------------------------------------------------------------------
 
 /**
+ * Minimal filters for the navbar badge — limit:10 per filter, no since.
+ *
+ * Just enough to show a dot indicator without pulling history. The full
+ * history fetch (buildNotificationFilters via ManualTimelineLoader) fires
+ * only when the user visits the notifications page.
+ */
+export function buildNotificationBadgeFilters(pubkey: string): Filter[] {
+  return [
+    {
+      kinds: [COMMENT_KIND],
+      "#P": [pubkey],
+      "#K": NIP34_ROOT_KINDS.map(String),
+      limit: 10,
+    } as Filter,
+    {
+      kinds: [
+        ISSUE_KIND,
+        PR_KIND,
+        PATCH_KIND,
+        PR_UPDATE_KIND,
+        ...STATUS_KINDS,
+        LEGACY_REPLY_KIND,
+      ],
+      "#p": [pubkey],
+      limit: 10,
+    } as Filter,
+  ];
+}
+
+/**
  * Build relay filters for thread notification events targeting a pubkey.
  *
  * Two filters:

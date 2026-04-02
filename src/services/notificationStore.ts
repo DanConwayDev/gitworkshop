@@ -5,6 +5,23 @@
  *   - Relay subscriptions for notification events (inbox relays + extra)
  *   - Reference counting (acquire/release)
  *
+ * ## Fetch strategy
+ *
+ * Thread notifications use a two-phase approach:
+ *
+ *   Phase 1 — Badge (fires immediately on login):
+ *     A live pool.subscription with limit:10 badge filters. Keeps a WebSocket
+ *     open for new arrivals and seeds the EventStore with enough events to
+ *     show a dot indicator. Cheap and always-on.
+ *
+ *   Phase 2 — History (fires on first /notifications visit):
+ *     A ManualTimelineLoader that pages backwards through history.
+ *     - First call: loadMore(10) from the badge, then loadMore(200) from the page
+ *     - Each call fetches one block; per-relay cursors are tracked internally
+ *     - historyLoading$ / historyHasMore$ drive the spinner and "load more" button
+ *     - activateFullFetch() triggers the first 200-event page; subsequent visits
+ *       are no-ops (the loader already exists and has its cursor state)
+ *
  * ## Two-event NIP-78 architecture
  *
  * The notification state is stored in two NIP-78 events:
@@ -30,6 +47,7 @@ import { pool, eventStore, addressLoader } from "@/services/nostr";
 import { extraRelays, lookupRelays, gitIndexRelays } from "@/services/settings";
 import {
   buildNotificationFilters,
+  buildNotificationBadgeFilters,
   buildRepoStarFilter,
   parseReadState,
   DEFAULT_READ_STATE,
@@ -39,6 +57,10 @@ import {
   type NotificationReadState,
 } from "@/lib/notifications";
 import { REPO_KIND } from "@/lib/nip34";
+import {
+  createManualTimelineLoader,
+  type ManualTimelineLoader,
+} from "@/lib/manualTimelineLoader";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
@@ -82,6 +104,9 @@ function saveToLocalStorage(
 // Entry type
 // ---------------------------------------------------------------------------
 
+/** Number of events per page on the notifications page */
+export const NOTIFICATION_PAGE_LIMIT = 200;
+
 export interface NotificationStoreEntry {
   pubkey: string;
   readState$: BehaviorSubject<NotificationReadState>;
@@ -91,6 +116,8 @@ export interface NotificationStoreEntry {
    * user. Used by NotificationModel to group social notifications by repo.
    */
   repoCoords$: BehaviorSubject<string[]>;
+  /** Manual timeline loader for paged history fetches */
+  historyLoader: ManualTimelineLoader | null;
   /** Debounce timer handle — owned here so notificationSync can clear it */
   publishTimer: ReturnType<typeof setTimeout> | null;
   /** Subscription teardown */
@@ -159,23 +186,18 @@ export function acquireNotificationStore(
     saveToLocalStorage(pubkey, state);
   });
 
-  // Subscribe to notification events from inbox relays + extra relays.
-  // The resolved set is stored in inboxRelays$ so the repo-activity
-  // subscription can exclude already-covered relays for thread filters.
-  //
-  // Use the persisted read-before cutoff (rb) as the relay `since` so we
-  // only fetch events newer than what we've already read. When rb === 0
-  // (no read history yet) we pass undefined and buildNotificationFilters
-  // applies a limit:50 cap instead — avoids pulling unbounded history on
-  // first login while still surfacing older notifications.
+  // ---------------------------------------------------------------------------
+  // Phase 1 — Badge: live subscription with limit:10 badge filters.
+  // Keeps a WebSocket open for new arrivals; seeds enough events for the dot.
+  // ---------------------------------------------------------------------------
   const inboxRelays$ = new BehaviorSubject<string[]>([]);
-  const notifSince = localState.rb > 0 ? localState.rb : undefined;
-  const threadFilters = buildNotificationFilters(pubkey, notifSince);
-  let relaySub = { unsubscribe: () => {} };
+  const badgeFilters = buildNotificationBadgeFilters(pubkey);
+  let badgeSub = { unsubscribe: () => {} };
+
   resolveNotificationRelays(pubkey).then((relays) => {
     inboxRelays$.next(relays);
-    relaySub = pool
-      .subscription(relays, threadFilters, {
+    badgeSub = pool
+      .subscription(relays, badgeFilters, {
         reconnect: Infinity,
         resubscribe: Infinity,
       })
@@ -184,17 +206,25 @@ export function acquireNotificationStore(
   });
 
   // ---------------------------------------------------------------------------
+  // Phase 2 — History loader: created lazily on first activateFullFetch() call.
+  // Stored on the entry so activateFullFetch() is idempotent.
+  // ---------------------------------------------------------------------------
+  // historyLoader is null until activateFullFetch() is called.
+  // It is created with the full thread filters (no limit — limit is set per
+  // loadMore() call) and the resolved inbox relays.
+  // We store a promise so concurrent activateFullFetch() calls don't race.
+  let historyLoaderPromise: Promise<ManualTimelineLoader> | null = null;
+
+  // ---------------------------------------------------------------------------
   // Fetch the nsec envelope from lookup relays + user outbox relays
   // ---------------------------------------------------------------------------
 
-  // One-shot address loader for the nsec envelope (lookup relays)
   const nsecEnvelopeSub = addressLoader({
     kind: NIP78_KIND,
     pubkey,
     identifier: NOTIFICATION_NSEC_D_TAG,
   }).subscribe();
 
-  // Also query outbox relays for the nsec envelope
   let nsecOutboxSub = { unsubscribe: () => {} };
   firstValueFrom(
     eventStore
@@ -220,8 +250,7 @@ export function acquireNotificationStore(
     .catch(() => {});
 
   // ---------------------------------------------------------------------------
-  // Once the nsec envelope is decrypted, fetch the state event authored by
-  // the notification keypair from the same relay sets.
+  // Once the nsec envelope is decrypted, fetch the state event
   // ---------------------------------------------------------------------------
 
   let stateEventSub = { unsubscribe: () => {} };
@@ -231,17 +260,12 @@ export function acquireNotificationStore(
       if (!notifSigner) return;
       const notifPubkey = await notifSigner.getPublicKey();
 
-      // Fetch state event from lookup relays
       const stateSub = addressLoader({
         kind: NIP78_KIND,
         pubkey: notifPubkey,
         identifier: NOTIFICATION_STATE_D_TAG,
       }).subscribe();
 
-      // Also query user outbox relays for the state event.
-      // Lookup relays (NIP-65 indexers) are not included here because the
-      // state event is authored by the notification keypair, not the user —
-      // indexers won't store events from an unknown pubkey.
       firstValueFrom(
         eventStore
           .model(MailboxesModel, pubkey)
@@ -262,7 +286,6 @@ export function acquireNotificationStore(
             .pipe(onlyEvents(), mapEventsToStore(eventStore))
             .subscribe();
 
-          // Combine both into stateEventSub for cleanup
           const prevUnsub = stateEventSub.unsubscribe.bind(stateEventSub);
           stateEventSub = {
             unsubscribe: () => {
@@ -278,24 +301,14 @@ export function acquireNotificationStore(
     })
     .catch(() => {});
 
-  // Watch for the nsec envelope + state event in the store, decrypt, and merge
   const nip78WatchSub = watchNip78Event(pubkey, readState$);
 
   // ---------------------------------------------------------------------------
   // Repo discovery — own repos for relay coverage and star notifications
   // ---------------------------------------------------------------------------
 
-  // Reactive list of the user's own repo coordinates, derived from the store.
-  // Starts empty; populated once kind:30617 events arrive from the relay.
-  // Used for two purposes:
-  //   1. Subscribing to repo-star (kind:7) events on the repo's own relays
-  //   2. Subscribing to thread notifications on each repo's own relays,
-  //      so we don't miss activity on repos whose relays aren't in our inbox
   const repoCoords$ = new BehaviorSubject<string[]>([]);
 
-  // Fetch the user's own repo announcements from git index relays.
-  // switchMap on gitIndexRelays so the subscription re-opens if the user
-  // changes their configured index relays in Settings.
   const ownRepoFilter: Filter = { kinds: [REPO_KIND], authors: [pubkey] };
   const ownRepoSub = gitIndexRelays
     .pipe(
@@ -313,8 +326,6 @@ export function acquireNotificationStore(
     )
     .subscribe();
 
-  // Keep repoCoords$ in sync with the EventStore — update whenever new
-  // kind:30617 events authored by this user arrive.
   const repoCoordsStoreSub = (
     eventStore.timeline([ownRepoFilter]) as unknown as Observable<NostrEvent[]>
   )
@@ -334,14 +345,6 @@ export function acquireNotificationStore(
     )
     .subscribe((coords) => repoCoords$.next(coords));
 
-  // Derive the union of relay URLs declared across all of the user's repo
-  // announcements. This is the correct relay set for both star and thread
-  // subscriptions — repo activity is published to the repo's own relays, not
-  // to git index relays.
-  //
-  // We also include git index relays (reactively) so that stars (which are
-  // published there alongside the repo announcement) are always covered, and
-  // so the relay set updates if the user changes their index relays in Settings.
   const repoRelays$ = combineLatest([
     gitIndexRelays,
     eventStore.timeline([ownRepoFilter]) as unknown as Observable<NostrEvent[]>,
@@ -364,11 +367,8 @@ export function acquireNotificationStore(
     ),
   );
 
-  // Reactive subscription for repo stars (kind:7) and thread notifications
-  // on repo relays. Stars are only fetched here (the inbox subscription
-  // doesn't include star filters). Thread filters are sent only to repo
-  // relays NOT already covered by the inbox subscription to avoid duplicate
-  // REQ messages for the same filters on the same relays.
+  // Repo stars live subscription — always-on, no history paging needed here.
+  // Stars are not included in the thread loader; they have their own filter.
   const repoActivitySub = combineLatest([
     repoCoords$,
     repoRelays$,
@@ -389,15 +389,13 @@ export function acquireNotificationStore(
           return of(undefined);
         }
 
-        // Use the same since constraint as the inbox subscription so repo-relay
-        // subscriptions are equally bounded.
-        const starFilter = buildRepoStarFilter(coords, notifSince);
+        // Stars: live subscription on all repo relays, no history limit needed
+        // (stars are low-volume). Thread filters go only to repo relays not
+        // already covered by the badge subscription to avoid duplicate REQs.
+        const starFilter = buildRepoStarFilter(coords);
         const inboxSet = new Set(inboxRelays);
-        // Repo relays not already covered by the inbox thread subscription
         const extraRepoRelays = repoRelays.filter((r) => !inboxSet.has(r));
 
-        // Build subscriptions: stars go to all repo relays; thread filters
-        // only go to repo relays not already covered by the inbox sub.
         const subs = [
           pool
             .subscription(repoRelays, [starFilter], {
@@ -408,9 +406,11 @@ export function acquireNotificationStore(
         ];
 
         if (extraRepoRelays.length > 0) {
+          // Badge filters on extra repo relays so we don't miss thread activity
+          // on repos whose relays aren't in the user's inbox
           subs.push(
             pool
-              .subscription(extraRepoRelays, threadFilters, {
+              .subscription(extraRepoRelays, badgeFilters, {
                 reconnect: Infinity,
                 resubscribe: Infinity,
               })
@@ -427,10 +427,11 @@ export function acquireNotificationStore(
     pubkey,
     readState$,
     repoCoords$,
+    historyLoader: null,
     publishTimer: null,
     cleanup: () => {
       localSub.unsubscribe();
-      relaySub.unsubscribe();
+      badgeSub.unsubscribe();
       nsecEnvelopeSub.unsubscribe();
       nsecOutboxSub.unsubscribe();
       stateEventSub.unsubscribe();
@@ -438,14 +439,51 @@ export function acquireNotificationStore(
       ownRepoSub.unsubscribe();
       repoCoordsStoreSub.unsubscribe();
       repoActivitySub.unsubscribe();
+      entry.historyLoader?.destroy();
       repoCoords$.complete();
       inboxRelays$.complete();
     },
     refCount: 1,
   };
 
+  // Attach the lazy loader factory to the entry via closure
+  (
+    entry as NotificationStoreEntry & {
+      _activateFullFetch: () => Promise<ManualTimelineLoader>;
+    }
+  )._activateFullFetch = async () => {
+    if (historyLoaderPromise) return historyLoaderPromise;
+    historyLoaderPromise = resolveNotificationRelays(pubkey).then((relays) => {
+      const fullFilters = buildNotificationFilters(pubkey);
+      const loader = createManualTimelineLoader(pool, relays, fullFilters, {
+        eventStore,
+      });
+      entry.historyLoader = loader;
+      // Fire the first full page immediately
+      loader.loadMore(NOTIFICATION_PAGE_LIMIT);
+      return loader;
+    });
+    return historyLoaderPromise;
+  };
+
   storeMap.set(pubkey, entry);
   return entry;
+}
+
+/**
+ * Activate the full history fetch for the notifications page.
+ * Idempotent — safe to call on every /notifications mount.
+ * Returns the ManualTimelineLoader so callers can subscribe to its state.
+ */
+export async function activateFullFetch(
+  pubkey: string,
+): Promise<ManualTimelineLoader | null> {
+  const entry = storeMap.get(pubkey);
+  if (!entry) return null;
+  const entryWithLoader = entry as NotificationStoreEntry & {
+    _activateFullFetch?: () => Promise<ManualTimelineLoader>;
+  };
+  return entryWithLoader._activateFullFetch?.() ?? null;
 }
 
 export function releaseNotificationStore(pubkey: string): void {

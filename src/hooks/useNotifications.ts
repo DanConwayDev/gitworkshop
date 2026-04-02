@@ -21,6 +21,8 @@ import { useEventStore } from "./useEventStore";
 import {
   acquireNotificationStore,
   releaseNotificationStore,
+  activateFullFetch,
+  NOTIFICATION_PAGE_LIMIT,
   type NotificationStoreEntry,
 } from "@/services/notificationStore";
 import {
@@ -48,6 +50,15 @@ export interface NotificationActions {
   markAsUnarchived: (rootId: string) => void;
   markAllAsRead: () => void;
   markAllAsArchived: () => void;
+}
+
+export interface NotificationHistoryState {
+  /** True while a history block is being fetched */
+  loading: boolean;
+  /** True if the last block returned a full page (more history available) */
+  hasMore: boolean;
+  /** Fetch the next page of history */
+  loadMore: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,23 +123,47 @@ function useNotificationStoreEntry(): NotificationStoreEntry | undefined {
 /**
  * Full notification state for the notifications page.
  *
- * Returns grouped items with read/archived status and action functions.
+ * Activates the full history fetch on mount (idempotent — safe to call on
+ * every /notifications visit). Returns grouped items, read/archived actions,
+ * and history pagination state for the spinner / "load more" button.
  */
 export function useNotifications(): {
   items: NotificationItem[] | undefined;
   unreadCount: number;
   actions: NotificationActions;
+  history: NotificationHistoryState;
 } {
   const store = useEventStore();
   const entry = useNotificationStoreEntry();
   const pubkey = entry?.pubkey;
   const readState$ = entry?.readState$;
-
   const repoCoords$ = entry?.repoCoords$;
 
-  // #9: model cache key is pubkey only; readState$ and repoCoords$ are passed
-  // as separate arguments and are not part of the cache key. The BehaviorSubject
-  // references are stable for the lifetime of the store entry.
+  // Activate the full history fetch on mount. activateFullFetch is idempotent —
+  // it creates the loader and fires the first page only once per store entry.
+  useEffect(() => {
+    if (!pubkey) return;
+    activateFullFetch(pubkey).catch(() => {});
+  }, [pubkey]);
+
+  // Subscribe to the loader's loading/hasMore state reactively.
+  // historyLoader is null until activateFullFetch resolves, so we read it
+  // from the entry after the effect fires. We use use$ with the loader's
+  // BehaviorSubjects once they exist.
+  const historyLoading =
+    use$(() => {
+      if (!entry?.historyLoader) return undefined;
+      return entry.historyLoader.historyLoading$;
+    }, [entry?.historyLoader]) ?? false;
+
+  const historyHasMore =
+    use$(() => {
+      if (!entry?.historyLoader) return undefined;
+      return entry.historyLoader.historyHasMore$;
+    }, [entry?.historyLoader]) ?? false;
+
+  // model cache key is pubkey only; readState$ and repoCoords$ are passed
+  // as separate arguments and are not part of the cache key.
   const output = use$(() => {
     if (!pubkey || !readState$ || !repoCoords$) return undefined;
     return store.model(
@@ -149,10 +184,17 @@ export function useNotifications(): {
     markAllAsArchived: () => entry && actionMarkAllAsArchived(entry),
   };
 
+  const history: NotificationHistoryState = {
+    loading: historyLoading,
+    hasMore: historyHasMore,
+    loadMore: () => entry?.historyLoader?.loadMore(NOTIFICATION_PAGE_LIMIT),
+  };
+
   return {
     items: output?.items,
     unreadCount: output?.unreadCount ?? 0,
     actions,
+    history,
   };
 }
 

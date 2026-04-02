@@ -40,6 +40,7 @@ import {
   GitMerge,
   XCircle,
   Star,
+  Loader2,
 } from "lucide-react";
 import { RepoBadge } from "@/components/RepoBadge";
 import {
@@ -57,7 +58,7 @@ const ITEMS_PER_PAGE = 10;
 
 export default function NotificationsPage() {
   const activeAccount = useActiveAccount();
-  const { items, unreadCount, actions } = useNotifications();
+  const { items, unreadCount, actions, history } = useNotifications();
   const [currentView, setCurrentView] = useState<ViewTab>("inbox");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -223,6 +224,27 @@ export default function NotificationsPage() {
           </ul>
         )}
       </div>
+
+      {/* History load-more / spinner */}
+      {(history.loading || history.hasMore) && (
+        <div className="flex justify-center mt-3">
+          {history.loading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading older notifications…
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={history.loadMore}
+            >
+              Load more
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
