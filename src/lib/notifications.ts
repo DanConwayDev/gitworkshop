@@ -165,14 +165,31 @@ export const DEFAULT_READ_STATE: NotificationReadState = {
  *      kind:1622 legacy NIP-34 replies. Kind:1 generic text notes are
  *      intentionally excluded — they are not git-related and would flood
  *      notifications with unrelated Nostr mentions.
+ *
+ * @param pubkey - The user's pubkey
+ * @param since  - If provided, only fetch events after this Unix timestamp
+ *                 (used when we have a known read-before cutoff so we skip
+ *                 already-read history). When absent a relay-side limit of
+ *                 50 is used instead — avoids pulling unbounded history for
+ *                 new users while still surfacing older notifications that
+ *                 predate any 30-day window.
  */
-export function buildNotificationFilters(pubkey: string): Filter[] {
+export function buildNotificationFilters(
+  pubkey: string,
+  since?: number,
+): Filter[] {
+  // When we have a read cutoff, fetch everything after it (no limit needed).
+  // When we don't, cap at 50 events per filter so we don't flood the connection
+  // on first login — the user can load more by visiting the notifications page.
+  const timeConstraint: Partial<Filter> = since ? { since } : { limit: 50 };
+
   return [
     // Comments on our issues/PRs/patches
     {
       kinds: [COMMENT_KIND],
       "#P": [pubkey],
       "#K": NIP34_ROOT_KINDS.map(String),
+      ...timeConstraint,
     } as Filter,
     // Events that tag us directly (git-related kinds only)
     {
@@ -185,6 +202,7 @@ export function buildNotificationFilters(pubkey: string): Filter[] {
         LEGACY_REPLY_KIND,
       ],
       "#p": [pubkey],
+      ...timeConstraint,
     } as Filter,
   ];
 }
@@ -196,12 +214,22 @@ export function buildNotificationFilters(pubkey: string): Filter[] {
 /**
  * Filter for kind:7 reactions (stars) targeting our repo announcements.
  * Requires knowing the repo coords.
+ *
+ * @param repoCoords - The repo coordinates to filter by
+ * @param since      - If provided, only fetch events after this Unix timestamp.
+ *                     When absent a limit of 50 is applied per the same
+ *                     rationale as buildNotificationFilters.
  */
-export function buildRepoStarFilter(repoCoords: string[]): Filter {
+export function buildRepoStarFilter(
+  repoCoords: string[],
+  since?: number,
+): Filter {
+  const timeConstraint: Partial<Filter> = since ? { since } : { limit: 50 };
   return {
     kinds: [REACTION_KIND],
     "#k": [String(REPO_KIND)],
     "#a": repoCoords,
+    ...timeConstraint,
   } as Filter;
 }
 

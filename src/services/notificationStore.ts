@@ -162,8 +162,15 @@ export function acquireNotificationStore(
   // Subscribe to notification events from inbox relays + extra relays.
   // The resolved set is stored in inboxRelays$ so the repo-activity
   // subscription can exclude already-covered relays for thread filters.
+  //
+  // Use the persisted read-before cutoff (rb) as the relay `since` so we
+  // only fetch events newer than what we've already read. When rb === 0
+  // (no read history yet) we pass undefined and buildNotificationFilters
+  // applies a limit:50 cap instead — avoids pulling unbounded history on
+  // first login while still surfacing older notifications.
   const inboxRelays$ = new BehaviorSubject<string[]>([]);
-  const threadFilters = buildNotificationFilters(pubkey);
+  const notifSince = localState.rb > 0 ? localState.rb : undefined;
+  const threadFilters = buildNotificationFilters(pubkey, notifSince);
   let relaySub = { unsubscribe: () => {} };
   resolveNotificationRelays(pubkey).then((relays) => {
     inboxRelays$.next(relays);
@@ -382,7 +389,9 @@ export function acquireNotificationStore(
           return of(undefined);
         }
 
-        const starFilter = buildRepoStarFilter(coords);
+        // Use the same since constraint as the inbox subscription so repo-relay
+        // subscriptions are equally bounded.
+        const starFilter = buildRepoStarFilter(coords, notifSince);
         const inboxSet = new Set(inboxRelays);
         // Repo relays not already covered by the inbox thread subscription
         const extraRepoRelays = repoRelays.filter((r) => !inboxSet.has(r));
