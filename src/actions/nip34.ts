@@ -32,7 +32,7 @@ import type { IssueStatus } from "@/lib/nip34";
 import { outboxStore } from "@/services/outbox";
 import { eventStore, addressLoader } from "@/services/nostr";
 import { MailboxesModel } from "applesauce-core/models";
-import { firstValueFrom, of, timeout } from "rxjs";
+import { firstValueFrom, of, timeout, filter } from "rxjs";
 
 // ---------------------------------------------------------------------------
 // Relay resolution helpers
@@ -90,9 +90,14 @@ async function resolveNotificationInboxes(
         const fetchSub = addressLoader({ kind: 10002, pubkey }).subscribe();
 
         const mailboxes = await firstValueFrom(
-          eventStore
-            .model(MailboxesModel, pubkey)
-            .pipe(timeout({ first: 3000, with: () => of(undefined) })),
+          eventStore.model(MailboxesModel, pubkey).pipe(
+            // Skip undefined emissions — MailboxesModel emits undefined
+            // immediately when the kind:10002 is not yet in the store.
+            // We want to wait for the addressLoader fetch to complete and
+            // deliver the actual relay list before resolving.
+            filter((m) => m !== undefined),
+            timeout({ first: 3000, with: () => of(undefined) }),
+          ),
         );
 
         fetchSub.unsubscribe();
