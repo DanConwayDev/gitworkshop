@@ -79,16 +79,18 @@ export default function RepositoriesPage({
       )
         return true;
 
-      // Also match against maintainer display names / usernames
+      // Also match against maintainer display names / usernames.
+      // Cover all four name fields: current (display_name, name) and their
+      // deprecated aliases (displayName, username) which older profiles may use.
       return r.maintainerSet.some((pk) => {
         const profile = profileMap.get(pk);
         if (!profile) return false;
-        const displayName = profile.displayName ?? profile.name ?? "";
-        const name = profile.name ?? "";
-        return (
-          displayName.toLowerCase().includes(q) ||
-          name.toLowerCase().includes(q)
-        );
+        return [
+          profile.display_name,
+          profile.displayName,
+          profile.name,
+          profile.username,
+        ].some((n) => n && n.toLowerCase().includes(q));
       });
     });
   }, [repos, search, profileMap]);
