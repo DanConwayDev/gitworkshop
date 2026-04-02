@@ -16,7 +16,7 @@ import { ThreadTree } from "@/components/ThreadTree";
 import type { ThreadTreeNode } from "@/lib/threadTree";
 import { cn } from "@/lib/utils";
 import { OutboxStatusBadge } from "@/components/OutboxStatusStrip";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, StatusIcon } from "@/components/StatusBadge";
 import type { IssueStatus } from "@/lib/nip34";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
@@ -337,11 +337,7 @@ export function StatusChangeCard({
       <div className="flex items-start pt-0.5">
         <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-muted/40 shrink-0">
           {authorised ? (
-            <StatusBadge
-              status={status}
-              variant={variant}
-              className="h-5 w-5 p-0 border-0 bg-transparent [&>svg]:h-3.5 [&>svg]:w-3.5 [&>span]:hidden"
-            />
+            <StatusIcon status={status} variant={variant} />
           ) : (
             <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground" />
           )}

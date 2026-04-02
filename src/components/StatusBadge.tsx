@@ -66,6 +66,26 @@ interface StatusBadgeProps {
   variant?: "issue" | "pr";
 }
 
+/** Renders only the icon for a given status, with the status colour applied. */
+export function StatusIcon({
+  status,
+  variant = "issue",
+  className,
+}: {
+  status: IssueStatus;
+  variant?: "issue" | "pr";
+  className?: string;
+}) {
+  const config = statusConfig[status];
+  const override = variant === "pr" ? prStatusOverrides[status] : undefined;
+  const Icon = override?.icon ?? config.icon;
+  // Extract the text-colour class from the config so the icon is coloured correctly.
+  const colourClass = config.className
+    .split(" ")
+    .find((c) => c.startsWith("text-"));
+  return <Icon className={cn("h-3.5 w-3.5", colourClass, className)} />;
+}
+
 export function StatusBadge({
   status,
   className,
