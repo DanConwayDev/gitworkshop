@@ -385,17 +385,22 @@ const GIT_REPOS_FOLLOW_KIND = 10018 as const;
 /**
  * List-level loader for a single item.
  *
- * Fires both the one-shot loaders (historical fetch, completes at EOSE) and
- * the persistent subscriptions (live updates, stays open until unsubscribed)
- * for essentials and comments.
+ * Fires both essentials (status, labels, deletions) and comments loaders for
+ * the given item ID against the provided relay list. Each loader handles its
+ * own historical fetch (backward pagination until exhausted) and persistent
+ * live subscription.
  *
- * Called by nip34RepoLoader for each discovered item, and by the hook layer
- * for detail pages. Because all singleton instances share the same buffer
- * windows, calls within the same window are merged into one REQ/subscription
- * per relay automatically.
+ * The relay list is a static snapshot — callers are responsible for
+ * reactivity. nip34RepoLoader re-fires this function when the RelayGroup
+ * gains new relays. useNip34ItemLoader re-subscribes via use$() when
+ * repoRelayKey changes (driven by useRelayGroupUrls).
+ *
+ * Because nip34EssentialsLoader and nip34CommentsLoader are singleton
+ * instances, calls within the same buffer window are batched into a single
+ * REQ per relay automatically.
  *
  * @param itemId - The event ID of the issue / patch / PR
- * @param relays - Relay URLs to query
+ * @param relays - Relay URLs to query (snapshot at call time)
  */
 export function nip34ListLoader(
   itemId: string,

@@ -1,10 +1,10 @@
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
-import type { RelayGroup } from "applesauce-relay";
+import type { RelayGroup, IRelay } from "applesauce-relay";
 import type { NostrEvent } from "nostr-tools";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { includeMailboxes } from "applesauce-core";
-import { of, merge } from "rxjs";
+import { of, merge, Observable } from "rxjs";
 import { map } from "rxjs/operators";
 import {
   liveness,
@@ -19,6 +19,24 @@ import type { Filter } from "applesauce-core/helpers";
 
 /** Max healthy inbox relays to take for the item author. */
 const MAX_INBOX_RELAYS = 3;
+
+/**
+ * Subscribe reactively to a RelayGroup's relay URL list.
+ * Re-renders (and re-runs dependent use$() calls) whenever the group gains
+ * or loses relays. Returns a stable empty array when group is undefined.
+ *
+ * relays$ is protected in TypeScript but public at runtime — we cast to
+ * access it so we can react to relay additions without polling.
+ */
+function useRelayGroupUrls(group: RelayGroup | undefined): string[] {
+  const urls = use$(() => {
+    if (!group) return of([] as string[]);
+    return (group as unknown as { relays$: Observable<IRelay[]> }).relays$.pipe(
+      map((relays) => relays.map((r) => r.url)),
+    );
+  }, [group]);
+  return urls ?? [];
+}
 
 /**
  * Minimum number of the author's inbox relays that must already be present in
@@ -124,7 +142,8 @@ export function useNip34ItemLoader(
   const store = useEventStore();
   const includeThread = options?.includeThread ?? false;
 
-  const repoRelays = repoRelayGroup?.relays.map((r) => r.url) ?? [];
+  // Reactive relay list — re-subscribes loaders when the group gains new relays
+  const repoRelays = useRelayGroupUrls(repoRelayGroup);
   const repoRelayKey = repoRelays.join(",");
 
   // ── Repo relay loaders ────────────────────────────────────────────────────
@@ -193,7 +212,8 @@ export function useNip34ItemLoaderBatch(
   const store = useEventStore();
   const includeThread = options?.includeThread ?? false;
 
-  const repoRelays = repoRelayGroup?.relays.map((r) => r.url) ?? [];
+  // Reactive relay list — re-subscribes loaders when the group gains new relays
+  const repoRelays = useRelayGroupUrls(repoRelayGroup);
   const repoRelayKey = repoRelays.join(",");
   // Stable key for the ID list — re-subscribes only when IDs actually change
   const idsKey = [...itemIds].sort().join(",");
