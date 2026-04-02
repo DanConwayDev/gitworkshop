@@ -39,6 +39,19 @@ function useRelayGroupUrls(group: RelayGroup | undefined): string[] {
 }
 
 /**
+ * Return the relays$ observable for a RelayGroup, or an observable of []
+ * when the group is undefined. Used to pass a reactive relay list directly
+ * to nip34ThreadItemLoader so it can handle new relays additively without
+ * needing to be torn down and recreated.
+ */
+function relayGroupUrls$(group: RelayGroup | undefined): Observable<string[]> {
+  if (!group) return of([] as string[]);
+  return (group as unknown as { relays$: Observable<IRelay[]> }).relays$.pipe(
+    map((relays) => relays.map((r) => r.url)),
+  );
+}
+
+/**
  * Minimum number of the author's inbox relays that must already be present in
  * the group before we consider coverage sufficient and skip adding more.
  */
@@ -154,11 +167,13 @@ export function useNip34ItemLoader(
     return nip34ListLoader(itemId, repoRelays);
   }, [itemId, repoRelayKey]);
 
-  // Thread level: reactions + zaps on root + recursively on comments
+  // Thread level: reactions + zaps on root + recursively on comments.
+  // Pass the reactive relays$ observable so the loader handles new relays
+  // additively without needing to be torn down and recreated.
   use$(() => {
     if (!itemId || repoRelays.length === 0 || !includeThread) return undefined;
-    return nip34ThreadItemLoader(itemId, repoRelays);
-  }, [itemId, repoRelayKey, includeThread]);
+    return nip34ThreadItemLoader(itemId, relayGroupUrls$(repoRelayGroup));
+  }, [itemId, repoRelayKey, includeThread, repoRelayGroup]);
 
   // ── NIP-65 author inbox relay loaders ─────────────────────────────────────
   const authorPubkey = use$(() => {
@@ -224,12 +239,18 @@ export function useNip34ItemLoaderBatch(
     return merge(...itemIds.map((id) => nip34ListLoader(id, repoRelays)));
   }, [idsKey, repoRelayKey]);
 
-  // Thread level: reactions + zaps for all IDs
+  // Thread level: reactions + zaps for all IDs.
+  // Pass the reactive relays$ observable so each loader handles new relays
+  // additively without needing to be torn down and recreated.
   use$(() => {
     if (itemIds.length === 0 || repoRelays.length === 0 || !includeThread)
       return undefined;
-    return merge(...itemIds.map((id) => nip34ThreadItemLoader(id, repoRelays)));
-  }, [idsKey, repoRelayKey, includeThread]);
+    return merge(
+      ...itemIds.map((id) =>
+        nip34ThreadItemLoader(id, relayGroupUrls$(repoRelayGroup)),
+      ),
+    );
+  }, [idsKey, repoRelayKey, includeThread, repoRelayGroup]);
 
   // NIP-65 author inbox relay loading per item
   // (Only fires when includeAuthorNip65 is true — resolves each item's author

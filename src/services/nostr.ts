@@ -533,12 +533,8 @@ export function nip34RepoLoader(
 }
 
 /**
- * Fire all three thread loaders and their persistent subscription counterparts
- * for a single event ID. Returns a merged observable of all child events
- * discovered via #e, #E, and #q tags.
- *
- * The loaders handle the historical fetch (completes at EOSE); the
- * subscriptions stay open for live updates.
+ * Fire all three thread loaders for a single event ID against a specific
+ * relay list (static snapshot at call time).
  */
 function nip34ThreadLoadAll(
   itemId: string,
@@ -571,43 +567,83 @@ function nip34ThreadLoadAll(
  * calls within their bufferTime window are collapsed into a single relay
  * subscription per tag name.
  *
+ * Reactive relay list: accepts Observable<string[]> | string[]. When the
+ * observable emits new relay URLs, loaders are re-fired for all already-seen
+ * comment IDs against only the new relays — existing subscriptions are
+ * untouched. New comments are always fetched against all current relays.
+ *
  * @param itemId - The event ID of the issue / patch / PR
- * @param relays - Relay URLs to query
+ * @param relays - Relay URLs to query (reactive or static)
  */
 export function nip34ThreadItemLoader(
   itemId: string,
-  relays: string[],
+  relays: Observable<string[]> | string[],
 ): Observable<PaginatedTagValueResponse> {
-  return merge(
-    // All child events on the root item itself
-    nip34ThreadLoadAll(itemId, relays),
-    // Recursively fetch child events for each comment.
-    // Merges the one-shot loader (historical) and the persistent subscription
-    // (live) so that comments arriving after EOSE also trigger thread loading.
-    new Observable<NostrEvent>((subscriber) => {
-      const seenIds = new Set<string>();
+  return new Observable<PaginatedTagValueResponse>((subscriber) => {
+    // seenIds: all comment IDs discovered so far (root item + comments)
+    const seenIds = new Set<string>();
+    // knownRelayUrls: relay URLs we have already fired loaders against
+    const knownRelayUrls = new Set<string>();
 
-      const handleComment = (event: NostrEvent) => {
-        if (!seenIds.has(event.id)) {
-          seenIds.add(event.id);
-          nip34ThreadLoadAll(event.id, relays).subscribe(subscriber);
+    // Fire all three thread loaders for an item against a specific relay list
+    function fireThreadLoaders(id: string, relayList: string[]): void {
+      nip34ThreadLoadAll(id, relayList).subscribe(subscriber);
+    }
+
+    // Subscribe to relay list changes. When new relay URLs appear, re-fire
+    // loaders for all already-seen IDs against only the new relays.
+    const relays$ = Array.isArray(relays)
+      ? (new Observable<string[]>((sub) => {
+          sub.next(relays);
+          sub.complete();
+        }) as Observable<string[]>)
+      : relays;
+
+    const relaySub = relays$
+      .pipe(
+        map((urls) => urls),
+        distinctUntilChanged(
+          (a, b) =>
+            a.length === b.length && a.every((url) => knownRelayUrls.has(url)),
+        ),
+      )
+      .subscribe((currentUrls) => {
+        const newUrls = currentUrls.filter((url) => !knownRelayUrls.has(url));
+        for (const url of newUrls) knownRelayUrls.add(url);
+        if (newUrls.length === 0) return;
+
+        // Re-fire for all already-seen IDs (root + comments) on new relays only.
+        // createPaginatedTagValueLoader batches these into one REQ per relay.
+        for (const id of seenIds) {
+          fireThreadLoaders(id, newUrls);
         }
-      };
-
-      // Comments — paginated historical fetch + persistent live subscription
-      // in one. Never completes (live sub stays open), so we never forward
-      // complete to the outer subscriber.
-      const commentsSub = nip34CommentsLoader({
-        value: itemId,
-        relays,
-      }).subscribe({
-        next: handleComment,
-        error: (err) => subscriber.error(err),
       });
 
-      return () => {
-        commentsSub.unsubscribe();
-      };
-    }),
-  );
+    // Fire thread loaders for the root item — uses all currently known relays
+    // (relaySub fires synchronously above since relays$ emits immediately).
+    seenIds.add(itemId);
+    fireThreadLoaders(itemId, [...knownRelayUrls]);
+
+    // Recursively fetch child events for each comment.
+    // New comments use all currently known relays at discovery time.
+    const commentsSub = nip34CommentsLoader({
+      value: itemId,
+      relays: [...knownRelayUrls],
+    }).subscribe({
+      next: (msg) => {
+        if (msg === "EOSE") return;
+        const event = msg as NostrEvent;
+        if (!seenIds.has(event.id)) {
+          seenIds.add(event.id);
+          fireThreadLoaders(event.id, [...knownRelayUrls]);
+        }
+      },
+      error: (err) => subscriber.error(err),
+    });
+
+    return () => {
+      relaySub.unsubscribe();
+      commentsSub.unsubscribe();
+    };
+  });
 }
