@@ -175,10 +175,11 @@ export default function NotificationsPage() {
 
       {/* Notification list */}
       <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
-        {!filteredItems ? (
-          // Loading skeleton
+        {!filteredItems || (filteredItems.length === 0 && history.loading) ? (
+          // Loading skeleton — also shown when list is empty but still fetching
+          // to avoid a flash of the empty state before the first page arrives
           <ul className="divide-y divide-border/40">
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: 2 }).map((_, i) => (
               <NotificationSkeleton key={i} />
             ))}
           </ul>
