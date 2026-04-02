@@ -23,11 +23,20 @@
  *      On reconnect the relay replays recent history; eoseSeen remains true
  *      so pagination is not re-triggered.
  *
+ * Pagination modes:
+ *   - Auto (default): pagination is triggered automatically after EOSE if the
+ *     relay returned >= limit events. Continues until exhausted.
+ *   - Manual (manualPaginate$ provided): automatic pagination is disabled.
+ *     Each emission of manualPaginate$ requests the next backward block from
+ *     all non-exhausted relays. Useful for "load more" buttons.
+ *
  * EOSE settle signal:
  *   The returned observable emits NostrEvent | "EOSE". "EOSE" is emitted
  *   200ms after the first relay in the batch finishes its current work:
  *     - Auto mode: first relay whose initial EOSE count < limit (no pagination
  *       needed), or first relay whose backward pagination block completes.
+ *     - Manual mode: first relay that returns its block after a manualPaginate$
+ *       trigger, or immediately at relay EOSE (no pagination pending).
  *     - The 200ms debounce gives other relays a chance to deliver events
  *       before the consumer considers the load "settled".
  *   Consumers that don't need the signal can pipe through onlyEvents().
@@ -92,6 +101,12 @@ export type PaginatedTagValueLoaderOptions = {
    * finishes its current work (default 200).
    */
   settleTime?: number;
+  /**
+   * If provided, disables automatic backward pagination. Each emission
+   * requests the next block from all non-exhausted relays. Use for
+   * "load more" button patterns.
+   */
+  manualPaginate$?: Observable<void>;
 };
 
 export type PaginatedTagValueLoader = (
@@ -143,9 +158,141 @@ function exhaustionKey(relay: string, tagName: string, f: Filter): string {
  * Process one batch window: for each relay in the filter map, open a live
  * subscription and (if needed) paginate backward until exhausted.
  *
- * @param settled$ - push to this when a relay finishes its current work;
- *                   the caller debounces it to emit "EOSE" into the stream.
+ * @param settled$       - push to this when a relay finishes its current work;
+ *                         the caller debounces it to emit "EOSE" into the stream.
+ * @param manualPaginate$ - if provided, disables auto-pagination; each emission
+ *                         requests the next backward block from this relay.
  */
+function processRelayStream(
+  pool: RelayPool,
+  relay: string,
+  relayFilter: Filter,
+  paginationFilter: TimelessFilter,
+  key: string,
+  limit: number,
+  exhausted: Set<string>,
+  settled$: Subject<void>,
+  manualPaginate$: Observable<void> | undefined,
+): Observable<NostrEvent> {
+  const subOpts: SubscriptionOptions = { reconnect: Infinity };
+
+  // No limit on the live filter — we want all future events.
+  const liveFilter: Filter = { ...relayFilter };
+  delete liveFilter.limit;
+
+  // If already exhausted, just open the live subscription — signal settled
+  // immediately since there is no history work to do.
+  if (exhausted.has(key)) {
+    settled$.next();
+    return pool
+      .subscription([relay], [liveFilter], subOpts)
+      .pipe(onlyEvents()) as Observable<NostrEvent>;
+  }
+
+  return new Observable<NostrEvent>((subscriber) => {
+    let countBeforeEose = 0;
+    let oldestSeen: number | undefined;
+    let eoseSeen = false;
+    let paginateSub: { unsubscribe(): void } | undefined;
+    let manualSub: { unsubscribe(): void } | undefined;
+
+    // Shared pagination window — driven by auto (BehaviorSubject) or manual
+    // (Subject pushed on each manualPaginate$ emission after EOSE).
+    // Created lazily once EOSE is received.
+    let window$: Subject<{ since?: number; until?: number }> | undefined;
+
+    const startPagination = () => {
+      if (manualPaginate$) {
+        // Manual mode: create a plain Subject; each manualPaginate$ emission
+        // pushes a new window value to request the next block.
+        const manualWindow$ = new Subject<{ since?: number; until?: number }>();
+        window$ = manualWindow$;
+
+        manualSub = manualPaginate$.subscribe(() => {
+          if (!exhausted.has(key)) {
+            manualWindow$.next({ since: -Infinity, until: oldestSeen });
+          }
+        });
+      } else {
+        // Auto mode: BehaviorSubject with initial value triggers the first
+        // block immediately; loadBlocksFromRelay drives subsequent blocks
+        // via its internal cursor until the relay returns 0 events.
+        window$ = new BehaviorSubject<{ since?: number; until?: number }>({
+          since: -Infinity,
+          until: oldestSeen,
+        });
+      }
+
+      paginateSub = window$
+        .pipe(
+          loadBlocksFromRelay(pool, relay, [paginationFilter], { limit }),
+          finalize(() => {
+            if (!manualPaginate$) {
+              // Auto: fully exhausted when loadBlocksFromRelay completes
+              exhausted.add(key);
+            }
+            settled$.next();
+          }),
+        )
+        .subscribe({
+          next: (event) => {
+            // Track oldest seen across all blocks for manual cursor
+            if (oldestSeen === undefined || event.created_at < oldestSeen) {
+              oldestSeen = event.created_at;
+            }
+            subscriber.next(event);
+          },
+          error: (err) => subscriber.error(err),
+          // Completing does not complete the outer observable —
+          // the live subscription keeps it alive
+        });
+    };
+
+    const liveSub = pool
+      .subscription([relay], [liveFilter], subOpts)
+      .subscribe({
+        next: (msg) => {
+          if (msg === "EOSE") {
+            eoseSeen = true;
+            if (manualPaginate$) {
+              // Manual mode: signal settled at EOSE regardless of count —
+              // the user decides when to request more
+              settled$.next();
+              // Only start pagination machinery if there may be more history
+              if (countBeforeEose >= limit) startPagination();
+              else exhausted.add(key);
+            } else {
+              // Auto mode: paginate if relay was truncated, otherwise done
+              if (countBeforeEose < limit) {
+                exhausted.add(key);
+                settled$.next();
+              } else {
+                startPagination();
+              }
+            }
+          } else {
+            const event = msg as NostrEvent;
+            if (!eoseSeen) {
+              countBeforeEose++;
+              if (oldestSeen === undefined || event.created_at < oldestSeen) {
+                oldestSeen = event.created_at;
+              }
+            }
+            subscriber.next(event);
+          }
+        },
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+    return () => {
+      liveSub.unsubscribe();
+      paginateSub?.unsubscribe();
+      manualSub?.unsubscribe();
+    };
+  });
+}
+
 function processBatch(
   pool: RelayPool,
   tagName: string,
@@ -155,100 +302,25 @@ function processBatch(
   settled$: Subject<void>,
 ): Observable<NostrEvent> {
   const limit = opts.limit ?? 500;
-  const subOpts: SubscriptionOptions = { reconnect: Infinity };
   const relayFilterMap = buildRelayFilterMap(tagName, pointers, opts);
 
   const perRelayStreams = Object.entries(relayFilterMap).map(
     ([relay, relayFilter]) => {
       const key = exhaustionKey(relay, tagName, relayFilter);
+      const paginationFilter: TimelessFilter = { ...relayFilter };
+      delete (paginationFilter as Filter).limit;
 
-      // No limit on the live filter — we want all future events.
-      const liveFilter: Filter = { ...relayFilter };
-      delete liveFilter.limit;
-
-      // If already exhausted, just open the live subscription — signal settled
-      // immediately since there is no history work to do.
-      if (exhausted.has(key)) {
-        settled$.next();
-        return pool
-          .subscription([relay], [liveFilter], subOpts)
-          .pipe(onlyEvents()) as Observable<NostrEvent>;
-      }
-
-      // TimelessFilter for loadBlocksFromRelay (no since/until — it adds them)
-      const paginationFilter: TimelessFilter = { ...liveFilter };
-
-      // Open one subscription that serves as both live feed and initial probe.
-      // We count events arriving before EOSE to decide whether to paginate.
-      return new Observable<NostrEvent>((subscriber) => {
-        let countBeforeEose = 0;
-        let oldestSeen: number | undefined;
-        let eoseSeen = false;
-        let paginateSub: { unsubscribe(): void } | undefined;
-
-        const liveSub = pool
-          .subscription([relay], [liveFilter], subOpts)
-          .subscribe({
-            next: (msg) => {
-              if (msg === "EOSE") {
-                eoseSeen = true;
-                if (countBeforeEose < limit) {
-                  // Relay has no more history — mark exhausted and signal settled
-                  exhausted.add(key);
-                  settled$.next();
-                  return;
-                }
-                // Relay was truncated — paginate backward from oldest seen
-                const window$ = new BehaviorSubject<{
-                  since?: number;
-                  until?: number;
-                }>({
-                  since: -Infinity,
-                  until: oldestSeen,
-                });
-
-                paginateSub = window$
-                  .pipe(
-                    loadBlocksFromRelay(pool, relay, [paginationFilter], {
-                      limit,
-                    }),
-                    finalize(() => {
-                      exhausted.add(key);
-                      // Signal settled after each completed pagination block
-                      settled$.next();
-                    }),
-                  )
-                  .subscribe({
-                    next: (event) => subscriber.next(event),
-                    error: (err) => subscriber.error(err),
-                    // pagination completing does not complete the outer observable —
-                    // the live subscription keeps it alive
-                  });
-              } else {
-                // It's a NostrEvent
-                const event = msg as NostrEvent;
-                if (!eoseSeen) {
-                  // Pre-EOSE: count and track oldest for pagination cursor
-                  countBeforeEose++;
-                  if (
-                    oldestSeen === undefined ||
-                    event.created_at < oldestSeen
-                  ) {
-                    oldestSeen = event.created_at;
-                  }
-                }
-                subscriber.next(event);
-              }
-            },
-            error: (err) => subscriber.error(err),
-            complete: () => subscriber.complete(),
-          });
-
-        return () => {
-          liveSub.unsubscribe();
-          paginateSub?.unsubscribe();
-        };
-      });
+      return processRelayStream(
+        pool,
+        relay,
+        relayFilter,
+        paginationFilter,
+        key,
+        limit,
+        exhausted,
+        settled$,
+        opts.manualPaginate$,
+      );
     },
   );
 
