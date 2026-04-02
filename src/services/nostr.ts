@@ -5,7 +5,6 @@ import {
   createAddressLoader,
   createEventLoaderForStore,
   createReactionsLoader,
-  createTagValueLoader,
   createZapsLoader,
   DnsIdentityLoader,
 } from "applesauce-loaders/loaders";
@@ -28,7 +27,7 @@ import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
 import { extraRelays, lookupRelays } from "./settings";
 import { ISSUE_KIND, PR_ROOT_KINDS, LEGACY_REPLY_KINDS } from "@/lib/nip34";
 import { Repository, isValidRepository } from "@/casts/Repository";
-import { createTagValueSubscription } from "@/lib/tagValueSubscription";
+import { createPaginatedTagValueLoader } from "@/lib/tagValuePaginatedLoader";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
 
 /**
@@ -280,8 +279,10 @@ const NIP34_THREAD_BUFFER = 500;
 /**
  * Essentials loader (#e tag).
  * Fetches status (1630-1633), NIP-32 labels (1985), deletion requests (5),
- * and legacy NIP-34 replies (kind 1 and 1622) for issues/patches/PRs in a
- * single batched relay subscription per buffer window.
+ * and legacy NIP-34 replies (kind 1 and 1622) for issues/patches/PRs.
+ *
+ * Uses createPaginatedTagValueLoader which combines the historical fetch,
+ * per-relay backward pagination, and a persistent live subscription in one.
  *
  * Legacy replies use NIP-10 #e tagging (not NIP-22 #E), so they must be
  * fetched via this #e loader rather than the #E comments loader. Including
@@ -290,7 +291,7 @@ const NIP34_THREAD_BUFFER = 500;
  * But legacy replies are an edge case in practice, so this is a reasonable
  * tradeoff vs. creating an additional singleton loader and subscription.
  */
-export const nip34EssentialsLoader = createTagValueLoader(pool, "e", {
+export const nip34EssentialsLoader = createPaginatedTagValueLoader(pool, "e", {
   cacheRequest,
   eventStore,
   kinds: [1630, 1631, 1632, 1633, 1985, 5, ...LEGACY_REPLY_KINDS],
@@ -304,7 +305,7 @@ export const nip34EssentialsLoader = createTagValueLoader(pool, "e", {
  * separate from the `#e` loaders. The longer buffer ensures essentials
  * land first.
  */
-export const nip34CommentsLoader = createTagValueLoader(pool, "E", {
+export const nip34CommentsLoader = createPaginatedTagValueLoader(pool, "E", {
   cacheRequest,
   eventStore,
   kinds: [1111, 1619],
@@ -315,7 +316,7 @@ export const nip34CommentsLoader = createTagValueLoader(pool, "E", {
  * Thread loader — replies (#e tag). All events referencing a thread member
  * via lowercase `e` tag. No kind restriction. Only fired on detail pages.
  */
-const nip34ThreadReplyLoader = createTagValueLoader(pool, "e", {
+const nip34ThreadReplyLoader = createPaginatedTagValueLoader(pool, "e", {
   cacheRequest,
   eventStore,
   bufferTime: NIP34_THREAD_BUFFER,
@@ -326,7 +327,7 @@ const nip34ThreadReplyLoader = createTagValueLoader(pool, "e", {
  * member via uppercase `E` tag (NIP-22 root reference). No kind restriction.
  * Only fired on detail pages.
  */
-const nip34ThreadRootLoader = createTagValueLoader(pool, "E", {
+const nip34ThreadRootLoader = createPaginatedTagValueLoader(pool, "E", {
   cacheRequest,
   eventStore,
   bufferTime: NIP34_THREAD_BUFFER,
@@ -336,55 +337,8 @@ const nip34ThreadRootLoader = createTagValueLoader(pool, "E", {
  * Thread loader — quotes (#q tag). All events quoting a thread member.
  * No kind restriction. Only fired on detail pages.
  */
-const nip34ThreadQuoteLoader = createTagValueLoader(pool, "q", {
+const nip34ThreadQuoteLoader = createPaginatedTagValueLoader(pool, "q", {
   cacheRequest,
-  eventStore,
-  bufferTime: NIP34_THREAD_BUFFER,
-});
-
-// ---------------------------------------------------------------------------
-// NIP-34 persistent subscriptions
-//
-// Mirror of the five loaders above, but backed by pool.subscription() instead
-// of pool.request(). Each batch window opens a relay subscription that stays
-// alive (reconnect/resubscribe: Infinity) for as long as the caller remains
-// subscribed — i.e. for the lifetime of the repo or detail-page route.
-//
-// The loaders handle the initial historical fetch (cache + EOSE).
-// The subscriptions handle live updates arriving after EOSE.
-//
-// Both are called together from nip34ListLoader / nip34ThreadItemLoader so
-// that callers don't need to know about the two-layer approach.
-// ---------------------------------------------------------------------------
-
-/** Persistent essentials subscription (#e tag, same kinds as nip34EssentialsLoader). */
-const nip34EssentialsSubscription = createTagValueSubscription(pool, "e", {
-  eventStore,
-  kinds: [1630, 1631, 1632, 1633, 1985, 5, ...LEGACY_REPLY_KINDS],
-  bufferTime: NIP34_ESSENTIALS_BUFFER,
-});
-
-/** Persistent comments subscription (#E tag, same kinds as nip34CommentsLoader). */
-const nip34CommentsSubscription = createTagValueSubscription(pool, "E", {
-  eventStore,
-  kinds: [1111, 1619],
-  bufferTime: NIP34_COMMENTS_BUFFER,
-});
-
-/** Persistent thread-reply subscription (#e tag, no kind restriction). */
-const nip34ThreadReplySubscription = createTagValueSubscription(pool, "e", {
-  eventStore,
-  bufferTime: NIP34_THREAD_BUFFER,
-});
-
-/** Persistent thread-root subscription (#E tag, no kind restriction). */
-const nip34ThreadRootSubscription = createTagValueSubscription(pool, "E", {
-  eventStore,
-  bufferTime: NIP34_THREAD_BUFFER,
-});
-
-/** Persistent thread-quote subscription (#q tag, no kind restriction). */
-const nip34ThreadQuoteSubscription = createTagValueSubscription(pool, "q", {
   eventStore,
   bufferTime: NIP34_THREAD_BUFFER,
 });
@@ -410,9 +364,10 @@ const nip34ThreadQuoteSubscription = createTagValueSubscription(pool, "q", {
 //                        repo coordinates and pipes each newly discovered
 //                        item ID into nip34ListLoader.
 //
-// Filter merging: because all loaders are singleton instances, calls that
-// arrive within the same buffer window are automatically merged into a
-// single relay subscription by applesauce — even across issues and PRs.
+// Each loader is a createPaginatedTagValueLoader instance that handles the
+// historical fetch, per-relay backward pagination, and persistent live
+// subscription in one. Calls within the same buffer window are batched into
+// a single relay subscription per relay automatically.
 // ---------------------------------------------------------------------------
 
 /** All root item kinds tracked at the repo level (issues + PR root kinds). */
@@ -444,12 +399,8 @@ export function nip34ListLoader(
   relays: string[],
 ): Observable<NostrEvent> {
   return merge(
-    // Historical fetch — completes at EOSE
     nip34EssentialsLoader({ value: itemId, relays }),
     nip34CommentsLoader({ value: itemId, relays }),
-    // Live updates — stays open for the caller's lifetime
-    nip34EssentialsSubscription({ value: itemId, relays }),
-    nip34CommentsSubscription({ value: itemId, relays }),
   );
 }
 
@@ -543,14 +494,9 @@ function nip34ThreadLoadAll(
   relays: string[],
 ): Observable<NostrEvent> {
   return merge(
-    // Historical fetch — completes at EOSE
     nip34ThreadReplyLoader({ value: itemId, relays }),
     nip34ThreadRootLoader({ value: itemId, relays }),
     nip34ThreadQuoteLoader({ value: itemId, relays }),
-    // Live updates — stays open for the caller's lifetime
-    nip34ThreadReplySubscription({ value: itemId, relays }),
-    nip34ThreadRootSubscription({ value: itemId, relays }),
-    nip34ThreadQuoteSubscription({ value: itemId, relays }),
   );
 }
 
@@ -597,29 +543,19 @@ export function nip34ThreadItemLoader(
         }
       };
 
-      // Historical comments (completes at EOSE)
-      const historicalSub = nip34CommentsLoader({
+      // Comments — paginated historical fetch + persistent live subscription
+      // in one. Never completes (live sub stays open), so we never forward
+      // complete to the outer subscriber.
+      const commentsSub = nip34CommentsLoader({
         value: itemId,
         relays,
       }).subscribe({
         next: handleComment,
         error: (err) => subscriber.error(err),
-        // Don't forward complete — the persistent sub below keeps us alive
-      });
-
-      // Live comments (stays open for the caller's lifetime)
-      const liveSub = nip34CommentsSubscription({
-        value: itemId,
-        relays,
-      }).subscribe({
-        next: handleComment,
-        error: (err) => subscriber.error(err),
-        complete: () => subscriber.complete(),
       });
 
       return () => {
-        historicalSub.unsubscribe();
-        liveSub.unsubscribe();
+        commentsSub.unsubscribe();
       };
     }),
   );
