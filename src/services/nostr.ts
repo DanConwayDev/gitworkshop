@@ -20,7 +20,7 @@ import {
   firstValueFrom,
   of,
 } from "rxjs";
-import { map, timeout } from "rxjs/operators";
+import { filter, map, timeout } from "rxjs/operators";
 import { MailboxesModel } from "applesauce-core/models";
 import { cacheRequest, saveEvents } from "./cache";
 import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
@@ -78,29 +78,69 @@ NostrConnectSigner.pool = pool;
 // This is done here (after pool is created) to avoid a circular dependency.
 outboxStore.pool = pool;
 
+/** Max relays to use per group when resolving */
+const MAX_RESOLVED_RELAYS = 5;
+
+/**
+ * Resolve a pubkey's NIP-65 mailboxes from the EventStore, fetching via
+ * addressLoader if not already cached. Returns undefined if not found within
+ * the timeout.
+ */
+async function resolveMailboxes(pubkey: string) {
+  // Kick off a fetch in case the kind:10002 isn't in the store yet.
+  // addressLoader writes into the EventStore as a side-effect.
+  const fetchSub = addressLoader({ kind: 10002, pubkey }).subscribe();
+  try {
+    return await firstValueFrom(
+      eventStore.model(MailboxesModel, pubkey).pipe(
+        // Skip the immediate undefined emitted when the event isn't in the
+        // store yet — wait for the addressLoader fetch to deliver it.
+        filter(
+          (m): m is { inboxes: string[]; outboxes: string[] } =>
+            m !== undefined,
+        ),
+        timeout({ first: 3000, with: () => of(undefined) }),
+      ),
+    );
+  } finally {
+    fetchSub.unsubscribe();
+  }
+}
+
 /**
  * Relay group resolver for the outbox store.
  *
  * Resolves a group ID to the current set of relay URLs:
- *   - 64-char hex pubkey → MailboxesModel outboxes (own pubkey) or inboxes (other)
+ *   - "outbox:<pubkey>" → that pubkey's NIP-65 write (outbox) relays
+ *   - "inbox:<pubkey>"  → that pubkey's NIP-65 read (inbox) relays
  *   - "30617:<pubkey>:<d>" → repo's declared relays from the EventStore
  *   - Other strings → [] (no dynamic resolution)
  *
- * This is called by outboxStore.reResolveRelayGroups() when relay lists change.
+ * When the kind:10002 is not yet in the EventStore, addressLoader is used to
+ * fetch it. The outbox store calls this again via reResolveRelayGroups()
+ * whenever a new kind:10002 arrives, so events are sent to newly-discovered
+ * relays automatically.
  */
-const relayGroupResolver: RelayGroupResolver = async (groupId, eventPubkey) => {
-  // 64-char hex pubkey
-  if (/^[0-9a-f]{64}$/.test(groupId)) {
+const relayGroupResolver: RelayGroupResolver = async (groupId) => {
+  // "outbox:<pubkey>" → NIP-65 write relays
+  if (groupId.startsWith("outbox:")) {
+    const pubkey = groupId.slice(7);
+    if (!/^[0-9a-f]{64}$/.test(pubkey)) return [];
     try {
-      const mailboxes = await firstValueFrom(
-        eventStore
-          .model(MailboxesModel, groupId)
-          .pipe(timeout({ first: 500, with: () => of(undefined) })),
-      );
-      if (!mailboxes) return [];
-      const isOwn = groupId === eventPubkey;
-      const relays = isOwn ? mailboxes.outboxes : mailboxes.inboxes;
-      return relays.slice(0, 5);
+      const mailboxes = await resolveMailboxes(pubkey);
+      return mailboxes?.outboxes.slice(0, MAX_RESOLVED_RELAYS) ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  // "inbox:<pubkey>" → NIP-65 read relays
+  if (groupId.startsWith("inbox:")) {
+    const pubkey = groupId.slice(6);
+    if (!/^[0-9a-f]{64}$/.test(pubkey)) return [];
+    try {
+      const mailboxes = await resolveMailboxes(pubkey);
+      return mailboxes?.inboxes.slice(0, MAX_RESOLVED_RELAYS) ?? [];
     } catch {
       return [];
     }
@@ -143,7 +183,8 @@ function watchUserMailboxesForOutboxReResolve(pubkey: string): () => void {
       distinctUntilChanged(),
     )
     .subscribe(() => {
-      // Pass the pubkey so only items referencing this user's relay group are re-resolved
+      // Pass the pubkey so only items with outbox:<pubkey> / inbox:<pubkey>
+      // / 30617:<pubkey>:* groups are re-resolved.
       outboxStore.reResolveRelayGroups(pubkey).catch((err) => {
         console.warn("[outbox] reResolveRelayGroups failed:", err);
       });
@@ -153,6 +194,31 @@ function watchUserMailboxesForOutboxReResolve(pubkey: string): () => void {
 
 // Exported so accounts.ts (or App.tsx) can call it when the active account changes.
 export { watchUserMailboxesForOutboxReResolve };
+
+/**
+ * Watch for any kind:10002 (NIP-65 relay list) arriving in the EventStore and
+ * trigger outbox re-resolution for the event's author.
+ *
+ * This covers the notification inbox case: when we publish a comment and add
+ * "inbox:<authorPubkey>" as a relay group with no URLs yet, the outbox store
+ * will re-resolve it as soon as the author's kind:10002 arrives — whether
+ * that's from the addressLoader fetch triggered by the resolver, or from any
+ * other subscription that happens to load it.
+ */
+function watchAnyMailboxForOutboxReResolve(): () => void {
+  const sub = eventStore.filters({ kinds: [10002] }, true).subscribe({
+    next: (event) => {
+      outboxStore.reResolveRelayGroups(event.pubkey).catch((err) => {
+        console.warn("[outbox] reResolveRelayGroups failed:", err);
+      });
+    },
+  });
+  return () => sub.unsubscribe();
+}
+
+// Start watching immediately — this covers notification inbox re-resolution
+// for any pubkey whose kind:10002 arrives after a comment is published.
+watchAnyMailboxForOutboxReResolve();
 
 /**
  * Publish an event to the configured relays.

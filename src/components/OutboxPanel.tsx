@@ -6,7 +6,8 @@
  * retried automatically by the outbox store (unless permanently rejected).
  *
  * Relay groups use semantic IDs:
- *   - 64-char hex pubkey → "your outbox" (if own pubkey) or "<name>'s inbox"
+ *   - "outbox:<pubkey>" → that pubkey's NIP-65 write relays
+ *   - "inbox:<pubkey>"  → that pubkey's NIP-65 read relays (notification delivery)
  *   - "30617:<pubkey>:<d>" → repo relay coord
  *   - Other strings → displayed as-is
  */
@@ -313,30 +314,37 @@ function useEventContext(
 /**
  * Render a rich label for a relay group ID.
  *
- * - 64-char hex pubkey → Avatar + username (inbox)
+ * - "outbox:<pubkey>" → Avatar + username (own write relays)
+ * - "inbox:<pubkey>"  → Avatar + username (notification inbox)
  * - "30617:<pubkey>:<d>" → maintainer avatar + "maintainer/repo-name"
  * - Other strings → displayed as-is
  */
-function GroupLabel({
-  groupId,
-  eventPubkey,
-}: {
-  groupId: string;
-  eventPubkey: string;
-}) {
+function GroupLabel({ groupId }: { groupId: string }) {
   const store = useEventStore();
 
-  // Inbox/outbox group: a pubkey
-  if (/^[0-9a-f]{64}$/.test(groupId)) {
-    const isOwn = groupId === eventPubkey;
+  // "outbox:<pubkey>" → NIP-65 write relays
+  if (groupId.startsWith("outbox:")) {
+    const pubkey = groupId.slice(7);
     return (
       <span className="flex items-center gap-1.5">
-        <span className="text-muted-foreground/60 text-xs">
-          {isOwn ? "outbox:" : "inbox:"}
-        </span>
+        <span className="text-muted-foreground/60 text-xs">outbox:</span>
         <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
-          <UserAvatar pubkey={groupId} size="sm" className="h-4 w-4" />
-          <UserName pubkey={groupId} className="text-xs font-medium" />
+          <UserAvatar pubkey={pubkey} size="sm" className="h-4 w-4" />
+          <UserName pubkey={pubkey} className="text-xs font-medium" />
+        </span>
+      </span>
+    );
+  }
+
+  // "inbox:<pubkey>" → NIP-65 read relays (notification delivery)
+  if (groupId.startsWith("inbox:")) {
+    const pubkey = groupId.slice(6);
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="text-muted-foreground/60 text-xs">inbox:</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+          <UserAvatar pubkey={pubkey} size="sm" className="h-4 w-4" />
+          <UserName pubkey={pubkey} className="text-xs font-medium" />
         </span>
       </span>
     );
@@ -734,7 +742,7 @@ export function OutboxItemDetail({ item }: { item: OutboxItem }) {
             className="rounded border border-border bg-muted/30"
           >
             <div className="flex items-center justify-between px-2 py-1 border-b border-border">
-              <GroupLabel groupId={groupId} eventPubkey={item.event.pubkey} />
+              <GroupLabel groupId={groupId} />
               <span className="text-muted-foreground/60 text-xs tabular-nums">
                 {groupSuccess}/{relaysForGroup.length}
               </span>

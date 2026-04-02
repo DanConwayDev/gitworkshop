@@ -332,7 +332,8 @@ const EXPIRE_UNSENT_AFTER_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
  * Callback type for resolving relay URLs for a given group ID.
  *
  * Group IDs follow the same convention as OutboxRelayEntry.groups:
- *   - 64-char hex pubkey → resolve to that pubkey's outbox or inbox relays
+ *   - "outbox:<pubkey>" → that pubkey's NIP-65 write (outbox) relays
+ *   - "inbox:<pubkey>"  → that pubkey's NIP-65 read (inbox) relays
  *   - "30617:<pubkey>:<d>" → resolve to that repo's relays
  *   - Other strings → return [] (no dynamic resolution)
  */
@@ -494,6 +495,12 @@ class OutboxStore {
 
   /**
    * Re-resolve relay groups for pending items using the current relay lists.
+   *
+   * When `changedPubkey` is provided, only items whose relay group definitions
+   * include a group ID referencing that pubkey are re-resolved. This covers:
+   *   - "outbox:<pubkey>"  (own outbox relays)
+   *   - "inbox:<pubkey>"   (notification inbox relays)
+   *   - "30617:<pubkey>:*" (repo coord where that pubkey is the owner)
    */
   async reResolveRelayGroups(changedPubkey?: string): Promise<void> {
     if (!this.relayGroupResolver) return;
@@ -502,7 +509,12 @@ class OutboxStore {
 
     const items = changedPubkey
       ? pendingItems.filter((i) =>
-          Object.keys(i.relayGroupDefs).includes(changedPubkey),
+          Object.keys(i.relayGroupDefs).some(
+            (groupId) =>
+              groupId === `outbox:${changedPubkey}` ||
+              groupId === `inbox:${changedPubkey}` ||
+              groupId.startsWith(`30617:${changedPubkey}:`),
+          ),
         )
       : pendingItems;
 
