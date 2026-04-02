@@ -125,7 +125,7 @@ export default function RepoCommitsPage() {
         ) : explorer.loading ? (
           <Skeleton className="h-8 w-28" />
         ) : resolvedRef ? (
-          <code className="font-mono text-violet-600 dark:text-violet-400 text-sm">
+          <code className="font-mono text-pink-600 dark:text-pink-400 text-sm">
             {resolvedRef}
           </code>
         ) : null}

@@ -259,7 +259,7 @@ function classifyFailure(msg: string):
 // IndexedDB persistence
 // ---------------------------------------------------------------------------
 
-const DB_NAME = "ngitstack-outbox";
+const DB_NAME = "gitworkshop-outbox";
 const DB_VERSION = 6; // bumped: corrected permanent failure reason labels
 const STORE_NAME = "outbox";
 

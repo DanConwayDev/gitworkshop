@@ -860,7 +860,7 @@ function GitServerPanel({
       <div className="px-4 py-3 border-b border-border/40">
         <div className="flex items-center gap-2">
           {usesGrasp && (
-            <GraspLogo className="h-4 w-4 shrink-0 text-violet-500" />
+            <GraspLogo className="h-4 w-4 shrink-0 text-pink-500" />
           )}
           <p className="text-sm font-semibold text-foreground">
             {!usesGrasp
@@ -910,7 +910,7 @@ function GitServerPanel({
         {usesGrasp && (
           <div className="py-1">
             <div className="flex items-center gap-1.5 px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-              <GraspLogo className="h-3 w-3 text-violet-500" />
+              <GraspLogo className="h-3 w-3 text-pink-500" />
               Grasp Servers
             </div>
             {graspStatuses.map((s) => (

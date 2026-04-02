@@ -41,16 +41,39 @@ function manifestPlugin(): Plugin {
   const virtualId = "/manifest.webmanifest";
   const manifest = JSON.stringify(
     {
-      name,
-      short_name: name,
-      description: "Nostr Git Client",
+      name: "GitWorkshop.dev",
+      short_name: "GitWorkshop",
+      description: "Decentralized GitHub alternative over Nostr",
       start_url: "/",
       display: "standalone",
-      background_color: "#ffffff",
-      theme_color: "#000000",
+      background_color: "#16171e",
+      theme_color: "#16171e",
+      categories: ["development", "productivity", "utilities"],
       icons: [
-        { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
-        { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+        {
+          src: "/icons/icon-192x192.png",
+          sizes: "192x192",
+          type: "image/png",
+          purpose: "any",
+        },
+        {
+          src: "/icons/icon-512x512.png",
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "any",
+        },
+        {
+          src: "/icons/pwa-maskable-192x192.png",
+          sizes: "192x192",
+          type: "image/png",
+          purpose: "maskable",
+        },
+        {
+          src: "/icons/pwa-maskable-512x512.png",
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "maskable",
+        },
       ],
     },
     null,

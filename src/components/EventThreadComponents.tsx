@@ -215,9 +215,9 @@ export function CommentCard({ comment }: { comment: NostrEvent }) {
       ref={cardRef}
       className={`overflow-hidden transition-all duration-700 hover:shadow-sm scroll-mt-20 ${
         effectiveHighlight === "strong"
-          ? "ring-2 ring-violet-500/60 border-violet-500/40 shadow-lg shadow-violet-500/15"
+          ? "ring-2 ring-pink-500/60 border-pink-500/40 shadow-lg shadow-pink-500/15"
           : effectiveHighlight === "subtle"
-            ? "ring-1 ring-violet-500/25 border-violet-500/20"
+            ? "ring-1 ring-pink-500/25 border-pink-500/20"
             : ""
       }`}
     >

@@ -136,7 +136,7 @@ export function CommitRow({
         <div className="min-w-0 flex-1">
           <Link
             to={`${basePath}/commit/${commit.hash}`}
-            className="text-sm font-medium hover:text-violet-600 dark:hover:text-violet-400 transition-colors line-clamp-2"
+            className="text-sm font-medium hover:text-pink-600 dark:hover:text-pink-400 transition-colors line-clamp-2"
           >
             {subject}
           </Link>

@@ -109,7 +109,7 @@ function StepIcon({
     return <Check className="h-4 w-4 text-green-500" />;
   }
   if (stepIdx === currentIdx) {
-    return <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />;
+    return <Loader2 className="h-4 w-4 text-pink-500 animate-spin" />;
   }
   return <Circle className="h-3.5 w-3.5 text-muted-foreground/40" />;
 }
@@ -509,9 +509,7 @@ export function CreateRepoDialog({ isOpen, onClose }: CreateRepoDialogProps) {
                         <>
                           {advancedLabel}
                           {hasCustomSelection && (
-                            <span className="ml-1 text-violet-500">
-                              (custom)
-                            </span>
+                            <span className="ml-1 text-pink-500">(custom)</span>
                           )}
                         </>
                       )}

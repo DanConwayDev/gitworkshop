@@ -96,19 +96,19 @@ export default function RepositoriesPage({
     <div className="min-h-full">
       {/* Hero section */}
       <div className="relative isolate overflow-hidden border-b border-border/40">
-        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-violet-500/5 via-transparent to-fuchsia-500/5" />
-        <div className="absolute top-0 left-1/4 w-96 h-96 -z-10 bg-violet-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-72 h-72 -z-10 bg-fuchsia-500/10 rounded-full blur-3xl" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-pink-500/5 via-transparent to-pink-500/5" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 -z-10 bg-pink-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-72 h-72 -z-10 bg-pink-500/10 rounded-full blur-3xl" />
 
         <div className="container max-w-screen-xl px-4 md:px-8 py-12 md:py-16">
           <div className="flex items-center gap-3 mb-4">
-            <Sparkles className="h-5 w-5 text-violet-500" />
+            <Sparkles className="h-5 w-5 text-pink-500" />
             <span className="text-sm font-medium text-muted-foreground">
               {relayLabel ? relayLabel : "Powered by Nostr"}
             </span>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">
-            <span className="bg-gradient-to-r from-violet-600 via-fuchsia-500 to-violet-600 dark:from-violet-400 dark:via-fuchsia-400 dark:to-violet-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-pink-600 via-pink-500 to-pink-600 dark:from-pink-400 dark:via-pink-400 dark:to-pink-400 bg-clip-text text-transparent">
               Git Repositories
             </span>
           </h1>
@@ -125,14 +125,14 @@ export default function RepositoriesPage({
                 placeholder="Search repositories..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 bg-background/60 backdrop-blur-sm border-border/60 focus-visible:ring-violet-500/30"
+                className="pl-10 bg-background/60 backdrop-blur-sm border-border/60 focus-visible:ring-pink-500/30"
               />
             </div>
 
             {/* Sync status indicator */}
             {isSyncing && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+                <Loader2 className="h-4 w-4 animate-spin text-pink-500" />
                 <span>Syncing…</span>
                 {repos && (
                   <span className="text-muted-foreground/60">
@@ -216,15 +216,15 @@ function RepoCard({ repo }: { repo: ResolvedRepo }) {
 
   return (
     <Link to={repoPath} className="group block">
-      <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20 group-hover:-translate-y-0.5">
+      <Card className="transition-all duration-200 hover:shadow-md hover:shadow-pink-500/5 hover:border-pink-500/20 group-hover:-translate-y-0.5">
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2.5 mb-2">
-                <div className="p-1.5 rounded-md bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10">
-                  <GitBranch className="h-4 w-4 text-violet-500" />
+                <div className="p-1.5 rounded-md bg-gradient-to-br from-pink-500/10 to-pink-500/10">
+                  <GitBranch className="h-4 w-4 text-pink-500" />
                 </div>
-                <h3 className="font-semibold text-base truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+                <h3 className="font-semibold text-base truncate group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
                   {repo.name}
                 </h3>
               </div>
@@ -274,7 +274,7 @@ function RepoCard({ repo }: { repo: ResolvedRepo }) {
             </div>
 
             {repo.webUrls.length > 0 && (
-              <ExternalLink className="h-4 w-4 text-muted-foreground/40 group-hover:text-violet-500 transition-colors shrink-0 mt-1" />
+              <ExternalLink className="h-4 w-4 text-muted-foreground/40 group-hover:text-pink-500 transition-colors shrink-0 mt-1" />
             )}
           </div>
         </CardContent>

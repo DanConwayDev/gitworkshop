@@ -141,7 +141,7 @@ export default function RepoIssuesPage() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <CircleDot className="h-4 w-4 text-violet-500" />
+                <CircleDot className="h-4 w-4 text-pink-500" />
                 New Issue
               </DialogTitle>
               <DialogDescription>
@@ -230,7 +230,7 @@ export default function RepoIssuesPage() {
           {account && repo && (
             <Button
               size="sm"
-              className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs shrink-0 ml-2"
+              className="gap-1.5 bg-pink-600 hover:bg-pink-700 text-white h-8 text-xs shrink-0 ml-2"
               onClick={() => setNewIssueOpen(true)}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -313,7 +313,7 @@ function IssueRow({
         {/* Title + metadata */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors line-clamp-1">
+            <span className="font-medium text-foreground group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors line-clamp-1">
               {issue.currentSubject}
             </span>
             {issue.labels.map((label) => (

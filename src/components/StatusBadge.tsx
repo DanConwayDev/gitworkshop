@@ -23,7 +23,7 @@ const statusConfig: Record<
   resolved: {
     label: "Resolved",
     className:
-      "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 hover:bg-violet-500/20",
+      "bg-pink-500/10 text-pink-600 dark:text-pink-400 border-pink-500/20 hover:bg-pink-500/20",
     icon: CheckCircle2,
   },
   closed: {

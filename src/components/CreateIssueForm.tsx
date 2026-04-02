@@ -417,7 +417,7 @@ export function CreateIssueForm({
             type="submit"
             size="sm"
             disabled={isPending || !subject.trim() || composerHasNsec(content)}
-            className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+            className="gap-1.5 bg-pink-600 hover:bg-pink-700 text-white"
           >
             {isPending ? (
               <>

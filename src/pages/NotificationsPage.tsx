@@ -394,9 +394,9 @@ function RootTypeIcon({
     case "issue":
       return <CircleDot className="h-4 w-4 text-emerald-500" />;
     case "pr":
-      return <GitPullRequest className="h-4 w-4 text-violet-500" />;
+      return <GitPullRequest className="h-4 w-4 text-pink-500" />;
     case "patch":
-      return <GitCommitHorizontal className="h-4 w-4 text-violet-500" />;
+      return <GitCommitHorizontal className="h-4 w-4 text-pink-500" />;
     default:
       return <MessageCircle className="h-4 w-4 text-muted-foreground" />;
   }
@@ -419,14 +419,14 @@ function UnreadSummaryBadge({
 }) {
   const Icon = hasMerge ? GitMerge : hasClosed ? XCircle : MessageCircle;
   const iconColor = hasMerge
-    ? "text-violet-500"
+    ? "text-pink-500"
     : hasClosed
       ? "text-red-500"
       : "text-muted-foreground";
 
   return (
     <span
-      className={`inline-flex items-center gap-0.5 text-xs ${isUnread ? "text-violet-600 dark:text-violet-400 font-medium" : "text-muted-foreground"}`}
+      className={`inline-flex items-center gap-0.5 text-xs ${isUnread ? "text-pink-600 dark:text-pink-400 font-medium" : "text-muted-foreground"}`}
     >
       <Icon className={`h-3 w-3 ${iconColor}`} />
       {summary}
@@ -695,7 +695,7 @@ function NotificationRow({
       className={cn(
         "group transition-colors",
         item.unread
-          ? "bg-accent/30 hover:bg-accent/50 border-l-2 border-l-violet-500"
+          ? "bg-accent/30 hover:bg-accent/50 border-l-2 border-l-pink-500"
           : "hover:bg-accent/20 border-l-2 border-l-transparent",
       )}
     >
@@ -709,7 +709,7 @@ function NotificationRow({
           {/* Unread dot */}
           <div className="w-2 pt-1.5 shrink-0">
             {item.unread && (
-              <div className="h-2 w-2 rounded-full bg-violet-500" />
+              <div className="h-2 w-2 rounded-full bg-pink-500" />
             )}
           </div>
 
@@ -878,7 +878,7 @@ function SocialNotificationRow({
       className={cn(
         "group transition-colors",
         item.unread
-          ? "bg-accent/30 hover:bg-accent/50 border-l-2 border-l-violet-500"
+          ? "bg-accent/30 hover:bg-accent/50 border-l-2 border-l-pink-500"
           : "hover:bg-accent/20 border-l-2 border-l-transparent",
       )}
     >
@@ -890,7 +890,7 @@ function SocialNotificationRow({
           {/* Unread dot */}
           <div className="w-2 pt-1.5 shrink-0">
             {item.unread && (
-              <div className="h-2 w-2 rounded-full bg-violet-500" />
+              <div className="h-2 w-2 rounded-full bg-pink-500" />
             )}
           </div>
 

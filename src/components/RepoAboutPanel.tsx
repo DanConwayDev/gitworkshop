@@ -249,7 +249,7 @@ function SidebarVariant({
                   href={url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:underline min-w-0"
+                  className="flex items-center gap-2 text-sm text-pink-600 dark:text-pink-400 hover:underline min-w-0"
                   title={url}
                 >
                   <Globe className="h-3.5 w-3.5 shrink-0" />
@@ -276,7 +276,7 @@ function SidebarVariant({
                     repo.maintainerSet.length > 1 && (
                       <Badge
                         variant="outline"
-                        className="text-[10px] px-1.5 py-0 h-4 text-violet-600 border-violet-500/40 dark:text-violet-400"
+                        className="text-[10px] px-1.5 py-0 h-4 text-pink-600 border-pink-500/40 dark:text-pink-400"
                       >
                         selected
                       </Badge>
@@ -321,7 +321,7 @@ function SidebarVariant({
           ) && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                <GraspLogo className="h-3 w-3 text-violet-500" />
+                <GraspLogo className="h-3 w-3 text-pink-500" />
                 Grasp Servers
               </p>
               <div className="flex flex-wrap gap-1">
@@ -332,7 +332,7 @@ function SidebarVariant({
                       key={relay}
                       to={`/relay/${relayUrlToSegment(relay)}`}
                       title={relay}
-                      className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:bg-violet-500/20 transition-colors"
+                      className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-pink-500/10 text-pink-600 dark:text-pink-400 hover:bg-pink-500/20 transition-colors"
                     >
                       {displayRelay(relay)}
                     </Link>
@@ -468,7 +468,7 @@ function FullVariant({
                 target="_blank"
                 rel="noopener noreferrer"
                 title={url}
-                className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:underline min-w-0"
+                className="flex items-center gap-2 text-sm text-pink-600 dark:text-pink-400 hover:underline min-w-0"
               >
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{shortenNip19InUrl(url)}</span>
@@ -492,7 +492,7 @@ function FullVariant({
                 repo.maintainerSet.length > 1 && (
                   <Badge
                     variant="outline"
-                    className="text-[10px] px-1.5 py-0 h-4 text-violet-600 border-violet-500/40 dark:text-violet-400"
+                    className="text-[10px] px-1.5 py-0 h-4 text-pink-600 border-pink-500/40 dark:text-pink-400"
                   >
                     selected
                   </Badge>
@@ -520,7 +520,7 @@ function FullVariant({
       {repo.relays.some((r) => isGraspRelay(r, repo.graspServerDomains)) && (
         <section className="space-y-2">
           <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-            <GraspLogo className="h-3.5 w-3.5 text-violet-500" />
+            <GraspLogo className="h-3.5 w-3.5 text-pink-500" />
             Grasp Servers
           </h3>
           <div className="flex flex-wrap gap-1.5">
@@ -662,7 +662,7 @@ function NgitCloneField({ command }: { command: string }) {
           href="https://ngit.dev/install"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1"
+          className="text-xs text-pink-600 dark:text-pink-400 hover:underline flex items-center gap-1"
         >
           Install ngit
           <ExternalLink className="h-3 w-3" />
@@ -718,7 +718,7 @@ function CloneServerList({
       {hasGrasp && (
         <div className="space-y-1">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-            <GraspLogo className="h-3 w-3 text-violet-500" />
+            <GraspLogo className="h-3 w-3 text-pink-500" />
             Grasp Servers
           </div>
           <div className="space-y-1">
@@ -874,7 +874,7 @@ function AnnouncementEventRows({
                 {isMulti && isSelected && (
                   <Badge
                     variant="outline"
-                    className="text-[10px] px-1.5 py-0 h-4 shrink-0 text-violet-600 border-violet-500/40 dark:text-violet-400"
+                    className="text-[10px] px-1.5 py-0 h-4 shrink-0 text-pink-600 border-pink-500/40 dark:text-pink-400"
                   >
                     selected
                   </Badge>
@@ -1246,7 +1246,7 @@ function CloneDropdown({
         <Button
           variant="default"
           size="sm"
-          className="w-full justify-between gap-2 bg-violet-600 hover:bg-violet-700 text-white border-0"
+          className="w-full justify-between gap-2 bg-pink-600 hover:bg-pink-700 text-white border-0"
         >
           <div className="flex items-center gap-2">
             <GitBranch className="h-4 w-4 shrink-0" />
@@ -1277,7 +1277,7 @@ function CloneDropdown({
                 href="https://ngit.dev/install"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1"
+                className="text-xs text-pink-600 dark:text-pink-400 hover:underline flex items-center gap-1"
               >
                 Install ngit
                 <ExternalLink className="h-3 w-3" />

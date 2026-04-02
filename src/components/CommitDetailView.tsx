@@ -174,8 +174,8 @@ function CommitDetail({
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 shrink-0">
-              <GitCommit className="h-5 w-5 text-violet-500" />
+            <div className="p-2 rounded-lg bg-gradient-to-br from-pink-500/10 to-pink-500/10 shrink-0">
+              <GitCommit className="h-5 w-5 text-pink-500" />
             </div>
             <div className="min-w-0 flex-1">
               <h1 className="text-xl font-semibold leading-snug break-words">
@@ -270,7 +270,7 @@ function CommitDetail({
                   <Link
                     key={p}
                     to={`${basePath}/commit/${p}`}
-                    className="text-xs font-mono text-violet-600 dark:text-violet-400 hover:underline"
+                    className="text-xs font-mono text-pink-600 dark:text-pink-400 hover:underline"
                   >
                     {p.slice(0, 8)}
                   </Link>

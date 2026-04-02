@@ -216,9 +216,9 @@ function ThreadComment({ event }: { event: NostrEvent }) {
       ref={elRef}
       className={`min-w-0 overflow-hidden border-t border-border/40 p-3 scroll-mt-20 transition-colors duration-700 ${
         effectiveHighlight === "strong"
-          ? "bg-violet-500/10"
+          ? "bg-pink-500/10"
           : effectiveHighlight === "subtle"
-            ? "bg-violet-500/5"
+            ? "bg-pink-500/5"
             : ""
       }`}
     >

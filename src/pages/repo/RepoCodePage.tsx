@@ -542,7 +542,7 @@ function LocatorBar({
         <div className="flex items-center gap-1 text-sm min-w-0 flex-1 flex-wrap">
           <Link
             to={treeUrl(currentRef)}
-            className="text-violet-600 dark:text-violet-400 hover:underline font-medium shrink-0"
+            className="text-pink-600 dark:text-pink-400 hover:underline font-medium shrink-0"
           >
             {repoId}
           </Link>
@@ -557,7 +557,7 @@ function LocatorBar({
                 ) : (
                   <Link
                     to={treeUrl(currentRef, segPath)}
-                    className="text-violet-600 dark:text-violet-400 hover:underline"
+                    className="text-pink-600 dark:text-pink-400 hover:underline"
                   >
                     {seg}
                   </Link>
@@ -755,7 +755,7 @@ function FileTreeRow({
         <FileText
           className={cn(
             "h-4 w-4 shrink-0",
-            isActive ? "text-violet-500" : "text-muted-foreground",
+            isActive ? "text-pink-500" : "text-muted-foreground",
           )}
         />
       )}
@@ -944,7 +944,7 @@ function FileContentViewer({
                   className={cn(
                     "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
                     viewMode === "rendered"
-                      ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                      ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -956,7 +956,7 @@ function FileContentViewer({
                   className={cn(
                     "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
                     viewMode === "text"
-                      ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                      ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >

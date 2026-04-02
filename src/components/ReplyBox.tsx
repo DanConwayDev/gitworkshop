@@ -137,7 +137,7 @@ export function ReplyBox({
         {profile?.picture && (
           <AvatarImage src={profile.picture} alt={displayName} />
         )}
-        <AvatarFallback className="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 text-foreground font-medium text-xs">
+        <AvatarFallback className="bg-gradient-to-br from-pink-500/20 to-pink-500/20 text-foreground font-medium text-xs">
           {initials}
         </AvatarFallback>
       </Avatar>
@@ -200,7 +200,7 @@ export function ReplyBox({
               type="submit"
               size="sm"
               disabled={isPending || !body.trim() || composerHasNsec(body)}
-              className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+              className="gap-1.5 bg-pink-600 hover:bg-pink-700 text-white"
             >
               {isPending ? (
                 <>

@@ -1,12 +1,11 @@
 import { Link } from "react-router-dom";
-import { GitBranch, Sun, Moon } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { use$ } from "@/hooks/use$";
 import { theme, toggleTheme } from "@/services/settings";
 
 const gitCommit = __GIT_COMMIT__;
 const commitDate = __COMMIT_DATE__;
-const appName = __APP_NAME__;
 
 export function AppFooter() {
   const currentTheme = use$(theme);
@@ -24,10 +23,12 @@ export function AppFooter() {
               to="/"
               className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
             >
-              <div className="bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded p-0.5">
-                <GitBranch className="h-3 w-3 text-white" />
-              </div>
-              <span className="font-medium">{appName}</span>
+              <img
+                src="/icons/icon-32x32.png"
+                alt="GitWorkshop"
+                className="h-4 w-4 rounded"
+              />
+              <span className="font-medium">GitWorkshop</span>
             </Link>
             <span className="opacity-50">
               {commitDate}+{gitCommit.slice(0, 7)}

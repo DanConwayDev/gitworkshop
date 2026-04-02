@@ -607,7 +607,7 @@ const FileDiffCard = memo(function FileDiffCard({
       className={cn(
         "rounded-lg border scroll-mt-20 transition-colors",
         isActive
-          ? "border-violet-500/60 ring-1 ring-violet-500/30"
+          ? "border-pink-500/60 ring-1 ring-pink-500/30"
           : "border-border/60",
       )}
     >

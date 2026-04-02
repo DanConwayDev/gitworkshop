@@ -92,7 +92,7 @@ export function FollowRepoButton({
     "inline-flex items-center gap-1.5 rounded-l-md border px-2.5 py-1 text-sm font-medium transition-colors",
     "disabled:opacity-50 disabled:cursor-not-allowed",
     isFollowing
-      ? "border-violet-400/60 bg-violet-400/10 text-violet-600 dark:text-violet-400 hover:bg-violet-400/20"
+      ? "border-pink-400/60 bg-pink-400/10 text-pink-600 dark:text-pink-400 hover:bg-pink-400/20"
       : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
     // When there's no count, round both sides
     count === 0 && "rounded-r-md",
@@ -102,7 +102,7 @@ export function FollowRepoButton({
   const countBtnClass = cn(
     "inline-flex items-center rounded-r-md border-y border-r px-2 py-1 text-sm font-medium tabular-nums transition-colors",
     isFollowing
-      ? "border-violet-400/60 bg-violet-400/10 text-violet-600 dark:text-violet-400 hover:bg-violet-400/20"
+      ? "border-pink-400/60 bg-pink-400/10 text-pink-600 dark:text-pink-400 hover:bg-pink-400/20"
       : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
   );
 
@@ -122,7 +122,7 @@ export function FollowRepoButton({
         {pending ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : isFollowing ? (
-          <Users className="h-3.5 w-3.5 transition-colors fill-violet-500 text-violet-500" />
+          <Users className="h-3.5 w-3.5 transition-colors fill-pink-500 text-pink-500" />
         ) : (
           <BookmarkPlus className="h-3.5 w-3.5 transition-colors" />
         )}

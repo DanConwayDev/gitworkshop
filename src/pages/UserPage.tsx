@@ -125,7 +125,7 @@ export default function UserPage({ pubkey }: UserPageProps) {
             <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
           </div>
         ) : (
-          <div className="absolute inset-0 -z-10 bg-gradient-to-br from-violet-500/5 via-transparent to-fuchsia-500/5" />
+          <div className="absolute inset-0 -z-10 bg-gradient-to-br from-pink-500/5 via-transparent to-pink-500/5" />
         )}
 
         <div className="container max-w-screen-xl px-4 md:px-8 py-8">
@@ -175,7 +175,7 @@ export default function UserPage({ pubkey }: UserPageProps) {
 
                   <div className="flex items-center gap-4 flex-wrap">
                     {profile.nip05 && (
-                      <span className="text-sm text-violet-600 dark:text-violet-400 font-medium">
+                      <span className="text-sm text-pink-600 dark:text-pink-400 font-medium">
                         {profile.nip05}
                       </span>
                     )}
@@ -252,7 +252,7 @@ export default function UserPage({ pubkey }: UserPageProps) {
                   className={cn(
                     "inline-flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors",
                     isActive
-                      ? "border-violet-500 text-violet-600 dark:text-violet-400"
+                      ? "border-pink-500 text-pink-600 dark:text-pink-400"
                       : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
                   )}
                 >
@@ -264,7 +264,7 @@ export default function UserPage({ pubkey }: UserPageProps) {
                       className={cn(
                         "text-[10px] px-1.5 py-0 h-4 min-w-4",
                         isActive &&
-                          "bg-violet-500/20 text-violet-600 dark:text-violet-400 border-0",
+                          "bg-pink-500/20 text-pink-600 dark:text-pink-400 border-0",
                       )}
                     >
                       {count}
@@ -424,15 +424,15 @@ function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
       className="group block cursor-pointer"
       onClick={() => navigate(repoPath)}
     >
-      <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20 group-hover:-translate-y-0.5">
+      <Card className="transition-all duration-200 hover:shadow-md hover:shadow-pink-500/5 hover:border-pink-500/20 group-hover:-translate-y-0.5">
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2.5 mb-2">
-                <div className="p-1.5 rounded-md bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10">
-                  <GitBranch className="h-4 w-4 text-violet-500" />
+                <div className="p-1.5 rounded-md bg-gradient-to-br from-pink-500/10 to-pink-500/10">
+                  <GitBranch className="h-4 w-4 text-pink-500" />
                 </div>
-                <h3 className="font-semibold text-base truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+                <h3 className="font-semibold text-base truncate group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
                   {repo.name}
                 </h3>
               </div>
@@ -485,7 +485,7 @@ function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
                 href={repo.webUrls[0]}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground/40 group-hover:text-violet-500 transition-colors shrink-0 mt-1"
+                className="text-muted-foreground/40 group-hover:text-pink-500 transition-colors shrink-0 mt-1"
                 onClick={(e) => e.stopPropagation()}
               >
                 <ExternalLink className="h-4 w-4" />
@@ -712,7 +712,7 @@ function GitAuthorFollowButton({ pubkey }: { pubkey: string }) {
       className={cn(
         "h-7 text-xs gap-1.5",
         isGitAuthorFollowing &&
-          "border-violet-500/40 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 hover:text-violet-600 dark:hover:text-violet-400",
+          "border-pink-500/40 text-pink-600 dark:text-pink-400 hover:bg-pink-500/10 hover:text-pink-600 dark:hover:text-pink-400",
       )}
       onClick={handleClick}
       disabled={pending}
@@ -774,14 +774,14 @@ function GitAuthorCard({ pubkey }: { pubkey: string }) {
       className="group block cursor-pointer"
       onClick={() => navigate(`/${npub}`)}
     >
-      <Card className="transition-all duration-200 hover:shadow-md hover:shadow-violet-500/5 hover:border-violet-500/20 group-hover:-translate-y-0.5">
+      <Card className="transition-all duration-200 hover:shadow-md hover:shadow-pink-500/5 hover:border-pink-500/20 group-hover:-translate-y-0.5">
         <CardContent className="p-4">
           <div className="flex items-center gap-3">
             <UserAvatar pubkey={pubkey} size="md" className="shrink-0" />
             <div className="flex-1 min-w-0">
               <UserName
                 pubkey={pubkey}
-                className="text-sm font-medium group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors truncate block"
+                className="text-sm font-medium group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors truncate block"
               />
               <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">
                 {npub.slice(0, 16)}...

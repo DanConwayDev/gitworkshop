@@ -286,7 +286,7 @@ function PRRow({
         {/* Title + metadata */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors line-clamp-1">
+            <span className="font-medium text-foreground group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors line-clamp-1">
               {pr.currentSubject}
             </span>
             {pr.labels.map((label) => (

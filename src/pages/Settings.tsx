@@ -84,20 +84,20 @@ function RelayCurationSection() {
                 onClick={() => relayCurationMode.next(opt.value)}
                 className={cn(
                   "relative flex flex-col gap-2 rounded-lg border p-4 text-left transition-all duration-150",
-                  "hover:border-violet-500/50 hover:bg-violet-500/5",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500",
+                  "hover:border-pink-500/50 hover:bg-pink-500/5",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500",
                   selected
-                    ? "border-violet-500 bg-violet-500/5 shadow-sm shadow-violet-500/10"
+                    ? "border-pink-500 bg-pink-500/5 shadow-sm shadow-pink-500/10"
                     : "border-border bg-background",
                 )}
               >
                 {selected && (
-                  <span className="absolute top-3 right-3 h-2 w-2 rounded-full bg-violet-500" />
+                  <span className="absolute top-3 right-3 h-2 w-2 rounded-full bg-pink-500" />
                 )}
                 <span
                   className={cn(
                     "transition-colors",
-                    selected ? "text-violet-500" : "text-muted-foreground",
+                    selected ? "text-pink-500" : "text-muted-foreground",
                   )}
                 >
                   {opt.icon}

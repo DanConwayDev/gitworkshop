@@ -23,7 +23,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 // DB_VERSION 3: added "trees" and "commitHistory" stores.
-const DB_NAME = "ngitstack-git-cache";
+const DB_NAME = "gitworkshop-git-cache";
 const DB_VERSION = 3;
 
 const STORE_COMMITS = "commits";

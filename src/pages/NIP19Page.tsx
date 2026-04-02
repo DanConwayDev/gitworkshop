@@ -132,7 +132,7 @@ function LoadingState({ message }: { message: string }) {
   return (
     <div className="min-h-[50vh] flex items-center justify-center">
       <div className="text-center space-y-3">
-        <div className="h-8 w-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto" />
+        <div className="h-8 w-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto" />
         <p className="text-sm text-muted-foreground">{message}</p>
       </div>
     </div>

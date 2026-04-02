@@ -127,7 +127,7 @@ function PatchCommitRow({
   const relativeTime = safeFormatDistanceToNow(ts, { addSuffix: true });
 
   const titleContent = (
-    <span className="text-sm font-medium hover:text-violet-600 dark:hover:text-violet-400 transition-colors line-clamp-2">
+    <span className="text-sm font-medium hover:text-pink-600 dark:hover:text-pink-400 transition-colors line-clamp-2">
       {subject}
     </span>
   );

@@ -237,7 +237,7 @@ export const zapsLoader = createZapsLoader(pool, {
 
 /**
  * Loader for NIP-05 DNS identity lookups.
- * Results are persisted to IndexedDB (ngitstack / nip05-identities) so that
+ * Results are persisted to IndexedDB (gitworkshop / nip05-identities) so that
  * verified identities survive page reloads. Expiry is set to 30 days so
  * stale entries are re-verified after a month.
  */

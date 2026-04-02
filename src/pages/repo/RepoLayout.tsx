@@ -402,7 +402,7 @@ function RepoLayoutResolved({
     <div className="min-h-full">
       {/* Repo header */}
       <div className="relative isolate border-b border-border/40">
-        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-violet-500/5 via-transparent to-fuchsia-500/5" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-pink-500/5 via-transparent to-pink-500/5" />
 
         <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-0">
           {repo ? (
@@ -516,8 +516,8 @@ function Nip05LoadingState({ nip05 }: { nip05: string }) {
     <div className="min-h-full flex items-center justify-center">
       <div className="text-center space-y-4 max-w-md px-4">
         <div className="flex justify-center">
-          <div className="p-4 rounded-full bg-violet-500/10">
-            <Loader2 className="h-8 w-8 text-violet-500 animate-spin" />
+          <div className="p-4 rounded-full bg-pink-500/10">
+            <Loader2 className="h-8 w-8 text-pink-500 animate-spin" />
           </div>
         </div>
         <h2 className="text-xl font-semibold">Resolving identity</h2>
@@ -666,7 +666,7 @@ function RepoBreadcrumb({
       <span className="text-muted-foreground font-normal">/</span>
       <Link
         to={basePath}
-        className="text-base font-semibold text-foreground hover:text-violet-500 transition-colors"
+        className="text-base font-semibold text-foreground hover:text-pink-500 transition-colors"
       >
         {repoName}
       </Link>
@@ -697,7 +697,7 @@ function TabLink({
       className={cn(
         "inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
         active
-          ? "border-violet-500 text-foreground"
+          ? "border-pink-500 text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
       )}
     >

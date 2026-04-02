@@ -1,7 +1,7 @@
 import type { AsyncIdentityCache } from "applesauce-loaders/loaders";
 import type { Identity } from "applesauce-loaders/helpers";
 
-const DB_NAME = "ngitstack";
+const DB_NAME = "gitworkshop";
 const STORE_NAME = "nip05-identities";
 const DB_VERSION = 1;
 
@@ -55,7 +55,7 @@ export async function loadAllNip05FromIdb(): Promise<Record<string, Identity>> {
 /**
  * AsyncIdentityCache backed by IndexedDB.
  *
- * DB: ngitstack  |  Store: nip05-identities  |  Key: "name@domain"
+ * DB: gitworkshop  |  Store: nip05-identities  |  Key: "name@domain"
  *
  * The DnsIdentityLoader passes the full address string as the key when
  * calling load(), and passes a Record<address, Identity> to save().

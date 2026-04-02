@@ -8,82 +8,85 @@
 @layer base {
   :root {
     --background: 0 0% 99%;
-    --foreground: 240 10% 8%;
+    --foreground: 231 15% 18%;
 
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 8%;
+    --card-foreground: 231 15% 18%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 8%;
+    --popover-foreground: 231 15% 18%;
 
-    --primary: 263 70% 50%;
+    /* Dracula pink — #ff79c6 */
+    --primary: 326 100% 74%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 260 20% 96%;
-    --secondary-foreground: 263 50% 30%;
+    --secondary: 265 20% 94%;
+    --secondary-foreground: 265 40% 30%;
 
-    --muted: 260 15% 96%;
+    --muted: 265 15% 94%;
     --muted-foreground: 240 5% 46%;
 
-    --accent: 260 20% 96%;
-    --accent-foreground: 263 50% 30%;
+    --accent: 265 20% 94%;
+    --accent-foreground: 265 40% 30%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 260 15% 91%;
-    --input: 260 15% 91%;
-    --ring: 263 70% 50%;
+    --border: 265 15% 89%;
+    --input: 265 15% 89%;
+    --ring: 326 100% 74%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 260 15% 98%;
+    --sidebar-background: 265 15% 97%;
     --sidebar-foreground: 240 5% 26%;
-    --sidebar-primary: 263 70% 50%;
+    --sidebar-primary: 326 100% 74%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 260 15% 95%;
+    --sidebar-accent: 265 15% 93%;
     --sidebar-accent-foreground: 240 5% 10%;
-    --sidebar-border: 260 10% 91%;
-    --sidebar-ring: 263 70% 50%;
+    --sidebar-border: 265 10% 89%;
+    --sidebar-ring: 326 100% 74%;
   }
 
   .dark {
-    --background: 240 15% 6%;
-    --foreground: 260 10% 95%;
+    /* Dracula dark background — #16171e */
+    --background: 231 15% 10%;
+    --foreground: 265 10% 93%;
 
-    --card: 240 15% 8%;
-    --card-foreground: 260 10% 95%;
+    --card: 231 15% 12%;
+    --card-foreground: 265 10% 93%;
 
-    --popover: 240 15% 8%;
-    --popover-foreground: 260 10% 95%;
+    --popover: 231 15% 12%;
+    --popover-foreground: 265 10% 93%;
 
-    --primary: 263 70% 60%;
+    /* Dracula pink — #ff79c6 */
+    --primary: 326 100% 74%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 260 20% 14%;
-    --secondary-foreground: 260 10% 90%;
+    --secondary: 265 20% 18%;
+    --secondary-foreground: 265 10% 88%;
 
-    --muted: 260 15% 14%;
-    --muted-foreground: 260 10% 60%;
+    --muted: 265 15% 18%;
+    --muted-foreground: 265 10% 58%;
 
-    --accent: 260 20% 14%;
-    --accent-foreground: 260 10% 90%;
+    --accent: 265 20% 18%;
+    --accent-foreground: 265 10% 88%;
 
     --destructive: 0 62% 30%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 260 15% 16%;
-    --input: 260 15% 16%;
-    --ring: 263 70% 60%;
+    --border: 265 15% 20%;
+    --input: 265 15% 20%;
+    --ring: 326 100% 74%;
 
-    --sidebar-background: 240 15% 7%;
-    --sidebar-foreground: 260 10% 90%;
-    --sidebar-primary: 263 70% 60%;
+    --sidebar-background: 231 15% 11%;
+    --sidebar-foreground: 265 10% 88%;
+    --sidebar-primary: 326 100% 74%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 260 15% 12%;
-    --sidebar-accent-foreground: 260 10% 90%;
-    --sidebar-border: 260 15% 14%;
-    --sidebar-ring: 263 70% 60%;
+    --sidebar-accent: 265 15% 16%;
+    --sidebar-accent-foreground: 265 10% 88%;
+    --sidebar-border: 265 15% 18%;
+    --sidebar-ring: 326 100% 74%;
   }
 }
 
