@@ -27,7 +27,10 @@ import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
 import { extraRelays, lookupRelays } from "./settings";
 import { ISSUE_KIND, PR_ROOT_KINDS, LEGACY_REPLY_KINDS } from "@/lib/nip34";
 import { Repository, isValidRepository } from "@/casts/Repository";
-import { createPaginatedTagValueLoader } from "@/lib/tagValuePaginatedLoader";
+import {
+  createPaginatedTagValueLoader,
+  type PaginatedTagValueResponse,
+} from "@/lib/tagValuePaginatedLoader";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
 
 /**
@@ -397,7 +400,7 @@ const GIT_REPOS_FOLLOW_KIND = 10018 as const;
 export function nip34ListLoader(
   itemId: string,
   relays: string[],
-): Observable<NostrEvent> {
+): Observable<PaginatedTagValueResponse> {
   return merge(
     nip34EssentialsLoader({ value: itemId, relays }),
     nip34CommentsLoader({ value: itemId, relays }),
@@ -492,7 +495,7 @@ export function nip34RepoLoader(
 function nip34ThreadLoadAll(
   itemId: string,
   relays: string[],
-): Observable<NostrEvent> {
+): Observable<PaginatedTagValueResponse> {
   return merge(
     nip34ThreadReplyLoader({ value: itemId, relays }),
     nip34ThreadRootLoader({ value: itemId, relays }),
@@ -526,7 +529,7 @@ function nip34ThreadLoadAll(
 export function nip34ThreadItemLoader(
   itemId: string,
   relays: string[],
-): Observable<NostrEvent> {
+): Observable<PaginatedTagValueResponse> {
   return merge(
     // All child events on the root item itself
     nip34ThreadLoadAll(itemId, relays),

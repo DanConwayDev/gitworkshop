@@ -2,7 +2,8 @@
  * createPaginatedTagValueLoader
  *
  * A drop-in replacement for applesauce's createTagValueLoader that adds
- * per-relay backward pagination and a persistent live subscription.
+ * per-relay backward pagination, a persistent live subscription, and an
+ * idiomatic EOSE settle signal.
  *
  * Batching behaviour is identical to createTagValueLoader:
  *   - Incoming pointers are buffered by time (bufferTime) and size (bufferSize)
@@ -21,6 +22,15 @@
  *      reconnecting automatically on disconnect (reconnect: Infinity).
  *      On reconnect the relay replays recent history; eoseSeen remains true
  *      so pagination is not re-triggered.
+ *
+ * EOSE settle signal:
+ *   The returned observable emits NostrEvent | "EOSE". "EOSE" is emitted
+ *   200ms after the first relay in the batch finishes its current work:
+ *     - Auto mode: first relay whose initial EOSE count < limit (no pagination
+ *       needed), or first relay whose backward pagination block completes.
+ *     - The 200ms debounce gives other relays a chance to deliver events
+ *       before the consumer considers the load "settled".
+ *   Consumers that don't need the signal can pipe through onlyEvents().
  *
  * Exhaustion tracking (in-memory, resets on page reload):
  *   - Once pagination completes (or is skipped) for a relay+batch combo,
@@ -47,8 +57,10 @@ import {
   Observable,
   Subject,
   bufferTime,
+  debounceTime,
   filter,
   finalize,
+  map,
   merge,
   share,
   switchMap,
@@ -56,6 +68,9 @@ import {
 } from "rxjs";
 
 export type { TagValuePointer };
+
+/** Response type — mirrors applesauce's SubscriptionResponse pattern */
+export type PaginatedTagValueResponse = NostrEvent | "EOSE";
 
 export type PaginatedTagValueLoaderOptions = {
   /** Time window to batch incoming pointers in ms (default 1000) */
@@ -72,11 +87,16 @@ export type PaginatedTagValueLoaderOptions = {
   extraRelays?: string[];
   /** Method used to load from the cache */
   cacheRequest?: CacheRequest;
+  /**
+   * Debounce window in ms before emitting "EOSE" after the first relay
+   * finishes its current work (default 200).
+   */
+  settleTime?: number;
 };
 
 export type PaginatedTagValueLoader = (
   pointer: TagValuePointer,
-) => Observable<NostrEvent>;
+) => Observable<PaginatedTagValueResponse>;
 
 /**
  * Build a per-relay filter map from a batch of pointers.
@@ -122,6 +142,9 @@ function exhaustionKey(relay: string, tagName: string, f: Filter): string {
 /**
  * Process one batch window: for each relay in the filter map, open a live
  * subscription and (if needed) paginate backward until exhausted.
+ *
+ * @param settled$ - push to this when a relay finishes its current work;
+ *                   the caller debounces it to emit "EOSE" into the stream.
  */
 function processBatch(
   pool: RelayPool,
@@ -129,6 +152,7 @@ function processBatch(
   pointers: TagValuePointer[],
   opts: PaginatedTagValueLoaderOptions,
   exhausted: Set<string>,
+  settled$: Subject<void>,
 ): Observable<NostrEvent> {
   const limit = opts.limit ?? 500;
   const subOpts: SubscriptionOptions = { reconnect: Infinity };
@@ -138,14 +162,14 @@ function processBatch(
     ([relay, relayFilter]) => {
       const key = exhaustionKey(relay, tagName, relayFilter);
 
-      // Single subscription per relay — no limit on the filter so it stays
-      // open for live events. We use the raw SubscriptionResponse stream so
-      // we can observe the EOSE marker to decide whether to paginate.
+      // No limit on the live filter — we want all future events.
       const liveFilter: Filter = { ...relayFilter };
       delete liveFilter.limit;
 
-      // If already exhausted, just open the live subscription with no pagination
+      // If already exhausted, just open the live subscription — signal settled
+      // immediately since there is no history work to do.
       if (exhausted.has(key)) {
+        settled$.next();
         return pool
           .subscription([relay], [liveFilter], subOpts)
           .pipe(onlyEvents()) as Observable<NostrEvent>;
@@ -169,8 +193,9 @@ function processBatch(
               if (msg === "EOSE") {
                 eoseSeen = true;
                 if (countBeforeEose < limit) {
-                  // Relay has no more history — mark exhausted, no pagination needed
+                  // Relay has no more history — mark exhausted and signal settled
                   exhausted.add(key);
+                  settled$.next();
                   return;
                 }
                 // Relay was truncated — paginate backward from oldest seen
@@ -189,6 +214,8 @@ function processBatch(
                     }),
                     finalize(() => {
                       exhausted.add(key);
+                      // Signal settled after each completed pagination block
+                      settled$.next();
                     }),
                   )
                   .subscribe({
@@ -225,7 +252,10 @@ function processBatch(
     },
   );
 
-  if (perRelayStreams.length === 0) return EMPTY;
+  if (perRelayStreams.length === 0) {
+    settled$.next();
+    return EMPTY;
+  }
 
   let combined: Observable<NostrEvent> = merge(...perRelayStreams);
 
@@ -255,10 +285,14 @@ function processBatch(
  * Creates a paginated tag-value loader that is a drop-in replacement for
  * applesauce's createTagValueLoader.
  *
+ * Returns Observable<NostrEvent | "EOSE">. Pipe through onlyEvents() if
+ * the EOSE signal is not needed.
+ *
  * - Batches pointers by bufferTime/bufferSize (same as createTagValueLoader)
  * - Opens a live subscription per relay (reconnect: Infinity)
  * - Paginates backward per relay until exhausted
  * - Skips already-exhausted relay+batch combos on subsequent calls
+ * - Emits "EOSE" settleTime ms after the first relay finishes its current work
  */
 export function createPaginatedTagValueLoader(
   pool: RelayPool,
@@ -267,6 +301,7 @@ export function createPaginatedTagValueLoader(
 ): PaginatedTagValueLoader {
   const bufferMs = opts.bufferTime ?? 1000;
   const bufferMax = opts.bufferSize ?? 200;
+  const settleMs = opts.settleTime ?? 200;
 
   // In-memory exhaustion tracking — resets on page reload
   const exhausted = new Set<string>();
@@ -275,7 +310,7 @@ export function createPaginatedTagValueLoader(
   const queue = new Subject<TagValuePointer>();
 
   // Emits one shared observable per batch window
-  const next = new Subject<Observable<NostrEvent>>();
+  const next = new Subject<Observable<PaginatedTagValueResponse>>();
 
   // Process each buffer window
   queue
@@ -283,12 +318,27 @@ export function createPaginatedTagValueLoader(
     .subscribe((pointers) => {
       if (pointers.length === 0) return;
 
-      const upstream = processBatch(
+      // Per-batch settle signal — any relay finishing its work pushes here
+      const settled$ = new Subject<void>();
+
+      // EOSE stream: debounce settle signals then map to "EOSE" sentinel
+      const eose$: Observable<PaginatedTagValueResponse> = settled$.pipe(
+        debounceTime(settleMs),
+        map(() => "EOSE" as const),
+      );
+
+      const events$ = processBatch(
         pool,
         tagName,
         pointers,
         opts,
         exhausted,
+        settled$,
+      );
+
+      const upstream: Observable<PaginatedTagValueResponse> = merge(
+        events$,
+        eose$,
       ).pipe(
         // Keep alive as long as at least one caller is subscribed
         share({ resetOnRefCountZero: true }),
@@ -297,8 +347,8 @@ export function createPaginatedTagValueLoader(
       next.next(upstream);
     });
 
-  return (pointer: TagValuePointer): Observable<NostrEvent> =>
-    new Observable<NostrEvent>((observer) => {
+  return (pointer: TagValuePointer): Observable<PaginatedTagValueResponse> =>
+    new Observable<PaginatedTagValueResponse>((observer) => {
       queue.next(pointer);
 
       const sub = next
@@ -306,11 +356,14 @@ export function createPaginatedTagValueLoader(
           take(1),
           switchMap((batchObs) =>
             batchObs.pipe(
-              // Only emit events relevant to this pointer's tag value
-              filter((event) =>
-                event.tags.some(
-                  (tag) => tag[0] === tagName && tag[1] === pointer.value,
-                ),
+              // Pass "EOSE" through; filter events to only those relevant to
+              // this pointer's tag value
+              filter(
+                (msg) =>
+                  msg === "EOSE" ||
+                  msg.tags.some(
+                    (tag) => tag[0] === tagName && tag[1] === pointer.value,
+                  ),
               ),
             ),
           ),
