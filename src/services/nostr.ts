@@ -9,7 +9,7 @@ import {
   DnsIdentityLoader,
 } from "applesauce-loaders/loaders";
 import { RelayLiveness, RelayPool, onlyEvents } from "applesauce-relay";
-import type { RelayGroup } from "applesauce-relay";
+import type { RelayGroup, IRelay } from "applesauce-relay";
 import { NostrConnectSigner } from "applesauce-signers";
 import type { NostrEvent } from "nostr-tools";
 import { verifyEvent } from "nostr-tools";
@@ -434,10 +434,49 @@ export function nip34RepoLoader(
 ): Observable<NostrEvent> {
   return new Observable<NostrEvent>((subscriber) => {
     const seenIds = new Set<string>();
-    const relayUrls = relayGroup.relays.map((r) => r.url);
+    // Track relay URLs we have already fired loaders against so we can detect
+    // genuinely new relays when the group grows.
+    const knownRelayUrls = new Set<string>();
+
+    // Fire nip34ListLoader for a single item against a specific set of relays.
+    // Inline so it can close over subscriber and seenIds.
+    function fireLoaders(id: string, relays: string[]): void {
+      nip34ListLoader(id, relays).subscribe(subscriber);
+    }
+
+    // Subscribe to RelayGroup relay list changes. relays$ is protected in TS
+    // but public at runtime — cast to access it so we can react to new relays
+    // being added without polling.
+    const relays$ = (relayGroup as unknown as { relays$: Observable<IRelay[]> })
+      .relays$;
+
+    const relaySub = relays$
+      .pipe(
+        // Map to URL strings for stable comparison
+        map((relays) => relays.map((r) => r.url)),
+        // Only proceed when the URL set actually changes
+        distinctUntilChanged(
+          (a, b) =>
+            a.length === b.length && a.every((url) => knownRelayUrls.has(url)),
+        ),
+      )
+      .subscribe((currentUrls) => {
+        // Diff: find relay URLs not yet known
+        const newUrls = currentUrls.filter((url) => !knownRelayUrls.has(url));
+        for (const url of newUrls) knownRelayUrls.add(url);
+
+        if (newUrls.length === 0) return;
+
+        // For every item already discovered, fire loaders against the new
+        // relays only. createPaginatedTagValueLoader batches all these calls
+        // within its buffer window into a single REQ per relay.
+        for (const id of seenIds) {
+          fireLoaders(id, newUrls);
+        }
+      });
 
     // Subscribe to issues, patches, and PRs — pipe each new item into the
-    // per-item essentials + comments loaders.
+    // per-item essentials + comments loaders against all current relays.
     const itemSub = relayGroup
       .subscription([{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter], {
         reconnect: Infinity,
@@ -449,7 +488,10 @@ export function nip34RepoLoader(
           const ev = event as NostrEvent;
           if (!seenIds.has(ev.id)) {
             seenIds.add(ev.id);
-            nip34ListLoader(ev.id, relayUrls).subscribe(subscriber);
+            // Use all currently known relays — knownRelayUrls is already
+            // populated by the relaySub above (relays$ is a BehaviorSubject
+            // so relaySub fires synchronously before itemSub can emit).
+            fireLoaders(ev.id, [...knownRelayUrls]);
           }
         },
         error: (err) => subscriber.error(err),
@@ -478,6 +520,7 @@ export function nip34RepoLoader(
       });
 
     return () => {
+      relaySub.unsubscribe();
       itemSub.unsubscribe();
       repoMetaSub.unsubscribe();
     };
