@@ -457,6 +457,7 @@ export function acquireNotificationStore(
       const fullFilters = buildNotificationFilters(pubkey);
       const loader = createManualTimelineLoader(pool, relays, fullFilters, {
         eventStore,
+        getArchiveCutoff: () => readState$.getValue().ab,
       });
       entry.historyLoader = loader;
       // Fire the first full page immediately

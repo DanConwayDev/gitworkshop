@@ -226,7 +226,12 @@ export default function NotificationsPage() {
       </div>
 
       {/* History load-more / spinner */}
-      {(history.loading || history.hasMore) && (
+      {/* On the inbox tab, hide load more once we've fetched all non-archived
+          events (reachedArchive). On archived/all tabs always show it so the
+          user can page through archived history. */}
+      {(history.loading ||
+        (history.hasMore &&
+          !(currentView === "inbox" && history.reachedArchive))) && (
         <div className="flex justify-center mt-3">
           {history.loading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">

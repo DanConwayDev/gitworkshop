@@ -57,6 +57,12 @@ export interface NotificationHistoryState {
   loading: boolean;
   /** True if the last block returned a full page (more history available) */
   hasMore: boolean;
+  /**
+   * True once every relay has either delivered an event older than the
+   * archive cutoff or been exhausted. Used to hide "load more" on the inbox
+   * tab — all non-archived events have been fetched.
+   */
+  reachedArchive: boolean;
   /** Fetch the next page of history */
   loadMore: () => void;
 }
@@ -162,6 +168,12 @@ export function useNotifications(): {
       return entry.historyLoader.historyHasMore$;
     }, [entry?.historyLoader]) ?? false;
 
+  const historyReachedArchive =
+    use$(() => {
+      if (!entry?.historyLoader) return undefined;
+      return entry.historyLoader.historyReachedArchive$;
+    }, [entry?.historyLoader]) ?? false;
+
   // model cache key is pubkey only; readState$ and repoCoords$ are passed
   // as separate arguments and are not part of the cache key.
   const output = use$(() => {
@@ -187,6 +199,7 @@ export function useNotifications(): {
   const history: NotificationHistoryState = {
     loading: historyLoading,
     hasMore: historyHasMore,
+    reachedArchive: historyReachedArchive,
     loadMore: () => entry?.historyLoader?.loadMore(NOTIFICATION_PAGE_LIMIT),
   };
 
