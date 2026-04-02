@@ -4,6 +4,7 @@ import { useSeoMeta } from "@unhead/react";
 import { useAllRepositories } from "@/hooks/useAllRepositories";
 import { useRepoPath } from "@/hooks/useRepoPath";
 import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
+import { useProfilesForPubkeys } from "@/hooks/useProfilesForPubkeys";
 import { UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,19 @@ export default function RepositoriesPage({
       : "Browse git repositories on Nostr",
   });
 
+  // Collect all unique maintainer pubkeys across all repos so we can fetch
+  // their profiles and include author names in the search filter.
+  const allMaintainerPubkeys = useMemo(() => {
+    if (!repos) return [];
+    const seen = new Set<string>();
+    for (const repo of repos) {
+      for (const pk of repo.maintainerSet) seen.add(pk);
+    }
+    return Array.from(seen);
+  }, [repos]);
+
+  const profileMap = useProfilesForPubkeys(allMaintainerPubkeys);
+
   // Reset visible count when search changes so results start from the top
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -57,13 +71,27 @@ export default function RepositoriesPage({
     if (!repos) return undefined;
     if (!search.trim()) return repos;
     const q = search.toLowerCase();
-    return repos.filter(
-      (r) =>
+    return repos.filter((r) => {
+      if (
         r.name.toLowerCase().includes(q) ||
         r.description.toLowerCase().includes(q) ||
-        r.labels.some((l) => l.toLowerCase().includes(q)),
-    );
-  }, [repos, search]);
+        r.labels.some((l) => l.toLowerCase().includes(q))
+      )
+        return true;
+
+      // Also match against maintainer display names / usernames
+      return r.maintainerSet.some((pk) => {
+        const profile = profileMap.get(pk);
+        if (!profile) return false;
+        const displayName = profile.displayName ?? profile.name ?? "";
+        const name = profile.name ?? "";
+        return (
+          displayName.toLowerCase().includes(q) ||
+          name.toLowerCase().includes(q)
+        );
+      });
+    });
+  }, [repos, search, profileMap]);
 
   const visible = useMemo(
     () => filtered?.slice(0, visibleCount),
