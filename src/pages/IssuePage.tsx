@@ -71,7 +71,6 @@ export default function IssuePage() {
                   issueId={issue.id}
                   currentSubject={issue.currentSubject || issue.originalSubject}
                   canEdit={canEdit}
-                  repoRelays={repo?.relays}
                   repoCoords={issue.repoCoords}
                 />
               </div>
@@ -196,7 +195,6 @@ export default function IssuePage() {
                           activeAccount && issue
                             ? {
                                 rootEvent: issue.rootEvent,
-                                repoRelays: repo?.relays ?? [],
                                 repoCoords: issue.repoCoords,
                               }
                             : undefined
@@ -209,12 +207,7 @@ export default function IssuePage() {
             </div>
 
             {/* Reply box — always shown; anonymous posting handled inside */}
-            {issue && (
-              <ReplyBox
-                rootEvent={issue.rootEvent}
-                repoRelays={repo?.relays ?? []}
-              />
-            )}
+            {issue && <ReplyBox rootEvent={issue.rootEvent} />}
           </div>
 
           {/* Sidebar */}
@@ -238,7 +231,6 @@ export default function IssuePage() {
                       { value: "resolved", label: "Resolved" },
                       { value: "closed", label: "Closed" },
                     ]}
-                    repoRelays={repo?.relays}
                   />
                 )}
 

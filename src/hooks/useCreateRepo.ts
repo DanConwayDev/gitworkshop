@@ -22,7 +22,7 @@ import {
 import { factory } from "@/services/actions";
 import { eventStore, pool } from "@/services/nostr";
 import { outboxStore } from "@/services/outbox";
-import { gitIndexRelays, extraRelays } from "@/services/settings";
+
 import { pushToGitServer, ZERO_HASH, type RefUpdate } from "@/lib/git-push";
 import { useProfile } from "@/hooks/useProfile";
 import type { GraspServer } from "@/hooks/useGraspServers";
@@ -164,12 +164,10 @@ export function useCreateRepo() {
         );
 
         // Also publish to outbox/index relays (fire-and-forget via outbox store)
-        const indexRelays = gitIndexRelays.getValue();
-        const userExtraRelays = extraRelays.getValue();
-        await outboxStore.publish(signedAnnouncement, {
-          "git index": indexRelays,
-          relays: userExtraRelays,
-        });
+        await outboxStore.publish(signedAnnouncement, [
+          "git-index",
+          "extra-relays",
+        ]);
 
         // Add to local store for immediate UI update
         eventStore.add(signedAnnouncement);

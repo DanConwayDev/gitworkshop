@@ -1,24 +1,16 @@
 /**
  * NIP-34 Actions — CreateIssue, ChangeIssueStatus, RenameIssueSubject, CreateComment.
  *
- * Relay strategy — single publish call with all relay groups:
+ * Relay strategy — callers declare intent via group ID strings; the outbox
+ * store resolves them to relay URLs via its relayGroupResolver:
  *
- *   - "outbox:<signerPubkey>"  → user's NIP-65 write relays (resolved immediately
- *                                from the EventStore; always cached at publish time)
- *   - "30617:<pubkey>:<d>"     → repo's declared relays (resolved from EventStore)
+ *   - "outbox:<signerPubkey>"  → user's NIP-65 write relays
+ *   - "30617:<pubkey>:<d>"     → repo's declared relays (one per coord)
  *   - "inbox:<notifyPubkey>"   → notification recipient's NIP-65 read relays
- *                                (may start with no URLs; the outbox store resolves
- *                                them via the relayGroupResolver and retries as soon
- *                                as the recipient's kind:10002 arrives)
+ *                                (resolved lazily; retried when kind:10002 arrives)
  *
  * The git index (wss://index.ngit.dev) is intentionally NOT a publish target —
  * it syncs from other relays and should not receive direct publishes.
- *
- * Inbox groups are registered with empty relay arrays when the recipient's
- * kind:10002 is not yet in the EventStore. The outbox store's
- * reResolveRelayGroups() is triggered by watchAnyMailboxForOutboxReResolve()
- * in nostr.ts whenever any kind:10002 arrives, so the event is delivered to
- * the recipient's inbox relays as soon as they are discovered — even days later.
  */
 
 import type { Action } from "applesauce-actions";
@@ -34,79 +26,30 @@ import { DeletionBlueprint } from "@/blueprints/deletion";
 import type { IssueStatus } from "@/lib/nip34";
 import { outboxStore } from "@/services/outbox";
 import { eventStore } from "@/services/nostr";
-import { MailboxesModel } from "applesauce-core/models";
-import { firstValueFrom, of, timeout } from "rxjs";
 
 // ---------------------------------------------------------------------------
-// Relay resolution helpers
+// Relay group ID helpers
 // ---------------------------------------------------------------------------
 
-/** Max outbox relays to use from the user's NIP-65 list */
-const MAX_OUTBOX_RELAYS = 5;
-
 /**
- * Get the current user's NIP-65 outbox relays from the EventStore.
- * The user's own kind:10002 is loaded on login so this should always hit
- * the cache. Falls back to empty if not found within 500ms.
- */
-async function getUserOutboxRelays(pubkey: string): Promise<string[]> {
-  try {
-    const mailboxes = await firstValueFrom(
-      eventStore
-        .model(MailboxesModel, pubkey)
-        .pipe(timeout({ first: 500, with: () => of(undefined) })),
-    );
-    return mailboxes?.outboxes.slice(0, MAX_OUTBOX_RELAYS) ?? [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Build relay groups for a publish call.
+ * Build the group ID strings for a publish call.
  *
  * Always includes:
- *   - "outbox:<signerPubkey>" → user's NIP-65 write relays (resolved now)
- *   - "30617:<pubkey>:<d>"    → repo's declared relays (one entry per coord)
+ *   - "outbox:<signerPubkey>" → user's NIP-65 write relays
+ *   - "30617:<pubkey>:<d>"    → repo's declared relays (one per coord)
  *
  * Optionally includes notification inbox groups:
- *   - "inbox:<pubkey>" → recipient's NIP-65 read relays
- *     Registered with whatever URLs are currently known (may be empty).
- *     The outbox store resolves them via relayGroupResolver and retries
- *     as soon as the recipient's kind:10002 arrives in the EventStore.
+ *   - "inbox:<pubkey>" → recipient's NIP-65 read relays (resolved lazily)
  */
-async function buildRelayGroups(
+function buildGroupIds(
   signerPubkey: string,
-  repoRelays: string[],
   repoCoords?: string[],
   notifyPubkeys?: string[],
-): Promise<Record<string, string[]>> {
-  const userOutboxes = await getUserOutboxRelays(signerPubkey);
-
-  const groups: Record<string, string[]> = {};
-
-  if (userOutboxes.length > 0) {
-    groups[`outbox:${signerPubkey}`] = userOutboxes;
-  }
-
-  if (repoRelays.length > 0) {
-    if (repoCoords && repoCoords.length > 0) {
-      for (const coord of repoCoords) {
-        groups[coord] = repoRelays;
-      }
-    } else {
-      groups["repo relays"] = repoRelays;
-    }
-  }
-
-  // Register inbox groups for notification recipients. Start with empty
-  // arrays — the outbox store's relayGroupResolver will fill them in as
-  // soon as the recipient's kind:10002 is discovered.
-  for (const pubkey of notifyPubkeys ?? []) {
-    groups[`inbox:${pubkey}`] = [];
-  }
-
-  return groups;
+): string[] {
+  const ids: string[] = [`outbox:${signerPubkey}`];
+  for (const coord of repoCoords ?? []) ids.push(coord);
+  for (const pubkey of notifyPubkeys ?? []) ids.push(`inbox:${pubkey}`);
+  return ids;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +66,6 @@ export function CreateIssue(
   ownerPubkey: string,
   subject: string,
   content: string,
-  repoRelays: string[],
   options?: IssueOptions,
 ): Action {
   return async ({ factory, sign, self }) => {
@@ -142,13 +84,10 @@ export function CreateIssue(
     eventStore.add(signed);
 
     const notifyPubkeys = ownerPubkey !== self ? [ownerPubkey] : [];
-    const groups = await buildRelayGroups(
-      self,
-      repoRelays,
-      [repoCoord],
-      notifyPubkeys,
+    await outboxStore.publish(
+      signed,
+      buildGroupIds(self, [repoCoord], notifyPubkeys),
     );
-    await outboxStore.publish(signed, groups);
   };
 }
 
@@ -162,7 +101,6 @@ export function ChangeIssueStatus(
   itemAuthorPubkey: string,
   repoCoords: string[],
   nextStatus: Exclude<IssueStatus, "deleted">,
-  repoRelays: string[],
 ): Action {
   return async ({ factory, sign, self }) => {
     const statusKind = STATUS_KIND_MAP[nextStatus];
@@ -186,13 +124,10 @@ export function ChangeIssueStatus(
     const notifyPubkeys = [
       ...new Set([itemAuthorPubkey, ...repoOwners].filter((pk) => pk !== self)),
     ];
-    const groups = await buildRelayGroups(
-      self,
-      repoRelays,
-      repoCoords,
-      notifyPubkeys,
+    await outboxStore.publish(
+      signed,
+      buildGroupIds(self, repoCoords, notifyPubkeys),
     );
-    await outboxStore.publish(signed, groups);
   };
 }
 
@@ -204,7 +139,6 @@ export function ChangeIssueStatus(
 export function RenameIssueSubject(
   issueId: string,
   newSubject: string,
-  repoRelays: string[],
   repoCoords?: string[],
 ): Action {
   return async ({ factory, sign, self }) => {
@@ -219,8 +153,7 @@ export function RenameIssueSubject(
     // without waiting for a relay round-trip.
     eventStore.add(signed);
 
-    const groups = await buildRelayGroups(self, repoRelays, repoCoords);
-    await outboxStore.publish(signed, groups);
+    await outboxStore.publish(signed, buildGroupIds(self, repoCoords));
   };
 }
 
@@ -232,7 +165,6 @@ export function RenameIssueSubject(
 export function AttachIssueLabels(
   issueId: string,
   labels: string[],
-  repoRelays: string[],
   repoCoords?: string[],
 ): Action {
   return async ({ factory, sign, self }) => {
@@ -243,8 +175,7 @@ export function AttachIssueLabels(
     // UI without waiting for a relay round-trip.
     eventStore.add(signed);
 
-    const groups = await buildRelayGroups(self, repoRelays, repoCoords);
-    await outboxStore.publish(signed, groups);
+    await outboxStore.publish(signed, buildGroupIds(self, repoCoords));
   };
 }
 
@@ -256,13 +187,11 @@ export function AttachIssueLabels(
  *
  * @param targetEvent - The event being reacted to
  * @param emoji       - Reaction emoji (defaults to "+")
- * @param repoRelays  - Relays declared in the repository announcement
  * @param repoCoords  - Repo coordinate strings for relay group keying
  */
 export function CreateReaction(
   targetEvent: NostrEvent,
   emoji: string,
-  repoRelays: string[],
   repoCoords?: string[],
 ): Action {
   return async ({ factory, sign, self }) => {
@@ -275,13 +204,10 @@ export function CreateReaction(
 
     const notifyPubkeys =
       targetEvent.pubkey !== self ? [targetEvent.pubkey] : [];
-    const groups = await buildRelayGroups(
-      self,
-      repoRelays,
-      repoCoords,
-      notifyPubkeys,
+    await outboxStore.publish(
+      signed,
+      buildGroupIds(self, repoCoords, notifyPubkeys),
     );
-    await outboxStore.publish(signed, groups);
   };
 }
 
@@ -292,17 +218,15 @@ export function CreateReaction(
  * Publishes to: user outbox + repo relays + root event author's inbox +
  * parent comment author's inbox (both deferred via outbox re-resolution).
  *
- * @param parent     - The event being commented on (root issue/PR or a comment)
- * @param content    - Markdown body of the comment
- * @param repoRelays - Relays declared in the repository announcement
- * @param rootEvent  - The root issue/PR/patch event — used to notify its author
- *                     when `parent` is a reply-to-comment rather than the root itself
- * @param options    - Optional CommentBlueprintOptions (alt, expiration, etc.)
+ * @param parent    - The event being commented on (root issue/PR or a comment)
+ * @param content   - Markdown body of the comment
+ * @param rootEvent - The root issue/PR/patch event — used to notify its author
+ *                    when `parent` is a reply-to-comment rather than the root itself
+ * @param options   - Optional CommentBlueprintOptions (alt, expiration, etc.)
  */
 export function CreateComment(
   parent: NostrEvent,
   content: string,
-  repoRelays: string[],
   rootEvent?: NostrEvent,
   options?: CommentOptions,
 ): Action {
@@ -335,13 +259,10 @@ export function CreateComment(
       ...new Set([rootPubkey, parent.pubkey].filter((pk) => pk !== self)),
     ];
 
-    const groups = await buildRelayGroups(
-      self,
-      repoRelays,
-      repoCoords,
-      notifyPubkeys,
+    await outboxStore.publish(
+      signed,
+      buildGroupIds(self, repoCoords, notifyPubkeys),
     );
-    await outboxStore.publish(signed, groups);
   };
 }
 
@@ -354,13 +275,11 @@ export function CreateComment(
  * Publishes to: user outbox + repo relays. No notification needed.
  *
  * @param events     - The event(s) to request deletion of (must be authored by self)
- * @param repoRelays - Relays declared in the repository announcement
  * @param repoCoords - Repo coordinate strings for relay group keying
  * @param reason     - Optional human-readable reason (written to content field)
  */
 export function DeleteEvent(
   events: NostrEvent[],
-  repoRelays: string[],
   repoCoords?: string[],
   reason?: string,
 ): Action {
@@ -380,7 +299,6 @@ export function DeleteEvent(
     // Add to local store immediately so the UI can react
     eventStore.add(signed);
 
-    const groups = await buildRelayGroups(self, repoRelays, repoCoords);
-    await outboxStore.publish(signed, groups);
+    await outboxStore.publish(signed, buildGroupIds(self, repoCoords));
   };
 }

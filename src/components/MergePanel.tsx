@@ -55,7 +55,7 @@ import { pushToGitServer, type RefUpdate } from "@/lib/git-push";
 import { pool as relayPool, eventStore } from "@/services/nostr";
 import { factory } from "@/services/actions";
 import { outboxStore } from "@/services/outbox";
-import { gitIndexRelays, extraRelays } from "@/services/settings";
+
 import { RepoStateBlueprint } from "@/blueprints/repo";
 import { StatusChangeBlueprint, STATUS_KIND_MAP } from "@/blueprints/status";
 import type { CommitPerson } from "@/lib/git-objects";
@@ -181,12 +181,6 @@ export function MergePanel({
   // Grasp relay URLs: repo relays whose hostname matches a Grasp server domain
   const graspRelayUrls = useMemo(
     () => repo.relays.filter((r) => isGraspRelay(r, repo.graspServerDomains)),
-    [repo.relays, repo.graspServerDomains],
-  );
-
-  // Non-Grasp relay URLs (for broadcasting after successful push)
-  const nonGraspRelayUrls = useMemo(
-    () => repo.relays.filter((r) => !isGraspRelay(r, repo.graspServerDomains)),
     [repo.relays, repo.graspServerDomains],
   );
 
@@ -349,38 +343,22 @@ export function MergePanel({
       const signedStatus = await account.signer.signEvent(statusTemplate);
 
       // Publish to all relay groups (user outbox + repo relays + git index + notifications)
-      const indexRelays = gitIndexRelays.getValue();
-      const relayGroups: Record<string, string[]> = {};
-
       const repoCoord = repoCoordinate(repo.selectedMaintainer, repo.dTag);
-      if (indexRelays.length > 0) {
-        relayGroups["git index"] = indexRelays;
-      }
-      if (repo.relays.length > 0) {
-        relayGroups[repoCoord] = repo.relays;
-      }
-
-      await outboxStore.publish(signedStatus, relayGroups);
+      await outboxStore.publish(signedStatus, [
+        `outbox:${account.pubkey}`,
+        repoCoord,
+        "git-index",
+      ]);
       eventStore.add(signedStatus);
 
       // ── Step 5: Broadcast state event to remaining relays ─────────────
       setMergeStep("broadcasting-state");
 
-      const broadcastGroups: Record<string, string[]> = {};
-      if (nonGraspRelayUrls.length > 0) {
-        broadcastGroups[repoCoord] = nonGraspRelayUrls;
-      }
-      if (indexRelays.length > 0) {
-        broadcastGroups["git index"] = indexRelays;
-      }
-      const userExtraRelays = extraRelays.getValue();
-      if (userExtraRelays.length > 0) {
-        broadcastGroups["extra relays"] = userExtraRelays;
-      }
-
-      if (Object.keys(broadcastGroups).length > 0) {
-        await outboxStore.publish(signedState, broadcastGroups);
-      }
+      await outboxStore.publish(signedState, [
+        repoCoord,
+        "git-index",
+        "extra-relays",
+      ]);
 
       // ── Done ──────────────────────────────────────────────────────────
       setMergeStep("done");
@@ -411,7 +389,6 @@ export function MergePanel({
     patchChain,
     repo,
     graspRelayUrls,
-    nonGraspRelayUrls,
     toast,
   ]);
 

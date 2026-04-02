@@ -32,15 +32,12 @@
  * acquireNotificationStore in notificationStore.ts.
  */
 
-import { BehaviorSubject, firstValueFrom, of } from "rxjs";
-import { timeout } from "rxjs/operators";
+import { BehaviorSubject } from "rxjs";
 import { generateSecretKey } from "nostr-tools";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { PrivateKeySigner } from "applesauce-signers/signers";
 import { EventFactory } from "applesauce-core/event-factory";
-import { MailboxesModel } from "applesauce-core/models";
 import { eventStore } from "@/services/nostr";
-import { extraRelays } from "@/services/settings";
 import {
   parseReadState,
   mergeReadStates,
@@ -227,8 +224,9 @@ export async function getOrCreateNotificationSigner(
     // Add to local store immediately
     eventStore.add(signed);
 
-    const relayGroups = await buildNsecEnvelopeRelayGroups(pubkey);
-    await outboxStore.publish(signed, relayGroups, { hidden: true });
+    await outboxStore.publish(signed, nsecEnvelopeGroupIds(pubkey), {
+      hidden: true,
+    });
 
     // Cache against the published event's metadata
     saveNsecCache(pubkey, {
@@ -255,73 +253,24 @@ export function evictNotificationSigner(pubkey: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Relay resolution
+// Relay group IDs
 // ---------------------------------------------------------------------------
 
-/** Max outbox relays to use from the user's NIP-65 list */
-const MAX_OUTBOX_RELAYS = 5;
-
 /**
- * Get the user's NIP-65 outbox relays from the EventStore.
- * Returns an empty array if not loaded within 500ms.
+ * Group IDs for the nsec envelope (authored by the user's pubkey).
+ * Only publishes to the user's outbox relays — index relays reject kind 30078.
  */
-async function getUserOutboxRelays(pubkey: string): Promise<string[]> {
-  try {
-    const mailboxes = await firstValueFrom(
-      eventStore
-        .model(MailboxesModel, pubkey)
-        .pipe(timeout({ first: 500, with: () => of(undefined) })),
-    );
-    return mailboxes?.outboxes.slice(0, MAX_OUTBOX_RELAYS) ?? [];
-  } catch {
-    return [];
-  }
+function nsecEnvelopeGroupIds(pubkey: string): string[] {
+  return [`outbox:${pubkey}`];
 }
 
 /**
- * Relay groups for the nsec envelope (authored by the user's pubkey).
- *
- * Only publishes to the user's outbox relays — user index relays (purplepag.es
- * etc.) will reject kind 30078 app data events.
+ * Group IDs for the notification state event (authored by the dedicated
+ * notification keypair). Publishes to the user's outbox relays, falling back
+ * to "extra-relays" if none are configured.
  */
-async function buildNsecEnvelopeRelayGroups(
-  pubkey: string,
-): Promise<Record<string, string[]>> {
-  const groups: Record<string, string[]> = {};
-
-  const outboxes = await getUserOutboxRelays(pubkey);
-  if (outboxes.length > 0) {
-    groups[pubkey] = outboxes;
-  }
-
-  return groups;
-}
-
-/**
- * Relay groups for the notification state event (authored by the dedicated
- * notification keypair, not the user).
- *
- * Only publishes to the user's outbox relays — lookup relays / NIP-65
- * indexers won't store events from an unknown pubkey. Falls back to
- * extraRelays if the user has no outbox relays configured.
- */
-async function buildStateEventRelayGroups(
-  pubkey: string,
-): Promise<Record<string, string[]>> {
-  const groups: Record<string, string[]> = {};
-
-  const outboxes = await getUserOutboxRelays(pubkey);
-  if (outboxes.length > 0) {
-    groups[pubkey] = outboxes;
-  } else {
-    // Fallback — user has no NIP-65 outbox relays yet
-    const fallback = extraRelays.getValue();
-    if (fallback.length > 0) {
-      groups["Fallback Relays"] = fallback;
-    }
-  }
-
-  return groups;
+function stateEventGroupIds(pubkey: string): string[] {
+  return [`outbox:${pubkey}`, "extra-relays"];
 }
 
 // ---------------------------------------------------------------------------
@@ -355,8 +304,9 @@ export async function publishReadState(
     // Add to local store immediately for optimistic updates
     eventStore.add(signed);
 
-    const relayGroups = await buildStateEventRelayGroups(pubkey);
-    await outboxStore.publish(signed, relayGroups, { hidden: true });
+    await outboxStore.publish(signed, stateEventGroupIds(pubkey), {
+      hidden: true,
+    });
   } catch (err) {
     console.warn("[notifications] Failed to publish read state:", err);
   }

@@ -27,8 +27,6 @@ import type { ProfileContent } from "applesauce-core/helpers";
 import { kinds } from "nostr-tools";
 import { outboxStore } from "@/services/outbox";
 import { eventStore } from "@/services/nostr";
-import { lookupRelays } from "@/services/settings";
-
 /** Relays every new account is bootstrapped onto (inbox + outbox). */
 export const ACCOUNT_BOOTSTRAP_RELAYS = [
   "wss://relay.ditto.pub",
@@ -37,23 +35,11 @@ export const ACCOUNT_BOOTSTRAP_RELAYS = [
 ];
 
 /**
- * Build the relay groups used for publishing bootstrap events.
- *
- * Returns two named groups so the outbox panel can show them separately
- * and the outbox store can re-resolve them independently:
- *   "bootstrap-relays" → the three hardcoded bootstrap relays
- *   "index-relays"     → the current lookup/user-index relays (if any)
+ * Group IDs used for publishing bootstrap events.
+ *   "bootstrap-relays" → the three hardcoded bootstrap relays (resolved by nostr.ts)
+ *   "index-relays"     → the current lookup/user-index relays (resolved by nostr.ts)
  */
-function buildBootstrapRelayGroups(): Record<string, string[]> {
-  const indexRelays = lookupRelays.getValue();
-  const groups: Record<string, string[]> = {
-    "bootstrap-relays": ACCOUNT_BOOTSTRAP_RELAYS,
-  };
-  if (indexRelays.length > 0) {
-    groups["index-relays"] = indexRelays;
-  }
-  return groups;
-}
+const BOOTSTRAP_GROUP_IDS = ["bootstrap-relays", "index-relays"];
 
 /**
  * Publish the initial kind:0 profile and kind:10002 relay list for a new
@@ -69,14 +55,12 @@ function buildBootstrapRelayGroups(): Record<string, string[]> {
  */
 export function CreateAccount(displayName: string): Action {
   return async ({ factory, sign }) => {
-    const relayGroups = buildBootstrapRelayGroups();
-
     // --- kind:0 profile ---
     const profileContent: ProfileContent = { name: displayName };
     const profileDraft = await factory.create(ProfileBlueprint, profileContent);
     const profileSigned = await sign(profileDraft);
     eventStore.add(profileSigned);
-    await outboxStore.publish(profileSigned, relayGroups);
+    await outboxStore.publish(profileSigned, BOOTSTRAP_GROUP_IDS);
 
     // --- kind:10002 relay list ---
     // Plain "r" tag (no read/write marker) = both read and write per NIP-65.
@@ -90,6 +74,6 @@ export function CreateAccount(displayName: string): Action {
     );
     const mailboxesSigned = await sign(mailboxesDraft);
     eventStore.add(mailboxesSigned);
-    await outboxStore.publish(mailboxesSigned, relayGroups);
+    await outboxStore.publish(mailboxesSigned, BOOTSTRAP_GROUP_IDS);
   };
 }

@@ -75,8 +75,6 @@ interface CreateIssueFormProps {
   repoCoord: string;
   /** Hex pubkey of the repository owner */
   ownerPubkey: string;
-  /** Relay URLs declared in the repository announcement */
-  repoRelays?: string[];
   /** Called after the issue is successfully published */
   onSuccess?: () => void;
   /** Called when the user cancels */
@@ -86,7 +84,6 @@ interface CreateIssueFormProps {
 export function CreateIssueForm({
   repoCoord,
   ownerPubkey,
-  repoRelays = [],
   onSuccess,
   onCancel,
 }: CreateIssueFormProps) {
@@ -180,7 +177,6 @@ export function CreateIssueForm({
           ownerPubkey,
           trimmedSubject,
           trimmedContent,
-          repoRelays,
           {
             labels: allLabels,
             contentTags: extractContentTags(trimmedContent),
@@ -205,7 +201,7 @@ export function CreateIssueForm({
         setIsPending(false);
       }
     },
-    [repoCoord, ownerPubkey, repoRelays, toast, onSuccess, isLoggedIn],
+    [repoCoord, ownerPubkey, toast, onSuccess, isLoggedIn],
   );
 
   const handleSubmit = useCallback(

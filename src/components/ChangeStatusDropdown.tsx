@@ -29,8 +29,6 @@ interface ChangeStatusDropdownProps {
   currentStatus: IssueStatus;
   /** Available status options to show */
   options: StatusOption[];
-  /** Relay URLs declared in the repository announcement */
-  repoRelays?: string[];
 }
 
 /**
@@ -43,7 +41,6 @@ export function ChangeStatusDropdown({
   repoCoords,
   currentStatus,
   options,
-  repoRelays = [],
 }: ChangeStatusDropdownProps) {
   const { toast } = useToast();
   const [isPending, setIsPending] = useState(false);
@@ -58,7 +55,6 @@ export function ChangeStatusDropdown({
           itemAuthorPubkey,
           repoCoords,
           next,
-          repoRelays,
         );
 
         toast({
@@ -77,7 +73,7 @@ export function ChangeStatusDropdown({
         setIsPending(false);
       }
     },
-    [itemId, itemAuthorPubkey, repoCoords, repoRelays, toast],
+    [itemId, itemAuthorPubkey, repoCoords, toast],
   );
 
   // Only show options that differ from the current status.

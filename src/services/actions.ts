@@ -2,7 +2,6 @@ import { ActionRunner, Actions } from "applesauce-actions";
 import { EventFactory } from "applesauce-core";
 import type { NostrEvent } from "nostr-tools";
 import { eventStore, publish } from "./nostr";
-import { lookupRelays } from "./settings";
 import { accounts } from "./accounts";
 
 /**
@@ -43,13 +42,11 @@ export const factory = new EventFactory({
  *
  * For all other events the call is forwarded to publish() unchanged.
  */
-function runnerPublish(event: NostrEvent, relays?: string[]): Promise<void> {
+function runnerPublish(event: NostrEvent): Promise<void> {
   if (INDEX_RELAY_KINDS.has(event.kind)) {
-    return publish(event, relays, {
-      "User Index Relays": lookupRelays.getValue(),
-    });
+    return publish(event, ["index-relays"]);
   }
-  return publish(event, relays);
+  return publish(event);
 }
 
 /**

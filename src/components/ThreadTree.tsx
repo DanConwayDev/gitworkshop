@@ -197,7 +197,6 @@ function ThreadComment({ event }: { event: NostrEvent }) {
       await runner.run(
         DeleteEvent,
         [event],
-        ctx.repoRelays,
         ctx.repoCoords,
         deleteReason.trim() || undefined,
       );
@@ -266,13 +265,7 @@ function ThreadComment({ event }: { event: NostrEvent }) {
           UserLink uses w-8 avatar + gap-1.5 = 38px before the name text. */}
       <div className="sm:ml-[38px]">
         <CommentContent content={event.content} />
-        {ctx && (
-          <ReactionsBar
-            event={event}
-            repoRelays={ctx.repoRelays}
-            repoCoords={ctx.repoCoords}
-          />
-        )}
+        {ctx && <ReactionsBar event={event} repoCoords={ctx.repoCoords} />}
       </div>
 
       {/* Inline reply composer */}
@@ -281,7 +274,6 @@ function ThreadComment({ event }: { event: NostrEvent }) {
           <ReplyBox
             rootEvent={ctx.rootEvent}
             parentEvent={event}
-            repoRelays={ctx.repoRelays}
             onSubmitted={() => setReplying(false)}
           />
         </div>

@@ -420,7 +420,6 @@ function RepoLayoutResolved({
                     (a) => a.pubkey === repo.selectedMaintainer,
                   )}
                   allAnnouncements={repo.announcements}
-                  repoRelays={repo.relays}
                   repoCoords={repo.allCoordinates}
                 />
               </div>

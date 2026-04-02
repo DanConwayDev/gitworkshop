@@ -1,5 +1,5 @@
 import { EventStore, mapEventsToStore } from "applesauce-core";
-import { persistEventsToCache, relaySet } from "applesauce-core/helpers";
+import { persistEventsToCache } from "applesauce-core/helpers";
 import type { Filter } from "applesauce-core/helpers";
 import {
   createAddressLoader,
@@ -24,7 +24,7 @@ import { filter, map, timeout } from "rxjs/operators";
 import { MailboxesModel } from "applesauce-core/models";
 import { cacheRequest, saveEvents } from "./cache";
 import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
-import { extraRelays, lookupRelays } from "./settings";
+import { extraRelays, lookupRelays, gitIndexRelays } from "./settings";
 import { ISSUE_KIND, PR_ROOT_KINDS, LEGACY_REPLY_KINDS } from "@/lib/nip34";
 import { Repository, isValidRepository } from "@/casts/Repository";
 import {
@@ -111,10 +111,17 @@ async function resolveMailboxes(pubkey: string) {
  * Relay group resolver for the outbox store.
  *
  * Resolves a group ID to the current set of relay URLs:
- *   - "outbox:<pubkey>" → that pubkey's NIP-65 write (outbox) relays
- *   - "inbox:<pubkey>"  → that pubkey's NIP-65 read (inbox) relays
- *   - "30617:<pubkey>:<d>" → repo's declared relays from the EventStore
- *   - Other strings → [] (no dynamic resolution)
+ *
+ *   Dynamic (pubkey-based):
+ *   - "outbox:<pubkey>"      → that pubkey's NIP-65 write (outbox) relays
+ *   - "inbox:<pubkey>"       → that pubkey's NIP-65 read (inbox) relays
+ *   - "30617:<pubkey>:<d>"   → repo's declared relays from the EventStore
+ *
+ *   Static (settings-based):
+ *   - "extra-relays"         → user-configured extra relays (extraRelays setting)
+ *   - "index-relays"         → lookup/user-index relays (lookupRelays setting)
+ *   - "git-index"            → git index relay (wss://index.ngit.dev)
+ *   - "bootstrap-relays"     → hardcoded new-account bootstrap relays
  *
  * When the kind:10002 is not yet in the EventStore, addressLoader is used to
  * fetch it. The outbox store calls this again via reResolveRelayGroups()
@@ -160,6 +167,15 @@ const relayGroupResolver: RelayGroupResolver = async (groupId) => {
     const repoEvent = repoEvents[0];
     if (!repoEvent || !isValidRepository(repoEvent)) return [];
     return new Repository(repoEvent, eventStore).relays;
+  }
+
+  // Static settings-based groups
+  if (groupId === "extra-relays") return extraRelays.getValue();
+  if (groupId === "index-relays") return lookupRelays.getValue();
+  if (groupId === "git-index") return gitIndexRelays.getValue();
+  if (groupId === "bootstrap-relays") {
+    const { ACCOUNT_BOOTSTRAP_RELAYS } = await import("@/actions/account");
+    return ACCOUNT_BOOTSTRAP_RELAYS;
   }
 
   return [];
@@ -232,28 +248,20 @@ watchAnyMailboxForOutboxReResolve();
  * Action functions in src/actions/nip34.ts which resolve the correct relay
  * groups (user outbox + repo relays + notification inboxes) automatically.
  *
- * @param event       - The signed Nostr event to publish
- * @param relays      - Optional relay URLs; falls back to extraRelays if omitted.
- *                      When provided by the ActionRunner these are the user's
- *                      NIP-65 outbox relays and are stored under the "Outbox"
- *                      group label in the outbox store.
- * @param extraGroups - Additional named relay groups to publish to alongside
- *                      the primary relay set (e.g. "User Index Relays").
+ * @param event          - The signed Nostr event to publish
+ * @param extraGroupIds  - Additional group IDs to publish to alongside the
+ *                         user's outbox (e.g. "index-relays").
  */
 export async function publish(
   event: NostrEvent,
-  relays?: string[],
-  extraGroups?: Record<string, string[]>,
+  extraGroupIds?: string[],
 ): Promise<void> {
   // Add to local store immediately for optimistic updates
   eventStore.add(event);
 
-  const outboxRelays = relaySet(extraRelays.getValue(), relays);
-  const relayGroups: Record<string, string[]> = {
-    Outbox: [...outboxRelays],
-    ...extraGroups,
-  };
-  await outboxStore.publish(event, relayGroups);
+  const groupIds = [`outbox:${event.pubkey}`, "extra-relays"];
+  if (extraGroupIds) groupIds.push(...extraGroupIds);
+  await outboxStore.publish(event, groupIds);
 }
 
 /**

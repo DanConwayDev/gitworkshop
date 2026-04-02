@@ -351,7 +351,6 @@ export default function PRPage() {
                     issueId={pr.rootEvent.id}
                     currentSubject={pr.currentSubject || pr.originalSubject}
                     canEdit={canEdit}
-                    repoRelays={repo?.relays}
                     repoCoords={pr.repoCoords}
                   />
                 </div>
@@ -584,7 +583,6 @@ export default function PRPage() {
                               activeAccount && pr
                                 ? {
                                     rootEvent: pr.rootEvent,
-                                    repoRelays: repo?.relays ?? [],
                                     repoCoords: pr.repoCoords,
                                   }
                                 : undefined
@@ -634,7 +632,6 @@ export default function PRPage() {
                       ? pr.revisions[pr.revisions.length - 1].rootPatchEvent!
                       : pr.rootEvent
                   }
-                  repoRelays={repo?.relays ?? []}
                 />
               )}
             </TabsContent>
@@ -746,7 +743,6 @@ export default function PRPage() {
                       { value: "closed", label: "Closed" },
                       { value: "draft", label: "Draft" },
                     ]}
-                    repoRelays={repo?.relays}
                   />
                 )}
 

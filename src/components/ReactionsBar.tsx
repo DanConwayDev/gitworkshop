@@ -60,14 +60,12 @@ const PRESET_EMOJIS = ["+", "🚀", "🤙", "🙏", "❤️", "🫂", "👀", "�
 
 interface ReactionsBarProps {
   event: NostrEvent;
-  repoRelays: string[];
   repoCoords?: string[];
   className?: string;
 }
 
 export function ReactionsBar({
   event,
-  repoRelays,
   repoCoords,
   className,
 }: ReactionsBarProps) {
@@ -118,7 +116,7 @@ export function ReactionsBar({
       if (sending || !activeAccount) return;
       setSending(true);
       try {
-        await runner.run(CreateReaction, event, emoji, repoRelays, repoCoords);
+        await runner.run(CreateReaction, event, emoji, repoCoords);
       } catch (err) {
         console.error("[ReactionsBar] failed to send reaction:", err);
       } finally {
@@ -126,7 +124,7 @@ export function ReactionsBar({
         setPickerOpen(false);
       }
     },
-    [sending, activeAccount, event, repoRelays, repoCoords],
+    [sending, activeAccount, event, repoCoords],
   );
 
   const confirmDeleteReaction = useCallback(async () => {
@@ -136,7 +134,6 @@ export function ReactionsBar({
       await runner.run(
         DeleteEvent,
         [deleteTarget],
-        repoRelays,
         repoCoords,
         deleteReason.trim() || undefined,
       );
@@ -147,7 +144,7 @@ export function ReactionsBar({
       setDeleteTarget(null);
       setDeleteReason("");
     }
-  }, [deleteTarget, deleting, repoRelays, repoCoords, deleteReason]);
+  }, [deleteTarget, deleting, repoCoords, deleteReason]);
 
   // Find the current user's reaction event for a given emoji (for deletion)
   const myReactionEvent = useCallback(

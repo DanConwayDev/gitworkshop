@@ -30,7 +30,6 @@ import {
   ChevronRight,
   AlertTriangle,
   RotateCw,
-  GitFork,
   ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -116,17 +115,16 @@ function RelativeTime({ unixSeconds }: { unixSeconds: number }) {
 }
 
 /**
- * Extract the repo name from the relay groups already resolved for this item.
+ * Extract the repo name from the relay group IDs declared for this item.
  *
- * The relay groups map contains entries like "30617:<pubkey>:<d>" which we
- * already look up in GroupLabel. Reuse that work here instead of re-parsing
- * the event's `a` tag and calling getReplaceable again.
+ * Group IDs like "30617:<pubkey>:<d>" identify the repo — look up the event
+ * in the store to get the human-readable name.
  */
 function repoNameFromGroups(
-  relayGroups: Record<string, string[]>,
+  groupIds: string[],
   store: ReturnType<typeof useEventStore>,
 ): string | undefined {
-  for (const groupId of Object.keys(relayGroups)) {
+  for (const groupId of groupIds) {
     if (!groupId.startsWith("30617:")) continue;
     const parts = groupId.split(":");
     const pubkey = parts[1] ?? "";
@@ -369,27 +367,17 @@ function GroupLabel({ groupId }: { groupId: string }) {
     );
   }
 
-  // Fallback for generic "relays" group (publish() with no coord)
-  if (groupId === "relays") {
+  // Static settings-based groups
+  const STATIC_LABELS: Record<string, string> = {
+    "extra-relays": "Extra Relays",
+    "index-relays": "Index Relays",
+    "git-index": "Git Index",
+    "bootstrap-relays": "Bootstrap Relays",
+  };
+  if (groupId in STATIC_LABELS) {
     return (
-      <span className="flex items-center gap-1.5">
-        <span className="text-muted-foreground/60 text-xs">outbox:</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
-          <span>relays</span>
-        </span>
-      </span>
-    );
-  }
-
-  // Fallback for "repo relays" well-known string (no coord available)
-  if (groupId === "repo relays") {
-    return (
-      <span className="flex items-center gap-1.5">
-        <span className="text-muted-foreground/60 text-xs">repo:</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
-          <GitFork className="h-3 w-3 shrink-0" />
-          <span>relays</span>
-        </span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+        <span>{STATIC_LABELS[groupId]}</span>
       </span>
     );
   }

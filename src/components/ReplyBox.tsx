@@ -37,8 +37,6 @@ export interface ReplyBoxProps {
    * propagate the root E/K/P tags from the parent comment.
    */
   parentEvent?: NostrEvent;
-  /** Relays declared in the repository announcement */
-  repoRelays: string[];
   /** Called after a comment is successfully posted (e.g. to close an inline composer) */
   onSubmitted?: () => void;
 }
@@ -46,7 +44,6 @@ export interface ReplyBoxProps {
 export function ReplyBox({
   rootEvent,
   parentEvent,
-  repoRelays,
   onSubmitted,
 }: ReplyBoxProps) {
   const [body, setBody] = useState("");
@@ -81,13 +78,7 @@ export function ReplyBox({
 
       setIsPending(true);
       try {
-        await activeRunner.run(
-          CreateComment,
-          parent,
-          trimmed,
-          repoRelays,
-          rootEvent,
-        );
+        await activeRunner.run(CreateComment, parent, trimmed, rootEvent);
 
         toast({
           title: "Comment posted",
@@ -109,7 +100,7 @@ export function ReplyBox({
         setIsPending(false);
       }
     },
-    [parent, rootEvent, repoRelays, onSubmitted, toast, isLoggedIn],
+    [parent, rootEvent, onSubmitted, toast, isLoggedIn],
   );
 
   const handleSubmit = useCallback(

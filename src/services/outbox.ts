@@ -16,11 +16,13 @@
  * pool.event() to complete so relays that came back online get one last
  * chance), then the item is removed from IndexedDB.
  *
- * Relay groups are tracked by semantic ID (pubkey hex for author outbox/inbox,
- * repo coord for repo relays). A relay URL can belong to multiple groups (e.g.
- * a relay that is both the author's outbox and a repo relay). When a user's
- * NIP-65 relay list changes, the store re-resolves relay groups for pending
- * items and sends to any newly-discovered relays.
+ * Relay groups are tracked by semantic ID strings. Callers declare *intent*
+ * by passing group ID strings (e.g. "outbox:<pubkey>", "30617:<pubkey>:<d>",
+ * "inbox:<pubkey>") — the outbox resolves them to relay URLs via the injected
+ * relayGroupResolver. A relay URL can belong to multiple groups (e.g. a relay
+ * that is both the author's outbox and a repo relay). When a user's NIP-65
+ * relay list changes, the store re-resolves relay groups for pending items and
+ * sends to any newly-discovered relays.
  *
  * The store exposes a BehaviorSubject<OutboxItem[]> so UI components can
  * reactively display the outbox state without polling.
@@ -51,16 +53,10 @@ function normalizeAndStripTrailingSlash(url: string): string {
 }
 
 /**
- * Normalize all relay URLs in a relay group map.
+ * Normalize an array of relay URLs, deduplicating after normalization.
  */
-function normalizeRelayGroups(
-  groups: Record<string, string[]>,
-): Record<string, string[]> {
-  const result: Record<string, string[]> = {};
-  for (const [group, urls] of Object.entries(groups)) {
-    result[group] = [...new Set(urls.map(normalizeAndStripTrailingSlash))];
-  }
-  return result;
+function normalizeRelayUrls(urls: string[]): string[] {
+  return [...new Set(urls.map(normalizeAndStripTrailingSlash))];
 }
 
 // ---------------------------------------------------------------------------
@@ -128,11 +124,11 @@ export interface OutboxItem {
   relays: OutboxRelayEntry[];
   createdAt: number;
   /**
-   * The original relay group definitions used to publish this event.
-   * Keys are group IDs (pubkey, repo coord, or well-known string).
-   * Values are the relay URLs that were resolved for that group at publish time.
+   * The group IDs declared at publish time. The outbox resolves these to relay
+   * URLs via relayGroupResolver. Stored so re-resolution can be triggered when
+   * relay lists change (e.g. a new kind:10002 arrives).
    */
-  relayGroupDefs: Record<string, string[]>;
+  relayGroupDefs: string[];
   /**
    * When true, this item is excluded from the outbox panel UI and pending
    * counts. Used for internal housekeeping events (e.g. notification state
@@ -383,23 +379,36 @@ class OutboxStore {
   /**
    * Record a new publish attempt and send to relays via pool.event().
    *
-   * @param event       - The signed event to publish
-   * @param relayGroups - Map of group ID → relay URLs
-   * @param options     - Optional settings (e.g. hidden from UI)
+   * Callers declare intent by passing group ID strings. The outbox resolves
+   * them immediately via relayGroupResolver and sends to whatever URLs are
+   * known now. Groups that resolve to no URLs (e.g. an inbox whose kind:10002
+   * hasn't arrived yet) are still stored — reResolveRelayGroups() will retry
+   * them when the relay list arrives.
+   *
+   * @param event    - The signed event to publish
+   * @param groupIds - Semantic group IDs (e.g. "outbox:<pubkey>", "30617:<p>:<d>")
+   * @param options  - Optional settings (e.g. hidden from UI)
    */
   async publish(
     event: NostrEvent,
-    relayGroups: Record<string, string[]>,
+    groupIds: string[],
     options?: OutboxPublishOptions,
   ): Promise<void> {
-    const normalized = normalizeRelayGroups(relayGroups);
+    // Deduplicate group IDs
+    const uniqueGroupIds = [...new Set(groupIds)];
 
-    // Deduplicate relay URLs across groups — a relay can serve multiple groups
+    // Resolve all groups in parallel
+    const resolvedGroups = await this.resolveGroups(
+      uniqueGroupIds,
+      event.pubkey,
+    );
+
+    // Build relay entries: deduplicate URLs across groups
     const relayToGroups = new Map<string, string[]>();
-    for (const [group, urls] of Object.entries(normalized)) {
+    for (const [groupId, urls] of resolvedGroups) {
       for (const url of urls) {
         const existing = relayToGroups.get(url) ?? [];
-        if (!existing.includes(group)) existing.push(group);
+        if (!existing.includes(groupId)) existing.push(groupId);
         relayToGroups.set(url, existing);
       }
     }
@@ -417,80 +426,15 @@ class OutboxStore {
     const item: OutboxItem = {
       id: event.id,
       event,
-      broadlySent: false,
+      broadlySent: this.computeBroadlySent(relays),
       relays,
       createdAt: Math.floor(Date.now() / 1000),
-      relayGroupDefs: normalized,
+      relayGroupDefs: uniqueGroupIds,
       ...(options?.hidden ? { hidden: true } : {}),
     };
 
     await this.upsert(item);
     this.sendToRelays(item);
-  }
-
-  /**
-   * Add relay groups to an already-published outbox item and send to any new
-   * relays that weren't in the original publish call.
-   */
-  async addRelays(
-    id: string,
-    relayGroups: Record<string, string[]>,
-  ): Promise<void> {
-    const normalized = normalizeRelayGroups(relayGroups);
-
-    const current = this.items$.getValue();
-    const item = current.find((i) => i.id === id);
-    if (!item) return;
-
-    const existingUrls = new Set(item.relays.map((r) => r.url));
-    const updatedRelays = [...item.relays];
-    const newUrls: string[] = [];
-
-    for (const [group, urls] of Object.entries(normalized)) {
-      for (const url of urls) {
-        if (existingUrls.has(url)) {
-          const idx = updatedRelays.findIndex((r) => r.url === url);
-          if (idx >= 0 && !updatedRelays[idx].groups.includes(group)) {
-            updatedRelays[idx] = {
-              ...updatedRelays[idx],
-              groups: [...updatedRelays[idx].groups, group],
-            };
-          }
-        } else {
-          updatedRelays.push({
-            url,
-            groups: [group],
-            status: "pending",
-            message: "",
-            attempts: [],
-          });
-          existingUrls.add(url);
-          newUrls.push(url);
-        }
-      }
-    }
-
-    // Merge new group defs
-    const updatedGroupDefs: Record<string, string[]> = {
-      ...item.relayGroupDefs,
-    };
-    for (const [group, urls] of Object.entries(normalized)) {
-      const existing = updatedGroupDefs[group] ?? [];
-      updatedGroupDefs[group] = [...new Set([...existing, ...urls])];
-    }
-
-    const updatedItem: OutboxItem = {
-      ...item,
-      relays: updatedRelays,
-      relayGroupDefs: updatedGroupDefs,
-      broadlySent: this.computeBroadlySent(updatedRelays),
-    };
-
-    await this.upsert(updatedItem);
-
-    if (newUrls.length > 0) {
-      this.sendToSpecificRelays(updatedItem, newUrls);
-    }
   }
 
   /**
@@ -509,7 +453,7 @@ class OutboxStore {
 
     const items = changedPubkey
       ? pendingItems.filter((i) =>
-          Object.keys(i.relayGroupDefs).some(
+          i.relayGroupDefs.some(
             (groupId) =>
               groupId === `outbox:${changedPubkey}` ||
               groupId === `inbox:${changedPubkey}` ||
@@ -520,44 +464,114 @@ class OutboxStore {
 
     if (items.length === 0) return;
 
-    // Collect all unique (groupId, eventPubkey) pairs
-    const uniquePairs = new Map<string, string>();
-    for (const item of items) {
-      for (const groupId of Object.keys(item.relayGroupDefs)) {
-        if (!uniquePairs.has(groupId)) {
-          uniquePairs.set(groupId, item.event.pubkey);
-        }
-      }
-    }
+    // Collect all unique group IDs across affected items
+    const uniqueGroupIds = [...new Set(items.flatMap((i) => i.relayGroupDefs))];
 
-    // Resolve all unique groups in parallel
-    const resolved = new Map<string, string[]>();
-    await Promise.all(
-      Array.from(uniquePairs.entries()).map(async ([groupId, eventPubkey]) => {
-        try {
-          const urls = await this.relayGroupResolver!(groupId, eventPubkey);
-          if (urls.length > 0) resolved.set(groupId, urls);
-        } catch {
-          // ignore resolution errors
-        }
-      }),
-    );
+    // Resolve all unique groups in parallel (use first item's pubkey as hint)
+    const pubkeyHint = items[0].event.pubkey;
+    const resolved = await this.resolveGroups(uniqueGroupIds, pubkeyHint);
 
     if (resolved.size === 0) return;
 
-    // Distribute resolved URLs to each item
+    // Distribute newly-resolved URLs to each item
     await Promise.all(
       items.map(async (item) => {
-        const newGroups: Record<string, string[]> = {};
-        for (const groupId of Object.keys(item.relayGroupDefs)) {
-          const urls = resolved.get(groupId);
-          if (urls) newGroups[groupId] = urls;
+        const newRelayToGroups = new Map<string, string[]>();
+        for (const groupId of item.relayGroupDefs) {
+          const urls = resolved.get(groupId) ?? [];
+          for (const url of urls) {
+            const existing = newRelayToGroups.get(url) ?? [];
+            if (!existing.includes(groupId)) existing.push(groupId);
+            newRelayToGroups.set(url, existing);
+          }
         }
-        if (Object.keys(newGroups).length > 0) {
-          await this.addRelays(item.id, newGroups);
+        if (newRelayToGroups.size > 0) {
+          await this.mergeResolvedRelays(item.id, newRelayToGroups);
         }
       }),
     );
+  }
+
+  // -------------------------------------------------------------------------
+  // Internal: relay resolution
+  // -------------------------------------------------------------------------
+
+  /**
+   * Resolve a list of group IDs to relay URLs using the injected resolver.
+   * Returns a Map of groupId → normalized URL array (empty array if unresolved).
+   */
+  private async resolveGroups(
+    groupIds: string[],
+    eventPubkey: string,
+  ): Promise<Map<string, string[]>> {
+    const result = new Map<string, string[]>();
+    if (!this.relayGroupResolver) return result;
+
+    await Promise.all(
+      groupIds.map(async (groupId) => {
+        try {
+          const urls = await this.relayGroupResolver!(groupId, eventPubkey);
+          result.set(groupId, normalizeRelayUrls(urls));
+        } catch {
+          result.set(groupId, []);
+        }
+      }),
+    );
+
+    return result;
+  }
+
+  /**
+   * Merge a resolved relay→groups map into an existing outbox item, sending
+   * to any URLs not already tracked.
+   */
+  private async mergeResolvedRelays(
+    id: string,
+    relayToGroups: Map<string, string[]>,
+  ): Promise<void> {
+    const current = this.items$.getValue();
+    const item = current.find((i) => i.id === id);
+    if (!item) return;
+
+    const existingUrls = new Set(item.relays.map((r) => r.url));
+    const updatedRelays = [...item.relays];
+    const newUrls: string[] = [];
+
+    for (const [url, groups] of relayToGroups) {
+      if (existingUrls.has(url)) {
+        // URL already tracked — add any new group memberships
+        const idx = updatedRelays.findIndex((r) => r.url === url);
+        if (idx >= 0) {
+          const merged = [...updatedRelays[idx].groups];
+          for (const g of groups) {
+            if (!merged.includes(g)) merged.push(g);
+          }
+          updatedRelays[idx] = { ...updatedRelays[idx], groups: merged };
+        }
+      } else {
+        updatedRelays.push({
+          url,
+          groups,
+          status: "pending",
+          message: "",
+          attempts: [],
+        });
+        existingUrls.add(url);
+        newUrls.push(url);
+      }
+    }
+
+    const updatedItem: OutboxItem = {
+      ...item,
+      relays: updatedRelays,
+      broadlySent: this.computeBroadlySent(updatedRelays),
+    };
+
+    await this.upsert(updatedItem);
+
+    if (newUrls.length > 0) {
+      this.sendToSpecificRelays(updatedItem, newUrls);
+    }
   }
 
   /**

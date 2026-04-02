@@ -47,8 +47,6 @@ interface StarButtonProps {
    * All announcement events for this repo (used for the deduplicated count).
    */
   allAnnouncements: NostrEvent[] | undefined;
-  /** Repo relay URLs for publishing. */
-  repoRelays: string[];
   /** Repo coordinate strings for relay group keying. */
   repoCoords: string[];
   className?: string;
@@ -57,7 +55,6 @@ interface StarButtonProps {
 export function StarButton({
   targetAnnouncement,
   allAnnouncements,
-  repoRelays,
   repoCoords,
   className,
 }: StarButtonProps) {
@@ -111,16 +108,10 @@ export function StarButton({
     try {
       if (isStarred && myStarEvent) {
         // Unstar: send a NIP-09 deletion request for the existing star event.
-        await runner.run(DeleteEvent, [myStarEvent], repoRelays, repoCoords);
+        await runner.run(DeleteEvent, [myStarEvent], repoCoords);
       } else if (!isStarred) {
         // Star: publish a "+" reaction targeting the selected announcement.
-        await runner.run(
-          CreateReaction,
-          targetAnnouncement,
-          "+",
-          repoRelays,
-          repoCoords,
-        );
+        await runner.run(CreateReaction, targetAnnouncement, "+", repoCoords);
       }
     } catch (err) {
       console.error("[StarButton] failed:", err);
@@ -134,7 +125,6 @@ export function StarButton({
     pending,
     isStarred,
     myStarEvent,
-    repoRelays,
     repoCoords,
   ]);
 
