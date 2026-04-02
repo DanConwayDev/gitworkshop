@@ -8,9 +8,17 @@ import { isValidElement, Children, type ReactNode } from "react";
  * The default only allows https/http/mailto/irc/xmpp — nostr: URIs would be
  * stripped before our `a` component ever sees them. This extends the allowlist
  * to include nostr: while keeping all other safety checks intact.
+ *
+ * data: URIs are allowed only for image/* MIME types so that embedded images
+ * (e.g. `![](data:image/png;base64,...)`) render correctly while arbitrary
+ * data: URIs (e.g. data:text/html) are blocked to prevent XSS.
  */
 const safeMarkdownProtocol = /^(https?|ircs?|mailto|xmpp|nostr)$/i;
+const safeDataImageUri = /^data:image\//i;
 export function markdownUrlTransform(url: string): string {
+  if (safeDataImageUri.test(url)) {
+    return url;
+  }
   const colon = url.indexOf(":");
   if (colon === -1 || safeMarkdownProtocol.test(url.slice(0, colon))) {
     return url;
