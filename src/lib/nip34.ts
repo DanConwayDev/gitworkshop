@@ -12,6 +12,7 @@ import {
   getOrComputeCachedValue,
 } from "applesauce-core/helpers";
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
+import { getThreadTree } from "@/lib/threadTree";
 
 // ---------------------------------------------------------------------------
 // Patch-chain identification tags — excluded from user-visible labels
@@ -1236,6 +1237,15 @@ export type IssueTimelineNode =
       type: "thread";
       node: import("@/lib/threadTree").ThreadTreeNode;
       ts: number;
+    }
+  | {
+      type: "status";
+      event: NostrEvent;
+      /** The status this event sets */
+      status: IssueStatus;
+      /** True when the author is authorised (maintainer or item author) */
+      authorised: boolean;
+      ts: number;
     };
 
 /**
@@ -1325,6 +1335,219 @@ export function buildRenameItems(
 }
 
 // ---------------------------------------------------------------------------
+// buildTimelineNodes — unified timeline builder for issues and PRs
+// ---------------------------------------------------------------------------
+
+interface BuildTimelineBaseArgs {
+  rootEvent: NostrEvent;
+  /** All comments (NIP-22 + legacy replies), already merged and deduplicated. */
+  comments: NostrEvent[];
+  /**
+   * Raw essential events (status, label/rename, deletion) — unfiltered.
+   * buildTimelineNodes applies its own auth logic for display purposes,
+   * independently of resolveItemEssentials which filters for effective status.
+   */
+  essentials: NostrEvent[];
+  /** Authorised users set (maintainers + item author). */
+  authorisedUsers: Set<string>;
+}
+
+export interface BuildIssueTimelineArgs extends BuildTimelineBaseArgs {
+  itemType: "issue";
+}
+
+export interface BuildPRTimelineArgs extends BuildTimelineBaseArgs {
+  itemType: "pr" | "patch";
+  /** Ordered revisions (oldest first). */
+  revisions: PRRevision[];
+  /**
+   * IDs of revision root patch events (excluding the original root).
+   * Used to route comments to the correct revision sub-thread.
+   */
+  revisionRootIds: string[];
+}
+
+export type BuildTimelineArgs = BuildIssueTimelineArgs | BuildPRTimelineArgs;
+
+/**
+ * Build the interleaved conversation timeline for an issue or PR/patch.
+ *
+ * Handles all node types:
+ * - `"status"`:   status change events (1630–1633), shown for all authors
+ *                 with an `authorised` flag for display purposes
+ * - `"rename"`:   subject-rename label events (kind:1985 with #subject ns)
+ * - `"revision"`: patch-set pushes or PR Updates (PR/patch only)
+ * - `"thread"`:   NIP-22 comments and legacy replies, threaded
+ *
+ * All nodes are sorted chronologically. At equal timestamps, non-thread
+ * nodes sort before thread nodes (activity markers before replies).
+ * For PR/patch, revision nodes sort before other nodes at equal timestamps.
+ */
+export function buildTimelineNodes(
+  args: BuildIssueTimelineArgs,
+): IssueTimelineNode[];
+export function buildTimelineNodes(args: BuildPRTimelineArgs): PRTimelineNode[];
+export function buildTimelineNodes(
+  args: BuildTimelineArgs,
+): IssueTimelineNode[] | PRTimelineNode[] {
+  const { rootEvent, comments, essentials, authorisedUsers } = args;
+  const rootId = rootEvent.id;
+
+  // ── Status nodes ──────────────────────────────────────────────────────────
+  // Show all status events regardless of auth; flag unauthorised ones so the
+  // UI can render "proposed status" vs "set status".
+  const statusNodes: (IssueTimelineNode | PRTimelineNode)[] = essentials
+    .filter((ev) => (STATUS_KINDS as readonly number[]).includes(ev.kind))
+    .map((ev) => ({
+      type: "status" as const,
+      event: ev,
+      status: kindToStatus(ev.kind),
+      // authorisedUsers.size === 0 means maintainers not yet loaded — treat as
+      // authorised to avoid a flash of "proposed" on initial load.
+      authorised: authorisedUsers.size === 0 || authorisedUsers.has(ev.pubkey),
+      ts: ev.created_at,
+    }));
+
+  // ── Rename nodes ──────────────────────────────────────────────────────────
+  // Only authorised renames (already filtered by resolveItemEssentials for
+  // effective subject, but here we derive them directly from essentials for
+  // the timeline — same auth rule: author or maintainer only).
+  const renameEvs = essentials
+    .filter(
+      (ev) =>
+        ev.kind === LABEL_KIND &&
+        (authorisedUsers.size === 0 || authorisedUsers.has(ev.pubkey)) &&
+        ev.tags.some(
+          ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
+        ),
+    )
+    .sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id));
+
+  // Reconstruct old/new subject pairs in order
+  const originalSubject = extractSubject(rootEvent);
+  let prevSubject = originalSubject;
+  const renameNodes: (IssueTimelineNode | PRTimelineNode)[] = renameEvs.map(
+    (ev) => {
+      const newSubject = ev.tags.find(
+        ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
+      )![1];
+      const node: IssueTimelineNode = {
+        type: "rename",
+        event: ev,
+        oldSubject: prevSubject,
+        newSubject,
+        ts: ev.created_at,
+      };
+      prevSubject = newSubject;
+      return node;
+    },
+  );
+
+  // ── Thread nodes (root-level comments) ───────────────────────────────────
+  // For patches: only comments whose E root tag points at the original root.
+  // Revision-rooted comments are handled below, interleaved after their revision.
+  const isPatch = args.itemType === "patch";
+  const revisionRootIdSet: Set<string> =
+    args.itemType !== "issue" ? new Set(args.revisionRootIds) : new Set();
+
+  const rootComments =
+    isPatch && revisionRootIdSet.size > 0
+      ? comments.filter((c) => {
+          const rootTag = c.tags.find((t) => t[0] === "E");
+          if (!rootTag) return true;
+          return rootTag[1] === rootId;
+        })
+      : comments;
+
+  const threadTree = getThreadTree(rootEvent, rootComments);
+  const rootThreadNodes: (IssueTimelineNode | PRTimelineNode)[] = threadTree
+    ? threadTree.children.map((child) => ({
+        type: "thread" as const,
+        node: child,
+        ts: child.event.created_at,
+      }))
+    : [];
+
+  if (args.itemType === "issue") {
+    // ── Issue: merge all nodes and sort ──────────────────────────────────
+    const nodes: IssueTimelineNode[] = [
+      ...statusNodes,
+      ...renameNodes,
+      ...rootThreadNodes,
+    ] as IssueTimelineNode[];
+
+    nodes.sort((a, b) => {
+      if (a.ts !== b.ts) return a.ts - b.ts;
+      // Non-thread nodes (activity markers) sort before thread nodes
+      const order = (t: IssueTimelineNode["type"]) => (t === "thread" ? 1 : 0);
+      return order(a.type) - order(b.type);
+    });
+
+    return nodes;
+  }
+
+  // ── PR/patch: build revision nodes, each with their sub-thread ───────────
+  const { revisions } = args;
+  const revisionNodes: PRTimelineNode[] = [];
+
+  for (const revision of revisions) {
+    revisionNodes.push({
+      type: "revision",
+      revision,
+      ts: revision.createdAt,
+    });
+
+    // For patch revisions (not the original root): emit comments rooted at
+    // this revision's root patch immediately after the revision node.
+    // They'll be re-sorted into chronological position below, but keeping
+    // them logically associated here makes the sort stable.
+    if (
+      isPatch &&
+      revision.rootPatchEvent &&
+      revision.rootPatchEvent.id !== rootId
+    ) {
+      const revId = revision.rootPatchEvent.id;
+      const revComments = comments.filter((c) => {
+        const rootTag = c.tags.find((t) => t[0] === "E");
+        return rootTag?.[1] === revId;
+      });
+      if (revComments.length > 0) {
+        const revTree = getThreadTree(revision.rootPatchEvent, revComments);
+        if (revTree) {
+          for (const child of revTree.children) {
+            revisionNodes.push({
+              type: "thread",
+              node: child,
+              ts: child.event.created_at,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  const nodes: PRTimelineNode[] = [
+    ...statusNodes,
+    ...renameNodes,
+    ...rootThreadNodes,
+    ...revisionNodes,
+  ] as PRTimelineNode[];
+
+  nodes.sort((a, b) => {
+    if (a.ts !== b.ts) return a.ts - b.ts;
+    // At equal timestamps: revision < other activity markers < thread
+    const order = (t: PRTimelineNode["type"]) => {
+      if (t === "revision") return 0;
+      if (t === "thread") return 2;
+      return 1;
+    };
+    return order(a.type) - order(b.type);
+  });
+
+  return nodes;
+}
+
+// ---------------------------------------------------------------------------
 // ResolvedPR — full detail-page view of a PR or patch
 // ---------------------------------------------------------------------------
 
@@ -1381,6 +1604,15 @@ export type PRTimelineNode =
   | {
       type: "thread";
       node: import("@/lib/threadTree").ThreadTreeNode;
+      ts: number;
+    }
+  | {
+      type: "status";
+      event: NostrEvent;
+      /** The status this event sets */
+      status: IssueStatus;
+      /** True when the author is authorised (maintainer or item author) */
+      authorised: boolean;
       ts: number;
     };
 

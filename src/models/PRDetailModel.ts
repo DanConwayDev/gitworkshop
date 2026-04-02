@@ -16,14 +16,13 @@ import {
   extractBody,
   extractPatchDiff,
   buildRenameItems,
+  buildTimelineNodes,
   type ResolvedPR,
   type PRRevision,
-  type PRTimelineNode,
   type PRItemType,
 } from "@/lib/nip34";
 import { resolveAllChains } from "@/hooks/usePatchChain";
 import { Patch, isValidPatch } from "@/casts/Patch";
-import { getThreadTree } from "@/lib/threadTree";
 
 /**
  * PRDetailModel — reactively resolves the full detail-page view of a single
@@ -306,15 +305,15 @@ export function PRDetailModel(
           );
 
           // ── Build timeline nodes ────────────────────────────────────
-          const timelineNodes = buildTimelineNodes(
+          const timelineNodes = buildTimelineNodes({
             itemType,
-            revisions,
-            mergedComments,
-            renameItems,
             rootEvent,
-            rootId,
+            comments: mergedComments,
+            essentials,
+            authorisedUsers: core.authorisedUsers,
+            revisions,
             revisionRootIds,
-          );
+          });
 
           // ── Participants ────────────────────────────────────────────
           const participantSet = new Set<string>();
@@ -455,97 +454,4 @@ function deduplicateUrls(urls: string[]): string[] {
     seen.add(u);
     return true;
   });
-}
-
-/**
- * Build the interleaved conversation timeline from revisions, comments,
- * and rename items.
- */
-function buildTimelineNodes(
-  itemType: PRItemType,
-  revisions: PRRevision[],
-  comments: NostrEvent[],
-  renameItems: { event: NostrEvent; oldSubject: string; newSubject: string }[],
-  rootEvent: NostrEvent,
-  rootId: string,
-  revisionRootIds: string[],
-): PRTimelineNode[] {
-  const nodes: PRTimelineNode[] = [];
-  const revisionRootIdSet = new Set(revisionRootIds);
-
-  // Push events (revisions)
-  for (const revision of revisions) {
-    nodes.push({
-      type: "revision",
-      revision,
-      ts: revision.createdAt,
-    });
-
-    // For patch revisions (not the original): attach comments rooted at
-    // this revision's root patch
-    if (
-      itemType === "patch" &&
-      revision.rootPatchEvent &&
-      revision.rootPatchEvent.id !== rootId
-    ) {
-      const revId = revision.rootPatchEvent.id;
-      const revComments = comments.filter((c) => {
-        const rootTag = c.tags.find((t) => t[0] === "E");
-        return rootTag?.[1] === revId;
-      });
-      if (revComments.length > 0) {
-        const revTree = getThreadTree(revision.rootPatchEvent, revComments);
-        if (revTree) {
-          for (const child of revTree.children) {
-            nodes.push({
-              type: "thread",
-              node: child,
-              ts: child.event.created_at,
-            });
-          }
-        }
-      }
-    }
-  }
-
-  // Top-level thread comments (rooted at the original root)
-  const rootComments =
-    itemType === "patch" && revisionRootIdSet.size > 0
-      ? comments.filter((c) => {
-          const rootTag = c.tags.find((t) => t[0] === "E");
-          if (!rootTag) return true;
-          return rootTag[1] === rootId;
-        })
-      : comments;
-
-  const threadTree = getThreadTree(rootEvent, rootComments);
-  if (threadTree) {
-    for (const child of threadTree.children) {
-      nodes.push({
-        type: "thread",
-        node: child,
-        ts: child.event.created_at,
-      });
-    }
-  }
-
-  // Subject renames
-  for (const item of renameItems) {
-    nodes.push({
-      type: "rename",
-      event: item.event,
-      oldSubject: item.oldSubject,
-      newSubject: item.newSubject,
-      ts: item.event.created_at,
-    });
-  }
-
-  // Sort chronologically with stable tie-break
-  nodes.sort((a, b) => {
-    if (a.ts !== b.ts) return a.ts - b.ts;
-    const typeOrder = (t: PRTimelineNode["type"]) => (t === "revision" ? 0 : 1);
-    return typeOrder(a.type) - typeOrder(b.type);
-  });
-
-  return nodes;
 }

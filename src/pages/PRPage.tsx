@@ -10,6 +10,7 @@ import {
   EventBodyCardSkeleton,
   CommentSkeleton,
   SubjectRenameCard,
+  StatusChangeCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
 
@@ -549,6 +550,17 @@ export default function PRPage() {
                               event={node.event}
                               oldSubject={node.oldSubject}
                               newSubject={node.newSubject}
+                            />
+                          );
+                        }
+                        if (node.type === "status") {
+                          return (
+                            <StatusChangeCard
+                              key={node.event.id}
+                              event={node.event}
+                              status={node.status}
+                              authorised={node.authorised}
+                              variant="pr"
                             />
                           );
                         }

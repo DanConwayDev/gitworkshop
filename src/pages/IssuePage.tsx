@@ -10,6 +10,7 @@ import {
   EventBodyCardSkeleton,
   CommentSkeleton,
   SubjectRenameCard,
+  StatusChangeCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
 import { useResolvedIssue } from "@/hooks/useResolvedIssue";
@@ -161,6 +162,17 @@ export default function IssuePage() {
                           event={node.event}
                           oldSubject={node.oldSubject}
                           newSubject={node.newSubject}
+                        />
+                      );
+                    }
+                    if (node.type === "status") {
+                      return (
+                        <StatusChangeCard
+                          key={node.event.id}
+                          event={node.event}
+                          status={node.status}
+                          authorised={node.authorised}
+                          variant="issue"
                         />
                       );
                     }

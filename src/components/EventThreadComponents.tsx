@@ -9,13 +9,15 @@ import { UserLink } from "@/components/UserAvatar";
 import { useUnreadHighlight } from "@/hooks/useUnreadHighlight";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Clock, Pencil, RotateCcw } from "lucide-react";
+import { Calendar, Clock, Pencil, RotateCcw, ShieldAlert } from "lucide-react";
 import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
 import { ThreadTree } from "@/components/ThreadTree";
 import type { ThreadTreeNode } from "@/lib/threadTree";
 import { cn } from "@/lib/utils";
 import { OutboxStatusBadge } from "@/components/OutboxStatusStrip";
+import { StatusBadge } from "@/components/StatusBadge";
+import type { IssueStatus } from "@/lib/nip34";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -305,6 +307,66 @@ export function SubjectRenameCard({
           <span className="mx-1.5 text-muted-foreground/40 select-none">→</span>
           <span className="font-medium text-foreground">{newSubject}</span>
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// StatusChangeCard
+// ---------------------------------------------------------------------------
+
+export function StatusChangeCard({
+  event,
+  status,
+  authorised,
+  variant = "issue",
+}: {
+  event: NostrEvent;
+  status: IssueStatus;
+  /** True when the author is a maintainer or the item author. */
+  authorised: boolean;
+  variant?: "issue" | "pr";
+}) {
+  const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
+    addSuffix: true,
+  });
+
+  return (
+    <div className="relative flex gap-3 py-1.5 pl-1">
+      <div className="flex items-start pt-0.5">
+        <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-muted/40 shrink-0">
+          {authorised ? (
+            <StatusBadge
+              status={status}
+              variant={variant}
+              className="h-5 w-5 p-0 border-0 bg-transparent [&>svg]:h-3.5 [&>svg]:w-3.5 [&>span]:hidden"
+            />
+          ) : (
+            <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 min-w-0 pt-1">
+        <p className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+          <UserLink
+            pubkey={event.pubkey}
+            avatarSize="sm"
+            nameClassName="text-sm font-medium text-foreground"
+          />
+          <span>{authorised ? "set status to" : "proposed status"}</span>
+          <StatusBadge status={status} variant={variant} />
+          <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {timeAgo}
+          </span>
+        </p>
+        {!authorised && (
+          <p className="mt-0.5 text-xs text-muted-foreground/50">
+            User is not a maintainer — status change not applied
+          </p>
+        )}
       </div>
     </div>
   );

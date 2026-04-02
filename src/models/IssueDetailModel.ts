@@ -13,10 +13,9 @@ import {
   resolveItemEssentials,
   extractBody,
   buildRenameItems,
+  buildTimelineNodes,
   type ResolvedIssue,
-  type IssueTimelineNode,
 } from "@/lib/nip34";
-import { getThreadTree } from "@/lib/threadTree";
 
 /**
  * IssueDetailModel — reactively resolves the full detail-page view of a single
@@ -114,11 +113,13 @@ export function IssueDetailModel(
           );
 
           // ── Build timeline nodes ────────────────────────────────────
-          const timelineNodes = buildTimelineNodes(
+          const timelineNodes = buildTimelineNodes({
+            itemType: "issue",
             rootEvent,
-            allComments,
-            renameItems,
-          );
+            comments: allComments,
+            essentials,
+            authorisedUsers: core.authorisedUsers,
+          });
 
           // ── Participants ────────────────────────────────────────────
           const participantSet = new Set<string>();
@@ -157,53 +158,4 @@ export function IssueDetailModel(
       ),
     );
   };
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Build the interleaved conversation timeline from comments and rename items.
- */
-function buildTimelineNodes(
-  rootEvent: NostrEvent,
-  comments: NostrEvent[],
-  renameItems: { event: NostrEvent; oldSubject: string; newSubject: string }[],
-): IssueTimelineNode[] {
-  const nodes: IssueTimelineNode[] = [];
-
-  // Thread comments
-  const threadTree = getThreadTree(rootEvent, comments);
-  if (threadTree) {
-    for (const child of threadTree.children) {
-      nodes.push({
-        type: "thread",
-        node: child,
-        ts: child.event.created_at,
-      });
-    }
-  }
-
-  // Subject renames
-  for (const item of renameItems) {
-    nodes.push({
-      type: "rename",
-      event: item.event,
-      oldSubject: item.oldSubject,
-      newSubject: item.newSubject,
-      ts: item.event.created_at,
-    });
-  }
-
-  // Sort chronologically with stable tie-break
-  nodes.sort((a, b) => {
-    if (a.ts !== b.ts) return a.ts - b.ts;
-    // renames before threads at the same timestamp
-    const typeOrder = (t: IssueTimelineNode["type"]) =>
-      t === "rename" ? 0 : 1;
-    return typeOrder(a.type) - typeOrder(b.type);
-  });
-
-  return nodes;
 }
