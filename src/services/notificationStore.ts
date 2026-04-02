@@ -39,7 +39,12 @@
  */
 
 import { BehaviorSubject, combineLatest, firstValueFrom, of } from "rxjs";
-import { timeout, map, switchMap, distinctUntilChanged } from "rxjs/operators";
+import {
+  map,
+  switchMap,
+  distinctUntilChanged,
+  startWith,
+} from "rxjs/operators";
 import { mapEventsToStore } from "applesauce-core";
 import { MailboxesModel } from "applesauce-core/models";
 import { onlyEvents } from "applesauce-relay";
@@ -141,26 +146,48 @@ export function updateReadState(
 }
 
 // ---------------------------------------------------------------------------
-// Relay resolution
+// Relay resolution — reactive observables
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the relay list for notification subscriptions.
- * Uses the user's NIP-65 inbox relays plus the configured extra relays.
- * Falls back to extra relays alone if MailboxesModel hasn't loaded yet.
+ * Observable of the user's NIP-65 inbox relays merged with extraRelays.
+ * Emits immediately with extraRelays alone (startWith), then re-emits
+ * whenever MailboxesModel updates. This ensures subscriptions start right
+ * away and automatically expand to the user's real inbox relays once the
+ * kind:10002 event arrives from the relay.
  */
-async function resolveNotificationRelays(pubkey: string): Promise<string[]> {
-  try {
-    const mailboxes = await firstValueFrom(
-      eventStore
-        .model(MailboxesModel, pubkey)
-        .pipe(timeout({ first: 1000, with: () => of(undefined) })),
-    );
-    const inboxes = mailboxes?.inboxes ?? [];
-    return [...new Set([...inboxes, ...extraRelays.getValue()])];
-  } catch {
-    return [...new Set([...extraRelays.getValue()])];
-  }
+function inboxRelaysObservable(pubkey: string) {
+  return combineLatest([
+    eventStore.model(MailboxesModel, pubkey).pipe(startWith(undefined)),
+    extraRelays,
+  ]).pipe(
+    map(([mailboxes, extra]) => {
+      const inboxes = mailboxes?.inboxes ?? [];
+      return [...new Set([...inboxes, ...extra])];
+    }),
+    distinctUntilChanged(
+      (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+    ),
+  );
+}
+
+/**
+ * Observable of the user's NIP-65 outbox relays merged with lookupRelays.
+ * Same startWith pattern — emits lookupRelays immediately, then expands.
+ */
+function outboxRelaysObservable(pubkey: string) {
+  return combineLatest([
+    eventStore.model(MailboxesModel, pubkey).pipe(startWith(undefined)),
+    lookupRelays,
+  ]).pipe(
+    map(([mailboxes, lookup]) => {
+      const outboxes = mailboxes?.outboxes ?? [];
+      return [...new Set([...outboxes, ...lookup])];
+    }),
+    distinctUntilChanged(
+      (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -188,22 +215,27 @@ export function acquireNotificationStore(
 
   // ---------------------------------------------------------------------------
   // Phase 1 — Badge: live subscription with limit:10 badge filters.
-  // Keeps a WebSocket open for new arrivals; seeds enough events for the dot.
+  // Reactive to MailboxesModel — re-subscribes when inbox relays change.
+  // Starts immediately with extraRelays, expands once kind:10002 arrives.
   // ---------------------------------------------------------------------------
-  const inboxRelays$ = new BehaviorSubject<string[]>([]);
   const badgeFilters = buildNotificationBadgeFilters(pubkey);
-  let badgeSub = { unsubscribe: () => {} };
 
-  resolveNotificationRelays(pubkey).then((relays) => {
-    inboxRelays$.next(relays);
-    badgeSub = pool
-      .subscription(relays, badgeFilters, {
-        reconnect: Infinity,
-        resubscribe: Infinity,
-      })
-      .pipe(onlyEvents(), mapEventsToStore(eventStore))
-      .subscribe();
-  });
+  // inboxRelays$ is a reactive observable (not a BehaviorSubject) so that
+  // repoActivitySub (which combines it) also reacts to relay list changes.
+  const inboxRelays$ = inboxRelaysObservable(pubkey);
+
+  const badgeSub = inboxRelays$
+    .pipe(
+      switchMap((relays) =>
+        pool
+          .subscription(relays, badgeFilters, {
+            reconnect: Infinity,
+            resubscribe: Infinity,
+          })
+          .pipe(onlyEvents(), mapEventsToStore(eventStore)),
+      ),
+    )
+    .subscribe();
 
   // ---------------------------------------------------------------------------
   // Phase 2 — History loader: created lazily on first activateFullFetch() call.
@@ -216,7 +248,8 @@ export function acquireNotificationStore(
   let historyLoaderPromise: Promise<ManualTimelineLoader> | null = null;
 
   // ---------------------------------------------------------------------------
-  // Fetch the nsec envelope from lookup relays + user outbox relays
+  // Fetch the nsec envelope from lookup relays + user outbox relays.
+  // Reactive — re-subscribes when outbox relays change.
   // ---------------------------------------------------------------------------
 
   const nsecEnvelopeSub = addressLoader({
@@ -225,81 +258,64 @@ export function acquireNotificationStore(
     identifier: NOTIFICATION_NSEC_D_TAG,
   }).subscribe();
 
-  let nsecOutboxSub = { unsubscribe: () => {} };
-  firstValueFrom(
-    eventStore
-      .model(MailboxesModel, pubkey)
-      .pipe(timeout({ first: 1000, with: () => of(undefined) })),
-  )
-    .then((mailboxes) => {
-      const outboxes = mailboxes?.outboxes ?? [];
-      const relays = [...new Set([...outboxes, ...lookupRelays.getValue()])];
-      if (relays.length === 0) return;
+  const nsecFilter = {
+    kinds: [NIP78_KIND],
+    authors: [pubkey],
+    "#d": [NOTIFICATION_NSEC_D_TAG],
+  } as Filter;
 
-      const nsecFilter = {
-        kinds: [NIP78_KIND],
-        authors: [pubkey],
-        "#d": [NOTIFICATION_NSEC_D_TAG],
-      } as Filter;
-
-      nsecOutboxSub = pool
-        .subscription(relays, [nsecFilter])
-        .pipe(onlyEvents(), mapEventsToStore(eventStore))
-        .subscribe();
-    })
-    .catch(() => {});
+  const nsecOutboxSub = outboxRelaysObservable(pubkey)
+    .pipe(
+      switchMap((relays) =>
+        relays.length === 0
+          ? of(undefined)
+          : pool
+              .subscription(relays, [nsecFilter])
+              .pipe(onlyEvents(), mapEventsToStore(eventStore)),
+      ),
+    )
+    .subscribe();
 
   // ---------------------------------------------------------------------------
-  // Once the nsec envelope is decrypted, fetch the state event
+  // Once the nsec envelope is decrypted, fetch the state event.
+  // Reactive — re-subscribes when outbox relays change.
   // ---------------------------------------------------------------------------
 
-  let stateEventSub = { unsubscribe: () => {} };
+  // addressLoader handles the lookup-relay fetch; we add a reactive outbox
+  // subscription that re-opens whenever the user's outbox relays change.
+  const stateEventSub = outboxRelaysObservable(pubkey)
+    .pipe(
+      switchMap(async (outboxes) => {
+        const notifSigner = await getOrCreateNotificationSigner(pubkey);
+        if (!notifSigner) return null;
+        return { outboxes, notifPubkey: await notifSigner.getPublicKey() };
+      }),
+      switchMap((resolved) => {
+        if (!resolved) return of(undefined);
+        const { outboxes, notifPubkey } = resolved;
 
-  getOrCreateNotificationSigner(pubkey)
-    .then(async (notifSigner) => {
-      if (!notifSigner) return;
-      const notifPubkey = await notifSigner.getPublicKey();
+        // addressLoader covers lookup relays; subscribe to outboxes for the
+        // state event so it's fetched from the user's own write relays too.
+        addressLoader({
+          kind: NIP78_KIND,
+          pubkey: notifPubkey,
+          identifier: NOTIFICATION_STATE_D_TAG,
+        }).subscribe();
 
-      const stateSub = addressLoader({
-        kind: NIP78_KIND,
-        pubkey: notifPubkey,
-        identifier: NOTIFICATION_STATE_D_TAG,
-      }).subscribe();
+        if (outboxes.length === 0) return of(undefined);
 
-      firstValueFrom(
-        eventStore
-          .model(MailboxesModel, pubkey)
-          .pipe(timeout({ first: 1000, with: () => of(undefined) })),
-      )
-        .then((mailboxes) => {
-          const outboxes = mailboxes?.outboxes ?? [];
-          if (outboxes.length === 0) return;
+        const stateFilter = {
+          kinds: [NIP78_KIND],
+          authors: [notifPubkey],
+          "#d": [NOTIFICATION_STATE_D_TAG],
+        } as Filter;
 
-          const stateFilter = {
-            kinds: [NIP78_KIND],
-            authors: [notifPubkey],
-            "#d": [NOTIFICATION_STATE_D_TAG],
-          } as Filter;
-
-          const outboxStateSub = pool
-            .subscription(outboxes, [stateFilter])
-            .pipe(onlyEvents(), mapEventsToStore(eventStore))
-            .subscribe();
-
-          const prevUnsub = stateEventSub.unsubscribe.bind(stateEventSub);
-          stateEventSub = {
-            unsubscribe: () => {
-              prevUnsub();
-              stateSub.unsubscribe();
-              outboxStateSub.unsubscribe();
-            },
-          };
-        })
-        .catch(() => {
-          stateEventSub = stateSub;
-        });
-    })
-    .catch(() => {});
+        return pool
+          .subscription(outboxes, [stateFilter])
+          .pipe(onlyEvents(), mapEventsToStore(eventStore));
+      }),
+    )
+    .subscribe();
 
   const nip78WatchSub = watchNip78Event(pubkey, readState$);
 
@@ -441,7 +457,6 @@ export function acquireNotificationStore(
       repoActivitySub.unsubscribe();
       entry.historyLoader?.destroy();
       repoCoords$.complete();
-      inboxRelays$.complete();
     },
     refCount: 1,
   };
@@ -453,17 +468,22 @@ export function acquireNotificationStore(
     }
   )._activateFullFetch = async () => {
     if (historyLoaderPromise) return historyLoaderPromise;
-    historyLoaderPromise = resolveNotificationRelays(pubkey).then((relays) => {
-      const fullFilters = buildNotificationFilters(pubkey);
-      const loader = createManualTimelineLoader(pool, relays, fullFilters, {
-        eventStore,
-        getArchiveCutoff: () => readState$.getValue().ab,
-      });
-      entry.historyLoader = loader;
-      // Fire the first full page immediately
-      loader.loadMore(NOTIFICATION_PAGE_LIMIT);
-      return loader;
-    });
+    // inboxRelaysObservable emits immediately (startWith), so firstValueFrom
+    // resolves synchronously with at least extraRelays. If the kind:10002 event
+    // is already in the store, the first emission already includes inbox relays.
+    historyLoaderPromise = firstValueFrom(inboxRelaysObservable(pubkey)).then(
+      (relays) => {
+        const fullFilters = buildNotificationFilters(pubkey);
+        const loader = createManualTimelineLoader(pool, relays, fullFilters, {
+          eventStore,
+          getArchiveCutoff: () => readState$.getValue().ab,
+        });
+        entry.historyLoader = loader;
+        // Fire the first full page immediately
+        loader.loadMore(NOTIFICATION_PAGE_LIMIT);
+        return loader;
+      },
+    );
     return historyLoaderPromise;
   };
 

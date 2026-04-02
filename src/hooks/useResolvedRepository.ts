@@ -103,6 +103,12 @@ export function useResolvedRepository(
   const key = `${pubkey}:${dTag}`;
   const hintsKey = relayHints.join(",");
 
+  // Subscribe to gitIndexRelays so Layer 1 re-runs when the user changes
+  // their git index relay settings.
+  const liveGitIndexRelays =
+    use$(() => gitIndexRelays, []) ?? gitIndexRelays.getValue();
+  const gitIndexRelayKey = liveGitIndexRelays.join(",");
+
   // Layer 1: seed the store with the selected maintainer's announcement.
   // Skip the relay query if the event is already in the store cache.
   // Include any URL relay hints so we can find the repo even if it isn't
@@ -114,13 +120,13 @@ export function useResolvedRepository(
       { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
     ];
     const relays = [
-      ...gitIndexRelays.getValue(),
-      ...relayHints.filter((r) => !gitIndexRelays.getValue().includes(r)),
+      ...liveGitIndexRelays,
+      ...relayHints.filter((r) => !liveGitIndexRelays.includes(r)),
     ];
     return pool
       .subscription(relays, filter)
       .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [key, hintsKey, store]);
+  }, [key, hintsKey, gitIndexRelayKey, store]);
 
   // Layer 2: subscribe to the model.
   const repo = use$(() => {

@@ -53,8 +53,15 @@ export function useAllRepositories(
   const store = useEventStore();
   const [isSyncing, setIsSyncing] = useState(true);
 
-  // Stable relay list — recompute only when override changes
-  const relays = relayOverride ?? gitIndexRelays.getValue();
+  // Subscribe to gitIndexRelays so the hook re-runs when the user changes
+  // their git index relay settings. Falls back to the current value if the
+  // observable hasn't emitted yet (it always emits synchronously as a
+  // BehaviorSubject, so this is just a type-safety guard).
+  const liveGitIndexRelays =
+    use$(() => gitIndexRelays, []) ?? gitIndexRelays.getValue();
+
+  // Stable relay list — recompute only when override or gitIndexRelays changes
+  const relays = relayOverride ?? liveGitIndexRelays;
   const relayKey = relays.join(",");
 
   // Track whether we've already started a bulk fetch for this relay set so
