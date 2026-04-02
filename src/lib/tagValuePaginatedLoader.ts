@@ -57,7 +57,7 @@ import { loadBlocksFromRelay } from "applesauce-loaders/loaders";
 import type { TagValuePointer } from "applesauce-loaders/loaders";
 import type { CacheRequest, TimelessFilter } from "applesauce-loaders";
 import { makeCacheRequest } from "applesauce-loaders/helpers";
-import type { RelayPool, SubscriptionOptions } from "applesauce-relay";
+import type { RelayPool } from "applesauce-relay";
 import { onlyEvents } from "applesauce-relay";
 import type { NostrEvent } from "nostr-tools";
 import {
@@ -67,13 +67,16 @@ import {
   Subject,
   bufferTime,
   debounceTime,
+  defer,
   filter,
   finalize,
   map,
   merge,
+  retry,
   share,
   switchMap,
   take,
+  tap,
 } from "rxjs";
 
 export type { TagValuePointer };
@@ -174,24 +177,36 @@ function processRelayStream(
   settled$: Subject<void>,
   manualPaginate$: Observable<void> | undefined,
 ): Observable<NostrEvent> {
-  const subOpts: SubscriptionOptions = { reconnect: Infinity };
-
   // No limit on the live filter — we want all future events.
   const liveFilter: Filter = { ...relayFilter };
   delete liveFilter.limit;
 
   // If already exhausted, just open the live subscription — signal settled
-  // immediately since there is no history work to do.
+  // immediately since there is no history work to do. No lastReceivedAt on
+  // this path since it's a fresh subscription with no prior state.
   if (exhausted.has(key)) {
     settled$.next();
-    return pool
-      .subscription([relay], [liveFilter], subOpts)
-      .pipe(onlyEvents()) as Observable<NostrEvent>;
+    return defer(() =>
+      pool.subscription([relay], [liveFilter], { reconnect: false }),
+    ).pipe(
+      onlyEvents(),
+      retry({ count: 3, delay: 1000, resetOnSuccess: true }),
+    ) as Observable<NostrEvent>;
   }
 
   return new Observable<NostrEvent>((subscriber) => {
     let countBeforeEose = 0;
     let oldestSeen: number | undefined;
+    // lastReceivedAt is tracked per relay so that on reconnect we can inject
+    // since: lastReceivedAt - 600 to avoid re-receiving the full history.
+    // This is the primary motivation for using defer() + retry() instead of
+    // pool.subscription(reconnect: Infinity) — the latter reopens with the
+    // same static filter verbatim, causing the relay to replay everything it
+    // has up to its default limit on every reconnect (wasteful bandwidth).
+    // The tradeoff: we bypass applesauce's built-in reconnect backoff and
+    // replicate it manually with retry(). Applesauce's defaults are weak
+    // (count: 3, delay: 1000ms, resetOnSuccess: true) so this is acceptable.
+    let lastReceivedAt: number | undefined;
     let eoseSeen = false;
     let paginateSub: { unsubscribe(): void } | undefined;
     let manualSub: { unsubscribe(): void } | undefined;
@@ -248,8 +263,46 @@ function processRelayStream(
         });
     };
 
-    const liveSub = pool
-      .subscription([relay], [liveFilter], subOpts)
+    // Use defer() so the subscription factory re-executes on each reconnect,
+    // allowing us to inject since: lastReceivedAt - 600 dynamically.
+    // reconnect: false — retry() below handles reconnection instead.
+    // IMPORTANT: defer() must be inlined here (not in a helper) so it closes
+    // over lastReceivedAt by reference and reads the current value on each
+    // reconnect attempt, not the value at subscription creation time.
+    const liveSub = defer(() =>
+      pool.subscription(
+        [relay],
+        [
+          {
+            ...liveFilter,
+            // On reconnect, only request events since the last received
+            // timestamp minus a 10-minute buffer to cover any gap during
+            // the disconnect. On first connect lastReceivedAt is undefined
+            // so no since is set — the relay sends its full recent history
+            // which we use as the initial depth probe.
+            ...(lastReceivedAt !== undefined
+              ? { since: lastReceivedAt - 600 }
+              : {}),
+          },
+        ],
+        { reconnect: false },
+      ),
+    )
+      .pipe(
+        tap((msg) => {
+          if (msg !== "EOSE") {
+            const t = (msg as NostrEvent).created_at;
+            if (lastReceivedAt === undefined || t > lastReceivedAt)
+              lastReceivedAt = t;
+          }
+        }),
+        // Replicate applesauce's default subscription retry config.
+        // See DEFAULT_RETRY_CONFIG in applesauce-relay/dist/relay.js:
+        //   { count: 3, delay: 1000, resetOnSuccess: true }
+        // We must replicate rather than use reconnect: Infinity because
+        // defer() needs to re-run on each attempt to pick up lastReceivedAt.
+        retry({ count: 3, delay: 1000, resetOnSuccess: true }),
+      )
       .subscribe({
         next: (msg) => {
           if (msg === "EOSE") {
