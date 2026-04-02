@@ -1,54 +1,66 @@
 /**
  * createManualTimelineLoader
  *
- * A manual-paged timeline loader built on applesauce's loadBlocksFromRelays.
+ * A manual-paged timeline loader built on applesauce's loadBlocksFromRelay.
  * Each call to loadMore(limit) fetches one block going backwards across all
- * relays. Per-relay cursors are tracked inside the single persistent
- * loadBlocksFromRelays operator instance — so each block starts exactly where
- * the previous one left off, even when the limit changes between calls.
+ * known relays. Per-relay cursors are tracked inside each relay's own
+ * persistent loadBlocksFromRelay operator instance — so each block starts
+ * exactly where the previous one left off, even when the limit changes.
+ *
+ * Reactive relay list:
+ *   The loader accepts an Observable<string[]> for its relay list. When the
+ *   observable emits a new list, the loader diffs it against the set of
+ *   already-known relays and spins up a new loadBlocksFromRelay pipeline for
+ *   each genuinely new relay. Existing relay pipelines are NEVER torn down —
+ *   their cursor state is preserved. This means:
+ *     - Relays discovered after the first loadMore() call (e.g. repo-declared
+ *       relays that arrive after own-repo announcements are fetched) are added
+ *       seamlessly without disrupting in-flight or completed blocks.
+ *     - The next loadMore() call will include the new relays from their
+ *       beginning (cursor starts at "now"), so they contribute to future blocks.
+ *   Relay removals are intentionally ignored — we never close a relay pipeline
+ *   once opened, because the cursor state would be lost.
  *
  * Limit per block:
- *   loadBlocksFromRelays closes over the filters array by reference and calls
- *   mergeFilters(f, base) on each window push, reading f.limit fresh each
- *   time. We hold a mutable copy of the filters and update .limit in-place
- *   before each window push so the relay sees the correct limit per block.
+ *   Each per-relay pipeline closes over mutableFilters by reference and reads
+ *   f.limit fresh on each window push. We update .limit in-place before each
+ *   window push so every relay sees the correct limit for that block.
  *   This lets the badge call loadMore(10) and the page call loadMore(200)
- *   through the same persistent loader without resetting the cursor.
+ *   through the same persistent loader without resetting any cursor.
  *
  * EOSE / settle signal:
  *   Each arriving event resets a debounce timer. When no events arrive for
  *   settleMs after the first event of a block, the block is considered done.
  *   This naturally handles multiple relays — the debounce waits for the
  *   last relay to deliver its final event before flipping historyLoading$ off.
- *   debounceTime(settleMs) fires after the first relay to go quiet, giving
- *   other relays a chance to catch up.
  *
  * hasMore heuristic:
  *   If the total event count across all relays for a block is >= the requested
  *   limit, there is probably more history. If < limit, the button is hidden.
  *
  * historyReachedArchive$ — smart inbox cutoff:
- *   After each block settles, every relay that participated is checked:
+ *   After each block settles, every relay that has ever delivered an event is
+ *   checked:
  *     - "done past archive" if its oldest delivered event <= archiveCutoff
  *     - "exhausted"         if it delivered fewer events than the block limit
  *   Relays that delivered zero events this block are also considered exhausted.
- *   If ALL relays are done by either criterion, historyReachedArchive$ is set
- *   to true. The notifications page uses this to hide "load more" on the inbox
- *   tab (where archived events are not shown anyway), while still showing it
- *   on the archived / all tabs.
+ *   If ALL such relays are done by either criterion, historyReachedArchive$ is
+ *   set to true. The notifications page uses this to hide "load more" on the
+ *   inbox tab (where archived events are not shown anyway).
  *
  *   Per-relay oldest timestamps are tracked cumulatively across blocks (not
- *   reset per block) because loadBlocksFromRelays advances the cursor — each
- *   block goes further back, so the oldest timestamp only ever decreases.
+ *   reset per block) because each relay's cursor advances — each block goes
+ *   further back, so the oldest timestamp only ever decreases.
  *   Per-relay counts ARE reset per block to detect per-block exhaustion.
  */
 
-import { BehaviorSubject, Subject } from "rxjs";
-import { debounceTime, tap } from "rxjs/operators";
+import { BehaviorSubject, Observable, Subject } from "rxjs";
+import { debounceTime, mergeAll, tap } from "rxjs/operators";
 import { mapEventsToStore } from "applesauce-core";
 import { getSeenRelays } from "applesauce-core/helpers";
-import { loadBlocksFromRelays } from "applesauce-loaders/loaders";
+import { loadBlocksFromRelay } from "applesauce-loaders/loaders";
 import { onlyEvents } from "applesauce-relay";
+import type { NostrEvent } from "nostr-tools";
 import type { EventStore } from "applesauce-core";
 import type { RelayPool } from "applesauce-relay";
 import type { TimelessFilter } from "applesauce-loaders";
@@ -99,7 +111,7 @@ export interface ManualTimelineLoaderOptions {
 
 export function createManualTimelineLoader(
   pool: RelayPool,
-  relays: string[],
+  relays: Observable<string[]> | string[],
   filters: TimelessFilter[],
   opts: ManualTimelineLoaderOptions,
 ): ManualTimelineLoader {
@@ -116,14 +128,14 @@ export function createManualTimelineLoader(
   let blockLimit = 10;
 
   // Mutable filter copies — .limit is updated in-place before each window
-  // push so loadBlocksFromRelays reads the correct limit for this block.
+  // push so each per-relay loadBlocksFromRelay reads the correct limit.
   const mutableFilters: (TimelessFilter & { limit?: number })[] = filters.map(
     (f) => ({ ...f }),
   );
 
-  // Pushing { since: -Infinity } triggers the next backward block from each
-  // relay's internal cursor. One persistent Subject drives the whole lifetime
-  // of the loader — the cursor state lives inside loadBlocksFromRelays.
+  // Shared window Subject — pushing here triggers a backward block on ALL
+  // per-relay pipelines simultaneously. The cursor state lives inside each
+  // relay's own loadBlocksFromRelay instance.
   const window$ = new Subject<{ since?: number; until?: number }>();
 
   // Each arriving event resets this debounce. When quiet for settleMs the
@@ -185,11 +197,25 @@ export function createManualTimelineLoader(
       checkReachedArchive();
     });
 
-  // Single persistent pipeline — one loadBlocksFromRelays instance for the
-  // lifetime of the loader, preserving per-relay cursor state across blocks.
-  const historySub: Subscription = window$
+  // -------------------------------------------------------------------------
+  // Per-relay pipeline management
+  //
+  // knownRelays: set of relay URLs we have already opened a pipeline for.
+  // relayStreams$: Subject that we push new per-relay observables into.
+  //   merge() subscribes to each one as it arrives and merges their output.
+  // -------------------------------------------------------------------------
+  const knownRelays = new Set<string>();
+  // Subject of per-relay observables. mergeAll() subscribes to each inner
+  // observable as it arrives without unsubscribing from existing ones —
+  // this is the standard RxJS higher-order merge pattern.
+  const relayStreams$ = new Subject<Observable<NostrEvent>>();
+
+  // Single subscription that merges all per-relay pipelines. Inner
+  // subscriptions are managed by mergeAll() and are properly torn down
+  // when historySub.unsubscribe() is called.
+  const historySub: Subscription = relayStreams$
     .pipe(
-      loadBlocksFromRelays(pool, relays, mutableFilters, {}),
+      mergeAll(),
       tap((event) => {
         blockCount++;
         eventActivity$.next();
@@ -213,6 +239,34 @@ export function createManualTimelineLoader(
     )
     .subscribe();
 
+  /**
+   * Open a new loadBlocksFromRelay pipeline for a relay URL that hasn't been
+   * seen before. The pipeline shares window$ with all other relay pipelines so
+   * loadMore() triggers all of them simultaneously.
+   */
+  function addRelay(url: string): void {
+    if (knownRelays.has(url)) return;
+    knownRelays.add(url);
+
+    const relayStream = window$.pipe(
+      loadBlocksFromRelay(pool, url, mutableFilters, {}),
+    );
+    relayStreams$.next(relayStream);
+  }
+
+  // Subscribe to the relay list observable and add new relays as they arrive.
+  // Existing relay pipelines are never torn down.
+  const relayListSub: Subscription = (
+    Array.isArray(relays)
+      ? new Observable<string[]>((sub) => {
+          sub.next(relays);
+          sub.complete();
+        })
+      : relays
+  ).subscribe((urls) => {
+    for (const url of urls) addRelay(url);
+  });
+
   return {
     historyLoading$,
     historyHasMore$,
@@ -224,7 +278,7 @@ export function createManualTimelineLoader(
       blockLimit = limit;
       // Reset per-block relay counts so exhaustion is measured per block
       relayBlockCount.clear();
-      // Update limit on all filters before the window push so the relay REQ
+      // Update limit on all filters before the window push so every relay REQ
       // is built with the correct limit for this block.
       for (const f of mutableFilters) {
         f.limit = limit;
@@ -233,8 +287,10 @@ export function createManualTimelineLoader(
       window$.next({ since: -Infinity });
     },
     destroy: () => {
+      relayListSub.unsubscribe();
       settledSub.unsubscribe();
       historySub.unsubscribe();
+      relayStreams$.complete();
       window$.complete();
       eventActivity$.complete();
     },

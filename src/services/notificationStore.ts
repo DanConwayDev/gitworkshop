@@ -38,7 +38,7 @@
  * Action implementations (markAsRead, etc.) live in notificationActions.ts.
  */
 
-import { BehaviorSubject, combineLatest, firstValueFrom, of } from "rxjs";
+import { BehaviorSubject, combineLatest, of } from "rxjs";
 import {
   map,
   switchMap,
@@ -468,23 +468,41 @@ export function acquireNotificationStore(
     }
   )._activateFullFetch = async () => {
     if (historyLoaderPromise) return historyLoaderPromise;
-    // inboxRelaysObservable emits immediately (startWith), so firstValueFrom
-    // resolves synchronously with at least extraRelays. If the kind:10002 event
-    // is already in the store, the first emission already includes inbox relays.
-    historyLoaderPromise = firstValueFrom(inboxRelaysObservable(pubkey)).then(
-      (relays) => {
-        const fullFilters = buildNotificationFilters(pubkey);
-        const loader = createManualTimelineLoader(pool, relays, fullFilters, {
-          eventStore,
-          getArchiveCutoff: () => readState$.getValue().ab,
-        });
-        entry.historyLoader = loader;
-        // Fire the first full page immediately
-        loader.loadMore(NOTIFICATION_PAGE_LIMIT);
-        return loader;
+    // Build a reactive relay observable that combines inbox relays and repo
+    // relays. The loader subscribes to this and additively opens a new
+    // per-relay pipeline whenever a new relay URL appears — existing relay
+    // pipelines (and their cursor state) are never torn down.
+    //
+    // This means:
+    //   - Inbox relays are available immediately (startWith in inboxRelaysObservable)
+    //   - Repo-declared relays are added as own-repo announcements arrive from
+    //     gitIndexRelays, so events on those relays are fetched even if the
+    //     announcements hadn't loaded yet when the user opened /notifications.
+    const combinedRelays$ = combineLatest([
+      inboxRelaysObservable(pubkey),
+      repoRelays$,
+    ]).pipe(
+      map(([inbox, repo]) => [...new Set([...inbox, ...repo])]),
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+      ),
+    );
+
+    const fullFilters = buildNotificationFilters(pubkey);
+    const loader = createManualTimelineLoader(
+      pool,
+      combinedRelays$,
+      fullFilters,
+      {
+        eventStore,
+        getArchiveCutoff: () => readState$.getValue().ab,
       },
     );
-    return historyLoaderPromise;
+    entry.historyLoader = loader;
+    // Fire the first full page immediately
+    loader.loadMore(NOTIFICATION_PAGE_LIMIT);
+    historyLoaderPromise = Promise.resolve(loader);
+    return loader;
   };
 
   storeMap.set(pubkey, entry);
