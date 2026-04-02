@@ -407,7 +407,7 @@ export function LabelChangeCard({
       </div>
 
       <div className="flex-1 min-w-0 pt-1">
-        <p className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+        <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
           <UserLink
             pubkey={event.pubkey}
             avatarSize="sm"
@@ -424,7 +424,7 @@ export function LabelChangeCard({
             <Clock className="h-3 w-3" />
             {timeAgo}
           </span>
-        </p>
+        </div>
         {!authorised && (
           <p className="mt-0.5 text-xs text-muted-foreground/50">
             User is not a maintainer — label change not applied
