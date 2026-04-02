@@ -28,15 +28,8 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 max-w-screen-xl items-center justify-between px-4 md:px-8">
-        <Link to="/" className="flex items-center gap-2.5 group transition-all">
-          <img
-            src="/icons/icon-32x32.png"
-            alt="GitWorkshop"
-            className="h-7 w-7 rounded-md"
-          />
-          <span className="font-semibold text-lg tracking-tight">
-            GitWorkshop
-          </span>
+        <Link to="/" className="group transition-opacity hover:opacity-80">
+          <img src="/icons/icon.svg" alt="GitWorkshop" className="h-8 w-8" />
         </Link>
 
         <div className="flex items-center gap-2">

@@ -24,11 +24,11 @@ export function AppFooter() {
               className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
             >
               <img
-                src="/icons/icon-32x32.png"
+                src="/icons/icon.svg"
                 alt="GitWorkshop"
-                className="h-4 w-4 rounded"
+                className="h-5 w-5"
               />
-              <span className="font-medium">GitWorkshop</span>
+              <span className="font-medium">gitworkshop.dev</span>
             </Link>
             <span className="opacity-50">
               {commitDate}+{gitCommit.slice(0, 7)}
