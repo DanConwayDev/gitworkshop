@@ -9,7 +9,14 @@ import { UserLink } from "@/components/UserAvatar";
 import { useUnreadHighlight } from "@/hooks/useUnreadHighlight";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Clock, Pencil, RotateCcw, ShieldAlert } from "lucide-react";
+import {
+  Calendar,
+  Clock,
+  Pencil,
+  RotateCcw,
+  ShieldAlert,
+  Tag,
+} from "lucide-react";
 import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
 import { ThreadTree } from "@/components/ThreadTree";
@@ -17,6 +24,7 @@ import type { ThreadTreeNode } from "@/lib/threadTree";
 import { cn } from "@/lib/utils";
 import { OutboxStatusBadge } from "@/components/OutboxStatusStrip";
 import { StatusBadge, StatusIcon } from "@/components/StatusBadge";
+import { LabelBadge } from "@/components/LabelBadge";
 import type { IssueStatus } from "@/lib/nip34";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
@@ -361,6 +369,65 @@ export function StatusChangeCard({
         {!authorised && (
           <p className="mt-0.5 text-xs text-muted-foreground/50">
             User is not a maintainer — status change not applied
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LabelChangeCard
+// ---------------------------------------------------------------------------
+
+export function LabelChangeCard({
+  event,
+  labels,
+  authorised,
+}: {
+  event: NostrEvent;
+  labels: string[];
+  /** True when the author is a maintainer or the item author. */
+  authorised: boolean;
+}) {
+  const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
+    addSuffix: true,
+  });
+
+  return (
+    <div className="relative flex gap-3 py-1.5 pl-1">
+      <div className="flex items-start pt-0.5">
+        <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-muted/40 shrink-0">
+          {authorised ? (
+            <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 min-w-0 pt-1">
+        <p className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+          <UserLink
+            pubkey={event.pubkey}
+            avatarSize="sm"
+            nameClassName="text-sm font-medium text-foreground"
+          />
+          <span>
+            {authorised ? "added" : "proposed"} label
+            {labels.length !== 1 ? "s" : ""}
+          </span>
+          {labels.map((label) => (
+            <LabelBadge key={label} label={label} />
+          ))}
+          <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {timeAgo}
+          </span>
+        </p>
+        {!authorised && (
+          <p className="mt-0.5 text-xs text-muted-foreground/50">
+            User is not a maintainer — label change not applied
           </p>
         )}
       </div>

@@ -1246,6 +1246,15 @@ export type IssueTimelineNode =
       /** True when the author is authorised (maintainer or item author) */
       authorised: boolean;
       ts: number;
+    }
+  | {
+      type: "label";
+      event: NostrEvent;
+      /** Labels added by this event */
+      labels: string[];
+      /** True when the author is authorised (maintainer or item author) */
+      authorised: boolean;
+      ts: number;
     };
 
 /**
@@ -1376,6 +1385,8 @@ export type BuildTimelineArgs = BuildIssueTimelineArgs | BuildPRTimelineArgs;
  * - `"status"`:   status change events (1630–1633), shown for all authors
  *                 with an `authorised` flag for display purposes
  * - `"rename"`:   subject-rename label events (kind:1985 with #subject ns)
+ * - `"label"`:    label/hashtag events (kind:1985 with #t ns), shown for all
+ *                 authors with an `authorised` flag for display purposes
  * - `"revision"`: patch-set pushes or PR Updates (PR/patch only)
  * - `"thread"`:   NIP-22 comments and legacy replies, threaded
  *
@@ -1443,6 +1454,31 @@ export function buildTimelineNodes(
     },
   );
 
+  // ── Label nodes ───────────────────────────────────────────────────────────
+  // Show label events that carry ISSUE_LABEL_NAMESPACE labels (not subject
+  // renames). Show all authors; flag unauthorised ones for display purposes.
+  const labelNodes: (IssueTimelineNode | PRTimelineNode)[] = essentials
+    .filter(
+      (ev) =>
+        ev.kind === LABEL_KIND &&
+        ev.tags.some(([t, , ns]) => t === "l" && ns === ISSUE_LABEL_NAMESPACE),
+    )
+    .map((ev) => {
+      const labels = ev.tags
+        .filter(([t, , ns]) => t === "l" && ns === ISSUE_LABEL_NAMESPACE)
+        .map(([, label]) => label)
+        .filter(Boolean);
+      return {
+        type: "label" as const,
+        event: ev,
+        labels,
+        authorised:
+          authorisedUsers.size === 0 || authorisedUsers.has(ev.pubkey),
+        ts: ev.created_at,
+      };
+    })
+    .filter((n) => n.labels.length > 0);
+
   // ── Thread nodes (root-level comments) ───────────────────────────────────
   // For patches: only comments whose E root tag points at the original root.
   // Revision-rooted comments are handled below, interleaved after their revision.
@@ -1473,6 +1509,7 @@ export function buildTimelineNodes(
     const nodes: IssueTimelineNode[] = [
       ...statusNodes,
       ...renameNodes,
+      ...labelNodes,
       ...rootThreadNodes,
     ] as IssueTimelineNode[];
 
@@ -1529,6 +1566,7 @@ export function buildTimelineNodes(
   const nodes: PRTimelineNode[] = [
     ...statusNodes,
     ...renameNodes,
+    ...labelNodes,
     ...rootThreadNodes,
     ...revisionNodes,
   ] as PRTimelineNode[];
@@ -1611,6 +1649,15 @@ export type PRTimelineNode =
       event: NostrEvent;
       /** The status this event sets */
       status: IssueStatus;
+      /** True when the author is authorised (maintainer or item author) */
+      authorised: boolean;
+      ts: number;
+    }
+  | {
+      type: "label";
+      event: NostrEvent;
+      /** Labels added by this event */
+      labels: string[];
       /** True when the author is authorised (maintainer or item author) */
       authorised: boolean;
       ts: number;

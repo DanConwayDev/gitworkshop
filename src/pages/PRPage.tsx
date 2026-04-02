@@ -11,6 +11,7 @@ import {
   CommentSkeleton,
   SubjectRenameCard,
   StatusChangeCard,
+  LabelChangeCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
 
@@ -561,6 +562,16 @@ export default function PRPage() {
                               status={node.status}
                               authorised={node.authorised}
                               variant="pr"
+                            />
+                          );
+                        }
+                        if (node.type === "label") {
+                          return (
+                            <LabelChangeCard
+                              key={node.event.id}
+                              event={node.event}
+                              labels={node.labels}
+                              authorised={node.authorised}
                             />
                           );
                         }

@@ -11,6 +11,7 @@ import {
   CommentSkeleton,
   SubjectRenameCard,
   StatusChangeCard,
+  LabelChangeCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
 import { useResolvedIssue } from "@/hooks/useResolvedIssue";
@@ -173,6 +174,16 @@ export default function IssuePage() {
                           status={node.status}
                           authorised={node.authorised}
                           variant="issue"
+                        />
+                      );
+                    }
+                    if (node.type === "label") {
+                      return (
+                        <LabelChangeCard
+                          key={node.event.id}
+                          event={node.event}
+                          labels={node.labels}
+                          authorised={node.authorised}
                         />
                       );
                     }
