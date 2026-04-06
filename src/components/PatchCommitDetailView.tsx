@@ -51,6 +51,8 @@ import {
   Braces,
   RotateCcw,
   Info,
+  AlertTriangle,
+  FileCode,
 } from "lucide-react";
 import { cn, safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { eventIdToNevent } from "@/lib/routeUtils";
@@ -61,6 +63,7 @@ import {
   readCachedChainResults,
   type CommitHashResult,
 } from "@/lib/patch-verify";
+import { mergePatchChainDiff } from "@/lib/patch-diff-merge";
 import type { Commit } from "@fiatjaf/git-natural-api";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
@@ -117,6 +120,12 @@ export interface PatchCommitDetailViewProps {
    * was used as the merge base.
    */
   guessedBaseCommitId?: string;
+  /**
+   * The resolved base commit hash (exact or approximated).
+   * When provided, the component will attempt to apply the patch to this base
+   * and show the applied diff. Falls back to the raw patch diff if apply fails.
+   */
+  baseCommitId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +352,21 @@ function RawEventJsonDialog({
 // Component
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Applied diff state
+// ---------------------------------------------------------------------------
+
+type AppliedDiffState =
+  | { kind: "idle" }
+  | { kind: "computing" }
+  | {
+      kind: "done";
+      diff: string;
+      failedCount: number;
+      failureReason?: "no-base" | "fetch-failed" | "hunk-mismatch";
+    }
+  | { kind: "error"; message: string };
+
 export function PatchCommitDetailView({
   commit,
   patchDiff,
@@ -360,10 +384,16 @@ export function PatchCommitDetailView({
   superseded = false,
   isBaseGuessed = false,
   guessedBaseCommitId,
+  baseCommitId,
   relayHints,
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
+  const [showRawDiff, setShowRawDiff] = useState(false);
+  const [appliedDiff, setAppliedDiff] = useState<AppliedDiffState>({
+    kind: "idle",
+  });
+  const applyAbortRef = useRef<AbortController | null>(null);
   const chainToVerify = patchChain ?? [patch];
   const [commitHashResult, setCommitHashResult] = useState<
     CommitHashResult | "computing" | null
@@ -530,6 +560,65 @@ export function PatchCommitDetailView({
     fallbackUrlsKey,
     fallbackUrls,
   ]);
+
+  // Apply the patch to the base commit to produce a clean applied diff.
+  // This mirrors what PatchFilesTab does but for a single patch.
+  // We use the single-patch chain so the apply logic handles it correctly.
+  const singlePatchChain = useMemo(() => [patch], [patch]);
+  const applyKey = `${patch.event.id}:${baseCommitId ?? ""}:${poolWinnerUrl ?? ""}:${fallbackUrls?.join(",") ?? ""}`;
+
+  useEffect(() => {
+    if (!pool || !baseCommitId) {
+      setAppliedDiff({ kind: "idle" });
+      return;
+    }
+
+    applyAbortRef.current?.abort();
+    const abort = new AbortController();
+    applyAbortRef.current = abort;
+
+    setAppliedDiff({ kind: "computing" });
+
+    mergePatchChainDiff(
+      singlePatchChain,
+      pool,
+      baseCommitId,
+      abort.signal,
+      fallbackUrls,
+    )
+      .then((result) => {
+        if (abort.signal.aborted) return;
+        setAppliedDiff({
+          kind: "done",
+          diff: result.combinedDiff,
+          failedCount: result.failedCount,
+          failureReason: result.failureReason,
+        });
+      })
+      .catch((err) => {
+        if (abort.signal.aborted) return;
+        setAppliedDiff({
+          kind: "error",
+          message: err instanceof Error ? err.message : "Unknown error",
+        });
+      });
+
+    return () => {
+      abort.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyKey]);
+
+  // Determine what diff to show and whether the toggle is relevant.
+  // appliedDiff.kind === "done" && failedCount === 0 → show applied diff by default
+  // appliedDiff.kind === "done" && failedCount > 0 → show raw diff (apply failed)
+  // appliedDiff.kind === "computing" / "idle" → show raw diff while loading
+  const appliedDiffReady =
+    appliedDiff.kind === "done" && appliedDiff.failedCount === 0;
+  const appliedDiffFailed =
+    appliedDiff.kind === "done" && appliedDiff.failedCount > 0;
+  const activeDiff =
+    !showRawDiff && appliedDiffReady ? appliedDiff.diff : patchDiff;
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(commit.hash);
@@ -760,21 +849,90 @@ export function PatchCommitDetailView({
         </CardContent>
       </Card>
 
-      {/* Approximated merge base notice */}
-      {isBaseGuessed && (
+      {/* Approximated merge base notice — shown only when apply succeeded or is still computing */}
+      {isBaseGuessed && !appliedDiffFailed && (
         <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-700 dark:text-blue-400">
           <div className="flex items-center gap-2">
             <Info className="h-3.5 w-3.5 shrink-0" />
             <span>
-              Merge base approximated from patch timestamp — diff may differ
-              slightly from the original.
+              Merge base approximated from patch timestamp — the parent commit
+              shown may not be exact.
             </span>
           </div>
         </div>
       )}
 
-      {/* Diff from patch content */}
-      {patchDiff ? (
+      {/* Apply failure warning — mirrors PatchFilesTab amber banner */}
+      {appliedDiffFailed && appliedDiff.kind === "done" && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <p>
+              {appliedDiff.failureReason === "no-base" && (
+                <>
+                  Could not compute a combined diff — the patch is missing a{" "}
+                  <code className="rounded bg-amber-500/10 px-1 font-mono text-[11px]">
+                    parent-commit
+                  </code>{" "}
+                  tag and no base commit could be determined.
+                </>
+              )}
+              {appliedDiff.failureReason === "fetch-failed" && (
+                <>
+                  Could not compute a combined diff — the base file content
+                  could not be fetched from the git server (the patch may
+                  reference a commit not yet pushed).
+                </>
+              )}
+              {appliedDiff.failureReason === "hunk-mismatch" && (
+                <>
+                  Could not compute a combined diff —
+                  {isBaseGuessed
+                    ? " the base commit was approximated from the patch timestamp and the patch did not apply cleanly against it."
+                    : " the patch did not apply cleanly against the current branch head."}
+                </>
+              )}
+              {!appliedDiff.failureReason && (
+                <>Could not compute a combined diff.</>
+              )}{" "}
+              Showing the original patch diff.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Diff header with toggle */}
+      {patchDiff && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-muted-foreground">
+            {appliedDiffReady && !showRawDiff
+              ? "Applied diff"
+              : "Original patch diff"}
+            {appliedDiff.kind === "computing" && (
+              <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground/60">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                computing applied diff…
+              </span>
+            )}
+          </span>
+          {appliedDiffReady && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-xs text-muted-foreground"
+              onClick={() => setShowRawDiff((v) => !v)}
+            >
+              <FileCode className="h-3.5 w-3.5" />
+              {showRawDiff ? "Show applied diff" : "Show original patch diff"}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Diff */}
+      {activeDiff ? (
+        <DiffView diff={activeDiff} />
+      ) : patchDiff ? (
         <DiffView diff={patchDiff} />
       ) : (
         <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">

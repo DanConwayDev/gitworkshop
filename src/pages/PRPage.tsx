@@ -229,6 +229,15 @@ export default function PRPage() {
   const [fileCount, setFileCount] = useState<number | undefined>(undefined);
   const fileCountAbortRef = useRef<AbortController | null>(null);
 
+  // ── Patch apply result (from PatchFilesTab, shared with commits tab) ──
+  const [patchApplyResult, setPatchApplyResult] = useState<
+    | {
+        failedCount: number;
+        failureReason?: "no-base" | "fetch-failed" | "hunk-mismatch";
+      }
+    | undefined
+  >(undefined);
+
   // For patches: compute file count synchronously from the patch chain
   const patchFileCount = useMemo(() => {
     if (pr?.itemType !== "patch" || !patchChain || patchChain.length === 0)
@@ -505,6 +514,7 @@ export default function PRPage() {
               ? commitDetailPatchMergeBase.baseCommitId
               : undefined
           }
+          baseCommitId={commitDetailPatchMergeBase.baseCommitId}
           relayHints={repoRelayHints}
         />
       );
@@ -890,7 +900,10 @@ export default function PRPage() {
                       onFileCountChange={(count) => {
                         if (pr?.itemType === "patch") setFileCount(count);
                       }}
+                      onApplyResult={setPatchApplyResult}
                       fallbackUrls={effectiveCloneUrls}
+                      basePath={prBasePath ?? undefined}
+                      relayHints={repoRelayHints}
                     />
                   ) : !pr?.tip.commitId ? (
                     <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
@@ -954,6 +967,7 @@ export default function PRPage() {
                       }
                       relayHints={repoRelayHints}
                       isBaseGuessed={patchMergeBase.isGuessed}
+                      applyResult={patchApplyResult}
                     />
                   ) : (
                     <CommitListEmpty message="No patches found in this patch set." />

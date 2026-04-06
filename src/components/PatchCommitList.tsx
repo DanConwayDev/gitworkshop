@@ -20,7 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Clock, User, GitCommit, Info } from "lucide-react";
+import { Clock, User, GitCommit, Info, AlertTriangle } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import type { Patch } from "@/casts/Patch";
@@ -54,6 +54,7 @@ export function PatchCommitList({
   basePath,
   relayHints,
   isBaseGuessed = false,
+  applyResult,
 }: {
   /** Ordered patches in the latest revision (oldest first). */
   patches: Patch[];
@@ -64,8 +65,21 @@ export function PatchCommitList({
    * Typically the repo relay group URLs.
    */
   relayHints?: string[];
-  /** When true, shows a notice that the merge base was approximated. */
+  /**
+   * When true, the merge base was approximated because the patch events omit
+   * the `parent-commit` tag. Combined with `applyResult` to determine the
+   * right banner to show.
+   */
   isBaseGuessed?: boolean;
+  /**
+   * The result of attempting to apply the patch chain from PatchFilesTab.
+   * When undefined, the apply hasn't run yet (e.g. user hasn't visited the
+   * Files tab). When provided, used to show the accurate outcome banner.
+   */
+  applyResult?: {
+    failedCount: number;
+    failureReason?: "no-base" | "fetch-failed" | "hunk-mismatch";
+  };
 }) {
   // Group by date (using committer timestamp or event created_at)
   const grouped = useMemo(() => {
@@ -87,15 +101,62 @@ export function PatchCommitList({
     return groups;
   }, [patches]);
 
+  // Determine which banner to show based on what we know.
+  // applyResult is only available after the user has visited the Files tab.
+  const applyFailed = applyResult && applyResult.failedCount > 0;
+  const applyClean = applyResult && applyResult.failedCount === 0;
+
   return (
     <div className="space-y-6">
-      {isBaseGuessed && (
+      {/* Apply failed — amber warning, mirrors PatchFilesTab */}
+      {isBaseGuessed && applyFailed && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              These patches omit the{" "}
+              <code className="rounded bg-amber-500/10 px-1 font-mono text-[11px]">
+                parent-commit
+              </code>{" "}
+              tag — the merge base was approximated from the patch timestamp,
+              and{" "}
+              {applyResult.failedCount === 1
+                ? "1 file"
+                : `${applyResult.failedCount} files`}{" "}
+              could not be cleanly applied against it. The diffs shown on
+              individual commits are the raw patch diffs.
+            </span>
+          </div>
+        </div>
+      )}
+      {/* Apply succeeded with guessed base — blue info */}
+      {isBaseGuessed && applyClean && (
         <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-700 dark:text-blue-400">
           <div className="flex items-center gap-2">
             <Info className="h-3.5 w-3.5 shrink-0" />
             <span>
-              Merge base approximated from patch timestamp — diff may differ
-              slightly from the original.
+              These patches omit the{" "}
+              <code className="rounded bg-blue-500/10 px-1 font-mono text-[11px]">
+                parent-commit
+              </code>{" "}
+              tag — the merge base was approximated from the patch timestamp.
+              The patch applied cleanly against the approximated base.
+            </span>
+          </div>
+        </div>
+      )}
+      {/* Apply not yet run — blue info, no outcome claim */}
+      {isBaseGuessed && !applyResult && (
+        <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-700 dark:text-blue-400">
+          <div className="flex items-center gap-2">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              These patches omit the{" "}
+              <code className="rounded bg-blue-500/10 px-1 font-mono text-[11px]">
+                parent-commit
+              </code>{" "}
+              tag — the merge base was approximated from the patch timestamp.
+              Visit the Files tab to see whether the patch applies cleanly.
             </span>
           </div>
         </div>

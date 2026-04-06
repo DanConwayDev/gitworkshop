@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   FileDiff,
   FilePlus2,
@@ -25,10 +26,8 @@ import {
   Folder,
   FolderOpen,
   AlertTriangle,
-  ExternalLink,
   Info,
 } from "lucide-react";
-import { nip19 } from "nostr-tools";
 import { cn } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
 import { fileDiffCardId } from "@/lib/diffCardId";
@@ -37,6 +36,7 @@ import {
   computePatchFileChanges,
   mergePatchChainDiff,
 } from "@/lib/patch-diff-merge";
+import { eventIdToNevent } from "@/lib/routeUtils";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 import type { FileChange } from "@/lib/git-grasp-pool";
@@ -63,8 +63,27 @@ export interface PatchFilesTabProps {
   pool: GitGraspPool | null;
   /** Called whenever the number of changed files becomes known. */
   onFileCountChange?: (count: number) => void;
+  /**
+   * Called once the patch apply phase completes (successfully or not).
+   * Allows the parent to reflect the actual apply outcome in other tabs.
+   */
+  onApplyResult?: (result: {
+    failedCount: number;
+    failureReason?: "no-base" | "fetch-failed" | "hunk-mismatch";
+  }) => void;
   /** Extra clone URLs to try for fetching original file content. */
   fallbackUrls?: string[];
+  /**
+   * Base path for the PR (e.g. `/user/repo/prs/nevent1...`).
+   * When provided, patch event links in the failure banner point to
+   * `<basePath>/commit/<nevent1>` instead of an external explorer.
+   */
+  basePath?: string;
+  /**
+   * Relay hints to embed in nevent1 identifiers for patch commit links.
+   * Typically the repo relay group URLs.
+   */
+  relayHints?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -301,7 +320,10 @@ export function PatchFilesTab({
   isBaseGuessed = false,
   pool,
   onFileCountChange,
+  onApplyResult,
   fallbackUrls,
+  basePath,
+  relayHints,
 }: PatchFilesTabProps) {
   const [phase, setPhase] = useState<Phase>({ kind: "parsing" });
   const [activeFile, setActiveFile] = useState<string | null>(null);
@@ -323,21 +345,33 @@ export function PatchFilesTab({
     }
   }, [phase, onFileCountChange]);
 
+  // Notify parent when the apply phase completes.
+  useEffect(() => {
+    if (phase.kind === "done" && onApplyResult) {
+      onApplyResult({
+        failedCount: phase.failedCount,
+        failureReason: phase.failureReason,
+      });
+    }
+  }, [phase, onApplyResult]);
+
   // Stable key for the chain to detect changes
   const chainKey = useMemo(() => chain.map((p) => p.id).join(","), [chain]);
 
-  // Build njump.me links for the patch events (for the failure banner).
+  // Build commit detail links for the patch events (for the failure banner).
+  // When basePath is provided, links point to the internal commit detail page.
   // Must be declared before any early returns to satisfy rules-of-hooks.
   const patchEventLinks = useMemo(() => {
-    return chain.map((p) => {
+    return chain.map((p, i) => {
       try {
-        const nevent = nip19.neventEncode({ id: p.event.id });
-        return { id: p.event.id, url: `https://njump.me/${nevent}` };
+        const nevent = eventIdToNevent(p.event.id, relayHints);
+        const url = basePath ? `${basePath}/commit/${nevent}` : null;
+        return { id: p.event.id, url, label: `patch ${i + 1}` };
       } catch {
-        return { id: p.event.id, url: null };
+        return { id: p.event.id, url: null, label: `patch ${i + 1}` };
       }
     });
-  }, [chain]);
+  }, [chain, basePath, relayHints]);
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -467,57 +501,53 @@ export function PatchFilesTab({
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             <div className="space-y-1 min-w-0">
               <p>
-                {phase.failedCount} file{phase.failedCount !== 1 ? "s" : ""}{" "}
-                could not be cleanly applied.{" "}
                 {phase.failureReason === "no-base" && (
                   <>
-                    The patch is missing a{" "}
+                    Could not compute a combined diff — the patch is missing a{" "}
                     <code className="rounded bg-amber-500/10 px-1 font-mono text-[11px]">
                       parent-commit
                     </code>{" "}
-                    tag and no base commit could be determined. Showing raw
-                    patch diff instead.
+                    tag and no base commit could be determined.
                   </>
                 )}
                 {phase.failureReason === "fetch-failed" && (
                   <>
-                    The base file content could not be fetched from the git
-                    server (the patch may reference a commit not yet pushed).
-                    Showing raw patch diff instead.
+                    Could not compute a combined diff — the base file content
+                    could not be fetched from the git server (the patch may
+                    reference a commit not yet pushed).
                   </>
                 )}
                 {phase.failureReason === "hunk-mismatch" && (
                   <>
-                    The patch was made against a different version of the file
-                    than what the repository currently has
+                    Could not compute a combined diff —
                     {isBaseGuessed
-                      ? " (the base commit was approximated from the patch timestamp — it may not be exact)"
-                      : " (the branch may have diverged)"}
-                    . Showing raw patch diff instead.
+                      ? " the base commit was approximated from the patch timestamp and the patch did not apply cleanly against it."
+                      : " the patch did not apply cleanly against the current branch head."}
                   </>
                 )}
                 {!phase.failureReason && (
-                  <>Showing raw patch diff for those files.</>
-                )}
+                  <>
+                    Could not compute a combined diff for {phase.failedCount}{" "}
+                    file{phase.failedCount !== 1 ? "s" : ""}.
+                  </>
+                )}{" "}
+                Showing the original patch diff.
               </p>
               {patchEventLinks.length > 0 && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
                   <span className="text-xs text-amber-600/70 dark:text-amber-400/70">
-                    View raw patch event
+                    View patch commit
                     {patchEventLinks.length !== 1 ? "s" : ""}:
                   </span>
-                  {patchEventLinks.map((link, i) =>
+                  {patchEventLinks.map((link) =>
                     link.url ? (
-                      <a
+                      <Link
                         key={link.id}
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        to={link.url}
                         className="inline-flex items-center gap-1 text-xs text-amber-600/80 dark:text-amber-400/80 hover:text-amber-700 dark:hover:text-amber-300 underline underline-offset-2"
                       >
-                        patch {i + 1}
-                        <ExternalLink className="h-2.5 w-2.5" />
-                      </a>
+                        {link.label}
+                      </Link>
                     ) : null,
                   )}
                 </div>
