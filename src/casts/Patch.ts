@@ -150,15 +150,29 @@ export class Patch extends EventCast<PatchEvent> {
   }
 
   /**
-   * The parent commit ID, from the `["parent-commit", "<id>"]` tag.
-   * Returns undefined if the tag is absent.
+   * The parent commit ID.
+   *
+   * Resolution order:
+   *   1. `["parent-commit", "<id>"]` tag (NIP-34, set by ngit).
+   *   2. `base-commit: <hash>` trailer that `git format-patch` appends at the
+   *      end of the patch body (after the `-- ` separator). This is a standard
+   *      git trailer and is the only source of base-commit info for patches
+   *      submitted without the NIP-34 parent-commit tag.
+   *
+   * Returns undefined if neither source is present.
    */
   get parentCommitId(): string | undefined {
-    return getOrComputeCachedValue(
-      this.event,
-      ParentCommitIdSymbol,
-      () => this.event.tags.find(([t]) => t === "parent-commit")?.[1],
-    );
+    return getOrComputeCachedValue(this.event, ParentCommitIdSymbol, () => {
+      // 1. NIP-34 tag
+      const tag = this.event.tags.find(([t]) => t === "parent-commit")?.[1];
+      if (tag) return tag;
+
+      // 2. git format-patch trailer: "base-commit: <40-char hex>"
+      const match = this.event.content.match(
+        /^base-commit:\s*([0-9a-f]{40})\s*$/im,
+      );
+      return match?.[1];
+    });
   }
 
   /**

@@ -82,6 +82,13 @@ export interface PatchChainDiffResult {
    * concatenation of multiple per-patch diffs, which may be confusing to read.
    */
   hasMultiPatchFailure: boolean;
+  /**
+   * True when the result was produced by falling back to the default branch
+   * HEAD because the exact base commit could not be fetched from the git
+   * server. The diff is valid but may not reflect the exact base the author
+   * used — show a soft warning to the user.
+   */
+  usedHeadFallback: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -309,6 +316,7 @@ export async function mergePatchChainDiff(
       failedCount: 0,
       failureReason: undefined,
       hasMultiPatchFailure: false,
+      usedHeadFallback: false,
     };
   }
 
@@ -476,6 +484,7 @@ export async function mergePatchChainDiff(
       failedCount: 0,
       failureReason: undefined,
       hasMultiPatchFailure: false,
+      usedHeadFallback: false,
     };
   }
 
@@ -511,6 +520,7 @@ export async function mergePatchChainDiff(
     failedCount,
     failureReason,
     hasMultiPatchFailure,
+    usedHeadFallback: false,
   };
 }
 

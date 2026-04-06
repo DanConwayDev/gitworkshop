@@ -313,6 +313,7 @@ type Phase =
       failedCount: number;
       failureReason?: "no-base" | "fetch-failed" | "hunk-mismatch";
       hasMultiPatchFailure: boolean;
+      usedHeadFallback: boolean;
     }
   | { kind: "error"; message: string };
 
@@ -396,6 +397,7 @@ export function PatchFilesTab({
           diff: "",
           failedCount: 0,
           hasMultiPatchFailure: false,
+          usedHeadFallback: false,
         });
         return;
       }
@@ -414,6 +416,7 @@ export function PatchFilesTab({
           diff: "",
           failedCount: 0,
           hasMultiPatchFailure: false,
+          usedHeadFallback: false,
         });
         return;
       }
@@ -431,7 +434,29 @@ export function PatchFilesTab({
 
       if (abort.signal.aborted) return;
 
-      // Phase 2b: if the base was guessed (no parent-commit tag) and the
+      // Phase 2b: if the exact base commit couldn't be fetched from the git
+      // server (commit not yet pushed), retry against the default branch HEAD.
+      // Only adopt the HEAD result if it applies cleanly (failedCount === 0).
+      if (
+        !isBaseGuessed &&
+        result.failureReason === "fetch-failed" &&
+        defaultBranchHead &&
+        defaultBranchHead !== baseCommitId
+      ) {
+        const tipResult = await mergePatchChainDiff(
+          chain,
+          pool!,
+          defaultBranchHead,
+          abort.signal,
+          fallbackUrls,
+        );
+        if (abort.signal.aborted) return;
+        if (tipResult.failedCount === 0) {
+          result = { ...tipResult, usedHeadFallback: true };
+        }
+      }
+
+      // Phase 2c: if the base was guessed (no parent-commit tag) and the
       // apply failed with a hunk-mismatch, retry against the tip of the
       // default branch before giving up.
       if (
@@ -461,6 +486,7 @@ export function PatchFilesTab({
         failedCount: result.failedCount,
         failureReason: result.failureReason,
         hasMultiPatchFailure: result.hasMultiPatchFailure,
+        usedHeadFallback: result.usedHeadFallback,
       });
     }
 
@@ -535,6 +561,16 @@ export function PatchFilesTab({
 
   return (
     <div className="space-y-0">
+      {phase.usedHeadFallback && (
+        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm text-blue-700 dark:text-blue-400 mb-3 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            The exact base commit could not be fetched from the git server. Diff
+            shown against the tip of the default branch — the patch applied
+            cleanly.
+          </span>
+        </div>
+      )}
       {phase.failedCount > 0 && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 mb-3">
           <details className="group">

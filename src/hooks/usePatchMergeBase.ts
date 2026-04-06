@@ -7,6 +7,10 @@
  *      committer timestamp is ≤ the first patch's author timestamp.
  *      This approximates the commit the patch was based on when the
  *      `parent-commit` tag is absent (older ngit versions, manual patches).
+ *   3. Default branch HEAD: if the timestamp heuristic fails (e.g. the repo
+ *      history is too deep to walk), fall back to the tip of the default
+ *      branch. Applying against HEAD is better than showing nothing — the
+ *      patch apply logic will retry against HEAD anyway on hunk-mismatch.
  *
  * The heuristic is "good enough" for rendering the Files Changed diff and
  * for the merge-base check. It may be slightly off if the author committed
@@ -140,7 +144,27 @@ export function usePatchMergeBase(
       .findCommitBeforeTimestamp(authorTimestamp, abort.signal)
       .then((result) => {
         if (abort.signal.aborted) return;
-        setBaseCommitId(result ?? undefined);
+
+        if (result) {
+          setBaseCommitId(result);
+          setIsGuessed(true);
+          setComputing(false);
+          return;
+        }
+
+        // Timestamp heuristic failed (history too deep or unreachable).
+        // Fall back to the default branch HEAD so the patch apply logic has
+        // something to work with — it will retry against HEAD on hunk-mismatch
+        // anyway, so this just makes that the first attempt.
+        const info = gitPool.getInfoRefs();
+        const headRef = info?.symrefs["HEAD"];
+        const headCommit = headRef
+          ? info?.refs[headRef]
+          : info
+            ? Object.values(info.refs)[0]
+            : undefined;
+
+        setBaseCommitId(headCommit ?? undefined);
         setIsGuessed(true);
         setComputing(false);
       })

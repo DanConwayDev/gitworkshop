@@ -364,6 +364,7 @@ type AppliedDiffState =
       diff: string;
       failedCount: number;
       failureReason?: "no-base" | "fetch-failed" | "hunk-mismatch";
+      usedHeadFallback: boolean;
     }
   | { kind: "error"; message: string };
 
@@ -590,6 +591,28 @@ export function PatchCommitDetailView({
 
       if (abort.signal.aborted) return;
 
+      // If the exact base commit couldn't be fetched (commit not yet pushed),
+      // retry against the default branch HEAD. Only adopt the HEAD result if
+      // it applies cleanly (failedCount === 0).
+      if (
+        !isBaseGuessed &&
+        result.failureReason === "fetch-failed" &&
+        defaultBranchHead &&
+        defaultBranchHead !== baseCommitId
+      ) {
+        const tipResult = await mergePatchChainDiff(
+          singlePatchChain,
+          pool!,
+          defaultBranchHead,
+          abort.signal,
+          fallbackUrls,
+        );
+        if (abort.signal.aborted) return;
+        if (tipResult.failedCount === 0) {
+          result = { ...tipResult, usedHeadFallback: true };
+        }
+      }
+
       // If the base was guessed and apply failed with a hunk-mismatch, retry
       // against the tip of the default branch before giving up.
       if (
@@ -618,6 +641,7 @@ export function PatchCommitDetailView({
         diff: result.combinedDiff,
         failedCount: result.failedCount,
         failureReason: result.failureReason,
+        usedHeadFallback: result.usedHeadFallback,
       });
     }
 
@@ -874,6 +898,20 @@ export function PatchCommitDetailView({
           </div>
         </CardContent>
       </Card>
+
+      {/* Head fallback notice — applied cleanly but against HEAD, not exact base */}
+      {appliedDiff.kind === "done" &&
+        appliedDiff.usedHeadFallback &&
+        !appliedDiffFailed && (
+          <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm text-blue-700 dark:text-blue-400 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>
+              The exact base commit could not be fetched from the git server.
+              Diff shown against the tip of the default branch — the patch
+              applied cleanly.
+            </span>
+          </div>
+        )}
 
       {/* Apply failure warning */}
       {appliedDiffFailed && appliedDiff.kind === "done" && (
