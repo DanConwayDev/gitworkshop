@@ -456,6 +456,9 @@ export default function PRPage() {
                       ? `${prBasePath}/commits`
                       : undefined
                   }
+                  hasCoverLetter={
+                    pr.itemType === "patch" && !!pr.hasCoverLetter
+                  }
                 />
               ) : (
                 <EventBodyCardSkeleton />

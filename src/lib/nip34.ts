@@ -1780,6 +1780,13 @@ export interface ResolvedPR extends ResolvedPRLite {
    * revision as a separate push event.
    */
   firstRevisionInlined?: boolean;
+
+  /**
+   * For patches: true when the body was sourced from a cover-letter patch
+   * (a patch with `[PATCH 0/N]` subject or `t:cover-letter` tag).
+   * Undefined / false for PRs and patches without a cover letter.
+   */
+  hasCoverLetter?: boolean;
 }
 
 // ---------------------------------------------------------------------------

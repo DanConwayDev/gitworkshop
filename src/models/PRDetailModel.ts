@@ -341,6 +341,7 @@ export function PRDetailModel(
             | Array<{ commitId: string | undefined; subject: string }>
             | undefined;
           let firstRevisionInlined = false;
+          let hasCoverLetter = false;
 
           if (itemType === "patch" && revisions.length > 0) {
             const firstRevision = revisions[0];
@@ -349,6 +350,11 @@ export function PRDetailModel(
               firstRevision.patches &&
               firstRevision.patches.length > 0
             ) {
+              // Detect cover letter: root patch itself, or first patch in chain
+              hasCoverLetter = firstRevision.patches.some(
+                (p) => p.isCoverLetter,
+              );
+
               const allSimultaneous = firstRevision.patches.every(
                 (p) =>
                   Math.abs(p.event.created_at - rootEvent.created_at) <=
@@ -403,6 +409,7 @@ export function PRDetailModel(
             patchDiff: patchDiff || undefined,
             initialPatchCommits,
             firstRevisionInlined,
+            hasCoverLetter,
           } satisfies ResolvedPR;
         },
       ),

@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Calendar,
   Clock,
+  Mail,
   Pencil,
   RotateCcw,
   ShieldAlert,
@@ -55,6 +56,11 @@ interface EventBodyCardProps {
    * badge to the latest commits (e.g. the PR's commits tab).
    */
   commitsLatestHref?: string;
+  /**
+   * When true, shows a "cover letter" badge indicating the description was
+   * sourced from a [PATCH 0/N] cover-letter patch.
+   */
+  hasCoverLetter?: boolean;
 }
 
 export function EventBodyCard({
@@ -63,6 +69,7 @@ export function EventBodyCard({
   commits,
   commitsSuperseded,
   commitsLatestHref,
+  hasCoverLetter,
 }: EventBodyCardProps) {
   const body = content ?? event.content;
   const createdAt = new Date(event.created_at * 1000);
@@ -82,6 +89,12 @@ export function EventBodyCard({
                 {format(createdAt, "MMM d, yyyy 'at' h:mm a")}
               </p>
               <OutboxStatusBadge event={event} />
+              {hasCoverLetter && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 text-[11px] text-muted-foreground font-medium">
+                  <Mail className="h-2.5 w-2.5" />
+                  cover letter
+                </span>
+              )}
             </span>
           </div>
           <EventCardActions event={event} />
