@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -85,6 +86,11 @@ interface MergePanelProps {
   defaultBranchName: string;
   /** The current HEAD commit of the default branch */
   defaultBranchHead: string | undefined;
+  /**
+   * Guessed base commit ID from the timestamp heuristic, used when the first
+   * patch has no `parent-commit` tag. Passed through to usePatchMergeability.
+   */
+  guessedBaseCommitId?: string;
 }
 
 type MergeStep =
@@ -159,6 +165,7 @@ export function MergePanel({
   behindCount,
   defaultBranchName,
   defaultBranchHead,
+  guessedBaseCommitId,
 }: MergePanelProps) {
   const account = useActiveAccount();
   const profile = useMyProfile();
@@ -174,6 +181,7 @@ export function MergePanel({
     gitPool,
     effectiveCloneUrls,
     true,
+    guessedBaseCommitId,
   );
 
   const defaultBranchRef = `refs/heads/${defaultBranchName}`;
@@ -418,6 +426,7 @@ export function MergePanel({
                   allHashesVerified={
                     mergeability.buildResult?.allHashesVerified ?? false
                   }
+                  isBaseGuessed={!!guessedBaseCommitId}
                 />
               </div>
 
@@ -590,6 +599,7 @@ function StatusHeadline({
   defaultBranchName,
   behindCount,
   allHashesVerified,
+  isBaseGuessed,
 }: {
   status: MergeabilityStatus;
   mergeStep: MergeStep;
@@ -597,6 +607,7 @@ function StatusHeadline({
   defaultBranchName: string;
   behindCount: number | undefined;
   allHashesVerified: boolean;
+  isBaseGuessed: boolean;
 }) {
   if (mergeStep === "done") {
     return (
@@ -646,6 +657,16 @@ function StatusHeadline({
               patches apply cleanly.
             </p>
           )}
+          {isBaseGuessed && (
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1">
+              <Info className="h-3 w-3 shrink-0" />
+              Merge base approximated from patch timestamp (no{" "}
+              <code className="rounded bg-muted px-0.5 font-mono text-[10px]">
+                parent-commit
+              </code>{" "}
+              tag).
+            </p>
+          )}
           {!allHashesVerified && (
             <p className="text-xs text-amber-600 mt-0.5">
               Diffs applied correctly. Tooling produced commit ID mismatch but
@@ -666,10 +687,19 @@ function StatusHeadline({
       );
     case "error":
       return (
-        <p className="text-sm text-amber-600">
-          Could not determine mergeability
-          {mergeError ? `: ${mergeError}` : ""}
-        </p>
+        <div>
+          <p className="text-sm text-amber-600">
+            Could not determine mergeability
+            {mergeError ? `: ${mergeError}` : ""}
+          </p>
+          {isBaseGuessed && (
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1">
+              <Info className="h-3 w-3 shrink-0" />
+              Merge base was approximated from patch timestamp — it may be
+              incorrect.
+            </p>
+          )}
+        </div>
       );
     default:
       return (

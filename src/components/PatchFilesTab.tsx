@@ -26,6 +26,7 @@ import {
   FolderOpen,
   AlertTriangle,
   ExternalLink,
+  Info,
 } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import { cn } from "@/lib/utils";
@@ -47,8 +48,17 @@ import type { FileChange } from "@/lib/git-grasp-pool";
 export interface PatchFilesTabProps {
   /** Ordered patches in the latest revision (oldest first). */
   chain: Patch[];
-  /** Base commit ID — from the first patch's parent-commit tag. */
+  /**
+   * Base commit ID — from the first patch's `parent-commit` tag, or
+   * approximated via the timestamp heuristic when the tag is absent.
+   */
   baseCommitId: string | undefined;
+  /**
+   * True when `baseCommitId` was approximated via the timestamp heuristic
+   * rather than read from the `parent-commit` tag. Used to soften the
+   * warning message shown when the diff cannot be applied cleanly.
+   */
+  isBaseGuessed?: boolean;
   /** Pool instance from useGitPool (repo clone URLs). */
   pool: GitGraspPool | null;
   /** Called whenever the number of changed files becomes known. */
@@ -288,6 +298,7 @@ type Phase =
 export function PatchFilesTab({
   chain,
   baseCommitId,
+  isBaseGuessed = false,
   pool,
   onFileCountChange,
   fallbackUrls,
@@ -439,6 +450,17 @@ export function PatchFilesTab({
 
   return (
     <div className="space-y-0">
+      {isBaseGuessed && phase.failedCount === 0 && (
+        <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-700 dark:text-blue-400 mb-3">
+          <div className="flex items-center gap-2">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Merge base approximated from patch timestamp — diff may differ
+              slightly from the original.
+            </span>
+          </div>
+        </div>
+      )}
       {phase.failedCount > 0 && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 mb-3 space-y-2">
           <div className="flex items-start gap-3">
@@ -453,7 +475,7 @@ export function PatchFilesTab({
                     <code className="rounded bg-amber-500/10 px-1 font-mono text-[11px]">
                       parent-commit
                     </code>{" "}
-                    tag, so the base file content cannot be fetched. Showing raw
+                    tag and no base commit could be determined. Showing raw
                     patch diff instead.
                   </>
                 )}
@@ -467,8 +489,11 @@ export function PatchFilesTab({
                 {phase.failureReason === "hunk-mismatch" && (
                   <>
                     The patch was made against a different version of the file
-                    than what the repository currently has (the branch may have
-                    diverged). Showing raw patch diff instead.
+                    than what the repository currently has
+                    {isBaseGuessed
+                      ? " (the base commit was approximated from the patch timestamp — it may not be exact)"
+                      : " (the branch may have diverged)"}
+                    . Showing raw patch diff instead.
                   </>
                 )}
                 {!phase.failureReason && (

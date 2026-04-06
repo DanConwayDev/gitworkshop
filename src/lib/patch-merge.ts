@@ -353,10 +353,12 @@ function buildNewDirTree(
  * This is the "build" counterpart to patch-verify.ts's "verify" function.
  * Instead of discarding serialized bytes, we keep them for the packfile.
  *
- * @param chain         - Ordered patches (oldest first), cover letters excluded
- * @param pool          - GitGraspPool for fetching base tree and file content
- * @param signal        - AbortSignal for cancellation
- * @param fallbackUrls  - Extra clone URLs to try
+ * @param chain              - Ordered patches (oldest first), cover letters excluded
+ * @param pool               - GitGraspPool for fetching base tree and file content
+ * @param signal             - AbortSignal for cancellation
+ * @param fallbackUrls       - Extra clone URLs to try
+ * @param guessedBaseCommitId - Fallback base commit when the first patch has no
+ *                              `parent-commit` tag (e.g. from the timestamp heuristic).
  * @returns Either a successful build result or an error with conflicts
  */
 export async function buildPatchChainObjects(
@@ -364,16 +366,19 @@ export async function buildPatchChainObjects(
   pool: GitGraspPool,
   signal: AbortSignal,
   fallbackUrls?: string[],
+  guessedBaseCommitId?: string,
 ): Promise<PatchChainBuildResult | PatchChainBuildError> {
   if (chain.length === 0) {
     return { reason: "Empty patch chain", conflicts: [] };
   }
 
-  // Find the base commit (first patch's parent-commit tag)
-  const baseCommitId = chain[0].parentCommitId;
+  // Find the base commit: prefer the explicit parent-commit tag, fall back to
+  // the guessed base (from the timestamp heuristic).
+  const baseCommitId = chain[0].parentCommitId ?? guessedBaseCommitId;
   if (!baseCommitId) {
     return {
-      reason: "No parent-commit tag on root patch — cannot determine base",
+      reason:
+        "No parent-commit tag on root patch and no base commit could be guessed — cannot determine base",
       conflicts: [],
     };
   }

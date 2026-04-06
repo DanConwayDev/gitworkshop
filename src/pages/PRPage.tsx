@@ -55,6 +55,7 @@ import {
 import { PatchCommitList } from "@/components/PatchCommitList";
 import { useCommitHistory } from "@/hooks/useGitExplorer";
 import { usePRMergeBase } from "@/hooks/usePRMergeBase";
+import { usePatchMergeBase } from "@/hooks/usePatchMergeBase";
 import { MergePanel } from "@/components/MergePanel";
 
 export default function PRPage() {
@@ -198,6 +199,11 @@ export default function PRPage() {
           (p) => !p.isCoverLetter,
         )
       : undefined;
+
+  // ── Patch merge base ──────────────────────────────────────────────────
+  // Resolves the base commit for the patch chain: uses the parent-commit tag
+  // when present, otherwise approximates via the timestamp heuristic.
+  const patchMergeBase = usePatchMergeBase(patchChain, gitPool, gitPoolState);
 
   // ── File count (eager for tab badge) ──────────────────────────────────
   const [fileCount, setFileCount] = useState<number | undefined>(undefined);
@@ -618,6 +624,11 @@ export default function PRPage() {
                     defaultBranchHead={
                       defaultBranchHead ?? repoState?.headCommitId
                     }
+                    guessedBaseCommitId={
+                      patchMergeBase.isGuessed
+                        ? patchMergeBase.baseCommitId
+                        : undefined
+                    }
                   />
                 )}
 
@@ -648,9 +659,8 @@ export default function PRPage() {
                 {pr?.itemType === "patch" && patchChain ? (
                   <PatchFilesTab
                     chain={patchChain}
-                    baseCommitId={
-                      patchChain[0]?.parentCommitId ?? effectiveMergeBase
-                    }
+                    baseCommitId={patchMergeBase.baseCommitId}
+                    isBaseGuessed={patchMergeBase.isGuessed}
                     pool={gitPool}
                     onFileCountChange={(count) => {
                       if (pr?.itemType === "patch") setFileCount(count);

@@ -1436,6 +1436,73 @@ export class GitGraspPool {
   }
 
   /**
+   * Find the newest commit on the default branch whose committer timestamp
+   * is ≤ `targetTimestamp`.
+   *
+   * This is used as a heuristic merge-base for NIP-34 patches that are
+   * missing a `parent-commit` tag. The patch's author timestamp is used as
+   * the target: the newest default-branch commit that existed at or before
+   * the patch was authored is a reasonable approximation of the base.
+   *
+   * Strategy:
+   *   Walk the default branch history in batches (newest-first). The first
+   *   commit whose committer timestamp is ≤ targetTimestamp is returned.
+   *
+   * Returns the commit hash, or null if it cannot be determined.
+   *
+   * @param targetTimestamp - Unix timestamp (seconds) to search at or before.
+   * @param signal          - AbortSignal for cancellation.
+   * @param batchSize       - Commits per fetch (default 200).
+   * @param maxTotal        - Hard cap on total commits walked (default 2000).
+   */
+  async findCommitBeforeTimestamp(
+    targetTimestamp: number,
+    signal: AbortSignal,
+    batchSize = 200,
+    maxTotal = 2000,
+  ): Promise<string | null> {
+    const info = this.getInfoRefs();
+    if (!info) return null;
+
+    const headRef = info.symrefs["HEAD"];
+    const defaultBranchCommit = headRef
+      ? info.refs[headRef]
+      : Object.values(info.refs)[0];
+    if (!defaultBranchCommit) return null;
+
+    let offset = 0;
+    let batchStart = defaultBranchCommit;
+
+    while (offset < maxTotal) {
+      if (signal.aborted) return null;
+
+      const batch = await this.getCommitHistory(batchStart, batchSize, signal);
+      if (!batch || batch.length === 0 || signal.aborted) return null;
+
+      for (const commit of batch) {
+        // Use committer timestamp (when the commit landed), falling back to
+        // author timestamp if committer is somehow absent.
+        const ts = commit.committer?.timestamp ?? commit.author.timestamp;
+        if (ts <= targetTimestamp) {
+          return commit.hash;
+        }
+      }
+
+      offset += batch.length;
+
+      // Walk to the first parent of the oldest commit in this batch.
+      const tail = batch[batch.length - 1];
+      if (tail.parents.length === 0) {
+        // Reached the root commit — return it as the best we can do.
+        return tail.hash;
+      }
+      batchStart = tail.parents[0];
+    }
+
+    return null; // exceeded maxTotal
+  }
+
+  /**
    * Fetch the data needed to compute a diff between two commits.
    *
    * Returns both commits and both complete recursive directory trees

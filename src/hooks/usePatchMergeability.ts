@@ -50,16 +50,19 @@ export interface PatchMergeability {
 /**
  * Eagerly check whether a patch chain can be merged.
  *
- * @param patchChain    - The ordered patches (oldest first, cover letters excluded)
- * @param pool          - GitGraspPool for fetching base tree / file content
- * @param fallbackUrls  - Extra clone URLs to try
- * @param enabled       - Set to false to skip the check entirely
+ * @param patchChain          - The ordered patches (oldest first, cover letters excluded)
+ * @param pool                - GitGraspPool for fetching base tree / file content
+ * @param fallbackUrls        - Extra clone URLs to try
+ * @param enabled             - Set to false to skip the check entirely
+ * @param guessedBaseCommitId - Fallback base commit when the first patch has no
+ *                              `parent-commit` tag (from the timestamp heuristic).
  */
 export function usePatchMergeability(
   patchChain: Patch[] | undefined,
   pool: GitGraspPool | null,
   fallbackUrls: string[] | undefined,
   enabled: boolean,
+  guessedBaseCommitId?: string,
 ): PatchMergeability {
   const [status, setStatus] = useState<MergeabilityStatus>("idle");
   const [buildResult, setBuildResult] = useState<PatchChainBuildResult | null>(
@@ -94,7 +97,13 @@ export function usePatchMergeability(
     const abort = new AbortController();
     abortRef.current = abort;
 
-    buildPatchChainObjects(patchChain, pool, abort.signal, fallbackUrls)
+    buildPatchChainObjects(
+      patchChain,
+      pool,
+      abort.signal,
+      fallbackUrls,
+      guessedBaseCommitId,
+    )
       .then((result) => {
         if (abort.signal.aborted) return;
 
@@ -132,6 +141,7 @@ export function usePatchMergeability(
     chainLength,
     pool,
     recheckCounter,
+    guessedBaseCommitId,
     // patchChain and fallbackUrls intentionally excluded — deps above are stable proxies
   ]);
 
