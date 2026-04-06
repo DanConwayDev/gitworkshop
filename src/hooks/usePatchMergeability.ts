@@ -139,111 +139,115 @@ export function usePatchMergeability(
     const abort = new AbortController();
     abortRef.current = abort;
 
+    // Capture narrowed references for use inside the async closure
+    const chain = patchChain;
+    const gitPool = pool;
+
     // Determine which strategies we can run
-    const hasMergeBase = !!(
-      patchChain[0].parentCommitId ?? guessedBaseCommitId
-    );
+    const hasMergeBase = !!(chain[0].parentCommitId ?? guessedBaseCommitId);
     const hasApplyTarget = !!(defaultBranchHead && maintainerCommitter);
 
-    // Build promises for each strategy
-    const mergePromise: Promise<
-      PatchChainBuildResult | PatchChainBuildError
-    > | null = hasMergeBase
-      ? buildPatchChainObjects(
-          patchChain,
-          pool,
-          abort.signal,
-          fallbackUrls,
-          guessedBaseCommitId,
-        )
-      : null;
+    // Run strategies sequentially: try merge first, only fall back to
+    // apply-to-tip if merge fails. This avoids the extra git-server fetch
+    // and patch-replay work when the merge strategy already succeeds.
+    async function run() {
+      // ── Strategy 1: merge against original base ──────────────────────
+      const mergeRes: PatchChainBuildResult | PatchChainBuildError | null =
+        hasMergeBase
+          ? await buildPatchChainObjects(
+              chain,
+              gitPool,
+              abort.signal,
+              fallbackUrls,
+              guessedBaseCommitId,
+            )
+          : null;
 
-    const applyPromise: Promise<
-      PatchChainApplyResult | PatchChainBuildError
-    > | null =
-      hasApplyTarget && defaultBranchHead && maintainerCommitter
-        ? applyPatchChainToTip(
-            patchChain,
-            pool,
-            defaultBranchHead,
-            maintainerCommitter,
-            abort.signal,
-            fallbackUrls,
-          )
-        : null;
+      if (abort.signal.aborted) return;
 
-    // Run both in parallel
-    Promise.all([
-      mergePromise ?? Promise.resolve(null),
-      applyPromise ?? Promise.resolve(null),
-    ])
-      .then(([mergeRes, applyRes]) => {
-        if (abort.signal.aborted) return;
+      const mergeOk = mergeRes !== null && !("reason" in mergeRes);
 
-        const mergeOk = mergeRes !== null && !("reason" in mergeRes);
-        const applyOk = applyRes !== null && !("reason" in applyRes);
+      if (mergeOk) {
+        // Merge strategy succeeded — use it, skip apply-to-tip entirely
+        setStatus("ready");
+        setBuildResult(mergeRes as PatchChainBuildResult);
+        setApplyResult(null);
+        setConflicts([]);
+        setErrorMessage(null);
+        setMergeStrategyError(null);
+        return;
+      }
 
-        if (mergeOk) {
-          // Merge strategy succeeded — prefer it
-          setStatus("ready");
-          setBuildResult(mergeRes as PatchChainBuildResult);
-          setApplyResult(null);
-          setConflicts([]);
-          setErrorMessage(null);
-          setMergeStrategyError(null);
-        } else if (applyOk) {
-          // Only apply-to-tip succeeded
-          const mergeErr =
-            mergeRes !== null && "reason" in mergeRes
-              ? (mergeRes as { reason: string }).reason
-              : hasMergeBase
-                ? "Merge strategy failed"
-                : "No merge base available";
-          setStatus("ready-apply-only");
-          setBuildResult(null);
-          setApplyResult(applyRes as PatchChainApplyResult);
-          setConflicts([]);
-          setErrorMessage(null);
-          setMergeStrategyError(mergeErr);
-        } else {
-          // Both failed — report the most informative error
-          const mergeErr =
-            mergeRes !== null && "reason" in mergeRes
-              ? (mergeRes as { reason: string; conflicts: MergeConflict[] })
-              : null;
-          const applyErr =
-            applyRes !== null && "reason" in applyRes
-              ? (applyRes as { reason: string; conflicts: MergeConflict[] })
-              : null;
+      // ── Strategy 2: apply to tip (only if merge failed) ──────────────
+      const applyRes: PatchChainApplyResult | PatchChainBuildError | null =
+        hasApplyTarget && defaultBranchHead && maintainerCommitter
+          ? await applyPatchChainToTip(
+              chain,
+              gitPool,
+              defaultBranchHead,
+              maintainerCommitter,
+              abort.signal,
+              fallbackUrls,
+            )
+          : null;
 
-          // Prefer merge strategy's conflict details if available
-          const primaryErr = mergeErr ?? applyErr;
-          const primaryConflicts = primaryErr?.conflicts ?? [];
+      if (abort.signal.aborted) return;
 
-          if (primaryConflicts.length > 0) {
-            setStatus("conflicts");
-            setConflicts(primaryConflicts);
-            setErrorMessage(primaryErr?.reason ?? "Conflicts detected");
-          } else if (!hasMergeBase && !hasApplyTarget) {
-            setStatus("idle");
-          } else {
-            setStatus("error");
-            setErrorMessage(
-              primaryErr?.reason ?? "Could not determine mergeability",
-            );
-          }
-          setMergeStrategyError(null);
-        }
-      })
-      .catch((err) => {
-        if (abort.signal.aborted) return;
+      const applyOk = applyRes !== null && !("reason" in applyRes);
+
+      if (applyOk) {
+        // Only apply-to-tip succeeded
+        const mergeErr =
+          mergeRes !== null && "reason" in mergeRes
+            ? (mergeRes as { reason: string }).reason
+            : hasMergeBase
+              ? "Merge strategy failed"
+              : "No merge base available";
+        setStatus("ready-apply-only");
+        setBuildResult(null);
+        setApplyResult(applyRes as PatchChainApplyResult);
+        setConflicts([]);
+        setErrorMessage(null);
+        setMergeStrategyError(mergeErr);
+        return;
+      }
+
+      // Both failed — report the most informative error
+      const mergeErr =
+        mergeRes !== null && "reason" in mergeRes
+          ? (mergeRes as { reason: string; conflicts: MergeConflict[] })
+          : null;
+      const applyErr =
+        applyRes !== null && "reason" in applyRes
+          ? (applyRes as { reason: string; conflicts: MergeConflict[] })
+          : null;
+
+      // Prefer merge strategy's conflict details if available
+      const primaryErr = mergeErr ?? applyErr;
+      const primaryConflicts = primaryErr?.conflicts ?? [];
+
+      if (primaryConflicts.length > 0) {
+        setStatus("conflicts");
+        setConflicts(primaryConflicts);
+        setErrorMessage(primaryErr?.reason ?? "Conflicts detected");
+      } else if (!hasMergeBase && !hasApplyTarget) {
+        setStatus("idle");
+      } else {
         setStatus("error");
         setErrorMessage(
-          err instanceof Error
-            ? err.message
-            : "Unknown error during merge check",
+          primaryErr?.reason ?? "Could not determine mergeability",
         );
-      });
+      }
+      setMergeStrategyError(null);
+    }
+
+    run().catch((err) => {
+      if (abort.signal.aborted) return;
+      setStatus("error");
+      setErrorMessage(
+        err instanceof Error ? err.message : "Unknown error during merge check",
+      );
+    });
 
     return () => abort.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
