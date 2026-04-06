@@ -9,7 +9,6 @@ import RepoCommitsPage from "./RepoCommitsPage";
 import RepoCommitPage from "./RepoCommitPage";
 import IssuePage from "@/pages/IssuePage";
 import PRPage from "@/pages/PRPage";
-import PRCommitPage from "@/pages/PRCommitPage";
 import { useIssues } from "@/hooks/useIssues";
 import { usePRs } from "@/hooks/usePRs";
 import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
@@ -545,7 +544,7 @@ function RepoLayoutResolved({
           ) : subPage === "pr" ? (
             <PRPage />
           ) : subPage === "pr-commit" ? (
-            <PRCommitPage />
+            <PRPage />
           ) : subPage === "prs" ? (
             <RepoPRsPage />
           ) : subPage === "about" ? (
