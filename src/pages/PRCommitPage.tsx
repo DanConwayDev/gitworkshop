@@ -229,6 +229,9 @@ export default function PRCommitPage() {
           defaultBranchHead={poolState.latestCommit?.hash}
           superseded={patchMatch.superseded}
           isBaseGuessed={patchMergeBase.isGuessed}
+          guessedBaseCommitId={
+            patchMergeBase.isGuessed ? patchMergeBase.baseCommitId : undefined
+          }
         />
       </div>
     );

@@ -108,6 +108,12 @@ export interface PatchCommitDetailViewProps {
    * the patch timestamp rather than determined exactly.
    */
   isBaseGuessed?: boolean;
+  /**
+   * The approximated base commit hash (only meaningful when isBaseGuessed is
+   * true). Shown in the approximation notice so the user can see which commit
+   * was used as the merge base.
+   */
+  guessedBaseCommitId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,15 +121,21 @@ export interface PatchCommitDetailViewProps {
 // ---------------------------------------------------------------------------
 
 type ParentContext =
-  | { kind: "patch-chain"; commitId: string; href: string }
-  | { kind: "default-branch"; commitId: string; href: string }
-  | { kind: "unknown"; commitId: string };
+  | { kind: "patch-chain"; commitId: string; href: string; guessed?: boolean }
+  | {
+      kind: "default-branch";
+      commitId: string;
+      href: string;
+      guessed?: boolean;
+    }
+  | { kind: "unknown"; commitId: string; guessed?: boolean };
 
 function resolveParentContext(
   parentCommitId: string,
   basePath: string,
   repoBasePath: string,
   patchChain: Patch[] | undefined,
+  guessed = false,
 ): ParentContext {
   if (patchChain) {
     const parentPatch = patchChain.find((p) => p.commitId === parentCommitId);
@@ -132,6 +144,7 @@ function resolveParentContext(
         kind: "patch-chain",
         commitId: parentCommitId,
         href: `${basePath}/commit/${parentCommitId}`,
+        guessed,
       };
     }
   }
@@ -140,6 +153,7 @@ function resolveParentContext(
     kind: "default-branch",
     commitId: parentCommitId,
     href: `${repoBasePath}/commit/${parentCommitId}`,
+    guessed,
   };
 }
 
@@ -337,6 +351,7 @@ export function PatchCommitDetailView({
   defaultBranchHead,
   superseded = false,
   isBaseGuessed = false,
+  guessedBaseCommitId,
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -357,13 +372,29 @@ export function PatchCommitDetailView({
   const subject = commit.message.split("\n")[0];
   const body = commit.message.split("\n").slice(2).join("\n").trim();
 
-  // Resolve parent commit context
+  // Resolve parent commit context.
+  // When the commit has no parents (parent-commit tag was absent) but we have
+  // a guessed base, synthesise a single guessed parent context so it still
+  // appears in the header.
   const parentContexts = useMemo(() => {
-    if (!commit.parents || commit.parents.length === 0) return [];
-    return commit.parents.map((parentId) =>
-      resolveParentContext(parentId, basePath, repoBasePath, patchChain),
-    );
-  }, [commit.parents, basePath, repoBasePath, patchChain]);
+    if (commit.parents && commit.parents.length > 0) {
+      return commit.parents.map((parentId) =>
+        resolveParentContext(parentId, basePath, repoBasePath, patchChain),
+      );
+    }
+    if (guessedBaseCommitId) {
+      return [
+        resolveParentContext(
+          guessedBaseCommitId,
+          basePath,
+          repoBasePath,
+          patchChain,
+          true,
+        ),
+      ];
+    }
+    return [];
+  }, [commit.parents, basePath, repoBasePath, patchChain, guessedBaseCommitId]);
 
   // Run commit hash verification reactively.
   //
@@ -690,6 +721,11 @@ export function PatchCommitDetailView({
                         {ctx.commitId === defaultBranchHead && (
                           <span className="text-[9px]">HEAD</span>
                         )}
+                      </span>
+                    )}
+                    {ctx.guessed && (
+                      <span className="text-[10px] text-muted-foreground/50">
+                        (approximated)
                       </span>
                     )}
                   </span>
