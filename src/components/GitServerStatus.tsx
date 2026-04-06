@@ -216,7 +216,7 @@ function ServerStatusDot({
       );
     case "connected":
       return (
-        <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
       );
     case "unknown":
       return (
@@ -293,7 +293,7 @@ function ServerStatusLabel({
     case "connected":
       return (
         <span className="text-[10px] text-muted-foreground/50 shrink-0">
-          ok
+          checking…
         </span>
       );
     case "unknown":
@@ -643,6 +643,11 @@ function ServerRow({
             errorKind={serverStatus.errorKind}
             usesProxy={serverStatus.usesProxy}
           />
+        )}
+        {serverStatus.status === "connected" && (
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            reachable — waiting for state…
+          </p>
         )}
         {serverStatus.status === "unknown" && (
           <p className="text-[11px] text-muted-foreground mt-0.5">fetching…</p>
