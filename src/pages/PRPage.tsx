@@ -67,6 +67,7 @@ import { usePatchChain } from "@/hooks/usePatchChain";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { PATCH_KIND, PR_KIND, extractPatchDiff } from "@/lib/nip34";
+import { eventIdToNevent } from "@/lib/routeUtils";
 import {
   buildSyntheticCommit,
   buildSyntheticCommitFallback,
@@ -306,6 +307,13 @@ export default function PRPage() {
     nip05,
   );
 
+  // Relay hints for nevent1 encoding of patch commit URL segments.
+  const repoRelayHints = useMemo(
+    () => resolved?.repoRelayGroup?.relays.map((r) => r.url) ?? [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resolved?.repoRelayGroup?.relays.map((r) => r.url).join(",")],
+  );
+
   // ── Commit detail logic (inlined from PRCommitPage) ───────────────────
   // Subscribe to fetch the root event from relays when viewing a commit.
   // Ensures the page works on direct URL navigation.
@@ -497,6 +505,7 @@ export default function PRPage() {
               ? commitDetailPatchMergeBase.baseCommitId
               : undefined
           }
+          relayHints={repoRelayHints}
         />
       );
     }
@@ -546,6 +555,7 @@ export default function PRPage() {
     repoBasePath,
     commitDetailPatchMergeBase.isGuessed,
     commitDetailPatchMergeBase.baseCommitId,
+    repoRelayHints,
   ]);
 
   return (
@@ -658,7 +668,7 @@ export default function PRPage() {
                               subject: c.subject,
                               noCommitId: !c.commitId,
                               href: prBasePath
-                                ? `${prBasePath}/commit/${c.commitId ?? c.eventId}`
+                                ? `${prBasePath}/commit/${eventIdToNevent(c.eventId, repoRelayHints)}`
                                 : undefined,
                             }))
                           : undefined
@@ -740,6 +750,7 @@ export default function PRPage() {
                                   superseded={node.revision.superseded}
                                   basePath={prBasePath ?? undefined}
                                   revisionNumber={currentRevNum}
+                                  relayHints={repoRelayHints}
                                 />
                               );
                             }
@@ -941,6 +952,7 @@ export default function PRPage() {
                         prBasePath ??
                         repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)
                       }
+                      relayHints={repoRelayHints}
                       isBaseGuessed={patchMergeBase.isGuessed}
                     />
                   ) : (

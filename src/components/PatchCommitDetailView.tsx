@@ -53,6 +53,7 @@ import {
   Info,
 } from "lucide-react";
 import { cn, safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
+import { eventIdToNevent } from "@/lib/routeUtils";
 import { DiffView } from "@/components/DiffView";
 import { UserLink } from "@/components/UserAvatar";
 import {
@@ -98,6 +99,8 @@ export interface PatchCommitDetailViewProps {
   patchChain?: Patch[];
   /** HEAD commit hash of the default branch (for parent context). */
   defaultBranchHead?: string;
+  /** Relay hints to embed in nevent1 identifiers for parent commit links. */
+  relayHints?: string[];
   /**
    * When true, a banner is shown indicating this commit belongs to a
    * superseded revision (a newer revision has been pushed).
@@ -136,14 +139,19 @@ function resolveParentContext(
   repoBasePath: string,
   patchChain: Patch[] | undefined,
   guessed = false,
+  relayHints?: string[],
 ): ParentContext {
   if (patchChain) {
     const parentPatch = patchChain.find((p) => p.commitId === parentCommitId);
     if (parentPatch) {
+      // Use nevent1 of the patch event ID — consistent with how PatchCommitList
+      // and PatchSetPushEvent generate links. The router decodes it back to the
+      // event ID for patchMatch.
+      const linkSegment = eventIdToNevent(parentPatch.event.id, relayHints);
       return {
         kind: "patch-chain",
         commitId: parentCommitId,
-        href: `${basePath}/commit/${parentCommitId}`,
+        href: `${basePath}/commit/${linkSegment}`,
         guessed,
       };
     }
@@ -352,6 +360,7 @@ export function PatchCommitDetailView({
   superseded = false,
   isBaseGuessed = false,
   guessedBaseCommitId,
+  relayHints,
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -379,7 +388,14 @@ export function PatchCommitDetailView({
   const parentContexts = useMemo(() => {
     if (commit.parents && commit.parents.length > 0) {
       return commit.parents.map((parentId) =>
-        resolveParentContext(parentId, basePath, repoBasePath, patchChain),
+        resolveParentContext(
+          parentId,
+          basePath,
+          repoBasePath,
+          patchChain,
+          false,
+          relayHints,
+        ),
       );
     }
     if (guessedBaseCommitId) {
@@ -390,11 +406,19 @@ export function PatchCommitDetailView({
           repoBasePath,
           patchChain,
           true,
+          relayHints,
         ),
       ];
     }
     return [];
-  }, [commit.parents, basePath, repoBasePath, patchChain, guessedBaseCommitId]);
+  }, [
+    commit.parents,
+    basePath,
+    repoBasePath,
+    patchChain,
+    guessedBaseCommitId,
+    relayHints,
+  ]);
 
   // Run commit hash verification reactively.
   //

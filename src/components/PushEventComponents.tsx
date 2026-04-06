@@ -20,6 +20,7 @@ import { formatDistanceToNow } from "date-fns";
 import { GitCommitHorizontal, GitPullRequest, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserLink } from "@/components/UserAvatar";
+import { eventIdToNevent } from "@/lib/routeUtils";
 import type { PR } from "@/casts/PR";
 import type { PRUpdate } from "@/casts/PRUpdate";
 import type { PatchRevision } from "@/hooks/usePatchChain";
@@ -114,11 +115,14 @@ export function PatchSetPushEvent({
   superseded,
   basePath,
   revisionNumber,
+  relayHints,
 }: {
   revision: PatchRevision;
   superseded: boolean;
   basePath?: string;
   revisionNumber?: number;
+  /** Relay hints to embed in nevent1 commit link segments. */
+  relayHints?: string[];
 }) {
   const { rootPatch, chain } = revision;
 
@@ -134,10 +138,14 @@ export function PatchSetPushEvent({
         .map((p) => ({
           id: p.id,
           commitId: p.commitId,
+          // nevent1 of the patch event ID is the canonical URL segment.
+          // The router decodes it back to the event ID for patchMatch.
+          linkSegment: eventIdToNevent(p.event.id, relayHints),
           shortHash: p.commitId?.slice(0, 7) ?? p.id.slice(0, 7),
           subject: p.subject || "(no subject)",
         })),
-    [chain],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chain, relayHints?.join(",")],
   );
 
   const isForcePush = revision.isRevision;
@@ -185,9 +193,7 @@ export function PatchSetPushEvent({
               subject={c.subject}
               superseded={superseded}
               href={
-                basePath && c.commitId
-                  ? `${basePath}/commit/${c.commitId}`
-                  : undefined
+                basePath ? `${basePath}/commit/${c.linkSegment}` : undefined
               }
             />
           ))}

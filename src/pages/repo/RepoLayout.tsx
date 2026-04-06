@@ -311,13 +311,20 @@ function RepoLayoutResolved({
           ? decodeEventIdentifier(rawSegment)
           : rawSegment;
 
-        // prs/<id>/commit/<hash> — commit detail scoped to a PR
+        // prs/<id>/commit/<hash|nevent1|note1> — commit detail scoped to a PR
         const prCommitIdx = segments.indexOf("commit", prsIdx + 2);
         if (prCommitIdx !== -1) {
+          const rawCommitSeg = segments[prCommitIdx + 1];
+          // Accept nevent1/note1 (decode to event ID) or raw hex (pass through).
+          // Raw hex may be either a git commit hash or a Nostr event ID —
+          // PRPage's patchMatch handles both.
+          const prCommitId = isEventIdentifier(rawCommitSeg)
+            ? decodeEventIdentifier(rawCommitSeg)
+            : rawCommitSeg;
           return {
             subPage: "pr-commit",
             prId,
-            prCommitId: segments[prCommitIdx + 1],
+            prCommitId,
           };
         }
 

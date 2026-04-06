@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Clock, User, GitCommit, Info } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
+import { eventIdToNevent } from "@/lib/routeUtils";
 import type { Patch } from "@/casts/Patch";
 
 // ---------------------------------------------------------------------------
@@ -51,12 +52,18 @@ function parseCommitterTag(
 export function PatchCommitList({
   patches,
   basePath,
+  relayHints,
   isBaseGuessed = false,
 }: {
   /** Ordered patches in the latest revision (oldest first). */
   patches: Patch[];
-  /** Prefix for commit links — links become `<basePath>/commit/<hash>`. */
+  /** Prefix for commit links — links become `<basePath>/commit/<nevent1>`. */
   basePath: string;
+  /**
+   * Relay hints to embed in nevent1 identifiers for patch commit links.
+   * Typically the repo relay group URLs.
+   */
+  relayHints?: string[];
   /** When true, shows a notice that the merge base was approximated. */
   isBaseGuessed?: boolean;
 }) {
@@ -109,6 +116,7 @@ export function PatchCommitList({
                   key={patch.id}
                   patch={patch}
                   basePath={basePath}
+                  relayHints={relayHints}
                 />
               ))}
             </div>
@@ -126,17 +134,20 @@ export function PatchCommitList({
 function PatchCommitRow({
   patch,
   basePath,
+  relayHints,
 }: {
   patch: Patch;
   basePath: string;
+  relayHints?: string[];
 }) {
   const committer = parseCommitterTag(patch);
   const ts = committer?.timestamp ?? patch.event.created_at;
   const authorName = committer?.name ?? "(unknown)";
   const commitId = patch.commitId;
-  // Fall back to the Nostr event ID when no git commit ID is available.
-  // PRCommitPage matches by event ID too, so the link will resolve correctly.
-  const linkId = commitId ?? patch.event.id;
+  // Always use nevent1 of the patch event ID for the URL segment — this is
+  // the canonical Nostr identifier. The router decodes it back to the event ID,
+  // and patchMatch handles both event ID and commit hash matching.
+  const linkSegment = eventIdToNevent(patch.event.id, relayHints);
   const shortHash = commitId?.slice(0, 8);
 
   const subject = patch.subject;
@@ -154,7 +165,7 @@ function PatchCommitRow({
     <div className="px-4 py-3 hover:bg-muted/20 transition-colors group">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <Link to={`${basePath}/commit/${linkId}`}>{titleContent}</Link>
+          <Link to={`${basePath}/commit/${linkSegment}`}>{titleContent}</Link>
           {body && (
             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
               {body}
@@ -186,7 +197,7 @@ function PatchCommitRow({
             </Tooltip>
           </TooltipProvider>
           <Link
-            to={`${basePath}/commit/${linkId}`}
+            to={`${basePath}/commit/${linkSegment}`}
             className={cn(
               "text-xs bg-muted hover:bg-muted/70 px-2 py-1 rounded transition-colors",
               commitId
