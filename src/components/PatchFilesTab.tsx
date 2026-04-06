@@ -503,7 +503,8 @@ export function PatchFilesTab({
               <p>
                 {phase.failureReason === "no-base" && (
                   <>
-                    Could not compute a combined diff — the patch is missing a{" "}
+                    {phase.failedCount} file{phase.failedCount !== 1 ? "s" : ""}{" "}
+                    could not be applied — the patch is missing a{" "}
                     <code className="rounded bg-amber-500/10 px-1 font-mono text-[11px]">
                       parent-commit
                     </code>{" "}
@@ -512,14 +513,16 @@ export function PatchFilesTab({
                 )}
                 {phase.failureReason === "fetch-failed" && (
                   <>
-                    Could not compute a combined diff — the base file content
-                    could not be fetched from the git server (the patch may
-                    reference a commit not yet pushed).
+                    {phase.failedCount} file{phase.failedCount !== 1 ? "s" : ""}{" "}
+                    could not be applied — the base file content could not be
+                    fetched from the git server (the patch may reference a
+                    commit not yet pushed).
                   </>
                 )}
                 {phase.failureReason === "hunk-mismatch" && (
                   <>
-                    Could not compute a combined diff —
+                    {phase.failedCount} file{phase.failedCount !== 1 ? "s" : ""}{" "}
+                    could not be applied —
                     {isBaseGuessed
                       ? " the base commit was approximated from the patch timestamp and the patch did not apply cleanly against it."
                       : " the patch did not apply cleanly against the current branch head."}
@@ -527,11 +530,13 @@ export function PatchFilesTab({
                 )}
                 {!phase.failureReason && (
                   <>
-                    Could not compute a combined diff for {phase.failedCount}{" "}
-                    file{phase.failedCount !== 1 ? "s" : ""}.
+                    {phase.failedCount} file{phase.failedCount !== 1 ? "s" : ""}{" "}
+                    could not be applied.
                   </>
                 )}{" "}
-                Showing the original patch diff.
+                {phase.failedCount === phase.changes.length
+                  ? "Showing the original patch diff for all files."
+                  : `The remaining ${phase.changes.length - phase.failedCount} file${phase.changes.length - phase.failedCount !== 1 ? "s" : ""} show the applied combined diff.`}
               </p>
               {patchEventLinks.length > 0 && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
