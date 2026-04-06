@@ -11,6 +11,7 @@ import {
   extractPatchBody,
   extractPatchDiff,
   PATCH_CHAIN_TAGS,
+  subjectIsCoverLetter,
 } from "@/lib/nip34";
 
 type PatchEvent = KnownEvent<typeof PATCH_KIND>;
@@ -97,12 +98,26 @@ export class Patch extends EventCast<PatchEvent> {
 
   /**
    * True when this patch is a cover letter (no diff, just a description).
-   * NIP-34: `["t", "cover-letter"]` tag.
+   *
+   * Detection order:
+   * 1. Explicit `["t", "cover-letter"]` tag (NIP-34 spec).
+   * 2. `[PATCH 0/N]` prefix in the `description` tag or Subject line of the
+   *    content — ngit and git-format-patch use patch number 0 for cover letters
+   *    but don't always add the `cover-letter` t-tag.
    */
   get isCoverLetter(): boolean {
-    return getOrComputeCachedValue(this.event, IsCoverLetterSymbol, () =>
-      hasNameValueTag(this.event, "t", "cover-letter"),
-    );
+    return getOrComputeCachedValue(this.event, IsCoverLetterSymbol, () => {
+      if (hasNameValueTag(this.event, "t", "cover-letter")) return true;
+      // Check description tag first line
+      const desc = this.event.tags.find(([t]) => t === "description")?.[1];
+      if (desc && subjectIsCoverLetter(desc)) return true;
+      // Fall back to Subject line in content
+      const subjectMatch = this.event.content.match(
+        /^Subject: (\[PATCH[^\]]*\])/m,
+      );
+      if (subjectMatch && subjectIsCoverLetter(subjectMatch[1])) return true;
+      return false;
+    });
   }
 
   /**

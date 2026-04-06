@@ -119,26 +119,55 @@ export function remainingLines(s: string): string {
 }
 
 /**
+ * Strip the `[PATCH N/M]` prefix from a subject line.
+ * e.g. "[PATCH 0/1] host: fix foo" → "host: fix foo"
+ * e.g. "[PATCH v2 3/5] host: fix foo" → "host: fix foo"
+ * Returns the original string if no prefix is found.
+ */
+export function stripPatchPrefix(subject: string): string {
+  return subject.replace(/^\[PATCH[^\]]*\]\s*/, "");
+}
+
+/**
+ * Returns true when a subject line (or description tag first line) indicates
+ * this is a cover letter — i.e. the patch number is 0 (e.g. `[PATCH 0/3]`).
+ * Matches patterns like: [PATCH 0/1], [PATCH v2 0/5], [PATCH RFC 0/3]
+ */
+export function subjectIsCoverLetter(subject: string): boolean {
+  // Match [PATCH ...] where the patch number (before the /) is 0.
+  // Non-greedy [^\]]*? so the \s+0\/ can still match inside the bracket.
+  return /^\[PATCH[^\]]*?\s+0\/\d+\]/.test(subject);
+}
+
+/**
  * Extract the subject (title) for a patch event.
  * Uses the first line of the `description` tag, falling back to
  * parsing the patch content via extractPatchMessage.
+ * Strips the `[PATCH N/M]` prefix in both cases.
  */
 export function extractPatchSubject(ev: NostrEvent): string {
   const desc = ev.tags.find(([t]) => t === "description")?.[1];
-  if (desc) return firstLine(desc);
+  if (desc) return stripPatchPrefix(firstLine(desc));
   const fromContent = extractPatchMessage(ev.content);
-  if (fromContent) return firstLine(fromContent);
+  if (fromContent) return stripPatchPrefix(firstLine(fromContent));
   return "(untitled)";
 }
 
 /**
  * Extract the body for a patch event.
- * Uses lines 2+ of the `description` tag, falling back to parsing
- * the patch content via extractPatchMessage.
+ * Uses lines 2+ of the `description` tag when present and non-empty,
+ * falling back to parsing the patch content via extractPatchMessage.
+ *
+ * Note: some clients (e.g. ngit) set the `description` tag to only the
+ * subject line (no body), so we must fall through to the content when
+ * `remainingLines` returns an empty string.
  */
 export function extractPatchBody(ev: NostrEvent): string {
   const desc = ev.tags.find(([t]) => t === "description")?.[1];
-  if (desc) return remainingLines(desc);
+  if (desc) {
+    const body = remainingLines(desc);
+    if (body) return body;
+  }
   const fromContent = extractPatchMessage(ev.content);
   if (fromContent) return remainingLines(fromContent);
   return "";
