@@ -29,14 +29,10 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { useGitPool } from "@/hooks/useGitPool";
 import { CommitDetailView } from "@/components/CommitDetailView";
 import { PatchCommitDetailView } from "@/components/PatchCommitDetailView";
-import { PRHeader } from "@/components/PRHeader";
-import { PRTabBar } from "@/components/PRTabBar";
 import { useEventStore } from "@/hooks/useEventStore";
 import { use$ } from "@/hooks/use$";
 import { usePatchChain } from "@/hooks/usePatchChain";
 import { usePatchMergeBase } from "@/hooks/usePatchMergeBase";
-import { useResolvedPR } from "@/hooks/useResolvedPR";
-import { useActiveAccount } from "applesauce-react/hooks";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { PATCH_KIND, PR_KIND, extractPatchDiff } from "@/lib/nip34";
@@ -60,23 +56,6 @@ export default function PRCommitPage() {
   } = useRepoContext();
   const store = useEventStore();
   const repo = resolved?.repo;
-
-  // Resolve the PR for the header — mirrors what PRPage does.
-  const selectedMaintainers = useMemo(
-    () => (repo?.maintainerSet ? new Set(repo.maintainerSet) : undefined),
-    [repo?.maintainerSet],
-  );
-  const pr = useResolvedPR(
-    prId,
-    resolved?.repoRelayGroup,
-    resolved?.extraRelaysForMaintainerMailboxCoverage,
-    selectedMaintainers,
-  );
-  const activeAccount = useActiveAccount();
-  const canEdit = useMemo(() => {
-    if (!activeAccount || !pr) return false;
-    return pr.authorisedUsers.has(activeAccount.pubkey);
-  }, [activeAccount, pr]);
 
   useSeoMeta({
     title: repo
@@ -192,10 +171,9 @@ export default function PRCommitPage() {
       .flatMap(([, ...urls]) => urls.filter(Boolean));
   }, [prId, store]);
 
-  // Determine the content to render inside the page body.
-  const content = (() => {
-    if (!prCommitId) {
-      return (
+  if (!prCommitId) {
+    return (
+      <div className="container max-w-screen-xl px-4 md:px-8 py-6">
         <Card className="border-destructive/30">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-sm text-destructive">
@@ -204,32 +182,38 @@ export default function PRCommitPage() {
             </div>
           </CardContent>
         </Card>
-      );
-    }
+      </div>
+    );
+  }
 
-    // Still loading the root event from relays
-    if (!rootEventLoaded) {
-      return (
+  // Still loading the root event from relays
+  if (!rootEventLoaded) {
+    return (
+      <div className="container max-w-screen-xl px-4 md:px-8 py-6">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>Loading…</span>
         </div>
-      );
-    }
+      </div>
+    );
+  }
 
-    // Patch-type: loading patch chain
-    if (isPatch && patchChain.loading) {
-      return (
+  // Patch-type: loading patch chain
+  if (isPatch && patchChain.loading) {
+    return (
+      <div className="container max-w-screen-xl px-4 md:px-8 py-6">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>Loading patch data…</span>
         </div>
-      );
-    }
+      </div>
+    );
+  }
 
-    // Patch-type: found the matching patch
-    if (isPatch && patchMatch) {
-      return (
+  // Patch-type: found the matching patch
+  if (isPatch && patchMatch) {
+    return (
+      <div className="container max-w-screen-xl px-4 md:px-8 py-6">
         <PatchCommitDetailView
           commit={patchMatch.commit}
           patchDiff={patchMatch.diff}
@@ -240,7 +224,6 @@ export default function PRCommitPage() {
           basePath={prBasePath ?? ""}
           repoBasePath={repoBasePath}
           backTo={prBasePath ? `${prBasePath}/commits` : ".."}
-          backLabel="PR commits"
           hasCommitId={patchMatch.hasCommitId}
           patchChain={patchChain.chain}
           defaultBranchHead={poolState.latestCommit?.hash}
@@ -250,12 +233,14 @@ export default function PRCommitPage() {
             patchMergeBase.isGuessed ? patchMergeBase.baseCommitId : undefined
           }
         />
-      );
-    }
+      </div>
+    );
+  }
 
-    // Patch-type: patch chain loaded but commit not found
-    if (isPatch && !patchChain.loading && !patchMatch) {
-      return (
+  // Patch-type: patch chain loaded but commit not found
+  if (isPatch && !patchChain.loading && !patchMatch) {
+    return (
+      <div className="container max-w-screen-xl px-4 md:px-8 py-6">
         <Card className="border-destructive/30">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-sm text-destructive">
@@ -266,38 +251,22 @@ export default function PRCommitPage() {
             </div>
           </CardContent>
         </Card>
-      );
-    }
+      </div>
+    );
+  }
 
-    // PR-type: use git server
-    if (!pool) return null;
+  // PR-type: use git server
+  if (!pool) return null;
 
-    return (
+  return (
+    <div className="container max-w-screen-xl px-4 md:px-8 py-6">
       <CommitDetailView
         commitId={prCommitId}
         pool={pool}
         basePath={prBasePath ?? ""}
         backTo={prBasePath ? `${prBasePath}/commits` : ".."}
-        backLabel="PR commits"
         fallbackUrls={prCloneUrls}
       />
-    );
-  })();
-
-  const tabBar = prBasePath ? (
-    <PRTabBar
-      prBasePath={prBasePath}
-      pr={pr}
-      patchChain={isPatch ? patchChain.chain : undefined}
-    />
-  ) : undefined;
-
-  return (
-    <>
-      <PRHeader pr={pr} canEdit={canEdit} tabs={tabBar} />
-      <div className="container max-w-screen-xl px-4 md:px-8 py-6">
-        {content}
-      </div>
-    </>
+    </div>
   );
 }

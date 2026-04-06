@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
 import { useActiveAccount } from "applesauce-react/hooks";
+import { formatDistanceToNow } from "date-fns";
+import { EditableSubject } from "@/components/EditSubjectInline";
 import {
   EventBodyCard,
   EventBodyCardSkeleton,
@@ -12,26 +14,28 @@ import {
   LabelChangeCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
-import { PRHeader } from "@/components/PRHeader";
-import { PRTabBar } from "@/components/PRTabBar";
 
 import { useResolvedPR } from "@/hooks/useResolvedPR";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { useGitPool } from "@/hooks/useGitPool";
-import { UserAvatar } from "@/components/UserAvatar";
+import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { ReplyBox } from "@/components/ReplyBox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   ArrowLeft,
   MessageCircle,
   Zap,
   Users,
+  Clock,
+  GitPullRequest,
   GitCommitHorizontal,
+  FileDiff,
 } from "lucide-react";
 import {
   PatchSetPushEvent,
@@ -271,20 +275,138 @@ export default function PRPage() {
     description: pr?.body.slice(0, 160) || "Loading PR...",
   });
 
-  const tabBar = prBasePath ? (
-    <PRTabBar
-      prBasePath={prBasePath}
-      pr={pr}
-      patchChain={patchChain ?? undefined}
-      fileCount={effectiveFileCount}
-      commitCount={prCommits.length > 0 ? prCommits.length : undefined}
-    />
-  ) : undefined;
+  // ── Derived values ────────────────────────────────────────────────────
+  const TypeIcon =
+    pr?.itemType === "patch" ? GitCommitHorizontal : GitPullRequest;
+
+  // Tab bar
+  const tabList = (
+    <TabsList className="h-auto bg-transparent p-0 gap-0 rounded-none border-0">
+      <TabsTrigger
+        value="conversation"
+        className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <MessageCircle className="h-3.5 w-3.5" />
+        Conversation
+        {pr && (
+          <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
+            {pr.commentCount}
+          </span>
+        )}
+      </TabsTrigger>
+
+      {/* Files Changed tab — for PRs and all patches */}
+      {(pr?.itemType === "pr" ||
+        (pr?.itemType === "patch" && patchChain && patchChain.length > 0)) && (
+        <TabsTrigger
+          value="files"
+          className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <FileDiff className="h-3.5 w-3.5" />
+          Files Changed
+          {effectiveFileCount !== undefined && effectiveFileCount > 0 && (
+            <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
+              {effectiveFileCount}
+            </span>
+          )}
+        </TabsTrigger>
+      )}
+
+      {/* Commits tab */}
+      {((pr?.itemType === "pr" && pr.tip.commitId) ||
+        (patchChain && patchChain.length > 0)) && (
+        <TabsTrigger
+          value="commits"
+          className="gap-1.5 text-sm rounded-none px-3 pb-2 pt-1 h-auto border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <GitCommitHorizontal className="h-3.5 w-3.5" />
+          Commits
+          {pr?.itemType === "pr"
+            ? prCommits.length > 0 && (
+                <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
+                  {prCommits.length}
+                </span>
+              )
+            : patchChain &&
+              patchChain.length > 0 && (
+                <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium leading-none">
+                  {patchChain.length}
+                </span>
+              )}
+        </TabsTrigger>
+      )}
+    </TabsList>
+  );
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange}>
       {/* PR header */}
-      <PRHeader pr={pr} canEdit={canEdit} tabs={tabBar} />
+      <div className="border-b border-border/40">
+        <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-0">
+          {pr ? (
+            <div className="flex flex-wrap items-end justify-between gap-x-4">
+              {/* Left: title + meta */}
+              <div className="min-w-0 pb-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <StatusBadge
+                    status={pr.status}
+                    variant="pr"
+                    className="mt-1 shrink-0"
+                  />
+                  <EditableSubject
+                    issueId={pr.rootEvent.id}
+                    currentSubject={pr.currentSubject || pr.originalSubject}
+                    canEdit={canEdit}
+                    repoCoords={pr.repoCoords}
+                  />
+                </div>
+
+                <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground ml-[calc(theme(spacing.3)+4.5rem-3.5rem)]">
+                  <div className="flex items-center gap-1">
+                    <TypeIcon className="h-3.5 w-3.5" />
+                    <span className="text-xs capitalize">{pr.itemType}</span>
+                  </div>
+                  <UserLink
+                    pubkey={pr.pubkey}
+                    avatarSize="sm"
+                    nameClassName="text-sm"
+                  />
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>
+                      {formatDistanceToNow(new Date(pr.createdAt * 1000), {
+                        addSuffix: true,
+                      })}
+                    </span>
+                  </div>
+                  {pr.labels.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {pr.labels.map((label) => (
+                        <LabelBadge key={label} label={label} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: tabs */}
+              <div className="shrink-0">{tabList}</div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex gap-3">
+                <Skeleton className="h-6 w-16 rounded-full" />
+                <Skeleton className="h-7 w-96" />
+              </div>
+              <div className="flex gap-3">
+                <Skeleton className="h-6 w-6 rounded-full" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-20" />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Content */}
       <div className="container max-w-screen-xl px-4 md:px-8 py-6">
