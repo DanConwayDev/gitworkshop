@@ -32,6 +32,7 @@ import { PatchCommitDetailView } from "@/components/PatchCommitDetailView";
 import { useEventStore } from "@/hooks/useEventStore";
 import { use$ } from "@/hooks/use$";
 import { usePatchChain } from "@/hooks/usePatchChain";
+import { usePatchMergeBase } from "@/hooks/usePatchMergeBase";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { PATCH_KIND, PR_KIND, extractPatchDiff } from "@/lib/nip34";
@@ -104,6 +105,13 @@ export default function PRCommitPage() {
   const patchChain = usePatchChain(
     isPatch ? prId : undefined,
     resolved?.repoRelayGroup,
+  );
+
+  // Resolve the merge base so we can show the approximation notice when needed.
+  const patchMergeBase = usePatchMergeBase(
+    isPatch ? patchChain.chain : undefined,
+    pool,
+    poolState,
   );
 
   // Find the patch whose commit tag or event ID matches the requested commit ID.
@@ -220,6 +228,7 @@ export default function PRCommitPage() {
           patchChain={patchChain.chain}
           defaultBranchHead={poolState.latestCommit?.hash}
           superseded={patchMatch.superseded}
+          isBaseGuessed={patchMergeBase.isGuessed}
         />
       </div>
     );

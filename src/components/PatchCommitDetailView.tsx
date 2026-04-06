@@ -50,6 +50,7 @@ import {
   GitBranch,
   Braces,
   RotateCcw,
+  Info,
 } from "lucide-react";
 import { cn, safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
@@ -102,6 +103,11 @@ export interface PatchCommitDetailViewProps {
    * superseded revision (a newer revision has been pushed).
    */
   superseded?: boolean;
+  /**
+   * When true, a notice is shown that the merge base was approximated from
+   * the patch timestamp rather than determined exactly.
+   */
+  isBaseGuessed?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -330,6 +336,7 @@ export function PatchCommitDetailView({
   patchChain,
   defaultBranchHead,
   superseded = false,
+  isBaseGuessed = false,
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -692,6 +699,19 @@ export function PatchCommitDetailView({
           </div>
         </CardContent>
       </Card>
+
+      {/* Approximated merge base notice */}
+      {isBaseGuessed && (
+        <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-700 dark:text-blue-400">
+          <div className="flex items-center gap-2">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Merge base approximated from patch timestamp — diff may differ
+              slightly from the original.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Diff from patch content */}
       {patchDiff ? (

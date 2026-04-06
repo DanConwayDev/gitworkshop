@@ -727,6 +727,7 @@ export default function PRPage() {
                       prBasePath ??
                       repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)
                     }
+                    isBaseGuessed={patchMergeBase.isGuessed}
                   />
                 ) : (
                   <CommitListEmpty message="No patches found in this patch set." />

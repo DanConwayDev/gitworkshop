@@ -20,7 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Clock, User, GitCommit } from "lucide-react";
+import { Clock, User, GitCommit, Info } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import type { Patch } from "@/casts/Patch";
 
@@ -51,11 +51,14 @@ function parseCommitterTag(
 export function PatchCommitList({
   patches,
   basePath,
+  isBaseGuessed = false,
 }: {
   /** Ordered patches in the latest revision (oldest first). */
   patches: Patch[];
   /** Prefix for commit links — links become `<basePath>/commit/<hash>`. */
   basePath: string;
+  /** When true, shows a notice that the merge base was approximated. */
+  isBaseGuessed?: boolean;
 }) {
   // Group by date (using committer timestamp or event created_at)
   const grouped = useMemo(() => {
@@ -79,6 +82,17 @@ export function PatchCommitList({
 
   return (
     <div className="space-y-6">
+      {isBaseGuessed && (
+        <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-700 dark:text-blue-400">
+          <div className="flex items-center gap-2">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Merge base approximated from patch timestamp — diff may differ
+              slightly from the original.
+            </span>
+          </div>
+        </div>
+      )}
       {grouped.map((group) => (
         <div key={group.date}>
           <div className="flex items-center gap-3 mb-2">
