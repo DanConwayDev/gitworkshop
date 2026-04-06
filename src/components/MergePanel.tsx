@@ -248,45 +248,48 @@ export function MergePanel({
 
   // ── Push helper ──────────────────────────────────────────────────────────
 
-  async function pushObjects(
-    allObjects: PackableObject[],
-    refUpdate: RefUpdate,
-  ): Promise<void> {
-    const packfile = await createPackfile(allObjects);
-    let pushSucceeded = false;
-    let lastPushError = "";
+  const pushObjects = useCallback(
+    async (
+      allObjects: PackableObject[],
+      refUpdate: RefUpdate,
+    ): Promise<void> => {
+      const packfile = await createPackfile(allObjects);
+      let pushSucceeded = false;
+      let lastPushError = "";
 
-    for (const cloneUrl of repo.graspCloneUrls) {
-      try {
-        const result = await pushToGitServer(cloneUrl, [refUpdate], packfile);
-        if (result.unpackOk) {
-          const refOk = result.refResults.every((r) => r.ok);
-          if (refOk) {
-            pushSucceeded = true;
-            break;
+      for (const cloneUrl of repo.graspCloneUrls) {
+        try {
+          const result = await pushToGitServer(cloneUrl, [refUpdate], packfile);
+          if (result.unpackOk) {
+            const refOk = result.refResults.every((r) => r.ok);
+            if (refOk) {
+              pushSucceeded = true;
+              break;
+            } else {
+              const failures = result.refResults
+                .filter((r) => !r.ok)
+                .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
+                .join("; ");
+              lastPushError = `Ref update rejected: ${failures}`;
+            }
           } else {
-            const failures = result.refResults
-              .filter((r) => !r.ok)
-              .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
-              .join("; ");
-            lastPushError = `Ref update rejected: ${failures}`;
+            lastPushError = `Unpack failed on ${cloneUrl}`;
           }
-        } else {
-          lastPushError = `Unpack failed on ${cloneUrl}`;
+        } catch (err) {
+          lastPushError =
+            err instanceof Error ? err.message : `Push failed to ${cloneUrl}`;
         }
-      } catch (err) {
-        lastPushError =
-          err instanceof Error ? err.message : `Push failed to ${cloneUrl}`;
       }
-    }
 
-    if (!pushSucceeded) {
-      throw new Error(
-        `Push failed to all Grasp servers. ${lastPushError}. ` +
-          "The state event will expire from purgatory in 30 minutes.",
-      );
-    }
-  }
+      if (!pushSucceeded) {
+        throw new Error(
+          `Push failed to all Grasp servers. ${lastPushError}. ` +
+            "The state event will expire from purgatory in 30 minutes.",
+        );
+      }
+    },
+    [repo.graspCloneUrls],
+  );
 
   // ── Merge orchestration (merge strategy) ─────────────────────────────────
 
@@ -438,6 +441,7 @@ export function MergePanel({
     profile,
     pr,
     patchChain,
+    pushObjects,
     repo,
     graspRelayUrls,
     toast,
@@ -555,6 +559,7 @@ export function MergePanel({
     gitPool,
     pr,
     patchChain,
+    pushObjects,
     repo,
     graspRelayUrls,
     toast,
