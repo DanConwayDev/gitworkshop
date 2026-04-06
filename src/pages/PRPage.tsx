@@ -896,6 +896,7 @@ export default function PRPage() {
                       chain={patchChain}
                       baseCommitId={patchMergeBase.baseCommitId}
                       isBaseGuessed={patchMergeBase.isGuessed}
+                      defaultBranchHead={defaultBranchHead}
                       pool={gitPool}
                       onFileCountChange={(count) => {
                         if (pr?.itemType === "patch") setFileCount(count);

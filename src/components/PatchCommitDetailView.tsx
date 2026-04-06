@@ -50,8 +50,8 @@ import {
   GitBranch,
   Braces,
   RotateCcw,
-  Info,
   AlertTriangle,
+  ChevronDown,
   FileCode,
 } from "lucide-react";
 import { cn, safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
@@ -565,7 +565,7 @@ export function PatchCommitDetailView({
   // This mirrors what PatchFilesTab does but for a single patch.
   // We use the single-patch chain so the apply logic handles it correctly.
   const singlePatchChain = useMemo(() => [patch], [patch]);
-  const applyKey = `${patch.event.id}:${baseCommitId ?? ""}:${poolWinnerUrl ?? ""}:${fallbackUrls?.join(",") ?? ""}`;
+  const applyKey = `${patch.event.id}:${baseCommitId ?? ""}:${isBaseGuessed ? "guessed" : "exact"}:${defaultBranchHead ?? ""}:${poolWinnerUrl ?? ""}:${fallbackUrls?.join(",") ?? ""}`;
 
   useEffect(() => {
     if (!pool || !baseCommitId) {
@@ -579,29 +579,55 @@ export function PatchCommitDetailView({
 
     setAppliedDiff({ kind: "computing" });
 
-    mergePatchChainDiff(
-      singlePatchChain,
-      pool,
-      baseCommitId,
-      abort.signal,
-      fallbackUrls,
-    )
-      .then((result) => {
+    async function runApply() {
+      let result = await mergePatchChainDiff(
+        singlePatchChain,
+        pool!,
+        baseCommitId,
+        abort.signal,
+        fallbackUrls,
+      );
+
+      if (abort.signal.aborted) return;
+
+      // If the base was guessed and apply failed with a hunk-mismatch, retry
+      // against the tip of the default branch before giving up.
+      if (
+        isBaseGuessed &&
+        result.failedCount > 0 &&
+        result.failureReason === "hunk-mismatch" &&
+        defaultBranchHead &&
+        defaultBranchHead !== baseCommitId
+      ) {
+        const tipResult = await mergePatchChainDiff(
+          singlePatchChain,
+          pool!,
+          defaultBranchHead,
+          abort.signal,
+          fallbackUrls,
+        );
         if (abort.signal.aborted) return;
-        setAppliedDiff({
-          kind: "done",
-          diff: result.combinedDiff,
-          failedCount: result.failedCount,
-          failureReason: result.failureReason,
-        });
-      })
-      .catch((err) => {
-        if (abort.signal.aborted) return;
-        setAppliedDiff({
-          kind: "error",
-          message: err instanceof Error ? err.message : "Unknown error",
-        });
+        if (tipResult.failedCount < result.failedCount) {
+          result = tipResult;
+        }
+      }
+
+      if (abort.signal.aborted) return;
+      setAppliedDiff({
+        kind: "done",
+        diff: result.combinedDiff,
+        failedCount: result.failedCount,
+        failureReason: result.failureReason,
       });
+    }
+
+    runApply().catch((err) => {
+      if (abort.signal.aborted) return;
+      setAppliedDiff({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    });
 
     return () => {
       abort.abort();
@@ -849,55 +875,50 @@ export function PatchCommitDetailView({
         </CardContent>
       </Card>
 
-      {/* Approximated merge base notice — shown only when apply succeeded or is still computing */}
-      {isBaseGuessed && !appliedDiffFailed && (
-        <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-700 dark:text-blue-400">
-          <div className="flex items-center gap-2">
-            <Info className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              Merge base approximated from patch timestamp — the parent commit
-              shown may not be exact.
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Apply failure warning — mirrors PatchFilesTab amber banner */}
+      {/* Apply failure warning */}
       {appliedDiffFailed && appliedDiff.kind === "done" && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            <p>
+          <details className="group">
+            <summary className="flex items-center gap-2 cursor-pointer list-none">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span className="font-medium flex-1">
+                Couldn't cleanly apply patch
+                {isBaseGuessed ? " — unknown merge base" : ""}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-2 ml-6 space-y-1.5 text-amber-700/80 dark:text-amber-400/80">
               {appliedDiff.failureReason === "no-base" && (
-                <>
-                  Could not compute a combined diff — the patch is missing a{" "}
+                <p>
+                  No{" "}
                   <code className="rounded bg-amber-500/10 px-1 font-mono text-[11px]">
                     parent-commit
                   </code>{" "}
-                  tag and no base commit could be determined.
-                </>
+                  tag on this patch and no base commit could be determined.
+                </p>
               )}
               {appliedDiff.failureReason === "fetch-failed" && (
-                <>
-                  Could not compute a combined diff — the base file content
-                  could not be fetched from the git server (the patch may
-                  reference a commit not yet pushed).
-                </>
+                <p>
+                  The base file content could not be fetched from the git server
+                  — the patch may reference a commit not yet pushed.
+                </p>
               )}
-              {appliedDiff.failureReason === "hunk-mismatch" && (
-                <>
-                  Could not compute a combined diff —
-                  {isBaseGuessed
-                    ? " the base commit was approximated from the patch timestamp and the patch did not apply cleanly against it."
-                    : " the patch did not apply cleanly against the current branch head."}
-                </>
-              )}
-              {!appliedDiff.failureReason && (
-                <>Could not compute a combined diff.</>
-              )}{" "}
-              Showing the original patch diff.
-            </p>
-          </div>
+              {appliedDiff.failureReason === "hunk-mismatch" &&
+                isBaseGuessed && (
+                  <p>
+                    Tried the tip of the default branch and a
+                    timestamp-approximated base — neither applied cleanly.
+                  </p>
+                )}
+              {appliedDiff.failureReason === "hunk-mismatch" &&
+                !isBaseGuessed && (
+                  <p>
+                    The patch did not apply cleanly against the base commit.
+                  </p>
+                )}
+              <p>Showing the raw patch diff.</p>
+            </div>
+          </details>
         </div>
       )}
 

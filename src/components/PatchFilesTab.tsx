@@ -26,7 +26,6 @@ import {
   Folder,
   FolderOpen,
   AlertTriangle,
-  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
@@ -59,6 +58,12 @@ export interface PatchFilesTabProps {
    * warning message shown when the diff cannot be applied cleanly.
    */
   isBaseGuessed?: boolean;
+  /**
+   * The current HEAD commit of the default branch. When `isBaseGuessed` is
+   * true and the first apply attempt fails with a hunk-mismatch, the apply
+   * is retried against this commit before giving up.
+   */
+  defaultBranchHead?: string;
   /** Pool instance from useGitPool (repo clone URLs). */
   pool: GitGraspPool | null;
   /** Called whenever the number of changed files becomes known. */
@@ -318,6 +323,7 @@ export function PatchFilesTab({
   chain,
   baseCommitId,
   isBaseGuessed = false,
+  defaultBranchHead,
   pool,
   onFileCountChange,
   onApplyResult,
@@ -357,6 +363,7 @@ export function PatchFilesTab({
 
   // Stable key for the chain to detect changes
   const chainKey = useMemo(() => chain.map((p) => p.id).join(","), [chain]);
+  const fallbackUrlsKey = fallbackUrls?.join(",");
 
   // Build commit detail links for the patch events (for the failure banner).
   // When basePath is provided, links point to the internal commit detail page.
@@ -399,7 +406,7 @@ export function PatchFilesTab({
       }
 
       // Phase 2: fetch originals + apply patches
-      const result = await mergePatchChainDiff(
+      let result = await mergePatchChainDiff(
         chain,
         // pool may be null if git server is unreachable — that's OK,
         // new-file-only patches don't need it
@@ -410,6 +417,29 @@ export function PatchFilesTab({
       );
 
       if (abort.signal.aborted) return;
+
+      // Phase 2b: if the base was guessed (no parent-commit tag) and the
+      // apply failed with a hunk-mismatch, retry against the tip of the
+      // default branch before giving up.
+      if (
+        isBaseGuessed &&
+        result.failedCount > 0 &&
+        result.failureReason === "hunk-mismatch" &&
+        defaultBranchHead &&
+        defaultBranchHead !== baseCommitId
+      ) {
+        const tipResult = await mergePatchChainDiff(
+          chain,
+          pool!,
+          defaultBranchHead,
+          abort.signal,
+          fallbackUrls,
+        );
+        if (abort.signal.aborted) return;
+        if (tipResult.failedCount < result.failedCount) {
+          result = tipResult;
+        }
+      }
 
       setPhase({
         kind: "done",
@@ -432,7 +462,14 @@ export function PatchFilesTab({
       abort.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chainKey, baseCommitId, pool, fallbackUrls?.join(",")]);
+  }, [
+    chainKey,
+    baseCommitId,
+    isBaseGuessed,
+    defaultBranchHead,
+    pool,
+    fallbackUrlsKey,
+  ]);
 
   // --- Render ---
 
@@ -484,59 +521,49 @@ export function PatchFilesTab({
 
   return (
     <div className="space-y-0">
-      {isBaseGuessed && phase.failedCount === 0 && (
-        <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-700 dark:text-blue-400 mb-3">
-          <div className="flex items-center gap-2">
-            <Info className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              Merge base approximated from patch timestamp — diff may differ
-              slightly from the original.
-            </span>
-          </div>
-        </div>
-      )}
       {phase.failedCount > 0 && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 mb-3 space-y-2">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            <div className="space-y-1 min-w-0">
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 mb-3">
+          <details className="group">
+            <summary className="flex items-center gap-2 cursor-pointer list-none">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span className="font-medium flex-1">
+                {chain.length > 1
+                  ? "Showing uncombined diffs — couldn't"
+                  : "Couldn't"}{" "}
+                cleanly apply patch
+                {isBaseGuessed ? " — unknown merge base" : ""}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-2 ml-6 space-y-1.5 text-amber-700/80 dark:text-amber-400/80">
+              {phase.failureReason === "no-base" && (
+                <p>
+                  No{" "}
+                  <code className="rounded bg-amber-500/10 px-1 font-mono text-[11px]">
+                    parent-commit
+                  </code>{" "}
+                  tag on this patch and no base commit could be determined.
+                </p>
+              )}
+              {phase.failureReason === "fetch-failed" && (
+                <p>
+                  The base file content could not be fetched from the git server
+                  — the patch may reference a commit not yet pushed.
+                </p>
+              )}
+              {phase.failureReason === "hunk-mismatch" && isBaseGuessed && (
+                <p>
+                  Tried the tip of the default branch and a
+                  timestamp-approximated base — neither applied cleanly.
+                </p>
+              )}
+              {phase.failureReason === "hunk-mismatch" && !isBaseGuessed && (
+                <p>The patch did not apply cleanly against the base commit.</p>
+              )}
               <p>
-                {phase.failureReason === "no-base" && (
-                  <>
-                    {phase.failedCount} file{phase.failedCount !== 1 ? "s" : ""}{" "}
-                    could not be applied — the patch is missing a{" "}
-                    <code className="rounded bg-amber-500/10 px-1 font-mono text-[11px]">
-                      parent-commit
-                    </code>{" "}
-                    tag and no base commit could be determined.
-                  </>
-                )}
-                {phase.failureReason === "fetch-failed" && (
-                  <>
-                    {phase.failedCount} file{phase.failedCount !== 1 ? "s" : ""}{" "}
-                    could not be applied — the base file content could not be
-                    fetched from the git server (the patch may reference a
-                    commit not yet pushed).
-                  </>
-                )}
-                {phase.failureReason === "hunk-mismatch" && (
-                  <>
-                    {phase.failedCount} file{phase.failedCount !== 1 ? "s" : ""}{" "}
-                    could not be applied —
-                    {isBaseGuessed
-                      ? " the base commit was approximated from the patch timestamp and the patch did not apply cleanly against it."
-                      : " the patch did not apply cleanly against the current branch head."}
-                  </>
-                )}
-                {!phase.failureReason && (
-                  <>
-                    {phase.failedCount} file{phase.failedCount !== 1 ? "s" : ""}{" "}
-                    could not be applied.
-                  </>
-                )}{" "}
                 {phase.failedCount === phase.changes.length
-                  ? "Showing the original patch diff for all files."
-                  : `The remaining ${phase.changes.length - phase.failedCount} file${phase.changes.length - phase.failedCount !== 1 ? "s" : ""} show the applied combined diff.`}
+                  ? "Showing the raw patch diff for all files."
+                  : `${phase.failedCount} file${phase.failedCount !== 1 ? "s" : ""} failed — showing raw patch diff for those; applied diff for the rest.`}
               </p>
               {patchEventLinks.length > 0 && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
@@ -558,7 +585,7 @@ export function PatchFilesTab({
                 </div>
               )}
             </div>
-          </div>
+          </details>
         </div>
       )}
       <div className="flex gap-0 rounded-lg border border-border/60 min-w-0">

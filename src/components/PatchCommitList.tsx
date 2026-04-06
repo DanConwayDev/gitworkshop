@@ -20,7 +20,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Clock, User, GitCommit, Info, AlertTriangle } from "lucide-react";
+import {
+  Clock,
+  User,
+  GitCommit,
+  AlertTriangle,
+  ChevronDown,
+} from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import type { Patch } from "@/casts/Patch";
@@ -104,61 +110,28 @@ export function PatchCommitList({
   // Determine which banner to show based on what we know.
   // applyResult is only available after the user has visited the Files tab.
   const applyFailed = applyResult && applyResult.failedCount > 0;
-  const applyClean = applyResult && applyResult.failedCount === 0;
 
   return (
     <div className="space-y-6">
-      {/* Apply failed — amber warning, mirrors PatchFilesTab */}
+      {/* Apply failed — amber warning */}
       {isBaseGuessed && applyFailed && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>
-              These patches omit the{" "}
-              <code className="rounded bg-amber-500/10 px-1 font-mono text-[11px]">
-                parent-commit
-              </code>{" "}
-              tag — the merge base was approximated from the patch timestamp,
-              and{" "}
-              {applyResult.failedCount === 1
-                ? "1 file"
-                : `${applyResult.failedCount} files`}{" "}
-              could not be cleanly applied against it. The diffs shown on
-              individual commits are the raw patch diffs.
-            </span>
-          </div>
-        </div>
-      )}
-      {/* Apply succeeded with guessed base — blue info */}
-      {isBaseGuessed && applyClean && (
-        <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-700 dark:text-blue-400">
-          <div className="flex items-center gap-2">
-            <Info className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              These patches omit the{" "}
-              <code className="rounded bg-blue-500/10 px-1 font-mono text-[11px]">
-                parent-commit
-              </code>{" "}
-              tag — the merge base was approximated from the patch timestamp.
-              The patch applied cleanly against the approximated base.
-            </span>
-          </div>
-        </div>
-      )}
-      {/* Apply not yet run — blue info, no outcome claim */}
-      {isBaseGuessed && !applyResult && (
-        <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-700 dark:text-blue-400">
-          <div className="flex items-center gap-2">
-            <Info className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              These patches omit the{" "}
-              <code className="rounded bg-blue-500/10 px-1 font-mono text-[11px]">
-                parent-commit
-              </code>{" "}
-              tag — the merge base was approximated from the patch timestamp.
-              Visit the Files tab to see whether the patch applies cleanly.
-            </span>
-          </div>
+          <details className="group">
+            <summary className="flex items-center gap-2 cursor-pointer list-none">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span className="font-medium flex-1">
+                Couldn't cleanly apply patch — unknown merge base
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-2 ml-6 space-y-1.5 text-amber-700/80 dark:text-amber-400/80">
+              <p>
+                Tried the tip of the default branch and a timestamp-approximated
+                base — neither applied cleanly. Individual commit diffs show the
+                raw patch diff.
+              </p>
+            </div>
+          </details>
         </div>
       )}
       {grouped.map((group) => (
