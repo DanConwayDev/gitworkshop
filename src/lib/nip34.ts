@@ -1771,6 +1771,8 @@ export interface ResolvedPR extends ResolvedPRLite {
    */
   initialPatchCommits?: Array<{
     commitId: string | undefined;
+    /** Nostr event ID of the patch — used as a fallback link target when commitId is absent. */
+    eventId: string;
     subject: string;
   }>;
 

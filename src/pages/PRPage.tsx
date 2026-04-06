@@ -434,12 +434,12 @@ export default function PRPage() {
                           pr.initialPatchCommits &&
                           pr.initialPatchCommits.length > 0
                         ? pr.initialPatchCommits.map((c) => ({
-                            hash: c.commitId ?? "",
+                            hash: c.commitId ?? c.eventId,
                             subject: c.subject,
-                            href:
-                              prBasePath && c.commitId
-                                ? `${prBasePath}/commit/${c.commitId}`
-                                : undefined,
+                            noCommitId: !c.commitId,
+                            href: prBasePath
+                              ? `${prBasePath}/commit/${c.commitId ?? c.eventId}`
+                              : undefined,
                           }))
                         : undefined
                   }

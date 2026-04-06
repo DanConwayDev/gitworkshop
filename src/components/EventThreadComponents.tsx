@@ -38,6 +38,8 @@ interface CommitEntry {
   hash: string;
   subject: string;
   href?: string;
+  /** When true, `hash` is a Nostr event ID fallback, not a real git commit hash. */
+  noCommitId?: boolean;
 }
 
 interface EventBodyCardProps {
@@ -142,13 +144,16 @@ export function EventBodyCard({
                   <>
                     <span
                       className={cn(
-                        "font-mono text-[11px] shrink-0",
+                        "text-[11px] shrink-0",
+                        c.noCommitId ? "" : "font-mono",
                         commitsSuperseded
                           ? "line-through text-muted-foreground/50"
-                          : "text-muted-foreground/70",
+                          : c.noCommitId
+                            ? "text-muted-foreground/50 italic"
+                            : "text-muted-foreground/70",
                       )}
                     >
-                      {c.hash.slice(0, 7)}
+                      {c.noCommitId ? "[unknown]" : c.hash.slice(0, 7)}
                     </span>
                     <span
                       className={cn(

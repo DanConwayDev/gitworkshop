@@ -25,7 +25,9 @@ import {
   Folder,
   FolderOpen,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
+import { nip19 } from "nostr-tools";
 import { cn } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
 import { fileDiffCardId } from "@/lib/diffCardId";
@@ -275,6 +277,7 @@ type Phase =
       changes: FileChange[];
       diff: string;
       failedCount: number;
+      failureReason?: "no-base" | "fetch-failed" | "hunk-mismatch";
     }
   | { kind: "error"; message: string };
 
@@ -311,6 +314,19 @@ export function PatchFilesTab({
 
   // Stable key for the chain to detect changes
   const chainKey = useMemo(() => chain.map((p) => p.id).join(","), [chain]);
+
+  // Build njump.me links for the patch events (for the failure banner).
+  // Must be declared before any early returns to satisfy rules-of-hooks.
+  const patchEventLinks = useMemo(() => {
+    return chain.map((p) => {
+      try {
+        const nevent = nip19.neventEncode({ id: p.event.id });
+        return { id: p.event.id, url: `https://njump.me/${nevent}` };
+      } catch {
+        return { id: p.event.id, url: null };
+      }
+    });
+  }, [chain]);
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -355,6 +371,7 @@ export function PatchFilesTab({
         changes: result.fileChanges.length > 0 ? result.fileChanges : changes,
         diff: result.combinedDiff,
         failedCount: result.failedCount,
+        failureReason: result.failureReason,
       });
     }
 
@@ -423,12 +440,65 @@ export function PatchFilesTab({
   return (
     <div className="space-y-0">
       {phase.failedCount > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 mb-3">
-          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-          <span>
-            {phase.failedCount} file{phase.failedCount !== 1 ? "s" : ""} could
-            not be cleanly applied. Showing raw patch diff for those files.
-          </span>
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 mb-3 space-y-2">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="space-y-1 min-w-0">
+              <p>
+                {phase.failedCount} file{phase.failedCount !== 1 ? "s" : ""}{" "}
+                could not be cleanly applied.{" "}
+                {phase.failureReason === "no-base" && (
+                  <>
+                    The patch is missing a{" "}
+                    <code className="rounded bg-amber-500/10 px-1 font-mono text-[11px]">
+                      parent-commit
+                    </code>{" "}
+                    tag, so the base file content cannot be fetched. Showing raw
+                    patch diff instead.
+                  </>
+                )}
+                {phase.failureReason === "fetch-failed" && (
+                  <>
+                    The base file content could not be fetched from the git
+                    server (the patch may reference a commit not yet pushed).
+                    Showing raw patch diff instead.
+                  </>
+                )}
+                {phase.failureReason === "hunk-mismatch" && (
+                  <>
+                    The patch was made against a different version of the file
+                    than what the repository currently has (the branch may have
+                    diverged). Showing raw patch diff instead.
+                  </>
+                )}
+                {!phase.failureReason && (
+                  <>Showing raw patch diff for those files.</>
+                )}
+              </p>
+              {patchEventLinks.length > 0 && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                  <span className="text-xs text-amber-600/70 dark:text-amber-400/70">
+                    View raw patch event
+                    {patchEventLinks.length !== 1 ? "s" : ""}:
+                  </span>
+                  {patchEventLinks.map((link, i) =>
+                    link.url ? (
+                      <a
+                        key={link.id}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-amber-600/80 dark:text-amber-400/80 hover:text-amber-700 dark:hover:text-amber-300 underline underline-offset-2"
+                      >
+                        patch {i + 1}
+                        <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    ) : null,
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
       <div className="flex gap-0 rounded-lg border border-border/60 min-w-0">

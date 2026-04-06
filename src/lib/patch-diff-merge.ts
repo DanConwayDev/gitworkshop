@@ -69,6 +69,13 @@ export interface PatchChainDiffResult {
   combinedDiff: string;
   /** Number of files that failed to apply */
   failedCount: number;
+  /**
+   * Why the apply failed, when failedCount > 0.
+   * "no-base": baseCommitId was undefined — can't fetch original file content.
+   * "fetch-failed": had a base commit but couldn't retrieve file from git server.
+   * "hunk-mismatch": fetched original but patch hunks don't match (wrong base).
+   */
+  failureReason?: "no-base" | "fetch-failed" | "hunk-mismatch";
 }
 
 // ---------------------------------------------------------------------------
@@ -289,12 +296,30 @@ export async function mergePatchChainDiff(
   fallbackUrls?: string[],
 ): Promise<PatchChainDiffResult> {
   if (chain.length === 0) {
-    return { files: [], fileChanges: [], combinedDiff: "", failedCount: 0 };
+    return {
+      files: [],
+      fileChanges: [],
+      combinedDiff: "",
+      failedCount: 0,
+      failureReason: undefined,
+    };
   }
 
   const { fileEntries } = parsePatchChain(chain);
   const results: MergedFileResult[] = [];
   let failedCount = 0;
+  // Track the most specific failure reason across all files.
+  // Priority: hunk-mismatch > fetch-failed > no-base
+  let failureReason: PatchChainDiffResult["failureReason"] = undefined;
+
+  const upgradeFailureReason = (
+    reason: NonNullable<PatchChainDiffResult["failureReason"]>,
+  ) => {
+    const priority = { "no-base": 1, "fetch-failed": 2, "hunk-mismatch": 3 };
+    if (!failureReason || priority[reason] > priority[failureReason]) {
+      failureReason = reason;
+    }
+  };
 
   // Process all files in parallel
   const filePromises = Array.from(fileEntries.entries()).map(
@@ -321,7 +346,10 @@ export async function mergePatchChainDiff(
 
       // Fetch original content for modified/deleted files
       let originalContent = "";
+      let fetchAttempted = false;
+      let fetchSucceeded = false;
       if (!isNewFile && baseCommitId && pool) {
+        fetchAttempted = true;
         try {
           const obj = await pool.getObjectByPath(
             baseCommitId,
@@ -331,6 +359,7 @@ export async function mergePatchChainDiff(
           );
           if (obj?.data) {
             originalContent = new TextDecoder().decode(obj.data);
+            fetchSucceeded = true;
           }
         } catch {
           // If we can't fetch the original, try applying anyway —
@@ -354,6 +383,14 @@ export async function mergePatchChainDiff(
           if (fuzzyResult === false) {
             error = `Patch ${entry.chainIndex + 1} failed to apply to ${path}`;
             failedCount++;
+            // Determine why: no base commit, fetch failed, or hunk mismatch
+            if (!isNewFile && !baseCommitId) {
+              upgradeFailureReason("no-base");
+            } else if (fetchAttempted && !fetchSucceeded) {
+              upgradeFailureReason("fetch-failed");
+            } else {
+              upgradeFailureReason("hunk-mismatch");
+            }
             break;
           }
           content = fuzzyResult;
@@ -425,7 +462,13 @@ export async function mergePatchChainDiff(
   }
 
   if (signal.aborted) {
-    return { files: [], fileChanges: [], combinedDiff: "", failedCount: 0 };
+    return {
+      files: [],
+      fileChanges: [],
+      combinedDiff: "",
+      failedCount: 0,
+      failureReason: undefined,
+    };
   }
 
   // Sort by path
@@ -446,7 +489,13 @@ export async function mergePatchChainDiff(
     .filter(Boolean)
     .join("\n");
 
-  return { files: results, fileChanges, combinedDiff, failedCount };
+  return {
+    files: results,
+    fileChanges,
+    combinedDiff,
+    failedCount,
+    failureReason,
+  };
 }
 
 /**

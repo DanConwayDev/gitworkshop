@@ -338,7 +338,11 @@ export function PRDetailModel(
           // `ngit send` invocation is treated as simultaneous.
           const INLINE_THRESHOLD_SECONDS = 60;
           let initialPatchCommits:
-            | Array<{ commitId: string | undefined; subject: string }>
+            | Array<{
+                commitId: string | undefined;
+                eventId: string;
+                subject: string;
+              }>
             | undefined;
           let firstRevisionInlined = false;
           let hasCoverLetter = false;
@@ -365,6 +369,7 @@ export function PRDetailModel(
                   .filter((p) => !p.isCoverLetter)
                   .map((p) => ({
                     commitId: p.commitId,
+                    eventId: p.event.id,
                     subject: p.subject || "(no subject)",
                   }));
                 firstRevisionInlined = true;

@@ -13,6 +13,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
@@ -119,6 +120,9 @@ function PatchCommitRow({
   const ts = committer?.timestamp ?? patch.event.created_at;
   const authorName = committer?.name ?? "(unknown)";
   const commitId = patch.commitId;
+  // Fall back to the Nostr event ID when no git commit ID is available.
+  // PRCommitPage matches by event ID too, so the link will resolve correctly.
+  const linkId = commitId ?? patch.event.id;
   const shortHash = commitId?.slice(0, 8);
 
   const subject = patch.subject;
@@ -136,11 +140,7 @@ function PatchCommitRow({
     <div className="px-4 py-3 hover:bg-muted/20 transition-colors group">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          {commitId ? (
-            <Link to={`${basePath}/commit/${commitId}`}>{titleContent}</Link>
-          ) : (
-            titleContent
-          )}
+          <Link to={`${basePath}/commit/${linkId}`}>{titleContent}</Link>
           {body && (
             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
               {body}
@@ -171,18 +171,22 @@ function PatchCommitRow({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          {commitId ? (
-            <Link
-              to={`${basePath}/commit/${commitId}`}
-              className="font-mono text-xs bg-muted hover:bg-muted/70 px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {shortHash}
-            </Link>
-          ) : (
-            <span className="font-mono text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
-              <GitCommit className="h-3 w-3 inline" />
-            </span>
-          )}
+          <Link
+            to={`${basePath}/commit/${linkId}`}
+            className={cn(
+              "text-xs bg-muted hover:bg-muted/70 px-2 py-1 rounded transition-colors",
+              commitId
+                ? "font-mono text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground/50 hover:text-muted-foreground",
+            )}
+            title={
+              commitId
+                ? undefined
+                : "No git commit ID — click to view patch event"
+            }
+          >
+            {shortHash ?? "[unknown]"}
+          </Link>
         </div>
       </div>
     </div>
