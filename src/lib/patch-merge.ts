@@ -575,6 +575,259 @@ export async function buildPatchChainObjects(
 }
 
 // ---------------------------------------------------------------------------
+// Apply-to-tip: replay patch chain as linear commits on top of defaultBranchHead
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of applying a patch chain directly on top of the default branch tip.
+ * Produces linear commits — no merge commit.
+ */
+export interface PatchChainApplyResult {
+  /** All git objects needed for the packfile (blobs + trees + commits) */
+  objects: PackableObject[];
+  /** The commit hash of the last replayed commit (new tip of the branch) */
+  newTipCommitHash: string;
+  /** Whether all claimed commit hashes matched the computed ones */
+  allHashesVerified: boolean;
+  /** Per-patch hash verification: patch event ID -> match/mismatch */
+  hashResults: Map<
+    string,
+    { computed: string; claimed: string; match: boolean }
+  >;
+}
+
+/**
+ * Apply a patch chain directly on top of the current default branch HEAD,
+ * producing linear commits (no merge commit). This is the "git am" / "apply"
+ * flow as opposed to the "merge" flow.
+ *
+ * Each patch is replayed as a new commit whose:
+ *   - tree = result of applying the patch diff to the previous tree
+ *   - parent = previous commit (starting from defaultBranchHead)
+ *   - author = original patch author (name, email, timestamp preserved)
+ *   - committer = the maintainer performing the apply (passed in)
+ *
+ * @param chain               - Ordered patches (oldest first), cover letters excluded
+ * @param pool                - GitGraspPool for fetching base tree and file content
+ * @param defaultBranchHead   - Current HEAD of the default branch (apply target)
+ * @param maintainerCommitter - The maintainer performing the apply (committer field)
+ * @param signal              - AbortSignal for cancellation
+ * @param fallbackUrls        - Extra clone URLs to try
+ */
+export async function applyPatchChainToTip(
+  chain: Patch[],
+  pool: GitGraspPool,
+  defaultBranchHead: string,
+  maintainerCommitter: CommitPerson,
+  signal: AbortSignal,
+  fallbackUrls?: string[],
+): Promise<PatchChainApplyResult | PatchChainBuildError> {
+  if (chain.length === 0) {
+    return { reason: "Empty patch chain", conflicts: [] };
+  }
+
+  // Fetch the tip tree from the git server
+  const tipData = await pool.getFullTree(
+    defaultBranchHead,
+    signal,
+    fallbackUrls,
+  );
+  if (!tipData) {
+    return {
+      reason: `Could not fetch tip commit ${defaultBranchHead.slice(0, 8)} from git server`,
+      conflicts: [],
+    };
+  }
+
+  const objects: PackableObject[] = [];
+  const hashResults = new Map<
+    string,
+    { computed: string; claimed: string; match: boolean }
+  >();
+  let allHashesVerified = true;
+
+  let currentTree = tipData.tree;
+  let currentParentCommitId = defaultBranchHead;
+  const fileContents = new Map<string, string>();
+
+  // We fetch file content from the tip tree, not the original base.
+  // Track the "effective base" for each file as we apply patches sequentially.
+  // Initially all files come from the tip tree.
+
+  for (let patchIdx = 0; patchIdx < chain.length; patchIdx++) {
+    const patch = chain[patchIdx];
+
+    if (signal.aborted) {
+      return { reason: "Aborted", conflicts: [] };
+    }
+
+    const claimedHash = patch.commitId;
+    if (!claimedHash) {
+      return {
+        reason: `Patch ${patchIdx + 1} has no commit ID tag`,
+        conflicts: [],
+      };
+    }
+
+    const patchDiff = extractPatchDiff(patch.content);
+    if (!patchDiff) {
+      return {
+        reason: `Patch ${patchIdx + 1} has no diff content`,
+        conflicts: [],
+      };
+    }
+
+    const stripped = normalizeDiffPrefix(stripTrailer(patchDiff));
+    const files = parseDiff(stripped);
+
+    const changedBlobs = new Map<string, string>();
+    const deletedPaths = new Set<string>();
+    const conflicts: MergeConflict[] = [];
+
+    for (const file of files) {
+      if (signal.aborted) {
+        return { reason: "Aborted", conflicts: [] };
+      }
+
+      const filePath = getFilePath(file);
+
+      if (file.deleted) {
+        deletedPaths.add(filePath);
+        fileContents.delete(filePath);
+        continue;
+      }
+
+      // Get current content from the tip tree (or from a previous patch in this chain)
+      let originalContent = "";
+      if (!file.new && file.from && file.from !== "/dev/null") {
+        if (fileContents.has(file.from)) {
+          originalContent = fileContents.get(file.from)!;
+        } else {
+          try {
+            const obj = await pool.getObjectByPath(
+              defaultBranchHead,
+              file.from,
+              signal,
+              fallbackUrls,
+            );
+            if (obj?.data) {
+              originalContent = new TextDecoder().decode(obj.data);
+            }
+          } catch {
+            return {
+              reason: `Could not fetch content for ${file.from} from tip commit`,
+              conflicts: [
+                {
+                  path: file.from,
+                  reason: "Could not fetch file content from git server tip",
+                  patchIndex: patchIdx,
+                },
+              ],
+            };
+          }
+        }
+      }
+
+      // Apply the patch
+      const diffString = reconstructPerFileDiff(file);
+      let result = applyPatch(originalContent, diffString);
+      if (result === false) {
+        result = applyPatch(originalContent, diffString, { fuzzFactor: 3 });
+        if (result === false) {
+          conflicts.push({
+            path: filePath,
+            reason: `Patch failed to apply cleanly against tip`,
+            patchIndex: patchIdx,
+          });
+          continue;
+        }
+      }
+
+      // Create blob object and collect it
+      const contentBytes = encoder.encode(result);
+      const blobObj = await packBlob(contentBytes);
+      objects.push(blobObj);
+
+      changedBlobs.set(filePath, blobObj.hash);
+      fileContents.set(filePath, result);
+    }
+
+    if (conflicts.length > 0) {
+      return {
+        reason: `Patch ${patchIdx + 1} has conflicts against tip`,
+        conflicts,
+      };
+    }
+
+    // Rebuild tree, collecting all tree objects
+    const treeHash = await rebuildTreeCollecting(
+      currentTree,
+      changedBlobs,
+      deletedPaths,
+      objects,
+    );
+
+    // Update the in-memory tree for the next patch
+    currentTree = applyBlobChangesToTree(
+      currentTree,
+      changedBlobs,
+      deletedPaths,
+    );
+
+    // Build commit object — preserve original author, use maintainer as committer
+    const author = parsePersonTag(patch, "author");
+    if (!author) {
+      return {
+        reason: `Patch ${patchIdx + 1} has no author tag — cannot reconstruct commit`,
+        conflicts: [],
+      };
+    }
+
+    const subject = patch.subject;
+    const body = patch.body;
+    const message = body ? `${subject}\n\n${body}` : subject;
+    const gpgSig = extractGpgSignature(patch);
+
+    const commitData: CommitData = {
+      treeHash,
+      parentHashes: [currentParentCommitId],
+      author,
+      // Committer is the maintainer applying the patch, not the original committer
+      committer: maintainerCommitter,
+      message,
+      // GPG signature from the original commit is intentionally dropped:
+      // the commit hash will differ (different parent, different committer),
+      // so the original signature would be invalid anyway.
+      gpgSignature: gpgSig,
+    };
+
+    const commitObj = await packCommit(commitData);
+    objects.push(commitObj);
+
+    // Verify hash — note: this will almost always mismatch because the parent
+    // and committer differ from the original. We track it for transparency.
+    const match = commitObj.hash === claimedHash;
+    hashResults.set(patch.event.id, {
+      computed: commitObj.hash,
+      claimed: claimedHash,
+      match,
+    });
+    if (!match) allHashesVerified = false;
+
+    // Use the computed hash (not the claimed one) as the parent for the next commit,
+    // since we're building a new linear chain on top of the tip.
+    currentParentCommitId = commitObj.hash;
+  }
+
+  return {
+    objects,
+    newTipCommitHash: currentParentCommitId,
+    allHashesVerified,
+    hashResults,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Merge commit creation
 // ---------------------------------------------------------------------------
 

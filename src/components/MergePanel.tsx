@@ -1,18 +1,37 @@
 /**
- * MergePanel — merge button and status panel for patch-type PRs on Grasp repos.
+ * MergePanel — merge/apply button and status panel for patch-type PRs on Grasp repos.
  *
  * Shown at the bottom of the conversation tab, above the reply box. Eagerly
- * checks whether the patch chain applies cleanly and shows one of:
- *   - "Ready to merge" with a green merge button
+ * checks whether the patch chain can be merged or applied and shows one of:
+ *   - "Ready to merge" with a green Merge button (merge strategy succeeded)
+ *   - "Apply to Tip" with an amber Apply button + warning (only apply-to-tip works)
  *   - "Conflicts detected" with file-level details
  *   - "Error" with a human-readable message
  *
- * The merge orchestration sequence:
+ * Two strategies are tried in parallel:
+ *
+ *   **Merge** (preferred): applies patches against the original merge-base
+ *   (parent-commit tag, or timestamp-guessed), then creates a merge commit
+ *   with two parents (defaultBranchHead + patchTipCommit). Preserves history.
+ *
+ *   **Apply to Tip**: applies patches directly on top of the current default
+ *   branch HEAD, producing linear commits (no merge commit). Used as a fallback
+ *   when the merge strategy fails (e.g. guessed base is wrong, or the patch
+ *   doesn't apply cleanly against the original base).
+ *
+ * The merge orchestration sequence (merge strategy):
  *   1. Build merge commit (pure computation, sub-millisecond)
  *   2. Publish kind:30618 state event to Grasp relays ONLY (purgatory)
  *   3. Push packfile to Grasp git server(s)
  *   4. Publish kind:1631 merged status event to all relay groups
  *   5. Publish kind:30618 to remaining relays (user outbox, repo relays)
+ *
+ * The apply-to-tip sequence:
+ *   1. (Objects already built in usePatchMergeability)
+ *   2. Publish kind:30618 state event to Grasp relays ONLY (purgatory)
+ *   3. Push packfile to Grasp git server(s)
+ *   4. Publish kind:1631 merged status event to all relay groups
+ *   5. Publish kind:30618 to remaining relays
  *
  * If step 3 fails, the state event expires from purgatory after 30 minutes.
  * No manual rollback needed.
@@ -24,6 +43,7 @@ import { nip19 } from "nostr-tools";
 import type { EventTemplate, NostrEvent } from "nostr-tools";
 import {
   GitMerge,
+  GitBranch,
   Loader2,
   AlertTriangle,
   CheckCircle2,
@@ -148,8 +168,8 @@ const STEP_LABELS: Record<MergeStep, string> = {
   pushing: "Pushing to git server...",
   "publishing-status": "Publishing merged status...",
   "broadcasting-state": "Broadcasting state event...",
-  done: "Merge complete!",
-  failed: "Merge failed",
+  done: "Complete!",
+  failed: "Failed",
 };
 
 // ---------------------------------------------------------------------------
@@ -175,13 +195,35 @@ export function MergePanel({
   const [mergeStep, setMergeStep] = useState<MergeStep>("idle");
   const [mergeError, setMergeError] = useState<string | null>(null);
 
-  // Eagerly check mergeability
+  // Build the maintainer CommitPerson for the apply-to-tip path
+  const maintainerCommitter: CommitPerson | undefined = useMemo(() => {
+    if (!account) return undefined;
+    const now = Math.floor(Date.now() / 1000);
+    const tzOffset = new Date().getTimezoneOffset();
+    const tzSign = tzOffset <= 0 ? "+" : "-";
+    const tzHours = Math.floor(Math.abs(tzOffset) / 60)
+      .toString()
+      .padStart(2, "0");
+    const tzMins = (Math.abs(tzOffset) % 60).toString().padStart(2, "0");
+    return {
+      name: profile?.displayName || profile?.name || "Anonymous",
+      email:
+        profile?.nip05 ??
+        `${nip19.npubEncode(account.pubkey).slice(0, 16)}@nostr`,
+      timestamp: now,
+      timezone: `${tzSign}${tzHours}${tzMins}`,
+    };
+  }, [account, profile]);
+
+  // Eagerly check mergeability — both strategies in parallel
   const mergeability = usePatchMergeability(
     patchChain,
     gitPool,
     effectiveCloneUrls,
     true,
     guessedBaseCommitId,
+    defaultBranchHead,
+    maintainerCommitter,
   );
 
   const defaultBranchRef = `refs/heads/${defaultBranchName}`;
@@ -192,13 +234,62 @@ export function MergePanel({
     [repo.relays, repo.graspServerDomains],
   );
 
-  // Can we show the merge button at all?
+  // Can we show the merge button?
   const canMerge =
     mergeability.status === "ready" &&
     defaultBranchHead &&
     mergeStep === "idle";
 
-  // The merge orchestration
+  // Can we show the apply-to-tip button?
+  const canApplyToTip =
+    mergeability.status === "ready-apply-only" &&
+    defaultBranchHead &&
+    mergeStep === "idle";
+
+  // ── Push helper ──────────────────────────────────────────────────────────
+
+  async function pushObjects(
+    allObjects: PackableObject[],
+    refUpdate: RefUpdate,
+  ): Promise<void> {
+    const packfile = await createPackfile(allObjects);
+    let pushSucceeded = false;
+    let lastPushError = "";
+
+    for (const cloneUrl of repo.graspCloneUrls) {
+      try {
+        const result = await pushToGitServer(cloneUrl, [refUpdate], packfile);
+        if (result.unpackOk) {
+          const refOk = result.refResults.every((r) => r.ok);
+          if (refOk) {
+            pushSucceeded = true;
+            break;
+          } else {
+            const failures = result.refResults
+              .filter((r) => !r.ok)
+              .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
+              .join("; ");
+            lastPushError = `Ref update rejected: ${failures}`;
+          }
+        } else {
+          lastPushError = `Unpack failed on ${cloneUrl}`;
+        }
+      } catch (err) {
+        lastPushError =
+          err instanceof Error ? err.message : `Push failed to ${cloneUrl}`;
+      }
+    }
+
+    if (!pushSucceeded) {
+      throw new Error(
+        `Push failed to all Grasp servers. ${lastPushError}. ` +
+          "The state event will expire from purgatory in 30 minutes.",
+      );
+    }
+  }
+
+  // ── Merge orchestration (merge strategy) ─────────────────────────────────
+
   const handleMerge = useCallback(async () => {
     if (
       !account ||
@@ -236,7 +327,6 @@ export function MergePanel({
         timezone,
       };
 
-      // Get the patch author's name for the merge message
       const patchAuthorNpub = nip19.npubEncode(pr.pubkey);
       const authorDisplayName = patchAuthorNpub.slice(0, 16) + "...";
 
@@ -249,76 +339,35 @@ export function MergePanel({
         authorDisplayName,
       );
 
-      // Combine all objects: patch chain objects + merge commit
       const allObjects: PackableObject[] = [
         ...mergeability.buildResult.objects,
         mergeCommitObj,
       ];
 
-      // ── Step 2: Publish state event to Grasp relays (purgatory) ───────
-      setMergeStep("publishing-state");
-
+      // ── Step 2+3: Publish state + push ────────────────────────────────
       const stateTemplate = await factory.create(
         RepoStateBlueprint,
         repo.dTag,
         mergeCommitObj.hash,
         defaultBranchName,
       );
+
       const signedState = await account.signer.signEvent(
         stateTemplate as EventTemplate,
       );
 
+      setMergeStep("publishing-state");
       await publishToGraspRelays(signedState, graspRelayUrls);
-
-      // Add to local store for immediate UI update
       eventStore.add(signedState);
 
-      // ── Step 3: Push packfile to Grasp git server(s) ──────────────────
       setMergeStep("pushing");
-
-      const packfile = await createPackfile(allObjects);
-      const refUpdate: RefUpdate = {
+      await pushObjects(allObjects, {
         oldHash: defaultBranchHead,
         newHash: mergeCommitObj.hash,
         refName: defaultBranchRef,
-      };
+      });
 
-      // Try each Grasp clone URL until one succeeds
-      let pushSucceeded = false;
-      let lastPushError = "";
-
-      for (const cloneUrl of repo.graspCloneUrls) {
-        try {
-          const result = await pushToGitServer(cloneUrl, [refUpdate], packfile);
-          if (result.unpackOk) {
-            const refOk = result.refResults.every((r) => r.ok);
-            if (refOk) {
-              pushSucceeded = true;
-              break;
-            } else {
-              const failures = result.refResults
-                .filter((r) => !r.ok)
-                .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
-                .join("; ");
-              lastPushError = `Ref update rejected: ${failures}`;
-            }
-          } else {
-            lastPushError = `Unpack failed on ${cloneUrl}`;
-          }
-        } catch (err) {
-          lastPushError =
-            err instanceof Error ? err.message : `Push failed to ${cloneUrl}`;
-        }
-      }
-
-      if (!pushSucceeded) {
-        throw new Error(
-          `Push failed to all Grasp servers. ${lastPushError}. ` +
-            "The state event will expire from purgatory in 30 minutes.",
-        );
-      }
-
-      // ── Step 4: Publish kind:1631 merged status event ─────────────────
+      // ── Step 4+5: Status + broadcast ──────────────────────────────────
       setMergeStep("publishing-status");
 
       const statusKind = STATUS_KIND_MAP["resolved"];
@@ -331,14 +380,12 @@ export function MergePanel({
         account.pubkey,
       );
 
-      // Add merge-specific tags to the status event
       const statusTags = [
         ...(statusDraft.tags ?? []),
         ["merge-commit", mergeCommitObj.hash],
         ["r", mergeCommitObj.hash],
       ];
 
-      // Add q tags for each patch event in the chain
       for (const patch of patchChain) {
         statusTags.push(["q", patch.event.id, "", patch.pubkey]);
       }
@@ -350,7 +397,6 @@ export function MergePanel({
 
       const signedStatus = await account.signer.signEvent(statusTemplate);
 
-      // Publish to all relay groups (user outbox + repo relays + git index + notifications)
       const repoCoord = repoCoordinate(repo.selectedMaintainer, repo.dTag);
       await outboxStore.publish(signedStatus, [
         `outbox:${account.pubkey}`,
@@ -359,16 +405,13 @@ export function MergePanel({
       ]);
       eventStore.add(signedStatus);
 
-      // ── Step 5: Broadcast state event to remaining relays ─────────────
       setMergeStep("broadcasting-state");
-
       await outboxStore.publish(signedState, [
         repoCoord,
         "git-index",
         "extra-relays",
       ]);
 
-      // ── Done ──────────────────────────────────────────────────────────
       setMergeStep("done");
       toast({
         title: "Patch merged",
@@ -400,6 +443,123 @@ export function MergePanel({
     toast,
   ]);
 
+  // ── Apply-to-tip orchestration ────────────────────────────────────────────
+
+  const handleApplyToTip = useCallback(async () => {
+    if (
+      !account ||
+      !mergeability.applyResult ||
+      !defaultBranchHead ||
+      !gitPool
+    ) {
+      return;
+    }
+
+    setMergeStep("building");
+    setMergeError(null);
+
+    try {
+      const { objects, newTipCommitHash } = mergeability.applyResult;
+
+      // Publish state event pointing to the new tip
+      const stateTemplate = await factory.create(
+        RepoStateBlueprint,
+        repo.dTag,
+        newTipCommitHash,
+        defaultBranchName,
+      );
+
+      const signedState = await account.signer.signEvent(
+        stateTemplate as EventTemplate,
+      );
+
+      setMergeStep("publishing-state");
+      await publishToGraspRelays(signedState, graspRelayUrls);
+      eventStore.add(signedState);
+
+      // Push the linear commits
+      setMergeStep("pushing");
+      await pushObjects(objects, {
+        oldHash: defaultBranchHead,
+        newHash: newTipCommitHash,
+        refName: defaultBranchRef,
+      });
+
+      // Publish status + broadcast
+      setMergeStep("publishing-status");
+
+      const statusKind = STATUS_KIND_MAP["resolved"];
+      const statusDraft = await factory.create(
+        StatusChangeBlueprint,
+        statusKind,
+        pr.rootEvent.id,
+        pr.repoCoords,
+        pr.pubkey,
+        account.pubkey,
+      );
+
+      const statusTags = [
+        ...(statusDraft.tags ?? []),
+        ["merge-commit", newTipCommitHash],
+        ["r", newTipCommitHash],
+      ];
+
+      for (const patch of patchChain) {
+        statusTags.push(["q", patch.event.id, "", patch.pubkey]);
+      }
+
+      const statusTemplate: EventTemplate = {
+        ...statusDraft,
+        tags: statusTags,
+      };
+
+      const signedStatus = await account.signer.signEvent(statusTemplate);
+
+      const repoCoord = repoCoordinate(repo.selectedMaintainer, repo.dTag);
+      await outboxStore.publish(signedStatus, [
+        `outbox:${account.pubkey}`,
+        repoCoord,
+        "git-index",
+      ]);
+      eventStore.add(signedStatus);
+
+      setMergeStep("broadcasting-state");
+      await outboxStore.publish(signedState, [
+        repoCoord,
+        "git-index",
+        "extra-relays",
+      ]);
+
+      setMergeStep("done");
+      toast({
+        title: "Patch applied",
+        description: `${patchChain.length} commit${patchChain.length !== 1 ? "s" : ""} applied to ${defaultBranchName} (tip: ${newTipCommitHash.slice(0, 8)}).`,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Apply failed unexpectedly";
+      setMergeStep("failed");
+      setMergeError(message);
+      toast({
+        title: "Apply failed",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  }, [
+    account,
+    mergeability.applyResult,
+    defaultBranchHead,
+    defaultBranchName,
+    defaultBranchRef,
+    gitPool,
+    pr,
+    patchChain,
+    repo,
+    graspRelayUrls,
+    toast,
+  ]);
+
   // ── Render ──────────────────────────────────────────────────────────────
 
   const isMerging =
@@ -424,13 +584,15 @@ export function MergePanel({
                   defaultBranchName={defaultBranchName}
                   behindCount={behindCount}
                   allHashesVerified={
-                    mergeability.buildResult?.allHashesVerified ?? false
+                    mergeability.buildResult?.allHashesVerified ??
+                    mergeability.applyResult?.allHashesVerified ??
+                    false
                   }
                   isBaseGuessed={!!guessedBaseCommitId}
                 />
               </div>
 
-              {/* Merge button / recheck */}
+              {/* Action buttons / recheck */}
               <div className="shrink-0 flex items-center gap-2">
                 {mergeability.status === "loading" && (
                   <span className="text-xs text-muted-foreground">
@@ -505,6 +667,66 @@ export function MergePanel({
                   </AlertDialog>
                 )}
 
+                {canApplyToTip && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        className="h-8 bg-amber-600 hover:bg-amber-700 text-white"
+                      >
+                        <GitBranch className="h-3.5 w-3.5 mr-1.5" />
+                        Apply to Tip
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Apply patches to tip?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                          <div className="space-y-2 text-sm text-muted-foreground">
+                            <p>
+                              The patches could not be merged cleanly against
+                              their original base, but they apply cleanly on top
+                              of{" "}
+                              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                                {defaultBranchName}
+                              </code>
+                              .
+                            </p>
+                            <p>
+                              This will replay the patch commits directly on top
+                              of the current branch tip (like{" "}
+                              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                                git am
+                              </code>
+                              ), producing a linear history with no merge
+                              commit. The original author and timestamps are
+                              preserved; you will be recorded as the committer.
+                            </p>
+                            {mergeability.mergeStrategyError && (
+                              <p className="text-amber-600 dark:text-amber-400 text-xs">
+                                Merge strategy failed:{" "}
+                                {mergeability.mergeStrategyError}
+                              </p>
+                            )}
+                          </div>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleApplyToTip}
+                          className="bg-amber-600 hover:bg-amber-700 text-white"
+                        >
+                          <GitBranch className="h-3.5 w-3.5 mr-1.5" />
+                          Confirm apply
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+
                 {isMerging && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -515,11 +737,31 @@ export function MergePanel({
                 {mergeStep === "done" && (
                   <div className="flex items-center gap-1.5 text-sm text-green-600">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span className="text-xs font-medium">Merged</span>
+                    <span className="text-xs font-medium">Done</span>
                   </div>
                 )}
               </div>
             </div>
+
+            {/* Apply-to-tip warning banner */}
+            {mergeability.status === "ready-apply-only" &&
+              mergeability.mergeStrategyError && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <div>
+                      <span className="font-medium">
+                        Merge strategy unavailable.
+                      </span>{" "}
+                      Patches apply cleanly against the current tip but not
+                      against the original base (
+                      {mergeability.mergeStrategyError}
+                      ). Applying will produce a linear history without a merge
+                      commit.
+                    </div>
+                  </div>
+                </div>
+              )}
 
             {/* Conflict details */}
             {mergeability.status === "conflicts" &&
@@ -583,6 +825,8 @@ function StatusIcon({
       return <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />;
     case "ready":
       return <CheckCircle2 className="h-5 w-5 text-green-600" />;
+    case "ready-apply-only":
+      return <AlertTriangle className="h-5 w-5 text-amber-500" />;
     case "conflicts":
       return <XCircle className="h-5 w-5 text-destructive" />;
     case "error":
@@ -612,7 +856,7 @@ function StatusHeadline({
   if (mergeStep === "done") {
     return (
       <p className="text-sm font-medium text-green-600">
-        Patch merged into{" "}
+        Patch applied to{" "}
         <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
           {defaultBranchName}
         </code>
@@ -621,7 +865,7 @@ function StatusHeadline({
   }
 
   if (mergeStep === "failed") {
-    return <p className="text-sm font-medium text-destructive">Merge failed</p>;
+    return <p className="text-sm font-medium text-destructive">Failed</p>;
   }
 
   if (mergeStep !== "idle") {
@@ -676,10 +920,19 @@ function StatusHeadline({
           )}
         </div>
       );
+    case "ready-apply-only":
+      return (
+        <p className="text-sm font-medium text-amber-600 dark:text-amber-500">
+          Patches apply cleanly to tip of{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+            {defaultBranchName}
+          </code>
+        </p>
+      );
     case "conflicts":
       return (
         <p className="text-sm font-medium text-destructive">
-          This patch has merge conflicts with{" "}
+          This patch has conflicts with{" "}
           <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
             {defaultBranchName}
           </code>
