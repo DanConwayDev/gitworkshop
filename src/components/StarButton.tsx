@@ -163,7 +163,7 @@ export function StarButton({
             isStarred && "fill-amber-500 text-amber-500",
           )}
         />
-        <span>Star</span>
+        <span className="hidden sm:inline">Star</span>
       </button>
 
       {/* Count — opens stargazers popover */}

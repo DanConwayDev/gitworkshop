@@ -413,14 +413,14 @@ function RepoLayoutResolved({
 
         <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-0">
           {repo ? (
-            <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex items-center justify-between gap-3 mb-4 min-w-0 overflow-hidden">
               <RepoBreadcrumb
                 pubkey={pubkey}
                 repoName={repo.name}
                 basePath={basePath}
                 nip05={nip05}
               />
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <FollowRepoButton allCoords={repo.allCoordinates} />
                 <StarButton
                   targetAnnouncement={repo.announcements.find(
@@ -709,18 +709,18 @@ function RepoBreadcrumb({
     npub.slice(0, 12) + "…";
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-w-0 overflow-hidden">
       <Link
         to={userPath}
-        className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors min-w-0 shrink"
       >
-        <UserAvatar pubkey={pubkey} size="sm" />
-        <span className="text-base font-medium">{username}</span>
+        <UserAvatar pubkey={pubkey} size="sm" className="flex-shrink-0" />
+        <span className="text-base font-medium truncate">{username}</span>
       </Link>
-      <span className="text-muted-foreground font-normal">/</span>
+      <span className="text-muted-foreground font-normal flex-shrink-0">/</span>
       <Link
         to={basePath}
-        className="text-base font-semibold text-foreground hover:text-pink-500 transition-colors"
+        className="text-base font-semibold text-foreground hover:text-pink-500 transition-colors truncate min-w-0 shrink"
       >
         {repoName}
       </Link>

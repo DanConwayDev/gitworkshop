@@ -126,7 +126,9 @@ export function FollowRepoButton({
         ) : (
           <BookmarkPlus className="h-3.5 w-3.5 transition-colors" />
         )}
-        <span>{isFollowing ? "Following" : "Follow"}</span>
+        <span className="hidden sm:inline">
+          {isFollowing ? "Following" : "Follow"}
+        </span>
       </button>
 
       {/* Count — opens followers popover */}
