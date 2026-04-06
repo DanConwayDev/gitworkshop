@@ -76,6 +76,12 @@ export interface PatchChainDiffResult {
    * "hunk-mismatch": fetched original but patch hunks don't match (wrong base).
    */
   failureReason?: "no-base" | "fetch-failed" | "hunk-mismatch";
+  /**
+   * True when at least one failed file was touched by more than one patch in
+   * the chain. In that case the raw fallback diff for that file is a
+   * concatenation of multiple per-patch diffs, which may be confusing to read.
+   */
+  hasMultiPatchFailure: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +308,7 @@ export async function mergePatchChainDiff(
       combinedDiff: "",
       failedCount: 0,
       failureReason: undefined,
+      hasMultiPatchFailure: false,
     };
   }
 
@@ -468,6 +475,7 @@ export async function mergePatchChainDiff(
       combinedDiff: "",
       failedCount: 0,
       failureReason: undefined,
+      hasMultiPatchFailure: false,
     };
   }
 
@@ -489,12 +497,20 @@ export async function mergePatchChainDiff(
     .filter(Boolean)
     .join("\n");
 
+  // True when any failed file was touched by more than one patch — in that
+  // case the raw fallback diff for that file is a concatenation of multiple
+  // per-patch diffs, which may be confusing to read.
+  const hasMultiPatchFailure = results.some(
+    (r) => r.error !== null && (fileEntries.get(r.path)?.length ?? 0) > 1,
+  );
+
   return {
     files: results,
     fileChanges,
     combinedDiff,
     failedCount,
     failureReason,
+    hasMultiPatchFailure,
   };
 }
 

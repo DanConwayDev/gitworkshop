@@ -312,6 +312,7 @@ type Phase =
       diff: string;
       failedCount: number;
       failureReason?: "no-base" | "fetch-failed" | "hunk-mismatch";
+      hasMultiPatchFailure: boolean;
     }
   | { kind: "error"; message: string };
 
@@ -389,7 +390,13 @@ export function PatchFilesTab({
 
     async function run() {
       if (chain.length === 0) {
-        setPhase({ kind: "done", changes: [], diff: "", failedCount: 0 });
+        setPhase({
+          kind: "done",
+          changes: [],
+          diff: "",
+          failedCount: 0,
+          hasMultiPatchFailure: false,
+        });
         return;
       }
 
@@ -401,7 +408,13 @@ export function PatchFilesTab({
       setPhase({ kind: "applying", changes });
 
       if (changes.length === 0) {
-        setPhase({ kind: "done", changes, diff: "", failedCount: 0 });
+        setPhase({
+          kind: "done",
+          changes,
+          diff: "",
+          failedCount: 0,
+          hasMultiPatchFailure: false,
+        });
         return;
       }
 
@@ -447,6 +460,7 @@ export function PatchFilesTab({
         diff: result.combinedDiff,
         failedCount: result.failedCount,
         failureReason: result.failureReason,
+        hasMultiPatchFailure: result.hasMultiPatchFailure,
       });
     }
 
@@ -527,7 +541,7 @@ export function PatchFilesTab({
             <summary className="flex items-center gap-2 cursor-pointer list-none">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span className="font-medium flex-1">
-                {chain.length > 1
+                {phase.hasMultiPatchFailure
                   ? "Showing uncombined diffs — couldn't"
                   : "Couldn't"}{" "}
                 cleanly apply patch
