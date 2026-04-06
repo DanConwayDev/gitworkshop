@@ -35,7 +35,14 @@ import {
   Code2,
   GitCommit,
   Info,
+  MoreHorizontal,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { RepoContext, type RepoContextValue } from "./RepoContext";
 import { PATCH_KIND, PR_KIND, type RepoQueryOptions } from "@/lib/nip34";
 import type { Filter as NostrFilter } from "applesauce-core/helpers";
@@ -434,21 +441,12 @@ function RepoLayoutResolved({
 
           {/* Tab navigation */}
           <nav className="flex gap-1 -mb-px">
+            {/* Primary tabs — always visible */}
             <TabLink
               to={basePath}
               active={isCodeTab}
               icon={<Code2 className="h-4 w-4" />}
               label="Code"
-            />
-            <TabLink
-              to={
-                commitsRef
-                  ? `${basePath}/commits/${commitsRef}`
-                  : `${basePath}/commits`
-              }
-              active={isCommitsTab}
-              icon={<GitCommit className="h-4 w-4" />}
-              label="Commits"
             />
             <TabLink
               to={`${basePath}/issues`}
@@ -464,12 +462,69 @@ function RepoLayoutResolved({
               label="PRs"
               count={openPRCount}
             />
-            <TabLink
-              to={`${basePath}/about`}
-              active={isAboutTab}
-              icon={<Info className="h-4 w-4" />}
-              label="About"
-            />
+
+            {/* Secondary tabs — visible on md+ screens */}
+            <div className="hidden md:flex gap-1">
+              <TabLink
+                to={
+                  commitsRef
+                    ? `${basePath}/commits/${commitsRef}`
+                    : `${basePath}/commits`
+                }
+                active={isCommitsTab}
+                icon={<GitCommit className="h-4 w-4" />}
+                label="Commits"
+              />
+              <TabLink
+                to={`${basePath}/about`}
+                active={isAboutTab}
+                icon={<Info className="h-4 w-4" />}
+                label="About"
+              />
+            </div>
+
+            {/* "More" dropdown — mobile only */}
+            <div className="md:hidden flex items-end pb-px">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
+                      isCommitsTab || isAboutTab
+                        ? "border-pink-500 text-foreground"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+                    )}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                    <span className="sr-only">More</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <Link
+                      to={
+                        commitsRef
+                          ? `${basePath}/commits/${commitsRef}`
+                          : `${basePath}/commits`
+                      }
+                      className="flex items-center gap-2"
+                    >
+                      <GitCommit className="h-4 w-4" />
+                      Commits
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link
+                      to={`${basePath}/about`}
+                      className="flex items-center gap-2"
+                    >
+                      <Info className="h-4 w-4" />
+                      About
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </nav>
         </div>
       </div>
