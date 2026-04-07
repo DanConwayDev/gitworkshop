@@ -157,6 +157,7 @@ type RefStatus =
 interface RefWithStatus extends GitRef {
   status: RefStatus;
   stateCommit?: string; // commit declared by winning state event (if different)
+  serverCommit?: string; // actual commit on the selected git server (may differ from ref.hash which is the winning server's hash)
   oldStateCommit?: string; // commit declared by the older relay-specific state (for "old-state")
   oldStateCreatedAt?: number; // created_at of the older relay-specific state event
 }
@@ -331,6 +332,7 @@ function getRefStatusForServer(
 ): {
   status: RefStatus;
   stateCommit?: string;
+  serverCommit?: string;
   oldStateCommit?: string;
   oldStateCreatedAt?: number;
 } {
@@ -378,12 +380,13 @@ function getRefStatusForServer(
         return {
           status: "old-state",
           stateCommit: stateRef.commitId,
+          serverCommit,
           oldStateCommit: oldStateRef.commitId,
           oldStateCreatedAt: oldState.created_at,
         };
       }
     }
-    return { status: "mismatch", stateCommit: stateRef.commitId };
+    return { status: "mismatch", stateCommit: stateRef.commitId, serverCommit };
   }
 
   // Fallback: direct commit comparison
@@ -405,6 +408,7 @@ function getRefStatusForServer(
         return {
           status: "old-state",
           stateCommit: stateRef.commitId,
+          serverCommit,
           oldStateCommit: oldStateRef.commitId,
           oldStateCreatedAt: oldState.created_at,
         };
@@ -412,7 +416,7 @@ function getRefStatusForServer(
     }
   }
 
-  return { status: "mismatch", stateCommit: stateRef.commitId };
+  return { status: "mismatch", stateCommit: stateRef.commitId, serverCommit };
 }
 
 function countMismatches(refsWithStatus: RefWithStatus[]): number {
@@ -485,27 +489,36 @@ function StatusTooltipText({
             : "Matches Nostr state — the maintainer's published state matches this git server"}
         </span>
       );
-    case "mismatch":
+    case "mismatch": {
+      const displayServerCommit = (
+        refWithStatus.serverCommit ?? refWithStatus.hash
+      ).slice(0, 8);
+      const displayStateCommit = refWithStatus.stateCommit?.slice(0, 8);
       return (
         <div className="space-y-1">
           <p className="font-medium text-amber-400">Differs from Nostr state</p>
           <p>
             Nostr state has{" "}
             <code className="font-mono text-[11px] bg-amber-500/20 px-1 rounded">
-              {refWithStatus.stateCommit?.slice(0, 8)}
+              {displayStateCommit}
             </code>{" "}
             but {serverLabel ? serverLabel : "the git server"} has{" "}
             <code className="font-mono text-[11px] bg-muted px-1 rounded">
-              {refWithStatus.hash.slice(0, 8)}
+              {displayServerCommit}
             </code>
           </p>
           <p className="text-muted-foreground text-[11px]">
-            This could mean a push hasn't been signed yet, or the git server was
-            updated without the maintainer's knowledge.
+            The maintainer likely pushed directly to{" "}
+            {serverLabel ? serverLabel : "the git server"} without publishing a
+            Nostr state update.
           </p>
         </div>
       );
-    case "old-state":
+    }
+    case "old-state": {
+      const displayServerCommit = (
+        refWithStatus.serverCommit ?? refWithStatus.hash
+      ).slice(0, 8);
       return (
         <div className="space-y-1">
           <p className="font-medium text-sky-400">
@@ -514,9 +527,9 @@ function StatusTooltipText({
           <p>
             {serverLabel ? serverLabel : "This server"} has{" "}
             <code className="font-mono text-[11px] bg-muted px-1 rounded">
-              {refWithStatus.hash.slice(0, 8)}
+              {displayServerCommit}
             </code>{" "}
-            which matches a previously-signed state
+            which matches a previously published state
             {refWithStatus.oldStateCreatedAt && (
               <>
                 {" "}
@@ -533,10 +546,11 @@ function StatusTooltipText({
             .
           </p>
           <p className="text-muted-foreground text-[11px]">
-            This server hasn't synced to the latest signed state yet.
+            This server hasn't synced to the latest Nostr state yet.
           </p>
         </div>
       );
+    }
     case "state-behind":
       return (
         <span>
