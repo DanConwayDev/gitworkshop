@@ -33,7 +33,11 @@ import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
-import type { PoolWarning, UrlState } from "@/lib/git-grasp-pool/types";
+import type {
+  PoolWarning,
+  UrlState,
+  UrlRefStatus,
+} from "@/lib/git-grasp-pool/types";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 
 // ---------------------------------------------------------------------------
@@ -128,6 +132,8 @@ function getRefStatus(
   repoState: RepositoryState | null | undefined,
   repoRelayEose: boolean,
   stateBehindGit: boolean,
+  urlStates: Record<string, UrlState>,
+  cloneUrls: string[],
 ): { status: RefStatus; stateCommit?: string } {
   // Still loading state event data
   if (repoState === undefined || !repoRelayEose) {
@@ -158,7 +164,43 @@ function getRefStatus(
     return { status: "state-behind", stateCommit: stateRef.commitId };
   }
 
-  // Compare commits (handle both full and abbreviated hashes)
+  // Use the pool's pre-computed per-URL ref statuses as the authoritative
+  // source. The pool already handles annotated tag peeling, old-ngit OID
+  // fallback, and cross-server discrepancies — re-computing here from only
+  // the winner's infoRefs would miss servers that are behind the state.
+  //
+  // Collect statuses for this ref across all ok servers.
+  const serverStatuses = cloneUrls
+    .map((url) => urlStates[url]?.refStatus[fullRefName])
+    .filter((s): s is UrlRefStatus => s !== undefined);
+
+  if (serverStatuses.length > 0) {
+    // If any server is behind or ahead of the state, surface as mismatch.
+    const hasMismatch = serverStatuses.some(
+      (s) => s === "behind" || s === "ahead",
+    );
+    if (hasMismatch) {
+      if (stateBehindGit)
+        return { status: "state-behind", stateCommit: stateRef.commitId };
+      return { status: "mismatch", stateCommit: stateRef.commitId };
+    }
+
+    // All servers that have reported are "match" (or "connected"/"error" which
+    // we ignore for verification purposes) and at least one confirmed match.
+    const anyMatch = serverStatuses.some((s) => s === "match");
+    const allSettled = serverStatuses.every(
+      (s) => s === "match" || s === "error" || s === "connected",
+    );
+    if (allSettled && anyMatch) {
+      return { status: "verified" };
+    }
+
+    // If not all pending (unknown/connected), fall through to the state
+    // comparison below so we show something useful while the pool fetches.
+  }
+
+  // Fallback: pool hasn't computed refStatus yet (infoRefs still in flight).
+  // Compare the winner's commit directly against the state event.
   function commitsMatch(a: string, b: string): boolean {
     return a === b || a.startsWith(b) || b.startsWith(a);
   }
@@ -909,9 +951,16 @@ export function RefSelector({
     () =>
       refs.map((ref) => ({
         ...ref,
-        ...getRefStatus(ref, repoState, repoRelayEose, stateBehindGit),
+        ...getRefStatus(
+          ref,
+          repoState,
+          repoRelayEose,
+          stateBehindGit,
+          urlStates,
+          cloneUrls,
+        ),
       })),
-    [refs, repoState, repoRelayEose, stateBehindGit],
+    [refs, repoState, repoRelayEose, stateBehindGit, urlStates, cloneUrls],
   );
 
   // Split into branches and tags
