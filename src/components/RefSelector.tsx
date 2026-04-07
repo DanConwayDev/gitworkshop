@@ -1698,7 +1698,12 @@ function SourceSelectorPanel({
         </p>
       </div>
 
-      <ScrollArea className="max-h-[360px]">
+      <ScrollArea
+        style={{
+          maxHeight:
+            "calc(var(--radix-popover-content-available-height) - 60px)",
+        }}
+      >
         <div className="py-1">
           {/* Default row — always first */}
           <button
@@ -1942,6 +1947,32 @@ function SourceHeader({
   relayStateMap?: Map<string, NostrEvent>;
 }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
+
+  const updatePopoverStyle = useCallback(() => {
+    if (!isMobile) {
+      setPopoverStyle({});
+      return;
+    }
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const margin = 8;
+    setPopoverStyle({
+      width: `calc(100vw - ${margin * 2}px)`,
+      maxWidth: `calc(100vw - ${margin * 2}px)`,
+      marginLeft: `-${rect.left - margin}px`,
+    });
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!selectorOpen) return;
+    updatePopoverStyle();
+    window.addEventListener("resize", updatePopoverStyle);
+    return () => window.removeEventListener("resize", updatePopoverStyle);
+  }, [selectorOpen, updatePopoverStyle]);
 
   const gitSourceUrl =
     poolWarning?.kind === "state-behind-git"
@@ -2000,6 +2031,7 @@ function SourceHeader({
       <Popover open={selectorOpen} onOpenChange={setSelectorOpen} modal={false}>
         <PopoverTrigger asChild>
           <button
+            ref={triggerRef}
             className={cn(
               "flex items-center gap-2 px-3 py-2 w-full text-left text-[11px] transition-colors",
               hasProblems && !isManualGitSource
@@ -2132,11 +2164,15 @@ function SourceHeader({
         </PopoverTrigger>
 
         <PopoverContent
-          className="p-0 overflow-hidden w-[480px] z-50"
+          className={cn(
+            "p-0 overflow-hidden z-50",
+            isMobile ? "w-screen" : "w-[480px]",
+          )}
           align="start"
           side="bottom"
           sideOffset={0}
-          avoidCollisions={true}
+          avoidCollisions={!isMobile}
+          style={popoverStyle}
         >
           <SourceSelectorPanel
             selectedSource={selectedSource}
