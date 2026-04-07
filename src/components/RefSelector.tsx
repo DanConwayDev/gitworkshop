@@ -36,6 +36,7 @@ import { nip19 } from "nostr-tools";
 import type { NostrEvent } from "nostr-tools";
 import { formatDistanceStrict } from "date-fns";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
+import { deriveEffectiveSource } from "@/lib/sourceUtils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
@@ -460,13 +461,13 @@ function StatusIcon({
 
 function StatusTooltipText({
   refWithStatus,
-  selectedSource,
+  effectiveSource,
 }: {
   refWithStatus: RefWithStatus;
-  selectedSource: string; // "nostr" or a URL
+  effectiveSource: string; // "nostr" or a concrete clone URL — never "default"
 }) {
   const serverLabel =
-    selectedSource !== "nostr" ? gitServerDomain(selectedSource) : null;
+    effectiveSource !== "nostr" ? gitServerDomain(effectiveSource) : null;
 
   switch (refWithStatus.status) {
     case "verified":
@@ -560,33 +561,29 @@ function RefRow({
   refWithStatus,
   isSelected,
   onSelect,
-  selectedSource,
-  sourceIsGitServer,
+  effectiveSource,
   pool,
   urlStates,
 }: {
   refWithStatus: RefWithStatus;
   isSelected: boolean;
   onSelect: () => void;
-  selectedSource: string;
-  /** True when the effective source is a git server (not nostr state). */
-  sourceIsGitServer: boolean;
+  /** Resolved source — "nostr" or a concrete clone URL, never "default". */
+  effectiveSource: string;
   pool?: GitGraspPool | null;
   urlStates?: Record<string, UrlState>;
 }) {
   const [commitTs, setCommitTs] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Resolve the commit hash for the currently selected source.
-  // When a specific git server URL is selected, use that server's commit for
-  // this ref (from refCommits) so the timestamp reflects what that server has,
-  // not the pool winner's commit.
+  // Resolve the commit hash for the effective source.
+  // When the source is a git server URL, use that server's commit for this ref
+  // (from refCommits) so the timestamp reflects what that server has, not the
+  // pool winner's commit.
   const fullRefName = `${refWithStatus.isBranch ? "refs/heads/" : "refs/tags/"}${refWithStatus.name}`;
   const sourceHash = useMemo(() => {
-    const isServerUrl =
-      selectedSource !== "default" && selectedSource !== "nostr";
-    if (isServerUrl && urlStates) {
-      const us = urlStates[selectedSource];
+    if (effectiveSource !== "nostr" && urlStates) {
+      const us = urlStates[effectiveSource];
       // Prefer peeled commit (annotated tags), fall back to raw ref
       return (
         us?.refCommits[`${fullRefName}^{}`] ??
@@ -595,7 +592,7 @@ function RefRow({
       );
     }
     return refWithStatus.hash;
-  }, [selectedSource, urlStates, fullRefName, refWithStatus.hash]);
+  }, [effectiveSource, urlStates, fullRefName, refWithStatus.hash]);
 
   useEffect(() => {
     if (!pool) return;
@@ -622,6 +619,7 @@ function RefRow({
   //   understand they're not in the signed state. When a git server is the
   //   source (stateBehindGit, no-state, or manual selection) these refs are
   //   fully present and should not be dimmed.
+  const sourceIsGitServer = effectiveSource !== "nostr";
   const isAbsent =
     refWithStatus.status === "not-on-server" ||
     (refWithStatus.status === "git-server-only" && !sourceIsGitServer);
@@ -696,7 +694,7 @@ function RefRow({
         >
           <StatusTooltipText
             refWithStatus={refWithStatus}
-            selectedSource={selectedSource}
+            effectiveSource={effectiveSource}
           />
         </TooltipContent>
       </Tooltip>
@@ -2025,30 +2023,26 @@ function SourceHeader({
     return () => window.removeEventListener("resize", updatePopoverStyle);
   }, [selectorOpen, updatePopoverStyle]);
 
-  const gitSourceUrl =
-    poolWarning?.kind === "state-behind-git"
-      ? poolWarning.gitServerUrl
-      : winnerUrl;
-  const gitDomain = gitSourceUrl ? gitServerDomain(gitSourceUrl) : null;
-
   const isLoading = repoState === undefined || !repoRelayEose;
-  const isGitSource = stateBehindGit || isNoState;
   const hasProblems = mismatchCount > 0 || stateBehindGit;
+
+  // Resolve "default" → "nostr" or a concrete git server URL.
+  const effectiveSource = deriveEffectiveSource(
+    selectedSource,
+    stateBehindGit,
+    isNoState,
+    winnerUrl,
+  );
+  const effectiveSourceIsGitServer = effectiveSource !== "nostr";
 
   // A URL (not "default"/"nostr") means the user manually picked a git server
   const isManualGitSource =
     selectedSource !== "default" && selectedSource !== "nostr";
-  // "nostr" is an explicit nostr override (only selectable when default ≠ nostr)
-  const isExplicitNostr = selectedSource === "nostr";
 
-  const sourceLabel = isManualGitSource
-    ? shortServerLabel(selectedSource)
-    : isExplicitNostr
-      ? "nostr"
-      : isGitSource && gitDomain
-        ? gitDomain
-        : "nostr";
-  const sourceIsNostr = !isManualGitSource && (isExplicitNostr || !isGitSource);
+  const sourceLabel = effectiveSourceIsGitServer
+    ? shortServerLabel(effectiveSource)
+    : "nostr";
+  const sourceIsNostr = !effectiveSourceIsGitServer;
 
   const defaultBranchName = useMemo(() => {
     return refsWithStatus.find((r) => r.isDefault && r.isBranch)?.name;
@@ -2295,6 +2289,22 @@ export function RefSelector({
   // Controlled when selectedSourceProp is provided; falls back to "default".
   const selectedSource = selectedSourceProp ?? "default";
   const setSelectedSource = (src: string) => onSourceChange?.(src);
+
+  // Resolve "default" → "nostr" or a concrete git server URL so all downstream
+  // display and data logic works with a real value rather than re-deriving it.
+  // Must be computed before refsWithStatus.
+  const isNoState = repoRelayEose && repoState === null;
+  const effectiveSource = useMemo(
+    () =>
+      deriveEffectiveSource(
+        selectedSource,
+        stateBehindGit,
+        isNoState,
+        winnerUrl,
+      ),
+    [selectedSource, stateBehindGit, isNoState, winnerUrl],
+  );
+
   const isMobile = useIsMobile();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
@@ -2340,13 +2350,14 @@ export function RefSelector({
     return () => clearTimeout(id);
   }, [open, isMobile]);
 
-  // Compute status for each ref — against selectedSource
+  // Compute status for each ref — against effectiveSource.
+  // effectiveSource is always "nostr" or a concrete clone URL (never "default").
   const refsWithStatus: RefWithStatus[] = useMemo(() => {
-    if (selectedSource === "default" || selectedSource === "nostr") {
-      // "default" uses the pool's normal logic (stateBehindGit respected).
-      // "nostr" forces nostr-state comparison by passing stateBehindGit=false,
-      // so refs are compared directly against the signed state even when the
-      // git server is ahead.
+    if (effectiveSource === "nostr") {
+      // "nostr" (whether explicit or resolved from "default") compares directly
+      // against the signed Nostr state. When the user explicitly selected
+      // "nostr" (overriding a git-ahead situation), pass stateBehindGit=false
+      // so refs are compared against the state even when the server is ahead.
       const behindGit = selectedSource === "nostr" ? false : stateBehindGit;
       return refs.map((ref) => ({
         ...ref,
@@ -2360,10 +2371,10 @@ export function RefSelector({
         ),
       }));
     }
-    // A specific git server URL is selected
-    const serverUrlState = urlStates[selectedSource];
+    // A specific git server URL (explicit selection or resolved from "default")
+    const serverUrlState = urlStates[effectiveSource];
     if (!serverUrlState?.infoRefs) {
-      // Server not ready — fall back to default behaviour
+      // Server not ready — fall back to nostr-state comparison
       return refs.map((ref) => ({
         ...ref,
         ...getRefStatus(
@@ -2393,6 +2404,7 @@ export function RefSelector({
     stateBehindGit,
     urlStates,
     cloneUrls,
+    effectiveSource,
     selectedSource,
     relayStateMap,
   ]);
@@ -2418,7 +2430,6 @@ export function RefSelector({
 
   // Only count genuine mismatches (not state-behind) for the issues row
   const mismatchCount = countMismatches(refsWithStatus);
-  const isNoState = repoRelayEose && repoState === null;
 
   // Hide search when all refs fit comfortably in the dropdown
   const totalRefs = branches.length + tags.length;
@@ -2440,22 +2451,19 @@ export function RefSelector({
   // Amber trigger border when there are genuine mismatches or state is behind
   const showAmberTrigger = mismatchCount > 0 || stateBehindGit;
 
-  // Source prefix in trigger button
-  const gitSourceUrl =
-    poolWarning?.kind === "state-behind-git"
-      ? poolWarning.gitServerUrl
-      : winnerUrl;
-  const gitDomain = gitSourceUrl ? gitServerDomain(gitSourceUrl) : null;
-
-  // A URL (not "default"/"nostr") means the user manually picked a git server
+  // A URL (not "nostr") means the effective source is a git server.
+  // isManualGitSource is true only when the user explicitly chose a URL
+  // (not when "default" resolved to a git server) — used for the "manual" badge.
   const isManualGitSource =
     selectedSource !== "default" && selectedSource !== "nostr";
-  // Show source prefix when: user manually selected a git server, OR auto-detected git source
-  const showGitPrefix =
-    isManualGitSource || ((stateBehindGit || isNoState) && gitDomain);
-  const sourcePrefix = isManualGitSource
-    ? gitServerDomain(selectedSource)
-    : gitDomain;
+  const effectiveSourceIsGitServer = effectiveSource !== "nostr";
+
+  // Source prefix in trigger button — show the git server domain when the
+  // effective source is a git server (manual or auto-resolved from "default").
+  const showGitPrefix = effectiveSourceIsGitServer;
+  const sourcePrefix = effectiveSourceIsGitServer
+    ? gitServerDomain(effectiveSource)
+    : null;
 
   const handleSelect = (refName: string) => {
     // If the chosen ref is not on the currently selected server, auto-switch
@@ -2686,11 +2694,7 @@ export function RefSelector({
                       refWithStatus={branch}
                       isSelected={branch.name === currentRef}
                       onSelect={() => handleSelect(branch.name)}
-                      selectedSource={selectedSource}
-                      sourceIsGitServer={
-                        selectedSource !== "nostr" &&
-                        (isManualGitSource || stateBehindGit || isNoState)
-                      }
+                      effectiveSource={effectiveSource}
                       pool={pool}
                       urlStates={urlStates}
                     />
@@ -2719,11 +2723,7 @@ export function RefSelector({
                       refWithStatus={tag}
                       isSelected={tag.name === currentRef}
                       onSelect={() => handleSelect(tag.name)}
-                      selectedSource={selectedSource}
-                      sourceIsGitServer={
-                        selectedSource !== "nostr" &&
-                        (isManualGitSource || stateBehindGit || isNoState)
-                      }
+                      effectiveSource={effectiveSource}
                       pool={pool}
                       urlStates={urlStates}
                     />

@@ -38,7 +38,10 @@ import {
 } from "lucide-react";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
-import { deriveEffectiveHeadCommit } from "@/lib/sourceUtils";
+import {
+  deriveEffectiveHeadCommit,
+  deriveEffectiveSource,
+} from "@/lib/sourceUtils";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 import { CodeBlock } from "@/components/CodeBlock";
@@ -132,9 +135,23 @@ export default function RepoCodePage() {
   const resolvedRefIsBranch =
     explorer.refs.find((r) => r.name === resolvedRef)?.isBranch ?? true;
 
+  // Resolve "default" → "nostr" or a concrete git server URL so all downstream
+  // logic works with a real source value rather than re-deriving it everywhere.
+  const isNoState = repoRelayEose && repoState === null;
+  const effectiveSource = useMemo(
+    () =>
+      deriveEffectiveSource(
+        selectedSource,
+        stateBehindGit,
+        isNoState,
+        poolState.winnerUrl,
+      ),
+    [selectedSource, stateBehindGit, isNoState, poolState.winnerUrl],
+  );
+
   const effectiveHeadCommit = useMemo(() => {
     return deriveEffectiveHeadCommit(
-      selectedSource,
+      effectiveSource,
       poolState.urls,
       repoState ?? null,
       stateBehindGit,
@@ -142,7 +159,7 @@ export default function RepoCodePage() {
       resolvedRefIsBranch,
     );
   }, [
-    selectedSource,
+    effectiveSource,
     poolState.urls,
     repoState,
     stateBehindGit,
@@ -158,11 +175,11 @@ export default function RepoCodePage() {
     knownHeadCommit: effectiveHeadCommit,
   });
 
-  // Use the source-aware explorer when a specific server is selected and its
-  // commit differs from the bootstrap; otherwise use the bootstrap explorer
-  // (avoids a redundant fetch when source is "default"/"nostr").
+  // Use the source-aware explorer when the effective source is a git server
+  // and its commit differs from the bootstrap; otherwise use the bootstrap
+  // explorer (avoids a redundant fetch when source resolves to nostr).
   const useSourceExplorer =
-    selectedSource !== "default" && effectiveHeadCommit !== bootstrapHeadCommit;
+    effectiveSource !== "nostr" && effectiveHeadCommit !== bootstrapHeadCommit;
   const activeExplorer = useSourceExplorer ? explorerForSource : explorer;
 
   // Page title: "<repo>/<path> at <ref> - ngit" or "<repo> - ngit" at root
@@ -212,18 +229,18 @@ export default function RepoCodePage() {
     ? currentPath.split("/").filter(Boolean)
     : [];
 
-  // When the git server is confirmed ahead of the signed Nostr state, the
-  // explorer may still be showing the old signed commit during the render
-  // cycle where stateBehindGit first becomes true (the explorer's useEffect
-  // hasn't fired yet). Override with the git server's commit info so the
-  // commit bar, warning banner, RefSelector, and tree viewer are always
-  // consistent with each other.
+  // When the effective source is a git server (not nostr), the explorer may
+  // still be showing the old signed commit during the render cycle where
+  // stateBehindGit first becomes true (the explorer's useEffect hasn't fired
+  // yet). Override with the git server's commit info so the commit bar,
+  // warning banner, RefSelector, and tree viewer are always consistent.
+  const effectiveSourceIsGitServer = effectiveSource !== "nostr";
   const displayHeadCommit =
-    stateBehindGit && selectedSource === "default"
+    stateBehindGit && effectiveSourceIsGitServer
       ? (poolState.latestCommit ?? activeExplorer.headCommit)
       : activeExplorer.headCommit;
   const displayCommitHash =
-    stateBehindGit && selectedSource === "default"
+    stateBehindGit && effectiveSourceIsGitServer
       ? poolState.warning?.kind === "state-behind-git"
         ? poolState.warning.gitCommitId
         : activeExplorer.commitHash

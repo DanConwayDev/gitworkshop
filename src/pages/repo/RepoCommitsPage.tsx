@@ -19,7 +19,10 @@ import {
 } from "@/components/CommitList";
 import { AlertCircle, GitCommit, Loader2 } from "lucide-react";
 import { safeFormatDistanceToNow } from "@/lib/utils";
-import { deriveEffectiveHeadCommit } from "@/lib/sourceUtils";
+import {
+  deriveEffectiveHeadCommit,
+  deriveEffectiveSource,
+} from "@/lib/sourceUtils";
 
 export default function RepoCommitsPage() {
   const { cloneUrls, repoState, repoRelayEose, commitsRef, resolved } =
@@ -75,10 +78,23 @@ export default function RepoCommitsPage() {
   const resolvedRefIsBranch =
     explorer.refs.find((r) => r.name === resolvedRef)?.isBranch ?? true;
 
-  // Derive the effective HEAD commit from the selected source.
+  // Resolve "default" → "nostr" or a concrete git server URL.
+  const isNoState = repoRelayEose && repoState === null;
+  const effectiveSource = useMemo(
+    () =>
+      deriveEffectiveSource(
+        selectedSource,
+        stateBehindGit,
+        isNoState,
+        poolState.winnerUrl,
+      ),
+    [selectedSource, stateBehindGit, isNoState, poolState.winnerUrl],
+  );
+
+  // Derive the effective HEAD commit from the effective source.
   const effectiveHeadCommit = useMemo(() => {
     return deriveEffectiveHeadCommit(
-      selectedSource,
+      effectiveSource,
       poolState.urls,
       repoState ?? null,
       stateBehindGit,
@@ -86,7 +102,7 @@ export default function RepoCommitsPage() {
       resolvedRefIsBranch,
     );
   }, [
-    selectedSource,
+    effectiveSource,
     poolState.urls,
     repoState,
     stateBehindGit,
@@ -103,14 +119,14 @@ export default function RepoCommitsPage() {
   });
 
   const useSourceExplorer =
-    selectedSource !== "default" && effectiveHeadCommit !== bootstrapHeadCommit;
+    effectiveSource !== "nostr" && effectiveHeadCommit !== bootstrapHeadCommit;
   const activeExplorer = useSourceExplorer ? explorerForSource : explorer;
 
   // Derive the commit hash to use for history.
-  // When a specific server is selected, use that server's commit directly.
-  // When default and git is ahead, use the pool's authoritative commit.
+  // When the effective source is a git server, use that server's commit directly.
+  // When nostr and git is ahead, use the pool's authoritative commit.
   const historyCommit: string | undefined = useMemo(() => {
-    if (selectedSource !== "default" && effectiveHeadCommit) {
+    if (effectiveSource !== "nostr" && effectiveHeadCommit) {
       return effectiveHeadCommit;
     }
     if (stateBehindGit) {
@@ -120,7 +136,7 @@ export default function RepoCommitsPage() {
     }
     return activeExplorer.commitHash ?? undefined;
   }, [
-    selectedSource,
+    effectiveSource,
     effectiveHeadCommit,
     stateBehindGit,
     poolState.warning,
