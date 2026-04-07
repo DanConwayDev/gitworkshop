@@ -26,10 +26,13 @@
  *   (including newly added ones) produces a single "EOSE" emission. This
  *   matches the settle semantics of createPaginatedTagValueLoader exactly.
  *
- * EventStore:
- *   Events are piped through mapEventsToStore() inside the loader so the
- *   caller gets a single observable to subscribe to. The hook does not need
- *   a separate fire-and-forget subscription.
+ * EventStore + relay provenance:
+ *   The Relay class applies markFromRelay() internally on every req, so each
+ *   event is already stamped with its source relay URL before it reaches this
+ *   loader. mapEventsToStore() then writes those stamped events into the store,
+ *   meaning getSeenRelays(event) works on any event retrieved from the store.
+ *   Callers can build a per-relay state registry purely from store.timeline()
+ *   without any side-channel state.
  */
 
 import type { RelayGroup, IRelay, RelayPool } from "applesauce-relay";
@@ -55,6 +58,9 @@ export interface RepoStateLoaderOptions {
  * Open a single-relay subscription for kind:30618 state events.
  * Pushes to settled$ on EOSE, error, or clean close so the settle signal
  * is never blocked by a misbehaving relay.
+ *
+ * The Relay class applies markFromRelay() internally, so emitted events are
+ * already stamped with the relay URL before reaching this function.
  *
  * Returns an Observable<NostrEvent> that completes when the relay closes
  * the subscription (normal for addressable-event fetches).
@@ -98,6 +104,10 @@ function queryRelay(
  *
  * The observable reacts to new relays being added to the group: each newly
  * discovered relay gets its own subscription without disturbing existing ones.
+ *
+ * The Relay class applies markFromRelay() internally, so events arrive
+ * already stamped with their source relay URL. getSeenRelays(event) is
+ * therefore available on any event retrieved from the store later.
  *
  * Emits NostrEvent | "EOSE". "EOSE" fires once all relays that have
  * responded so far have settled (debounced by settleTime ms). If new relays
@@ -144,6 +154,8 @@ export function loadRepoStateFromRelays(
     const relayEvents$ = new Subject<NostrEvent>();
 
     // Pipe all relay events through the EventStore and forward to subscriber.
+    // Events are already stamped with their source relay by the Relay class
+    // internally, so getSeenRelays() works on stored events.
     const storeSub = relayEvents$.pipe(mapEventsToStore(eventStore)).subscribe({
       next: (event) => subscriber.next(event as NostrEvent),
       error: (err) => subscriber.error(err),

@@ -10,9 +10,11 @@ import { loadRepoStateFromRelays } from "@/lib/repoStateLoader";
 import { pool } from "@/services/nostr";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
 import type { Filter } from "applesauce-core/helpers";
+import { getSeenRelays } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
 import { map } from "rxjs/operators";
 import type { RelayGroup } from "applesauce-relay";
+import type { NostrEvent } from "nostr-tools";
 
 /**
  * Pick the winning state event from a list of candidates.
@@ -33,18 +35,16 @@ function pickWinningStateEvent(
 
 /**
  * Fetch and reactively subscribe to the winning kind:30618 repository state
- * event for a repository.
+ * event for a repository, while also tracking the per-relay state registry.
  *
  * The "winner" is the state event with the latest `created_at` among all
  * maintainers, with the event ID as a tiebreaker (lexicographically larger
  * ID wins). This matches the NIP-34 spec.
  *
  * Each relay in the group is queried individually so that every relay's
- * version of the addressable event is observed. This matters because Grasp
- * servers only serve the state event that matches the git data they hold —
- * a server that is behind the canonical state will serve an older version,
- * and collecting all versions allows callers to determine whether a
- * behind-server has a previously signed state.
+ * version of the addressable event is observed. The loader stamps each event
+ * with its source relay via markFromRelay() before writing it to the
+ * EventStore, so getSeenRelays(event) is available on any stored event.
  *
  * Returns a tuple of:
  *   - The winning `RepositoryState` cast, `null` when none exists, or
@@ -52,6 +52,10 @@ function pickWinningStateEvent(
  *   - `repoRelayEose`: `true` once all relays in the group have settled
  *     (debounced by 200ms after the last relay responds), `false` while
  *     pending. Always `true` when `repoRelayGroup` is undefined.
+ *   - `relayStateMap`: `Map<relayUrl, NostrEvent>` — the best state event
+ *     seen from each relay, derived reactively from the EventStore via
+ *     getSeenRelays(). Callers can use this to determine whether a Grasp
+ *     server is behind the canonical state and what commit it last announced.
  *
  * @param dTag           - The repository d-tag identifier
  * @param maintainerSet  - All maintainer pubkeys (from ResolvedRepo.maintainerSet)
@@ -61,7 +65,7 @@ export function useRepositoryState(
   dTag: string | undefined,
   maintainerSet: string[] | undefined,
   repoRelayGroup: RelayGroup | undefined,
-): [RepositoryState | null | undefined, boolean] {
+): [RepositoryState | null | undefined, boolean, Map<string, NostrEvent>] {
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
@@ -118,17 +122,17 @@ export function useRepositoryState(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dTag, maintainerKey, relayKey, store]);
 
+  const storeFilter: Filter = {
+    kinds: [REPO_STATE_KIND],
+    authors: maintainerSet ?? [],
+    "#d": dTag ? [dTag] : [],
+  } as Filter;
+
   // Read back from the store and pick the winner.
   // store.timeline() is reactive — it re-emits whenever new events arrive,
   // so the winning state updates automatically as relays respond.
   const repoState = use$(() => {
     if (!dTag || !maintainerSet || maintainerSet.length === 0) return undefined;
-
-    const storeFilter: Filter = {
-      kinds: [REPO_STATE_KIND],
-      authors: maintainerSet,
-      "#d": [dTag],
-    } as Filter;
 
     return store.timeline([storeFilter]).pipe(
       map((events) => {
@@ -147,5 +151,40 @@ export function useRepositoryState(
     ) as unknown as Observable<RepositoryState | null>;
   }, [dTag, maintainerKey, store]);
 
-  return [repoState, repoRelayEose];
+  // Per-relay state registry: for each relay URL, keep the best state event
+  // seen from that relay. Derived reactively from the store — no side-channel
+  // state needed because the loader stamps each event with its source relay
+  // via markFromRelay() before writing it to the store.
+  //
+  // For each valid state event, getSeenRelays() returns the set of relay URLs
+  // it was received from. We invert that: for each relay URL, we keep the
+  // event with the highest created_at (event ID as tiebreaker).
+  const relayStateMap = use$(() => {
+    if (!dTag || !maintainerSet || maintainerSet.length === 0) return undefined;
+
+    return store.timeline([storeFilter]).pipe(
+      map((events) => {
+        const result = new Map<string, NostrEvent>();
+        for (const event of events) {
+          if (!isValidRepositoryState(event)) continue;
+          const seenOn = getSeenRelays(event);
+          if (!seenOn) continue;
+          for (const relayUrl of seenOn) {
+            const existing = result.get(relayUrl);
+            if (
+              !existing ||
+              event.created_at > existing.created_at ||
+              (event.created_at === existing.created_at &&
+                event.id > existing.id)
+            ) {
+              result.set(relayUrl, event);
+            }
+          }
+        }
+        return result;
+      }),
+    ) as unknown as Observable<Map<string, NostrEvent>>;
+  }, [dTag, maintainerKey, store]);
+
+  return [repoState, repoRelayEose, relayStateMap ?? new Map()];
 }
