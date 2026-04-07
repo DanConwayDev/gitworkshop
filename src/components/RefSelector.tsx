@@ -2127,7 +2127,8 @@ export function RefSelector({
                       onSelect={() => handleSelect(branch.name)}
                       selectedSource={selectedSource}
                       sourceIsGitServer={
-                        isManualGitSource || stateBehindGit || isNoState
+                        selectedSource !== "nostr" &&
+                        (isManualGitSource || stateBehindGit || isNoState)
                       }
                     />
                   ))}
@@ -2157,7 +2158,8 @@ export function RefSelector({
                       onSelect={() => handleSelect(tag.name)}
                       selectedSource={selectedSource}
                       sourceIsGitServer={
-                        isManualGitSource || stateBehindGit || isNoState
+                        selectedSource !== "nostr" &&
+                        (isManualGitSource || stateBehindGit || isNoState)
                       }
                     />
                   ))}
