@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
@@ -22,10 +22,12 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { ReplyBox } from "@/components/ReplyBox";
+import { CoverNoteBox } from "@/components/CoverNoteBox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, MessageCircle, Zap, Users, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, MessageCircle, Zap, Users, Clock, Pin } from "lucide-react";
 
 export default function IssuePage() {
   const { pubkey, repoId, resolved, issueId, nip05 } = useRepoContext();
@@ -51,6 +53,9 @@ export default function IssuePage() {
     if (!activeAccount || !issue) return false;
     return issue.authorisedUsers.has(activeAccount.pubkey);
   }, [activeAccount, issue]);
+
+  // ── Cover note editor state ───────────────────────────────────────────────
+  const [coverNoteEditing, setCoverNoteEditing] = useState(false);
 
   useSeoMeta({
     title: issue
@@ -121,9 +126,31 @@ export default function IssuePage() {
           {/* Main content */}
           <div className="min-w-0 space-y-4">
             {/* Cover note — pinned note from author/maintainer */}
-            {issue?.coverNotes && issue.coverNotes.length > 0 && (
-              <CoverNoteCard events={issue.coverNotes} />
-            )}
+            {coverNoteEditing && issue ? (
+              <CoverNoteBox
+                rootEvent={issue.rootEvent}
+                repoCoords={issue.repoCoords}
+                initialContent={issue.coverNotes?.[0]?.content ?? ""}
+                onSubmitted={() => setCoverNoteEditing(false)}
+                onCancel={() => setCoverNoteEditing(false)}
+              />
+            ) : issue?.coverNotes && issue.coverNotes.length > 0 ? (
+              <CoverNoteCard
+                events={issue.coverNotes}
+                onEdit={canEdit ? () => setCoverNoteEditing(true) : undefined}
+              />
+            ) : canEdit && issue ? (
+              /* Subtle "Add cover note" button — only for authorised users */
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCoverNoteEditing(true)}
+                className="gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground h-7 -ml-2"
+              >
+                <Pin className="h-3 w-3" />
+                Add cover note
+              </Button>
+            ) : null}
 
             {/* Issue body */}
             {issue ? (

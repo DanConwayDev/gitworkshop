@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
@@ -24,9 +30,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { ReplyBox } from "@/components/ReplyBox";
+import { CoverNoteBox } from "@/components/CoverNoteBox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   ArrowLeft,
@@ -39,6 +47,7 @@ import {
   FileDiff,
   AlertCircle,
   Loader2,
+  Pin,
 } from "lucide-react";
 import {
   PatchSetPushEvent,
@@ -296,6 +305,17 @@ export default function PRPage() {
     if (!activeAccount || !pr) return false;
     return pr.maintainers.has(activeAccount.pubkey);
   }, [activeAccount, pr]);
+
+  // ── Cover note editor state ───────────────────────────────────────────────
+  const [coverNoteEditing, setCoverNoteEditing] = useState(false);
+  const handleCoverNoteSubmitted = useCallback(
+    () => setCoverNoteEditing(false),
+    [],
+  );
+  const handleCoverNoteCancel = useCallback(
+    () => setCoverNoteEditing(false),
+    [],
+  );
 
   // ── SEO ───────────────────────────────────────────────────────────────
   useSeoMeta({
@@ -658,9 +678,33 @@ export default function PRPage() {
               {/* Conversation tab */}
               <TabsContent value="conversation" className="space-y-4 mt-0">
                 {/* Cover note — pinned note from author/maintainer */}
-                {pr?.coverNotes && pr.coverNotes.length > 0 && (
-                  <CoverNoteCard events={pr.coverNotes} />
-                )}
+                {coverNoteEditing && pr ? (
+                  <CoverNoteBox
+                    rootEvent={pr.rootEvent}
+                    repoCoords={pr.repoCoords}
+                    initialContent={pr.coverNotes?.[0]?.content ?? ""}
+                    onSubmitted={handleCoverNoteSubmitted}
+                    onCancel={handleCoverNoteCancel}
+                  />
+                ) : pr?.coverNotes && pr.coverNotes.length > 0 ? (
+                  <CoverNoteCard
+                    events={pr.coverNotes}
+                    onEdit={
+                      canEdit ? () => setCoverNoteEditing(true) : undefined
+                    }
+                  />
+                ) : canEdit && pr ? (
+                  /* Subtle "Add cover note" button — only for authorised users */
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCoverNoteEditing(true)}
+                    className="gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground h-7 -ml-2"
+                  >
+                    <Pin className="h-3 w-3" />
+                    Add cover note
+                  </Button>
+                ) : null}
 
                 {/* PR / patch body */}
                 {pr ? (

@@ -17,6 +17,7 @@ import type { Action } from "applesauce-actions";
 import type { NostrEvent } from "nostr-tools";
 import { IssueBlueprint, type IssueOptions } from "@/blueprints/issue";
 import { CommentBlueprint, type CommentOptions } from "@/blueprints/comment";
+import { CoverNoteBlueprint } from "@/blueprints/cover-note";
 import { StatusChangeBlueprint, STATUS_KIND_MAP } from "@/blueprints/status";
 import {
   IssueSubjectRenameBlueprint,
@@ -263,6 +264,35 @@ export function CreateComment(
       signed,
       buildGroupIds(self, repoCoords, notifyPubkeys),
     );
+  };
+}
+
+/**
+ * Create or update a cover note (kind:1624) for a NIP-34 issue or PR.
+ *
+ * A cover note is a pinned note posted by the item author or a maintainer
+ * that appears above the first description card on an issue or PR page.
+ *
+ * Publishes to: user outbox + repo relays. No notification needed.
+ *
+ * @param rootEvent  - The root issue / PR / patch event being annotated
+ * @param content    - Markdown body of the cover note
+ * @param repoCoords - Repo coordinate strings for relay group keying
+ */
+export function CreateCoverNote(
+  rootEvent: NostrEvent,
+  content: string,
+  repoCoords?: string[],
+): Action {
+  return async ({ factory, sign, self }) => {
+    const draft = await factory.create(CoverNoteBlueprint, rootEvent, content);
+    const signed = await sign(draft);
+
+    // Add to local store immediately so the cover note appears without
+    // waiting for a relay round-trip.
+    eventStore.add(signed);
+
+    await outboxStore.publish(signed, buildGroupIds(self, repoCoords));
   };
 }
 

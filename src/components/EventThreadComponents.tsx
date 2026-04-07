@@ -490,15 +490,25 @@ export interface ThreadContext {
 
 /**
  * Displays the latest authorised cover note (kind:1624) for an issue or PR,
- * with a versions history dropdown and a raw JSON viewer.
+ * with a versions history dropdown, a raw JSON viewer, and an optional edit
+ * button for authorised users.
  *
  * Shown above the first description card, below the page title. Mirrors
  * gitworkshop's CoverNote component.
  *
- * @param events - All authorised cover notes, sorted newest-first. The first
- *                 entry is the one displayed by default.
+ * @param events  - All authorised cover notes, sorted newest-first. The first
+ *                  entry is the one displayed by default.
+ * @param onEdit  - When provided, an edit icon button is shown next to the
+ *                  history and {} icons. Clicking it calls this callback so
+ *                  the parent can open the CoverNoteBox composer.
  */
-export function CoverNoteCard({ events }: { events: NostrEvent[] }) {
+export function CoverNoteCard({
+  events,
+  onEdit,
+}: {
+  events: NostrEvent[];
+  onEdit?: () => void;
+}) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [jsonOpen, setJsonOpen] = useState(false);
 
@@ -552,6 +562,19 @@ export function CoverNoteCard({ events }: { events: NostrEvent[] }) {
 
           {/* Right: action buttons */}
           <div className="flex items-center gap-1 shrink-0 ml-2">
+            {/* Edit button — only shown for authorised users */}
+            {onEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground/60 hover:text-foreground"
+                title="Edit cover note"
+                onClick={onEdit}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            )}
+
             {/* Raw JSON viewer */}
             <Button
               variant="ghost"
