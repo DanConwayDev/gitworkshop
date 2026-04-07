@@ -22,7 +22,8 @@ import {
   ShieldAlert,
   ShieldQuestion,
   AlertTriangle,
-  Info,
+  Radio,
+  Server,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { GitRef } from "@/hooks/useGitExplorer";
@@ -203,16 +204,16 @@ function StatusTooltipText({
     case "verified":
       return (
         <span>
-          Signed and verified — the maintainer's published state matches this
+          Matches Nostr state — the maintainer's published state matches this
           git server
         </span>
       );
     case "mismatch":
       return (
         <div className="space-y-1">
-          <p className="font-medium text-amber-400">Out of sync</p>
+          <p className="font-medium text-amber-400">Differs from Nostr state</p>
           <p>
-            The maintainer signed{" "}
+            Nostr state has{" "}
             <code className="font-mono text-[11px] bg-amber-500/20 px-1 rounded">
               {refWithStatus.stateCommit?.slice(0, 8)}
             </code>{" "}
@@ -230,21 +231,21 @@ function StatusTooltipText({
     case "state-behind":
       return (
         <span>
-          The git server has newer commits than the maintainer's last signed
-          state — the maintainer hasn't re-signed yet
+          The git server has newer commits than the maintainer's last Nostr
+          state — the maintainer hasn't re-published yet
         </span>
       );
     case "git-server-only":
       return (
         <span>
-          This ref exists on the git server but isn't tracked in the
-          maintainer's signed state
+          This ref exists on the git server but isn't in the maintainer's Nostr
+          state
         </span>
       );
     case "no-state":
       return null;
     case "loading":
-      return <span>Checking verification status…</span>;
+      return <span>Checking Nostr state…</span>;
   }
 }
 
@@ -322,43 +323,155 @@ function RefRow({
   return row;
 }
 
-function MismatchBanner({ mismatchCount }: { mismatchCount: number }) {
-  return (
-    <div className="mx-2 mb-1 mt-1 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
-      <div className="flex items-start gap-2">
-        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
-        <div className="space-y-1 min-w-0">
-          <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
-            {mismatchCount === 1
-              ? "1 ref is out of sync"
-              : `${mismatchCount} refs are out of sync`}
-          </p>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            The git server and the maintainer's signed state don't agree on{" "}
-            {mismatchCount === 1 ? "a ref" : "some refs"}. This could mean a
-            recent push hasn't been signed yet.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ---------------------------------------------------------------------------
+// Popover header: source row + optional issues row
+// ---------------------------------------------------------------------------
 
-function NoStateBanner() {
+/**
+ * The source label shown at the top of the popover.
+ *
+ * Scenarios:
+ *   - Nostr state exists and is current → "nostr" (emerald)
+ *   - Nostr state exists but git server is ahead → git domain (amber)
+ *   - No Nostr state → git domain (muted)
+ *   - Loading → "nostr" (muted, still checking)
+ */
+function SourceHeader({
+  repoState,
+  repoRelayEose,
+  stateBehindGit,
+  poolWarning,
+  winnerUrl,
+  mismatchCount,
+  isNoState,
+}: {
+  repoState: RepositoryState | null | undefined;
+  repoRelayEose: boolean;
+  stateBehindGit: boolean;
+  poolWarning?: PoolWarning | null;
+  winnerUrl?: string | null;
+  mismatchCount: number;
+  isNoState: boolean;
+}) {
+  const gitSourceUrl =
+    poolWarning?.kind === "state-behind-git"
+      ? poolWarning.gitServerUrl
+      : winnerUrl;
+  const gitDomain = gitSourceUrl ? gitServerDomain(gitSourceUrl) : null;
+
+  // Determine which source is active and its visual state
+  const isLoading = repoState === undefined || !repoRelayEose;
+  const isGitSource = stateBehindGit || isNoState;
+  const hasProblems = mismatchCount > 0 || stateBehindGit;
+
+  // Source label
+  const sourceLabel = isGitSource && gitDomain ? gitDomain : "nostr";
+  const sourceIsNostr = !isGitSource;
+
   return (
-    <div className="mx-2 mb-1 mt-1 rounded-md border border-border/60 bg-muted/30 px-3 py-2.5">
-      <div className="flex items-start gap-2">
-        <Info className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-        <div className="space-y-1 min-w-0">
-          <p className="text-xs font-medium text-muted-foreground">
-            No signed state published
-          </p>
-          <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-            The maintainer hasn't published a signed snapshot of this repo's
-            branches yet. Showing git server data only.
-          </p>
-        </div>
-      </div>
+    <div
+      className={cn(
+        "flex items-center gap-2 px-3 py-2 border-b text-[11px]",
+        hasProblems
+          ? "border-amber-500/30 bg-amber-500/5"
+          : "border-border/40 bg-muted/20",
+      )}
+    >
+      {/* Source icon */}
+      {sourceIsNostr ? (
+        <Radio
+          className={cn(
+            "h-3 w-3 shrink-0",
+            isLoading
+              ? "text-muted-foreground/40"
+              : "text-purple-500 dark:text-purple-400",
+          )}
+        />
+      ) : (
+        <Server
+          className={cn(
+            "h-3 w-3 shrink-0",
+            hasProblems ? "text-amber-500" : "text-muted-foreground/60",
+          )}
+        />
+      )}
+
+      {/* "Source:" label */}
+      <span className="text-muted-foreground/60 shrink-0">Source</span>
+
+      {/* Source value */}
+      <span
+        className={cn(
+          "font-medium truncate",
+          isLoading
+            ? "text-muted-foreground/50"
+            : sourceIsNostr
+              ? "text-purple-600 dark:text-purple-400"
+              : hasProblems
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-foreground/80",
+        )}
+      >
+        {sourceLabel}
+      </span>
+
+      {/* Right-side status — issues, no-state info, or happy-path sync confirmation */}
+      {hasProblems ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default">
+              <AlertTriangle className="h-3 w-3 text-amber-500" />
+              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                {stateBehindGit
+                  ? "ahead of nostr"
+                  : mismatchCount === 1
+                    ? "1 ref differs"
+                    : `${mismatchCount} refs differ`}
+              </span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent
+            side="bottom"
+            className="max-w-[260px] text-xs"
+            sideOffset={6}
+          >
+            {stateBehindGit ? (
+              <span>
+                The git server has newer unsigned commits than the maintainer's
+                last Nostr state. Showing the git server's latest data.
+              </span>
+            ) : (
+              <span>
+                {mismatchCount === 1
+                  ? "1 ref differs"
+                  : `${mismatchCount} refs differ`}{" "}
+                from the Nostr state. This could mean a recent push hasn't been
+                re-published to Nostr yet. Hover each ref for details.
+              </span>
+            )}
+          </TooltipContent>
+        </Tooltip>
+      ) : isNoState ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default text-muted-foreground/60">
+              <span>no Nostr state</span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent
+            side="bottom"
+            className="max-w-[240px] text-xs"
+            sideOffset={6}
+          >
+            The maintainer hasn't published a Nostr state for this repo yet.
+            Showing git server data only.
+          </TooltipContent>
+        </Tooltip>
+      ) : !isLoading && sourceIsNostr ? (
+        <span className="ml-auto text-muted-foreground/50 shrink-0">
+          all git servers in sync
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -410,7 +523,7 @@ export function RefSelector({
     ? tags.filter((t) => t.name.toLowerCase().includes(lowerSearch))
     : tags;
 
-  // Only count genuine mismatches (not state-behind) for the mismatch banner
+  // Only count genuine mismatches (not state-behind) for the issues row
   const mismatchCount = countMismatches(refsWithStatus);
   const isNoState = repoRelayEose && repoState === null;
 
@@ -434,19 +547,23 @@ export function RefSelector({
   // Amber trigger border when there are genuine mismatches or state is behind
   const showAmberTrigger = mismatchCount > 0 || stateBehindGit;
 
-  // Show the git server domain when the displayed state isn't signed.
-  // This tells the user where the data is coming from.
+  // Determine the source prefix for the trigger.
   //
   // When state-behind-git, the warning carries the exact server URL whose
-  // unsigned commit is being displayed. For no-state / git-server-only /
-  // mismatch, fall back to the pool's winner URL (fastest responding server).
+  // unsigned commit is being displayed. For no-state, fall back to the pool's
+  // winner URL. When Nostr state is current (verified / mismatch / loading),
+  // always show "nostr".
   const gitSourceUrl =
     poolWarning?.kind === "state-behind-git"
       ? poolWarning.gitServerUrl
       : winnerUrl;
-  const showGitDomain =
-    gitSourceUrl && currentStatus !== "verified" && currentStatus !== "loading";
   const gitDomain = gitSourceUrl ? gitServerDomain(gitSourceUrl) : null;
+
+  // Only show a source prefix in the trigger when the source is a git server
+  // (not Nostr). In the happy path (Nostr is current) the prefix is omitted
+  // to keep the trigger compact — the popover header always shows the source.
+  const showGitPrefix = (stateBehindGit || isNoState) && gitDomain;
+  const sourcePrefix = gitDomain;
 
   const handleSelect = (refName: string) => {
     onRefChange(refName);
@@ -465,33 +582,47 @@ export function RefSelector({
           className={cn(
             "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs transition-all duration-200",
             "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-            "max-w-[280px]",
+            "max-w-[320px]",
             showAmberTrigger
               ? "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10"
               : "border-border/60 bg-background",
           )}
         >
-          {showGitDomain && (
+          {/* Source prefix — only shown when source is a git server, not nostr */}
+          {showGitPrefix && (
             <>
-              <span className="text-muted-foreground/70 truncate max-w-[120px]">
-                {gitDomain}
+              <span
+                className={cn(
+                  "truncate max-w-[100px] shrink-0",
+                  showAmberTrigger
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-muted-foreground/70",
+                )}
+              >
+                {sourcePrefix}
               </span>
-              <span className="text-muted-foreground/40">/</span>
+              <span className="text-muted-foreground/40 shrink-0">/</span>
             </>
           )}
+
+          {/* Branch/tag icon */}
           {currentIsTag ? (
             <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           ) : (
             <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           )}
+
+          {/* Ref name */}
           <span className="truncate font-medium">{currentRef}</span>
+
+          {/* Per-ref status icon */}
           {showStatusIcon ? (
             <span className="shrink-0 ml-0.5">
               {currentStatus === "verified" && (
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
               )}
               {currentStatus === "mismatch" && (
-                <ShieldAlert className="h-3.5 w-3.5 text-red-500" />
+                <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
               )}
               {currentStatus === "state-behind" && (
                 <AlertTriangle className="h-3 w-3 text-amber-500" />
@@ -503,6 +634,7 @@ export function RefSelector({
           ) : mismatchCount > 0 ? (
             <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0 ml-0.5" />
           ) : null}
+
           <ChevronsUpDown className="h-3 w-3 shrink-0 text-muted-foreground/60 ml-0.5" />
         </button>
       </PopoverTrigger>
@@ -512,6 +644,17 @@ export function RefSelector({
         align="start"
         sideOffset={6}
       >
+        {/* Source header — always shown, replaces the old banners */}
+        <SourceHeader
+          repoState={repoState}
+          repoRelayEose={repoRelayEose}
+          stateBehindGit={stateBehindGit}
+          poolWarning={poolWarning}
+          winnerUrl={winnerUrl}
+          mismatchCount={mismatchCount}
+          isNoState={isNoState}
+        />
+
         {/* Search input — hidden when all refs fit in the dropdown */}
         {showSearch && (
           <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40">
@@ -525,12 +668,6 @@ export function RefSelector({
             />
           </div>
         )}
-
-        {/* Mismatch banner */}
-        {mismatchCount > 0 && <MismatchBanner mismatchCount={mismatchCount} />}
-
-        {/* No state banner */}
-        {isNoState && <NoStateBanner />}
 
         <ScrollArea className="max-h-[360px]">
           <div className="py-1">
@@ -603,11 +740,11 @@ export function RefSelector({
             <div className="px-3 py-2 flex items-center gap-3 text-[11px] text-muted-foreground/60">
               <span className="flex items-center gap-1">
                 <ShieldCheck className="h-3 w-3 text-emerald-500/70" />
-                signed
+                matches nostr
               </span>
               <span className="flex items-center gap-1">
                 <ShieldAlert className="h-3 w-3 text-amber-500/70" />
-                out of sync
+                differs from nostr
               </span>
               <span className="flex items-center gap-1">
                 <ShieldQuestion className="h-3 w-3 text-muted-foreground/40" />
