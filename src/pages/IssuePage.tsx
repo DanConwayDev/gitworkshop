@@ -9,6 +9,7 @@ import {
   EventBodyCard,
   EventBodyCardSkeleton,
   CommentSkeleton,
+  CoverNoteCard,
   SubjectRenameCard,
   StatusChangeCard,
   LabelChangeCard,
@@ -119,6 +120,9 @@ export default function IssuePage() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
           {/* Main content */}
           <div className="min-w-0 space-y-4">
+            {/* Cover note — pinned note from author/maintainer */}
+            {issue?.coverNote && <CoverNoteCard event={issue.coverNote} />}
+
             {/* Issue body */}
             {issue ? (
               <EventBodyCard event={issue.rootEvent} content={issue.body} />

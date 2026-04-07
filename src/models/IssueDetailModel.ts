@@ -10,10 +10,12 @@ import {
   STATUS_KINDS,
   COMMENT_KIND,
   LEGACY_REPLY_KINDS,
+  COVER_NOTE_KIND,
   resolveItemEssentials,
   extractBody,
   buildRenameItems,
   buildTimelineNodes,
+  resolveCoverNote,
   type ResolvedIssue,
 } from "@/lib/nip34";
 
@@ -25,6 +27,7 @@ import {
  * - The root event (kind:1621)
  * - Essentials (status, labels, deletions)
  * - Comments (kind:1111 via #E, legacy kinds 1/1622 via #e)
+ * - Cover notes (kind:1624 via #E)
  * - Zaps (kind:9735)
  *
  * Emits a `ResolvedIssue` whenever any of these change.
@@ -62,6 +65,11 @@ export function IssueDetailModel(
       { kinds: [...LEGACY_REPLY_KINDS], "#e": [rootId] } as Filter,
     ]);
 
+    // Cover notes (kind:1624) referencing this issue via lowercase #e tag
+    const coverNotes$ = store.timeline([
+      { kinds: [COVER_NOTE_KIND], "#e": [rootId] } as Filter,
+    ]);
+
     // Zaps
     const zaps$ = store.timeline([{ kinds: [9735], "#e": [rootId] } as Filter]);
 
@@ -70,6 +78,7 @@ export function IssueDetailModel(
       essentials$,
       comments$,
       legacyReplies$,
+      coverNotes$,
       zaps$,
     ]).pipe(
       auditTime(50),
@@ -79,6 +88,7 @@ export function IssueDetailModel(
           essentialEvents,
           commentEvents,
           legacyReplyEvents,
+          coverNoteEvents,
           zapEvents,
         ]) => {
           const roots = rootEvents as NostrEvent[];
@@ -91,6 +101,7 @@ export function IssueDetailModel(
             ...(commentEvents as NostrEvent[]),
             ...(legacyReplyEvents as NostrEvent[]),
           ];
+          const coverNotes = coverNoteEvents as NostrEvent[];
           const zaps = zapEvents as NostrEvent[];
 
           // Effective maintainer set (use provided or empty while loading)
@@ -103,6 +114,14 @@ export function IssueDetailModel(
             allComments,
             zaps,
             effectiveMaintainers,
+          );
+
+          // ── Cover note ─────────────────────────────────────────────
+          const coverNote = resolveCoverNote(
+            rootId,
+            rootEvent.pubkey,
+            coverNotes,
+            core.authorisedUsers,
           );
 
           // ── Build rename items ──────────────────────────────────────
@@ -146,6 +165,7 @@ export function IssueDetailModel(
 
             // Detail fields
             body: extractBody(rootEvent),
+            coverNote,
             timelineNodes,
             comments: allComments,
             zaps,

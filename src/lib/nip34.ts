@@ -198,6 +198,15 @@ export const PR_ROOT_KINDS = [PATCH_KIND, PR_KIND] as const;
 export const COMMENT_KIND = 1111;
 
 /**
+ * Cover note (kind 1624).
+ *
+ * A pinned note posted by the item author or a maintainer that appears above
+ * the first description card on an issue or PR page. Only the latest
+ * authorised cover note is shown. Mirrors gitworkshop's CoverNote feature.
+ */
+export const COVER_NOTE_KIND = 1624;
+
+/**
  * Legacy NIP-34 reply kinds — pre-NIP-22 replies that use NIP-10 #e tagging.
  * Kind 1622 is the original NIP-34 reply kind; kind 1 is a generic text note
  * sometimes used as a reply in older clients. Both thread correctly via the
@@ -1300,6 +1309,12 @@ export interface ResolvedIssue extends ResolvedIssueLite {
   body: string;
 
   /**
+   * The latest authorised cover note (kind:1624) for this issue, if any.
+   * Only the item author or a maintainer may post a cover note.
+   */
+  coverNote?: NostrEvent;
+
+  /**
    * Pre-built conversation timeline: interleaved comments and subject renames,
    * sorted chronologically.
    */
@@ -1331,6 +1346,43 @@ export interface ResolvedIssue extends ResolvedIssueLite {
 // ---------------------------------------------------------------------------
 // Shared detail-page helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Resolve the latest authorised cover note (kind:1624) for an item.
+ *
+ * A cover note is authorised when its author is the item author or a
+ * confirmed maintainer. When multiple authorised cover notes exist, the
+ * one with the highest `created_at` wins (ties broken by event ID).
+ *
+ * @param rootId          - The event ID of the root issue / PR / patch
+ * @param rootPubkey      - The pubkey of the root event author
+ * @param coverNoteEvents - All kind:1624 events referencing this root
+ * @param authorisedUsers - Pubkeys authorised to write for this item
+ */
+export function resolveCoverNote(
+  rootId: string,
+  rootPubkey: string,
+  coverNoteEvents: NostrEvent[],
+  authorisedUsers: Set<string>,
+): NostrEvent | undefined {
+  const candidates = coverNoteEvents.filter(
+    (ev) =>
+      ev.kind === COVER_NOTE_KIND &&
+      ev.tags.some((t) => t[0] === "e" && t[1] === rootId) &&
+      // authorisedUsers.size === 0 means maintainers not yet loaded — treat
+      // the item author as authorised to avoid a flash of no cover note.
+      (authorisedUsers.size === 0
+        ? ev.pubkey === rootPubkey
+        : authorisedUsers.has(ev.pubkey)),
+  );
+  if (candidates.length === 0) return undefined;
+  return candidates.reduce((latest, ev) =>
+    ev.created_at > latest.created_at ||
+    (ev.created_at === latest.created_at && ev.id > latest.id)
+      ? ev
+      : latest,
+  );
+}
 
 /**
  * Build rename items with old/new subjects for display.
@@ -1704,6 +1756,12 @@ export type PRTimelineNode =
 export interface ResolvedPR extends ResolvedPRLite {
   /** Body text (description tag for patches, content for PRs) */
   body: string;
+
+  /**
+   * The latest authorised cover note (kind:1624) for this PR/patch, if any.
+   * Only the item author or a maintainer may post a cover note.
+   */
+  coverNote?: NostrEvent;
 
   /**
    * All revisions ordered oldest-first. The last entry is the current

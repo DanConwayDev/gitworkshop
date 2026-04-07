@@ -9,6 +9,7 @@ import {
   EventBodyCard,
   EventBodyCardSkeleton,
   CommentSkeleton,
+  CoverNoteCard,
   SubjectRenameCard,
   StatusChangeCard,
   LabelChangeCard,
@@ -656,6 +657,9 @@ export default function PRPage() {
             <div className="space-y-4 min-w-0">
               {/* Conversation tab */}
               <TabsContent value="conversation" className="space-y-4 mt-0">
+                {/* Cover note — pinned note from author/maintainer */}
+                {pr?.coverNote && <CoverNoteCard event={pr.coverNote} />}
+
                 {/* PR / patch body */}
                 {pr ? (
                   <EventBodyCard

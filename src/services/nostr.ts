@@ -25,7 +25,12 @@ import { MailboxesModel } from "applesauce-core/models";
 import { cacheRequest, saveEvents } from "./cache";
 import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
 import { extraRelays, lookupRelays, gitIndexRelays } from "./settings";
-import { ISSUE_KIND, PR_ROOT_KINDS, LEGACY_REPLY_KINDS } from "@/lib/nip34";
+import {
+  ISSUE_KIND,
+  PR_ROOT_KINDS,
+  LEGACY_REPLY_KINDS,
+  COVER_NOTE_KIND,
+} from "@/lib/nip34";
 import { Repository, isValidRepository } from "@/casts/Repository";
 import {
   createPaginatedTagValueLoader,
@@ -356,7 +361,11 @@ const NIP34_THREAD_BUFFER = 500;
 /**
  * Essentials loader (#e tag).
  * Fetches status (1630-1633), NIP-32 labels (1985), deletion requests (5),
- * and legacy NIP-34 replies (kind 1 and 1622) for issues/patches/PRs.
+ * cover notes (1624), and legacy NIP-34 replies (kind 1 and 1622) for
+ * issues/patches/PRs.
+ *
+ * Cover notes use lowercase #e (NIP-10 style) to reference the root item,
+ * not NIP-22 uppercase #E, so they belong here alongside other essentials.
  *
  * Uses createPaginatedTagValueLoader which combines the historical fetch,
  * per-relay backward pagination, and a persistent live subscription in one.
@@ -371,7 +380,16 @@ const NIP34_THREAD_BUFFER = 500;
 export const nip34EssentialsLoader = createPaginatedTagValueLoader(pool, "e", {
   cacheRequest,
   eventStore,
-  kinds: [1630, 1631, 1632, 1633, 1985, 5, ...LEGACY_REPLY_KINDS],
+  kinds: [
+    1630,
+    1631,
+    1632,
+    1633,
+    1985,
+    5,
+    COVER_NOTE_KIND,
+    ...LEGACY_REPLY_KINDS,
+  ],
   bufferTime: NIP34_ESSENTIALS_BUFFER,
 });
 

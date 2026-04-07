@@ -12,11 +12,13 @@ import {
   COMMENT_KIND,
   LEGACY_REPLY_KINDS,
   PATCH_KIND,
+  COVER_NOTE_KIND,
   resolveItemEssentials,
   extractBody,
   extractPatchDiff,
   buildRenameItems,
   buildTimelineNodes,
+  resolveCoverNote,
   type ResolvedPR,
   type PRRevision,
   type PRItemType,
@@ -81,6 +83,11 @@ export function PRDetailModel(
       { kinds: [PR_UPDATE_KIND, PATCH_KIND], "#e": [rootId] } as Filter,
     ]);
 
+    // Cover notes (kind:1624) referencing this PR/patch via lowercase #e tag
+    const coverNotes$ = store.timeline([
+      { kinds: [COVER_NOTE_KIND], "#e": [rootId] } as Filter,
+    ]);
+
     // Zaps
     const zaps$ = store.timeline([{ kinds: [9735], "#e": [rootId] } as Filter]);
 
@@ -90,6 +97,7 @@ export function PRDetailModel(
       comments$,
       legacyReplies$,
       updates$,
+      coverNotes$,
       zaps$,
     ]).pipe(
       auditTime(50),
@@ -100,6 +108,7 @@ export function PRDetailModel(
           commentEvents,
           legacyReplyEvents,
           updateEvents,
+          coverNoteEvents,
           zapEvents,
         ]) => {
           const roots = rootEvents as NostrEvent[];
@@ -113,6 +122,7 @@ export function PRDetailModel(
             ...(legacyReplyEvents as NostrEvent[]),
           ];
           const updates = updateEvents as NostrEvent[];
+          const coverNotes = coverNoteEvents as NostrEvent[];
           const zaps = zapEvents as NostrEvent[];
 
           // Determine item type
@@ -297,6 +307,14 @@ export function PRDetailModel(
             });
           }
 
+          // ── Cover note ─────────────────────────────────────────────
+          const coverNote = resolveCoverNote(
+            rootId,
+            rootEvent.pubkey,
+            coverNotes,
+            core.authorisedUsers,
+          );
+
           // ── Build rename items ──────────────────────────────────────
           const renameItems = buildRenameItems(
             core.originalSubject,
@@ -398,6 +416,7 @@ export function PRDetailModel(
 
             // Detail fields
             body: extractBody(rootEvent),
+            coverNote,
             revisions,
             tip: {
               commitId: tipCommitId,
