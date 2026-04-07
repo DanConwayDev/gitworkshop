@@ -1,7 +1,7 @@
 /**
  * Shared components used in both IssuePage and PRPage thread views.
  */
-import { lazy, Suspense, type RefObject } from "react";
+import { lazy, Suspense, useState, type RefObject } from "react";
 import { formatDistanceToNow, format } from "date-fns";
 import type { NostrEvent } from "nostr-tools";
 import { Link } from "react-router-dom";
@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Calendar,
   Clock,
+  History,
   Mail,
   Pencil,
   Pin,
@@ -28,6 +29,19 @@ import { OutboxStatusBadge } from "@/components/OutboxStatusStrip";
 import { StatusBadge, StatusIcon } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import type { IssueStatus } from "@/lib/nip34";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -475,43 +489,153 @@ export interface ThreadContext {
 // ---------------------------------------------------------------------------
 
 /**
- * Displays the latest authorised cover note (kind:1624) for an issue or PR.
+ * Displays the latest authorised cover note (kind:1624) for an issue or PR,
+ * with a versions history dropdown and a raw JSON viewer.
  *
  * Shown above the first description card, below the page title. Mirrors
  * gitworkshop's CoverNote component.
+ *
+ * @param events - All authorised cover notes, sorted newest-first. The first
+ *                 entry is the one displayed by default.
  */
-export function CoverNoteCard({ event }: { event: NostrEvent }) {
+export function CoverNoteCard({ events }: { events: NostrEvent[] }) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [jsonOpen, setJsonOpen] = useState(false);
+
+  const event = events[selectedIndex];
+  if (!event) return null;
+
   const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
     addSuffix: true,
   });
 
+  const hasMultiple = events.length > 1;
+
   return (
-    <div className="border-l-4 border-blue-500/60 bg-muted/30 rounded-r-md px-4 py-3 mb-4">
-      <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground mb-2">
-        <Pin className="h-3.5 w-3.5 shrink-0 text-blue-500/70" />
-        <span className="font-medium uppercase tracking-wide text-blue-500/80">
-          Cover note
-        </span>
-        <span className="text-muted-foreground/40">by</span>
-        <UserLink
-          pubkey={event.pubkey}
-          avatarSize="sm"
-          nameClassName="text-xs font-medium text-foreground"
-        />
-        <span className="text-muted-foreground/40">·</span>
-        <span className="flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          {timeAgo}
-        </span>
+    <>
+      <div className="border-l-4 border-blue-500/60 bg-muted/30 rounded-r-md px-4 py-3 mb-4">
+        <div className="flex items-start gap-2">
+          {/* Left: metadata + content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground mb-2">
+              <Pin className="h-3.5 w-3.5 shrink-0 text-blue-500/70" />
+              <span className="font-medium uppercase tracking-wide text-blue-500/80">
+                Cover note
+              </span>
+              {hasMultiple && selectedIndex > 0 && (
+                <span className="text-xs text-amber-500/80 font-medium">
+                  (older version)
+                </span>
+              )}
+              <span className="text-muted-foreground/40">by</span>
+              <UserLink
+                pubkey={event.pubkey}
+                avatarSize="sm"
+                nameClassName="text-xs font-medium text-foreground"
+              />
+              <span className="text-muted-foreground/40">·</span>
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {timeAgo}
+              </span>
+            </div>
+            <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
+              <Suspense
+                fallback={
+                  <div className="h-8 animate-pulse bg-muted rounded" />
+                }
+              >
+                <MarkdownContent content={event.content} />
+              </Suspense>
+            </div>
+          </div>
+
+          {/* Right: action buttons */}
+          <div className="flex items-center gap-1 shrink-0 ml-2">
+            {/* Raw JSON viewer */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground/60 hover:text-foreground"
+              title="View raw event JSON"
+              onClick={() => setJsonOpen(true)}
+            >
+              <span className="text-[10px] font-mono font-bold leading-none">
+                {"{}"}
+              </span>
+            </Button>
+
+            {/* Versions dropdown — only shown when there are multiple */}
+            {hasMultiple && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground/60 hover:text-foreground"
+                    title={`${events.length} versions — click to browse`}
+                  >
+                    <History className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  {events.map((ev, idx) => (
+                    <DropdownMenuItem
+                      key={ev.id}
+                      onClick={() => setSelectedIndex(idx)}
+                      className={cn(
+                        "flex flex-col items-start gap-0.5 cursor-pointer",
+                        idx === selectedIndex && "bg-accent",
+                      )}
+                    >
+                      <div className="flex items-center gap-1.5 w-full">
+                        {idx === 0 && (
+                          <span className="text-[10px] font-medium text-blue-500/80 uppercase tracking-wide">
+                            Latest
+                          </span>
+                        )}
+                        {idx > 0 && (
+                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                            v{events.length - idx}
+                          </span>
+                        )}
+                        <span className="text-xs text-muted-foreground ml-auto">
+                          {formatDistanceToNow(new Date(ev.created_at * 1000), {
+                            addSuffix: true,
+                          })}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground/70 truncate w-full">
+                        by{" "}
+                        <span className="font-mono text-[10px]">
+                          {ev.pubkey.slice(0, 8)}…
+                        </span>
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
       </div>
-      <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
-        <Suspense
-          fallback={<div className="h-8 animate-pulse bg-muted rounded" />}
-        >
-          <MarkdownContent content={event.content} />
-        </Suspense>
-      </div>
-    </div>
+
+      {/* Raw JSON modal */}
+      <Dialog open={jsonOpen} onOpenChange={setJsonOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-sm">
+              Raw event · kind:{event.kind}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            <pre className="text-xs font-mono bg-muted rounded-md p-4 whitespace-pre-wrap break-all">
+              {JSON.stringify(event, null, 2)}
+            </pre>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

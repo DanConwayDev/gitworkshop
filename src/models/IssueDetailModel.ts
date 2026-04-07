@@ -15,7 +15,7 @@ import {
   extractBody,
   buildRenameItems,
   buildTimelineNodes,
-  resolveCoverNote,
+  resolveCoverNotes,
   type ResolvedIssue,
 } from "@/lib/nip34";
 
@@ -117,12 +117,13 @@ export function IssueDetailModel(
           );
 
           // ── Cover note ─────────────────────────────────────────────
-          const coverNote = resolveCoverNote(
+          const allCoverNotes = resolveCoverNotes(
             rootId,
             rootEvent.pubkey,
             coverNotes,
             core.authorisedUsers,
           );
+          const coverNote = allCoverNotes[0];
 
           // ── Build rename items ──────────────────────────────────────
           const renameItems = buildRenameItems(
@@ -166,6 +167,7 @@ export function IssueDetailModel(
             // Detail fields
             body: extractBody(rootEvent),
             coverNote,
+            coverNotes: allCoverNotes,
             timelineNodes,
             comments: allComments,
             zaps,

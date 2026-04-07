@@ -121,7 +121,9 @@ export default function IssuePage() {
           {/* Main content */}
           <div className="min-w-0 space-y-4">
             {/* Cover note — pinned note from author/maintainer */}
-            {issue?.coverNote && <CoverNoteCard event={issue.coverNote} />}
+            {issue?.coverNotes && issue.coverNotes.length > 0 && (
+              <CoverNoteCard events={issue.coverNotes} />
+            )}
 
             {/* Issue body */}
             {issue ? (

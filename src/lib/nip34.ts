@@ -1315,6 +1315,12 @@ export interface ResolvedIssue extends ResolvedIssueLite {
   coverNote?: NostrEvent;
 
   /**
+   * All authorised cover notes (kind:1624) for this issue, sorted newest-first.
+   * Includes the resolved `coverNote` plus any older versions by other authors.
+   */
+  coverNotes: NostrEvent[];
+
+  /**
    * Pre-built conversation timeline: interleaved comments and subject renames,
    * sorted chronologically.
    */
@@ -1365,6 +1371,33 @@ export function resolveCoverNote(
   coverNoteEvents: NostrEvent[],
   authorisedUsers: Set<string>,
 ): NostrEvent | undefined {
+  const candidates = resolveCoverNotes(
+    rootId,
+    rootPubkey,
+    coverNoteEvents,
+    authorisedUsers,
+  );
+  return candidates[0];
+}
+
+/**
+ * Return all authorised cover notes (kind:1624) for an item, sorted
+ * newest-first (highest `created_at`, ties broken by event ID descending).
+ *
+ * A cover note is authorised when its author is the item author or a
+ * confirmed maintainer.
+ *
+ * @param rootId          - The event ID of the root issue / PR / patch
+ * @param rootPubkey      - The pubkey of the root event author
+ * @param coverNoteEvents - All kind:1624 events referencing this root
+ * @param authorisedUsers - Pubkeys authorised to write for this item
+ */
+export function resolveCoverNotes(
+  rootId: string,
+  rootPubkey: string,
+  coverNoteEvents: NostrEvent[],
+  authorisedUsers: Set<string>,
+): NostrEvent[] {
   const candidates = coverNoteEvents.filter(
     (ev) =>
       ev.kind === COVER_NOTE_KIND &&
@@ -1375,12 +1408,12 @@ export function resolveCoverNote(
         ? ev.pubkey === rootPubkey
         : authorisedUsers.has(ev.pubkey)),
   );
-  if (candidates.length === 0) return undefined;
-  return candidates.reduce((latest, ev) =>
-    ev.created_at > latest.created_at ||
-    (ev.created_at === latest.created_at && ev.id > latest.id)
-      ? ev
-      : latest,
+  return candidates.sort((a, b) =>
+    b.created_at !== a.created_at
+      ? b.created_at - a.created_at
+      : b.id < a.id
+        ? -1
+        : 1,
   );
 }
 
@@ -1762,6 +1795,12 @@ export interface ResolvedPR extends ResolvedPRLite {
    * Only the item author or a maintainer may post a cover note.
    */
   coverNote?: NostrEvent;
+
+  /**
+   * All authorised cover notes (kind:1624) for this PR/patch, sorted newest-first.
+   * Includes the resolved `coverNote` plus any older versions by other authors.
+   */
+  coverNotes: NostrEvent[];
 
   /**
    * All revisions ordered oldest-first. The last entry is the current

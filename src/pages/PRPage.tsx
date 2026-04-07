@@ -658,7 +658,9 @@ export default function PRPage() {
               {/* Conversation tab */}
               <TabsContent value="conversation" className="space-y-4 mt-0">
                 {/* Cover note — pinned note from author/maintainer */}
-                {pr?.coverNote && <CoverNoteCard event={pr.coverNote} />}
+                {pr?.coverNotes && pr.coverNotes.length > 0 && (
+                  <CoverNoteCard events={pr.coverNotes} />
+                )}
 
                 {/* PR / patch body */}
                 {pr ? (
