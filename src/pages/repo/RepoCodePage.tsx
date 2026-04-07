@@ -330,6 +330,9 @@ export default function RepoCodePage() {
             pulling={gitPulling}
             currentRefFull={currentRefFull}
             urlStates={poolState.urls}
+            repoStateRefs={repoState?.refs}
+            hasStateEvent={!!repoState}
+            repoRelayEose={repoRelayEose}
           />
 
           {/* Error state */}
@@ -462,12 +465,18 @@ function gitServerDomain(url: string): string {
  *
  * The banner is suppressed when the currently selected ref is in sync across
  * all servers — i.e. no server has a "behind" refStatus for that ref.
+ *
+ * When the selected ref is not present in the Nostr state at all (but a state
+ * event exists), a softer informational variant is shown instead.
  */
 function GitServerAheadBanner({
   warning,
   pulling,
   currentRefFull,
   urlStates,
+  repoStateRefs,
+  hasStateEvent,
+  repoRelayEose,
 }: {
   warning: PoolWarning | null;
   pulling: boolean;
@@ -475,10 +484,52 @@ function GitServerAheadBanner({
   currentRefFull: string;
   /** Per-URL state from the pool — used to check per-ref sync status */
   urlStates: Record<string, UrlState>;
+  /** Refs declared in the Nostr state event, if any */
+  repoStateRefs: Array<{ name: string }> | undefined;
+  /** Whether a Nostr state event exists for this repo */
+  hasStateEvent: boolean;
+  /** True once the relay EOSE has been received */
+  repoRelayEose: boolean;
 }) {
   // Suppress while data is still loading — the mismatch may resolve once
   // infoRefs settle.
-  if (!warning || pulling) return null;
+  if (pulling) return null;
+
+  // Only show anything once we know whether a state event exists.
+  if (!repoRelayEose) return null;
+
+  // No Nostr state at all — nothing to compare against, stay silent.
+  if (!hasStateEvent) return null;
+
+  // If there is a state event but the selected ref is not in it, show a
+  // softer informational banner (the maintainer hasn't announced this ref).
+  if (currentRefFull && repoStateRefs) {
+    const refInState = repoStateRefs.some((r) => r.name === currentRefFull);
+    if (!refInState) {
+      return (
+        <div className="flex items-start gap-3 rounded-lg border border-muted-foreground/20 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="space-y-0.5 min-w-0">
+            <p className="font-medium text-foreground/80">
+              This ref isn&apos;t tracked on Nostr
+            </p>
+            <p className="text-xs leading-relaxed">
+              The maintainer&apos;s last Nostr announcement does not include{" "}
+              <code className="font-mono bg-muted px-1 rounded">
+                {currentRefFull
+                  .replace("refs/heads/", "")
+                  .replace("refs/tags/", "")}
+              </code>
+              . Showing the git server&apos;s version of this ref.
+            </p>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // No pool warning — nothing further to show.
+  if (!warning) return null;
 
   // Suppress when the currently selected ref is in sync on all servers.
   // The pool marks a server as "behind" for a ref when it has a different
