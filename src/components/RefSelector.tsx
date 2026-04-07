@@ -1720,6 +1720,7 @@ function SourceHeader({
   pool,
   selectedSource,
   onSelectSource,
+  diffSummaryExternal,
 }: {
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
@@ -1737,6 +1738,8 @@ function SourceHeader({
   pool?: GitGraspPool | null;
   selectedSource: string;
   onSelectSource: (source: string) => void;
+  /** When true, DiffSummaryBar is rendered externally (inside ScrollArea) — skip it here */
+  diffSummaryExternal?: boolean;
 }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
 
@@ -1788,7 +1791,8 @@ function SourceHeader({
   }, [poolWarning, stateCreatedAt]);
 
   // Only show DiffSummaryBar when not viewing a manually-selected git server
-  const showDiffSummary = hasProblems && !isLoading && !isManualGitSource;
+  const showDiffSummary =
+    hasProblems && !isLoading && !isManualGitSource && !diffSummaryExternal;
 
   return (
     <>
@@ -2257,31 +2261,65 @@ export function RefSelector({
           pool={pool}
           selectedSource={selectedSource}
           onSelectSource={setSelectedSource}
+          diffSummaryExternal
         />
-
-        {/* Search input */}
-        {showSearch && (
-          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40">
-            <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Find a branch or tag…"
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-              autoFocus
-            />
-          </div>
-        )}
 
         <ScrollArea
           type="always"
           style={{
             height:
-              "calc(var(--radix-popover-content-available-height) - 140px)",
+              "calc(var(--radix-popover-content-available-height) - 80px)",
             maxHeight:
-              "calc(var(--radix-popover-content-available-height) - 140px)",
+              "calc(var(--radix-popover-content-available-height) - 80px)",
           }}
         >
+          {/* Diff summary — inside scroll area so expanding it doesn't overflow the viewport */}
+          {(mismatchCount > 0 || stateBehindGit) &&
+            repoState !== undefined &&
+            repoRelayEose &&
+            !isManualGitSource && (
+              <DiffSummaryBar
+                refsWithStatus={refsWithStatus}
+                stateBehindGit={stateBehindGit}
+                defaultBranchName={
+                  refsWithStatus.find((r) => r.isDefault && r.isBranch)?.name
+                }
+                gitAheadDistance={(() => {
+                  if (
+                    poolWarning?.kind !== "state-behind-git" ||
+                    !poolWarning.gitCommitterDate ||
+                    !stateCreatedAt
+                  )
+                    return null;
+                  try {
+                    return formatDistanceStrict(
+                      new Date(poolWarning.gitCommitterDate * 1000),
+                      new Date(stateCreatedAt * 1000),
+                    );
+                  } catch {
+                    return null;
+                  }
+                })()}
+                cloneUrls={cloneUrls}
+                urlStates={urlStates}
+                pool={pool}
+              />
+            )}
+
+          {/* Search input */}
+          {showSearch && (
+            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40">
+              <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Find a branch or tag…"
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+                autoFocus
+              />
+            </div>
+          )}
+
           <div className="py-1">
             {/* Branches section */}
             {filteredBranches.length > 0 && (
