@@ -1244,7 +1244,7 @@ function SourceServerLabel({
       case "match":
         return (
           <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
-            behind
+            Nostr state
           </span>
         );
       case "behind":
@@ -1690,11 +1690,9 @@ function SourceSelectorPanel({
     <div className="w-full">
       {/* Header */}
       <div className="px-4 py-2.5 border-b border-border/40">
-        <p className="text-xs font-semibold text-foreground">
-          Verification source
-        </p>
+        <p className="text-xs font-semibold text-foreground">Explorer source</p>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          Select which source to compare refs against the Nostr state
+          Choose which server to explore when git and Nostr are out of sync
         </p>
       </div>
 
