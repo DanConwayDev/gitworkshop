@@ -28,7 +28,11 @@ import {
   ChevronUp,
   CheckCircle2,
   XCircle,
+  HelpCircle,
+  Copy,
+  Minus,
 } from "lucide-react";
+import { nip19 } from "nostr-tools";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { GitRef } from "@/hooks/useGitExplorer";
@@ -37,8 +41,12 @@ import type {
   PoolWarning,
   UrlState,
   UrlRefStatus,
+  UrlErrorKind,
 } from "@/lib/git-grasp-pool/types";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
+import { GraspLogo } from "@/components/GraspLogo";
+import { UserAvatar, UserName } from "@/components/UserAvatar";
+import { graspCloneUrlNpub } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,6 +92,10 @@ export interface RefSelectorProps {
   urlStates?: Record<string, UrlState>;
   /** All clone URLs — used to order servers in the expanded diff summary. */
   cloneUrls?: string[];
+  /** Subset of cloneUrls that are Grasp server clone URLs */
+  graspCloneUrls?: string[];
+  /** Subset of cloneUrls that are NOT Grasp server clone URLs */
+  additionalGitServerUrls?: string[];
   /**
    * Pool instance — used to lazily fetch commit timestamps for differing refs
    * so we can show "committed 3 months ago" in the expanded section.
@@ -98,6 +110,7 @@ export interface RefSelectorProps {
  * - "mismatch"        : state event exists but declares a different commit for this ref
  * - "state-behind"    : git server is ahead of the signed state (expected lag, not suspicious)
  * - "git-server-only" : state event exists but doesn't include this ref
+ * - "not-on-server"   : ref doesn't exist on the selected git server source
  * - "no-state"        : no state event was found (after EOSE)
  * - "loading"         : still waiting for state event data
  */
@@ -106,6 +119,7 @@ type RefStatus =
   | "mismatch"
   | "state-behind"
   | "git-server-only"
+  | "not-on-server"
   | "no-state"
   | "loading";
 
@@ -224,6 +238,70 @@ function getRefStatus(
   return { status: "mismatch", stateCommit: stateRef.commitId };
 }
 
+/**
+ * Compute ref status when a specific git server is selected as the source.
+ * Nostr state is still the authority — we compare this server's commit
+ * against the Nostr state, but only using data from this one server.
+ * Refs absent from this server get "not-on-server".
+ */
+function getRefStatusForServer(
+  ref: GitRef,
+  serverUrlState: UrlState,
+  repoState: RepositoryState | null | undefined,
+  repoRelayEose: boolean,
+): { status: RefStatus; stateCommit?: string } {
+  const prefix = ref.isBranch ? "refs/heads/" : "refs/tags/";
+  const fullRefName = `${prefix}${ref.name}`;
+  const peeledRefName = `${fullRefName}^{}`;
+
+  // Check if this ref exists on the selected server
+  const serverCommit =
+    serverUrlState.infoRefs?.refs[peeledRefName] ??
+    serverUrlState.infoRefs?.refs[fullRefName];
+
+  if (!serverCommit) {
+    return { status: "not-on-server" };
+  }
+
+  // Nostr state still loading
+  if (repoState === undefined || !repoRelayEose) {
+    return { status: "loading" };
+  }
+
+  // No Nostr state
+  if (repoState === null) {
+    return { status: "no-state" };
+  }
+
+  // Find this ref in the Nostr state
+  const stateRef = repoState.refs.find((r) => r.name === fullRefName);
+  if (!stateRef) {
+    return { status: "git-server-only" };
+  }
+
+  // Use the pool's pre-computed refStatus for this server if available
+  const poolStatus = serverUrlState.refStatus[fullRefName];
+  if (poolStatus === "match") return { status: "verified" };
+  if (poolStatus === "behind" || poolStatus === "ahead") {
+    return { status: "mismatch", stateCommit: stateRef.commitId };
+  }
+
+  // Fallback: direct commit comparison
+  function commitsMatch(a: string, b: string): boolean {
+    return a === b || a.startsWith(b) || b.startsWith(a);
+  }
+
+  if (commitsMatch(serverCommit, stateRef.commitId)) {
+    return { status: "verified" };
+  }
+
+  if (ref.rawTagOid && commitsMatch(ref.rawTagOid, stateRef.commitId)) {
+    return { status: "verified" };
+  }
+
+  return { status: "mismatch", stateCommit: stateRef.commitId };
+}
+
 function countMismatches(refsWithStatus: RefWithStatus[]): number {
   return refsWithStatus.filter((r) => r.status === "mismatch").length;
 }
@@ -260,6 +338,10 @@ function StatusIcon({
           className={cn("h-3.5 w-3.5 text-muted-foreground/50", className)}
         />
       );
+    case "not-on-server":
+      return (
+        <Minus className={cn("h-3 w-3 text-muted-foreground/30", className)} />
+      );
     case "no-state":
       return null;
     case "loading":
@@ -269,15 +351,21 @@ function StatusIcon({
 
 function StatusTooltipText({
   refWithStatus,
+  selectedSource,
 }: {
   refWithStatus: RefWithStatus;
+  selectedSource: string; // "nostr" or a URL
 }) {
+  const serverLabel =
+    selectedSource !== "nostr" ? gitServerDomain(selectedSource) : null;
+
   switch (refWithStatus.status) {
     case "verified":
       return (
         <span>
-          Matches Nostr state — the maintainer's published state matches this
-          git server
+          {serverLabel
+            ? `${serverLabel} matches the Nostr state for this ref`
+            : "Matches Nostr state — the maintainer's published state matches this git server"}
         </span>
       );
     case "mismatch":
@@ -289,7 +377,7 @@ function StatusTooltipText({
             <code className="font-mono text-[11px] bg-amber-500/20 px-1 rounded">
               {refWithStatus.stateCommit?.slice(0, 8)}
             </code>{" "}
-            but the git server has{" "}
+            but {serverLabel ? serverLabel : "the git server"} has{" "}
             <code className="font-mono text-[11px] bg-muted px-1 rounded">
               {refWithStatus.hash.slice(0, 8)}
             </code>
@@ -314,6 +402,12 @@ function StatusTooltipText({
           state
         </span>
       );
+    case "not-on-server":
+      return (
+        <span>
+          This ref is not available on {serverLabel ?? "the selected server"}
+        </span>
+      );
     case "no-state":
       return null;
     case "loading":
@@ -325,11 +419,14 @@ function RefRow({
   refWithStatus,
   isSelected,
   onSelect,
+  selectedSource,
 }: {
   refWithStatus: RefWithStatus;
   isSelected: boolean;
   onSelect: () => void;
+  selectedSource: string;
 }) {
+  const isAbsent = refWithStatus.status === "not-on-server";
   const showTooltip =
     refWithStatus.status !== "no-state" && refWithStatus.status !== "loading";
 
@@ -342,6 +439,7 @@ function RefRow({
         isSelected && "bg-accent",
         refWithStatus.status === "mismatch" &&
           "hover:bg-amber-500/10 dark:hover:bg-amber-500/10",
+        isAbsent && "opacity-50",
       )}
     >
       {/* Selection check */}
@@ -356,6 +454,7 @@ function RefRow({
           isSelected && "font-medium",
           refWithStatus.status === "mismatch" &&
             "text-amber-600 dark:text-amber-400",
+          isAbsent && "text-muted-foreground",
         )}
         title={refWithStatus.name}
       >
@@ -386,7 +485,10 @@ function RefRow({
           className="max-w-[280px] text-xs"
           sideOffset={8}
         >
-          <StatusTooltipText refWithStatus={refWithStatus} />
+          <StatusTooltipText
+            refWithStatus={refWithStatus}
+            selectedSource={selectedSource}
+          />
         </TooltipContent>
       </Tooltip>
     );
@@ -580,13 +682,7 @@ function ServerCommitRow({
 
 /**
  * Subtle expandable bar below the source header that explains ref discrepancies.
- *
- * Two modes:
- *   - stateBehindGit: "master is 3 months ahead of nostr and 2 other refs differ"
- *   - nostr source with mismatches: "2 refs differ across git servers"
- *
- * Clicking expands a per-ref breakdown (each ref further expandable to show
- * per-server commits with committer timestamps).
+ * Only shown when selectedSource === "nostr".
  */
 function DiffSummaryBar({
   refsWithStatus,
@@ -696,15 +792,664 @@ function DiffSummaryBar({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Source selector dropdown — replaces GitServerStatus panel
+// ---------------------------------------------------------------------------
+
+/** Condensed npub: "npub1abc…56" */
+function condenseNpub(npub: string): string {
+  if (npub.length <= 12) return npub;
+  return npub.slice(0, 8) + "…" + npub.slice(-2);
+}
+
+function condenseGraspUrl(url: string): string {
+  const npub = graspCloneUrlNpub(url);
+  if (!npub) return url;
+  return url.replace(npub, condenseNpub(npub));
+}
+
+function npubToPubkey(npub: string): string | undefined {
+  try {
+    const decoded = nip19.decode(npub);
+    if (decoded.type === "npub") return decoded.data;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function ProxyBadge() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="shrink-0 inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 cursor-default leading-none">
+          proxy
+        </span>
+      </TooltipTrigger>
+      <TooltipContent
+        side="left"
+        className="text-xs max-w-[220px]"
+        sideOffset={6}
+      >
+        Fetched via cors.isomorphic-git.org — this server does not support
+        cross-origin requests
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ErrorDetail({
+  errorKind,
+  usesProxy,
+}: {
+  errorKind?: UrlErrorKind | null;
+  usesProxy: boolean;
+}) {
+  let message: string;
+  switch (errorKind) {
+    case "not-http":
+      message = "SSH/non-HTTP URL — not fetchable in browser";
+      break;
+    case "not-git":
+      message = usesProxy
+        ? "no git data via proxy — wrong path or 404"
+        : "no git data — wrong path or 404";
+      break;
+    case "cors-blocked":
+      message = "CORS blocked — direct and proxy both failed";
+      break;
+    case "proxy-error":
+      message = "proxy error — server unreachable via proxy";
+      break;
+    case "http-error":
+      message = "HTTP error — server returned 4xx/5xx";
+      break;
+    case "network":
+      message = "network error — server unreachable";
+      break;
+    case "transient":
+      message = "temporarily unreachable";
+      break;
+    default:
+      message = "unreachable";
+  }
+  return (
+    <p className="text-[11px] text-muted-foreground/80 mt-0.5">{message}</p>
+  );
+}
+
+/** Status dot for a server row in the source selector */
+function SourceServerDot({
+  status,
+  gitIsAhead,
+}: {
+  status: UrlRefStatus;
+  gitIsAhead?: boolean;
+}) {
+  if (status === "behind" && gitIsAhead) {
+    return <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+  }
+  switch (status) {
+    case "match":
+      return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
+    case "behind":
+      return <XCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+    case "ahead":
+      return <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+    case "error":
+      return (
+        <XCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+      );
+    case "connected":
+    case "unknown":
+      return (
+        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+      );
+  }
+}
+
+/** One-word right-aligned status label for a server row */
+function SourceServerLabel({
+  status,
+  hasState,
+  gitIsAhead,
+}: {
+  status: UrlRefStatus;
+  hasState: boolean;
+  gitIsAhead?: boolean;
+}) {
+  if (gitIsAhead && hasState) {
+    switch (status) {
+      case "match":
+        return (
+          <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
+            behind
+          </span>
+        );
+      case "behind":
+        return (
+          <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
+            unsigned
+          </span>
+        );
+      default:
+        break;
+    }
+  }
+  switch (status) {
+    case "match":
+      return (
+        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 shrink-0">
+          {hasState ? "matches nostr" : "in sync"}
+        </span>
+      );
+    case "behind":
+      return (
+        <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
+          differs
+        </span>
+      );
+    case "ahead":
+      return (
+        <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
+          ahead
+        </span>
+      );
+    case "error":
+      return (
+        <span className="text-[10px] text-muted-foreground/60 shrink-0">
+          error
+        </span>
+      );
+    case "connected":
+      return (
+        <span className="text-[10px] text-muted-foreground/40 shrink-0">
+          checking…
+        </span>
+      );
+    case "unknown":
+      return (
+        <span className="text-[10px] text-muted-foreground/40 shrink-0">…</span>
+      );
+  }
+}
+
 /**
- * The source label shown at the top of the popover.
- *
- * Scenarios:
- *   - Nostr state exists and is current → "nostr" (emerald)
- *   - Nostr state exists but git server is ahead → git domain (amber)
- *   - No Nostr state → git domain (muted)
- *   - Loading → "nostr" (muted, still checking)
+ * A single git server row in the source selector dropdown.
+ * Clicking selects it as the verification source (if selectable).
  */
+function SourceServerRow({
+  url,
+  urlState,
+  isGrasp,
+  isSelected,
+  hasState,
+  gitIsAhead,
+  stateCreatedAt,
+  gitCommitterDate,
+  pool,
+  onSelect,
+}: {
+  url: string;
+  urlState: UrlState | undefined;
+  isGrasp: boolean;
+  isSelected: boolean;
+  hasState: boolean;
+  gitIsAhead: boolean;
+  stateCreatedAt?: number;
+  gitCommitterDate?: number;
+  pool?: GitGraspPool | null;
+  onSelect: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [serverCommitTs, setServerCommitTs] = useState<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const connectionStatus = urlState?.status ?? "untested";
+  const hasInfoRefs = !!urlState?.infoRefs;
+  const isError =
+    connectionStatus === "permanent-failure" || connectionStatus === "error";
+  const isLoading = !isError && !hasInfoRefs;
+  const isSelectable = hasInfoRefs && !isError;
+
+  // For the server row we show overall connection health, not per-ref status
+  // (per-ref status is shown in the ref list itself once selected)
+  const overallStatus: UrlRefStatus = isError
+    ? "error"
+    : isLoading
+      ? "unknown"
+      : (() => {
+          if (!urlState) return "unknown";
+          const statuses = Object.values(urlState.refStatus);
+          if (statuses.length === 0) return "connected";
+          if (statuses.some((s) => s === "behind" || s === "ahead")) {
+            return gitIsAhead ? "behind" : "behind";
+          }
+          if (
+            statuses.every(
+              (s) => s === "match" || s === "error" || s === "connected",
+            )
+          ) {
+            if (statuses.some((s) => s === "match")) return "match";
+          }
+          return "connected";
+        })();
+
+  const needsTimestampCheck =
+    overallStatus === "behind" &&
+    hasState &&
+    !gitIsAhead &&
+    !!pool &&
+    stateCreatedAt !== undefined;
+
+  useEffect(() => {
+    if (!needsTimestampCheck || !urlState) return;
+    // Find any differing commit to check its timestamp
+    const differingEntry = Object.entries(urlState.refCommits).find(
+      ([refName]) => {
+        const s = urlState.refStatus[refName];
+        return s === "behind" || s === "ahead";
+      },
+    );
+    if (!differingEntry) return;
+
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    pool!
+      .getSingleCommit(differingEntry[1], ac.signal)
+      .then((commit) => {
+        if (ac.signal.aborted || !commit) return;
+        setServerCommitTs(
+          commit.committer?.timestamp ?? commit.author.timestamp,
+        );
+      })
+      .catch(() => {});
+
+    return () => ac.abort();
+  }, [needsTimestampCheck, urlState, pool]);
+
+  const refinedBehindLabel: "behind nostr" | "diverged" | "differs" =
+    !needsTimestampCheck
+      ? "differs"
+      : serverCommitTs === null
+        ? "differs"
+        : serverCommitTs < stateCreatedAt!
+          ? "behind nostr"
+          : "diverged";
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const npub = isGrasp ? (graspCloneUrlNpub(url) ?? undefined) : undefined;
+  const pubkey = npub ? npubToPubkey(npub) : undefined;
+  const displayUrl = isGrasp ? condenseGraspUrl(url) : url;
+
+  const serverIsUnsignedAhead =
+    overallStatus === "behind" && hasState && gitIsAhead;
+  const serverIsSignedOnly =
+    overallStatus === "match" && hasState && gitIsAhead;
+
+  // Highlight color for selected state
+  const selectedHighlight = isSelected
+    ? gitIsAhead
+      ? ("amber" as const)
+      : ("emerald" as const)
+    : null;
+
+  return (
+    <button
+      onClick={isSelectable ? onSelect : undefined}
+      disabled={!isSelectable}
+      className={cn(
+        "w-full text-left flex items-start gap-2.5 px-4 py-2 text-xs group transition-colors relative",
+        isSelectable ? "cursor-pointer" : "cursor-not-allowed opacity-60",
+        selectedHighlight === "emerald" &&
+          "bg-emerald-500/5 border-l-2 border-emerald-500 pl-[14px] hover:bg-emerald-500/10",
+        selectedHighlight === "amber" &&
+          "bg-amber-500/5 border-l-2 border-amber-500 pl-[14px] hover:bg-amber-500/10",
+        !selectedHighlight && isSelectable && "hover:bg-accent/30",
+      )}
+    >
+      <SourceServerDot status={overallStatus} gitIsAhead={gitIsAhead} />
+
+      <div className="min-w-0 flex-1">
+        {/* URL + identity bubble */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p
+            className={cn(
+              "font-mono text-[10px] break-all leading-snug",
+              isError ? "text-muted-foreground/60" : "text-foreground/80",
+            )}
+            title={url}
+          >
+            {displayUrl}
+          </p>
+          {isGrasp && (pubkey ?? npub) && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border border-border/60 bg-popover px-1.5 py-0.5 shadow-sm whitespace-nowrap font-sans leading-none shrink-0",
+                isError && "opacity-60 grayscale",
+              )}
+            >
+              {pubkey ? (
+                <>
+                  <UserAvatar
+                    pubkey={pubkey}
+                    size="xs"
+                    className="h-3.5 w-3.5 text-[6px] shrink-0"
+                  />
+                  <UserName
+                    pubkey={pubkey}
+                    className="text-[10px] text-muted-foreground font-normal"
+                  />
+                </>
+              ) : (
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {condenseNpub(npub!)}
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+
+        {/* Sub-line detail */}
+        {serverIsUnsignedAhead && (
+          <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+            unsigned commits ahead of nostr state
+            {gitCommitterDate && (
+              <span className="text-muted-foreground/70">
+                {" "}
+                (
+                {safeFormatDistanceToNow(gitCommitterDate, { addSuffix: true })}
+                )
+              </span>
+            )}
+          </p>
+        )}
+        {serverIsSignedOnly && (
+          <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+            serving nostr state · another server has newer unsigned commits
+          </p>
+        )}
+        {overallStatus === "behind" && !gitIsAhead && (
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            {refinedBehindLabel === "behind nostr"
+              ? "commit older than nostr state"
+              : refinedBehindLabel === "diverged"
+                ? "commit diverged from nostr state"
+                : "differs from nostr state"}
+          </p>
+        )}
+        {isError && (
+          <ErrorDetail
+            errorKind={urlState?.lastErrorKind}
+            usesProxy={urlState?.usesProxy ?? false}
+          />
+        )}
+        {isLoading && (
+          <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+            fetching…
+          </p>
+        )}
+        {!isError && !isLoading && overallStatus === "connected" && (
+          <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+            reachable — waiting for state…
+          </p>
+        )}
+      </div>
+
+      {urlState?.usesProxy && <ProxyBadge />}
+
+      {/* Copy URL icon — only on hover, stops propagation so it doesn't select */}
+      {isSelectable && (
+        <span
+          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground mt-0.5"
+          onClick={handleCopy}
+          aria-label="Copy URL"
+        >
+          {copied ? (
+            <Check className="h-3 w-3 text-emerald-500" />
+          ) : (
+            <Copy className="h-3 w-3" />
+          )}
+        </span>
+      )}
+
+      {/* Right-aligned status label */}
+      <SourceServerLabel
+        status={overallStatus}
+        hasState={hasState}
+        gitIsAhead={gitIsAhead}
+      />
+    </button>
+  );
+}
+
+/**
+ * The source selector dropdown panel — shown inside a nested Popover
+ * triggered from the SourceHeader row.
+ *
+ * Shows:
+ *   - Nostr state row (always first, always selectable)
+ *   - Grasp server rows (if any)
+ *   - Other git server rows
+ *
+ * Clicking a selectable row sets it as the verification source.
+ */
+function SourceSelectorPanel({
+  selectedSource,
+  onSelectSource,
+  repoState,
+  repoRelayEose,
+  stateCreatedAt,
+  urlStates,
+  cloneUrls,
+  graspCloneUrls,
+  additionalGitServerUrls,
+  stateBehindGit,
+  poolWarning,
+  pool,
+}: {
+  selectedSource: string;
+  onSelectSource: (source: string) => void;
+  repoState: RepositoryState | null | undefined;
+  repoRelayEose: boolean;
+  stateCreatedAt?: number;
+  urlStates: Record<string, UrlState>;
+  cloneUrls: string[];
+  graspCloneUrls: string[];
+  additionalGitServerUrls: string[];
+  stateBehindGit: boolean;
+  poolWarning?: PoolWarning | null;
+  pool?: GitGraspPool | null;
+}) {
+  const hasState =
+    repoRelayEose && repoState !== null && repoState !== undefined;
+  const gitIsAhead = poolWarning?.kind === "state-behind-git";
+  const gitCommitterDate =
+    poolWarning?.kind === "state-behind-git"
+      ? poolWarning.gitCommitterDate
+      : undefined;
+
+  const usesGrasp = graspCloneUrls.length > 0;
+  const graspUrls = cloneUrls.filter((u) => graspCloneUrls.includes(u));
+  const otherUrls = cloneUrls.filter((u) =>
+    additionalGitServerUrls.includes(u),
+  );
+
+  const nostrSubLine = useMemo(() => {
+    if (repoState === undefined || !repoRelayEose) return "Checking relays…";
+    if (repoState === null) return "No signed state published";
+    if (stateCreatedAt) {
+      return `Published ${safeFormatDistanceToNow(stateCreatedAt, { addSuffix: true })}`;
+    }
+    return "Signed state available";
+  }, [repoState, repoRelayEose, stateCreatedAt]);
+
+  const nostrIsSelected = selectedSource === "nostr";
+
+  return (
+    <div className="w-full">
+      {/* Header */}
+      <div className="px-4 py-2.5 border-b border-border/40">
+        <p className="text-xs font-semibold text-foreground">
+          Verification source
+        </p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Select which source to compare refs against the Nostr state
+        </p>
+      </div>
+
+      <ScrollArea className="max-h-[360px]">
+        {/* Nostr row */}
+        <div className="py-1">
+          <button
+            onClick={() => onSelectSource("nostr")}
+            className={cn(
+              "w-full text-left flex items-start gap-2.5 px-4 py-2 text-xs group transition-colors cursor-pointer",
+              nostrIsSelected
+                ? stateBehindGit
+                  ? "bg-amber-500/5 border-l-2 border-amber-500 pl-[14px] hover:bg-amber-500/10"
+                  : "bg-purple-500/5 border-l-2 border-purple-500 pl-[14px] hover:bg-purple-500/10"
+                : "hover:bg-accent/30",
+            )}
+          >
+            <Radio
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 mt-0.5",
+                repoState === undefined || !repoRelayEose
+                  ? "text-muted-foreground/40"
+                  : repoState === null
+                    ? "text-muted-foreground/40"
+                    : stateBehindGit
+                      ? "text-amber-500"
+                      : "text-purple-500 dark:text-purple-400",
+              )}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-foreground/90 text-[11px]">
+                nostr
+              </p>
+              <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                {nostrSubLine}
+              </p>
+            </div>
+            <span
+              className={cn(
+                "text-[10px] shrink-0",
+                repoState === null || !repoRelayEose
+                  ? "text-muted-foreground/40"
+                  : stateBehindGit
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-purple-600 dark:text-purple-400",
+              )}
+            >
+              {repoState === undefined || !repoRelayEose
+                ? "loading"
+                : repoState === null
+                  ? "no state"
+                  : stateBehindGit
+                    ? "behind"
+                    : "authority"}
+            </span>
+          </button>
+        </div>
+
+        {/* Grasp servers */}
+        {usesGrasp && graspUrls.length > 0 && (
+          <>
+            <Separator />
+            <div className="py-1">
+              <div className="flex items-center gap-1.5 px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                <GraspLogo className="h-3 w-3 text-pink-500" />
+                Grasp Servers
+              </div>
+              {graspUrls.map((url) => (
+                <SourceServerRow
+                  key={url}
+                  url={url}
+                  urlState={urlStates[url]}
+                  isGrasp={true}
+                  isSelected={selectedSource === url}
+                  hasState={hasState}
+                  gitIsAhead={gitIsAhead}
+                  stateCreatedAt={stateCreatedAt}
+                  gitCommitterDate={gitCommitterDate}
+                  pool={pool}
+                  onSelect={() => onSelectSource(url)}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Separator between sections */}
+        {usesGrasp && otherUrls.length > 0 && <Separator />}
+
+        {/* Other git servers */}
+        {otherUrls.length > 0 && (
+          <div className="py-1">
+            <div className="flex items-center gap-1.5 px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              <Server className="h-3 w-3" />
+              {usesGrasp ? "Other Git Servers" : "Git Servers"}
+            </div>
+            {otherUrls.map((url) => (
+              <SourceServerRow
+                key={url}
+                url={url}
+                urlState={urlStates[url]}
+                isGrasp={false}
+                isSelected={selectedSource === url}
+                hasState={hasState}
+                gitIsAhead={gitIsAhead}
+                stateCreatedAt={stateCreatedAt}
+                gitCommitterDate={gitCommitterDate}
+                pool={pool}
+                onSelect={() => onSelectSource(url)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Fallback: cloneUrls not split into grasp/other */}
+        {!usesGrasp && otherUrls.length === 0 && cloneUrls.length > 0 && (
+          <div className="py-1">
+            <div className="flex items-center gap-1.5 px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              <Server className="h-3 w-3" />
+              Git Servers
+            </div>
+            {cloneUrls.map((url) => (
+              <SourceServerRow
+                key={url}
+                url={url}
+                urlState={urlStates[url]}
+                isGrasp={false}
+                isSelected={selectedSource === url}
+                hasState={hasState}
+                gitIsAhead={gitIsAhead}
+                stateCreatedAt={stateCreatedAt}
+                gitCommitterDate={gitCommitterDate}
+                pool={pool}
+                onSelect={() => onSelectSource(url)}
+              />
+            ))}
+          </div>
+        )}
+      </ScrollArea>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Source header: clickable row that opens the source selector
+// ---------------------------------------------------------------------------
+
 function SourceHeader({
   repoState,
   repoRelayEose,
@@ -716,8 +1461,12 @@ function SourceHeader({
   refsWithStatus,
   stateCreatedAt,
   cloneUrls,
+  graspCloneUrls,
+  additionalGitServerUrls,
   urlStates,
   pool,
+  selectedSource,
+  onSelectSource,
 }: {
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
@@ -729,9 +1478,15 @@ function SourceHeader({
   refsWithStatus: RefWithStatus[];
   stateCreatedAt?: number;
   cloneUrls: string[];
+  graspCloneUrls: string[];
+  additionalGitServerUrls: string[];
   urlStates: Record<string, UrlState>;
   pool?: GitGraspPool | null;
+  selectedSource: string;
+  onSelectSource: (source: string) => void;
 }) {
+  const [selectorOpen, setSelectorOpen] = useState(false);
+
   const gitSourceUrl =
     poolWarning?.kind === "state-behind-git"
       ? poolWarning.gitServerUrl
@@ -742,123 +1497,190 @@ function SourceHeader({
   const isGitSource = stateBehindGit || isNoState;
   const hasProblems = mismatchCount > 0 || stateBehindGit;
 
-  const sourceLabel = isGitSource && gitDomain ? gitDomain : "nostr";
-  const sourceIsNostr = !isGitSource;
+  // Determine display source label
+  const isManualGitSource = selectedSource !== "nostr";
+  const sourceLabel = isManualGitSource
+    ? shortServerLabel(selectedSource)
+    : isGitSource && gitDomain
+      ? gitDomain
+      : "nostr";
+  const sourceIsNostr = !isManualGitSource && !isGitSource;
 
   const defaultBranchName = useMemo(() => {
     return refsWithStatus.find((r) => r.isDefault && r.isBranch)?.name;
   }, [refsWithStatus]);
 
-  const showDiffSummary = hasProblems && !isLoading;
+  // Only show DiffSummaryBar when viewing nostr source
+  const showDiffSummary =
+    hasProblems && !isLoading && selectedSource === "nostr";
 
   return (
     <>
-      <div
-        className={cn(
-          "flex items-center gap-2 px-3 py-2 border-b text-[11px]",
-          hasProblems
-            ? "border-amber-500/30 bg-amber-500/5"
-            : "border-border/40 bg-muted/20",
-          showDiffSummary && "border-b-0",
-        )}
-      >
-        {/* Source icon */}
-        {sourceIsNostr ? (
-          <Radio
+      {/* Clickable source row — opens source selector */}
+      <Popover open={selectorOpen} onOpenChange={setSelectorOpen} modal={false}>
+        <PopoverTrigger asChild>
+          <button
             className={cn(
-              "h-3 w-3 shrink-0",
-              isLoading
-                ? "text-muted-foreground/40"
-                : "text-purple-500 dark:text-purple-400",
+              "flex items-center gap-2 px-3 py-2 border-b w-full text-left text-[11px] transition-colors",
+              hasProblems && selectedSource === "nostr"
+                ? "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10"
+                : "border-border/40 bg-muted/20 hover:bg-accent/40",
+              showDiffSummary && "border-b-0",
             )}
-          />
-        ) : (
-          <Server
-            className={cn(
-              "h-3 w-3 shrink-0",
-              hasProblems ? "text-amber-500" : "text-muted-foreground/60",
+          >
+            {/* Source icon */}
+            {sourceIsNostr ? (
+              <Radio
+                className={cn(
+                  "h-3 w-3 shrink-0",
+                  isLoading
+                    ? "text-muted-foreground/40"
+                    : "text-purple-500 dark:text-purple-400",
+                )}
+              />
+            ) : (
+              <Server
+                className={cn(
+                  "h-3 w-3 shrink-0",
+                  hasProblems && selectedSource === "nostr"
+                    ? "text-amber-500"
+                    : isManualGitSource
+                      ? "text-blue-500 dark:text-blue-400"
+                      : "text-muted-foreground/60",
+                )}
+              />
             )}
-          />
-        )}
 
-        <span className="text-muted-foreground/60 shrink-0">Source</span>
+            <span className="text-muted-foreground/60 shrink-0">Source</span>
 
-        <span
-          className={cn(
-            "font-medium truncate",
-            isLoading
-              ? "text-muted-foreground/50"
-              : sourceIsNostr
-                ? "text-purple-600 dark:text-purple-400"
-                : hasProblems
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-foreground/80",
-          )}
+            {/* Source label + subtle chevron */}
+            <span className="flex items-center gap-0.5">
+              <span
+                className={cn(
+                  "font-medium truncate",
+                  isLoading
+                    ? "text-muted-foreground/50"
+                    : isManualGitSource
+                      ? "text-blue-600 dark:text-blue-400"
+                      : sourceIsNostr
+                        ? "text-purple-600 dark:text-purple-400"
+                        : hasProblems
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-foreground/80",
+                )}
+              >
+                {sourceLabel}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-3 w-3 shrink-0 transition-transform",
+                  selectorOpen && "rotate-180",
+                  isLoading
+                    ? "text-muted-foreground/30"
+                    : isManualGitSource
+                      ? "text-blue-500/60 dark:text-blue-400/60"
+                      : sourceIsNostr
+                        ? "text-purple-500/60 dark:text-purple-400/60"
+                        : hasProblems
+                          ? "text-amber-500/60"
+                          : "text-muted-foreground/40",
+                )}
+              />
+            </span>
+
+            {/* Right-side status badge */}
+            {hasProblems && selectedSource === "nostr" ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default">
+                    <AlertTriangle className="h-3 w-3 text-amber-500" />
+                    <span className="text-amber-600 dark:text-amber-400 font-medium">
+                      {stateBehindGit
+                        ? "ahead of nostr"
+                        : mismatchCount === 1
+                          ? "1 ref differs"
+                          : `${mismatchCount} refs differ`}
+                    </span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="bottom"
+                  className="max-w-[260px] text-xs"
+                  sideOffset={6}
+                >
+                  {stateBehindGit ? (
+                    <span>
+                      The git server has newer unsigned commits than the
+                      maintainer's last Nostr state. Showing the git server's
+                      latest data.
+                    </span>
+                  ) : (
+                    <span>
+                      {mismatchCount === 1
+                        ? "1 ref differs"
+                        : `${mismatchCount} refs differ`}{" "}
+                      from the Nostr state. This could mean a recent push hasn't
+                      been re-published to Nostr yet.
+                    </span>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            ) : isNoState && selectedSource === "nostr" ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default text-muted-foreground/60">
+                    <span>no Nostr state</span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="bottom"
+                  className="max-w-[240px] text-xs"
+                  sideOffset={6}
+                >
+                  The maintainer hasn't published a Nostr state for this repo
+                  yet. Showing git server data only.
+                </TooltipContent>
+              </Tooltip>
+            ) : isManualGitSource ? (
+              <span className="ml-auto text-[10px] text-blue-600/70 dark:text-blue-400/60 shrink-0">
+                manual
+              </span>
+            ) : !isLoading && sourceIsNostr ? (
+              <span className="ml-auto text-muted-foreground/50 shrink-0">
+                all git servers in sync
+              </span>
+            ) : null}
+          </button>
+        </PopoverTrigger>
+
+        <PopoverContent
+          className="p-0 overflow-hidden w-[480px] z-50"
+          align="start"
+          side="bottom"
+          sideOffset={0}
+          avoidCollisions={true}
         >
-          {sourceLabel}
-        </span>
+          <SourceSelectorPanel
+            selectedSource={selectedSource}
+            onSelectSource={(src) => {
+              onSelectSource(src);
+              setSelectorOpen(false);
+            }}
+            repoState={repoState}
+            repoRelayEose={repoRelayEose}
+            stateCreatedAt={stateCreatedAt}
+            urlStates={urlStates}
+            cloneUrls={cloneUrls}
+            graspCloneUrls={graspCloneUrls}
+            additionalGitServerUrls={additionalGitServerUrls}
+            stateBehindGit={stateBehindGit}
+            poolWarning={poolWarning}
+            pool={pool}
+          />
+        </PopoverContent>
+      </Popover>
 
-        {/* Right-side status badge */}
-        {hasProblems ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default">
-                <AlertTriangle className="h-3 w-3 text-amber-500" />
-                <span className="text-amber-600 dark:text-amber-400 font-medium">
-                  {stateBehindGit
-                    ? "ahead of nostr"
-                    : mismatchCount === 1
-                      ? "1 ref differs"
-                      : `${mismatchCount} refs differ`}
-                </span>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent
-              side="bottom"
-              className="max-w-[260px] text-xs"
-              sideOffset={6}
-            >
-              {stateBehindGit ? (
-                <span>
-                  The git server has newer unsigned commits than the
-                  maintainer's last Nostr state. Showing the git server's latest
-                  data.
-                </span>
-              ) : (
-                <span>
-                  {mismatchCount === 1
-                    ? "1 ref differs"
-                    : `${mismatchCount} refs differ`}{" "}
-                  from the Nostr state. This could mean a recent push hasn't
-                  been re-published to Nostr yet.
-                </span>
-              )}
-            </TooltipContent>
-          </Tooltip>
-        ) : isNoState ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default text-muted-foreground/60">
-                <span>no Nostr state</span>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent
-              side="bottom"
-              className="max-w-[240px] text-xs"
-              sideOffset={6}
-            >
-              The maintainer hasn't published a Nostr state for this repo yet.
-              Showing git server data only.
-            </TooltipContent>
-          </Tooltip>
-        ) : !isLoading && sourceIsNostr ? (
-          <span className="ml-auto text-muted-foreground/50 shrink-0">
-            all git servers in sync
-          </span>
-        ) : null}
-      </div>
-
-      {/* Subtle expandable diff summary */}
+      {/* Subtle expandable diff summary — only for nostr source */}
       {showDiffSummary && (
         <DiffSummaryBar
           refsWithStatus={refsWithStatus}
@@ -891,16 +1713,18 @@ export function RefSelector({
   stateCreatedAt,
   urlStates = {},
   cloneUrls = [],
+  graspCloneUrls = [],
+  additionalGitServerUrls = [],
   pool,
 }: RefSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [selectedSource, setSelectedSource] = useState<string>("nostr");
   const isMobile = useIsMobile();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
 
   // Recompute popover position/width on open and resize.
-  // Height is handled purely via CSS using --radix-popover-content-available-height.
   const updatePopoverStyle = useCallback(() => {
     if (!isMobile) {
       setPopoverStyle({});
@@ -909,8 +1733,6 @@ export function RefSelector({
     const el = triggerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    // Radix positions the popover at the trigger's left edge (align="start").
-    // Shift left to leave 8px margin each side.
     const margin = 8;
     setPopoverStyle({
       width: `calc(100vw - ${margin * 2}px)`,
@@ -926,19 +1748,16 @@ export function RefSelector({
     return () => window.removeEventListener("resize", updatePopoverStyle);
   }, [open, updatePopoverStyle]);
 
-  // On mobile, scroll the trigger into view when the dropdown opens so both
-  // the button and the list are visible simultaneously.
+  // On mobile, scroll the trigger into view when the dropdown opens.
   useEffect(() => {
     if (!open || !isMobile) return;
     const el = triggerRef.current;
     if (!el) return;
-    // Small delay to let the popover render first.
     const id = setTimeout(() => {
       const stickyHeader = document.querySelector("header.sticky");
       const headerHeight = stickyHeader
         ? stickyHeader.getBoundingClientRect().height
         : 0;
-      // Scroll so the trigger sits just below the sticky header.
       const triggerTop =
         el.getBoundingClientRect().top + window.scrollY - headerHeight - 8;
       window.scrollTo({ top: triggerTop, behavior: "smooth" });
@@ -946,22 +1765,49 @@ export function RefSelector({
     return () => clearTimeout(id);
   }, [open, isMobile]);
 
-  // Compute status for each ref
-  const refsWithStatus: RefWithStatus[] = useMemo(
-    () =>
-      refs.map((ref) => ({
+  // Compute status for each ref — against selectedSource
+  const refsWithStatus: RefWithStatus[] = useMemo(() => {
+    if (selectedSource !== "nostr") {
+      const serverUrlState = urlStates[selectedSource];
+      if (!serverUrlState?.infoRefs) {
+        // Server not ready — fall back to nostr comparison
+        return refs.map((ref) => ({
+          ...ref,
+          ...getRefStatus(
+            ref,
+            repoState,
+            repoRelayEose,
+            stateBehindGit,
+            urlStates,
+            cloneUrls,
+          ),
+        }));
+      }
+      return refs.map((ref) => ({
         ...ref,
-        ...getRefStatus(
-          ref,
-          repoState,
-          repoRelayEose,
-          stateBehindGit,
-          urlStates,
-          cloneUrls,
-        ),
-      })),
-    [refs, repoState, repoRelayEose, stateBehindGit, urlStates, cloneUrls],
-  );
+        ...getRefStatusForServer(ref, serverUrlState, repoState, repoRelayEose),
+      }));
+    }
+    return refs.map((ref) => ({
+      ...ref,
+      ...getRefStatus(
+        ref,
+        repoState,
+        repoRelayEose,
+        stateBehindGit,
+        urlStates,
+        cloneUrls,
+      ),
+    }));
+  }, [
+    refs,
+    repoState,
+    repoRelayEose,
+    stateBehindGit,
+    urlStates,
+    cloneUrls,
+    selectedSource,
+  ]);
 
   // Split into branches and tags
   const branches = useMemo(
@@ -998,31 +1844,28 @@ export function RefSelector({
   );
   const currentStatus = currentRefWithStatus?.status ?? "loading";
 
-  // Show the status indicator in the trigger when we have a definitive status
-  // for the selected ref.
   const showStatusIcon =
-    currentStatus !== "loading" && currentStatus !== "no-state";
+    currentStatus !== "loading" &&
+    currentStatus !== "no-state" &&
+    currentStatus !== "not-on-server";
 
   // Amber trigger border when there are genuine mismatches or state is behind
   const showAmberTrigger = mismatchCount > 0 || stateBehindGit;
 
-  // Determine the source prefix for the trigger.
-  //
-  // When state-behind-git, the warning carries the exact server URL whose
-  // unsigned commit is being displayed. For no-state, fall back to the pool's
-  // winner URL. When Nostr state is current (verified / mismatch / loading),
-  // always show "nostr".
+  // Source prefix in trigger button
   const gitSourceUrl =
     poolWarning?.kind === "state-behind-git"
       ? poolWarning.gitServerUrl
       : winnerUrl;
   const gitDomain = gitSourceUrl ? gitServerDomain(gitSourceUrl) : null;
 
-  // Only show a source prefix in the trigger when the source is a git server
-  // (not Nostr). In the happy path (Nostr is current) the prefix is omitted
-  // to keep the trigger compact — the popover header always shows the source.
-  const showGitPrefix = (stateBehindGit || isNoState) && gitDomain;
-  const sourcePrefix = gitDomain;
+  // Show source prefix when: user manually selected a git server, OR auto-detected git source
+  const isManualGitSource = selectedSource !== "nostr";
+  const showGitPrefix =
+    isManualGitSource || ((stateBehindGit || isNoState) && gitDomain);
+  const sourcePrefix = isManualGitSource
+    ? gitServerDomain(selectedSource)
+    : gitDomain;
 
   const handleSelect = (refName: string) => {
     onRefChange(refName);
@@ -1043,20 +1886,24 @@ export function RefSelector({
             "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs transition-all duration-200",
             "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             "max-w-[320px]",
-            showAmberTrigger
+            showAmberTrigger && selectedSource === "nostr"
               ? "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10"
-              : "border-border/60 bg-background",
+              : isManualGitSource
+                ? "border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10"
+                : "border-border/60 bg-background",
           )}
         >
-          {/* Source prefix — only shown when source is a git server, not nostr */}
-          {showGitPrefix && (
+          {/* Source prefix — shown when source is a git server */}
+          {showGitPrefix && sourcePrefix && (
             <>
               <span
                 className={cn(
                   "truncate max-w-[100px] shrink-0",
-                  showAmberTrigger
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-muted-foreground/70",
+                  isManualGitSource
+                    ? "text-blue-600 dark:text-blue-400"
+                    : showAmberTrigger
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-muted-foreground/70",
                 )}
               >
                 {sourcePrefix}
@@ -1091,7 +1938,7 @@ export function RefSelector({
                 <ShieldQuestion className="h-3.5 w-3.5 text-muted-foreground/50" />
               )}
             </span>
-          ) : mismatchCount > 0 ? (
+          ) : mismatchCount > 0 && selectedSource === "nostr" ? (
             <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0 ml-0.5" />
           ) : null}
 
@@ -1106,7 +1953,7 @@ export function RefSelector({
         style={popoverStyle}
         avoidCollisions={!isMobile}
       >
-        {/* Source header — always shown, replaces the old banners */}
+        {/* Source header — clickable, opens source selector */}
         <SourceHeader
           repoState={repoState}
           repoRelayEose={repoRelayEose}
@@ -1118,11 +1965,15 @@ export function RefSelector({
           refsWithStatus={refsWithStatus}
           stateCreatedAt={stateCreatedAt}
           cloneUrls={cloneUrls}
+          graspCloneUrls={graspCloneUrls}
+          additionalGitServerUrls={additionalGitServerUrls}
           urlStates={urlStates}
           pool={pool}
+          selectedSource={selectedSource}
+          onSelectSource={setSelectedSource}
         />
 
-        {/* Search input — hidden when all refs fit in the dropdown */}
+        {/* Search input */}
         {showSearch && (
           <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40">
             <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -1136,14 +1987,6 @@ export function RefSelector({
           </div>
         )}
 
-        {/*
-         * Both height and maxHeight must be set so the Radix scrollbar track
-         * (which uses h-full) has a definite height to render against.
-         * Subtract fixed parts (source header ~36px, optional search ~44px,
-         * optional footer ~36px, separator ~1px) + 16px bottom gap for shadow.
-         * type="always" keeps the scrollbar permanently visible so users know
-         * the list is scrollable.
-         */}
         <ScrollArea
           type="always"
           style={{
@@ -1171,6 +2014,7 @@ export function RefSelector({
                       refWithStatus={branch}
                       isSelected={branch.name === currentRef}
                       onSelect={() => handleSelect(branch.name)}
+                      selectedSource={selectedSource}
                     />
                   ))}
                 </div>
@@ -1180,7 +2024,7 @@ export function RefSelector({
             {/* Separator between branches and tags */}
             {filteredBranches.length > 0 && <Separator className="my-2" />}
 
-            {/* Tags section — always shown so the count is visible */}
+            {/* Tags section */}
             <div>
               <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                 <Tag className="h-3 w-3" />
@@ -1197,6 +2041,7 @@ export function RefSelector({
                       refWithStatus={tag}
                       isSelected={tag.name === currentRef}
                       onSelect={() => handleSelect(tag.name)}
+                      selectedSource={selectedSource}
                     />
                   ))}
                 </div>
@@ -1216,8 +2061,30 @@ export function RefSelector({
           </div>
         </ScrollArea>
 
-        {/* Footer with legend */}
-        {repoState !== null && repoState !== undefined && (
+        {/* Footer legend — only shown for nostr source with state */}
+        {repoState !== null &&
+          repoState !== undefined &&
+          selectedSource === "nostr" && (
+            <>
+              <Separator />
+              <div className="px-3 py-2 flex items-center gap-3 text-[11px] text-muted-foreground/60">
+                <span className="flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3 text-emerald-500/70" />
+                  matches nostr
+                </span>
+                <span className="flex items-center gap-1">
+                  <ShieldAlert className="h-3 w-3 text-amber-500/70" />
+                  differs from nostr
+                </span>
+                <span className="flex items-center gap-1">
+                  <ShieldQuestion className="h-3 w-3 text-muted-foreground/40" />
+                  git server only
+                </span>
+              </div>
+            </>
+          )}
+        {/* Footer legend for git server source */}
+        {selectedSource !== "nostr" && (
           <>
             <Separator />
             <div className="px-3 py-2 flex items-center gap-3 text-[11px] text-muted-foreground/60">
@@ -1230,8 +2097,8 @@ export function RefSelector({
                 differs from nostr
               </span>
               <span className="flex items-center gap-1">
-                <ShieldQuestion className="h-3 w-3 text-muted-foreground/40" />
-                git server only
+                <Minus className="h-3 w-3 text-muted-foreground/30" />
+                not on this server
               </span>
             </div>
           </>

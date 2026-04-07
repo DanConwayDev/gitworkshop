@@ -536,6 +536,8 @@ function LocatorBar({
             stateCreatedAt={repoState?.event.created_at}
             urlStates={urlStates}
             cloneUrls={cloneUrls}
+            graspCloneUrls={graspCloneUrls}
+            additionalGitServerUrls={additionalGitServerUrls}
             pool={pool}
           />
         ) : loading ? (
