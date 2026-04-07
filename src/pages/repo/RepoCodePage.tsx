@@ -344,9 +344,9 @@ function gitServerDomain(url: string): string {
 
 /**
  * Banner shown when one or more git servers have commits newer than the
- * signed Nostr state. Tells the user which server is ahead and how stale
- * the signed state is, so they understand why the code view may differ from
- * what the maintainer last signed.
+ * Nostr-announced state. Tells the user which server is ahead and how stale
+ * the Nostr state is, so they understand why the code view may differ from
+ * what the maintainer last announced on Nostr.
  */
 function GitServerAheadBanner({
   warning,
@@ -377,18 +377,18 @@ function GitServerAheadBanner({
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="space-y-0.5 min-w-0">
           <p className="font-medium">
-            {domain} is ahead of the signed Nostr state
+            {domain} has commits not yet announced on Nostr
           </p>
           <p className="text-xs text-amber-600/80 dark:text-amber-400/70 leading-relaxed">
             Showing the git server&apos;s latest commit{" "}
             <code className="font-mono bg-amber-500/10 px-1 rounded">
               {shortGit}
             </code>{" "}
-            ({gitAge}). The maintainer last signed{" "}
+            ({gitAge}) — ahead of the last Nostr-announced commit{" "}
             <code className="font-mono bg-amber-500/10 px-1 rounded">
               {shortState}
             </code>{" "}
-            ({stateAge}) — the git server has newer unsigned commits.
+            ({stateAge}).
           </p>
         </div>
       </div>
@@ -401,14 +401,16 @@ function GitServerAheadBanner({
       <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="space-y-0.5">
-          <p className="font-medium">Signed commit not found on git server</p>
+          <p className="font-medium">
+            Nostr-announced commit not found on git server
+          </p>
           <p className="text-xs text-amber-600/80 dark:text-amber-400/70">
-            The maintainer signed commit{" "}
+            The maintainer announced commit{" "}
             <code className="font-mono bg-amber-500/10 px-1 rounded">
               {shortState}
             </code>{" "}
-            as HEAD, but it couldn&apos;t be found on any git server. Showing
-            the latest available commit instead.
+            as HEAD on Nostr, but it couldn&apos;t be found on any git server.
+            Showing the latest available commit instead.
           </p>
         </div>
       </div>

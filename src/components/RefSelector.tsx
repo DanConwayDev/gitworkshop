@@ -64,7 +64,7 @@ export interface RefSelectorProps {
   /** True while data is still being fetched */
   loading?: boolean;
   /**
-   * True when the git server is confirmed ahead of the signed Nostr state.
+   * True when the git server is confirmed ahead of the Nostr-announced state.
    * Ref commit differences are expected in this case and should not be shown
    * as suspicious mismatches.
    */
@@ -72,7 +72,7 @@ export interface RefSelectorProps {
   /**
    * Warning from the git pool (state-behind-git, state-commit-unavailable).
    * When state-behind-git, the warning's gitServerUrl identifies the server
-   * whose unsigned commit is being displayed.
+   * whose unannounced commit is being displayed.
    */
   poolWarning?: PoolWarning | null;
   /**
@@ -941,7 +941,7 @@ function SourceServerLabel({
       case "behind":
         return (
           <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
-            unsigned
+            ahead
           </span>
         );
       default:
@@ -1173,7 +1173,7 @@ function SourceServerRow({
         {/* Sub-line detail */}
         {serverIsUnsignedAhead && (
           <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70 mt-0.5">
-            unsigned commits ahead of nostr state
+            commits not yet announced on Nostr
             {gitCommitterDate && (
               <span className="text-muted-foreground/70">
                 {" "}
@@ -1186,7 +1186,7 @@ function SourceServerRow({
         )}
         {serverIsSignedOnly && (
           <p className="text-[11px] text-muted-foreground/70 mt-0.5">
-            serving nostr state · another server has newer unsigned commits
+            serving Nostr state · another server has unannounced commits
           </p>
         )}
         {overallStatus === "behind" && !gitIsAhead && (
@@ -1297,11 +1297,11 @@ function SourceSelectorPanel({
 
   const nostrSubLine = useMemo(() => {
     if (repoState === undefined || !repoRelayEose) return "Checking relays…";
-    if (repoState === null) return "No signed state published";
+    if (repoState === null) return "No Nostr state published";
     if (stateCreatedAt) {
       return `Published ${safeFormatDistanceToNow(stateCreatedAt, { addSuffix: true })}`;
     }
-    return "Signed state available";
+    return "Nostr state available";
   }, [repoState, repoRelayEose, stateCreatedAt]);
 
   // When the default source is not nostr (git server is ahead or no state),
@@ -1450,7 +1450,7 @@ function SourceSelectorPanel({
                   ? "loading"
                   : repoState === null
                     ? "no state"
-                    : "signed state"}
+                    : "Nostr state"}
               </span>
             </button>
           )}
@@ -1710,9 +1710,8 @@ function SourceHeader({
                 >
                   {stateBehindGit ? (
                     <span>
-                      The git server has newer unsigned commits than the
-                      maintainer's last Nostr state. Showing the git server's
-                      latest data.
+                      The git server has commits not yet announced on Nostr.
+                      Showing the git server's latest data.
                     </span>
                   ) : (
                     <span>

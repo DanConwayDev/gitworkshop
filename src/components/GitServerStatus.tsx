@@ -553,10 +553,10 @@ function ServerRow({
           )}
         </div>
 
-        {/* Server has newer unsigned commits — ahead of the signed state */}
+        {/* Server has unannounced commits — ahead of the Nostr state */}
         {serverIsUnsignedAhead && serverStatus.serverCommit && (
           <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70 mt-0.5">
-            has unsigned commit{" "}
+            has unannounced commit{" "}
             <code className="bg-muted px-1 rounded">
               {serverStatus.serverCommit.slice(0, 8)}
             </code>
@@ -590,10 +590,10 @@ function ServerRow({
           </p>
         )}
 
-        {/* Server only has the old signed commit — another server is ahead */}
+        {/* Server only has the Nostr commit — another server is ahead */}
         {serverIsSignedOnly && serverStatus.serverCommit && (
           <p className="text-[11px] text-muted-foreground/70 mt-0.5">
-            serving signed commit{" "}
+            serving Nostr commit{" "}
             <code className="bg-muted px-1 rounded">
               {serverStatus.serverCommit.slice(0, 8)}
             </code>
@@ -603,11 +603,11 @@ function ServerRow({
                 ({safeFormatDistanceToNow(stateCreatedAt, { addSuffix: true })})
               </span>
             )}{" "}
-            · another server has newer unsigned commits
+            · another server has unannounced commits
           </p>
         )}
 
-        {/* Normal "behind signed" case — server is missing commits the signed state has */}
+        {/* Normal "behind" case — server is missing commits the Nostr state has */}
         {serverStatus.status === "behind" &&
           !gitIsAhead &&
           serverStatus.serverCommit && (
@@ -877,10 +877,9 @@ function GitServerPanel({
         </div>
         <p className="text-xs text-muted-foreground mt-1">
           {hasState && gitIsAhead ? (
-            // Git server is ahead of signed state — reframe the summary
+            // Git server is ahead of Nostr state — reframe the summary
             <span className="text-amber-600/90 dark:text-amber-400/80">
-              At least one server has unsigned commits newer than the signed
-              state for{" "}
+              At least one server has commits not yet announced on Nostr for{" "}
               <code className="font-mono bg-muted px-1 py-0.5 rounded text-[11px]">
                 {currentRefShort}
               </code>
@@ -890,8 +889,8 @@ function GitServerPanel({
               <span className="font-medium text-foreground">
                 {matchingServerCount}/{uniqueServerCount}
               </span>{" "}
-              {uniqueServerCount === 1 ? "server" : "servers"} serving the
-              signed state for{" "}
+              {uniqueServerCount === 1 ? "server" : "servers"} serving the Nostr
+              state for{" "}
               <code className="font-mono bg-muted px-1 py-0.5 rounded text-[11px]">
                 {currentRefShort}
               </code>
@@ -970,7 +969,7 @@ function GitServerPanel({
         <>
           <Separator />
           <div className="px-4 py-2.5 text-[11px] text-muted-foreground/70 leading-relaxed">
-            No signed state — comparing git servers to each other
+            No Nostr state — comparing git servers to each other
           </div>
         </>
       )}
