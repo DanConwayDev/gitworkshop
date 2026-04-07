@@ -154,7 +154,9 @@ export default function RepoCodePage() {
       effectiveSource,
       poolState.urls,
       repoState ?? null,
-      stateBehindGit,
+      // When the user explicitly chose "nostr", treat stateBehindGit as false
+      // so the explorer uses the Nostr state commit rather than the git server's.
+      stateBehindGit && selectedSource !== "nostr",
       resolvedRef,
       resolvedRefIsBranch,
     );
