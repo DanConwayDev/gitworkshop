@@ -642,6 +642,144 @@ function GitServerAheadBanner({
 }
 
 // ---------------------------------------------------------------------------
+// Collapsible path breadcrumb
+// ---------------------------------------------------------------------------
+
+// Approximate px width of a single character at 14px (0.875rem) font size.
+const CHAR_PX = 7.5;
+// Fixed overhead per segment: chevron (14px) + gap (4px) + gap (4px) = ~22px
+const SEG_OVERHEAD_PX = 22;
+// Width of the "…" button
+const ELLIPSIS_PX = 28;
+
+function estimateTextPx(text: string) {
+  return text.length * CHAR_PX;
+}
+
+function CollapsibleBreadcrumb({
+  repoId,
+  pathSegments,
+  currentRef,
+  treeUrl,
+}: {
+  repoId: string;
+  pathSegments: string[];
+  currentRef: string;
+  treeUrl: (ref: string, path?: string) => string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+  // When the user explicitly expands, show everything regardless of width.
+  const [forceExpanded, setForceExpanded] = useState(false);
+
+  // Reset forceExpanded when the path changes.
+  const pathKey = pathSegments.join("/");
+  useEffect(() => {
+    setForceExpanded(false);
+  }, [pathKey]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      setContainerWidth(entries[0].contentRect.width);
+    });
+    ro.observe(el);
+    setContainerWidth(el.getBoundingClientRect().width);
+    return () => ro.disconnect();
+  }, []);
+
+  // Compute how many middle segments (between root and last) we can show.
+  // Always show: root + last. Middle segments are indices 0..n-2 of pathSegments.
+  const lastSegment = pathSegments[pathSegments.length - 1] ?? "";
+  const middleSegments = pathSegments.slice(0, -1);
+
+  // Budget: total width minus root, last segment, their separators.
+  const rootPx = estimateTextPx(repoId) + SEG_OVERHEAD_PX;
+  const lastPx =
+    pathSegments.length > 0 ? estimateTextPx(lastSegment) + SEG_OVERHEAD_PX : 0;
+  // Extra budget consumed by the "…" button + its separator when shown.
+  const ellipsisPx = ELLIPSIS_PX + SEG_OVERHEAD_PX;
+
+  // How many middle segments fit when we also reserve room for the "…" button?
+  let visibleMiddleCount = 0;
+  if (!forceExpanded && containerWidth > 0 && middleSegments.length > 0) {
+    let budget = containerWidth - rootPx - lastPx - ellipsisPx;
+    for (const seg of middleSegments) {
+      const needed = estimateTextPx(seg) + SEG_OVERHEAD_PX;
+      if (budget >= needed) {
+        visibleMiddleCount++;
+        budget -= needed;
+      } else {
+        break;
+      }
+    }
+  }
+
+  const showEllipsis =
+    !forceExpanded && visibleMiddleCount < middleSegments.length;
+  const visibleMiddle = forceExpanded
+    ? middleSegments
+    : middleSegments.slice(0, visibleMiddleCount);
+  const hiddenMiddle = forceExpanded
+    ? []
+    : middleSegments.slice(visibleMiddleCount);
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex items-center gap-1 text-sm min-w-0 w-full flex-nowrap overflow-hidden"
+    >
+      <Link
+        to={treeUrl(currentRef)}
+        className="text-pink-600 dark:text-pink-400 hover:underline font-medium shrink-0"
+        title={repoId}
+      >
+        {repoId}
+      </Link>
+
+      {/* Visible middle segments (before the ellipsis) */}
+      {visibleMiddle.map((seg, i) => {
+        const segPath = pathSegments.slice(0, i + 1).join("/");
+        return (
+          <span key={i} className="flex items-center gap-1 shrink-0">
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <Link
+              to={treeUrl(currentRef, segPath)}
+              className="text-pink-600 dark:text-pink-400 hover:underline"
+            >
+              {seg}
+            </Link>
+          </span>
+        );
+      })}
+
+      {/* Ellipsis button — expands to show hidden middle segments */}
+      {showEllipsis && hiddenMiddle.length > 0 && (
+        <span className="flex items-center gap-1 shrink-0">
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <button
+            onClick={() => setForceExpanded(true)}
+            className="flex items-center justify-center h-5 w-6 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs font-medium"
+            title={`Show hidden path: ${hiddenMiddle.join("/")}`}
+            aria-label="Expand path"
+          >
+            …
+          </button>
+        </span>
+      )}
+
+      {/* Last segment */}
+      {pathSegments.length > 0 && (
+        <span className="flex items-center gap-1 min-w-0">
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="font-medium truncate min-w-0">{lastSegment}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 // Locator bar
 // ---------------------------------------------------------------------------
 
@@ -744,112 +882,94 @@ function LocatorBar({
 
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
-      {/* Top bar: branch selector + breadcrumb + pulling status */}
+      {/* Top bar: branch selector + right-side indicators, then breadcrumb on its own line */}
       <div
         ref={barRef}
         className={cn(
-          "flex items-center gap-2 px-3 py-2 flex-wrap relative",
+          "flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2 relative",
           pulling ? "fetching-gradient" : "bg-muted/30",
         )}
       >
-        {/* Branch/tag selector */}
-        {refs.length > 0 ? (
-          <RefSelector
-            refs={refs}
-            currentRef={currentRef}
-            onRefChange={onRefChange}
-            selectedSource={selectedSource}
-            onSourceChange={onSourceChange}
-            onRefAndSourceChange={onRefAndSourceChange}
-            repoState={repoState}
-            repoRelayEose={repoRelayEose}
-            relayStateMap={relayStateMap}
-            loading={loading}
-            stateBehindGit={stateBehindGit}
-            poolWarning={poolWarning}
-            winnerUrl={winnerUrl}
-            stateCreatedAt={repoState?.event.created_at}
-            urlStates={urlStates}
-            cloneUrls={cloneUrls}
-            graspCloneUrls={graspCloneUrls}
-            additionalGitServerUrls={additionalGitServerUrls}
-            pool={pool}
-          />
-        ) : loading ? (
-          <Skeleton className="h-8 w-28" />
-        ) : null}
+        {/* Row 1: branch/tag selector (shrink-0) + right-side indicators pushed to end */}
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {refs.length > 0 ? (
+            <RefSelector
+              refs={refs}
+              currentRef={currentRef}
+              onRefChange={onRefChange}
+              selectedSource={selectedSource}
+              onSourceChange={onSourceChange}
+              onRefAndSourceChange={onRefAndSourceChange}
+              repoState={repoState}
+              repoRelayEose={repoRelayEose}
+              relayStateMap={relayStateMap}
+              loading={loading}
+              stateBehindGit={stateBehindGit}
+              poolWarning={poolWarning}
+              winnerUrl={winnerUrl}
+              stateCreatedAt={repoState?.event.created_at}
+              urlStates={urlStates}
+              cloneUrls={cloneUrls}
+              graspCloneUrls={graspCloneUrls}
+              additionalGitServerUrls={additionalGitServerUrls}
+              pool={pool}
+            />
+          ) : loading ? (
+            <Skeleton className="h-8 w-28" />
+          ) : null}
 
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-1 text-sm min-w-0 flex-1 flex-wrap">
-          <Link
-            to={treeUrl(currentRef)}
-            className="text-pink-600 dark:text-pink-400 hover:underline font-medium shrink-0"
-          >
-            {repoId}
-          </Link>
-          {pathSegments.map((seg, i) => {
-            const segPath = pathSegments.slice(0, i + 1).join("/");
-            const isLast = i === pathSegments.length - 1;
-            return (
-              <span key={i} className="flex items-center gap-1 min-w-0">
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                {isLast ? (
-                  <span className="font-medium">{seg}</span>
-                ) : (
-                  <Link
-                    to={treeUrl(currentRef, segPath)}
-                    className="text-pink-600 dark:text-pink-400 hover:underline"
-                  >
-                    {seg}
-                  </Link>
-                )}
+          {/* Right side: pulling indicator + server status — pushed to the end of row 1 */}
+          <div className="flex items-center gap-2 ml-auto shrink-0">
+            {pulling ? (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Checking…
               </span>
-            );
-          })}
+            ) : repoState ? (
+              <span
+                ref={checkedRef}
+                className="text-xs text-muted-foreground/60 whitespace-nowrap"
+              >
+                checked just now
+              </span>
+            ) : lastCheckedAt ? (
+              <span
+                ref={checkedRef}
+                className="text-xs text-muted-foreground/60 whitespace-nowrap"
+              >
+                checked{" "}
+                {safeFormatDistanceToNow(lastCheckedAt, { addSuffix: true })}
+              </span>
+            ) : null}
+
+            {cloneUrls.length > 0 && (
+              <GitServerStatus
+                currentRefFull={currentRefFull}
+                currentRefShort={currentRef}
+                repoRelayEose={repoRelayEose}
+                hasStateEvent={hasStateEvent}
+                urlStates={urlStates}
+                cloneUrls={cloneUrls}
+                graspCloneUrls={graspCloneUrls}
+                additionalGitServerUrls={additionalGitServerUrls}
+                crossRefDiscrepancies={crossRefDiscrepancies}
+                poolWarning={poolWarning}
+                stateCreatedAt={repoState?.event.created_at}
+                pool={pool}
+              />
+            )}
+          </div>
         </div>
 
-        {/* Right side: pulling indicator + server status */}
-        {pulling ? (
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Checking…
-          </span>
-        ) : repoState ? (
-          // We have a live Nostr state event subscription — always "just now"
-          // because we're still listening for updates via that subscription.
-          <span
-            ref={checkedRef}
-            className="text-xs text-muted-foreground/60 shrink-0 whitespace-nowrap"
-          >
-            checked just now
-          </span>
-        ) : lastCheckedAt ? (
-          <span
-            ref={checkedRef}
-            className="text-xs text-muted-foreground/60 shrink-0 whitespace-nowrap"
-          >
-            checked{" "}
-            {safeFormatDistanceToNow(lastCheckedAt, { addSuffix: true })}
-          </span>
-        ) : null}
-
-        {/* Git server status indicator — right-most element */}
-        {cloneUrls.length > 0 && (
-          <GitServerStatus
-            currentRefFull={currentRefFull}
-            currentRefShort={currentRef}
-            repoRelayEose={repoRelayEose}
-            hasStateEvent={hasStateEvent}
-            urlStates={urlStates}
-            cloneUrls={cloneUrls}
-            graspCloneUrls={graspCloneUrls}
-            additionalGitServerUrls={additionalGitServerUrls}
-            crossRefDiscrepancies={crossRefDiscrepancies}
-            poolWarning={poolWarning}
-            stateCreatedAt={repoState?.event.created_at}
-            pool={pool}
+        {/* Row 2: breadcrumb — always on its own full-width line */}
+        <div className="basis-full min-w-0">
+          <CollapsibleBreadcrumb
+            repoId={repoId}
+            pathSegments={pathSegments}
+            currentRef={currentRef}
+            treeUrl={treeUrl}
           />
-        )}
+        </div>
       </div>
 
       {/* Commit summary row */}
