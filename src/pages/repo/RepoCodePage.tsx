@@ -232,10 +232,20 @@ export default function RepoCodePage() {
     return path ? `${base}/${path}` : base;
   };
 
-  // Handle branch/tag selector change
-  const handleRefChange = (newRef: string) => {
-    navigate(treeUrl(newRef));
-  };
+  // Handle branch/tag selector change — preserve the source query param so
+  // switching branches doesn't silently revert to the default source.
+  const handleRefChange = useCallback(
+    (newRef: string) => {
+      const source = searchParams.get("source");
+      const base = `${basePath}/tree/${newRef}`;
+      if (source) {
+        navigate(`${base}?source=${encodeURIComponent(source)}`);
+      } else {
+        navigate(base);
+      }
+    },
+    [navigate, searchParams, basePath],
+  );
 
   // Atomic handler: navigate to a new ref while simultaneously applying a
   // source change. Used when the user picks a source that doesn't have the

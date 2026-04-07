@@ -175,9 +175,20 @@ export default function RepoCommitsPage() {
     return idx !== -1 ? pathname.slice(0, idx) : pathname;
   }, []);
 
-  const handleRefChange = (newRef: string) => {
-    navigate(`${basePath}/commits/${newRef}`);
-  };
+  // Preserve the source query param when switching branches so the selected
+  // source isn't silently reverted to default.
+  const handleRefChange = useCallback(
+    (newRef: string) => {
+      const source = searchParams.get("source");
+      const base = `${basePath}/commits/${newRef}`;
+      if (source) {
+        navigate(`${base}?source=${encodeURIComponent(source)}`);
+      } else {
+        navigate(base);
+      }
+    },
+    [navigate, searchParams, basePath],
+  );
 
   const handleRefAndSourceChange = useCallback(
     (newRef: string, newSource: string) => {
