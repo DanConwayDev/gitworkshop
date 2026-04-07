@@ -421,13 +421,24 @@ function RefRow({
   isSelected,
   onSelect,
   selectedSource,
+  sourceIsGitServer,
 }: {
   refWithStatus: RefWithStatus;
   isSelected: boolean;
   onSelect: () => void;
   selectedSource: string;
+  /** True when the effective source is a git server (not nostr state). */
+  sourceIsGitServer: boolean;
 }) {
-  const isAbsent = refWithStatus.status === "not-on-server";
+  // "not-on-server" = ref absent from the selected git server
+  // "git-server-only" = ref absent from nostr state; fade it only when nostr
+  //   is the effective source so the user can see these refs exist but
+  //   understand they're not in the signed state. When a git server is the
+  //   source (stateBehindGit, no-state, or manual selection) these refs are
+  //   fully present and should not be dimmed.
+  const isAbsent =
+    refWithStatus.status === "not-on-server" ||
+    (refWithStatus.status === "git-server-only" && !sourceIsGitServer);
   const showTooltip =
     refWithStatus.status !== "no-state" && refWithStatus.status !== "loading";
 
@@ -2115,6 +2126,9 @@ export function RefSelector({
                       isSelected={branch.name === currentRef}
                       onSelect={() => handleSelect(branch.name)}
                       selectedSource={selectedSource}
+                      sourceIsGitServer={
+                        isManualGitSource || stateBehindGit || isNoState
+                      }
                     />
                   ))}
                 </div>
@@ -2142,6 +2156,9 @@ export function RefSelector({
                       isSelected={tag.name === currentRef}
                       onSelect={() => handleSelect(tag.name)}
                       selectedSource={selectedSource}
+                      sourceIsGitServer={
+                        isManualGitSource || stateBehindGit || isNoState
+                      }
                     />
                   ))}
                 </div>

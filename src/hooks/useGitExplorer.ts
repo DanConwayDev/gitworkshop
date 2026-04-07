@@ -353,8 +353,12 @@ export function useGitExplorer(
     // -----------------------------------------------------------------------
     // Fast path: if infoRefs + tree are already in the L1 memory cache we can
     // render immediately without a loading flash. Common case on remount.
+    //
+    // Use getMergedInfoRefs() so that refs from all servers (e.g. GitHub-only
+    // branches not mirrored to the grasp server) are included in the ref list,
+    // consistent with the slow path which also uses the merged view.
     // -----------------------------------------------------------------------
-    const fastInfo = pool.getInfoRefs();
+    const fastInfo = pool.getMergedInfoRefs();
 
     if (fastInfo) {
       const fastParsedRefs = parseRefs(fastInfo);
