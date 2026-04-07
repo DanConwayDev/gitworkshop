@@ -29,6 +29,13 @@ export interface GitRef {
   isBranch: boolean;
   isTag: boolean;
   isDefault: boolean;
+  /**
+   * For annotated tags only: the raw tag object OID from infoRefs.
+   * `hash` is always the peeled commit hash; this field carries the tag
+   * object OID so callers can detect when an older state event stored the
+   * tag object OID instead of the peeled commit (pre-fix ngit behaviour).
+   */
+  rawTagOid?: string;
 }
 
 export interface FileEntry {
@@ -147,7 +154,12 @@ function parseRefs(info: InfoRefsUploadPackResponse): GitRef[] {
 
     // For annotated tags the ref points to a tag object, not a commit.
     // The peeled entry (refName + "^{}") holds the actual commit hash.
-    const commitHash = isTag ? (info.refs[`${refName}^{}`] ?? hash) : hash;
+    const peeledHash = isTag ? info.refs[`${refName}^{}`] : undefined;
+    const commitHash = peeledHash ?? hash;
+    // rawTagOid is only set for annotated tags (where the peeled entry exists
+    // and differs from the raw hash). Used by RefSelector to handle state
+    // events published by older ngit that stored the tag object OID.
+    const rawTagOid = peeledHash && peeledHash !== hash ? hash : undefined;
 
     refs.push({
       name: shortName,
@@ -155,6 +167,7 @@ function parseRefs(info: InfoRefsUploadPackResponse): GitRef[] {
       isBranch,
       isTag,
       isDefault: refName === headRef,
+      rawTagOid,
     });
   }
 

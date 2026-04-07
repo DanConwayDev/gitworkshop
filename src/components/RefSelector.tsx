@@ -159,11 +159,18 @@ function getRefStatus(
   }
 
   // Compare commits (handle both full and abbreviated hashes)
-  if (
-    ref.hash === stateRef.commitId ||
-    ref.hash.startsWith(stateRef.commitId) ||
-    stateRef.commitId.startsWith(ref.hash)
-  ) {
+  function commitsMatch(a: string, b: string): boolean {
+    return a === b || a.startsWith(b) || b.startsWith(a);
+  }
+
+  if (commitsMatch(ref.hash, stateRef.commitId)) {
+    return { status: "verified" };
+  }
+
+  // Older ngit versions stored the tag object OID in the state event instead
+  // of the peeled commit. The pool handles this the same way (pool.ts:183-189).
+  // If the state's commitId matches the raw tag object OID, treat as verified.
+  if (ref.rawTagOid && commitsMatch(ref.rawTagOid, stateRef.commitId)) {
     return { status: "verified" };
   }
 
