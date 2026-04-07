@@ -1016,6 +1016,7 @@ function DiffSummaryBar({
   cloneUrls,
   urlStates,
   pool,
+  sourceIsNostr,
 }: {
   refsWithStatus: RefWithStatus[];
   stateBehindGit: boolean;
@@ -1025,6 +1026,8 @@ function DiffSummaryBar({
   cloneUrls: string[];
   urlStates: Record<string, UrlState>;
   pool?: GitGraspPool | null;
+  /** True when the user has explicitly selected nostr as the source */
+  sourceIsNostr?: boolean;
 }) {
   const PAGE_SIZE = 6;
   const [expanded, setExpanded] = useState(false);
@@ -1067,7 +1070,21 @@ function DiffSummaryBar({
     const branchName = defaultBranchName ?? defaultRef.name;
     // Total "extra" items: other differing refs + git-server-only refs
     const extraCount = otherDifferingCount + gitServerOnlyRefs.length;
-    summaryText = (
+    summaryText = sourceIsNostr ? (
+      <>
+        git servers:{" "}
+        <code className="font-mono bg-muted px-1 rounded text-[10px]">
+          {branchName}
+        </code>{" "}
+        ahead of nostr
+        {gitAheadDistance && <> by {gitAheadDistance}</>}
+        {extraCount > 0 && (
+          <>
+            , {extraCount} other ref{extraCount !== 1 ? "s" : ""} differ
+          </>
+        )}
+      </>
+    ) : (
       <>
         <code className="font-mono bg-muted px-1 rounded text-[10px]">
           {branchName}
@@ -1083,7 +1100,18 @@ function DiffSummaryBar({
     );
   } else if (stateBehindGit) {
     const extraCount = gitServerOnlyRefs.length;
-    summaryText = (
+    summaryText = sourceIsNostr ? (
+      <>
+        git servers: {differingRefs.length} ref
+        {differingRefs.length !== 1 ? "s" : ""} ahead of nostr
+        {gitAheadDistance && <> by {gitAheadDistance}</>}
+        {extraCount > 0 && (
+          <>
+            , {extraCount} git-server-only ref{extraCount !== 1 ? "s" : ""}
+          </>
+        )}
+      </>
+    ) : (
       <>
         {differingRefs.length} ref{differingRefs.length !== 1 ? "s" : ""} ahead
         of nostr
@@ -2437,7 +2465,9 @@ function SourceHeader({
                     <AlertTriangle className="h-3 w-3 text-amber-500" />
                     <span className="text-amber-600 dark:text-amber-400 font-medium">
                       {stateBehindGit
-                        ? "ahead of nostr"
+                        ? sourceIsNostr
+                          ? "git servers ahead of nostr"
+                          : "ahead of nostr"
                         : mismatchCount === 1
                           ? "1 ref differs"
                           : `${mismatchCount} refs differ`}
@@ -2451,8 +2481,9 @@ function SourceHeader({
                 >
                   {stateBehindGit ? (
                     <span>
-                      The git server has commits not yet announced on Nostr.
-                      Showing the git server's latest data.
+                      {sourceIsNostr
+                        ? "Git servers have commits not yet announced on Nostr. You are viewing the Nostr state."
+                        : "The git server has commits not yet announced on Nostr. Showing the git server's latest data."}
                     </span>
                   ) : (
                     <span>
@@ -2541,6 +2572,7 @@ function SourceHeader({
           cloneUrls={cloneUrls}
           urlStates={urlStates}
           pool={pool}
+          sourceIsNostr={sourceIsNostr}
         />
       )}
     </>
@@ -2996,6 +3028,7 @@ export function RefSelector({
                 cloneUrls={cloneUrls}
                 urlStates={urlStates}
                 pool={pool}
+                sourceIsNostr={!effectiveSourceIsGitServer}
               />
             )}
 
