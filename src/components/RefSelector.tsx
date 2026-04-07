@@ -1019,7 +1019,19 @@ function DiffSummaryBar({
   urlStates: Record<string, UrlState>;
   pool?: GitGraspPool | null;
 }) {
+  const PAGE_SIZE = 6;
   const [expanded, setExpanded] = useState(false);
+  const [differingVisible, setDifferingVisible] = useState(PAGE_SIZE);
+  const [gitOnlyVisible, setGitOnlyVisible] = useState(PAGE_SIZE);
+
+  // Reset pagination when collapsed so re-opening starts from the top
+  const handleToggle = () => {
+    if (expanded) {
+      setDifferingVisible(PAGE_SIZE);
+      setGitOnlyVisible(PAGE_SIZE);
+    }
+    setExpanded((v) => !v);
+  };
 
   const differingRefs = useMemo(() => {
     if (stateBehindGit) {
@@ -1103,7 +1115,7 @@ function DiffSummaryBar({
     <div className="bg-amber-500/5">
       {/* Summary row */}
       <button
-        onClick={() => setExpanded((v) => !v)}
+        onClick={handleToggle}
         className="flex items-center gap-1.5 w-full px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-amber-500/10 transition-colors text-left"
       >
         <span className="flex-1 min-w-0">{summaryText}</span>
@@ -1117,7 +1129,7 @@ function DiffSummaryBar({
       {/* Expanded per-ref list — slightly faded amber so it trails off naturally */}
       {expanded && (
         <div className="px-3 pb-2 space-y-1.5 bg-amber-500/[0.03]">
-          {differingRefs.map((ref) => (
+          {differingRefs.slice(0, differingVisible).map((ref) => (
             <DiffRefRow
               key={ref.name}
               refItem={ref}
@@ -1126,6 +1138,19 @@ function DiffSummaryBar({
               pool={pool}
             />
           ))}
+          {differingVisible < differingRefs.length && (
+            <button
+              onClick={() => setDifferingVisible((v) => v + PAGE_SIZE)}
+              className="flex items-center gap-1.5 w-full py-0.5 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors group"
+            >
+              <span className="flex-1 border-t border-dashed border-border/40 group-hover:border-border/70 transition-colors" />
+              <span className="shrink-0">
+                {differingRefs.length - differingVisible} more
+              </span>
+              <ChevronDown className="h-2.5 w-2.5 shrink-0" />
+              <span className="flex-1 border-t border-dashed border-border/40 group-hover:border-border/70 transition-colors" />
+            </button>
+          )}
 
           {/* Git server only section */}
           {gitServerOnlyRefs.length > 0 && (
@@ -1140,7 +1165,7 @@ function DiffSummaryBar({
                 <Server className="h-3 w-3" />
                 Not on nostr (git server only)
               </p>
-              {gitServerOnlyRefs.map((ref) => (
+              {gitServerOnlyRefs.slice(0, gitOnlyVisible).map((ref) => (
                 <GitServerOnlyRefRow
                   key={ref.name}
                   refItem={ref}
@@ -1149,6 +1174,19 @@ function DiffSummaryBar({
                   pool={pool}
                 />
               ))}
+              {gitOnlyVisible < gitServerOnlyRefs.length && (
+                <button
+                  onClick={() => setGitOnlyVisible((v) => v + PAGE_SIZE)}
+                  className="flex items-center gap-1.5 w-full py-0.5 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors group"
+                >
+                  <span className="flex-1 border-t border-dashed border-border/40 group-hover:border-border/70 transition-colors" />
+                  <span className="shrink-0">
+                    {gitServerOnlyRefs.length - gitOnlyVisible} more
+                  </span>
+                  <ChevronDown className="h-2.5 w-2.5 shrink-0" />
+                  <span className="flex-1 border-t border-dashed border-border/40 group-hover:border-border/70 transition-colors" />
+                </button>
+              )}
             </div>
           )}
         </div>
