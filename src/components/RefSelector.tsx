@@ -1292,7 +1292,10 @@ function SourceSelectorPanel({
     return "Signed state available";
   }, [repoState, repoRelayEose, stateCreatedAt]);
 
-  const nostrIsSelected = selectedSource === "nostr";
+  // When the default source is not nostr (git server is ahead or no state),
+  // show "default" as the first option and "nostr" as an explicit override.
+  // When default IS nostr, only show the nostr row (labelled "default / nostr").
+  const defaultIsNostr = !stateBehindGit && repoState !== null;
 
   return (
     <div className="w-full">
@@ -1307,13 +1310,13 @@ function SourceSelectorPanel({
       </div>
 
       <ScrollArea className="max-h-[360px]">
-        {/* Nostr row */}
         <div className="py-1">
+          {/* Default row — always first */}
           <button
-            onClick={() => onSelectSource("nostr")}
+            onClick={() => onSelectSource("default")}
             className={cn(
               "w-full text-left flex items-start gap-2.5 px-4 py-2 text-xs group transition-colors cursor-pointer",
-              nostrIsSelected
+              selectedSource === "default"
                 ? stateBehindGit
                   ? "bg-amber-500/5 border-l-2 border-amber-500 pl-[14px] hover:bg-amber-500/10"
                   : "bg-purple-500/5 border-l-2 border-purple-500 pl-[14px] hover:bg-purple-500/10"
@@ -1325,19 +1328,23 @@ function SourceSelectorPanel({
                 "h-3.5 w-3.5 shrink-0 mt-0.5",
                 repoState === undefined || !repoRelayEose
                   ? "text-muted-foreground/40"
-                  : repoState === null
-                    ? "text-muted-foreground/40"
-                    : stateBehindGit
-                      ? "text-amber-500"
+                  : stateBehindGit
+                    ? "text-amber-500"
+                    : repoState === null
+                      ? "text-muted-foreground/40"
                       : "text-purple-500 dark:text-purple-400",
               )}
             />
             <div className="min-w-0 flex-1">
               <p className="font-medium text-foreground/90 text-[11px]">
-                nostr
+                default
               </p>
               <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                {nostrSubLine}
+                {stateBehindGit
+                  ? "Git server (ahead of nostr state)"
+                  : repoState === null
+                    ? "Git server (no nostr state)"
+                    : `Nostr state · ${nostrSubLine.toLowerCase()}`}
               </p>
             </div>
             <span
@@ -1355,10 +1362,56 @@ function SourceSelectorPanel({
                 : repoState === null
                   ? "no state"
                   : stateBehindGit
-                    ? "behind"
+                    ? "git ahead"
                     : "authority"}
             </span>
           </button>
+
+          {/* Explicit nostr row — only shown when default is NOT nostr */}
+          {!defaultIsNostr && (
+            <button
+              onClick={() => onSelectSource("nostr")}
+              className={cn(
+                "w-full text-left flex items-start gap-2.5 px-4 py-2 text-xs group transition-colors cursor-pointer",
+                selectedSource === "nostr"
+                  ? "bg-purple-500/5 border-l-2 border-purple-500 pl-[14px] hover:bg-purple-500/10"
+                  : "hover:bg-accent/30",
+              )}
+            >
+              <Radio
+                className={cn(
+                  "h-3.5 w-3.5 shrink-0 mt-0.5",
+                  repoState === undefined || !repoRelayEose
+                    ? "text-muted-foreground/40"
+                    : repoState === null
+                      ? "text-muted-foreground/40"
+                      : "text-purple-500 dark:text-purple-400",
+                )}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-foreground/90 text-[11px]">
+                  nostr
+                </p>
+                <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                  {nostrSubLine}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "text-[10px] shrink-0",
+                  repoState === null || !repoRelayEose
+                    ? "text-muted-foreground/40"
+                    : "text-purple-600 dark:text-purple-400",
+                )}
+              >
+                {repoState === undefined || !repoRelayEose
+                  ? "loading"
+                  : repoState === null
+                    ? "no state"
+                    : "signed state"}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Grasp servers */}
@@ -1497,22 +1550,27 @@ function SourceHeader({
   const isGitSource = stateBehindGit || isNoState;
   const hasProblems = mismatchCount > 0 || stateBehindGit;
 
-  // Determine display source label
-  const isManualGitSource = selectedSource !== "nostr";
+  // A URL (not "default"/"nostr") means the user manually picked a git server
+  const isManualGitSource =
+    selectedSource !== "default" && selectedSource !== "nostr";
+  // "nostr" is an explicit nostr override (only selectable when default ≠ nostr)
+  const isExplicitNostr = selectedSource === "nostr";
+
   const sourceLabel = isManualGitSource
     ? shortServerLabel(selectedSource)
-    : isGitSource && gitDomain
-      ? gitDomain
-      : "nostr";
-  const sourceIsNostr = !isManualGitSource && !isGitSource;
+    : isExplicitNostr
+      ? "nostr"
+      : isGitSource && gitDomain
+        ? gitDomain
+        : "nostr";
+  const sourceIsNostr = !isManualGitSource && (isExplicitNostr || !isGitSource);
 
   const defaultBranchName = useMemo(() => {
     return refsWithStatus.find((r) => r.isDefault && r.isBranch)?.name;
   }, [refsWithStatus]);
 
-  // Only show DiffSummaryBar when viewing nostr source
-  const showDiffSummary =
-    hasProblems && !isLoading && selectedSource === "nostr";
+  // Only show DiffSummaryBar when not viewing a manually-selected git server
+  const showDiffSummary = hasProblems && !isLoading && !isManualGitSource;
 
   return (
     <>
@@ -1522,7 +1580,7 @@ function SourceHeader({
           <button
             className={cn(
               "flex items-center gap-2 px-3 py-2 border-b w-full text-left text-[11px] transition-colors",
-              hasProblems && selectedSource === "nostr"
+              hasProblems && !isManualGitSource
                 ? "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10"
                 : "border-border/40 bg-muted/20 hover:bg-accent/40",
               showDiffSummary && "border-b-0",
@@ -1542,7 +1600,7 @@ function SourceHeader({
               <Server
                 className={cn(
                   "h-3 w-3 shrink-0",
-                  hasProblems && selectedSource === "nostr"
+                  hasProblems && !isManualGitSource
                     ? "text-amber-500"
                     : isManualGitSource
                       ? "text-blue-500 dark:text-blue-400"
@@ -1554,10 +1612,10 @@ function SourceHeader({
             <span className="text-muted-foreground/60 shrink-0">Source</span>
 
             {/* Source label + subtle chevron */}
-            <span className="flex items-center gap-0.5">
+            <span className="flex items-center gap-0.5 min-w-0 overflow-hidden">
               <span
                 className={cn(
-                  "font-medium truncate",
+                  "font-medium truncate max-w-[120px]",
                   isLoading
                     ? "text-muted-foreground/50"
                     : isManualGitSource
@@ -1589,7 +1647,7 @@ function SourceHeader({
             </span>
 
             {/* Right-side status badge */}
-            {hasProblems && selectedSource === "nostr" ? (
+            {hasProblems && !isManualGitSource ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default">
@@ -1625,7 +1683,7 @@ function SourceHeader({
                   )}
                 </TooltipContent>
               </Tooltip>
-            ) : isNoState && selectedSource === "nostr" ? (
+            ) : isNoState && !isManualGitSource ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default text-muted-foreground/60">
@@ -1719,7 +1777,10 @@ export function RefSelector({
 }: RefSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [selectedSource, setSelectedSource] = useState<string>("nostr");
+  // "default" = let the pool decide (current behaviour — git server when ahead, nostr otherwise)
+  // "nostr"   = explicitly force nostr state comparison even when stateBehindGit
+  // <url>     = compare against a specific git server's infoRefs
+  const [selectedSource, setSelectedSource] = useState<string>("default");
   const isMobile = useIsMobile();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
@@ -1767,37 +1828,43 @@ export function RefSelector({
 
   // Compute status for each ref — against selectedSource
   const refsWithStatus: RefWithStatus[] = useMemo(() => {
-    if (selectedSource !== "nostr") {
-      const serverUrlState = urlStates[selectedSource];
-      if (!serverUrlState?.infoRefs) {
-        // Server not ready — fall back to nostr comparison
-        return refs.map((ref) => ({
-          ...ref,
-          ...getRefStatus(
-            ref,
-            repoState,
-            repoRelayEose,
-            stateBehindGit,
-            urlStates,
-            cloneUrls,
-          ),
-        }));
-      }
+    if (selectedSource === "default" || selectedSource === "nostr") {
+      // "default" uses the pool's normal logic (stateBehindGit respected).
+      // "nostr" forces nostr-state comparison by passing stateBehindGit=false,
+      // so refs are compared directly against the signed state even when the
+      // git server is ahead.
+      const behindGit = selectedSource === "nostr" ? false : stateBehindGit;
       return refs.map((ref) => ({
         ...ref,
-        ...getRefStatusForServer(ref, serverUrlState, repoState, repoRelayEose),
+        ...getRefStatus(
+          ref,
+          repoState,
+          repoRelayEose,
+          behindGit,
+          urlStates,
+          cloneUrls,
+        ),
+      }));
+    }
+    // A specific git server URL is selected
+    const serverUrlState = urlStates[selectedSource];
+    if (!serverUrlState?.infoRefs) {
+      // Server not ready — fall back to default behaviour
+      return refs.map((ref) => ({
+        ...ref,
+        ...getRefStatus(
+          ref,
+          repoState,
+          repoRelayEose,
+          stateBehindGit,
+          urlStates,
+          cloneUrls,
+        ),
       }));
     }
     return refs.map((ref) => ({
       ...ref,
-      ...getRefStatus(
-        ref,
-        repoState,
-        repoRelayEose,
-        stateBehindGit,
-        urlStates,
-        cloneUrls,
-      ),
+      ...getRefStatusForServer(ref, serverUrlState, repoState, repoRelayEose),
     }));
   }, [
     refs,
@@ -1859,8 +1926,10 @@ export function RefSelector({
       : winnerUrl;
   const gitDomain = gitSourceUrl ? gitServerDomain(gitSourceUrl) : null;
 
+  // A URL (not "default"/"nostr") means the user manually picked a git server
+  const isManualGitSource =
+    selectedSource !== "default" && selectedSource !== "nostr";
   // Show source prefix when: user manually selected a git server, OR auto-detected git source
-  const isManualGitSource = selectedSource !== "nostr";
   const showGitPrefix =
     isManualGitSource || ((stateBehindGit || isNoState) && gitDomain);
   const sourcePrefix = isManualGitSource
@@ -1886,7 +1955,7 @@ export function RefSelector({
             "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs transition-all duration-200",
             "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             "max-w-[320px]",
-            showAmberTrigger && selectedSource === "nostr"
+            showAmberTrigger && !isManualGitSource
               ? "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10"
               : isManualGitSource
                 ? "border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10"
@@ -1938,7 +2007,7 @@ export function RefSelector({
                 <ShieldQuestion className="h-3.5 w-3.5 text-muted-foreground/50" />
               )}
             </span>
-          ) : mismatchCount > 0 && selectedSource === "nostr" ? (
+          ) : mismatchCount > 0 && !isManualGitSource ? (
             <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0 ml-0.5" />
           ) : null}
 
@@ -2061,10 +2130,10 @@ export function RefSelector({
           </div>
         </ScrollArea>
 
-        {/* Footer legend — only shown for nostr source with state */}
+        {/* Footer legend — shown for default/nostr source with state */}
         {repoState !== null &&
           repoState !== undefined &&
-          selectedSource === "nostr" && (
+          !isManualGitSource && (
             <>
               <Separator />
               <div className="px-3 py-2 flex items-center gap-3 text-[11px] text-muted-foreground/60">
@@ -2083,8 +2152,8 @@ export function RefSelector({
               </div>
             </>
           )}
-        {/* Footer legend for git server source */}
-        {selectedSource !== "nostr" && (
+        {/* Footer legend for manually-selected git server source */}
+        {isManualGitSource && (
           <>
             <Separator />
             <div className="px-3 py-2 flex items-center gap-3 text-[11px] text-muted-foreground/60">
