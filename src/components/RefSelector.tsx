@@ -3066,8 +3066,6 @@ export function RefSelector({
         <ScrollArea
           type="always"
           style={{
-            height:
-              "calc(var(--radix-popover-content-available-height) - 80px)",
             maxHeight:
               "calc(var(--radix-popover-content-available-height) - 80px)",
           }}
