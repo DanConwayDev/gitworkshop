@@ -33,6 +33,7 @@ import {
   Minus,
 } from "lucide-react";
 import { nip19 } from "nostr-tools";
+import { formatDistanceStrict } from "date-fns";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { GitRef } from "@/hooks/useGitExplorer";
@@ -1294,8 +1295,32 @@ function SourceSelectorPanel({
 
   // When the default source is not nostr (git server is ahead or no state),
   // show "default" as the first option and "nostr" as an explicit override.
-  // When default IS nostr, only show the nostr row (labelled "default / nostr").
+  // When default IS nostr, only show the nostr row (labelled "nostr").
   const defaultIsNostr = !stateBehindGit && repoState !== null;
+
+  // Domain of the git server that is ahead (used in the default row label)
+  const gitAheadDomain =
+    poolWarning?.kind === "state-behind-git" && poolWarning.gitServerUrl
+      ? gitServerDomain(poolWarning.gitServerUrl)
+      : null;
+
+  // How far ahead the git server's default branch is relative to the nostr state
+  const gitAheadDistance = useMemo(() => {
+    if (
+      poolWarning?.kind !== "state-behind-git" ||
+      !poolWarning.gitCommitterDate ||
+      !stateCreatedAt
+    )
+      return null;
+    try {
+      return formatDistanceStrict(
+        new Date(poolWarning.gitCommitterDate * 1000),
+        new Date(stateCreatedAt * 1000),
+      );
+    } catch {
+      return null;
+    }
+  }, [poolWarning, stateCreatedAt]);
 
   return (
     <div className="w-full">
@@ -1337,14 +1362,20 @@ function SourceSelectorPanel({
             />
             <div className="min-w-0 flex-1">
               <p className="font-medium text-foreground/90 text-[11px]">
-                default
+                {stateBehindGit
+                  ? gitAheadDomain
+                    ? `default (${gitAheadDomain})`
+                    : "default"
+                  : "nostr"}
               </p>
               <p className="text-[10px] text-muted-foreground/70 mt-0.5">
                 {stateBehindGit
-                  ? "Git server (ahead of nostr state)"
+                  ? gitAheadDistance
+                    ? `because default branch is ${gitAheadDistance} ahead of nostr`
+                    : "default branch is ahead of nostr state"
                   : repoState === null
                     ? "Git server (no nostr state)"
-                    : `Nostr state · ${nostrSubLine.toLowerCase()}`}
+                    : `${nostrSubLine}`}
               </p>
             </div>
             <span
