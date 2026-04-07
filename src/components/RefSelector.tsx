@@ -155,49 +155,45 @@ function gitServerDomain(url: string): string {
   }
 }
 
-/**
- * Derive the likely Nostr relay URL from a git server clone URL.
- * For Grasp servers (https://host/npub1.../repo.git) this is wss://host.
- * Returns undefined for non-HTTP URLs or when derivation is not possible.
- */
-function cloneUrlToRelayUrl(cloneUrl: string): string | undefined {
-  try {
-    const u = new URL(cloneUrl);
-    if (u.protocol !== "https:" && u.protocol !== "http:") return undefined;
-    const wsProto = u.protocol === "https:" ? "wss:" : "ws:";
-    return `${wsProto}//${u.host}`;
-  } catch {
-    return undefined;
-  }
-}
-
 function commitsMatch(a: string, b: string): boolean {
   return a === b || a.startsWith(b) || b.startsWith(a);
 }
 
 /**
- * Given a relay URL and the relayStateMap, return the older state event for
- * that relay if it differs from the winning state. Returns undefined when the
- * relay's state IS the winning state or when no relay state is available.
+ * Search all relay state events for any older (previously-signed) state event
+ * that differs from the winning state. Returns the most recent such event, or
+ * undefined if every relay is already serving the winning state.
+ *
+ * Searching all relays (not just the one associated with the server's clone URL)
+ * means we catch the case where multiple relays hold different older versions —
+ * the server's commit just needs to match any of them.
  */
-function getOlderRelayState(
-  relayUrl: string,
+function findOlderStateEvent(
   relayStateMap: Map<string, NostrEvent>,
   winningState: RepositoryState,
 ): NostrEvent | undefined {
-  const relayEvent = relayStateMap.get(relayUrl);
-  if (!relayEvent) return undefined;
-  // If the relay's event IS the winning event, there's no older state
-  if (relayEvent.id === winningState.event.id) return undefined;
-  // Only return it if it's actually older (or same age but lower ID)
-  if (
-    relayEvent.created_at > winningState.event.created_at ||
-    (relayEvent.created_at === winningState.event.created_at &&
-      relayEvent.id >= winningState.event.id)
-  ) {
-    return undefined;
+  let best: NostrEvent | undefined;
+  for (const event of relayStateMap.values()) {
+    // Skip if this IS the winning event
+    if (event.id === winningState.event.id) continue;
+    // Skip if it's not actually older than the winner
+    if (
+      event.created_at > winningState.event.created_at ||
+      (event.created_at === winningState.event.created_at &&
+        event.id >= winningState.event.id)
+    ) {
+      continue;
+    }
+    // Keep the most recent older event as the best candidate
+    if (
+      !best ||
+      event.created_at > best.created_at ||
+      (event.created_at === best.created_at && event.id > best.id)
+    ) {
+      best = event;
+    }
   }
-  return relayEvent;
+  return best;
 }
 
 function getRefStatus(
@@ -309,7 +305,6 @@ function getRefStatus(
  */
 function getRefStatusForServer(
   ref: GitRef,
-  serverUrl: string,
   serverUrlState: UrlState,
   repoState: RepositoryState | null | undefined,
   repoRelayEose: boolean,
@@ -353,14 +348,9 @@ function getRefStatusForServer(
   const poolStatus = serverUrlState.refStatus[fullRefName];
   if (poolStatus === "match") return { status: "verified" };
   if (poolStatus === "behind" || poolStatus === "ahead") {
-    // Check if this server's commit matches an older signed state from its relay
+    // Check if this server's commit matches any older signed state event
     const oldState = relayStateMap
-      ? (() => {
-          const relayUrl = cloneUrlToRelayUrl(serverUrl);
-          return relayUrl
-            ? getOlderRelayState(relayUrl, relayStateMap, repoState)
-            : undefined;
-        })()
+      ? findOlderStateEvent(relayStateMap, repoState)
       : undefined;
     if (oldState && isValidRepositoryState(oldState)) {
       const oldStateRefs = getStateRefs(oldState);
@@ -388,10 +378,7 @@ function getRefStatusForServer(
 
   // Check for old-state match before declaring mismatch
   if (relayStateMap) {
-    const relayUrl = cloneUrlToRelayUrl(serverUrl);
-    const oldState = relayUrl
-      ? getOlderRelayState(relayUrl, relayStateMap, repoState)
-      : undefined;
+    const oldState = findOlderStateEvent(relayStateMap, repoState);
     if (oldState && isValidRepositoryState(oldState)) {
       const oldStateRefs = getStateRefs(oldState);
       const oldStateRef = oldStateRefs.find((r) => r.name === fullRefName);
@@ -1650,15 +1637,14 @@ function SourceSelectorPanel({
   }, [repoState, repoRelayEose, stateCreatedAt]);
 
   /**
-   * For a given clone URL, return the older state event from its relay (if any).
-   * Only meaningful when there is a winning state and the relay's event is older.
+   * Return the most recent older state event across all relays, if any exists.
+   * The same result is used for every server row since we're searching all
+   * known relay state versions rather than restricting to a per-server relay.
    */
-  const getOlderStateForUrl = (cloneUrl: string): NostrEvent | undefined => {
-    if (!relayStateMap || !repoState || repoState === null) return undefined;
-    const relayUrl = cloneUrlToRelayUrl(cloneUrl);
-    if (!relayUrl) return undefined;
-    return getOlderRelayState(relayUrl, relayStateMap, repoState);
-  };
+  const olderStateEvent: NostrEvent | undefined =
+    relayStateMap && repoState
+      ? findOlderStateEvent(relayStateMap, repoState)
+      : undefined;
 
   // When the default source is not nostr (git server is ahead or no state),
   // show "default" as the first option and "nostr" as an explicit override.
@@ -1834,7 +1820,7 @@ function SourceSelectorPanel({
                   gitCommitterDate={gitCommitterDate}
                   pool={pool}
                   onSelect={() => onSelectSource(url)}
-                  olderStateEvent={getOlderStateForUrl(url)}
+                  olderStateEvent={olderStateEvent}
                 />
               ))}
             </div>
@@ -1864,7 +1850,7 @@ function SourceSelectorPanel({
                 gitCommitterDate={gitCommitterDate}
                 pool={pool}
                 onSelect={() => onSelectSource(url)}
-                olderStateEvent={getOlderStateForUrl(url)}
+                olderStateEvent={olderStateEvent}
               />
             ))}
           </div>
@@ -1890,7 +1876,7 @@ function SourceSelectorPanel({
                 gitCommitterDate={gitCommitterDate}
                 pool={pool}
                 onSelect={() => onSelectSource(url)}
-                olderStateEvent={getOlderStateForUrl(url)}
+                olderStateEvent={olderStateEvent}
               />
             ))}
           </div>
@@ -2292,7 +2278,6 @@ export function RefSelector({
       ...ref,
       ...getRefStatusForServer(
         ref,
-        selectedSource,
         serverUrlState,
         repoState,
         repoRelayEose,
