@@ -849,36 +849,25 @@ export function RefSelector({
   const isMobile = useIsMobile();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
-  // Separate max-height for the ScrollArea so it scrolls independently of the
-  // fixed header/search/footer sections inside the popover.
-  const [scrollAreaMaxHeight, setScrollAreaMaxHeight] = useState(360);
 
-  // Recompute popover dimensions whenever the dropdown opens or viewport resizes.
+  // Recompute popover position/width on open and resize.
+  // Height is handled purely via CSS using --radix-popover-content-available-height.
   const updatePopoverStyle = useCallback(() => {
+    if (!isMobile) {
+      setPopoverStyle({});
+      return;
+    }
     const el = triggerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    // Measure the sticky app header height so we can factor it in.
-    // Total space available below the trigger (sideOffset is 6px, add 8px breathing room).
-    const availableHeight = window.innerHeight - rect.bottom - 6 - 8;
-    // Reserve space for the fixed parts: source header (~36px), optional search
-    // (~44px), optional footer (~36px). Use a conservative 120px reservation so
-    // the ScrollArea always gets a sensible slice of the available space.
-    const fixedPartsHeight = 120;
-    const safeScrollHeight = Math.max(availableHeight - fixedPartsHeight, 80);
-    setScrollAreaMaxHeight(safeScrollHeight);
-
-    if (isMobile) {
-      // Radix positions the popover at the trigger's left edge (align="start").
-      // Shift it left by that amount so it spans the full viewport width.
-      setPopoverStyle({
-        width: "100vw",
-        maxWidth: "100vw",
-        marginLeft: `-${rect.left}px`,
-      });
-    } else {
-      setPopoverStyle({});
-    }
+    // Radix positions the popover at the trigger's left edge (align="start").
+    // Shift left to leave 8px margin each side.
+    const margin = 8;
+    setPopoverStyle({
+      width: `calc(100vw - ${margin * 2}px)`,
+      maxWidth: `calc(100vw - ${margin * 2}px)`,
+      marginLeft: `-${rect.left - margin}px`,
+    });
   }, [isMobile]);
 
   useEffect(() => {
@@ -1055,10 +1044,7 @@ export function RefSelector({
       </PopoverTrigger>
 
       <PopoverContent
-        className={cn(
-          "p-0 overflow-hidden",
-          isMobile ? "w-screen" : "w-[420px]",
-        )}
+        className={cn("p-0 z-40", isMobile ? "w-screen" : "w-[420px]")}
         align="start"
         sideOffset={6}
         style={popoverStyle}
@@ -1094,10 +1080,21 @@ export function RefSelector({
           </div>
         )}
 
+        {/*
+         * Both height and maxHeight must be set so the Radix scrollbar track
+         * (which uses h-full) has a definite height to render against.
+         * Subtract fixed parts (source header ~36px, optional search ~44px,
+         * optional footer ~36px, separator ~1px) + 16px bottom gap for shadow.
+         * type="always" keeps the scrollbar permanently visible so users know
+         * the list is scrollable.
+         */}
         <ScrollArea
+          type="always"
           style={{
-            height: `${scrollAreaMaxHeight}px`,
-            maxHeight: `${scrollAreaMaxHeight}px`,
+            height:
+              "calc(var(--radix-popover-content-available-height) - 140px)",
+            maxHeight:
+              "calc(var(--radix-popover-content-available-height) - 140px)",
           }}
         >
           <div className="py-1">
