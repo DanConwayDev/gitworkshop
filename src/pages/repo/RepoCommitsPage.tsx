@@ -108,6 +108,7 @@ export default function RepoCommitsPage() {
     poolState.urls,
     repoState,
     stateBehindGit,
+    selectedSource,
     resolvedRef,
     resolvedRefIsBranch,
   ]);

@@ -165,6 +165,7 @@ export default function RepoCodePage() {
     poolState.urls,
     repoState,
     stateBehindGit,
+    selectedSource,
     resolvedRef,
     resolvedRefIsBranch,
   ]);
