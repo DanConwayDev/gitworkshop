@@ -562,6 +562,8 @@ function RefRow({
   onSelect,
   selectedSource,
   sourceIsGitServer,
+  pool,
+  urlStates,
 }: {
   refWithStatus: RefWithStatus;
   isSelected: boolean;
@@ -569,7 +571,51 @@ function RefRow({
   selectedSource: string;
   /** True when the effective source is a git server (not nostr state). */
   sourceIsGitServer: boolean;
+  pool?: GitGraspPool | null;
+  urlStates?: Record<string, UrlState>;
 }) {
+  const [commitTs, setCommitTs] = useState<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Resolve the commit hash for the currently selected source.
+  // When a specific git server URL is selected, use that server's commit for
+  // this ref (from refCommits) so the timestamp reflects what that server has,
+  // not the pool winner's commit.
+  const fullRefName = `${refWithStatus.isBranch ? "refs/heads/" : "refs/tags/"}${refWithStatus.name}`;
+  const sourceHash = useMemo(() => {
+    const isServerUrl =
+      selectedSource !== "default" && selectedSource !== "nostr";
+    if (isServerUrl && urlStates) {
+      const us = urlStates[selectedSource];
+      // Prefer peeled commit (annotated tags), fall back to raw ref
+      return (
+        us?.refCommits[`${fullRefName}^{}`] ??
+        us?.refCommits[fullRefName] ??
+        refWithStatus.hash
+      );
+    }
+    return refWithStatus.hash;
+  }, [selectedSource, urlStates, fullRefName, refWithStatus.hash]);
+
+  useEffect(() => {
+    if (!pool) return;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    setCommitTs(null);
+
+    pool
+      .getSingleCommit(sourceHash, ac.signal)
+      .then((commit) => {
+        if (ac.signal.aborted || !commit) return;
+        setCommitTs(commit.committer?.timestamp ?? commit.author.timestamp);
+      })
+      .catch(() => {});
+
+    return () => {
+      ac.abort();
+    };
+  }, [sourceHash, pool]);
   // "not-on-server" = ref absent from the selected git server
   // "git-server-only" = ref absent from nostr state; fade it only when nostr
   //   is the effective source so the user can see these refs exist but
@@ -601,20 +647,27 @@ function RefRow({
         {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
       </div>
 
-      {/* Ref name */}
-      <span
-        className={cn(
-          "flex-1 truncate font-mono text-[13px]",
-          isSelected && "font-medium",
-          refWithStatus.status === "mismatch" &&
-            "text-amber-600 dark:text-amber-400",
-          refWithStatus.status === "old-state" &&
-            "text-sky-600 dark:text-sky-400",
-          isAbsent && "text-muted-foreground",
+      {/* Ref name + committer timestamp */}
+      <span className="flex-1 flex items-baseline gap-2 min-w-0 overflow-hidden">
+        <span
+          className={cn(
+            "truncate font-mono text-[13px]",
+            isSelected && "font-medium",
+            refWithStatus.status === "mismatch" &&
+              "text-amber-600 dark:text-amber-400",
+            refWithStatus.status === "old-state" &&
+              "text-sky-600 dark:text-sky-400",
+            isAbsent && "text-muted-foreground",
+          )}
+          title={refWithStatus.name}
+        >
+          {refWithStatus.name}
+        </span>
+        {commitTs !== null && (
+          <span className="shrink-0 text-[11px] text-muted-foreground/40 font-normal">
+            {safeFormatDistanceToNow(commitTs, { addSuffix: true })}
+          </span>
         )}
-        title={refWithStatus.name}
-      >
-        {refWithStatus.name}
       </span>
 
       {/* Default badge */}
@@ -2638,6 +2691,8 @@ export function RefSelector({
                         selectedSource !== "nostr" &&
                         (isManualGitSource || stateBehindGit || isNoState)
                       }
+                      pool={pool}
+                      urlStates={urlStates}
                     />
                   ))}
                 </div>
@@ -2669,6 +2724,8 @@ export function RefSelector({
                         selectedSource !== "nostr" &&
                         (isManualGitSource || stateBehindGit || isNoState)
                       }
+                      pool={pool}
+                      urlStates={urlStates}
                     />
                   ))}
                 </div>
