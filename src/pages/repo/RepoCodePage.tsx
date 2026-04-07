@@ -243,6 +243,15 @@ export default function RepoCodePage() {
     ? currentPath.split("/").filter(Boolean)
     : [];
 
+  // Full ref name for the currently selected ref — used by the banner and
+  // the git server status icon to look up per-ref status from the pool.
+  const currentRefObj = activeExplorer.refs.find((r) => r.name === currentRef);
+  const currentRefFull = currentRefObj
+    ? currentRefObj.isBranch
+      ? `refs/heads/${currentRef}`
+      : `refs/tags/${currentRef}`
+    : "";
+
   // When the effective source is a git server (not nostr), the explorer may
   // still be showing the old signed commit during the render cycle where
   // stateBehindGit first becomes true (the explorer's useEffect hasn't fired
@@ -319,6 +328,8 @@ export default function RepoCodePage() {
           <GitServerAheadBanner
             warning={poolState.warning}
             pulling={gitPulling}
+            currentRefFull={currentRefFull}
+            urlStates={poolState.urls}
           />
 
           {/* Error state */}
@@ -448,17 +459,39 @@ function gitServerDomain(url: string): string {
  * Nostr-announced state. Tells the user which server is ahead and how stale
  * the Nostr state is, so they understand why the code view may differ from
  * what the maintainer last announced on Nostr.
+ *
+ * The banner is suppressed when the currently selected ref is in sync across
+ * all servers — i.e. no server has a "behind" refStatus for that ref.
  */
 function GitServerAheadBanner({
   warning,
   pulling,
+  currentRefFull,
+  urlStates,
 }: {
   warning: PoolWarning | null;
   pulling: boolean;
+  /** Full ref name for the currently selected ref (e.g. "refs/heads/main") */
+  currentRefFull: string;
+  /** Per-URL state from the pool — used to check per-ref sync status */
+  urlStates: Record<string, UrlState>;
 }) {
   // Suppress while data is still loading — the mismatch may resolve once
   // infoRefs settle.
   if (!warning || pulling) return null;
+
+  // Suppress when the currently selected ref is in sync on all servers.
+  // The pool marks a server as "behind" for a ref when it has a different
+  // commit than the Nostr state. In the state-behind-git scenario the
+  // semantics are inverted (the "behind" server actually has the *newer*
+  // unsigned commit), but either way: if no server has a non-"match" status
+  // for the current ref, the ref is in sync and the banner is irrelevant.
+  if (currentRefFull) {
+    const anyServerAheadForRef = Object.values(urlStates).some(
+      (us) => us.refStatus[currentRefFull] === "behind",
+    );
+    if (!anyServerAheadForRef) return null;
+  }
 
   if (warning.kind === "state-behind-git") {
     const stateAge = safeFormatDistanceToNow(warning.stateCreatedAt, {
