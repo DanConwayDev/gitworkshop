@@ -9,6 +9,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -31,6 +37,7 @@ import {
   HelpCircle,
   Copy,
   Minus,
+  Braces,
 } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import type { NostrEvent } from "nostr-tools";
@@ -2265,6 +2272,35 @@ function SourceSelectorPanel({
 }
 
 // ---------------------------------------------------------------------------
+// Raw state event JSON modal
+// ---------------------------------------------------------------------------
+
+function RawStateEventDialog({
+  event,
+  open,
+  onOpenChange,
+}: {
+  event: NostrEvent;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Nostr state event JSON</DialogTitle>
+        </DialogHeader>
+        <div className="overflow-auto rounded-md border bg-muted/40 p-4 min-h-0">
+          <pre className="text-xs font-mono whitespace-pre-wrap break-all">
+            {JSON.stringify(event, null, 2)}
+          </pre>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Source header: clickable row that opens the source selector
 // ---------------------------------------------------------------------------
 
@@ -2318,6 +2354,7 @@ function SourceHeader({
   onRefRevertToDefault?: (newSource: string) => void;
 }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const [rawEventOpen, setRawEventOpen] = useState(false);
   const isMobile = useIsMobile();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
@@ -2471,6 +2508,20 @@ function SourceHeader({
               />
             </span>
 
+            {/* Raw state event button — stops propagation so it doesn't open the source selector */}
+            {repoState && sourceIsNostr && (
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRawEventOpen(true);
+                }}
+                className="shrink-0 p-0.5 rounded text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                title="View raw Nostr state event"
+              >
+                <Braces className="h-3 w-3" />
+              </span>
+            )}
+
             {/* Right-side status badge */}
             {hasProblems && !isManualGitSource ? (
               <Tooltip>
@@ -2587,6 +2638,15 @@ function SourceHeader({
           urlStates={urlStates}
           pool={pool}
           sourceIsNostr={sourceIsNostr}
+        />
+      )}
+
+      {/* Raw state event dialog */}
+      {repoState && sourceIsNostr && (
+        <RawStateEventDialog
+          event={repoState.event}
+          open={rawEventOpen}
+          onOpenChange={setRawEventOpen}
         />
       )}
     </>
