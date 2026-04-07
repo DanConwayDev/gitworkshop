@@ -378,7 +378,14 @@ export function useGitExplorer(
         const matchingRef = fastParsedRefs.find(
           (r) => r.hash === knownHeadCommit && r.isBranch,
         );
-        fastResolvedRef = matchingRef?.name ?? knownHeadCommit;
+        // Fall back to the default branch name when no ref matches the known
+        // head commit (e.g. git server is ahead of the Nostr state — the
+        // Nostr commit doesn't match any current branch tip).
+        const defaultRef = fastParsedRefs.find(
+          (r) => r.isDefault && r.isBranch,
+        );
+        fastResolvedRef =
+          matchingRef?.name ?? defaultRef?.name ?? knownHeadCommit;
         fastResolvedPath = "";
       } else {
         const headRef = fastInfo.symrefs["HEAD"];
@@ -644,7 +651,11 @@ export function useGitExplorer(
       const matchingRef = parsedRefs.find(
         (r) => r.hash === knownHeadCommit && r.isBranch,
       );
-      resolvedRef = matchingRef?.name ?? knownHeadCommit;
+      // Fall back to the default branch name when no ref matches the known
+      // head commit (e.g. git server is ahead of the Nostr state — the
+      // Nostr commit doesn't match any current branch tip).
+      const defaultRef = parsedRefs.find((r) => r.isDefault && r.isBranch);
+      resolvedRef = matchingRef?.name ?? defaultRef?.name ?? knownHeadCommit;
       path = "";
     } else {
       // Use the default branch
