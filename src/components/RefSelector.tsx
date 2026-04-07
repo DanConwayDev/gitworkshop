@@ -2043,7 +2043,9 @@ function SourceHeader({
     selectedSource !== "default" && selectedSource !== "nostr";
 
   const sourceLabel = effectiveSourceIsGitServer
-    ? shortServerLabel(effectiveSource)
+    ? selectedSource === "default"
+      ? `default (${gitServerDomain(effectiveSource)})`
+      : shortServerLabel(effectiveSource)
     : "nostr";
   const sourceIsNostr = !effectiveSourceIsGitServer;
 
