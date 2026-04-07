@@ -80,6 +80,10 @@ export default function RepoCommitsPage() {
 
   // Resolve "default" → "nostr" or a concrete git server URL.
   const isNoState = repoRelayEose && repoState === null;
+  const aheadServerUrl =
+    poolState.warning?.kind === "state-behind-git"
+      ? poolState.warning.gitServerUrl
+      : null;
   const effectiveSource = useMemo(
     () =>
       deriveEffectiveSource(
@@ -87,8 +91,15 @@ export default function RepoCommitsPage() {
         stateBehindGit,
         isNoState,
         poolState.winnerUrl,
+        aheadServerUrl,
       ),
-    [selectedSource, stateBehindGit, isNoState, poolState.winnerUrl],
+    [
+      selectedSource,
+      stateBehindGit,
+      isNoState,
+      poolState.winnerUrl,
+      aheadServerUrl,
+    ],
   );
 
   // Derive the effective HEAD commit from the effective source.

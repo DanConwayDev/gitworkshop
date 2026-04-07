@@ -2027,11 +2027,14 @@ function SourceHeader({
   const hasProblems = mismatchCount > 0 || stateBehindGit;
 
   // Resolve "default" → "nostr" or a concrete git server URL.
+  const aheadServerUrl =
+    poolWarning?.kind === "state-behind-git" ? poolWarning.gitServerUrl : null;
   const effectiveSource = deriveEffectiveSource(
     selectedSource,
     stateBehindGit,
     isNoState,
     winnerUrl,
+    aheadServerUrl,
   );
   const effectiveSourceIsGitServer = effectiveSource !== "nostr";
 
@@ -2294,6 +2297,8 @@ export function RefSelector({
   // display and data logic works with a real value rather than re-deriving it.
   // Must be computed before refsWithStatus.
   const isNoState = repoRelayEose && repoState === null;
+  const aheadServerUrl =
+    poolWarning?.kind === "state-behind-git" ? poolWarning.gitServerUrl : null;
   const effectiveSource = useMemo(
     () =>
       deriveEffectiveSource(
@@ -2301,8 +2306,9 @@ export function RefSelector({
         stateBehindGit,
         isNoState,
         winnerUrl,
+        aheadServerUrl,
       ),
-    [selectedSource, stateBehindGit, isNoState, winnerUrl],
+    [selectedSource, stateBehindGit, isNoState, winnerUrl, aheadServerUrl],
   );
 
   const isMobile = useIsMobile();

@@ -20,23 +20,29 @@ import type { RepositoryState } from "@/casts/RepositoryState";
  * logic so that "default" never leaks into downstream components.
  *
  * Resolution rules for "default":
- *   - git server is ahead of Nostr state  → the winning git server URL
+ *   - git server is ahead of Nostr state  → the ahead server's URL
+ *                                            (aheadServerUrl, falls back to winnerUrl)
  *   - no Nostr state published             → the winning git server URL (or
  *                                            "nostr" if no winner is known)
  *   - otherwise                            → "nostr"
  *
  * "nostr" and explicit URLs are returned unchanged.
  *
- * @param selectedSource  Raw source value from URL params / component state
- * @param stateBehindGit  True when the git server is confirmed ahead of Nostr
- * @param isNoState       True when EOSE received but no Nostr state exists
- * @param winnerUrl       Clone URL of the pool's winning git server, if known
+ * @param selectedSource   Raw source value from URL params / component state
+ * @param stateBehindGit   True when the git server is confirmed ahead of Nostr
+ * @param isNoState        True when EOSE received but no Nostr state exists
+ * @param winnerUrl        Clone URL of the pool's winning git server, if known
+ * @param aheadServerUrl   Clone URL of the specific server that is ahead of the
+ *                         Nostr state (from poolWarning.gitServerUrl). When
+ *                         stateBehindGit=true this takes priority over winnerUrl
+ *                         so the source reflects the server driving the display.
  */
 export function deriveEffectiveSource(
   selectedSource: string,
   stateBehindGit: boolean,
   isNoState: boolean,
   winnerUrl: string | null | undefined,
+  aheadServerUrl?: string | null,
 ): string {
   if (selectedSource !== "default") {
     // "nostr" or an explicit URL — return as-is
@@ -44,7 +50,12 @@ export function deriveEffectiveSource(
   }
 
   // "default" resolution
-  if (stateBehindGit || isNoState) {
+  if (stateBehindGit) {
+    // Use the specific server that is ahead, falling back to the pool winner.
+    return aheadServerUrl ?? winnerUrl ?? "nostr";
+  }
+
+  if (isNoState) {
     return winnerUrl ?? "nostr";
   }
 

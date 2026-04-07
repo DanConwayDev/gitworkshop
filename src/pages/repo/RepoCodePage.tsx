@@ -138,6 +138,10 @@ export default function RepoCodePage() {
   // Resolve "default" → "nostr" or a concrete git server URL so all downstream
   // logic works with a real source value rather than re-deriving it everywhere.
   const isNoState = repoRelayEose && repoState === null;
+  const aheadServerUrl =
+    poolState.warning?.kind === "state-behind-git"
+      ? poolState.warning.gitServerUrl
+      : null;
   const effectiveSource = useMemo(
     () =>
       deriveEffectiveSource(
@@ -145,8 +149,15 @@ export default function RepoCodePage() {
         stateBehindGit,
         isNoState,
         poolState.winnerUrl,
+        aheadServerUrl,
       ),
-    [selectedSource, stateBehindGit, isNoState, poolState.winnerUrl],
+    [
+      selectedSource,
+      stateBehindGit,
+      isNoState,
+      poolState.winnerUrl,
+      aheadServerUrl,
+    ],
   );
 
   const effectiveHeadCommit = useMemo(() => {
