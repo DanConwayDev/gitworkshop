@@ -151,9 +151,9 @@ function getRefStatus(
   const stateRef = repoState.refs.find((r) => r.name === fullRefName);
 
   if (!stateRef) {
-    // When the git server is confirmed ahead of the signed state, new refs
-    // that don't appear in the state are expected — don't flag them.
-    if (stateBehindGit) return { status: "state-behind" };
+    // This ref exists on the git server but has never been published to the
+    // Nostr state — always flag it as git-server-only, even when the git
+    // server is ahead of the signed state on the default branch.
     return { status: "git-server-only" };
   }
 

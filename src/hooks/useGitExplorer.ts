@@ -257,18 +257,23 @@ function shortRefName(refPath: string): string {
 }
 
 /**
- * Extract infoRefs from the pool state — returns the first URL's infoRefs
- * that is available, preferring the winner URL.
+ * Extract infoRefs from the pool state — returns a merged view of refs from
+ * all URLs that have successfully fetched infoRefs, so refs that only exist
+ * on some servers (e.g. GitHub-only branches not mirrored to the grasp
+ * server) are included in the ref list.
+ *
+ * Falls back to any single URL's infoRefs while the race is still in flight.
  */
 function getInfoRefsFromState(
   pool: GitGraspPool,
   state: PoolState,
 ): InfoRefsUploadPackResponse | null {
-  // Prefer the winner URL's infoRefs (via pool.getInfoRefs())
-  const winner = pool.getInfoRefs();
-  if (winner) return winner;
+  // Use the merged view once the winner is known — this unions refs from all
+  // servers so GitHub-only refs appear alongside grasp-server refs.
+  const merged = pool.getMergedInfoRefs();
+  if (merged) return merged;
 
-  // Fall back to any URL that has infoRefs — this fires as soon as the first
+  // Fall back to any URL that has infoRefs — fires as soon as the first
   // URL in the race completes, rather than waiting for all to settle.
   for (const urlState of Object.values(state.urls)) {
     if (urlState.infoRefs) return urlState.infoRefs;

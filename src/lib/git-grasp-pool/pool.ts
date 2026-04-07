@@ -1611,6 +1611,47 @@ export class GitGraspPool {
   }
 
   /**
+   * Returns a merged infoRefs that unions refs from all URLs that have
+   * successfully fetched infoRefs. The winner's symrefs and capabilities
+   * take precedence; refs from all servers are merged so that refs only
+   * present on some servers (e.g. GitHub-only branches) are visible.
+   *
+   * Winner refs take precedence over other servers for the same ref name,
+   * so the displayed commit hash is always from the authoritative source.
+   */
+  getMergedInfoRefs(): InfoRefsUploadPackResponse | null {
+    const winner = this.getInfoRefs();
+    const allTrackers = this.urlManager.getAll();
+    const othersWithRefs = allTrackers
+      .filter((t) => t.url !== this.winnerUrl && t.state.infoRefs !== null)
+      .map((t) => t.state.infoRefs!);
+
+    if (!winner && othersWithRefs.length === 0) return null;
+
+    // Start from the winner (or first available) as the base
+    const base = winner ?? othersWithRefs[0];
+    if (othersWithRefs.length === 0) return base;
+
+    // Merge: winner refs take precedence, then fill in from other servers
+    const mergedRefs: Record<string, string> = {};
+    // Add other servers' refs first (lower priority)
+    for (const other of othersWithRefs) {
+      for (const [name, hash] of Object.entries(other.refs)) {
+        mergedRefs[name] = hash;
+      }
+    }
+    // Winner's refs overwrite (higher priority)
+    for (const [name, hash] of Object.entries(base.refs)) {
+      mergedRefs[name] = hash;
+    }
+
+    return {
+      ...base,
+      refs: mergedRefs,
+    };
+  }
+
+  /**
    * Returns true if the given URL is currently being routed through the
    * CORS proxy. Useful for UI components that display proxy status.
    */
