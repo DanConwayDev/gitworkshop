@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useCallback } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
 import {
@@ -19,12 +19,35 @@ import {
 } from "@/components/CommitList";
 import { AlertCircle, GitCommit, Loader2 } from "lucide-react";
 import { safeFormatDistanceToNow } from "@/lib/utils";
+import { deriveEffectiveHeadCommit } from "@/lib/sourceUtils";
 
 export default function RepoCommitsPage() {
   const { cloneUrls, repoState, repoRelayEose, commitsRef, resolved } =
     useRepoContext();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const repo = resolved?.repo;
+
+  // "source" query param drives which server's commit history is shown.
+  const selectedSource = searchParams.get("source") ?? "default";
+
+  const handleSourceChange = useCallback(
+    (src: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (src === "default") {
+            next.delete("source");
+          } else {
+            next.set("source", src);
+          }
+          return next;
+        },
+        { replace: false },
+      );
+    },
+    [setSearchParams],
+  );
 
   // Pool must come before explorer since pool is passed to explorer.
   const { pool, poolState } = useGitPool(cloneUrls, {
@@ -39,33 +62,70 @@ export default function RepoCommitsPage() {
   const stateBehindGit =
     !gitPulling && poolState.warning?.kind === "state-behind-git";
 
-  // When the git server is confirmed ahead of the signed Nostr state, don't
-  // pass a knownHeadCommit so the explorer falls through to the default branch
-  // (matching the Code tab behaviour).
-  const effectiveHeadCommit = stateBehindGit
+  // Bootstrap explorer: resolves refs and the current ref name.
+  const bootstrapHeadCommit = stateBehindGit
     ? undefined
     : repoState?.headCommitId;
-
-  // Always fetch refs so we can populate the selector.
-  // Pass commitsRef so the explorer resolves to the right commit hash.
   const explorer = useGitExplorer(pool, poolState, {
+    refAndPath: commitsRef,
+    knownHeadCommit: bootstrapHeadCommit,
+  });
+
+  const resolvedRef = explorer.resolvedRef ?? undefined;
+  const resolvedRefIsBranch =
+    explorer.refs.find((r) => r.name === resolvedRef)?.isBranch ?? true;
+
+  // Derive the effective HEAD commit from the selected source.
+  const effectiveHeadCommit = useMemo(() => {
+    return deriveEffectiveHeadCommit(
+      selectedSource,
+      poolState.urls,
+      repoState ?? null,
+      stateBehindGit,
+      resolvedRef ?? null,
+      resolvedRefIsBranch,
+    );
+  }, [
+    selectedSource,
+    poolState.urls,
+    repoState,
+    stateBehindGit,
+    resolvedRef,
+    resolvedRefIsBranch,
+  ]);
+
+  // When the effective commit differs from the bootstrap, run a second explorer
+  // to fetch the source-specific tree (needed to get the right commitHash for
+  // the history hook below).
+  const explorerForSource = useGitExplorer(pool, poolState, {
     refAndPath: commitsRef,
     knownHeadCommit: effectiveHeadCommit,
   });
 
-  const resolvedRef = explorer.resolvedRef ?? undefined;
+  const useSourceExplorer =
+    selectedSource !== "default" && effectiveHeadCommit !== bootstrapHeadCommit;
+  const activeExplorer = useSourceExplorer ? explorerForSource : explorer;
 
-  // When the git server is confirmed ahead of the signed state, use the pool's
-  // authoritative gitCommitId directly — this is available as soon as the pool
-  // computes the warning, before the explorer has had a chance to re-run.
-  // Otherwise fall back to the explorer's resolved commit hash (full 40-char),
-  // which avoids re-resolving the branch name against infoRefs (which could
-  // map to an older commit on a different server).
-  const historyCommit: string | undefined = stateBehindGit
-    ? poolState.warning?.kind === "state-behind-git"
-      ? poolState.warning.gitCommitId
-      : (explorer.commitHash ?? undefined)
-    : (explorer.commitHash ?? undefined);
+  // Derive the commit hash to use for history.
+  // When a specific server is selected, use that server's commit directly.
+  // When default and git is ahead, use the pool's authoritative commit.
+  const historyCommit: string | undefined = useMemo(() => {
+    if (selectedSource !== "default" && effectiveHeadCommit) {
+      return effectiveHeadCommit;
+    }
+    if (stateBehindGit) {
+      return poolState.warning?.kind === "state-behind-git"
+        ? poolState.warning.gitCommitId
+        : (activeExplorer.commitHash ?? undefined);
+    }
+    return activeExplorer.commitHash ?? undefined;
+  }, [
+    selectedSource,
+    effectiveHeadCommit,
+    stateBehindGit,
+    poolState.warning,
+    activeExplorer.commitHash,
+  ]);
 
   const history = useInfiniteCommitHistory(pool, poolState, historyCommit);
 
@@ -110,14 +170,16 @@ export default function RepoCommitsPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <GitCommit className="h-5 w-5 text-muted-foreground shrink-0" />
         <h2 className="text-lg font-semibold shrink-0">Commits on</h2>
-        {explorer.refs.length > 0 ? (
+        {activeExplorer.refs.length > 0 ? (
           <RefSelector
-            refs={explorer.refs}
+            refs={activeExplorer.refs}
             currentRef={resolvedRef ?? ""}
             onRefChange={handleRefChange}
+            selectedSource={selectedSource}
+            onSourceChange={handleSourceChange}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
-            loading={explorer.loading}
+            loading={activeExplorer.loading}
             stateBehindGit={stateBehindGit}
             poolWarning={poolState.warning}
             winnerUrl={poolState.winnerUrl}
@@ -126,7 +188,7 @@ export default function RepoCommitsPage() {
             cloneUrls={cloneUrls}
             pool={pool}
           />
-        ) : explorer.loading ? (
+        ) : activeExplorer.loading ? (
           <Skeleton className="h-8 w-28" />
         ) : resolvedRef ? (
           <code className="font-mono text-pink-600 dark:text-pink-400 text-sm">
@@ -160,7 +222,9 @@ export default function RepoCommitsPage() {
         {cloneUrls.length > 0 && (
           <GitServerStatus
             currentRefFull={(() => {
-              const ref = explorer.refs.find((r) => r.name === resolvedRef);
+              const ref = activeExplorer.refs.find(
+                (r) => r.name === resolvedRef,
+              );
               if (!ref || !resolvedRef) return "";
               return ref.isBranch
                 ? `refs/heads/${resolvedRef}`

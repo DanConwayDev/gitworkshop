@@ -7,7 +7,7 @@ import {
   useRef,
   useCallback,
 } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
 import { useGitPool } from "@/hooks/useGitPool";
@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
+import { deriveEffectiveHeadCommit } from "@/lib/sourceUtils";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 import { CodeBlock } from "@/components/CodeBlock";
@@ -63,7 +64,30 @@ export default function RepoCodePage() {
     resolved,
   } = useRepoContext();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const repo = resolved?.repo;
+
+  // "source" query param drives which server's data the explorer shows.
+  // No param = "default" (pool-decided). "nostr" or a clone URL are explicit.
+  const selectedSource = searchParams.get("source") ?? "default";
+
+  const handleSourceChange = useCallback(
+    (src: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (src === "default") {
+            next.delete("source");
+          } else {
+            next.set("source", src);
+          }
+          return next;
+        },
+        { replace: false },
+      );
+    },
+    [setSearchParams],
+  );
 
   // Single pool subscription — drives everything on this page.
   const { pool, poolState } = useGitPool(cloneUrls, {
@@ -84,31 +108,77 @@ export default function RepoCodePage() {
   // waiting for the Nostr relay to send EOSE (which can take 2-5 s).
   const gitPulling = cloneUrls.length > 0 ? poolState.pulling : false;
 
-  // When the git server is confirmed ahead of the signed Nostr state, don't
-  // pass a knownHeadCommit so the explorer falls through to the default branch
-  // (which already points at the git server's latest commit). This keeps the
-  // trigger showing the branch name rather than a raw commit hash.
-  const effectiveHeadCommit = useMemo(() => {
-    if (!gitPulling && poolState.warning?.kind === "state-behind-git") {
-      return undefined;
-    }
+  const stateBehindGit =
+    !gitPulling && poolState.warning?.kind === "state-behind-git";
+
+  // Run the explorer first with the Nostr/default commit so we get refs and
+  // resolvedRef populated. We then derive the effective commit from the
+  // selected source using the resolved ref, and re-run if it differs.
+  //
+  // Bootstrap pass: use the standard Nostr/default logic.
+  const bootstrapHeadCommit = useMemo(() => {
+    if (stateBehindGit) return undefined;
     return repoState?.headCommitId;
-  }, [gitPulling, poolState.warning, repoState?.headCommitId]);
+  }, [stateBehindGit, repoState?.headCommitId]);
 
   const explorer = useGitExplorer(pool, poolState, {
+    refAndPath: treeRefAndPath,
+    knownHeadCommit: bootstrapHeadCommit,
+  });
+
+  // Once the explorer has resolved the ref, derive the effective HEAD commit
+  // from the selected source. This is what actually drives the displayed tree.
+  const resolvedRef = explorer.resolvedRef;
+  const resolvedRefIsBranch =
+    explorer.refs.find((r) => r.name === resolvedRef)?.isBranch ?? true;
+
+  const effectiveHeadCommit = useMemo(() => {
+    return deriveEffectiveHeadCommit(
+      selectedSource,
+      poolState.urls,
+      repoState ?? null,
+      stateBehindGit,
+      resolvedRef,
+      resolvedRefIsBranch,
+    );
+  }, [
+    selectedSource,
+    poolState.urls,
+    repoState,
+    stateBehindGit,
+    resolvedRef,
+    resolvedRefIsBranch,
+  ]);
+
+  // Re-run the explorer with the effective commit when source changes.
+  // We use a second explorer instance keyed on effectiveHeadCommit so that
+  // the bootstrap explorer's cached state is not discarded on every render.
+  const explorerForSource = useGitExplorer(pool, poolState, {
     refAndPath: treeRefAndPath,
     knownHeadCommit: effectiveHeadCommit,
   });
 
+  // Use the source-aware explorer when a specific server is selected and its
+  // commit differs from the bootstrap; otherwise use the bootstrap explorer
+  // (avoids a redundant fetch when source is "default"/"nostr").
+  const useSourceExplorer =
+    selectedSource !== "default" && effectiveHeadCommit !== bootstrapHeadCommit;
+  const activeExplorer = useSourceExplorer ? explorerForSource : explorer;
+
   // Page title: "<repo>/<path> at <ref> - ngit" or "<repo> - ngit" at root
   const seoTitle = useMemo(() => {
     const name = repo?.name ?? repoId;
-    const ref = explorer.resolvedRef;
-    const path = explorer.resolvedPath;
+    const ref = activeExplorer.resolvedRef;
+    const path = activeExplorer.resolvedPath;
     if (ref && path) return `${name}/${path} at ${ref} - ngit`;
     if (ref) return `${name} at ${ref} - ngit`;
     return `${name} - ngit`;
-  }, [repo?.name, repoId, explorer.resolvedRef, explorer.resolvedPath]);
+  }, [
+    repo?.name,
+    repoId,
+    activeExplorer.resolvedRef,
+    activeExplorer.resolvedPath,
+  ]);
 
   useSeoMeta({
     title: seoTitle,
@@ -136,8 +206,8 @@ export default function RepoCodePage() {
     navigate(treeUrl(newRef));
   };
 
-  const currentRef = explorer.resolvedRef ?? "";
-  const currentPath = explorer.resolvedPath ?? "";
+  const currentRef = activeExplorer.resolvedRef ?? "";
+  const currentPath = activeExplorer.resolvedPath ?? "";
   const pathSegments = currentPath
     ? currentPath.split("/").filter(Boolean)
     : [];
@@ -148,28 +218,22 @@ export default function RepoCodePage() {
   // hasn't fired yet). Override with the git server's commit info so the
   // commit bar, warning banner, RefSelector, and tree viewer are always
   // consistent with each other.
-  // When the git server is confirmed ahead of the signed Nostr state, the
-  // explorer may still be showing the old signed commit during the render
-  // cycle where stateBehindGit first becomes true (the explorer's useEffect
-  // hasn't fired yet). Override with the git server's commit info so the
-  // commit bar, warning banner, RefSelector, and tree viewer are always
-  // consistent with each other.
-  const stateBehindGit =
-    !gitPulling && poolState.warning?.kind === "state-behind-git";
-  const displayHeadCommit = stateBehindGit
-    ? (poolState.latestCommit ?? explorer.headCommit)
-    : explorer.headCommit;
-  const displayCommitHash = stateBehindGit
-    ? poolState.warning?.kind === "state-behind-git"
-      ? poolState.warning.gitCommitId
-      : explorer.commitHash
-    : explorer.commitHash;
+  const displayHeadCommit =
+    stateBehindGit && selectedSource === "default"
+      ? (poolState.latestCommit ?? activeExplorer.headCommit)
+      : activeExplorer.headCommit;
+  const displayCommitHash =
+    stateBehindGit && selectedSource === "default"
+      ? poolState.warning?.kind === "state-behind-git"
+        ? poolState.warning.gitCommitId
+        : activeExplorer.commitHash
+      : activeExplorer.commitHash;
 
   // Show the sidebar when at the repo root (no sub-path within the tree)
   const isAtRoot = !treeRefAndPath || pathSegments.length === 0;
 
   // Determine if we should show a README below the file tree
-  const readmeEntry = explorer.fileTree?.find(
+  const readmeEntry = activeExplorer.fileTree?.find(
     (f) => f.type === "file" && f.name.toLowerCase().startsWith("readme"),
   );
 
@@ -191,13 +255,15 @@ export default function RepoCodePage() {
         <>
           {/* Locator bar: branch selector + breadcrumb + commit info */}
           <LocatorBar
-            loading={explorer.loading}
-            refs={explorer.refs}
+            loading={activeExplorer.loading}
+            refs={activeExplorer.refs}
             currentRef={currentRef}
             pathSegments={pathSegments}
             basePath={basePath}
             treeUrl={treeUrl}
             onRefChange={handleRefChange}
+            selectedSource={selectedSource}
+            onSourceChange={handleSourceChange}
             headCommit={displayHeadCommit}
             commitHash={displayCommitHash}
             repoId={repoId}
@@ -225,45 +291,47 @@ export default function RepoCodePage() {
           />
 
           {/* Error state */}
-          {explorer.error && (
+          {activeExplorer.error && (
             <Card className="border-destructive/30">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 text-sm text-destructive">
                   <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>{explorer.error}</span>
+                  <span>{activeExplorer.error}</span>
                 </div>
               </CardContent>
             </Card>
           )}
 
           {/* Path not found */}
-          {!explorer.loading && !explorer.error && !explorer.pathExists && (
-            <div className="text-center py-16 space-y-4">
-              <h3 className="text-xl font-semibold">Path not found</h3>
-              <p className="text-muted-foreground text-sm">
-                <code className="font-mono bg-muted px-1.5 py-0.5 rounded">
-                  {currentPath || "/"}
-                </code>{" "}
-                does not exist at ref{" "}
-                <code className="font-mono bg-muted px-1.5 py-0.5 rounded">
-                  {currentRef}
-                </code>
-              </p>
-              <Button variant="outline" asChild>
-                <Link to={treeUrl(currentRef)}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to root
-                </Link>
-              </Button>
-            </div>
-          )}
+          {!activeExplorer.loading &&
+            !activeExplorer.error &&
+            !activeExplorer.pathExists && (
+              <div className="text-center py-16 space-y-4">
+                <h3 className="text-xl font-semibold">Path not found</h3>
+                <p className="text-muted-foreground text-sm">
+                  <code className="font-mono bg-muted px-1.5 py-0.5 rounded">
+                    {currentPath || "/"}
+                  </code>{" "}
+                  does not exist at ref{" "}
+                  <code className="font-mono bg-muted px-1.5 py-0.5 rounded">
+                    {currentRef}
+                  </code>
+                </p>
+                <Button variant="outline" asChild>
+                  <Link to={treeUrl(currentRef)}>
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Back to root
+                  </Link>
+                </Button>
+              </div>
+            )}
 
           {/* File tree (directory view) */}
-          {(explorer.loading ||
-            (explorer.fileTree && explorer.isDirectory)) && (
+          {(activeExplorer.loading ||
+            (activeExplorer.fileTree && activeExplorer.isDirectory)) && (
             <FileTreeTable
-              loading={explorer.loading}
-              entries={explorer.fileTree}
+              loading={activeExplorer.loading}
+              entries={activeExplorer.fileTree}
               currentPath={currentPath}
               currentRef={currentRef}
               treeUrl={treeUrl}
@@ -271,14 +339,14 @@ export default function RepoCodePage() {
           )}
 
           {/* Parent directory listing + file content viewer (file view) */}
-          {!explorer.loading &&
-            !explorer.isDirectory &&
-            explorer.pathExists && (
+          {!activeExplorer.loading &&
+            !activeExplorer.isDirectory &&
+            activeExplorer.pathExists && (
               <>
-                {explorer.parentFileTree && (
+                {activeExplorer.parentFileTree && (
                   <FileTreeTable
                     loading={false}
-                    entries={explorer.parentFileTree}
+                    entries={activeExplorer.parentFileTree}
                     currentPath={pathSegments.slice(0, -1).join("/")}
                     currentRef={currentRef}
                     treeUrl={treeUrl}
@@ -287,24 +355,24 @@ export default function RepoCodePage() {
                 )}
                 <FileContentViewer
                   filename={pathSegments[pathSegments.length - 1] ?? ""}
-                  filePath={explorer.resolvedPath ?? ""}
-                  content={explorer.fileContent}
-                  fileBytes={explorer.fileBytes}
+                  filePath={activeExplorer.resolvedPath ?? ""}
+                  content={activeExplorer.fileContent}
+                  fileBytes={activeExplorer.fileBytes}
                   cloneUrls={cloneUrls}
-                  commitHash={explorer.commitHash}
+                  commitHash={activeExplorer.commitHash}
                 />
               </>
             )}
 
           {/* README below file tree */}
-          {!explorer.loading &&
-            explorer.isDirectory &&
+          {!activeExplorer.loading &&
+            activeExplorer.isDirectory &&
             readmeEntry &&
-            explorer.commitHash &&
+            activeExplorer.commitHash &&
             pool && (
               <ReadmeViewer
                 pool={pool}
-                commitHash={explorer.commitHash}
+                commitHash={activeExplorer.commitHash}
                 readmePath={readmeEntry.path}
                 readmeName={readmeEntry.name}
                 cloneUrls={cloneUrls}
@@ -434,6 +502,8 @@ function LocatorBar({
   basePath,
   treeUrl,
   onRefChange,
+  selectedSource,
+  onSourceChange,
   headCommit,
   commitHash,
   repoId,
@@ -460,6 +530,8 @@ function LocatorBar({
   basePath: string;
   treeUrl: (ref: string, path?: string) => string;
   onRefChange: (ref: string) => void;
+  selectedSource: string;
+  onSourceChange: (src: string) => void;
   headCommit: ReturnType<typeof useGitExplorer>["headCommit"];
   commitHash: string | null;
   repoId: string;
@@ -533,6 +605,8 @@ function LocatorBar({
             refs={refs}
             currentRef={currentRef}
             onRefChange={onRefChange}
+            selectedSource={selectedSource}
+            onSourceChange={onSourceChange}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
             relayStateMap={relayStateMap}

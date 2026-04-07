@@ -60,6 +60,17 @@ export interface RefSelectorProps {
   refs: GitRef[];
   currentRef: string;
   onRefChange: (ref: string) => void;
+  /**
+   * The currently selected verification source.
+   * "default" = pool-decided, "nostr" = explicit nostr override, or a clone URL.
+   * Defaults to "default" when omitted.
+   */
+  selectedSource?: string;
+  /**
+   * Called whenever the user changes the verification source.
+   * "default" = pool-decided, "nostr" = explicit nostr override, or a URL.
+   */
+  onSourceChange?: (source: string) => void;
   /** The winning Nostr state event, null if none found, undefined while loading */
   repoState: RepositoryState | null | undefined;
   /** True once the relay EOSE has been received for the state query */
@@ -2172,6 +2183,8 @@ export function RefSelector({
   refs,
   currentRef,
   onRefChange,
+  selectedSource: selectedSourceProp,
+  onSourceChange,
   repoState,
   repoRelayEose,
   relayStateMap,
@@ -2191,7 +2204,10 @@ export function RefSelector({
   // "default" = let the pool decide (current behaviour — git server when ahead, nostr otherwise)
   // "nostr"   = explicitly force nostr state comparison even when stateBehindGit
   // <url>     = compare against a specific git server's infoRefs
-  const [selectedSource, setSelectedSource] = useState<string>("default");
+  //
+  // Controlled when selectedSourceProp is provided; falls back to "default".
+  const selectedSource = selectedSourceProp ?? "default";
+  const setSelectedSource = (src: string) => onSourceChange?.(src);
   const isMobile = useIsMobile();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
@@ -2355,6 +2371,50 @@ export function RefSelector({
     : gitDomain;
 
   const handleSelect = (refName: string) => {
+    // If the chosen ref is not on the currently selected server, auto-switch
+    // to the best source that has it: default → nostr → first other server URL.
+    const chosenRef = refsWithStatus.find((r) => r.name === refName);
+    if (chosenRef?.status === "not-on-server") {
+      const prefix = chosenRef.isBranch ? "refs/heads/" : "refs/tags/";
+      const fullRefName = `${prefix}${refName}`;
+
+      // "default" source always has the ref (pool winner) — prefer it.
+      const defaultHasRef = cloneUrls.some((url) => {
+        const infoRefs = urlStates[url]?.infoRefs;
+        if (!infoRefs) return false;
+        return (
+          infoRefs.refs[fullRefName] !== undefined ||
+          infoRefs.refs[`${fullRefName}^{}`] !== undefined
+        );
+      });
+
+      if (defaultHasRef || selectedSource === "default") {
+        // Remove source param — "default" is the no-param state.
+        setSelectedSource("default");
+      } else if (repoState !== null && repoState !== undefined) {
+        // Check if Nostr state has this ref.
+        const nostrHasRef = repoState.refs.some((r) => r.name === fullRefName);
+        if (nostrHasRef) {
+          setSelectedSource("nostr");
+        } else {
+          // Try other server URLs in order.
+          const otherUrl = cloneUrls.find((url) => {
+            if (url === selectedSource) return false;
+            const infoRefs = urlStates[url]?.infoRefs;
+            if (!infoRefs) return false;
+            return (
+              infoRefs.refs[fullRefName] !== undefined ||
+              infoRefs.refs[`${fullRefName}^{}`] !== undefined
+            );
+          });
+          if (otherUrl) setSelectedSource(otherUrl);
+          else setSelectedSource("default");
+        }
+      } else {
+        setSelectedSource("default");
+      }
+    }
+
     onRefChange(refName);
     setOpen(false);
     setSearch("");
