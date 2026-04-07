@@ -1038,11 +1038,11 @@ function DiffSummaryBar({
   }
 
   return (
-    <div className="border-b border-border/40">
+    <div className="bg-amber-500/5">
       {/* Summary row */}
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="flex items-center gap-1.5 w-full px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors text-left"
+        className="flex items-center gap-1.5 w-full px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-amber-500/10 transition-colors text-left"
       >
         <span className="flex-1 min-w-0">{summaryText}</span>
         {expanded ? (
@@ -1052,9 +1052,9 @@ function DiffSummaryBar({
         )}
       </button>
 
-      {/* Expanded per-ref list */}
+      {/* Expanded per-ref list — slightly faded amber so it trails off naturally */}
       {expanded && (
-        <div className="px-3 pb-2 space-y-1.5">
+        <div className="px-3 pb-2 space-y-1.5 bg-amber-500/[0.03]">
           {differingRefs.map((ref) => (
             <DiffRefRow
               key={ref.name}
@@ -1990,11 +1990,10 @@ function SourceHeader({
         <PopoverTrigger asChild>
           <button
             className={cn(
-              "flex items-center gap-2 px-3 py-2 border-b w-full text-left text-[11px] transition-colors",
+              "flex items-center gap-2 px-3 py-2 w-full text-left text-[11px] transition-colors",
               hasProblems && !isManualGitSource
-                ? "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10"
-                : "border-border/40 bg-muted/20 hover:bg-accent/40",
-              showDiffSummary && "border-b-0",
+                ? "bg-amber-500/5 hover:bg-amber-500/10"
+                : "border-b border-border/40 bg-muted/20 hover:bg-accent/40",
             )}
           >
             {/* Source icon */}
