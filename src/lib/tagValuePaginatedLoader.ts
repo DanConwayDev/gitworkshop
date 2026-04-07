@@ -66,11 +66,9 @@ import {
   Observable,
   Subject,
   bufferTime,
-  debounceTime,
   defer,
   filter,
   finalize,
-  map,
   merge,
   retry,
   share,
@@ -78,6 +76,7 @@ import {
   take,
   tap,
 } from "rxjs";
+import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
 
 export type { TagValuePointer };
 
@@ -426,7 +425,7 @@ export function createPaginatedTagValueLoader(
 ): PaginatedTagValueLoader {
   const bufferMs = opts.bufferTime ?? 1000;
   const bufferMax = opts.bufferSize ?? 200;
-  const settleMs = opts.settleTime ?? 200;
+  const settleMs = opts.settleTime ?? DEFAULT_SETTLE_TIME;
 
   // In-memory exhaustion tracking — resets on page reload
   const exhausted = new Set<string>();
@@ -444,13 +443,7 @@ export function createPaginatedTagValueLoader(
       if (pointers.length === 0) return;
 
       // Per-batch settle signal — any relay finishing its work pushes here
-      const settled$ = new Subject<void>();
-
-      // EOSE stream: debounce settle signals then map to "EOSE" sentinel
-      const eose$: Observable<PaginatedTagValueResponse> = settled$.pipe(
-        debounceTime(settleMs),
-        map(() => "EOSE" as const),
-      );
+      const { settled$, eose$ } = makeSettleSignal(settleMs);
 
       const events$ = processBatch(
         pool,
