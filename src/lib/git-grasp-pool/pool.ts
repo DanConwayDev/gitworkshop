@@ -133,16 +133,27 @@ function computeRefStatuses(
     // For annotated tags, prefer the peeled commit hash (refName + "^{}")
     // because the state event stores the peeled commit, not the tag object.
     const peeledRefName = refName + "^{}";
-    const serverCommits: Array<{ url: string; commit: string }> = [];
+    const serverCommits: Array<{
+      url: string;
+      commit: string;
+      /** Raw tag object OID from infoRefs (only set for annotated tags) */
+      rawTagOid?: string;
+    }> = [];
     for (const t of trackers) {
       if (t.status === "ok" && t.state.infoRefs) {
+        const rawOid = t.state.infoRefs.refs[refName];
+        const peeledOid = t.state.infoRefs.refs[peeledRefName];
         // Use the peeled commit when available (annotated tag), otherwise the
         // raw ref value (lightweight tag or branch).
-        const commit =
-          t.state.infoRefs.refs[peeledRefName] ??
-          t.state.infoRefs.refs[refName];
+        const commit = peeledOid ?? rawOid;
         if (commit) {
-          serverCommits.push({ url: t.url, commit });
+          serverCommits.push({
+            url: t.url,
+            commit,
+            // Only record rawTagOid when it differs from the peeled commit
+            // (i.e. this is an annotated tag, not a lightweight tag/branch).
+            rawTagOid: peeledOid && peeledOid !== rawOid ? rawOid : undefined,
+          });
         }
       }
     }
@@ -159,7 +170,7 @@ function computeRefStatuses(
 
     // Assign per-URL status for this ref
     let disagreeCount = 0;
-    for (const { url, commit } of serverCommits) {
+    for (const { url, commit, rawTagOid } of serverCommits) {
       const statusMap = urlRefStatuses.get(url)!;
       const commitMap = urlRefCommits.get(url)!;
       commitMap[refName] = commit;
@@ -168,6 +179,13 @@ function computeRefStatuses(
         // State event exists but doesn't mention this ref — can't compare
         statusMap[refName] = "connected";
       } else if (commitsMatch(commit, expectedCommit)) {
+        statusMap[refName] = "match";
+      } else if (rawTagOid && commitsMatch(rawTagOid, expectedCommit)) {
+        // Old ngit (pre-fix) stored the tag object OID in the state event
+        // instead of the peeled commit. The server's peeled commit differs
+        // from the state's tag object OID, but the raw tag OID matches —
+        // the server is consistent; treat this as a match to avoid false
+        // discrepancy warnings for repos published by older ngit versions.
         statusMap[refName] = "match";
       } else {
         statusMap[refName] = "behind";
@@ -182,10 +200,13 @@ function computeRefStatuses(
         disagreeCount,
         totalServers: serverCommits.length,
         expectedCommit,
-        servers: serverCommits.map(({ url, commit }) => ({
+        servers: serverCommits.map(({ url, commit, rawTagOid }) => ({
           url,
           commit,
-          matches: expectedCommit ? commitsMatch(commit, expectedCommit) : true,
+          matches: expectedCommit
+            ? commitsMatch(commit, expectedCommit) ||
+              (!!rawTagOid && commitsMatch(rawTagOid, expectedCommit))
+            : true,
         })),
       });
     }
