@@ -6,6 +6,7 @@ import type {
   RepoQueryOptions,
 } from "@/lib/nip34";
 import type { RepositoryState } from "@/casts/RepositoryState";
+import type { NostrEvent } from "nostr-tools";
 
 export interface RepoContextValue {
   /** Hex pubkey of the selected maintainer (always resolved, even for nip05 routes). */
@@ -32,6 +33,13 @@ export interface RepoContextValue {
    * is still in flight. Always true when there is no repo relay group.
    */
   repoRelayEose: boolean;
+  /**
+   * Per-relay state registry: the best kind:30618 state event seen from each
+   * relay URL. Derived reactively from the EventStore. Callers can use this
+   * to determine whether a Grasp server is behind the canonical state and
+   * what commit it last announced.
+   */
+  relayStateMap: Map<string, NostrEvent>;
   /** Everything after /tree/ in the URL (e.g. "main", "feat/foo/.gitignore").
    *  Ref resolution via longest-prefix matching happens inside useGitExplorer. */
   treeRefAndPath?: string;

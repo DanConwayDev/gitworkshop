@@ -57,6 +57,7 @@ export default function RepoCodePage() {
     cloneUrls,
     repoState,
     repoRelayEose,
+    relayStateMap,
     treeRefAndPath,
     repoId,
     resolved,
@@ -204,6 +205,7 @@ export default function RepoCodePage() {
             lastCheckedAt={poolState.lastCheckedAt}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
+            relayStateMap={relayStateMap}
             hasStateEvent={!!repoState}
             urlStates={poolState.urls}
             cloneUrls={cloneUrls}
@@ -439,6 +441,7 @@ function LocatorBar({
   lastCheckedAt,
   repoState,
   repoRelayEose,
+  relayStateMap,
   hasStateEvent,
   urlStates,
   cloneUrls,
@@ -464,6 +467,7 @@ function LocatorBar({
   lastCheckedAt: number | null;
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
+  relayStateMap: Map<string, import("nostr-tools").NostrEvent>;
   hasStateEvent: boolean;
   urlStates: Record<string, UrlState>;
   cloneUrls: string[];
@@ -531,6 +535,7 @@ function LocatorBar({
             onRefChange={onRefChange}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
+            relayStateMap={relayStateMap}
             loading={loading}
             stateBehindGit={stateBehindGit}
             poolWarning={poolWarning}

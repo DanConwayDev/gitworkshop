@@ -33,11 +33,14 @@ import {
   Minus,
 } from "lucide-react";
 import { nip19 } from "nostr-tools";
+import type { NostrEvent } from "nostr-tools";
 import { formatDistanceStrict } from "date-fns";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
+import { isValidRepositoryState } from "@/casts/RepositoryState";
+import { getStateRefs } from "@/lib/nip34";
 import type {
   PoolWarning,
   UrlState,
@@ -61,6 +64,12 @@ export interface RefSelectorProps {
   repoState: RepositoryState | null | undefined;
   /** True once the relay EOSE has been received for the state query */
   repoRelayEose: boolean;
+  /**
+   * Per-relay state registry from useRepositoryState. Maps relay URL to the
+   * best state event seen from that relay. Used to detect when a git server
+   * is serving an older (but previously signed) Nostr state.
+   */
+  relayStateMap?: Map<string, NostrEvent>;
   /** True while data is still being fetched */
   loading?: boolean;
   /**
@@ -109,6 +118,7 @@ export interface RefSelectorProps {
  *
  * - "verified"        : state event exists and this ref's commit matches
  * - "mismatch"        : state event exists but declares a different commit for this ref
+ * - "old-state"       : ref matches a previously-signed (older) Nostr state from this relay
  * - "state-behind"    : git server is ahead of the signed state (expected lag, not suspicious)
  * - "git-server-only" : state event exists but doesn't include this ref
  * - "not-on-server"   : ref doesn't exist on the selected git server source
@@ -118,6 +128,7 @@ export interface RefSelectorProps {
 type RefStatus =
   | "verified"
   | "mismatch"
+  | "old-state"
   | "state-behind"
   | "git-server-only"
   | "not-on-server"
@@ -126,7 +137,9 @@ type RefStatus =
 
 interface RefWithStatus extends GitRef {
   status: RefStatus;
-  stateCommit?: string; // commit declared by state event (if different)
+  stateCommit?: string; // commit declared by winning state event (if different)
+  oldStateCommit?: string; // commit declared by the older relay-specific state (for "old-state")
+  oldStateCreatedAt?: number; // created_at of the older relay-specific state event
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +153,51 @@ function gitServerDomain(url: string): string {
   } catch {
     return url;
   }
+}
+
+/**
+ * Derive the likely Nostr relay URL from a git server clone URL.
+ * For Grasp servers (https://host/npub1.../repo.git) this is wss://host.
+ * Returns undefined for non-HTTP URLs or when derivation is not possible.
+ */
+function cloneUrlToRelayUrl(cloneUrl: string): string | undefined {
+  try {
+    const u = new URL(cloneUrl);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return undefined;
+    const wsProto = u.protocol === "https:" ? "wss:" : "ws:";
+    return `${wsProto}//${u.host}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function commitsMatch(a: string, b: string): boolean {
+  return a === b || a.startsWith(b) || b.startsWith(a);
+}
+
+/**
+ * Given a relay URL and the relayStateMap, return the older state event for
+ * that relay if it differs from the winning state. Returns undefined when the
+ * relay's state IS the winning state or when no relay state is available.
+ */
+function getOlderRelayState(
+  relayUrl: string,
+  relayStateMap: Map<string, NostrEvent>,
+  winningState: RepositoryState,
+): NostrEvent | undefined {
+  const relayEvent = relayStateMap.get(relayUrl);
+  if (!relayEvent) return undefined;
+  // If the relay's event IS the winning event, there's no older state
+  if (relayEvent.id === winningState.event.id) return undefined;
+  // Only return it if it's actually older (or same age but lower ID)
+  if (
+    relayEvent.created_at > winningState.event.created_at ||
+    (relayEvent.created_at === winningState.event.created_at &&
+      relayEvent.id >= winningState.event.id)
+  ) {
+    return undefined;
+  }
+  return relayEvent;
 }
 
 function getRefStatus(
@@ -244,13 +302,24 @@ function getRefStatus(
  * Nostr state is still the authority — we compare this server's commit
  * against the Nostr state, but only using data from this one server.
  * Refs absent from this server get "not-on-server".
+ *
+ * When the server's commit doesn't match the winning state but matches a
+ * previously-signed (older) state event from that server's relay, the status
+ * is "old-state" rather than "mismatch".
  */
 function getRefStatusForServer(
   ref: GitRef,
+  serverUrl: string,
   serverUrlState: UrlState,
   repoState: RepositoryState | null | undefined,
   repoRelayEose: boolean,
-): { status: RefStatus; stateCommit?: string } {
+  relayStateMap?: Map<string, NostrEvent>,
+): {
+  status: RefStatus;
+  stateCommit?: string;
+  oldStateCommit?: string;
+  oldStateCreatedAt?: number;
+} {
   const prefix = ref.isBranch ? "refs/heads/" : "refs/tags/";
   const fullRefName = `${prefix}${ref.name}`;
   const peeledRefName = `${fullRefName}^{}`;
@@ -284,20 +353,57 @@ function getRefStatusForServer(
   const poolStatus = serverUrlState.refStatus[fullRefName];
   if (poolStatus === "match") return { status: "verified" };
   if (poolStatus === "behind" || poolStatus === "ahead") {
+    // Check if this server's commit matches an older signed state from its relay
+    const oldState = relayStateMap
+      ? (() => {
+          const relayUrl = cloneUrlToRelayUrl(serverUrl);
+          return relayUrl
+            ? getOlderRelayState(relayUrl, relayStateMap, repoState)
+            : undefined;
+        })()
+      : undefined;
+    if (oldState && isValidRepositoryState(oldState)) {
+      const oldStateRefs = getStateRefs(oldState);
+      const oldStateRef = oldStateRefs.find((r) => r.name === fullRefName);
+      if (oldStateRef && commitsMatch(serverCommit, oldStateRef.commitId)) {
+        return {
+          status: "old-state",
+          stateCommit: stateRef.commitId,
+          oldStateCommit: oldStateRef.commitId,
+          oldStateCreatedAt: oldState.created_at,
+        };
+      }
+    }
     return { status: "mismatch", stateCommit: stateRef.commitId };
   }
 
   // Fallback: direct commit comparison
-  function commitsMatch(a: string, b: string): boolean {
-    return a === b || a.startsWith(b) || b.startsWith(a);
-  }
-
   if (commitsMatch(serverCommit, stateRef.commitId)) {
     return { status: "verified" };
   }
 
   if (ref.rawTagOid && commitsMatch(ref.rawTagOid, stateRef.commitId)) {
     return { status: "verified" };
+  }
+
+  // Check for old-state match before declaring mismatch
+  if (relayStateMap) {
+    const relayUrl = cloneUrlToRelayUrl(serverUrl);
+    const oldState = relayUrl
+      ? getOlderRelayState(relayUrl, relayStateMap, repoState)
+      : undefined;
+    if (oldState && isValidRepositoryState(oldState)) {
+      const oldStateRefs = getStateRefs(oldState);
+      const oldStateRef = oldStateRefs.find((r) => r.name === fullRefName);
+      if (oldStateRef && commitsMatch(serverCommit, oldStateRef.commitId)) {
+        return {
+          status: "old-state",
+          stateCommit: stateRef.commitId,
+          oldStateCommit: oldStateRef.commitId,
+          oldStateCreatedAt: oldState.created_at,
+        };
+      }
+    }
   }
 
   return { status: "mismatch", stateCommit: stateRef.commitId };
@@ -328,6 +434,10 @@ function StatusIcon({
     case "mismatch":
       return (
         <ShieldAlert className={cn("h-3.5 w-3.5 text-amber-500", className)} />
+      );
+    case "old-state":
+      return (
+        <ShieldAlert className={cn("h-3.5 w-3.5 text-sky-500", className)} />
       );
     case "state-behind":
       return (
@@ -386,6 +496,38 @@ function StatusTooltipText({
           <p className="text-muted-foreground text-[11px]">
             This could mean a push hasn't been signed yet, or the git server was
             updated without the maintainer's knowledge.
+          </p>
+        </div>
+      );
+    case "old-state":
+      return (
+        <div className="space-y-1">
+          <p className="font-medium text-sky-400">
+            Matches an older Nostr state
+          </p>
+          <p>
+            {serverLabel ? serverLabel : "This server"} has{" "}
+            <code className="font-mono text-[11px] bg-muted px-1 rounded">
+              {refWithStatus.hash.slice(0, 8)}
+            </code>{" "}
+            which matches a previously-signed state
+            {refWithStatus.oldStateCreatedAt && (
+              <>
+                {" "}
+                from{" "}
+                {safeFormatDistanceToNow(refWithStatus.oldStateCreatedAt, {
+                  addSuffix: true,
+                })}
+              </>
+            )}
+            . The latest Nostr state has{" "}
+            <code className="font-mono text-[11px] bg-sky-500/20 px-1 rounded">
+              {refWithStatus.stateCommit?.slice(0, 8)}
+            </code>
+            .
+          </p>
+          <p className="text-muted-foreground text-[11px]">
+            This server hasn't synced to the latest signed state yet.
           </p>
         </div>
       );
@@ -451,6 +593,8 @@ function RefRow({
         isSelected && "bg-accent",
         refWithStatus.status === "mismatch" &&
           "hover:bg-amber-500/10 dark:hover:bg-amber-500/10",
+        refWithStatus.status === "old-state" &&
+          "hover:bg-sky-500/10 dark:hover:bg-sky-500/10",
         isAbsent && "opacity-50",
       )}
     >
@@ -466,6 +610,8 @@ function RefRow({
           isSelected && "font-medium",
           refWithStatus.status === "mismatch" &&
             "text-amber-600 dark:text-amber-400",
+          refWithStatus.status === "old-state" &&
+            "text-sky-600 dark:text-sky-400",
           isAbsent && "text-muted-foreground",
         )}
         title={refWithStatus.name}
@@ -1052,12 +1198,17 @@ function ErrorDetail({
 function SourceServerDot({
   status,
   gitIsAhead,
+  serverHasOlderState,
 }: {
   status: UrlRefStatus;
   gitIsAhead?: boolean;
+  serverHasOlderState?: boolean;
 }) {
   if (status === "behind" && gitIsAhead) {
     return <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+  }
+  if (status === "behind" && serverHasOlderState) {
+    return <CheckCircle2 className="h-3.5 w-3.5 text-sky-500 shrink-0" />;
   }
   switch (status) {
     case "match":
@@ -1083,10 +1234,12 @@ function SourceServerLabel({
   status,
   hasState,
   gitIsAhead,
+  serverHasOlderState,
 }: {
   status: UrlRefStatus;
   hasState: boolean;
   gitIsAhead?: boolean;
+  serverHasOlderState?: boolean;
 }) {
   if (gitIsAhead && hasState) {
     switch (status) {
@@ -1105,6 +1258,13 @@ function SourceServerLabel({
       default:
         break;
     }
+  }
+  if (serverHasOlderState && status === "behind") {
+    return (
+      <span className="text-[10px] text-sky-600 dark:text-sky-400 shrink-0">
+        old state
+      </span>
+    );
   }
   switch (status) {
     case "match":
@@ -1159,6 +1319,7 @@ function SourceServerRow({
   gitCommitterDate,
   pool,
   onSelect,
+  olderStateEvent,
 }: {
   url: string;
   urlState: UrlState | undefined;
@@ -1170,6 +1331,8 @@ function SourceServerRow({
   gitCommitterDate?: number;
   pool?: GitGraspPool | null;
   onSelect: () => void;
+  /** When set, this server's relay served an older (but valid) signed state event */
+  olderStateEvent?: NostrEvent;
 }) {
   const [copied, setCopied] = useState(false);
   const [serverCommitTs, setServerCommitTs] = useState<number | null>(null);
@@ -1264,12 +1427,18 @@ function SourceServerRow({
     overallStatus === "behind" && hasState && gitIsAhead;
   const serverIsSignedOnly =
     overallStatus === "match" && hasState && gitIsAhead;
+  // Server has an older signed state — it's behind the canonical state but
+  // its data is still cryptographically verified (just not the latest).
+  const serverHasOlderState =
+    overallStatus === "behind" && hasState && !gitIsAhead && !!olderStateEvent;
 
   // Highlight color for selected state
   const selectedHighlight = isSelected
     ? gitIsAhead
       ? ("amber" as const)
-      : ("emerald" as const)
+      : serverHasOlderState
+        ? ("sky" as const)
+        : ("emerald" as const)
     : null;
 
   return (
@@ -1283,10 +1452,16 @@ function SourceServerRow({
           "bg-emerald-500/5 border-l-2 border-emerald-500 pl-[14px] hover:bg-emerald-500/10",
         selectedHighlight === "amber" &&
           "bg-amber-500/5 border-l-2 border-amber-500 pl-[14px] hover:bg-amber-500/10",
+        selectedHighlight === "sky" &&
+          "bg-sky-500/5 border-l-2 border-sky-500 pl-[14px] hover:bg-sky-500/10",
         !selectedHighlight && isSelectable && "hover:bg-accent/30",
       )}
     >
-      <SourceServerDot status={overallStatus} gitIsAhead={gitIsAhead} />
+      <SourceServerDot
+        status={overallStatus}
+        gitIsAhead={gitIsAhead}
+        serverHasOlderState={serverHasOlderState}
+      />
 
       <div className="min-w-0 flex-1">
         {/* URL + identity bubble */}
@@ -1347,13 +1522,22 @@ function SourceServerRow({
             serving Nostr state · another server has unannounced commits
           </p>
         )}
-        {overallStatus === "behind" && !gitIsAhead && (
+        {overallStatus === "behind" && !gitIsAhead && !serverHasOlderState && (
           <p className="text-[11px] text-muted-foreground mt-0.5">
             {refinedBehindLabel === "behind nostr"
               ? "commit older than nostr state"
               : refinedBehindLabel === "diverged"
                 ? "commit diverged from nostr state"
                 : "differs from nostr state"}
+          </p>
+        )}
+        {serverHasOlderState && olderStateEvent && (
+          <p className="text-[11px] text-sky-600/80 dark:text-sky-400/70 mt-0.5">
+            serving older Nostr state
+            {" · "}
+            {safeFormatDistanceToNow(olderStateEvent.created_at, {
+              addSuffix: true,
+            })}
           </p>
         )}
         {isError && (
@@ -1396,6 +1580,7 @@ function SourceServerRow({
         status={overallStatus}
         hasState={hasState}
         gitIsAhead={gitIsAhead}
+        serverHasOlderState={serverHasOlderState}
       />
     </button>
   );
@@ -1425,6 +1610,7 @@ function SourceSelectorPanel({
   stateBehindGit,
   poolWarning,
   pool,
+  relayStateMap,
 }: {
   selectedSource: string;
   onSelectSource: (source: string) => void;
@@ -1438,6 +1624,7 @@ function SourceSelectorPanel({
   stateBehindGit: boolean;
   poolWarning?: PoolWarning | null;
   pool?: GitGraspPool | null;
+  relayStateMap?: Map<string, NostrEvent>;
 }) {
   const hasState =
     repoRelayEose && repoState !== null && repoState !== undefined;
@@ -1461,6 +1648,17 @@ function SourceSelectorPanel({
     }
     return "Nostr state available";
   }, [repoState, repoRelayEose, stateCreatedAt]);
+
+  /**
+   * For a given clone URL, return the older state event from its relay (if any).
+   * Only meaningful when there is a winning state and the relay's event is older.
+   */
+  const getOlderStateForUrl = (cloneUrl: string): NostrEvent | undefined => {
+    if (!relayStateMap || !repoState || repoState === null) return undefined;
+    const relayUrl = cloneUrlToRelayUrl(cloneUrl);
+    if (!relayUrl) return undefined;
+    return getOlderRelayState(relayUrl, relayStateMap, repoState);
+  };
 
   // When the default source is not nostr (git server is ahead or no state),
   // show "default" as the first option and "nostr" as an explicit override.
@@ -1636,6 +1834,7 @@ function SourceSelectorPanel({
                   gitCommitterDate={gitCommitterDate}
                   pool={pool}
                   onSelect={() => onSelectSource(url)}
+                  olderStateEvent={getOlderStateForUrl(url)}
                 />
               ))}
             </div>
@@ -1665,6 +1864,7 @@ function SourceSelectorPanel({
                 gitCommitterDate={gitCommitterDate}
                 pool={pool}
                 onSelect={() => onSelectSource(url)}
+                olderStateEvent={getOlderStateForUrl(url)}
               />
             ))}
           </div>
@@ -1690,6 +1890,7 @@ function SourceSelectorPanel({
                 gitCommitterDate={gitCommitterDate}
                 pool={pool}
                 onSelect={() => onSelectSource(url)}
+                olderStateEvent={getOlderStateForUrl(url)}
               />
             ))}
           </div>
@@ -1721,6 +1922,7 @@ function SourceHeader({
   selectedSource,
   onSelectSource,
   diffSummaryExternal,
+  relayStateMap,
 }: {
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
@@ -1740,6 +1942,7 @@ function SourceHeader({
   onSelectSource: (source: string) => void;
   /** When true, DiffSummaryBar is rendered externally (inside ScrollArea) — skip it here */
   diffSummaryExternal?: boolean;
+  relayStateMap?: Map<string, NostrEvent>;
 }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
 
@@ -1955,6 +2158,7 @@ function SourceHeader({
             stateBehindGit={stateBehindGit}
             poolWarning={poolWarning}
             pool={pool}
+            relayStateMap={relayStateMap}
           />
         </PopoverContent>
       </Popover>
@@ -1985,6 +2189,7 @@ export function RefSelector({
   onRefChange,
   repoState,
   repoRelayEose,
+  relayStateMap,
   loading,
   stateBehindGit = false,
   poolWarning,
@@ -2085,7 +2290,14 @@ export function RefSelector({
     }
     return refs.map((ref) => ({
       ...ref,
-      ...getRefStatusForServer(ref, serverUrlState, repoState, repoRelayEose),
+      ...getRefStatusForServer(
+        ref,
+        selectedSource,
+        serverUrlState,
+        repoState,
+        repoRelayEose,
+        relayStateMap,
+      ),
     }));
   }, [
     refs,
@@ -2095,6 +2307,7 @@ export function RefSelector({
     urlStates,
     cloneUrls,
     selectedSource,
+    relayStateMap,
   ]);
 
   // Split into branches and tags
@@ -2221,6 +2434,9 @@ export function RefSelector({
               {currentStatus === "mismatch" && (
                 <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
               )}
+              {currentStatus === "old-state" && (
+                <ShieldAlert className="h-3.5 w-3.5 text-sky-500" />
+              )}
               {currentStatus === "state-behind" && (
                 <AlertTriangle className="h-3 w-3 text-amber-500" />
               )}
@@ -2262,6 +2478,7 @@ export function RefSelector({
           selectedSource={selectedSource}
           onSelectSource={setSelectedSource}
           diffSummaryExternal
+          relayStateMap={relayStateMap}
         />
 
         <ScrollArea
@@ -2419,10 +2636,14 @@ export function RefSelector({
         {isManualGitSource && (
           <>
             <Separator />
-            <div className="px-3 py-2 flex items-center gap-3 text-[11px] text-muted-foreground/60">
+            <div className="px-3 py-2 flex items-center gap-3 text-[11px] text-muted-foreground/60 flex-wrap">
               <span className="flex items-center gap-1">
                 <ShieldCheck className="h-3 w-3 text-emerald-500/70" />
                 matches nostr
+              </span>
+              <span className="flex items-center gap-1">
+                <ShieldAlert className="h-3 w-3 text-sky-500/70" />
+                older nostr state
               </span>
               <span className="flex items-center gap-1">
                 <ShieldAlert className="h-3 w-3 text-amber-500/70" />
