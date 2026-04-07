@@ -119,10 +119,13 @@ export default function RepoCodePage() {
   // selected source using the resolved ref, and re-run if it differs.
   //
   // Bootstrap pass: use the standard Nostr/default logic.
+  // When the user explicitly chose "nostr" as source, honour the Nostr commit
+  // even when stateBehindGit is true — the user wants to see the signed state.
+  const userChoseNostr = selectedSource === "nostr";
   const bootstrapHeadCommit = useMemo(() => {
-    if (stateBehindGit) return undefined;
+    if (stateBehindGit && !userChoseNostr) return undefined;
     return repoState?.headCommitId;
-  }, [stateBehindGit, repoState?.headCommitId]);
+  }, [stateBehindGit, userChoseNostr, repoState?.headCommitId]);
 
   const explorer = useGitExplorer(pool, poolState, {
     refAndPath: treeRefAndPath,
@@ -280,22 +283,12 @@ export default function RepoCodePage() {
       : `refs/tags/${currentRef}`
     : "";
 
-  // When the effective source is a git server (not nostr), the explorer may
-  // still be showing the old signed commit during the render cycle where
-  // stateBehindGit first becomes true (the explorer's useEffect hasn't fired
-  // yet). Override with the git server's commit info so the commit bar,
-  // warning banner, RefSelector, and tree viewer are always consistent.
-  const effectiveSourceIsGitServer = effectiveSource !== "nostr";
-  const displayHeadCommit =
-    stateBehindGit && effectiveSourceIsGitServer
-      ? (poolState.latestCommit ?? activeExplorer.headCommit)
-      : activeExplorer.headCommit;
-  const displayCommitHash =
-    stateBehindGit && effectiveSourceIsGitServer
-      ? poolState.warning?.kind === "state-behind-git"
-        ? poolState.warning.gitCommitId
-        : activeExplorer.commitHash
-      : activeExplorer.commitHash;
+  // The commit bar and warning banner must always show the same commit — the
+  // one the explorer is actually displaying. Use the explorer's own commitHash
+  // and headCommit directly; the warning banner independently references
+  // poolState.warning for its comparison text (stateCommitId vs gitCommitId).
+  const displayCommitHash = activeExplorer.commitHash;
+  const displayHeadCommit = activeExplorer.headCommit;
 
   // Show the sidebar when at the repo root (no sub-path within the tree)
   const isAtRoot = !treeRefAndPath || pathSegments.length === 0;
@@ -353,16 +346,20 @@ export default function RepoCodePage() {
             winnerUrl={poolState.winnerUrl}
           />
 
-          {/* State sync warning banner */}
-          <GitServerAheadBanner
-            warning={poolState.warning}
-            pulling={gitPulling}
-            currentRefFull={currentRefFull}
-            urlStates={poolState.urls}
-            repoStateRefs={repoState?.refs}
-            hasStateEvent={!!repoState}
-            repoRelayEose={repoRelayEose}
-          />
+          {/* State sync warning banner — hidden when user explicitly chose nostr */}
+          {!userChoseNostr && (
+            <GitServerAheadBanner
+              warning={poolState.warning}
+              pulling={gitPulling}
+              currentRefFull={currentRefFull}
+              urlStates={poolState.urls}
+              repoStateRefs={repoState?.refs}
+              hasStateEvent={!!repoState}
+              repoRelayEose={repoRelayEose}
+              displayedCommitHash={displayCommitHash}
+              effectiveSource={effectiveSource}
+            />
+          )}
 
           {/* Error state */}
           {activeExplorer.error && (
@@ -506,6 +503,8 @@ function GitServerAheadBanner({
   repoStateRefs,
   hasStateEvent,
   repoRelayEose,
+  displayedCommitHash,
+  effectiveSource,
 }: {
   warning: PoolWarning | null;
   pulling: boolean;
@@ -519,6 +518,10 @@ function GitServerAheadBanner({
   hasStateEvent: boolean;
   /** True once the relay EOSE has been received */
   repoRelayEose: boolean;
+  /** The commit hash the explorer is actually displaying — used in the banner text */
+  displayedCommitHash: string | null;
+  /** The resolved source being displayed — "nostr" or a concrete clone URL */
+  effectiveSource: string;
 }) {
   // Suppress while data is still loading — the mismatch may resolve once
   // infoRefs settle.
@@ -560,17 +563,17 @@ function GitServerAheadBanner({
   // No pool warning — nothing further to show.
   if (!warning) return null;
 
-  // Suppress when the currently selected ref is in sync on all servers.
-  // The pool marks a server as "behind" for a ref when it has a different
-  // commit than the Nostr state. In the state-behind-git scenario the
-  // semantics are inverted (the "behind" server actually has the *newer*
-  // unsigned commit), but either way: if no server has a non-"match" status
-  // for the current ref, the ref is in sync and the banner is irrelevant.
-  if (currentRefFull) {
-    const anyServerAheadForRef = Object.values(urlStates).some(
-      (us) => us.refStatus[currentRefFull] === "behind",
-    );
-    if (!anyServerAheadForRef) return null;
+  // Only show the banner when the *currently displayed* server is the one
+  // that's ahead of Nostr. If the user selected a server that matches the
+  // Nostr state, the banner is irrelevant regardless of what other servers do.
+  if (warning.kind === "state-behind-git" && currentRefFull) {
+    const sourceUrlState = urlStates[effectiveSource];
+    const sourceRefStatus = sourceUrlState?.refStatus[currentRefFull];
+    // "behind" in pool semantics = this server has a *different* commit than
+    // the Nostr state. In the state-behind-git scenario that means it's ahead.
+    // Any other status (match, connected, unknown, error) means this server
+    // is not the one driving the "ahead" situation — suppress the banner.
+    if (sourceRefStatus !== "behind") return null;
   }
 
   if (warning.kind === "state-behind-git") {
@@ -581,10 +584,14 @@ function GitServerAheadBanner({
       addSuffix: true,
     });
     const shortState = warning.stateCommitId.slice(0, 8);
-    const shortGit = warning.gitCommitId.slice(0, 8);
+    // Use the explorer's actual displayed commit hash so the banner is always
+    // consistent with the commit bar. Fall back to the pool's warning commit
+    // (HEAD of the git server) while the explorer is still loading.
+    const shortGit = (displayedCommitHash ?? warning.gitCommitId).slice(0, 8);
 
-    // Use the domain of the specific server that reported the newer commit.
-    const domain = gitServerDomain(warning.gitServerUrl);
+    // Use the domain of the effective source (the server being viewed),
+    // not necessarily the server that first triggered the warning.
+    const domain = gitServerDomain(effectiveSource);
 
     return (
       <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
