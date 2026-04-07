@@ -46,6 +46,7 @@ import {
   STATUS_CLOSED,
   STATUS_DRAFT,
   COMMENT_KIND,
+  COVER_NOTE_KIND,
   REPO_KIND,
   getRepoName,
   extractSubject,
@@ -83,6 +84,8 @@ function kindLabel(kind: number): string {
       return "Status: Draft";
     case COMMENT_KIND:
       return "Comment";
+    case COVER_NOTE_KIND:
+      return "Cover Note";
     case 7:
       return "Reaction";
     case 5:
@@ -163,6 +166,27 @@ function useEventContext(
     const nevent = eventIdToNevent(event.id);
     const label = repoName ? `${repoName}: ${subject}` : subject;
     return { label, path: `/${nevent}` };
+  }
+
+  // Cover notes (kind 1624) — label shows the parent issue/PR subject,
+  // link goes to the cover note event itself so the page can highlight it.
+  if (kind === COVER_NOTE_KIND) {
+    const rootId = event.tags.find(
+      ([t, , , marker]) => t === "e" && marker === "root",
+    )?.[1];
+    if (rootId) {
+      const rootEvent = store.getEvent(rootId);
+      if (rootEvent) {
+        const subject = extractSubject(rootEvent);
+        const repoName = repoNameFromGroups(relayGroupDefs, store);
+        const nevent = eventIdToNevent(event.id);
+        const label = repoName
+          ? `${repoName}: cover note on "${subject}"`
+          : `cover note on "${subject}"`;
+        return { label, path: `/${nevent}` };
+      }
+    }
+    return undefined;
   }
 
   // Comments (kind 1111) — label shows the root context, link goes to the
