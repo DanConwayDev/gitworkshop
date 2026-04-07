@@ -179,6 +179,20 @@ export default function RepoCommitsPage() {
     navigate(`${basePath}/commits/${newRef}`);
   };
 
+  const handleRefAndSourceChange = useCallback(
+    (newRef: string, newSource: string) => {
+      const params = new URLSearchParams(searchParams);
+      if (newSource === "default") {
+        params.delete("source");
+      } else {
+        params.set("source", newSource);
+      }
+      const query = params.toString();
+      navigate(`${basePath}/commits/${newRef}${query ? `?${query}` : ""}`);
+    },
+    [navigate, searchParams, basePath],
+  );
+
   if (cloneUrls.length === 0) {
     return (
       <div className="container max-w-screen-xl px-4 md:px-8 py-6">
@@ -207,6 +221,7 @@ export default function RepoCommitsPage() {
             onRefChange={handleRefChange}
             selectedSource={selectedSource}
             onSourceChange={handleSourceChange}
+            onRefAndSourceChange={handleRefAndSourceChange}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
             loading={activeExplorer.loading}

@@ -237,6 +237,24 @@ export default function RepoCodePage() {
     navigate(treeUrl(newRef));
   };
 
+  // Atomic handler: navigate to a new ref while simultaneously applying a
+  // source change. Used when the user picks a source that doesn't have the
+  // current ref — we need both changes in one navigation so neither is lost.
+  const handleRefAndSourceChange = useCallback(
+    (newRef: string, newSource: string) => {
+      const params = new URLSearchParams(searchParams);
+      if (newSource === "default") {
+        params.delete("source");
+      } else {
+        params.set("source", newSource);
+      }
+      const query = params.toString();
+      const url = `${basePath}/tree/${newRef}${query ? `?${query}` : ""}`;
+      navigate(url);
+    },
+    [navigate, searchParams, basePath],
+  );
+
   const currentRef = activeExplorer.resolvedRef ?? "";
   const currentPath = activeExplorer.resolvedPath ?? "";
   const pathSegments = currentPath
@@ -304,6 +322,7 @@ export default function RepoCodePage() {
             onRefChange={handleRefChange}
             selectedSource={selectedSource}
             onSourceChange={handleSourceChange}
+            onRefAndSourceChange={handleRefAndSourceChange}
             headCommit={displayHeadCommit}
             commitHash={displayCommitHash}
             repoId={repoId}
@@ -619,6 +638,7 @@ function LocatorBar({
   onRefChange,
   selectedSource,
   onSourceChange,
+  onRefAndSourceChange,
   headCommit,
   commitHash,
   repoId,
@@ -647,6 +667,7 @@ function LocatorBar({
   onRefChange: (ref: string) => void;
   selectedSource: string;
   onSourceChange: (src: string) => void;
+  onRefAndSourceChange?: (defaultRef: string, newSource: string) => void;
   headCommit: ReturnType<typeof useGitExplorer>["headCommit"];
   commitHash: string | null;
   repoId: string;
@@ -722,6 +743,7 @@ function LocatorBar({
             onRefChange={onRefChange}
             selectedSource={selectedSource}
             onSourceChange={onSourceChange}
+            onRefAndSourceChange={onRefAndSourceChange}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
             relayStateMap={relayStateMap}

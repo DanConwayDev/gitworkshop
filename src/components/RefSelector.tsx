@@ -72,6 +72,13 @@ export interface RefSelectorProps {
    * "default" = pool-decided, "nostr" = explicit nostr override, or a URL.
    */
   onSourceChange?: (source: string) => void;
+  /**
+   * Called when the user selects a source that doesn't have the current ref.
+   * Receives the new source so the caller can atomically navigate to the
+   * default branch while applying the source change in one step.
+   * When omitted, the source change is applied normally without a ref revert.
+   */
+  onRefAndSourceChange?: (defaultRef: string, newSource: string) => void;
   /** The winning Nostr state event, null if none found, undefined while loading */
   repoState: RepositoryState | null | undefined;
   /** True once the relay EOSE has been received for the state query */
@@ -1407,6 +1414,9 @@ function SourceServerRow({
   pool,
   onSelect,
   olderStateEvent,
+  currentRefFullName,
+  currentRefIsDefault,
+  currentRefInNostrState,
 }: {
   url: string;
   urlState: UrlState | undefined;
@@ -1420,6 +1430,12 @@ function SourceServerRow({
   onSelect: () => void;
   /** When set, this server's relay served an older (but valid) signed state event */
   olderStateEvent?: NostrEvent;
+  /** Full ref name of the currently viewed ref (e.g. "refs/heads/feature-x") */
+  currentRefFullName?: string;
+  /** True when the current ref is the default branch */
+  currentRefIsDefault?: boolean;
+  /** True when the nostr state includes the current ref, false when it doesn't, undefined when unknown */
+  currentRefInNostrState?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [serverCommitTs, setServerCommitTs] = useState<number | null>(null);
@@ -1498,6 +1514,62 @@ function SourceServerRow({
         : serverCommitTs < stateCreatedAt!
           ? "behind nostr"
           : "diverged";
+
+  // Whether the current ref exists on this server (only meaningful once infoRefs loaded)
+  const currentRefOnServer = useMemo(() => {
+    if (!currentRefFullName || !urlState?.infoRefs) return undefined; // unknown
+    return (
+      urlState.infoRefs.refs[currentRefFullName] !== undefined ||
+      urlState.infoRefs.refs[`${currentRefFullName}^{}`] !== undefined
+    );
+  }, [currentRefFullName, urlState?.infoRefs]);
+
+  // Per-ref status for the current ref on this server
+  const currentRefStatus = currentRefFullName
+    ? urlState?.refStatus[currentRefFullName]
+    : undefined;
+
+  // Whether the current ref is ahead of nostr on this server:
+  // - pool says "ahead" or "behind" with gitIsAhead (server is ahead of state)
+  // - OR: server has the ref but nostr state doesn't (git-server-only branch)
+  const currentRefIsAhead =
+    currentRefStatus === "ahead" ||
+    (currentRefStatus === "behind" && gitIsAhead) ||
+    (currentRefOnServer === true && currentRefInNostrState === false);
+
+  // Commit timestamp for the current ref on this server (for "ahead" messages)
+  const [currentRefCommitTs, setCurrentRefCommitTs] = useState<number | null>(
+    null,
+  );
+  const currentRefAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (
+      !currentRefFullName ||
+      !currentRefOnServer ||
+      !pool ||
+      !urlState?.infoRefs
+    )
+      return;
+    const commit =
+      urlState.infoRefs.refs[`${currentRefFullName}^{}`] ??
+      urlState.infoRefs.refs[currentRefFullName];
+    if (!commit) return;
+
+    currentRefAbortRef.current?.abort();
+    const ac = new AbortController();
+    currentRefAbortRef.current = ac;
+
+    pool
+      .getSingleCommit(commit, ac.signal)
+      .then((c) => {
+        if (ac.signal.aborted || !c) return;
+        setCurrentRefCommitTs(c.committer?.timestamp ?? c.author.timestamp);
+      })
+      .catch(() => {});
+
+    return () => ac.abort();
+  }, [currentRefFullName, currentRefOnServer, pool, urlState?.infoRefs]);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1591,42 +1663,110 @@ function SourceServerRow({
         </div>
 
         {/* Sub-line detail */}
-        {serverIsUnsignedAhead && (
+        {/* When the current ref is not on this server, show a clear warning */}
+        {currentRefOnServer === false && !currentRefIsDefault && (
+          <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+            doesn't have this ref — will show default branch
+          </p>
+        )}
+        {serverIsUnsignedAhead && currentRefOnServer !== false && (
           <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70 mt-0.5">
-            commits not yet announced on Nostr
-            {gitCommitterDate && (
-              <span className="text-muted-foreground/70">
-                {" "}
-                (
-                {safeFormatDistanceToNow(gitCommitterDate, { addSuffix: true })}
-                )
-              </span>
+            {currentRefIsDefault || !currentRefFullName ? (
+              <>
+                commits not yet announced on Nostr
+                {gitCommitterDate && (
+                  <span className="text-muted-foreground/70">
+                    {" "}
+                    (
+                    {safeFormatDistanceToNow(gitCommitterDate, {
+                      addSuffix: true,
+                    })}
+                    )
+                  </span>
+                )}
+              </>
+            ) : currentRefIsAhead ? (
+              <>
+                this ref not yet announced on Nostr
+                {currentRefCommitTs !== null && (
+                  <span className="text-muted-foreground/70">
+                    {" "}
+                    (
+                    {safeFormatDistanceToNow(currentRefCommitTs, {
+                      addSuffix: true,
+                    })}
+                    )
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                commits not yet announced on Nostr
+                {gitCommitterDate && (
+                  <span className="text-muted-foreground/70">
+                    {" "}
+                    (
+                    {safeFormatDistanceToNow(gitCommitterDate, {
+                      addSuffix: true,
+                    })}
+                    )
+                  </span>
+                )}
+              </>
             )}
           </p>
         )}
-        {serverIsSignedOnly && (
+        {/* Server has the current ref but nostr state doesn't (git-server-only branch) */}
+        {currentRefOnServer === true &&
+          currentRefInNostrState === false &&
+          !serverIsUnsignedAhead &&
+          !serverIsSignedOnly && (
+            <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+              this ref not yet announced on Nostr
+              {currentRefCommitTs !== null && (
+                <span className="text-muted-foreground/70">
+                  {" "}
+                  (
+                  {safeFormatDistanceToNow(currentRefCommitTs, {
+                    addSuffix: true,
+                  })}
+                  )
+                </span>
+              )}
+            </p>
+          )}
+        {serverIsSignedOnly && currentRefOnServer !== false && (
           <p className="text-[11px] text-muted-foreground/70 mt-0.5">
-            serving Nostr state · another server has unannounced commits
+            {currentRefIsDefault || !currentRefFullName
+              ? "serving Nostr state · another server has unannounced commits"
+              : currentRefIsAhead
+                ? "this ref not yet announced on Nostr"
+                : "serving Nostr state · another server has unannounced commits"}
           </p>
         )}
-        {overallStatus === "behind" && !gitIsAhead && !serverHasOlderState && (
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            {refinedBehindLabel === "behind nostr"
-              ? "commit older than nostr state"
-              : refinedBehindLabel === "diverged"
-                ? "commit diverged from nostr state"
-                : "differs from nostr state"}
-          </p>
-        )}
-        {serverHasOlderState && olderStateEvent && (
-          <p className="text-[11px] text-sky-600/80 dark:text-sky-400/70 mt-0.5">
-            serving older Nostr state
-            {" · "}
-            {safeFormatDistanceToNow(olderStateEvent.created_at, {
-              addSuffix: true,
-            })}
-          </p>
-        )}
+        {overallStatus === "behind" &&
+          !gitIsAhead &&
+          !serverHasOlderState &&
+          currentRefOnServer !== false && (
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {refinedBehindLabel === "behind nostr"
+                ? "commit older than nostr state"
+                : refinedBehindLabel === "diverged"
+                  ? "commit diverged from nostr state"
+                  : "differs from nostr state"}
+            </p>
+          )}
+        {serverHasOlderState &&
+          olderStateEvent &&
+          currentRefOnServer !== false && (
+            <p className="text-[11px] text-sky-600/80 dark:text-sky-400/70 mt-0.5">
+              serving older Nostr state
+              {" · "}
+              {safeFormatDistanceToNow(olderStateEvent.created_at, {
+                addSuffix: true,
+              })}
+            </p>
+          )}
         {isError && (
           <ErrorDetail
             errorKind={urlState?.lastErrorKind}
@@ -1698,6 +1838,9 @@ function SourceSelectorPanel({
   poolWarning,
   pool,
   relayStateMap,
+  currentRefFullName,
+  currentRefIsDefault,
+  onRefRevertToDefault,
 }: {
   selectedSource: string;
   onSelectSource: (source: string) => void;
@@ -1712,6 +1855,16 @@ function SourceSelectorPanel({
   poolWarning?: PoolWarning | null;
   pool?: GitGraspPool | null;
   relayStateMap?: Map<string, NostrEvent>;
+  /** Full ref name of the currently viewed ref (e.g. "refs/heads/feature-x") */
+  currentRefFullName?: string;
+  /** True when the current ref is the default branch */
+  currentRefIsDefault?: boolean;
+  /**
+   * Called when the user selects a source that doesn't have the current ref.
+   * Receives the new source so the parent can navigate to the default branch
+   * while simultaneously applying the source change in one atomic step.
+   */
+  onRefRevertToDefault?: (newSource: string) => void;
 }) {
   const hasState =
     repoRelayEose && repoState !== null && repoState !== undefined;
@@ -1727,14 +1880,25 @@ function SourceSelectorPanel({
     additionalGitServerUrls.includes(u),
   );
 
+  // Whether the nostr state includes the current ref
+  const nostrHasCurrentRef = useMemo(() => {
+    if (!currentRefFullName || currentRefIsDefault) return true; // default always present
+    if (!repoState || !repoRelayEose) return undefined; // unknown
+    return repoState.refs.some((r) => r.name === currentRefFullName);
+  }, [currentRefFullName, currentRefIsDefault, repoState, repoRelayEose]);
+
   const nostrSubLine = useMemo(() => {
     if (repoState === undefined || !repoRelayEose) return "Checking relays…";
     if (repoState === null) return "No Nostr state published";
+    // If the current ref isn't in the nostr state, say so clearly
+    if (nostrHasCurrentRef === false) {
+      return "doesn't have this ref — will show default branch";
+    }
     if (stateCreatedAt) {
-      return `Published ${safeFormatDistanceToNow(stateCreatedAt, { addSuffix: true })}`;
+      return `State published ${safeFormatDistanceToNow(stateCreatedAt, { addSuffix: true })}`;
     }
     return "Nostr state available";
-  }, [repoState, repoRelayEose, stateCreatedAt]);
+  }, [repoState, repoRelayEose, stateCreatedAt, nostrHasCurrentRef]);
 
   /**
    * Return the most recent older state event across all relays, if any exists.
@@ -1745,6 +1909,66 @@ function SourceSelectorPanel({
     relayStateMap && repoState
       ? findOlderStateEvent(relayStateMap, repoState)
       : undefined;
+
+  /**
+   * Check whether a given git server URL has the current ref.
+   * Returns undefined when infoRefs haven't loaded yet.
+   */
+  const serverHasCurrentRef = useCallback(
+    (url: string): boolean | undefined => {
+      if (!currentRefFullName || currentRefIsDefault) return true; // default branch always present
+      const infoRefs = urlStates[url]?.infoRefs;
+      if (!infoRefs) return undefined; // still loading
+      return (
+        infoRefs.refs[currentRefFullName] !== undefined ||
+        infoRefs.refs[`${currentRefFullName}^{}`] !== undefined
+      );
+    },
+    [currentRefFullName, currentRefIsDefault, urlStates],
+  );
+
+  /**
+   * Wrap source selection: if the chosen source doesn't have the current ref,
+   * also trigger a revert to the default branch — atomically via the combined
+   * callback so the navigation happens in one step.
+   */
+  const handleSelectSource = useCallback(
+    (src: string) => {
+      // Check if the new source lacks the current ref
+      let needsRefRevert = false;
+      if (src !== "default" && src !== "nostr") {
+        const hasRef = serverHasCurrentRef(src);
+        if (hasRef === false) needsRefRevert = true;
+      } else if (
+        (src === "nostr" || src === "default") &&
+        currentRefFullName &&
+        !currentRefIsDefault
+      ) {
+        // "nostr" or "default" (when it resolves to nostr): check if nostr state has the ref
+        const resolvedToNostr =
+          src === "nostr" || (!stateBehindGit && repoState !== null);
+        if (resolvedToNostr && nostrHasCurrentRef === false) {
+          needsRefRevert = true;
+        }
+      }
+
+      if (needsRefRevert) {
+        onRefRevertToDefault?.(src);
+      } else {
+        onSelectSource(src);
+      }
+    },
+    [
+      onSelectSource,
+      serverHasCurrentRef,
+      onRefRevertToDefault,
+      currentRefFullName,
+      currentRefIsDefault,
+      nostrHasCurrentRef,
+      stateBehindGit,
+      repoState,
+    ],
+  );
 
   // When the default source is not nostr (git server is ahead or no state),
   // show "default" as the first option and "nostr" as an explicit override.
@@ -1922,8 +2146,11 @@ function SourceSelectorPanel({
                   stateCreatedAt={stateCreatedAt}
                   gitCommitterDate={gitCommitterDate}
                   pool={pool}
-                  onSelect={() => onSelectSource(url)}
+                  onSelect={() => handleSelectSource(url)}
                   olderStateEvent={olderStateEvent}
+                  currentRefFullName={currentRefFullName}
+                  currentRefIsDefault={currentRefIsDefault}
+                  currentRefInNostrState={nostrHasCurrentRef}
                 />
               ))}
             </div>
@@ -1952,8 +2179,11 @@ function SourceSelectorPanel({
                 stateCreatedAt={stateCreatedAt}
                 gitCommitterDate={gitCommitterDate}
                 pool={pool}
-                onSelect={() => onSelectSource(url)}
+                onSelect={() => handleSelectSource(url)}
                 olderStateEvent={olderStateEvent}
+                currentRefFullName={currentRefFullName}
+                currentRefIsDefault={currentRefIsDefault}
+                currentRefInNostrState={nostrHasCurrentRef}
               />
             ))}
           </div>
@@ -1978,8 +2208,11 @@ function SourceSelectorPanel({
                 stateCreatedAt={stateCreatedAt}
                 gitCommitterDate={gitCommitterDate}
                 pool={pool}
-                onSelect={() => onSelectSource(url)}
+                onSelect={() => handleSelectSource(url)}
                 olderStateEvent={olderStateEvent}
+                currentRefFullName={currentRefFullName}
+                currentRefIsDefault={currentRefIsDefault}
+                currentRefInNostrState={nostrHasCurrentRef}
               />
             ))}
           </div>
@@ -2012,6 +2245,9 @@ function SourceHeader({
   onSelectSource,
   diffSummaryExternal,
   relayStateMap,
+  currentRefFullName,
+  currentRefIsDefault,
+  onRefRevertToDefault,
 }: {
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
@@ -2032,6 +2268,12 @@ function SourceHeader({
   /** When true, DiffSummaryBar is rendered externally (inside ScrollArea) — skip it here */
   diffSummaryExternal?: boolean;
   relayStateMap?: Map<string, NostrEvent>;
+  /** Full ref name of the currently viewed ref (e.g. "refs/heads/feature-x") */
+  currentRefFullName?: string;
+  /** True when the current ref is the default branch */
+  currentRefIsDefault?: boolean;
+  /** Called when a source change requires reverting to the default branch */
+  onRefRevertToDefault?: (newSource: string) => void;
 }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const isMobile = useIsMobile();
@@ -2279,6 +2521,12 @@ function SourceHeader({
             poolWarning={poolWarning}
             pool={pool}
             relayStateMap={relayStateMap}
+            currentRefFullName={currentRefFullName}
+            currentRefIsDefault={currentRefIsDefault}
+            onRefRevertToDefault={(newSource) => {
+              onRefRevertToDefault?.(newSource);
+              setSelectorOpen(false);
+            }}
           />
         </PopoverContent>
       </Popover>
@@ -2309,6 +2557,7 @@ export function RefSelector({
   onRefChange,
   selectedSource: selectedSourceProp,
   onSourceChange,
+  onRefAndSourceChange,
   repoState,
   repoRelayEose,
   relayStateMap,
@@ -2489,6 +2738,45 @@ export function RefSelector({
   );
   const currentStatus = currentRefWithStatus?.status ?? "loading";
 
+  // Full ref name for the current ref — used by the source selector to detect
+  // when a server doesn't have the current ref.
+  const currentRefFullName = currentRefObj
+    ? currentRefObj.isBranch
+      ? `refs/heads/${currentRef}`
+      : `refs/tags/${currentRef}`
+    : undefined;
+  const currentRefIsDefault = currentRefObj?.isDefault ?? false;
+
+  // Default branch name — used to revert when switching to a source that
+  // doesn't have the current ref.
+  const defaultBranchRef = refs.find((r) => r.isDefault && r.isBranch);
+  const handleRefRevertToDefault = useCallback(
+    (newSource: string) => {
+      if (defaultBranchRef) {
+        if (onRefAndSourceChange) {
+          // Atomic: navigate to default branch + apply source in one step
+          onRefAndSourceChange(defaultBranchRef.name, newSource);
+        } else {
+          // Fallback: apply source change then ref change separately
+          onSourceChange?.(newSource);
+          if (defaultBranchRef.name !== currentRef) {
+            onRefChange(defaultBranchRef.name);
+          }
+        }
+      } else {
+        // No default branch known — just apply the source change
+        onSourceChange?.(newSource);
+      }
+    },
+    [
+      defaultBranchRef,
+      currentRef,
+      onRefChange,
+      onSourceChange,
+      onRefAndSourceChange,
+    ],
+  );
+
   const showStatusIcon =
     currentStatus !== "loading" &&
     currentStatus !== "no-state" &&
@@ -2664,6 +2952,9 @@ export function RefSelector({
           onSelectSource={setSelectedSource}
           diffSummaryExternal
           relayStateMap={relayStateMap}
+          currentRefFullName={currentRefFullName}
+          currentRefIsDefault={currentRefIsDefault}
+          onRefRevertToDefault={handleRefRevertToDefault}
         />
 
         <ScrollArea
