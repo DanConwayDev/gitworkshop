@@ -842,15 +842,6 @@ function LocatorBar({
   pool: import("@/lib/git-grasp-pool").GitGraspPool | null;
   winnerUrl: string | null;
 }) {
-  // Hide "checked" text if showing it would cause the bar to wrap onto
-  // multiple lines. We directly manipulate the DOM via refs to avoid a
-  // render cycle — measure height without it, then with it, and show/hide
-  // accordingly.
-  const barRef = useRef<HTMLDivElement>(null);
-  const checkedRef = useRef<HTMLSpanElement>(null);
-
-  const hasRepoState = !!repoState;
-
   // Compute the full ref name for the pool's refStatus lookup
   const currentRefObj = refs.find((r) => r.name === currentRef);
   const currentRefFull = currentRefObj
@@ -858,117 +849,93 @@ function LocatorBar({
       ? `refs/heads/${currentRef}`
       : `refs/tags/${currentRef}`
     : "";
-  const pathKey = pathSegments.join("/");
-
-  useEffect(() => {
-    const bar = barRef.current;
-    const checked = checkedRef.current;
-    if (!bar || !checked) return;
-    const check = () => {
-      // Measure without
-      checked.style.display = "none";
-      const heightWithout = bar.scrollHeight;
-      // Measure with
-      checked.style.display = "";
-      const heightWith = bar.scrollHeight;
-      // Hide if it causes wrapping
-      checked.style.display = heightWith <= heightWithout ? "" : "none";
-    };
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(bar);
-    return () => ro.disconnect();
-  }, [lastCheckedAt, pulling, hasRepoState, pathKey, currentRef, refs.length]);
 
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
-      {/* Top bar: branch selector + right-side indicators, then breadcrumb on its own line */}
+      {/* Single flex-wrap row.
+          Order: [RefSelector] [Breadcrumb] [checked hidden@narrow] [GitServerStatus hidden@narrow]
+          The breadcrumb has flex-[1_1_12rem]: it fills available space and
+          only wraps to a full-width second line when it can't fit at 12rem.
+          checked + GitServerStatus are hidden below the sm breakpoint so
+          they disappear before the breadcrumb is forced to wrap. */}
       <div
-        ref={barRef}
         className={cn(
-          "flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2 relative",
+          "flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 relative",
           pulling ? "fetching-gradient" : "bg-muted/30",
         )}
       >
-        {/* Row 1: branch/tag selector (shrink-0) + right-side indicators pushed to end */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          {refs.length > 0 ? (
-            <RefSelector
-              refs={refs}
-              currentRef={currentRef}
-              onRefChange={onRefChange}
-              selectedSource={selectedSource}
-              onSourceChange={onSourceChange}
-              onRefAndSourceChange={onRefAndSourceChange}
-              repoState={repoState}
-              repoRelayEose={repoRelayEose}
-              relayStateMap={relayStateMap}
-              loading={loading}
-              stateBehindGit={stateBehindGit}
-              poolWarning={poolWarning}
-              winnerUrl={winnerUrl}
-              stateCreatedAt={repoState?.event.created_at}
-              urlStates={urlStates}
-              cloneUrls={cloneUrls}
-              graspCloneUrls={graspCloneUrls}
-              additionalGitServerUrls={additionalGitServerUrls}
-              pool={pool}
-            />
-          ) : loading ? (
-            <Skeleton className="h-8 w-28" />
-          ) : null}
+        {/* Branch/tag selector */}
+        {refs.length > 0 ? (
+          <RefSelector
+            refs={refs}
+            currentRef={currentRef}
+            onRefChange={onRefChange}
+            selectedSource={selectedSource}
+            onSourceChange={onSourceChange}
+            onRefAndSourceChange={onRefAndSourceChange}
+            repoState={repoState}
+            repoRelayEose={repoRelayEose}
+            relayStateMap={relayStateMap}
+            loading={loading}
+            stateBehindGit={stateBehindGit}
+            poolWarning={poolWarning}
+            winnerUrl={winnerUrl}
+            stateCreatedAt={repoState?.event.created_at}
+            urlStates={urlStates}
+            cloneUrls={cloneUrls}
+            graspCloneUrls={graspCloneUrls}
+            additionalGitServerUrls={additionalGitServerUrls}
+            pool={pool}
+          />
+        ) : loading ? (
+          <Skeleton className="h-8 w-28 shrink-0" />
+        ) : null}
 
-          {/* Right side: pulling indicator + server status — pushed to the end of row 1 */}
-          <div className="flex items-center gap-2 ml-auto shrink-0">
-            {pulling ? (
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Checking…
-              </span>
-            ) : repoState ? (
-              <span
-                ref={checkedRef}
-                className="text-xs text-muted-foreground/60 whitespace-nowrap"
-              >
-                checked just now
-              </span>
-            ) : lastCheckedAt ? (
-              <span
-                ref={checkedRef}
-                className="text-xs text-muted-foreground/60 whitespace-nowrap"
-              >
-                checked{" "}
-                {safeFormatDistanceToNow(lastCheckedAt, { addSuffix: true })}
-              </span>
-            ) : null}
-
-            {cloneUrls.length > 0 && (
-              <GitServerStatus
-                currentRefFull={currentRefFull}
-                currentRefShort={currentRef}
-                repoRelayEose={repoRelayEose}
-                hasStateEvent={hasStateEvent}
-                urlStates={urlStates}
-                cloneUrls={cloneUrls}
-                graspCloneUrls={graspCloneUrls}
-                additionalGitServerUrls={additionalGitServerUrls}
-                crossRefDiscrepancies={crossRefDiscrepancies}
-                poolWarning={poolWarning}
-                stateCreatedAt={repoState?.event.created_at}
-                pool={pool}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Row 2: breadcrumb — always on its own full-width line */}
-        <div className="basis-full min-w-0">
+        {/* Breadcrumb — fills remaining space; wraps to full-width line 2
+            only when it can't fit at its minimum width alongside the ref selector */}
+        <div className="flex-[1_1_12rem] min-w-0">
           <CollapsibleBreadcrumb
             repoId={repoId}
             pathSegments={pathSegments}
             currentRef={currentRef}
             treeUrl={treeUrl}
           />
+        </div>
+
+        {/* Right-side items — hidden below sm breakpoint */}
+        <div className="hidden sm:flex items-center gap-2 shrink-0">
+          {pulling ? (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Checking…
+            </span>
+          ) : repoState ? (
+            <span className="text-xs text-muted-foreground/60 whitespace-nowrap">
+              checked just now
+            </span>
+          ) : lastCheckedAt ? (
+            <span className="text-xs text-muted-foreground/60 whitespace-nowrap">
+              checked{" "}
+              {safeFormatDistanceToNow(lastCheckedAt, { addSuffix: true })}
+            </span>
+          ) : null}
+
+          {cloneUrls.length > 0 && (
+            <GitServerStatus
+              currentRefFull={currentRefFull}
+              currentRefShort={currentRef}
+              repoRelayEose={repoRelayEose}
+              hasStateEvent={hasStateEvent}
+              urlStates={urlStates}
+              cloneUrls={cloneUrls}
+              graspCloneUrls={graspCloneUrls}
+              additionalGitServerUrls={additionalGitServerUrls}
+              crossRefDiscrepancies={crossRefDiscrepancies}
+              poolWarning={poolWarning}
+              stateCreatedAt={repoState?.event.created_at}
+              pool={pool}
+            />
+          )}
         </div>
       </div>
 
