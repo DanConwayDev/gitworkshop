@@ -669,7 +669,9 @@ function ServerCommitRow({
 
   return (
     <div className="flex items-center gap-1.5 text-[10px]">
-      {matchesState ? (
+      {stateCommit === undefined ? (
+        <Server className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+      ) : matchesState ? (
         <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
       ) : (
         <XCircle className="h-3 w-3 text-amber-500 shrink-0" />
@@ -693,6 +695,114 @@ function ServerCommitRow({
 }
 
 /**
+ * A single git-server-only ref row in the expanded diff summary.
+ * Shows which servers have the ref and their commits.
+ * Expandable when servers differ or there are multiple servers to list.
+ */
+function GitServerOnlyRefRow({
+  refItem,
+  cloneUrls,
+  urlStates,
+  pool,
+}: {
+  refItem: RefWithStatus;
+  cloneUrls: string[];
+  urlStates: Record<string, UrlState>;
+  pool?: GitGraspPool | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const fullRefName = `${refItem.isBranch ? "refs/heads/" : "refs/tags/"}${refItem.name}`;
+  const peeledRefName = fullRefName + "^{}";
+
+  // Servers that have this ref
+  const serverEntries = useMemo(() => {
+    return cloneUrls
+      .map((url) => {
+        const us = urlStates[url];
+        if (!us || us.status === "untested") return null;
+        const commit =
+          us.refCommits[peeledRefName] ?? us.refCommits[fullRefName];
+        if (!commit) return null;
+        return { url, label: gitServerDomain(url), commit };
+      })
+      .filter(
+        (e): e is { url: string; label: string; commit: string } => e !== null,
+      );
+  }, [cloneUrls, urlStates, fullRefName, peeledRefName]);
+
+  // Unique commits across servers
+  const uniqueCommits = useMemo(
+    () => new Set(serverEntries.map((e) => e.commit)),
+    [serverEntries],
+  );
+  const allSameCommit = uniqueCommits.size <= 1;
+  // Only expandable when there's something useful to show in the detail view:
+  // multiple servers (to see per-server commits) or differing commits
+  const canExpand = serverEntries.length > 1 || !allSameCommit;
+
+  // Inline server label: "github.com" or "github.com, gitlab.com"
+  const inlineServers =
+    serverEntries.length > 0
+      ? serverEntries.map((e) => e.label).join(", ")
+      : null;
+
+  return (
+    <div className="pl-2">
+      <button
+        onClick={canExpand ? () => setExpanded((v) => !v) : undefined}
+        disabled={!canExpand}
+        className={cn(
+          "flex items-center gap-2 text-[11px] text-muted-foreground w-full text-left py-0.5",
+          canExpand && "hover:text-foreground transition-colors",
+        )}
+      >
+        {refItem.isBranch ? (
+          <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground/40" />
+        ) : (
+          <Tag className="h-3 w-3 shrink-0 text-muted-foreground/40" />
+        )}
+        <code className="font-mono bg-muted px-1 py-0.5 rounded text-[10px] shrink-0">
+          {refItem.name}
+        </code>
+        {inlineServers && (
+          <span className="text-muted-foreground/50 truncate min-w-0">
+            {inlineServers}
+            {allSameCommit && serverEntries[0] && (
+              <code className="font-mono ml-1 text-[10px]">
+                {serverEntries[0].commit.slice(0, 8)}
+              </code>
+            )}
+          </span>
+        )}
+        {canExpand && (
+          <>
+            {expanded ? (
+              <ChevronUp className="h-3 w-3 ml-auto shrink-0 text-muted-foreground/50" />
+            ) : (
+              <ChevronDown className="h-3 w-3 ml-auto shrink-0 text-muted-foreground/50" />
+            )}
+          </>
+        )}
+      </button>
+
+      {expanded && (
+        <div className="mt-1 ml-2 space-y-1 border-l border-border/40 pl-3 pb-1">
+          {serverEntries.map((entry) => (
+            <ServerCommitRow
+              key={entry.url}
+              entry={entry}
+              stateCommit={undefined}
+              pool={pool}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Subtle expandable bar below the source header that explains ref discrepancies.
  * Only shown when selectedSource === "nostr".
  */
@@ -700,7 +810,7 @@ function DiffSummaryBar({
   refsWithStatus,
   stateBehindGit,
   defaultBranchName,
-  stateCreatedAt,
+  gitAheadDistance,
   cloneUrls,
   urlStates,
   pool,
@@ -708,7 +818,8 @@ function DiffSummaryBar({
   refsWithStatus: RefWithStatus[];
   stateBehindGit: boolean;
   defaultBranchName?: string;
-  stateCreatedAt?: number;
+  /** Human-readable distance the git server is ahead of the Nostr state, e.g. "3 months" */
+  gitAheadDistance?: string | null;
   cloneUrls: string[];
   urlStates: Record<string, UrlState>;
   pool?: GitGraspPool | null;
@@ -724,49 +835,71 @@ function DiffSummaryBar({
     return refsWithStatus.filter((r) => r.status === "mismatch");
   }, [refsWithStatus, stateBehindGit]);
 
-  if (differingRefs.length === 0) return null;
+  const gitServerOnlyRefs = useMemo(
+    () => refsWithStatus.filter((r) => r.status === "git-server-only"),
+    [refsWithStatus],
+  );
+
+  if (differingRefs.length === 0 && gitServerOnlyRefs.length === 0) return null;
 
   const defaultRef = differingRefs.find((r) => r.isDefault);
   const otherDifferingCount = defaultRef
     ? differingRefs.length - 1
     : differingRefs.length;
 
-  const stateAge =
-    stateCreatedAt !== undefined
-      ? safeFormatDistanceToNow(stateCreatedAt, { addSuffix: true })
-      : null;
-
   // Subtle summary sentence
   let summaryText: React.ReactNode;
   if (stateBehindGit && defaultRef) {
     const branchName = defaultBranchName ?? defaultRef.name;
+    // Total "extra" items: other differing refs + git-server-only refs
+    const extraCount = otherDifferingCount + gitServerOnlyRefs.length;
     summaryText = (
       <>
         <code className="font-mono bg-muted px-1 rounded text-[10px]">
           {branchName}
         </code>{" "}
-        is{stateAge ? ` ${stateAge}` : ""} ahead of nostr
-        {otherDifferingCount > 0 && (
+        is ahead of nostr
+        {gitAheadDistance && <> by {gitAheadDistance}</>}
+        {extraCount > 0 && (
           <>
-            {" "}
-            and {otherDifferingCount} other ref
-            {otherDifferingCount !== 1 ? "s" : ""} differ
+            , {extraCount} other ref{extraCount !== 1 ? "s" : ""} differ
           </>
         )}
       </>
     );
   } else if (stateBehindGit) {
+    const extraCount = gitServerOnlyRefs.length;
     summaryText = (
       <>
-        {differingRefs.length} refs ahead of nostr
-        {stateAge && <> ({stateAge})</>}
+        {differingRefs.length} ref{differingRefs.length !== 1 ? "s" : ""} ahead
+        of nostr
+        {gitAheadDistance && <> by {gitAheadDistance}</>}
+        {extraCount > 0 && (
+          <>
+            , {extraCount} git-server-only ref{extraCount !== 1 ? "s" : ""}
+          </>
+        )}
+      </>
+    );
+  } else if (differingRefs.length > 0) {
+    const extraCount = gitServerOnlyRefs.length;
+    summaryText = (
+      <>
+        {differingRefs.length} ref{differingRefs.length !== 1 ? "s" : ""} differ
+        across git servers
+        {extraCount > 0 && (
+          <>
+            , {extraCount} git-server-only ref{extraCount !== 1 ? "s" : ""}
+          </>
+        )}
       </>
     );
   } else {
+    // Only git-server-only refs
     summaryText = (
       <>
-        {differingRefs.length} ref{differingRefs.length !== 1 ? "s" : ""} differ{" "}
-        across git servers
+        {gitServerOnlyRefs.length} ref
+        {gitServerOnlyRefs.length !== 1 ? "s" : ""} on git server only
       </>
     );
   }
@@ -798,6 +931,31 @@ function DiffSummaryBar({
               pool={pool}
             />
           ))}
+
+          {/* Git server only section */}
+          {gitServerOnlyRefs.length > 0 && (
+            <div
+              className={cn(
+                "space-y-1",
+                differingRefs.length > 0 &&
+                  "mt-2 pt-2 border-t border-border/30",
+              )}
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-1">
+                <Server className="h-3 w-3" />
+                Not on nostr (git server only)
+              </p>
+              {gitServerOnlyRefs.map((ref) => (
+                <GitServerOnlyRefRow
+                  key={ref.name}
+                  refItem={ref}
+                  cloneUrls={cloneUrls}
+                  urlStates={urlStates}
+                  pool={pool}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1611,6 +1769,24 @@ function SourceHeader({
     return refsWithStatus.find((r) => r.isDefault && r.isBranch)?.name;
   }, [refsWithStatus]);
 
+  // How far ahead the git server's default branch is relative to the nostr state
+  const gitAheadDistance = useMemo(() => {
+    if (
+      poolWarning?.kind !== "state-behind-git" ||
+      !poolWarning.gitCommitterDate ||
+      !stateCreatedAt
+    )
+      return null;
+    try {
+      return formatDistanceStrict(
+        new Date(poolWarning.gitCommitterDate * 1000),
+        new Date(stateCreatedAt * 1000),
+      );
+    } catch {
+      return null;
+    }
+  }, [poolWarning, stateCreatedAt]);
+
   // Only show DiffSummaryBar when not viewing a manually-selected git server
   const showDiffSummary = hasProblems && !isLoading && !isManualGitSource;
 
@@ -1785,7 +1961,7 @@ function SourceHeader({
           refsWithStatus={refsWithStatus}
           stateBehindGit={stateBehindGit}
           defaultBranchName={defaultBranchName}
-          stateCreatedAt={stateCreatedAt}
+          gitAheadDistance={gitAheadDistance}
           cloneUrls={cloneUrls}
           urlStates={urlStates}
           pool={pool}
