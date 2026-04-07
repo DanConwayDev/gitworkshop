@@ -121,6 +121,10 @@ export default function RepoCommitsPage() {
             stateBehindGit={stateBehindGit}
             poolWarning={poolState.warning}
             winnerUrl={poolState.winnerUrl}
+            stateCreatedAt={repoState?.event.created_at}
+            urlStates={poolState.urls}
+            cloneUrls={cloneUrls}
+            pool={pool}
           />
         ) : explorer.loading ? (
           <Skeleton className="h-8 w-28" />

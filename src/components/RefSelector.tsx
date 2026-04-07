@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Popover,
   PopoverContent,
@@ -24,11 +24,16 @@ import {
   AlertTriangle,
   Radio,
   Server,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
-import type { PoolWarning } from "@/lib/git-grasp-pool/types";
+import type { PoolWarning, UrlState } from "@/lib/git-grasp-pool/types";
+import type { GitGraspPool } from "@/lib/git-grasp-pool";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,6 +67,23 @@ export interface RefSelectorProps {
    * which server the data is coming from.
    */
   winnerUrl?: string | null;
+  /**
+   * Unix timestamp (seconds) of the Nostr state event — used to show
+   * how stale the signed state is relative to what git servers have.
+   */
+  stateCreatedAt?: number;
+  /**
+   * Per-URL state from the pool — used in the expanded diff summary to show
+   * per-server commit info for differing refs.
+   */
+  urlStates?: Record<string, UrlState>;
+  /** All clone URLs — used to order servers in the expanded diff summary. */
+  cloneUrls?: string[];
+  /**
+   * Pool instance — used to lazily fetch commit timestamps for differing refs
+   * so we can show "committed 3 months ago" in the expanded section.
+   */
+  pool?: GitGraspPool | null;
 }
 
 /**
@@ -324,8 +346,305 @@ function RefRow({
 }
 
 // ---------------------------------------------------------------------------
-// Popover header: source row + optional issues row
+// Popover header: source row + optional expandable diff-summary bar
 // ---------------------------------------------------------------------------
+
+/** Short hostname from a clone URL, e.g. "github.com/foo/bar" */
+function shortServerLabel(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.hostname + (u.pathname !== "/" ? u.pathname : "");
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * A single ref row inside the expanded diff summary.
+ * Shows the nostr state commit and per-server commits with committer timestamps.
+ */
+function DiffRefRow({
+  refItem,
+  cloneUrls,
+  urlStates,
+  pool,
+}: {
+  refItem: RefWithStatus;
+  cloneUrls: string[];
+  urlStates: Record<string, UrlState>;
+  pool?: GitGraspPool | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const fullRefName = `${refItem.isBranch ? "refs/heads/" : "refs/tags/"}${refItem.name}`;
+  // For annotated tags the pool stores the peeled commit under "refs/tags/foo^{}"
+  const peeledRefName = fullRefName + "^{}";
+
+  // Collect per-server commit info from urlStates
+  const serverEntries = useMemo(() => {
+    return cloneUrls
+      .map((url) => {
+        const us = urlStates[url];
+        if (!us || us.status === "untested") return null;
+        // Prefer peeled (annotated tag) commit, fall back to raw
+        const commit =
+          us.refCommits[peeledRefName] ?? us.refCommits[fullRefName];
+        if (!commit) return null;
+        return { url, label: shortServerLabel(url), commit };
+      })
+      .filter(
+        (e): e is { url: string; label: string; commit: string } => e !== null,
+      );
+  }, [cloneUrls, urlStates, fullRefName, peeledRefName]);
+
+  return (
+    <div className="pl-2">
+      {/* Ref header row — clickable to expand */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full text-left py-0.5"
+      >
+        {refItem.isBranch ? (
+          <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+        ) : (
+          <Tag className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+        )}
+        <code className="font-mono bg-muted px-1 py-0.5 rounded text-[10px] shrink-0">
+          {refItem.name}
+        </code>
+        <span className="text-amber-600/80 dark:text-amber-400/70">
+          {refItem.status === "mismatch"
+            ? "differs from nostr"
+            : "ahead of nostr"}
+        </span>
+        {expanded ? (
+          <ChevronUp className="h-3 w-3 ml-auto shrink-0 text-muted-foreground/50" />
+        ) : (
+          <ChevronDown className="h-3 w-3 ml-auto shrink-0 text-muted-foreground/50" />
+        )}
+      </button>
+
+      {/* Per-source breakdown */}
+      {expanded && (
+        <div className="mt-1 ml-2 space-y-1 border-l border-border/40 pl-3 pb-1">
+          {/* Nostr state row */}
+          {refItem.stateCommit && (
+            <div className="flex items-center gap-1.5 text-[10px]">
+              <Radio className="h-3 w-3 text-purple-500 dark:text-purple-400 shrink-0" />
+              <span className="text-muted-foreground/70 shrink-0">nostr</span>
+              <code className="font-mono bg-muted px-1 rounded shrink-0">
+                {refItem.stateCommit.slice(0, 8)}
+              </code>
+            </div>
+          )}
+
+          {/* Per-server rows */}
+          {serverEntries.map((entry) => (
+            <ServerCommitRow
+              key={entry.url}
+              entry={entry}
+              stateCommit={refItem.stateCommit}
+              pool={pool}
+            />
+          ))}
+
+          {serverEntries.length === 0 && (
+            <p className="text-[10px] text-muted-foreground/50">
+              no server data yet
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A single server row inside an expanded DiffRefRow.
+ * Lazily fetches the committer timestamp for the server's commit.
+ */
+function ServerCommitRow({
+  entry,
+  stateCommit,
+  pool,
+}: {
+  entry: { url: string; label: string; commit: string };
+  stateCommit?: string;
+  pool?: GitGraspPool | null;
+}) {
+  const [commitTs, setCommitTs] = useState<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const matchesState =
+    stateCommit !== undefined &&
+    (entry.commit === stateCommit ||
+      entry.commit.startsWith(stateCommit) ||
+      stateCommit.startsWith(entry.commit));
+
+  useEffect(() => {
+    if (!pool) return;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    pool
+      .getSingleCommit(entry.commit, ac.signal)
+      .then((commit) => {
+        if (ac.signal.aborted || !commit) return;
+        const ts = commit.committer?.timestamp ?? commit.author.timestamp;
+        setCommitTs(ts);
+      })
+      .catch(() => {
+        /* ignore — timestamp stays null */
+      });
+
+    return () => {
+      ac.abort();
+    };
+  }, [entry.commit, pool]);
+
+  return (
+    <div className="flex items-center gap-1.5 text-[10px]">
+      {matchesState ? (
+        <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+      ) : (
+        <XCircle className="h-3 w-3 text-amber-500 shrink-0" />
+      )}
+      <span
+        className="font-mono text-muted-foreground truncate min-w-0"
+        title={entry.url}
+      >
+        {entry.label}
+      </span>
+      <code className="font-mono bg-muted px-1 rounded shrink-0">
+        {entry.commit.slice(0, 8)}
+      </code>
+      {commitTs !== null && (
+        <span className="text-muted-foreground/50 shrink-0">
+          · {safeFormatDistanceToNow(commitTs, { addSuffix: true })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Subtle expandable bar below the source header that explains ref discrepancies.
+ *
+ * Two modes:
+ *   - stateBehindGit: "master is 3 months ahead of nostr and 2 other refs differ"
+ *   - nostr source with mismatches: "2 refs differ across git servers"
+ *
+ * Clicking expands a per-ref breakdown (each ref further expandable to show
+ * per-server commits with committer timestamps).
+ */
+function DiffSummaryBar({
+  refsWithStatus,
+  stateBehindGit,
+  defaultBranchName,
+  stateCreatedAt,
+  cloneUrls,
+  urlStates,
+  pool,
+}: {
+  refsWithStatus: RefWithStatus[];
+  stateBehindGit: boolean;
+  defaultBranchName?: string;
+  stateCreatedAt?: number;
+  cloneUrls: string[];
+  urlStates: Record<string, UrlState>;
+  pool?: GitGraspPool | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const differingRefs = useMemo(() => {
+    if (stateBehindGit) {
+      return refsWithStatus.filter(
+        (r) => r.status === "state-behind" || r.status === "mismatch",
+      );
+    }
+    return refsWithStatus.filter((r) => r.status === "mismatch");
+  }, [refsWithStatus, stateBehindGit]);
+
+  if (differingRefs.length === 0) return null;
+
+  const defaultRef = differingRefs.find((r) => r.isDefault);
+  const otherDifferingCount = defaultRef
+    ? differingRefs.length - 1
+    : differingRefs.length;
+
+  const stateAge =
+    stateCreatedAt !== undefined
+      ? safeFormatDistanceToNow(stateCreatedAt, { addSuffix: true })
+      : null;
+
+  // Subtle summary sentence
+  let summaryText: React.ReactNode;
+  if (stateBehindGit && defaultRef) {
+    const branchName = defaultBranchName ?? defaultRef.name;
+    summaryText = (
+      <>
+        <code className="font-mono bg-muted px-1 rounded text-[10px]">
+          {branchName}
+        </code>{" "}
+        is{stateAge ? ` ${stateAge}` : ""} ahead of nostr
+        {otherDifferingCount > 0 && (
+          <>
+            {" "}
+            and {otherDifferingCount} other ref
+            {otherDifferingCount !== 1 ? "s" : ""} differ
+          </>
+        )}
+      </>
+    );
+  } else if (stateBehindGit) {
+    summaryText = (
+      <>
+        {differingRefs.length} refs ahead of nostr
+        {stateAge && <> ({stateAge})</>}
+      </>
+    );
+  } else {
+    summaryText = (
+      <>
+        {differingRefs.length} ref{differingRefs.length !== 1 ? "s" : ""} differ{" "}
+        across git servers
+      </>
+    );
+  }
+
+  return (
+    <div className="border-b border-border/40">
+      {/* Summary row */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-1.5 w-full px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors text-left"
+      >
+        <span className="flex-1 min-w-0">{summaryText}</span>
+        {expanded ? (
+          <ChevronUp className="h-3 w-3 shrink-0" />
+        ) : (
+          <ChevronDown className="h-3 w-3 shrink-0" />
+        )}
+      </button>
+
+      {/* Expanded per-ref list */}
+      {expanded && (
+        <div className="px-3 pb-2 space-y-1.5">
+          {differingRefs.map((ref) => (
+            <DiffRefRow
+              key={ref.name}
+              refItem={ref}
+              cloneUrls={cloneUrls}
+              urlStates={urlStates}
+              pool={pool}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * The source label shown at the top of the popover.
@@ -344,6 +663,11 @@ function SourceHeader({
   winnerUrl,
   mismatchCount,
   isNoState,
+  refsWithStatus,
+  stateCreatedAt,
+  cloneUrls,
+  urlStates,
+  pool,
 }: {
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
@@ -352,6 +676,11 @@ function SourceHeader({
   winnerUrl?: string | null;
   mismatchCount: number;
   isNoState: boolean;
+  refsWithStatus: RefWithStatus[];
+  stateCreatedAt?: number;
+  cloneUrls: string[];
+  urlStates: Record<string, UrlState>;
+  pool?: GitGraspPool | null;
 }) {
   const gitSourceUrl =
     poolWarning?.kind === "state-behind-git"
@@ -359,120 +688,139 @@ function SourceHeader({
       : winnerUrl;
   const gitDomain = gitSourceUrl ? gitServerDomain(gitSourceUrl) : null;
 
-  // Determine which source is active and its visual state
   const isLoading = repoState === undefined || !repoRelayEose;
   const isGitSource = stateBehindGit || isNoState;
   const hasProblems = mismatchCount > 0 || stateBehindGit;
 
-  // Source label
   const sourceLabel = isGitSource && gitDomain ? gitDomain : "nostr";
   const sourceIsNostr = !isGitSource;
 
+  const defaultBranchName = useMemo(() => {
+    return refsWithStatus.find((r) => r.isDefault && r.isBranch)?.name;
+  }, [refsWithStatus]);
+
+  const showDiffSummary = hasProblems && !isLoading;
+
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 px-3 py-2 border-b text-[11px]",
-        hasProblems
-          ? "border-amber-500/30 bg-amber-500/5"
-          : "border-border/40 bg-muted/20",
-      )}
-    >
-      {/* Source icon */}
-      {sourceIsNostr ? (
-        <Radio
-          className={cn(
-            "h-3 w-3 shrink-0",
-            isLoading
-              ? "text-muted-foreground/40"
-              : "text-purple-500 dark:text-purple-400",
-          )}
-        />
-      ) : (
-        <Server
-          className={cn(
-            "h-3 w-3 shrink-0",
-            hasProblems ? "text-amber-500" : "text-muted-foreground/60",
-          )}
-        />
-      )}
-
-      {/* "Source:" label */}
-      <span className="text-muted-foreground/60 shrink-0">Source</span>
-
-      {/* Source value */}
-      <span
+    <>
+      <div
         className={cn(
-          "font-medium truncate",
-          isLoading
-            ? "text-muted-foreground/50"
-            : sourceIsNostr
-              ? "text-purple-600 dark:text-purple-400"
-              : hasProblems
-                ? "text-amber-600 dark:text-amber-400"
-                : "text-foreground/80",
+          "flex items-center gap-2 px-3 py-2 border-b text-[11px]",
+          hasProblems
+            ? "border-amber-500/30 bg-amber-500/5"
+            : "border-border/40 bg-muted/20",
+          showDiffSummary && "border-b-0",
         )}
       >
-        {sourceLabel}
-      </span>
-
-      {/* Right-side status — issues, no-state info, or happy-path sync confirmation */}
-      {hasProblems ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default">
-              <AlertTriangle className="h-3 w-3 text-amber-500" />
-              <span className="text-amber-600 dark:text-amber-400 font-medium">
-                {stateBehindGit
-                  ? "ahead of nostr"
-                  : mismatchCount === 1
-                    ? "1 ref differs"
-                    : `${mismatchCount} refs differ`}
-              </span>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent
-            side="bottom"
-            className="max-w-[260px] text-xs"
-            sideOffset={6}
-          >
-            {stateBehindGit ? (
-              <span>
-                The git server has newer unsigned commits than the maintainer's
-                last Nostr state. Showing the git server's latest data.
-              </span>
-            ) : (
-              <span>
-                {mismatchCount === 1
-                  ? "1 ref differs"
-                  : `${mismatchCount} refs differ`}{" "}
-                from the Nostr state. This could mean a recent push hasn't been
-                re-published to Nostr yet. Hover each ref for details.
-              </span>
+        {/* Source icon */}
+        {sourceIsNostr ? (
+          <Radio
+            className={cn(
+              "h-3 w-3 shrink-0",
+              isLoading
+                ? "text-muted-foreground/40"
+                : "text-purple-500 dark:text-purple-400",
             )}
-          </TooltipContent>
-        </Tooltip>
-      ) : isNoState ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default text-muted-foreground/60">
-              <span>no Nostr state</span>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent
-            side="bottom"
-            className="max-w-[240px] text-xs"
-            sideOffset={6}
-          >
-            The maintainer hasn't published a Nostr state for this repo yet.
-            Showing git server data only.
-          </TooltipContent>
-        </Tooltip>
-      ) : !isLoading && sourceIsNostr ? (
-        <span className="ml-auto text-muted-foreground/50 shrink-0">
-          all git servers in sync
+          />
+        ) : (
+          <Server
+            className={cn(
+              "h-3 w-3 shrink-0",
+              hasProblems ? "text-amber-500" : "text-muted-foreground/60",
+            )}
+          />
+        )}
+
+        <span className="text-muted-foreground/60 shrink-0">Source</span>
+
+        <span
+          className={cn(
+            "font-medium truncate",
+            isLoading
+              ? "text-muted-foreground/50"
+              : sourceIsNostr
+                ? "text-purple-600 dark:text-purple-400"
+                : hasProblems
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-foreground/80",
+          )}
+        >
+          {sourceLabel}
         </span>
-      ) : null}
-    </div>
+
+        {/* Right-side status badge */}
+        {hasProblems ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default">
+                <AlertTriangle className="h-3 w-3 text-amber-500" />
+                <span className="text-amber-600 dark:text-amber-400 font-medium">
+                  {stateBehindGit
+                    ? "ahead of nostr"
+                    : mismatchCount === 1
+                      ? "1 ref differs"
+                      : `${mismatchCount} refs differ`}
+                </span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              className="max-w-[260px] text-xs"
+              sideOffset={6}
+            >
+              {stateBehindGit ? (
+                <span>
+                  The git server has newer unsigned commits than the
+                  maintainer's last Nostr state. Showing the git server's latest
+                  data.
+                </span>
+              ) : (
+                <span>
+                  {mismatchCount === 1
+                    ? "1 ref differs"
+                    : `${mismatchCount} refs differ`}{" "}
+                  from the Nostr state. This could mean a recent push hasn't
+                  been re-published to Nostr yet.
+                </span>
+              )}
+            </TooltipContent>
+          </Tooltip>
+        ) : isNoState ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="ml-auto flex items-center gap-1 shrink-0 cursor-default text-muted-foreground/60">
+                <span>no Nostr state</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              className="max-w-[240px] text-xs"
+              sideOffset={6}
+            >
+              The maintainer hasn't published a Nostr state for this repo yet.
+              Showing git server data only.
+            </TooltipContent>
+          </Tooltip>
+        ) : !isLoading && sourceIsNostr ? (
+          <span className="ml-auto text-muted-foreground/50 shrink-0">
+            all git servers in sync
+          </span>
+        ) : null}
+      </div>
+
+      {/* Subtle expandable diff summary */}
+      {showDiffSummary && (
+        <DiffSummaryBar
+          refsWithStatus={refsWithStatus}
+          stateBehindGit={stateBehindGit}
+          defaultBranchName={defaultBranchName}
+          stateCreatedAt={stateCreatedAt}
+          cloneUrls={cloneUrls}
+          urlStates={urlStates}
+          pool={pool}
+        />
+      )}
+    </>
   );
 }
 
@@ -490,6 +838,10 @@ export function RefSelector({
   stateBehindGit = false,
   poolWarning,
   winnerUrl,
+  stateCreatedAt,
+  urlStates = {},
+  cloneUrls = [],
+  pool,
 }: RefSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -653,6 +1005,11 @@ export function RefSelector({
           winnerUrl={winnerUrl}
           mismatchCount={mismatchCount}
           isNoState={isNoState}
+          refsWithStatus={refsWithStatus}
+          stateCreatedAt={stateCreatedAt}
+          cloneUrls={cloneUrls}
+          urlStates={urlStates}
+          pool={pool}
         />
 
         {/* Search input — hidden when all refs fit in the dropdown */}

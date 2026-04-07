@@ -533,6 +533,10 @@ function LocatorBar({
             stateBehindGit={stateBehindGit}
             poolWarning={poolWarning}
             winnerUrl={winnerUrl}
+            stateCreatedAt={repoState?.event.created_at}
+            urlStates={urlStates}
+            cloneUrls={cloneUrls}
+            pool={pool}
           />
         ) : loading ? (
           <Skeleton className="h-8 w-28" />
