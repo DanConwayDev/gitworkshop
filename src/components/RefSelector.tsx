@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
   Popover,
   PopoverContent,
@@ -30,6 +30,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import type { PoolWarning, UrlState } from "@/lib/git-grasp-pool/types";
@@ -845,6 +846,67 @@ export function RefSelector({
 }: RefSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const isMobile = useIsMobile();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
+  // Separate max-height for the ScrollArea so it scrolls independently of the
+  // fixed header/search/footer sections inside the popover.
+  const [scrollAreaMaxHeight, setScrollAreaMaxHeight] = useState(360);
+
+  // Recompute popover dimensions whenever the dropdown opens or viewport resizes.
+  const updatePopoverStyle = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    // Measure the sticky app header height so we can factor it in.
+    // Total space available below the trigger (sideOffset is 6px, add 8px breathing room).
+    const availableHeight = window.innerHeight - rect.bottom - 6 - 8;
+    // Reserve space for the fixed parts: source header (~36px), optional search
+    // (~44px), optional footer (~36px). Use a conservative 120px reservation so
+    // the ScrollArea always gets a sensible slice of the available space.
+    const fixedPartsHeight = 120;
+    const safeScrollHeight = Math.max(availableHeight - fixedPartsHeight, 80);
+    setScrollAreaMaxHeight(safeScrollHeight);
+
+    if (isMobile) {
+      // Radix positions the popover at the trigger's left edge (align="start").
+      // Shift it left by that amount so it spans the full viewport width.
+      setPopoverStyle({
+        width: "100vw",
+        maxWidth: "100vw",
+        marginLeft: `-${rect.left}px`,
+      });
+    } else {
+      setPopoverStyle({});
+    }
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePopoverStyle();
+    window.addEventListener("resize", updatePopoverStyle);
+    return () => window.removeEventListener("resize", updatePopoverStyle);
+  }, [open, updatePopoverStyle]);
+
+  // On mobile, scroll the trigger into view when the dropdown opens so both
+  // the button and the list are visible simultaneously.
+  useEffect(() => {
+    if (!open || !isMobile) return;
+    const el = triggerRef.current;
+    if (!el) return;
+    // Small delay to let the popover render first.
+    const id = setTimeout(() => {
+      const stickyHeader = document.querySelector("header.sticky");
+      const headerHeight = stickyHeader
+        ? stickyHeader.getBoundingClientRect().height
+        : 0;
+      // Scroll so the trigger sits just below the sticky header.
+      const triggerTop =
+        el.getBoundingClientRect().top + window.scrollY - headerHeight - 8;
+      window.scrollTo({ top: triggerTop, behavior: "smooth" });
+    }, 50);
+    return () => clearTimeout(id);
+  }, [open, isMobile]);
 
   // Compute status for each ref
   const refsWithStatus: RefWithStatus[] = useMemo(
@@ -931,6 +993,7 @@ export function RefSelector({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
+          ref={triggerRef}
           className={cn(
             "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs transition-all duration-200",
             "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -992,9 +1055,14 @@ export function RefSelector({
       </PopoverTrigger>
 
       <PopoverContent
-        className="w-[320px] p-0 overflow-hidden"
+        className={cn(
+          "p-0 overflow-hidden",
+          isMobile ? "w-screen" : "w-[420px]",
+        )}
         align="start"
         sideOffset={6}
+        style={popoverStyle}
+        avoidCollisions={!isMobile}
       >
         {/* Source header — always shown, replaces the old banners */}
         <SourceHeader
@@ -1026,7 +1094,12 @@ export function RefSelector({
           </div>
         )}
 
-        <ScrollArea className="max-h-[360px]">
+        <ScrollArea
+          style={{
+            height: `${scrollAreaMaxHeight}px`,
+            maxHeight: `${scrollAreaMaxHeight}px`,
+          }}
+        >
           <div className="py-1">
             {/* Branches section */}
             {filteredBranches.length > 0 && (
