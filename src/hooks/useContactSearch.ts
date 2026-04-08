@@ -7,8 +7,7 @@ import { mapEventsToStore } from "applesauce-core";
 import { getProfileContent, isValidProfile } from "applesauce-core/helpers";
 import type { Filter } from "applesauce-core/helpers";
 import type { ProfileContent } from "applesauce-core/helpers";
-import { merge } from "rxjs";
-import { map, scan, startWith } from "rxjs/operators";
+import { map } from "rxjs/operators";
 
 // NIP-50 search relay — relay.ditto.pub supports the `search` filter field
 const NIP50_RELAY = "wss://relay.ditto.pub";
@@ -103,11 +102,6 @@ export function useContactSearch(
     return out;
   }, [priorityPubkeys, gitFollowPubkeys, followPubkeys]);
 
-  const localPubkeyKey = useMemo(
-    () => [...localPubkeys].sort().join(","),
-    [localPubkeys],
-  );
-
   // ── 4. NIP-50 search (debounced) ─────────────────────────────────────────
   const [nip50Pubkeys, setNip50Pubkeys] = useState<string[]>([]);
 
@@ -142,58 +136,27 @@ export function useContactSearch(
     return () => clearTimeout(timer);
   }, [query, store]);
 
-  // ── 7. Reactive profiles for NIP-50 results ───────────────────────────────
-  // NIP-50 events are already in the store (mapEventsToStore above), so we
-  // just need to read them reactively. No extra fetch needed.
-  const nip50PubkeyKey = useMemo(
-    () => [...nip50Pubkeys].sort().join(","),
-    [nip50Pubkeys],
-  );
-
-  const nip50ProfileMap = use$(() => {
-    if (nip50Pubkeys.length === 0) return undefined;
-
-    const initial = new Map<string, ProfileContent>();
+  // ── 7. Profiles for NIP-50 results ───────────────────────────────────────
+  // NIP-50 events are already synchronously in the store (mapEventsToStore
+  // above completes before setNip50Pubkeys is called), so a plain synchronous
+  // read is sufficient — no reactive subscription needed.
+  const nip50ProfileMap = useMemo(() => {
+    const profileMap = new Map<string, ProfileContent>();
     for (const pubkey of nip50Pubkeys) {
       const ev = store.getReplaceable(0, pubkey);
       if (ev && isValidProfile(ev)) {
         const content = getProfileContent(ev);
-        if (content) initial.set(pubkey, content);
+        if (content) profileMap.set(pubkey, content);
       }
     }
-
-    const streams = nip50Pubkeys.map((pubkey) =>
-      store
-        .replaceable(0, pubkey)
-        .pipe(
-          map((ev) =>
-            ev && isValidProfile(ev)
-              ? ([pubkey, getProfileContent(ev)] as const)
-              : null,
-          ),
-        ),
-    );
-
-    return merge(...streams).pipe(
-      scan((acc, entry) => {
-        if (!entry) return acc;
-        const [pubkey, profile] = entry;
-        if (!profile) return acc;
-        const next = new Map(acc);
-        next.set(pubkey, profile);
-        return next;
-      }, initial),
-      startWith(initial),
-    );
-  }, [nip50PubkeyKey, store]);
+    return profileMap;
+  }, [nip50Pubkeys, store]);
 
   // ── 5. Snapshot profiles for local candidates from the EventStore cache ────
   // We read synchronously from the store rather than opening a subscription
   // over potentially thousands of pubkeys. The actual network fetch for
   // rendered items is handled by MentionAutocomplete via useProfilesForPubkeys,
   // which targets only the small set of pubkeys visible in the dropdown.
-  // Re-runs when nip50ProfileMap updates so newly-cached profiles for local
-  // candidates (e.g. a follow who also appeared in NIP-50 results) are picked up.
   const localProfileMap = useMemo(() => {
     const profileMap = new Map<string, ProfileContent>();
     for (const pubkey of localPubkeys) {
@@ -204,10 +167,7 @@ export function useContactSearch(
       }
     }
     return profileMap;
-    // nip50ProfileMap intentionally included: when NIP-50 results arrive they
-    // may include profiles for local candidates, so we re-snapshot the cache.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localPubkeyKey, store, nip50ProfileMap]);
+  }, [localPubkeys, store]);
 
   // ── 6. Assemble + filter + sort ───────────────────────────────────────────
   return useMemo<ContactSearchResult[]>(() => {

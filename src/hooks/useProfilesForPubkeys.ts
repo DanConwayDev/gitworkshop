@@ -40,12 +40,17 @@ export function useProfilesForPubkeys(
 
   // Fire a single subscription for all pubkeys against the lookup relays.
   // These are profile-aggregator relays (purplepag.es, etc.) that store kind:0.
+  // Only fetch pubkeys whose kind:0 is not already in the EventStore cache —
+  // re-requesting cached profiles wastes bandwidth and relay resources.
   // This is fire-and-forget — we just want the events in the store.
   use$(() => {
     if (pubkeys.length === 0) return undefined;
 
+    const missing = pubkeys.filter((pk) => !store.getReplaceable(0, pk));
+    if (missing.length === 0) return undefined;
+
     const relays = lookupRelays.getValue();
-    const filter: Filter = { kinds: [0], authors: pubkeys };
+    const filter: Filter = { kinds: [0], authors: missing };
 
     return pool
       .subscription(relays, [filter])
