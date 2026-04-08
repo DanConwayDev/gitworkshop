@@ -14,8 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CommentContent } from "@/components/CommentContent";
 import { MentionAutocomplete } from "@/components/MentionAutocomplete";
-import { useProfile } from "@/hooks/useProfile";
-import { genUserName } from "@/lib/genUserName";
+import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -289,17 +288,19 @@ function EmbedChip({ identifier }: { identifier: string }) {
 }
 
 function ProfileChip({ pubkey }: { pubkey: string }) {
-  const profile = useProfile(pubkey);
-  const displayName =
-    profile?.display_name ??
-    profile?.displayName ??
-    profile?.name ??
-    genUserName(pubkey);
+  const { name: displayName, isPlaceholder } = useUserDisplayName(pubkey);
 
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted pl-0.5 pr-2 py-0.5 text-xs">
       <UserAvatar pubkey={pubkey} size="xs" className="shrink-0" />
-      <span className="font-medium text-foreground">{displayName}</span>
+      <span
+        className={cn(
+          "font-medium",
+          isPlaceholder ? "text-muted-foreground font-mono" : "text-foreground",
+        )}
+      >
+        {displayName}
+      </span>
     </span>
   );
 }

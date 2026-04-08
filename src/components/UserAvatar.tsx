@@ -9,6 +9,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useUserPath } from "@/hooks/useUserPath";
 import { useIsFollowing } from "@/hooks/useIsFollowing";
 import { useIsGitAuthorFollowing } from "@/hooks/useIsGitAuthorFollowing";
+import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { cn } from "@/lib/utils";
 import { nip19 } from "nostr-tools";
 import { UserCheck } from "lucide-react";
@@ -204,27 +205,33 @@ interface UserNameProps {
 }
 
 export function UserName({ pubkey, className, linkToProfile }: UserNameProps) {
-  const profile = useProfile(pubkey);
+  const { name: displayName, isPlaceholder } = useUserDisplayName(pubkey);
   const userPath = useUserPath(pubkey);
-  const npub = pubkey ? nip19.npubEncode(pubkey) : undefined;
-  const displayName =
-    profile?.displayName ??
-    profile?.name ??
-    (npub ? npub.slice(0, 12) + "..." : "unknown");
+
+  const nameEl = (
+    <span
+      className={cn(
+        "font-medium",
+        isPlaceholder && "text-muted-foreground font-mono",
+      )}
+    >
+      {displayName}
+    </span>
+  );
 
   if (linkToProfile && pubkey) {
     return (
       <Link
         to={userPath}
         onClick={(e) => e.stopPropagation()}
-        className={cn("font-medium hover:underline", className)}
+        className={cn("hover:underline", className)}
       >
-        {displayName}
+        {nameEl}
       </Link>
     );
   }
 
-  return <span className={cn("font-medium", className)}>{displayName}</span>;
+  return <span className={className}>{nameEl}</span>;
 }
 
 interface UserLinkProps {
@@ -250,13 +257,8 @@ export function UserLink({
   nameClassName,
   noLink = false,
 }: UserLinkProps) {
-  const profile = useProfile(pubkey);
+  const { name: displayName, isPlaceholder } = useUserDisplayName(pubkey);
   const userPath = useUserPath(pubkey);
-  const npub = pubkey ? nip19.npubEncode(pubkey) : undefined;
-  const displayName =
-    profile?.displayName ??
-    profile?.name ??
-    (npub ? npub.slice(0, 12) + "..." : "unknown");
 
   const inner = (
     <>
@@ -266,6 +268,7 @@ export function UserLink({
         className={cn(
           "font-medium",
           !noLink && "hover:underline",
+          isPlaceholder && "text-muted-foreground font-mono",
           nameClassName,
         )}
       >

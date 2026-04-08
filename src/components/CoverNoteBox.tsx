@@ -19,13 +19,13 @@ import { useActiveAccount } from "applesauce-react/hooks";
 import { runner } from "@/services/actions";
 import { useToast } from "@/hooks/useToast";
 import { useProfile } from "@/hooks/useProfile";
+import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { CreateCoverNote } from "@/actions/nip34";
 import { NostrComposer } from "@/components/NostrComposer";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Pin, Loader2, X } from "lucide-react";
-import { genUserName } from "@/lib/genUserName";
 
 export interface CoverNoteBoxProps {
   /** The root issue / PR / patch event */
@@ -64,11 +64,7 @@ export function CoverNoteBox({
 
   const account = useActiveAccount();
   const profile = useProfile(account?.pubkey);
-
-  const displayName =
-    profile?.displayName ??
-    profile?.name ??
-    (account ? genUserName(account.pubkey) : "");
+  const { name: displayName } = useUserDisplayName(account?.pubkey ?? "");
   const initials = displayName.slice(0, 2).toUpperCase() || "?";
 
   const showToggle = focused || hasPreviewableContent(body);

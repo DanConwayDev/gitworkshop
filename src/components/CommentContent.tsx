@@ -21,10 +21,9 @@ import remarkGfm from "remark-gfm";
 import { remarkNostrMentions } from "applesauce-content/markdown";
 import { decodePointer } from "applesauce-core/helpers";
 import type { Components } from "react-markdown";
-import { useProfile } from "@/hooks/useProfile";
 import { useUserPath } from "@/hooks/useUserPath";
+import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { UserAvatar } from "@/components/UserAvatar";
-import { genUserName } from "@/lib/genUserName";
 import { cn, markdownUrlTransform } from "@/lib/utils";
 import { WrappableCodeBlock } from "@/components/WrappableCodeBlock";
 
@@ -33,10 +32,8 @@ import { WrappableCodeBlock } from "@/components/WrappableCodeBlock";
 // ---------------------------------------------------------------------------
 
 function NostrProfileMention({ pubkey }: { pubkey: string }) {
-  const profile = useProfile(pubkey);
+  const { name: displayName, isPlaceholder } = useUserDisplayName(pubkey);
   const userPath = useUserPath(pubkey);
-  const displayName =
-    profile?.displayName ?? profile?.name ?? genUserName(pubkey);
 
   return (
     <Link
@@ -44,7 +41,9 @@ function NostrProfileMention({ pubkey }: { pubkey: string }) {
       className="inline-flex items-center gap-1 align-middle text-primary hover:underline font-medium"
     >
       <UserAvatar pubkey={pubkey} size="xs" className="shrink-0" />@
-      {displayName}
+      <span className={cn(isPlaceholder && "text-muted-foreground font-mono")}>
+        {displayName}
+      </span>
     </Link>
   );
 }

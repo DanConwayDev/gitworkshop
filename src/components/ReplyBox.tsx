@@ -17,6 +17,7 @@ import { runner } from "@/services/actions";
 import { createAnonRunner } from "@/lib/anonPublish";
 import { useToast } from "@/hooks/useToast";
 import { useProfile } from "@/hooks/useProfile";
+import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { CreateComment } from "@/actions/nip34";
 import { NostrComposer } from "@/components/NostrComposer";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
@@ -26,7 +27,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useAuthModal } from "@/contexts/AuthModalContext";
 import { Loader2 } from "lucide-react";
-import { genUserName } from "@/lib/genUserName";
 
 export interface ReplyBoxProps {
   /** The root issue/PR event being commented on */
@@ -62,13 +62,10 @@ export function ReplyBox({
 
   const account = useActiveAccount();
   const profile = useProfile(account?.pubkey);
+  const { name: displayName } = useUserDisplayName(account?.pubkey ?? "");
 
   const isLoggedIn = !!account;
 
-  const displayName =
-    profile?.displayName ??
-    profile?.name ??
-    (account ? genUserName(account.pubkey) : "");
   const initials = displayName.slice(0, 2).toUpperCase() || "?";
 
   const showToggle = focused || hasPreviewableContent(body);

@@ -3,7 +3,7 @@ import { nip19 } from "nostr-tools";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useContactSearch } from "@/hooks/useContactSearch";
 import { useProfile } from "@/hooks/useProfile";
-import { genUserName } from "@/lib/genUserName";
+import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -340,14 +340,9 @@ function MentionItem({
   isSelected: boolean;
   onClick: () => void;
 }) {
-  // useProfile subscribes reactively via the User cast (same as UserAvatar),
-  // so the name updates as soon as the kind:0 event lands in the store.
+  // useUserDisplayName subscribes reactively and updates when kind:0 lands.
+  const { name: displayName, isPlaceholder } = useUserDisplayName(pubkey);
   const profile = useProfile(pubkey);
-  const displayName =
-    profile?.display_name ??
-    profile?.displayName ??
-    profile?.name ??
-    genUserName(pubkey);
   const nip05 = profile?.nip05;
   const npub = nip19.npubEncode(pubkey);
   const identifier = nip05 ?? `${npub.slice(0, 12)}…`;
@@ -368,7 +363,14 @@ function MentionItem({
       <UserAvatar pubkey={pubkey} size="md" className="shrink-0" />
 
       <div className="flex-1 min-w-0">
-        <div className="font-semibold text-sm truncate">{displayName}</div>
+        <div
+          className={cn(
+            "font-semibold text-sm truncate font-mono",
+            isPlaceholder && "text-muted-foreground",
+          )}
+        >
+          {displayName}
+        </div>
         <div className="text-xs text-muted-foreground truncate font-mono">
           {identifier}
         </div>

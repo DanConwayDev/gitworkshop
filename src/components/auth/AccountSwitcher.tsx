@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu.tsx";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserPath } from "@/hooks/useUserPath";
-import { genUserName } from "@/lib/genUserName";
+import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import type { IAccount } from "applesauce-accounts";
 import {
   use$,
@@ -36,8 +36,10 @@ interface AccountItemProps {
 }
 
 function AccountItem({ account, isActive, onSelect }: AccountItemProps) {
+  const { name: displayName, isPlaceholder } = useUserDisplayName(
+    account.pubkey,
+  );
   const profile = useProfile(account.pubkey);
-  const displayName = profile?.name ?? genUserName(account.pubkey);
 
   return (
     <DropdownMenuItem
@@ -51,7 +53,15 @@ function AccountItem({ account, isActive, onSelect }: AccountItemProps) {
         </AvatarFallback>
       </Avatar>
       <div className="flex-1 truncate">
-        <p className="text-sm font-medium">{displayName}</p>
+        <p
+          className={
+            isPlaceholder
+              ? "text-sm font-mono text-muted-foreground"
+              : "text-sm font-medium"
+          }
+        >
+          {displayName}
+        </p>
       </div>
       {isActive && <div className="w-2 h-2 rounded-full bg-primary"></div>}
     </DropdownMenuItem>
@@ -64,13 +74,14 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   const accounts = use$(accountManager.accounts$);
   const activeProfile = useProfile(activeAccount?.pubkey);
   const activeUserPath = useUserPath(activeAccount?.pubkey ?? "");
+  const { name: displayName, isPlaceholder: activeIsPlaceholder } =
+    useUserDisplayName(activeAccount?.pubkey ?? "");
 
   if (!activeAccount) return null;
 
   const otherAccounts = accounts.filter(
     (acc) => acc.pubkey !== activeAccount.pubkey,
   );
-  const displayName = activeProfile?.name ?? genUserName(activeAccount.pubkey);
 
   const handleSetActive = (account: IAccount) => {
     accountManager.setActive(account);
@@ -89,7 +100,15 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
             <AvatarFallback>{displayName.charAt(0)}</AvatarFallback>
           </Avatar>
           <div className="flex-1 text-left hidden md:block truncate">
-            <p className="font-medium text-sm truncate">{displayName}</p>
+            <p
+              className={
+                activeIsPlaceholder
+                  ? "font-mono text-sm text-muted-foreground truncate"
+                  : "font-medium text-sm truncate"
+              }
+            >
+              {displayName}
+            </p>
           </div>
           <ChevronDown className="w-4 h-4 text-muted-foreground" />
         </button>
@@ -105,7 +124,15 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
               <AvatarFallback>{displayName.charAt(0)}</AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{displayName}</p>
+              <p
+                className={
+                  activeIsPlaceholder
+                    ? "text-sm font-mono text-muted-foreground truncate"
+                    : "text-sm font-medium truncate"
+                }
+              >
+                {displayName}
+              </p>
               <p className="text-xs text-muted-foreground">View profile</p>
             </div>
           </Link>

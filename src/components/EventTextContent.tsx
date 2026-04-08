@@ -10,20 +10,17 @@ import { Link } from "react-router-dom";
 import { useRenderedContent, type ComponentMap } from "applesauce-react/hooks";
 import type { NostrEvent } from "nostr-tools";
 import { cn } from "@/lib/utils";
-import { useProfile } from "@/hooks/useProfile";
 import { useUserPath } from "@/hooks/useUserPath";
+import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { UserAvatar } from "@/components/UserAvatar";
-import { genUserName } from "@/lib/genUserName";
 
 // ---------------------------------------------------------------------------
 // Mention component — renders nprofile / npub as inline avatar + name
 // ---------------------------------------------------------------------------
 
 function MentionComponent({ pubkey }: { pubkey: string }) {
-  const profile = useProfile(pubkey);
+  const { name: displayName, isPlaceholder } = useUserDisplayName(pubkey);
   const userPath = useUserPath(pubkey);
-  const displayName =
-    profile?.displayName ?? profile?.name ?? genUserName(pubkey);
 
   return (
     <Link
@@ -31,7 +28,9 @@ function MentionComponent({ pubkey }: { pubkey: string }) {
       className="inline-flex items-center gap-1 align-middle text-primary hover:underline font-medium"
     >
       <UserAvatar pubkey={pubkey} size="xs" className="shrink-0" />@
-      {displayName}
+      <span className={cn(isPlaceholder && "text-muted-foreground font-mono")}>
+        {displayName}
+      </span>
     </Link>
   );
 }
