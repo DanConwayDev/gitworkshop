@@ -172,12 +172,10 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
               >
                 {displayName}
               </p>
-              <div className="flex items-center gap-2">
-                <SignerTypeBadge account={activeAccount} />
-                <span className="text-xs text-muted-foreground">
-                  · View profile
-                </span>
-              </div>
+              <SignerTypeBadge account={activeAccount} />
+              <span className="text-xs text-muted-foreground">
+                View profile
+              </span>
             </div>
           </Link>
         </DropdownMenuItem>
