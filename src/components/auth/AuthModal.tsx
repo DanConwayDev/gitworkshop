@@ -99,6 +99,11 @@ export function AuthModal() {
     setLoginDialogOpen(true);
   }, []);
 
+  const handleCreateAccountFromLogin = useCallback(() => {
+    setLoginDialogOpen(false);
+    setView("create-account");
+  }, []);
+
   const handleLoginDialogClose = useCallback(() => {
     setLoginDialogOpen(false);
     // If we were opened directly on sign-in, closing LoginDialog should close
@@ -309,6 +314,20 @@ export function AuthModal() {
               </div>
             )}
 
+            {/* ── Sign in link — shown on create-account steps ── */}
+            {view === "create-account" && !isPublishing && (
+              <p className="text-sm text-center text-muted-foreground pt-1">
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={handleSignIn}
+                  className="text-foreground underline underline-offset-4 hover:text-primary transition-colors"
+                >
+                  Sign in
+                </button>
+              </p>
+            )}
+
             {/* ── Create account: display-name step ── */}
             {view === "create-account" && createStep === "display-name" && (
               <form
@@ -503,6 +522,7 @@ export function AuthModal() {
         isOpen={loginDialogOpen}
         onClose={handleLoginDialogClose}
         onLogin={handleLoginSuccess}
+        onCreateAccount={handleCreateAccountFromLogin}
       />
     </>
   );

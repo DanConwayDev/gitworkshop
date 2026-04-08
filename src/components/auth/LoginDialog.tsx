@@ -31,6 +31,7 @@ interface LoginDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onLogin: () => void;
+  onCreateAccount?: () => void;
 }
 
 const validateNsec = (nsec: string) => {
@@ -45,6 +46,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
   isOpen,
   onClose,
   onLogin,
+  onCreateAccount,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isFileLoading, setIsFileLoading] = useState(false);
@@ -543,6 +545,19 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
             </Collapsible>
           ) : (
             renderTabs()
+          )}
+
+          {onCreateAccount && (
+            <p className="text-sm text-center text-muted-foreground pt-2">
+              Don&apos;t have an account?{" "}
+              <button
+                type="button"
+                onClick={onCreateAccount}
+                className="text-foreground underline underline-offset-4 hover:text-primary transition-colors"
+              >
+                Create account
+              </button>
+            </p>
           )}
         </div>
       </DialogContent>
