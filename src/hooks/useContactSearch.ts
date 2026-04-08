@@ -63,19 +63,22 @@ export function useContactSearch(
 
   // ── 1. Git follows (kind:10017) ───────────────────────────────────────────
   const myPubkey = myUser?.pubkey;
-  const gitFollowPubkeys =
-    use$(() => {
-      if (!myPubkey) return undefined;
-      return store.replaceable(GIT_AUTHORS_KIND, myPubkey).pipe(
-        map((event) => {
-          if (!event) return [] as string[];
-          return event.tags
-            .filter(([t]) => t === "p")
-            .map(([, v]) => v)
-            .filter((v): v is string => !!v);
-        }),
-      );
-    }, [myPubkey, store]) ?? [];
+  const rawGitFollowPubkeys = use$(() => {
+    if (!myPubkey) return undefined;
+    return store.replaceable(GIT_AUTHORS_KIND, myPubkey).pipe(
+      map((event) => {
+        if (!event) return [] as string[];
+        return event.tags
+          .filter(([t]) => t === "p")
+          .map(([, v]) => v)
+          .filter((v): v is string => !!v);
+      }),
+    );
+  }, [myPubkey, store]);
+  const gitFollowPubkeys = useMemo(
+    () => rawGitFollowPubkeys ?? [],
+    [rawGitFollowPubkeys],
+  );
 
   // ── 2. Social follows (kind:3) ────────────────────────────────────────────
   const contacts = use$(() => myUser?.contacts$, [myUser?.pubkey]);
