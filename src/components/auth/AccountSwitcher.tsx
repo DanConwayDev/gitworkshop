@@ -18,12 +18,50 @@ import { useUserPath } from "@/hooks/useUserPath";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import type { IAccount } from "applesauce-accounts";
 import {
+  ExtensionAccount,
+  NostrConnectAccount,
+  PrivateKeyAccount,
+} from "applesauce-accounts/accounts";
+import {
   use$,
   useAccountManager,
   useActiveAccount,
 } from "applesauce-react/hooks";
-import { ChevronDown, LogOut, UserIcon, UserPlus } from "lucide-react";
+import {
+  ChevronDown,
+  Key,
+  LogOut,
+  Puzzle,
+  UserIcon,
+  UserPlus,
+  Wifi,
+} from "lucide-react";
 import { Link } from "react-router-dom";
+
+function SignerTypeBadge({ account }: { account: IAccount }) {
+  if (account instanceof ExtensionAccount)
+    return (
+      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+        <Puzzle className="w-3 h-3" />
+        Extension
+      </span>
+    );
+  if (account instanceof NostrConnectAccount)
+    return (
+      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+        <Wifi className="w-3 h-3" />
+        Remote signer
+      </span>
+    );
+  if (account instanceof PrivateKeyAccount)
+    return (
+      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+        <Key className="w-3 h-3" />
+        Secret key
+      </span>
+    );
+  return null;
+}
 
 interface AccountSwitcherProps {
   onAddAccountClick: () => void;
@@ -52,18 +90,21 @@ function AccountItem({ account, isActive, onSelect }: AccountItemProps) {
           {displayName?.charAt(0) || <UserIcon />}
         </AvatarFallback>
       </Avatar>
-      <div className="flex-1 truncate">
+      <div className="flex-1 min-w-0">
         <p
           className={
             isPlaceholder
-              ? "text-sm font-mono text-muted-foreground"
-              : "text-sm font-medium"
+              ? "text-sm font-mono text-muted-foreground truncate"
+              : "text-sm font-medium truncate"
           }
         >
           {displayName}
         </p>
+        <SignerTypeBadge account={account} />
       </div>
-      {isActive && <div className="w-2 h-2 rounded-full bg-primary"></div>}
+      {isActive && (
+        <div className="w-2 h-2 rounded-full bg-primary shrink-0"></div>
+      )}
     </DropdownMenuItem>
   );
 }
@@ -131,7 +172,12 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
               >
                 {displayName}
               </p>
-              <p className="text-xs text-muted-foreground">View profile</p>
+              <div className="flex items-center gap-2">
+                <SignerTypeBadge account={activeAccount} />
+                <span className="text-xs text-muted-foreground">
+                  · View profile
+                </span>
+              </div>
             </div>
           </Link>
         </DropdownMenuItem>
@@ -141,7 +187,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
         </div>
         {otherAccounts.map((account) => (
           <AccountItem
-            key={account.pubkey}
+            key={account.id}
             account={account}
             isActive={false}
             onSelect={() => handleSetActive(account)}
