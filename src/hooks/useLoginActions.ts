@@ -1,7 +1,7 @@
 import { APP_NAME } from "@/lib/constants";
 import { accounts } from "@/services/accounts";
 import { pool } from "@/services/nostr";
-import { extraRelays } from "@/services/settings";
+import { defaultNostrConnectRelays } from "@/services/settings";
 import { signerWithNudge } from "@/lib/signerWithNudge";
 import { Accounts } from "applesauce-accounts";
 import { NostrConnectAccount } from "applesauce-accounts/accounts";
@@ -68,13 +68,15 @@ export interface NostrConnectSession {
  * Creates a new nostrconnect:// session.
  * Generates an ephemeral signer, builds the URI, and returns both so the
  * caller can display the QR code while separately awaiting the connection.
+ *
+ * @param appName - Optional app name to embed in the URI metadata
+ * @param relays  - Optional relay override; falls back to {@link defaultNostrConnectRelays}
  */
 export function createNostrConnectSession(
   appName?: string,
+  relays?: string[],
 ): NostrConnectSession {
-  const relays = extraRelays.getValue();
-  const fallback = ["wss://relay.damus.io", "wss://relay.primal.net"];
-  const sessionRelays = relays.length > 0 ? relays : fallback;
+  const sessionRelays = relays ?? defaultNostrConnectRelays.getValue();
 
   const signer = new NostrConnectSigner({ relays: sessionRelays, pool });
 

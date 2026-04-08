@@ -151,6 +151,35 @@ persist(relayCurationMode, "relayCurationMode", {
 });
 
 // ---------------------------------------------------------------------------
+// Remote signer (NIP-46) relays
+// ---------------------------------------------------------------------------
+
+/**
+ * Default rendezvous relays used when initiating a new remote-signer
+ * (NIP-46 / nostrconnect) session. Matches the defaults used by the ngit CLI
+ * (wss://bucket.coracle.social, wss://nos.lol, wss://relay.ditto.pub).
+ *
+ * These relays are negotiated at connection time and stored in the bunker URI —
+ * changing this setting only affects *new* remote-signer logins. Existing
+ * accounts continue to use the relays embedded in their bunker URI.
+ */
+export const DEFAULT_NOSTR_CONNECT_RELAYS: readonly string[] = [
+  "wss://bucket.coracle.social",
+  "wss://nos.lol",
+  "wss://relay.ditto.pub",
+];
+
+export const defaultNostrConnectRelays = new BehaviorSubject<string[]>([
+  ...DEFAULT_NOSTR_CONNECT_RELAYS,
+]);
+
+// Persist user overrides; delete the key when the value matches the default so
+// code-level default changes are picked up by users who haven't customised it.
+persist(defaultNostrConnectRelays, "defaultNostrConnectRelays", {
+  defaultValue: [...DEFAULT_NOSTR_CONNECT_RELAYS],
+});
+
+// ---------------------------------------------------------------------------
 // Default Grasp servers
 // ---------------------------------------------------------------------------
 

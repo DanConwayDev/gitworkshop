@@ -19,6 +19,7 @@ import {
   lookupRelays,
   relayCurationMode,
   DEFAULT_GRASP_SERVERS,
+  defaultNostrConnectRelays,
   type RelayCurationMode,
 } from "@/services/settings";
 import { validateGraspServer } from "@/lib/grasp";
@@ -684,6 +685,45 @@ function GraspRelaysSection() {
   );
 }
 
+function DefaultNostrConnectRelaysSection() {
+  const relaysList = use$(defaultNostrConnectRelays);
+
+  const handleAdd = (relay: string) => {
+    const newRelays = [...new Set([...(relaysList || []), relay])];
+    defaultNostrConnectRelays.next(newRelays);
+  };
+
+  const handleRemove = (relay: string) => {
+    const newRelays = (relaysList || []).filter((r) => r !== relay);
+    defaultNostrConnectRelays.next(newRelays);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Default Remote Signer Relays</CardTitle>
+        <CardDescription>
+          Rendezvous relays used when connecting a new remote signer (NIP-46).
+          These are negotiated at login time and stored in the bunker URI —
+          changing them only affects new logins, not existing accounts.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          {relaysList?.map((relay, index) => (
+            <RelayItem
+              key={index}
+              relay={relay}
+              onRemove={() => handleRemove(relay)}
+            />
+          ))}
+        </div>
+        <NewRelayForm onAdd={handleAdd} />
+      </CardContent>
+    </Card>
+  );
+}
+
 function ExtraRelaysSection() {
   const extraRelaysList = use$(extraRelays);
 
@@ -739,6 +779,7 @@ export default function Settings() {
       <RelayCurationSection />
       <GraspRelaysSection />
       <DiscoveryRelaysSection />
+      <DefaultNostrConnectRelaysSection />
       <OutboxRelaysSection />
       <InboxRelaysSection />
       <ExtraRelaysSection />

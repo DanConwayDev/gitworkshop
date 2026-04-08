@@ -10,6 +10,8 @@ import {
   Copy,
   Check,
   ExternalLink,
+  X,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +38,16 @@ interface LoginDialogProps {
 
 const validateNsec = (nsec: string) => {
   return /^nsec1[a-zA-Z0-9]{58}$/.test(nsec);
+};
+
+/** Extract the relay list embedded in a nostrconnect:// URI */
+const relaysFromUri = (uri: string): string[] => {
+  try {
+    const url = new URL(uri);
+    return url.searchParams.getAll("relay");
+  } catch {
+    return [];
+  }
 };
 
 const validateBunkerUri = (uri: string) => {
@@ -71,9 +83,13 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
   const hasExtension = "nostr" in window;
   const [isMoreOptionsOpen, setIsMoreOptionsOpen] = useState(false);
 
+  // Relay editor state for the nostrconnect session
+  const [showRelayEditor, setShowRelayEditor] = useState(false);
+  const [newRelayInput, setNewRelayInput] = useState("");
+
   // Generate a nostrconnect session (sync — just creates the ephemeral signer + URI)
-  const generateConnectSession = useCallback(() => {
-    const session = createNostrConnectSession(APP_NAME);
+  const generateConnectSession = useCallback((relays?: string[]) => {
+    const session = createNostrConnectSession(APP_NAME, relays);
     setNostrConnectSession(session);
     setConnectError(null);
   }, []);
@@ -132,16 +148,29 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
     }
   }, [isOpen]);
 
-  const handleRetry = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    setNostrConnectSession(null);
-    setIsWaitingForConnect(false);
-    setConnectError(null);
-    // Let state clear before generating a new session
-    setTimeout(() => generateConnectSession(), 0);
-  }, [generateConnectSession]);
+  const handleRetry = useCallback(
+    (relays?: string[]) => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      setNostrConnectSession(null);
+      setIsWaitingForConnect(false);
+      setConnectError(null);
+      // Let state clear before generating a new session
+      setTimeout(() => generateConnectSession(relays), 0);
+    },
+    [generateConnectSession],
+  );
+
+  /** Regenerate the session with a modified relay list */
+  const handleRelayChange = useCallback(
+    (relays: string[]) => {
+      handleRetry(relays);
+      setShowRelayEditor(false);
+      setNewRelayInput("");
+    },
+    [handleRetry],
+  );
 
   const handleCopyUri = async () => {
     if (!nostrConnectSession) return;
@@ -367,7 +396,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
           {connectError ? (
             <div className="flex flex-col items-center space-y-4 py-4">
               <p className="text-sm text-red-500 text-center">{connectError}</p>
-              <Button variant="outline" onClick={handleRetry}>
+              <Button variant="outline" onClick={() => handleRetry()}>
                 Retry
               </Button>
             </div>
@@ -422,6 +451,93 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
                   </>
                 )}
               </Button>
+
+              {/* Relay editor — collapsible one-liner */}
+              {(() => {
+                const currentRelays = relaysFromUri(nostrConnectSession.uri);
+                return (
+                  <div className="w-full">
+                    <button
+                      type="button"
+                      onClick={() => setShowRelayEditor(!showRelayEditor)}
+                      className="flex items-center justify-center gap-1.5 w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+                    >
+                      <span>
+                        Relays:{" "}
+                        {currentRelays
+                          .map((r) => r.replace("wss://", ""))
+                          .join(", ")}
+                      </span>
+                      <ChevronDown
+                        className={`w-3 h-3 transition-transform ${showRelayEditor ? "rotate-180" : ""}`}
+                      />
+                    </button>
+
+                    {showRelayEditor && (
+                      <div className="mt-2 space-y-2 text-sm">
+                        {currentRelays.map((relay) => (
+                          <div
+                            key={relay}
+                            className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/20 px-2.5 py-1.5"
+                          >
+                            <span className="flex-1 font-mono text-xs truncate">
+                              {relay}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleRelayChange(
+                                  currentRelays.filter((r) => r !== relay),
+                                )
+                              }
+                              className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                              aria-label={`Remove ${relay}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newRelayInput}
+                            onChange={(e) => setNewRelayInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && newRelayInput.trim()) {
+                                e.preventDefault();
+                                const relay =
+                                  newRelayInput.trim().startsWith("wss://") ||
+                                  newRelayInput.trim().startsWith("ws://")
+                                    ? newRelayInput.trim()
+                                    : `wss://${newRelayInput.trim()}`;
+                                handleRelayChange([...currentRelays, relay]);
+                              }
+                            }}
+                            placeholder="wss://relay.example.com"
+                            className="flex-1 h-7 rounded-md border border-input bg-background px-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newRelayInput.trim()) return;
+                              const relay =
+                                newRelayInput.trim().startsWith("wss://") ||
+                                newRelayInput.trim().startsWith("ws://")
+                                  ? newRelayInput.trim()
+                                  : `wss://${newRelayInput.trim()}`;
+                              handleRelayChange([...currentRelays, relay]);
+                            }}
+                            className="h-7 w-7 rounded-md border border-input bg-background flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                            aria-label="Add relay"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </>
           ) : (
             <div className="flex items-center justify-center h-[100px]">
