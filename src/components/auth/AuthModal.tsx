@@ -314,20 +314,6 @@ export function AuthModal() {
               </div>
             )}
 
-            {/* ── Sign in link — shown on create-account steps ── */}
-            {view === "create-account" && !isPublishing && (
-              <p className="text-sm text-center text-muted-foreground pt-1">
-                Already have an account?{" "}
-                <button
-                  type="button"
-                  onClick={handleSignIn}
-                  className="text-foreground underline underline-offset-4 hover:text-primary transition-colors"
-                >
-                  Sign in
-                </button>
-              </p>
-            )}
-
             {/* ── Create account: display-name step ── */}
             {view === "create-account" && createStep === "display-name" && (
               <form
@@ -512,6 +498,20 @@ export function AuthModal() {
                   Publishing your profile and relay list...
                 </p>
               </div>
+            )}
+
+            {/* ── Sign in link — shown at the bottom of create-account steps ── */}
+            {view === "create-account" && !isPublishing && (
+              <p className="text-sm text-center text-muted-foreground pt-1">
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={handleSignIn}
+                  className="text-foreground underline underline-offset-4 hover:text-primary transition-colors"
+                >
+                  Sign in
+                </button>
+              </p>
             )}
           </div>
         </DialogContent>
