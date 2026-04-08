@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { nip19 } from "nostr-tools";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useContactSearch } from "@/hooks/useContactSearch";
 import { useProfile } from "@/hooks/useProfile";
+import { useProfilesForPubkeys } from "@/hooks/useProfilesForPubkeys";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { cn } from "@/lib/utils";
 
@@ -142,6 +143,16 @@ export function MentionAutocomplete({
     isOpen ? mentionQuery : "",
     priorityPubkeys,
   );
+
+  // Fetch profiles for the pubkeys currently visible in the dropdown.
+  // This is intentionally targeted — only the rendered items, not the full
+  // follow list. useProfilesForPubkeys fires a single batched REQ to the
+  // lookup relays and updates MentionItem reactively as profiles arrive.
+  const renderedPubkeys = useMemo(
+    () => contacts.map((c) => c.pubkey),
+    [contacts],
+  );
+  useProfilesForPubkeys(renderedPubkeys);
 
   // Detect @mention query at cursor.
   const detectMention = useCallback(

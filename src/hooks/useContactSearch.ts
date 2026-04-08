@@ -3,9 +3,7 @@ import { use$ } from "@/hooks/use$";
 import { useMyUser } from "@/hooks/useUser";
 import { useEventStore } from "@/hooks/useEventStore";
 import { pool } from "@/services/nostr";
-import { lookupRelays } from "@/services/settings";
 import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
 import { getProfileContent, isValidProfile } from "applesauce-core/helpers";
 import type { Filter } from "applesauce-core/helpers";
 import type { ProfileContent } from "applesauce-core/helpers";
@@ -110,57 +108,7 @@ export function useContactSearch(
     [localPubkeys],
   );
 
-  // ── 4. Fetch profiles for local candidates (lookup relays) ────────────────
-  use$(() => {
-    if (localPubkeys.length === 0) return undefined;
-    const relays = lookupRelays.getValue();
-    const filter: Filter = { kinds: [0], authors: localPubkeys };
-    return pool
-      .subscription(relays, [filter])
-      .pipe(onlyEvents(), mapEventsToStore(store));
-  }, [localPubkeyKey, store]);
-
-  // ── 5. Reactive profile map for local candidates ──────────────────────────
-  // Uses the same merge+scan pattern as useProfilesForPubkeys so cached
-  // profiles appear immediately and the map grows as network responses arrive.
-  const localProfileMap = use$(() => {
-    if (localPubkeys.length === 0) return undefined;
-
-    const initial = new Map<string, ProfileContent>();
-    for (const pubkey of localPubkeys) {
-      const ev = store.getReplaceable(0, pubkey);
-      if (ev && isValidProfile(ev)) {
-        const content = getProfileContent(ev);
-        if (content) initial.set(pubkey, content);
-      }
-    }
-
-    const streams = localPubkeys.map((pubkey) =>
-      store
-        .replaceable(0, pubkey)
-        .pipe(
-          map((ev) =>
-            ev && isValidProfile(ev)
-              ? ([pubkey, getProfileContent(ev)] as const)
-              : null,
-          ),
-        ),
-    );
-
-    return merge(...streams).pipe(
-      scan((acc, entry) => {
-        if (!entry) return acc;
-        const [pubkey, profile] = entry;
-        if (!profile) return acc;
-        const next = new Map(acc);
-        next.set(pubkey, profile);
-        return next;
-      }, initial),
-      startWith(initial),
-    );
-  }, [localPubkeyKey, store]);
-
-  // ── 6. NIP-50 search (debounced) ──────────────────────────────────────────
+  // ── 4. NIP-50 search (debounced) ─────────────────────────────────────────
   const [nip50Pubkeys, setNip50Pubkeys] = useState<string[]>([]);
 
   useEffect(() => {
@@ -239,7 +187,29 @@ export function useContactSearch(
     );
   }, [nip50PubkeyKey, store]);
 
-  // ── 8. Assemble + filter + sort ───────────────────────────────────────────
+  // ── 5. Snapshot profiles for local candidates from the EventStore cache ────
+  // We read synchronously from the store rather than opening a subscription
+  // over potentially thousands of pubkeys. The actual network fetch for
+  // rendered items is handled by MentionAutocomplete via useProfilesForPubkeys,
+  // which targets only the small set of pubkeys visible in the dropdown.
+  // Re-runs when nip50ProfileMap updates so newly-cached profiles for local
+  // candidates (e.g. a follow who also appeared in NIP-50 results) are picked up.
+  const localProfileMap = useMemo(() => {
+    const profileMap = new Map<string, ProfileContent>();
+    for (const pubkey of localPubkeys) {
+      const ev = store.getReplaceable(0, pubkey);
+      if (ev && isValidProfile(ev)) {
+        const content = getProfileContent(ev);
+        if (content) profileMap.set(pubkey, content);
+      }
+    }
+    return profileMap;
+    // nip50ProfileMap intentionally included: when NIP-50 results arrive they
+    // may include profiles for local candidates, so we re-snapshot the cache.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localPubkeyKey, store, nip50ProfileMap]);
+
+  // ── 6. Assemble + filter + sort ───────────────────────────────────────────
   return useMemo<ContactSearchResult[]>(() => {
     const lowerQuery = query.trim().toLowerCase();
     const prioritySet = new Set(priorityPubkeys);
@@ -307,14 +277,14 @@ export function useContactSearch(
     const candidates = Array.from(scored.values()).filter(
       ({ profile, tier }) => {
         if (!lowerQuery) {
-          // Empty query: only show priority + git follows + social follows
+          // Empty query: show priority + git follows + social follows regardless
+          // of whether their profile is loaded yet
           return tier <= 2;
         }
-        if (!profile) {
-          // No profile yet — include priority/git-follow/social-follow pubkeys so
-          // they appear immediately even before their profile loads
-          return tier <= 2;
-        }
+        // With a query we can only match against profile metadata — if we don't
+        // have a profile for this pubkey yet, we have nothing to search against
+        // so exclude it. It will appear once its profile arrives in the store.
+        if (!profile) return false;
         const name = (profile.name ?? "").toLowerCase();
         const displayName = (
           profile.display_name ??
