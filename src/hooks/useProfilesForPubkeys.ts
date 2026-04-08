@@ -1,30 +1,23 @@
 import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
-import { pool } from "@/services/nostr";
-import { lookupRelays } from "@/services/settings";
-import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
+import { profileLoader } from "@/services/nostr";
 import { merge } from "rxjs";
 import { map, scan, startWith } from "rxjs/operators";
 import { getProfileContent, isValidProfile } from "applesauce-core/helpers";
 import type { ProfileContent } from "applesauce-core/helpers";
-import type { Filter } from "applesauce-core/helpers";
 
 /**
  * Batch-fetch kind:0 profile metadata for a list of pubkeys.
  *
- * Subscribes to the lookup relays (purplepag.es, etc.) for all provided
- * pubkeys in a single REQ, adds events to the EventStore, then returns a
- * reactive map of pubkey → ProfileContent. The map updates as profiles arrive.
+ * Delegates fetching to the singleton profileLoader (createAddressLoader with
+ * a 200ms buffer) so all per-pubkey requests across the entire app are batched
+ * into a single relay REQ per window. Only pubkeys whose kind:0 is not already
+ * in the EventStore are submitted to the loader.
  *
- * The git index relay only stores kind:30617 repo announcements, so we use
- * the dedicated lookup/profile-aggregator relays instead.
- *
- * Uses merge+scan rather than combineLatest so the map is populated
- * incrementally — cached profiles appear immediately on first render and
- * the map grows as network responses arrive, rather than waiting for every
- * pubkey to have a profile before emitting anything.
+ * Returns a reactive map of pubkey → ProfileContent that updates as profiles
+ * arrive. Uses merge+scan so cached profiles appear immediately on first render
+ * and the map grows incrementally rather than waiting for every pubkey.
  *
  * Returns an empty Map while no profiles have arrived yet.
  *
@@ -38,23 +31,20 @@ export function useProfilesForPubkeys(
 
   const store = useEventStore();
 
-  // Fire a single subscription for all pubkeys against the lookup relays.
-  // These are profile-aggregator relays (purplepag.es, etc.) that store kind:0.
-  // Only fetch pubkeys whose kind:0 is not already in the EventStore cache —
-  // re-requesting cached profiles wastes bandwidth and relay resources.
-  // This is fire-and-forget — we just want the events in the store.
+  // Submit missing pubkeys to the singleton profileLoader.
+  // The loader batches all calls within its 200ms window into a single REQ,
+  // so multiple components mounting simultaneously produce one relay request.
+  // Pubkeys already in the EventStore are skipped to avoid redundant fetches.
+  // Fire-and-forget — events land in the store as a side-effect.
   use$(() => {
     if (pubkeys.length === 0) return undefined;
 
     const missing = pubkeys.filter((pk) => !store.getReplaceable(0, pk));
     if (missing.length === 0) return undefined;
 
-    const relays = lookupRelays.getValue();
-    const filter: Filter = { kinds: [0], authors: missing };
-
-    return pool
-      .subscription(relays, [filter])
-      .pipe(onlyEvents(), mapEventsToStore(store));
+    return merge(
+      ...missing.map((pk) => profileLoader({ kind: 0, pubkey: pk })),
+    );
   }, [pubkeyKey, store]);
 
   // Reactively read profiles from the store as they arrive, accumulating into

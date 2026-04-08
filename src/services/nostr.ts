@@ -315,6 +315,25 @@ export const zapsLoader = createZapsLoader(pool, {
 });
 
 /**
+ * Singleton profile loader for kind:0 metadata events.
+ *
+ * Batches all per-pubkey profile fetch requests across the entire app into a
+ * single relay REQ per 200ms window. Components call this instead of opening
+ * their own pool.subscription so that e.g. a list of 20 issue authors produces
+ * one REQ rather than 20.
+ *
+ * The eventStore option deduplicates events that come back from relays.
+ * Call-site deduplication (skip if already in store) is the responsibility of
+ * the caller — see useLoadProfile / useProfilesForPubkeys.
+ */
+export const profileLoader = createAddressLoader(pool, {
+  cacheRequest,
+  eventStore,
+  lookupRelays: lookupRelays.getValue(),
+  bufferTime: 200,
+});
+
+/**
  * Loader for NIP-05 DNS identity lookups.
  * Results are persisted to IndexedDB (gitworkshop / nip05-identities) so that
  * verified identities survive page reloads. Expiry is set to 30 days so
