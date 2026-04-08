@@ -116,6 +116,24 @@ export default function PRPage() {
     selectedMaintainers,
   );
 
+  // Ordered priority pubkeys for @ mention autocomplete:
+  // parent author first, then participants, then maintainers (deduped).
+  const mentionPriorityPubkeys = useMemo<string[]>(() => {
+    if (!pr) return [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (pk: string) => {
+      if (!seen.has(pk)) {
+        seen.add(pk);
+        out.push(pk);
+      }
+    };
+    add(pr.pubkey);
+    for (const pk of pr.participants) add(pk);
+    for (const pk of repo?.maintainerSet ?? []) add(pk);
+    return out;
+  }, [pr, repo?.maintainerSet]);
+
   // Git pool — uses the repo's clone URLs (same as RepoCodePage).
   const { pool: gitPool, poolState: gitPoolState } = useGitPool(cloneUrls);
 
@@ -685,6 +703,7 @@ export default function PRPage() {
                     initialContent={pr.coverNotes?.[0]?.content ?? ""}
                     onSubmitted={handleCoverNoteSubmitted}
                     onCancel={handleCoverNoteCancel}
+                    priorityPubkeys={mentionPriorityPubkeys}
                   />
                 ) : pr?.coverNotes && pr.coverNotes.length > 0 ? (
                   <CoverNoteCard
@@ -878,6 +897,7 @@ export default function PRPage() {
                                   ? {
                                       rootEvent: pr.rootEvent,
                                       repoCoords: pr.repoCoords,
+                                      priorityPubkeys: mentionPriorityPubkeys,
                                     }
                                   : undefined
                               }
@@ -931,6 +951,7 @@ export default function PRPage() {
                         ? pr.revisions[pr.revisions.length - 1].rootPatchEvent!
                         : pr.rootEvent
                     }
+                    priorityPubkeys={mentionPriorityPubkeys}
                   />
                 )}
               </TabsContent>

@@ -275,6 +275,7 @@ function ThreadComment({ event }: { event: NostrEvent }) {
             rootEvent={ctx.rootEvent}
             parentEvent={event}
             onSubmitted={() => setReplying(false)}
+            priorityPubkeys={ctx.priorityPubkeys}
           />
         </div>
       )}

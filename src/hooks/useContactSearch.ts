@@ -17,6 +17,9 @@ const NIP50_RELAY = "wss://relay.ditto.pub";
 const NIP50_DEBOUNCE_MS = 300;
 const MAX_RESULTS = 8;
 
+/** kind:10017 — NIP-51 Git authors follow list */
+const GIT_AUTHORS_KIND = 10017;
+
 export interface ContactSearchResult {
   pubkey: string;
   profile: ProfileContent | undefined;
@@ -26,11 +29,12 @@ export interface ContactSearchResult {
  * Priority tiers for mention autocomplete results.
  *
  * 0 = priority pubkeys (repo maintainers, parent event participants)
- * 1 = follows (current user's contact list)
- * 2 = NIP-50 relay search results
- * 3 = EventStore cache hits (profiles already loaded for other reasons)
+ * 1 = git follows (kind:10017 — git author follow list)
+ * 2 = social follows (kind:3 — Nostr contact list)
+ * 3 = NIP-50 relay search results
+ * 4 = EventStore cache hits (profiles already loaded for other reasons)
  */
-type Tier = 0 | 1 | 2 | 3;
+type Tier = 0 | 1 | 2 | 3 | 4;
 
 interface ScoredResult {
   pubkey: string;
@@ -40,14 +44,14 @@ interface ScoredResult {
 
 /**
  * Search for mentionable users with priority ordering:
- *   priority pubkeys → follows → NIP-50 relay results → EventStore cache
+ *   priority pubkeys → git follows → social follows → NIP-50 relay results → EventStore cache
  *
  * - Profile names are loaded reactively from the EventStore (Applesauce-native).
  * - NIP-50 search is debounced 300ms and fires against relay.ditto.pub.
- * - When query is empty, shows priority pubkeys + follows (up to MAX_RESULTS).
+ * - When query is empty, shows priority pubkeys + git follows + social follows (up to MAX_RESULTS).
  * - Returns [] when no results are available yet.
  *
- * @param query          - The text typed after "@"
+ * @param query           - The text typed after "@"
  * @param priorityPubkeys - Pubkeys to surface first (maintainers, participants)
  */
 export function useContactSearch(
@@ -57,33 +61,53 @@ export function useContactSearch(
   const myUser = useMyUser();
   const store = useEventStore();
 
-  // ── 1. Follows from the current user's contact list ──────────────────────
+  // ── 1. Git follows (kind:10017) ───────────────────────────────────────────
+  const myPubkey = myUser?.pubkey;
+  const gitFollowPubkeys =
+    use$(() => {
+      if (!myPubkey) return undefined;
+      return store.replaceable(GIT_AUTHORS_KIND, myPubkey).pipe(
+        map((event) => {
+          if (!event) return [] as string[];
+          return event.tags
+            .filter(([t]) => t === "p")
+            .map(([, v]) => v)
+            .filter((v): v is string => !!v);
+        }),
+      );
+    }, [myPubkey, store]) ?? [];
+
+  // ── 2. Social follows (kind:3) ────────────────────────────────────────────
   const contacts = use$(() => myUser?.contacts$, [myUser?.pubkey]);
   const followPubkeys = useMemo<string[]>(
     () => contacts?.map((u) => u.pubkey) ?? [],
     [contacts],
   );
 
-  // ── 2. Candidate pubkey pool ──────────────────────────────────────────────
-  // Union of priority + follows, deduplicated, for profile fetching.
+  // ── 3. Candidate pubkey pool ──────────────────────────────────────────────
+  // Union of priority + git follows + social follows, deduplicated, for profile fetching.
   const localPubkeys = useMemo<string[]>(() => {
     const seen = new Set<string>();
     const out: string[] = [];
-    for (const pk of [...priorityPubkeys, ...followPubkeys]) {
+    for (const pk of [
+      ...priorityPubkeys,
+      ...gitFollowPubkeys,
+      ...followPubkeys,
+    ]) {
       if (!seen.has(pk)) {
         seen.add(pk);
         out.push(pk);
       }
     }
     return out;
-  }, [priorityPubkeys, followPubkeys]);
+  }, [priorityPubkeys, gitFollowPubkeys, followPubkeys]);
 
   const localPubkeyKey = useMemo(
     () => [...localPubkeys].sort().join(","),
     [localPubkeys],
   );
 
-  // ── 3. Fetch profiles for local candidates (lookup relays) ────────────────
+  // ── 4. Fetch profiles for local candidates (lookup relays) ────────────────
   use$(() => {
     if (localPubkeys.length === 0) return undefined;
     const relays = lookupRelays.getValue();
@@ -93,7 +117,7 @@ export function useContactSearch(
       .pipe(onlyEvents(), mapEventsToStore(store));
   }, [localPubkeyKey, store]);
 
-  // ── 4. Reactive profile map for local candidates ──────────────────────────
+  // ── 5. Reactive profile map for local candidates ──────────────────────────
   // Uses the same merge+scan pattern as useProfilesForPubkeys so cached
   // profiles appear immediately and the map grows as network responses arrive.
   const localProfileMap = use$(() => {
@@ -133,7 +157,7 @@ export function useContactSearch(
     );
   }, [localPubkeyKey, store]);
 
-  // ── 5. NIP-50 search (debounced) ──────────────────────────────────────────
+  // ── 6. NIP-50 search (debounced) ──────────────────────────────────────────
   const [nip50Pubkeys, setNip50Pubkeys] = useState<string[]>([]);
 
   useEffect(() => {
@@ -167,7 +191,7 @@ export function useContactSearch(
     return () => clearTimeout(timer);
   }, [query, store]);
 
-  // ── 6. Reactive profiles for NIP-50 results ───────────────────────────────
+  // ── 7. Reactive profiles for NIP-50 results ───────────────────────────────
   // NIP-50 events are already in the store (mapEventsToStore above), so we
   // just need to read them reactively. No extra fetch needed.
   const nip50PubkeyKey = useMemo(
@@ -212,10 +236,11 @@ export function useContactSearch(
     );
   }, [nip50PubkeyKey, store]);
 
-  // ── 7. Assemble + filter + sort ───────────────────────────────────────────
+  // ── 8. Assemble + filter + sort ───────────────────────────────────────────
   return useMemo<ContactSearchResult[]>(() => {
     const lowerQuery = query.trim().toLowerCase();
     const prioritySet = new Set(priorityPubkeys);
+    const gitFollowSet = new Set(gitFollowPubkeys);
     const followSet = new Set(followPubkeys);
 
     // Collect all candidate pubkeys with their tier
@@ -238,22 +263,31 @@ export function useContactSearch(
       add(pk, localProfileMap?.get(pk), 0);
     }
 
-    // Tier 1: follows
-    for (const pk of followPubkeys) {
+    // Tier 1: git follows
+    for (const pk of gitFollowPubkeys) {
       const tier: Tier = prioritySet.has(pk) ? 0 : 1;
       add(pk, localProfileMap?.get(pk), tier);
     }
 
-    // Tier 2: NIP-50 results
-    for (const pk of nip50Pubkeys) {
+    // Tier 2: social follows
+    for (const pk of followPubkeys) {
       let tier: Tier = 2;
       if (prioritySet.has(pk)) tier = 0;
-      else if (followSet.has(pk)) tier = 1;
+      else if (gitFollowSet.has(pk)) tier = 1;
+      add(pk, localProfileMap?.get(pk), tier);
+    }
+
+    // Tier 3: NIP-50 results
+    for (const pk of nip50Pubkeys) {
+      let tier: Tier = 3;
+      if (prioritySet.has(pk)) tier = 0;
+      else if (gitFollowSet.has(pk)) tier = 1;
+      else if (followSet.has(pk)) tier = 2;
       const profile = nip50ProfileMap?.get(pk) ?? localProfileMap?.get(pk);
       add(pk, profile, tier);
     }
 
-    // Tier 3: EventStore cache (profiles already loaded for other reasons)
+    // Tier 4: EventStore cache (profiles already loaded for other reasons)
     // Only include when there's a query — avoids flooding the empty-state list
     if (lowerQuery) {
       const cachedEvents = store.getByFilters([{ kinds: [0] }] as Filter[]);
@@ -262,7 +296,7 @@ export function useContactSearch(
         if (!isValidProfile(ev)) continue;
         const content = getProfileContent(ev);
         if (!content) continue;
-        add(ev.pubkey, content, 3);
+        add(ev.pubkey, content, 4);
       }
     }
 
@@ -270,13 +304,13 @@ export function useContactSearch(
     const candidates = Array.from(scored.values()).filter(
       ({ profile, tier }) => {
         if (!lowerQuery) {
-          // Empty query: only show priority + follows
-          return tier <= 1;
+          // Empty query: only show priority + git follows + social follows
+          return tier <= 2;
         }
         if (!profile) {
-          // No profile yet — include priority/follow pubkeys so they appear
-          // immediately even before their profile loads
-          return tier <= 1;
+          // No profile yet — include priority/git-follow/social-follow pubkeys so
+          // they appear immediately even before their profile loads
+          return tier <= 2;
         }
         const name = (profile.name ?? "").toLowerCase();
         const displayName = (
@@ -318,6 +352,7 @@ export function useContactSearch(
   }, [
     query,
     priorityPubkeys,
+    gitFollowPubkeys,
     followPubkeys,
     localProfileMap,
     nip50Pubkeys,

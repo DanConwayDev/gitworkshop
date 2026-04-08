@@ -39,12 +39,18 @@ export interface ReplyBoxProps {
   parentEvent?: NostrEvent;
   /** Called after a comment is successfully posted (e.g. to close an inline composer) */
   onSubmitted?: () => void;
+  /**
+   * Ordered pubkeys to surface first in @ mention autocomplete:
+   * parent author → thread participants → repo maintainers.
+   */
+  priorityPubkeys?: string[];
 }
 
 export function ReplyBox({
   rootEvent,
   parentEvent,
   onSubmitted,
+  priorityPubkeys,
 }: ReplyBoxProps) {
   const [body, setBody] = useState("");
   const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
@@ -145,6 +151,7 @@ export function ReplyBox({
           activeTab={activeTab}
           onTabChange={setActiveTab}
           onFocusChange={setFocused}
+          priorityPubkeys={priorityPubkeys}
         />
 
         <div className="flex items-center justify-between gap-2">

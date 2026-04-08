@@ -482,6 +482,11 @@ export interface ThreadContext {
   rootEvent: NostrEvent;
   /** Repo coordinate strings (e.g. "30617:<pubkey>:<d>") for relay group keying */
   repoCoords?: string[];
+  /**
+   * Ordered list of pubkeys to surface first in @ mention autocomplete:
+   * parent author → thread participants → repo maintainers.
+   */
+  priorityPubkeys?: string[];
 }
 
 // ---------------------------------------------------------------------------

@@ -47,6 +47,24 @@ export default function IssuePage() {
     selectedMaintainers,
   );
 
+  // Ordered priority pubkeys for @ mention autocomplete:
+  // parent author first, then participants, then maintainers (deduped).
+  const mentionPriorityPubkeys = useMemo<string[]>(() => {
+    if (!issue) return [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (pk: string) => {
+      if (!seen.has(pk)) {
+        seen.add(pk);
+        out.push(pk);
+      }
+    };
+    add(issue.pubkey);
+    for (const pk of issue.participants) add(pk);
+    for (const pk of repo?.maintainerSet ?? []) add(pk);
+    return out;
+  }, [issue, repo?.maintainerSet]);
+
   // ── Auth ──────────────────────────────────────────────────────────────────
   const activeAccount = useActiveAccount();
   const canEdit = useMemo(() => {
@@ -133,6 +151,7 @@ export default function IssuePage() {
                 initialContent={issue.coverNotes?.[0]?.content ?? ""}
                 onSubmitted={() => setCoverNoteEditing(false)}
                 onCancel={() => setCoverNoteEditing(false)}
+                priorityPubkeys={mentionPriorityPubkeys}
               />
             ) : issue?.coverNotes && issue.coverNotes.length > 0 ? (
               <CoverNoteCard
@@ -229,6 +248,7 @@ export default function IssuePage() {
                             ? {
                                 rootEvent: issue.rootEvent,
                                 repoCoords: issue.repoCoords,
+                                priorityPubkeys: mentionPriorityPubkeys,
                               }
                             : undefined
                         }
@@ -240,7 +260,12 @@ export default function IssuePage() {
             </div>
 
             {/* Reply box — always shown; anonymous posting handled inside */}
-            {issue && <ReplyBox rootEvent={issue.rootEvent} />}
+            {issue && (
+              <ReplyBox
+                rootEvent={issue.rootEvent}
+                priorityPubkeys={mentionPriorityPubkeys}
+              />
+            )}
           </div>
 
           {/* Sidebar */}

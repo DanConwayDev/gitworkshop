@@ -41,6 +41,11 @@ export interface CoverNoteBoxProps {
   onSubmitted?: () => void;
   /** Called when the user dismisses the composer without saving */
   onCancel?: () => void;
+  /**
+   * Ordered pubkeys to surface first in @ mention autocomplete:
+   * parent author → thread participants → repo maintainers.
+   */
+  priorityPubkeys?: string[];
 }
 
 export function CoverNoteBox({
@@ -49,6 +54,7 @@ export function CoverNoteBox({
   initialContent = "",
   onSubmitted,
   onCancel,
+  priorityPubkeys,
 }: CoverNoteBoxProps) {
   const [body, setBody] = useState(initialContent);
   const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
@@ -131,6 +137,7 @@ export function CoverNoteBox({
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onFocusChange={setFocused}
+            priorityPubkeys={priorityPubkeys}
           />
 
           <div className="flex items-center justify-between gap-2">
