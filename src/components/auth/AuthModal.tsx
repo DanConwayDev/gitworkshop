@@ -86,6 +86,11 @@ export function AuthModal() {
       setAckExposure(false);
       setIsPublishing(false);
       setNameError("");
+      // When opened directly on sign-in, skip the outer modal and go straight
+      // to LoginDialog
+      if (initialView === "sign-in") {
+        setLoginDialogOpen(true);
+      }
     }
   }, [isOpen, initialView]);
 
@@ -96,7 +101,12 @@ export function AuthModal() {
 
   const handleLoginDialogClose = useCallback(() => {
     setLoginDialogOpen(false);
-  }, []);
+    // If we were opened directly on sign-in, closing LoginDialog should close
+    // the whole auth flow rather than revealing an empty outer modal.
+    if (view === "sign-in") {
+      closeAuthModal();
+    }
+  }, [view, closeAuthModal]);
 
   const handleLoginSuccess = useCallback(() => {
     setLoginDialogOpen(false);
@@ -254,7 +264,10 @@ export function AuthModal() {
           if (!open) closeAuthModal();
         }}
       >
-        <DialogContent className="max-w-[95vw] sm:max-w-sm max-h-[90dvh] p-0 gap-0 overflow-hidden rounded-2xl overflow-y-auto">
+        <DialogContent
+          className="max-w-[95vw] sm:max-w-sm max-h-[90dvh] p-0 gap-0 overflow-hidden rounded-2xl overflow-y-auto"
+          aria-describedby={undefined}
+        >
           <DialogHeader className="px-6 pt-6 pb-2">
             <div className="flex items-center gap-2">
               {canGoBack && (
