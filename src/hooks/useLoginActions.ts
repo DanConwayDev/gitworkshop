@@ -51,7 +51,7 @@ export function applySignerNudge<T extends IAccount>(account: T): T {
 }
 
 /** Check if running on an actual mobile device (not just a small screen) */
-function isMobileDevice(): boolean {
+export function isMobileDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }

@@ -26,6 +26,7 @@ import { APP_NAME } from "@/lib/constants";
 import {
   useLoginActions,
   createNostrConnectSession,
+  isMobileDevice,
   type NostrConnectSession,
 } from "@/hooks/useLoginActions";
 import { DialogTitle } from "@radix-ui/react-dialog";
@@ -93,7 +94,10 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
 
   // Generate a nostrconnect session (sync — just creates the ephemeral signer + URI)
   const generateConnectSession = useCallback((relays?: string[]) => {
-    const session = createNostrConnectSession(APP_NAME, relays);
+    const signerName = isMobileDevice()
+      ? `${APP_NAME} mobile`
+      : `${APP_NAME} desktop`;
+    const session = createNostrConnectSession(signerName, relays);
     setNostrConnectSession(session);
     setConnectError(null);
   }, []);
