@@ -14,8 +14,10 @@
  * cards with reactions, zaps, or thread trees. Those belong on dedicated pages.
  */
 
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
+import { map } from "rxjs/operators";
 import type { NostrEvent } from "nostr-tools";
 import { nip19 } from "nostr-tools";
 import type { EventPointer, AddressPointer } from "nostr-tools/nip19";
@@ -32,12 +34,128 @@ import {
   PATCH_KIND,
   PR_KIND,
   REPO_KIND,
+  STATUS_KINDS,
+  DELETION_KIND,
+  LABEL_KIND,
+  SUBJECT_LABEL_NAMESPACE,
+  kindToStatus,
   extractSubject,
   extractPatchSubject,
+  type IssueStatus,
 } from "@/lib/nip34";
 import { useRepoPath } from "@/hooks/useRepoPath";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import { getTagValue } from "applesauce-core/helpers/event";
+import { use$ } from "@/hooks/use$";
+import { useEventStore } from "@/hooks/useEventStore";
+import { nip34EssentialsLoader } from "@/services/nostr";
+import { gitIndexRelays } from "@/services/settings";
+import type { Filter } from "applesauce-core/helpers";
+
+interface EmbeddedItemEssentials {
+  status: IssueStatus;
+  /** Current subject after applying authorised renames, or undefined while loading. */
+  currentSubject: string | undefined;
+}
+
+/**
+ * Fires the essentials loader for a NIP-34 item and reactively derives its
+ * current status and subject from the EventStore.
+ *
+ * Uses the relay hints from the event pointer (if any) plus the configured
+ * git index relay as a fallback.
+ *
+ * Auth: no author/maintainer filtering is applied here — the repo announcement
+ * is not fetched in this lightweight context so the maintainer set is unknown.
+ * Any status or rename event referencing this item is accepted. The full auth
+ * rules are enforced on the detail page when the user clicks through.
+ * Deletion (kind:5) is the one exception: NIP-09 requires it to be authored
+ * by the item author, so we still enforce that check.
+ *
+ * @param itemId          - The event ID of the issue / patch / PR
+ * @param relayHints      - Optional relay hints from the event pointer
+ * @param authorPubkey    - The pubkey of the item author (for deletion auth only)
+ * @param originalSubject - The subject extracted directly from the root event
+ */
+function useEmbeddedItemEssentials(
+  itemId: string,
+  relayHints: string[] | undefined,
+  authorPubkey: string,
+  originalSubject: string,
+): EmbeddedItemEssentials {
+  const store = useEventStore();
+
+  // Fire the essentials loader once on mount (or when itemId changes).
+  useEffect(() => {
+    const relays = [...(relayHints ?? []), ...gitIndexRelays.getValue()];
+    if (relays.length === 0) return;
+    const sub = nip34EssentialsLoader({ value: itemId, relays }).subscribe();
+    return () => sub.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId]);
+
+  // Reactively watch for status, deletion, and label events in the store.
+  const essentials = use$(() => {
+    const essentialsFilter: Filter[] = [
+      {
+        kinds: [...STATUS_KINDS, DELETION_KIND, LABEL_KIND],
+        "#e": [itemId],
+      } as Filter,
+    ];
+    return store.timeline(essentialsFilter).pipe(
+      map((events): EmbeddedItemEssentials => {
+        // ── Status ──────────────────────────────────────────────────────────
+        // Deletion by the item author takes precedence over all status events.
+        // NIP-09: only the original author's deletion is valid.
+        const isDeleted = events.some(
+          (ev) => ev.kind === DELETION_KIND && ev.pubkey === authorPubkey,
+        );
+
+        let status: IssueStatus = "open";
+        if (isDeleted) {
+          status = "deleted";
+        } else {
+          // Accept any status event — no maintainer check without the repo event.
+          let latest: { kind: number; createdAt: number } | undefined;
+          for (const ev of events) {
+            if ((STATUS_KINDS as readonly number[]).includes(ev.kind)) {
+              if (!latest || ev.created_at > latest.createdAt) {
+                latest = { kind: ev.kind, createdAt: ev.created_at };
+              }
+            }
+          }
+          if (latest) status = kindToStatus(latest.kind);
+        }
+
+        // ── Subject renames ─────────────────────────────────────────────────
+        // Accept any rename event — no maintainer check without the repo event.
+        // Sorted oldest-first; the last one wins.
+        const renames = events
+          .filter(
+            (ev) =>
+              ev.kind === LABEL_KIND &&
+              ev.tags.some(
+                ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
+              ),
+          )
+          .sort(
+            (a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id),
+          );
+
+        const latestRename = renames[renames.length - 1];
+        const currentSubject = latestRename
+          ? (latestRename.tags.find(
+              ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
+            )?.[1] ?? originalSubject)
+          : originalSubject;
+
+        return { status, currentSubject };
+      }),
+    );
+  }, [itemId, authorPubkey, originalSubject, store]);
+
+  return essentials ?? { status: "open", currentSubject: undefined };
+}
 
 // ---------------------------------------------------------------------------
 // Shared "lite wrapper" shell — author badge + timestamp + content slot
@@ -84,8 +202,22 @@ function EventWrapperLite({
 // Kind-specific preview content
 // ---------------------------------------------------------------------------
 
-function IssuePreviewContent({ event }: { event: NostrEvent }) {
-  const subject = extractSubject(event);
+function IssuePreviewContent({
+  event,
+  relayHints,
+}: {
+  event: NostrEvent;
+  relayHints?: string[];
+}) {
+  const originalSubject = extractSubject(event);
+  const { status, currentSubject } = useEmbeddedItemEssentials(
+    event.id,
+    relayHints,
+    event.pubkey,
+    originalSubject,
+  );
+  const subject = currentSubject ?? originalSubject;
+
   const repoCoord = event.tags.find(([t]) => t === "a")?.[1];
   const repoId = repoCoord?.split(":")?.[2];
   const repoPubkey = repoCoord?.split(":")?.[1];
@@ -97,7 +229,7 @@ function IssuePreviewContent({ event }: { event: NostrEvent }) {
   return (
     <EventWrapperLite event={event} href={href}>
       <StatusIcon
-        status="open"
+        status={status}
         variant="issue"
         className="h-3.5 w-3.5 shrink-0"
       />
@@ -127,11 +259,22 @@ function IssuePreviewContent({ event }: { event: NostrEvent }) {
 function PatchPreviewContent({
   event,
   isPR,
+  relayHints,
 }: {
   event: NostrEvent;
   isPR: boolean;
+  relayHints?: string[];
 }) {
-  const subject = extractPatchSubject(event);
+  const originalSubject = extractPatchSubject(event);
+  const variant = isPR ? "pr" : "patch";
+  const { status, currentSubject } = useEmbeddedItemEssentials(
+    event.id,
+    relayHints,
+    event.pubkey,
+    originalSubject,
+  );
+  const subject = currentSubject ?? originalSubject;
+
   const repoCoord = event.tags.find(([t]) => t === "a")?.[1];
   const repoId = repoCoord?.split(":")?.[2];
   const repoPubkey = repoCoord?.split(":")?.[1];
@@ -143,7 +286,11 @@ function PatchPreviewContent({
 
   return (
     <EventWrapperLite event={event} href={href}>
-      <StatusIcon status="open" variant="pr" className="h-3.5 w-3.5 shrink-0" />
+      <StatusIcon
+        status={status}
+        variant={variant}
+        className="h-3.5 w-3.5 shrink-0"
+      />
       <span className="text-muted-foreground/60 text-xs">Git {label}</span>
       {repoId && (
         <>
@@ -212,15 +359,25 @@ function GenericPreviewContent({ event }: { event: NostrEvent }) {
 // Dispatcher — picks the right preview based on event kind
 // ---------------------------------------------------------------------------
 
-function EventPreviewDispatcher({ event }: { event: NostrEvent }) {
+function EventPreviewDispatcher({
+  event,
+  relayHints,
+}: {
+  event: NostrEvent;
+  relayHints?: string[];
+}) {
   if (event.kind === ISSUE_KIND) {
-    return <IssuePreviewContent event={event} />;
+    return <IssuePreviewContent event={event} relayHints={relayHints} />;
   }
   if (event.kind === PATCH_KIND) {
-    return <PatchPreviewContent event={event} isPR={false} />;
+    return (
+      <PatchPreviewContent event={event} isPR={false} relayHints={relayHints} />
+    );
   }
   if (event.kind === PR_KIND) {
-    return <PatchPreviewContent event={event} isPR={true} />;
+    return (
+      <PatchPreviewContent event={event} isPR={true} relayHints={relayHints} />
+    );
   }
   if (event.kind === REPO_KIND) {
     return <RepoPreviewContent event={event} />;
@@ -283,7 +440,11 @@ export function EmbeddedEventByIdPreview({
 
   return (
     <PreviewContainer className={className}>
-      {event ? <EventPreviewDispatcher event={event} /> : <PreviewSkeleton />}
+      {event ? (
+        <EventPreviewDispatcher event={event} relayHints={pointer.relays} />
+      ) : (
+        <PreviewSkeleton />
+      )}
     </PreviewContainer>
   );
 }
@@ -302,7 +463,11 @@ export function EmbeddedEventByAddressPreview({
 
   return (
     <PreviewContainer className={className}>
-      {event ? <EventPreviewDispatcher event={event} /> : <PreviewSkeleton />}
+      {event ? (
+        <EventPreviewDispatcher event={event} relayHints={pointer.relays} />
+      ) : (
+        <PreviewSkeleton />
+      )}
     </PreviewContainer>
   );
 }
