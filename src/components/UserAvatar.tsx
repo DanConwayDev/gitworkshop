@@ -6,6 +6,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfile } from "@/hooks/useProfile";
+import { useLoadProfile } from "@/hooks/useLoadProfile";
 import { useUserPath } from "@/hooks/useUserPath";
 import { useIsFollowing } from "@/hooks/useIsFollowing";
 import { useIsGitAuthorFollowing } from "@/hooks/useIsGitAuthorFollowing";
@@ -85,6 +86,7 @@ export function UserAvatar({
   linkToProfile,
   showFollowIndicator = true,
 }: UserAvatarProps) {
+  useLoadProfile(pubkey);
   const profile = useProfile(pubkey);
   const userPath = useUserPath(pubkey);
   const isFollowing = useIsFollowing(showFollowIndicator ? pubkey : undefined);
@@ -205,6 +207,7 @@ interface UserNameProps {
 }
 
 export function UserName({ pubkey, className, linkToProfile }: UserNameProps) {
+  useLoadProfile(pubkey);
   const { name: displayName, isPlaceholder } = useUserDisplayName(pubkey);
   const userPath = useUserPath(pubkey);
 

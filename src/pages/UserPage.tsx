@@ -4,6 +4,7 @@ import { nip19 } from "nostr-tools";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { useProfile } from "@/hooks/useProfile";
+import { useLoadProfile } from "@/hooks/useLoadProfile";
 import { useUserRepositories } from "@/hooks/useUserRepositories";
 import { useUserProfileSubscription } from "@/hooks/useUserProfileSubscription";
 import { useUserFollowedRepos } from "@/hooks/useUserFollowedRepos";
@@ -80,6 +81,7 @@ const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
 ];
 
 export default function UserPage({ pubkey }: UserPageProps) {
+  useLoadProfile(pubkey);
   const profile = useProfile(pubkey);
   const repos = useUserRepositories(pubkey);
   const [searchParams, setSearchParams] = useSearchParams();

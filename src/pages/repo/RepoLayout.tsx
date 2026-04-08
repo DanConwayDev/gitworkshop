@@ -17,6 +17,7 @@ import { useRepositoryState } from "@/hooks/useRepositoryState";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import { useProfile } from "@/hooks/useProfile";
+import { useLoadProfile } from "@/hooks/useLoadProfile";
 import { useUserPath } from "@/hooks/useUserPath";
 import { UserAvatar } from "@/components/UserAvatar";
 import { mapEventsToStore } from "applesauce-core";
@@ -703,6 +704,7 @@ function RepoBreadcrumb({
   basePath: string;
   nip05?: string;
 }) {
+  useLoadProfile(pubkey);
   const profile = useProfile(pubkey);
   const userPath = useUserPath(pubkey);
   const npub = nip19.npubEncode(pubkey);
