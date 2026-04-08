@@ -15,7 +15,6 @@
  * Use MarkdownContent for full markdown (issue/PR bodies, README files).
  */
 import { Link } from "react-router-dom";
-import { nip19 } from "nostr-tools";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { remarkNostrMentions } from "applesauce-content/markdown";
@@ -26,6 +25,10 @@ import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { UserAvatar } from "@/components/UserAvatar";
 import { cn, markdownUrlTransform } from "@/lib/utils";
 import { WrappableCodeBlock } from "@/components/WrappableCodeBlock";
+import {
+  EmbeddedEventByIdPreview,
+  EmbeddedEventByAddressPreview,
+} from "@/components/EmbeddedEventPreview";
 
 // ---------------------------------------------------------------------------
 // Inline Nostr profile mention — avatar + @name
@@ -68,28 +71,13 @@ const components: Components = {
         }
 
         if (decoded.type === "note" || decoded.type === "nevent") {
-          const id = decoded.type === "note" ? decoded.data : decoded.data.id;
-          const encoded = nip19.noteEncode(id);
-          return (
-            <Link
-              to={`/${encoded}`}
-              className="text-primary hover:underline font-mono text-sm"
-            >
-              {encoded.slice(0, 12)}…
-            </Link>
-          );
+          const pointer =
+            decoded.type === "nevent" ? decoded.data : { id: decoded.data };
+          return <EmbeddedEventByIdPreview pointer={pointer} />;
         }
 
         if (decoded.type === "naddr") {
-          const encoded = nip19.naddrEncode(decoded.data);
-          return (
-            <Link
-              to={`/${encoded}`}
-              className="text-primary hover:underline font-mono text-sm"
-            >
-              {encoded.slice(0, 12)}…
-            </Link>
-          );
+          return <EmbeddedEventByAddressPreview pointer={decoded.data} />;
         }
       } catch {
         // invalid identifier — fall through to truncated display
