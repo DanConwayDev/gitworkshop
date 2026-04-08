@@ -12,6 +12,7 @@ import { eventIdToNevent, isNip05, standardizeNip05 } from "../lib/routeUtils";
 import { useRepoPath } from "../hooks/useRepoPath";
 import UserPage from "./UserPage";
 import NotFound from "./NotFound";
+import { UnsupportedEventPage } from "./UnsupportedEventPage";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { resilientSubscription } from "@/lib/resilientSubscription";
@@ -285,7 +286,8 @@ function EventRedirect({
     );
   }
 
-  return <NotFound />;
+  // Any other event kind — show a preview with a link to njump.me
+  return <UnsupportedEventPage event={event} relayHints={hintRelays} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -378,16 +380,12 @@ export function NIP19Page() {
 
     return <UserPage pubkey={user.pubkey} />;
   } else if (pointer) {
-    // AI agent should implement event loading view here
-    if (!event) return <div>Loading event...</div>;
+    if (!event) return <LoadingState message="Fetching event…" />;
 
-    // AI agent should implement event view here based on event kind
-    switch (event.kind) {
-      case 1:
-        return <div>Note placeholder</div>;
-      default:
-        return <div>Unknown event type</div>;
-    }
+    // For any event kind this app doesn't have a dedicated page for, show a
+    // preview with a link to njump.me so users aren't left with a blank 404.
+    const hintRelays = "relays" in pointer ? (pointer.relays ?? []) : [];
+    return <UnsupportedEventPage event={event} relayHints={hintRelays} />;
   } else if (isNip05(identifier)) {
     // Bare domain (danconwaydev.com) or _@domain.com — resolve to user page
     return <Nip05UserPage nip05={standardizeNip05(identifier)} />;
