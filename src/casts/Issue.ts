@@ -2,7 +2,7 @@ import { CastRefEventStore, EventCast } from "applesauce-common/casts/cast";
 import { getOrComputeCachedValue } from "applesauce-core/helpers";
 import { getTagValue, KnownEvent } from "applesauce-core/helpers/event";
 import type { NostrEvent } from "nostr-tools";
-import { ISSUE_KIND } from "@/lib/nip34";
+import { extractSubject, ISSUE_KIND } from "@/lib/nip34";
 
 type IssueEvent = KnownEvent<typeof ISSUE_KIND>;
 
@@ -29,10 +29,8 @@ export class Issue extends EventCast<IssueEvent> {
   }
 
   get subject(): string {
-    return getOrComputeCachedValue(
-      this.event,
-      SubjectSymbol,
-      () => getTagValue(this.event, "subject") ?? "(untitled)",
+    return getOrComputeCachedValue(this.event, SubjectSymbol, () =>
+      extractSubject(this.event),
     );
   }
 

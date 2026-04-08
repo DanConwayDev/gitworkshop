@@ -734,7 +734,11 @@ export interface ResolvedIssueLite {
  */
 export function extractSubject(ev: NostrEvent): string {
   if (ev.kind === PATCH_KIND) return extractPatchSubject(ev);
-  return ev.tags.find(([t]) => t === "subject")?.[1] ?? "(untitled)";
+  return (
+    (ev.tags.find(([t]) => t === "subject")?.[1] ??
+      ev.content.split("\n")[0].trim()) ||
+    "(untitled)"
+  );
 }
 
 /**
