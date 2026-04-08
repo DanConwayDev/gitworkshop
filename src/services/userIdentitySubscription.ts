@@ -37,6 +37,7 @@ import { onlyEvents } from "applesauce-relay";
 import { eventStore, pool } from "./nostr";
 import { lookupRelays } from "./settings";
 import type { Filter } from "applesauce-core/helpers";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 
 /**
  * All replaceable event kinds that define the user's identity, relay
@@ -79,12 +80,16 @@ export function startUserIdentitySubscription(
     authors: [pubkey],
   };
 
-  const sub: Subscription = pool
-    .subscription(relays, [filter], {
-      // Stay open indefinitely — reconnect and resubscribe on relay drops
-      reconnect: Infinity,
-      resubscribe: Infinity,
-    })
+  // resilientSubscription provides:
+  //   - lastReceivedAt-aware reconnect (avoids replaying full relay history)
+  //   - foreground resume gap-fill (recovers events missed while backgrounded)
+  //   - EOSE settle signal (not critical here but harmless)
+  const sub: Subscription = resilientSubscription(pool, relays, [filter], {
+    reconnect: true,
+    gapFill: true,
+    settle: false, // no consumer needs the EOSE signal here
+    paginate: false,
+  })
     .pipe(onlyEvents(), mapEventsToStore(eventStore))
     .subscribe({
       error: (err) => {

@@ -8,6 +8,7 @@ import { onlyEvents } from "applesauce-relay";
 import { pool } from "@/services/nostr";
 import type { Filter, NostrEvent } from "applesauce-core/helpers";
 import type { CastConstructor } from "applesauce-common/casts";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 
 /**
  * Subscribe to a timeline of events from relays.
@@ -61,7 +62,12 @@ export function useTimeline<C extends EventCast<NostrEvent> = Note>(
 
   const notes = use$(
     () =>
-      pool.subscription(relays, filters).pipe(
+      resilientSubscription(pool, relays, filters, {
+        reconnect: true,
+        gapFill: true,
+        settle: true,
+        paginate: true,
+      }).pipe(
         onlyEvents(), // Filter out EOSE and other relay messages
         mapEventsToStore(store), // Add events to store and deduplicate
         mapEventsToTimeline(), // Collect events into an array

@@ -36,6 +36,7 @@ import {
   createPaginatedTagValueLoader,
   type PaginatedTagValueResponse,
 } from "@/lib/tagValuePaginatedLoader";
+import { withGapFill } from "@/lib/withGapFill";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
 
 /**
@@ -593,11 +594,21 @@ export function nip34RepoLoader(
 
     // Subscribe to issues, patches, and PRs — pipe each new item into the
     // per-item essentials + comments loaders against all current relays.
-    const itemSub = relayGroup
-      .subscription([{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter], {
-        reconnect: Infinity,
-        resubscribe: Infinity,
-      })
+    // withGapFill wraps the RelayGroup subscription so that on foreground
+    // resume a one-shot gap-fill REQ is fired against the current relay
+    // snapshot, recovering any items published while the app was backgrounded.
+    const itemSub = withGapFill(
+      relayGroup.subscription(
+        [{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter],
+        {
+          reconnect: Infinity,
+          resubscribe: Infinity,
+        },
+      ),
+      pool,
+      () => [...knownRelayUrls],
+      [{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter],
+    )
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
       .subscribe({
         next: (event) => {

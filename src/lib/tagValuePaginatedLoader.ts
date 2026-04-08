@@ -58,7 +58,7 @@ import type { TagValuePointer } from "applesauce-loaders/loaders";
 import type { CacheRequest, TimelessFilter } from "applesauce-loaders";
 import { makeCacheRequest } from "applesauce-loaders/helpers";
 import type { RelayPool } from "applesauce-relay";
-import { onlyEvents } from "applesauce-relay";
+import { completeOnEose, onlyEvents } from "applesauce-relay";
 import type { NostrEvent } from "nostr-tools";
 import {
   BehaviorSubject,
@@ -77,6 +77,7 @@ import {
   tap,
 } from "rxjs";
 import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
+import { foregroundResume$ } from "./foregroundResume";
 
 export type { TagValuePointer };
 
@@ -209,6 +210,7 @@ function processRelayStream(
     let eoseSeen = false;
     let paginateSub: { unsubscribe(): void } | undefined;
     let manualSub: { unsubscribe(): void } | undefined;
+    let gapFillSub: { unsubscribe(): void } | undefined;
 
     // Shared pagination window — driven by auto (BehaviorSubject) or manual
     // (Subject pushed on each manualPaginate$ emission after EOSE).
@@ -337,10 +339,36 @@ function processRelayStream(
         complete: () => subscriber.complete(),
       });
 
+    // Foreground resume gap-fill: when the app returns from background, fire a
+    // one-shot REQ with since: lastReceivedAt - 600 to recover missed events.
+    // Only fires if we have received at least one event (lastReceivedAt defined).
+    // completeOnEose() auto-completes after EOSE so the subscription is short-lived.
+    // EventStore deduplication (mapEventsToStore + filterDuplicateEvents in
+    // processBatch) handles any overlap with the live subscription.
+    const gapFillResumeSub = foregroundResume$.subscribe(() => {
+      if (lastReceivedAt === undefined) return;
+      gapFillSub?.unsubscribe();
+      const gapFilter: Filter = {
+        ...liveFilter,
+        since: lastReceivedAt - 600,
+      };
+      gapFillSub = pool
+        .subscription([relay], [gapFilter], { reconnect: false })
+        .pipe(completeOnEose(), onlyEvents())
+        .subscribe({
+          next: (event) => subscriber.next(event),
+          error: () => {
+            /* gap-fill errors are non-fatal */
+          },
+        });
+    });
+
     return () => {
       liveSub.unsubscribe();
       paginateSub?.unsubscribe();
       manualSub?.unsubscribe();
+      gapFillSub?.unsubscribe();
+      gapFillResumeSub.unsubscribe();
     };
   });
 }
