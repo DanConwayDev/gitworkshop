@@ -75,7 +75,10 @@ export function useResolvedPR(
     const filter = { kinds: [PATCH_KIND], "#e": [prId] } as Filter;
     if (repoRelayGroup) {
       return withGapFill(
-        repoRelayGroup.subscription([filter]),
+        repoRelayGroup.subscription([filter], {
+          reconnect: Infinity,
+          resubscribe: Infinity,
+        }),
         pool,
         () => repoRelayGroup.relays.map((r) => r.url),
         [filter],
@@ -90,7 +93,10 @@ export function useResolvedPR(
     const filter: Filter = { kinds: [PATCH_KIND], ids: [prId] };
     if (repoRelayGroup) {
       return withGapFill(
-        repoRelayGroup.subscription([filter]),
+        repoRelayGroup.subscription([filter], {
+          reconnect: Infinity,
+          resubscribe: Infinity,
+        }),
         pool,
         () => repoRelayGroup.relays.map((r) => r.url),
         [filter],

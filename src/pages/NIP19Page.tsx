@@ -14,7 +14,7 @@ import UserPage from "./UserPage";
 import NotFound from "./NotFound";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
-import { resilientSubscription } from "../lib/resilientSubscription";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import { gitIndexRelays } from "../services/settings";
 import { useDnsIdentity } from "../hooks/useDnsIdentity";
 import type { NostrEvent } from "nostr-tools";

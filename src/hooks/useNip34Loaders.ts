@@ -334,7 +334,10 @@ export function useNip34ItemDetailLoader(
     const filters: Filter[] = [{ ids: [itemId] }];
     if (repoRelayGroup) {
       return withGapFill(
-        repoRelayGroup.subscription(filters),
+        repoRelayGroup.subscription(filters, {
+          reconnect: Infinity,
+          resubscribe: Infinity,
+        }),
         pool,
         () => repoRelayGroup.relays.map((r) => r.url),
         filters,
@@ -356,7 +359,10 @@ export function useNip34ItemDetailLoader(
       return undefined;
     const filters: Filter[] = [{ ids: [itemId] }];
     return withGapFill(
-      extraRelaysForMaintainerMailboxCoverage.subscription(filters),
+      extraRelaysForMaintainerMailboxCoverage.subscription(filters, {
+        reconnect: Infinity,
+        resubscribe: Infinity,
+      }),
       pool,
       () => extraRelaysForMaintainerMailboxCoverage.relays.map((r) => r.url),
       filters,
