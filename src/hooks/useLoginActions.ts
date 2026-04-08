@@ -137,7 +137,12 @@ export function useLoginActions() {
         const signer = await NostrConnectSigner.fromBunkerURI(uri);
         const pubkey = await signer.getPublicKey();
 
-        const existing = accounts.getAccountForPubkey(pubkey);
+        // Only skip adding if a NostrConnect account for this pubkey already
+        // exists — a different signer type (e.g. extension) for the same pubkey
+        // is a distinct account and should be added separately.
+        const existing = accounts
+          .getAccountsForPubkey(pubkey)
+          .find((a) => a instanceof Accounts.NostrConnectAccount);
         if (existing) {
           accounts.setActive(existing);
           return;
@@ -168,7 +173,12 @@ export function useLoginActions() {
 
         const pubkey = await session.signer.getPublicKey();
 
-        const existing = accounts.getAccountForPubkey(pubkey);
+        // Only skip adding if a NostrConnect account for this pubkey already
+        // exists — a different signer type (e.g. extension) for the same pubkey
+        // is a distinct account and should be added separately.
+        const existing = accounts
+          .getAccountsForPubkey(pubkey)
+          .find((a) => a instanceof Accounts.NostrConnectAccount);
         if (existing) {
           accounts.setActive(existing);
           return;

@@ -79,9 +79,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
 
   if (!activeAccount) return null;
 
-  const otherAccounts = accounts.filter(
-    (acc) => acc.pubkey !== activeAccount.pubkey,
-  );
+  const otherAccounts = accounts.filter((acc) => acc.id !== activeAccount.id);
 
   const handleSetActive = (account: IAccount) => {
     accountManager.setActive(account);
