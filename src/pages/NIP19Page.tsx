@@ -21,6 +21,7 @@ import { useDnsIdentity } from "../hooks/useDnsIdentity";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 import { getReplaceableIdentifier } from "applesauce-core/helpers";
+import { getNip10References } from "applesauce-common/helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -124,6 +125,25 @@ function RepoPathRedirect({
 /** Get the uppercase `E` root tag from a NIP-22 comment (kind 1111). */
 function getCommentRootId(event: NostrEvent): string | undefined {
   return event.tags.find(([t]) => t === "E")?.[1];
+}
+
+/**
+ * Get the NIP-10 thread root event ID from any event that uses `e` tags for
+ * threading (kind:1 replies, legacy NIP-34 replies, etc.).
+ *
+ * Prefers the marked `root` tag; falls back to the first positional `e` tag
+ * for older events that don't use markers.
+ */
+function getNip10RootId(event: NostrEvent): string | undefined {
+  const refs = getNip10References(event);
+  // Marked root takes priority
+  if (refs.root?.e?.id) return refs.root.e.id;
+  // Positional fallback: first e tag is the root when there are multiple
+  const eTags = event.tags.filter(([t]) => t === "e");
+  if (eTags.length >= 2) return eTags[0]?.[1];
+  // Single e tag — this event is a direct reply to that event
+  if (eTags.length === 1) return eTags[0]?.[1];
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +306,23 @@ function EventRedirect({
     );
   }
 
-  // Any other event kind — show a preview with a link to njump.me
+  // For any other kind, check if this event is threaded (NIP-10 `e` tags)
+  // and the root is a supported git kind. If so, redirect to the root's page
+  // with this event's ID as a fragment anchor (permalink to the comment).
+  // Preserve commentId if already set (we may be resolving an intermediate
+  // event in a chain — the original linked event is what we want to anchor to).
+  const nip10RootId = getNip10RootId(event);
+  if (nip10RootId && nip10RootId !== eventId) {
+    return (
+      <EventRedirect
+        eventId={nip10RootId}
+        hintRelays={hintRelays}
+        commentId={commentId ?? event.id}
+      />
+    );
+  }
+
+  // No thread root found or this IS the root — show a preview with njump link
   return <UnsupportedEventPage event={event} relayHints={hintRelays} />;
 }
 
