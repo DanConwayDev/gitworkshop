@@ -21,6 +21,8 @@ import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { withGapFill } from "@/lib/withGapFill";
+import { pool } from "@/services/nostr";
 import {
   useNip34ItemDetailLoader,
   useNip34ItemLoaderBatch,
@@ -72,9 +74,12 @@ export function useResolvedPR(
     if (!prId) return undefined;
     const filter = { kinds: [PATCH_KIND], "#e": [prId] } as Filter;
     if (repoRelayGroup) {
-      return repoRelayGroup
-        .subscription([filter], { reconnect: Infinity, resubscribe: Infinity })
-        .pipe(onlyEvents(), mapEventsToStore(store));
+      return withGapFill(
+        repoRelayGroup.subscription([filter]),
+        pool,
+        () => repoRelayGroup.relays.map((r) => r.url),
+        [filter],
+      ).pipe(onlyEvents(), mapEventsToStore(store));
     }
     return undefined;
   }, [prId, repoRelayGroup, store]);
@@ -84,9 +89,12 @@ export function useResolvedPR(
     if (!prId) return undefined;
     const filter: Filter = { kinds: [PATCH_KIND], ids: [prId] };
     if (repoRelayGroup) {
-      return repoRelayGroup
-        .subscription([filter], { reconnect: Infinity, resubscribe: Infinity })
-        .pipe(onlyEvents(), mapEventsToStore(store));
+      return withGapFill(
+        repoRelayGroup.subscription([filter]),
+        pool,
+        () => repoRelayGroup.relays.map((r) => r.url),
+        [filter],
+      ).pipe(onlyEvents(), mapEventsToStore(store));
     }
     return undefined;
   }, [prId, repoRelayGroup, store]);

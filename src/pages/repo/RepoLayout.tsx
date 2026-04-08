@@ -22,6 +22,8 @@ import { useUserPath } from "@/hooks/useUserPath";
 import { UserAvatar } from "@/components/UserAvatar";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { withGapFill } from "@/lib/withGapFill";
+import { pool } from "@/services/nostr";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -197,9 +199,12 @@ function RepoLayoutResolved({
         "#a": repo.allCoordinates,
       } as NostrFilter,
     ];
-    return extraRelaysForMaintainerMailboxCoverage
-      .subscription(filters)
-      .pipe(onlyEvents(), mapEventsToStore(store));
+    return withGapFill(
+      extraRelaysForMaintainerMailboxCoverage.subscription(filters),
+      pool,
+      () => extraRelaysForMaintainerMailboxCoverage.relays.map((r) => r.url),
+      filters,
+    ).pipe(onlyEvents(), mapEventsToStore(store));
   }, [curationMode, extraRelaysForMaintainerMailboxCoverage, coordKey, store]);
 
   const queryOptions: RepoQueryOptions = useMemo(

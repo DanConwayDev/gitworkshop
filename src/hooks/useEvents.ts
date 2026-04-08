@@ -4,6 +4,7 @@ import { useEventStore } from "./useEventStore";
 import { mapEventsToStore, mapEventsToTimeline } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { pool } from "@/services/nostr";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 
@@ -58,13 +59,11 @@ export function useEvents(
 
   const events = use$(
     () =>
-      pool
-        .subscription(relays, filters)
-        .pipe(
-          onlyEvents(),
-          mapEventsToStore(store),
-          mapEventsToTimeline(),
-        ) as unknown as import("rxjs").Observable<NostrEvent[]>,
+      resilientSubscription(pool, relays, filters, { paginate: true }).pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+        mapEventsToTimeline(),
+      ) as unknown as import("rxjs").Observable<NostrEvent[]>,
     [relayKey, filterKey, store],
   );
 

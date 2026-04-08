@@ -10,6 +10,7 @@ import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import "window.nostrdb.js";
 
 const REPO_FILTER: Filter = { kinds: [REPO_KIND] };
@@ -164,9 +165,10 @@ export function useAllRepositories(
   // Live subscription — keeps the store updated after the bulk fetch
   use$(
     () =>
-      pool
-        .subscription(relays, [REPO_FILTER])
-        .pipe(onlyEvents(), mapEventsToStore(store)),
+      resilientSubscription(pool, relays, [REPO_FILTER]).pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+      ),
     [relayKey, store],
   );
 

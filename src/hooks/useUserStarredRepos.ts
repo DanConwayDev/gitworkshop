@@ -28,6 +28,7 @@ import { pool } from "@/services/nostr";
 import { gitIndexRelays, lookupRelays } from "@/services/settings";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 
 import {
   REPO_KIND,
@@ -72,12 +73,9 @@ export function useUserStarredRepos(
       ...new Set([...gitIndexRelays.getValue(), ...lookupRelays.getValue()]),
     ];
 
-    return pool
-      .subscription(relays, [starReactionFilter(pubkey)], {
-        reconnect: Infinity,
-        resubscribe: Infinity,
-      })
-      .pipe(onlyEvents(), mapEventsToStore(store));
+    return resilientSubscription(pool, relays, [
+      starReactionFilter(pubkey),
+    ]).pipe(onlyEvents(), mapEventsToStore(store));
   }, [pubkey, store]);
 
   // Layer 1a — Phase 2: once we have their kind:10002, subscribe on their
@@ -91,12 +89,9 @@ export function useUserStarredRepos(
       switchMap((outboxes) => {
         if (outboxes.length === 0) return of(undefined);
 
-        return pool
-          .subscription(outboxes, [starReactionFilter(pubkey)], {
-            reconnect: Infinity,
-            resubscribe: Infinity,
-          })
-          .pipe(onlyEvents(), mapEventsToStore(store));
+        return resilientSubscription(pool, outboxes, [
+          starReactionFilter(pubkey),
+        ]).pipe(onlyEvents(), mapEventsToStore(store));
       }),
     );
   }, [pubkey, store]);
@@ -134,12 +129,9 @@ export function useUserStarredRepos(
           authors: coordPubkeys,
         };
 
-        return pool
-          .subscription(gitIndexRelays.getValue(), [repoFilter], {
-            reconnect: Infinity,
-            resubscribe: Infinity,
-          })
-          .pipe(onlyEvents(), mapEventsToStore(store));
+        return resilientSubscription(pool, gitIndexRelays.getValue(), [
+          repoFilter,
+        ]).pipe(onlyEvents(), mapEventsToStore(store));
       }),
     );
   }, [pubkey, store]);

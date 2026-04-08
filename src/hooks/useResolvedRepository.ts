@@ -7,6 +7,8 @@ import { RelayGroup } from "applesauce-relay";
 import type { RelayGroup as RelayGroupType } from "applesauce-relay";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { pool, liveness } from "@/services/nostr";
+import { resilientSubscription } from "@/lib/resilientSubscription";
+import { withGapFill } from "@/lib/withGapFill";
 import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
 import { gitIndexRelays } from "@/services/settings";
 import { RepositoryModel } from "@/models/RepositoryModel";
@@ -123,9 +125,10 @@ export function useResolvedRepository(
       ...liveGitIndexRelays,
       ...relayHints.filter((r) => !liveGitIndexRelays.includes(r)),
     ];
-    return pool
-      .subscription(relays, filter)
-      .pipe(onlyEvents(), mapEventsToStore(store));
+    return resilientSubscription(pool, relays, filter).pipe(
+      onlyEvents(),
+      mapEventsToStore(store),
+    );
   }, [key, hintsKey, gitIndexRelayKey, store]);
 
   // Layer 2: subscribe to the model.
@@ -195,9 +198,12 @@ export function useResolvedRepository(
         "#d": [dTag],
       } as Filter,
     ];
-    return repoRelayGroup
-      .subscription(filter)
-      .pipe(onlyEvents(), mapEventsToStore(store));
+    return withGapFill(
+      repoRelayGroup.subscription(filter),
+      pool,
+      () => repoRelayGroup.relays.map((r) => r.url),
+      filter,
+    ).pipe(onlyEvents(), mapEventsToStore(store));
   }, [dTag, repoRelayKey, maintainerKey, store, repoRelayGroup]);
 
   // Layer 4: resolve maintainer outbox + inbox relays. Only relays not already
@@ -249,9 +255,13 @@ export function useResolvedRepository(
             "#d": [dTag],
           } as Filter,
         ];
-        return extraRelaysForMaintainerMailboxCoverage
-          .subscription(filter)
-          .pipe(onlyEvents(), mapEventsToStore(store));
+        return withGapFill(
+          extraRelaysForMaintainerMailboxCoverage.subscription(filter),
+          pool,
+          () =>
+            extraRelaysForMaintainerMailboxCoverage.relays.map((r) => r.url),
+          filter,
+        ).pipe(onlyEvents(), mapEventsToStore(store));
       }),
     ) as unknown as Observable<null>;
   }, [

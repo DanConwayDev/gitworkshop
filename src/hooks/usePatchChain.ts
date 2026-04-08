@@ -29,6 +29,8 @@ import { useEventStore } from "./useEventStore";
 import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { resilientSubscription } from "@/lib/resilientSubscription";
+import { withGapFill } from "@/lib/withGapFill";
 import { castTimelineStream } from "applesauce-common/observable";
 import { Patch } from "@/casts/Patch";
 import { PATCH_KIND } from "@/lib/nip34";
@@ -183,14 +185,18 @@ export function usePatchChain(
     if (!rootPatchId) return undefined;
     const filter = { kinds: [PATCH_KIND], "#e": [rootPatchId] } as Filter;
     if (repoRelayGroup) {
-      return repoRelayGroup
-        .subscription([filter])
-        .pipe(onlyEvents(), mapEventsToStore(store));
+      return withGapFill(
+        repoRelayGroup.subscription([filter]),
+        pool,
+        () => repoRelayGroup.relays.map((r) => r.url),
+        [filter],
+      ).pipe(onlyEvents(), mapEventsToStore(store));
     }
     if (fallbackRelays.length > 0) {
-      return pool
-        .subscription(fallbackRelays, [filter])
-        .pipe(onlyEvents(), mapEventsToStore(store));
+      return resilientSubscription(pool, fallbackRelays, [filter]).pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+      );
     }
     return undefined;
   }, [rootPatchId, repoRelayGroup, fallbackRelays.join(","), store]);
@@ -200,14 +206,18 @@ export function usePatchChain(
     if (!rootPatchId) return undefined;
     const filter: Filter = { kinds: [PATCH_KIND], ids: [rootPatchId] };
     if (repoRelayGroup) {
-      return repoRelayGroup
-        .subscription([filter])
-        .pipe(onlyEvents(), mapEventsToStore(store));
+      return withGapFill(
+        repoRelayGroup.subscription([filter]),
+        pool,
+        () => repoRelayGroup.relays.map((r) => r.url),
+        [filter],
+      ).pipe(onlyEvents(), mapEventsToStore(store));
     }
     if (fallbackRelays.length > 0) {
-      return pool
-        .subscription(fallbackRelays, [filter])
-        .pipe(onlyEvents(), mapEventsToStore(store));
+      return resilientSubscription(pool, fallbackRelays, [filter]).pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+      );
     }
     return undefined;
   }, [rootPatchId, repoRelayGroup, fallbackRelays.join(","), store]);

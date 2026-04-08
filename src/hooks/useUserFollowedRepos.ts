@@ -24,6 +24,7 @@ import { pool } from "@/services/nostr";
 import { gitIndexRelays } from "@/services/settings";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import {
   REPO_KIND,
   groupIntoResolvedRepos,
@@ -68,12 +69,9 @@ export function useUserFollowedRepos(
           "#d": coords.map((c) => c.split(":")[2]).filter(Boolean),
         } as Filter;
 
-        return pool
-          .subscription(gitIndexRelays.getValue(), [filter], {
-            reconnect: Infinity,
-            resubscribe: Infinity,
-          })
-          .pipe(onlyEvents(), mapEventsToStore(store));
+        return resilientSubscription(pool, gitIndexRelays.getValue(), [
+          filter,
+        ]).pipe(onlyEvents(), mapEventsToStore(store));
       }),
     );
   }, [pubkey, store]);

@@ -15,6 +15,8 @@ import {
 import { gitIndexRelays, relayCurationMode } from "@/services/settings";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { resilientSubscription } from "@/lib/resilientSubscription";
+import { withGapFill } from "@/lib/withGapFill";
 import type { Filter } from "applesauce-core/helpers";
 
 /** Max healthy inbox relays to take for the item author. */
@@ -331,16 +333,17 @@ export function useNip34ItemDetailLoader(
     if (!itemId) return undefined;
     const filters: Filter[] = [{ ids: [itemId] }];
     if (repoRelayGroup) {
-      return repoRelayGroup
-        .subscription(filters, { reconnect: Infinity, resubscribe: Infinity })
-        .pipe(onlyEvents(), mapEventsToStore(store));
+      return withGapFill(
+        repoRelayGroup.subscription(filters),
+        pool,
+        () => repoRelayGroup.relays.map((r) => r.url),
+        filters,
+      ).pipe(onlyEvents(), mapEventsToStore(store));
     }
-    return pool
-      .subscription(gitIndexRelays.getValue(), filters, {
-        reconnect: Infinity,
-        resubscribe: Infinity,
-      })
-      .pipe(onlyEvents(), mapEventsToStore(store));
+    return resilientSubscription(pool, gitIndexRelays.getValue(), filters).pipe(
+      onlyEvents(),
+      mapEventsToStore(store),
+    );
   }, [itemId, repoRelayGroup, store]);
 
   // ── 2. In outbox mode, also fetch from extra maintainer mailbox relays ──
@@ -352,9 +355,12 @@ export function useNip34ItemDetailLoader(
     )
       return undefined;
     const filters: Filter[] = [{ ids: [itemId] }];
-    return extraRelaysForMaintainerMailboxCoverage
-      .subscription(filters, { reconnect: Infinity, resubscribe: Infinity })
-      .pipe(onlyEvents(), mapEventsToStore(store));
+    return withGapFill(
+      extraRelaysForMaintainerMailboxCoverage.subscription(filters),
+      pool,
+      () => extraRelaysForMaintainerMailboxCoverage.relays.map((r) => r.url),
+      filters,
+    ).pipe(onlyEvents(), mapEventsToStore(store));
   }, [itemId, curationMode, extraRelaysForMaintainerMailboxCoverage, store]);
 
   // ── 3. Trigger loading (list + thread) ───────────────────────────────────

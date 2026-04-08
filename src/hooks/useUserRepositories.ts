@@ -3,6 +3,7 @@ import { useEventStore } from "./useEventStore";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { pool } from "@/services/nostr";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
 import { gitIndexRelays } from "@/services/settings";
 import { RepositoryListModel } from "@/models/RepositoryListModel";
@@ -34,11 +35,12 @@ export function useUserRepositories(
   // for every result, which is the correct behaviour for a user profile page.
   use$(() => {
     if (!pubkey) return undefined;
-    return pool
-      .subscription(gitIndexRelays.getValue(), [
-        { kinds: [REPO_KIND], authors: [pubkey] } as Filter,
-      ])
-      .pipe(onlyEvents(), mapEventsToStore(store));
+    return resilientSubscription(
+      pool,
+      gitIndexRelays.getValue(),
+      [{ kinds: [REPO_KIND], authors: [pubkey] } as Filter],
+      { paginate: true },
+    ).pipe(onlyEvents(), mapEventsToStore(store));
   }, [pubkey, store]);
 
   // Layer 2: subscribe to the model scoped to this pubkey.

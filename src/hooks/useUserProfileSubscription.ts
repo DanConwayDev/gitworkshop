@@ -31,6 +31,7 @@ import { pool } from "@/services/nostr";
 import { gitIndexRelays, lookupRelays } from "@/services/settings";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import { switchMap, of } from "rxjs";
 import { map } from "rxjs/operators";
 import type { Filter } from "applesauce-core/helpers";
@@ -74,12 +75,10 @@ export function useUserProfileSubscription(pubkey: string | undefined): void {
       authors: [pubkey],
     };
 
-    return pool
-      .subscription(relays, [filter], {
-        reconnect: Infinity,
-        resubscribe: Infinity,
-      })
-      .pipe(onlyEvents(), mapEventsToStore(store));
+    return resilientSubscription(pool, relays, [filter]).pipe(
+      onlyEvents(),
+      mapEventsToStore(store),
+    );
   }, [pubkey, isOwnProfile, store]);
 
   // Phase 2: once we have their kind:10002, also subscribe on their outbox
@@ -98,12 +97,10 @@ export function useUserProfileSubscription(pubkey: string | undefined): void {
           authors: [pubkey],
         };
 
-        return pool
-          .subscription(outboxes, [filter], {
-            reconnect: Infinity,
-            resubscribe: Infinity,
-          })
-          .pipe(onlyEvents(), mapEventsToStore(store));
+        return resilientSubscription(pool, outboxes, [filter]).pipe(
+          onlyEvents(),
+          mapEventsToStore(store),
+        );
       }),
     );
   }, [pubkey, isOwnProfile, store]);

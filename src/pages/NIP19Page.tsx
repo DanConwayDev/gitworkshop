@@ -14,6 +14,7 @@ import UserPage from "./UserPage";
 import NotFound from "./NotFound";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { resilientSubscription } from "../lib/resilientSubscription";
 import { gitIndexRelays } from "../services/settings";
 import { useDnsIdentity } from "../hooks/useDnsIdentity";
 import type { NostrEvent } from "nostr-tools";
@@ -167,9 +168,9 @@ function EventRedirect({
       ...hintRelays,
       ...indexRelays.filter((r) => !hintRelays.includes(r)),
     ];
-    return pool
-      .subscription(allRelays, filters)
-      .pipe(onlyEvents(), mapEventsToStore(eventStore));
+    return resilientSubscription(pool, allRelays, filters, {
+      paginate: false,
+    }).pipe(onlyEvents(), mapEventsToStore(eventStore));
   }, [eventId, hintRelays.join(",")]);
 
   const event = use$(

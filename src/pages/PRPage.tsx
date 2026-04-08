@@ -76,6 +76,8 @@ import { use$ } from "@/hooks/use$";
 import { usePatchChain } from "@/hooks/usePatchChain";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
+import { withGapFill } from "@/lib/withGapFill";
+import { pool } from "@/services/nostr";
 import { PATCH_KIND, PR_KIND, extractPatchDiff } from "@/lib/nip34";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import {
@@ -369,9 +371,12 @@ export default function PRPage() {
     if (!prCommitId || !prId) return undefined;
     const filter: Filter = { kinds: [PATCH_KIND, PR_KIND], ids: [prId] };
     if (resolved?.repoRelayGroup) {
-      return resolved.repoRelayGroup
-        .subscription([filter])
-        .pipe(onlyEvents(), mapEventsToStore(store));
+      return withGapFill(
+        resolved.repoRelayGroup.subscription([filter]),
+        pool,
+        () => resolved.repoRelayGroup.relays.map((r) => r.url),
+        [filter],
+      ).pipe(onlyEvents(), mapEventsToStore(store));
     }
     return undefined;
   }, [prCommitId, prId, resolved?.repoRelayGroup, store]);

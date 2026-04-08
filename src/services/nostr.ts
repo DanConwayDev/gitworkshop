@@ -628,19 +628,24 @@ export function nip34RepoLoader(
     // Subscribe to self-contained repo-level events: kind 7 reactions (stars)
     // and kind 10018 follow lists. Both are keyed by the announcement `a` tag
     // and need no per-item loading, so they share a single subscription.
-    const repoMetaSub = relayGroup
-      .subscription(
-        [
-          {
-            kinds: [REACTION_KIND, GIT_REPOS_FOLLOW_KIND],
-            "#a": coords,
-          } as Filter,
-        ],
-        {
-          reconnect: Infinity,
-          resubscribe: Infinity,
-        },
-      )
+    // withGapFill wraps the RelayGroup subscription so that on foreground
+    // resume a one-shot gap-fill REQ is fired against the current relay
+    // snapshot, recovering any events published while the app was backgrounded.
+    const repoMetaFilters = [
+      {
+        kinds: [REACTION_KIND, GIT_REPOS_FOLLOW_KIND],
+        "#a": coords,
+      } as Filter,
+    ];
+    const repoMetaSub = withGapFill(
+      relayGroup.subscription(repoMetaFilters, {
+        reconnect: Infinity,
+        resubscribe: Infinity,
+      }),
+      pool,
+      () => [...knownRelayUrls],
+      repoMetaFilters,
+    )
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
       .subscribe({
         error: (err) => subscriber.error(err),
