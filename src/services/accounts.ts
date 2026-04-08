@@ -3,6 +3,7 @@ import {
   NostrConnectAccount,
   registerCommonAccountTypes,
 } from "applesauce-accounts/accounts";
+import { applySignerNudge } from "@/hooks/useLoginActions";
 import { switchMap, distinctUntilChanged, map } from "rxjs/operators";
 import { of } from "rxjs";
 // Import pool to ensure NostrConnectSigner.pool is set before fromJSON runs,
@@ -44,6 +45,8 @@ registerCommonAccountTypes(accounts);
           });
           account.signer.isConnected = true;
         }
+        // Apply nudge wrapper to all restored accounts that benefit from it.
+        applySignerNudge(account);
       }
     }
   } catch (error) {

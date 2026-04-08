@@ -2,7 +2,10 @@ import { APP_NAME } from "@/lib/constants";
 import { accounts } from "@/services/accounts";
 import { pool } from "@/services/nostr";
 import { extraRelays } from "@/services/settings";
+import { signerWithNudge } from "@/lib/signerWithNudge";
 import { Accounts } from "applesauce-accounts";
+import { NostrConnectAccount } from "applesauce-accounts/accounts";
+import type { IAccount } from "applesauce-accounts";
 import {
   ExtensionSigner,
   NostrConnectSigner,
@@ -11,6 +14,41 @@ import {
 import { nip19 } from "nostr-tools";
 
 // NOTE: This file should not be edited except for adding new login methods.
+
+/**
+ * Wraps the signer on an account with {@link signerWithNudge} so that slow or
+ * pending remote-signer operations surface a toast nudge to the user.
+ *
+ * - NostrConnect accounts: also wires up a relay-connectivity check so the
+ *   toast can warn when the bunker relay WebSocket is not open.
+ * - Extension accounts: wrapped without a connectivity check (nudge still
+ *   helps when the user dismisses or ignores the extension popup).
+ * - PrivateKey accounts: not wrapped — local signing is instant.
+ *
+ * Mutates `account.signer` in place and returns the account for chaining.
+ */
+export function applySignerNudge<T extends IAccount>(account: T): T {
+  if (account instanceof NostrConnectAccount) {
+    const nostrConnectSigner = account.signer as NostrConnectSigner;
+    // Connectivity check: the signer is considered reachable when it is
+    // actively listening on its relay subscription AND the session is marked
+    // connected. This is the best available proxy without reaching into pool
+    // WebSocket internals — if either flag is false the relay is effectively
+    // unreachable for NIP-46 purposes.
+    const isBunkerConnected = () =>
+      nostrConnectSigner.listening && nostrConnectSigner.isConnected;
+    account.signer = signerWithNudge(
+      nostrConnectSigner,
+      isBunkerConnected,
+    ) as typeof account.signer;
+  } else if (account instanceof Accounts.ExtensionAccount) {
+    // Extension signers benefit from the nudge (user may dismiss or ignore the
+    // browser popup) but have no relay connectivity to check.
+    account.signer = signerWithNudge(account.signer) as typeof account.signer;
+  }
+  // PrivateKeyAccount: local signing is synchronous — no nudge needed.
+  return account;
+}
 
 /** Check if running on an actual mobile device (not just a small screen) */
 function isMobileDevice(): boolean {
@@ -103,7 +141,9 @@ export function useLoginActions() {
           return;
         }
 
-        const account = new Accounts.NostrConnectAccount(pubkey, signer);
+        const account = applySignerNudge(
+          new Accounts.NostrConnectAccount(pubkey, signer),
+        );
         accounts.addAccount(account);
         accounts.setActive(account);
       } catch (error) {
@@ -132,9 +172,8 @@ export function useLoginActions() {
           return;
         }
 
-        const account = new Accounts.NostrConnectAccount(
-          pubkey,
-          session.signer,
+        const account = applySignerNudge(
+          new Accounts.NostrConnectAccount(pubkey, session.signer),
         );
         accounts.addAccount(account);
         accounts.setActive(account);
@@ -165,7 +204,9 @@ export function useLoginActions() {
         }
 
         const signer = new ExtensionSigner();
-        const account = new Accounts.ExtensionAccount(pubkey, signer);
+        const account = applySignerNudge(
+          new Accounts.ExtensionAccount(pubkey, signer),
+        );
 
         accounts.addAccount(account);
         accounts.setActive(account);
