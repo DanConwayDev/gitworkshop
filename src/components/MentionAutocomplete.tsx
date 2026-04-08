@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { nip19 } from "nostr-tools";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useContactSearch } from "@/hooks/useContactSearch";
+import { useProfile } from "@/hooks/useProfile";
 import { genUserName } from "@/lib/genUserName";
 import { cn } from "@/lib/utils";
-import type { ProfileContent } from "applesauce-core/helpers";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -18,6 +18,8 @@ export interface MentionAutocompleteProps {
     end: number;
     replacement: string;
   }) => void;
+  /** Pubkeys to surface first in results (e.g. repo maintainers, thread participants) */
+  priorityPubkeys?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +126,7 @@ export function MentionAutocomplete({
   textareaRef,
   content,
   onInsertMention,
+  priorityPubkeys = [],
 }: MentionAutocompleteProps) {
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionStart, setMentionStart] = useState(-1);
@@ -135,7 +138,10 @@ export function MentionAutocomplete({
   } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const contacts = useContactSearch(isOpen ? mentionQuery : "");
+  const contacts = useContactSearch(
+    isOpen ? mentionQuery : "",
+    priorityPubkeys,
+  );
 
   // Detect @mention query at cursor.
   const detectMention = useCallback(
@@ -308,13 +314,12 @@ export function MentionAutocomplete({
       style={{ top: dropdownPos.top, left: dropdownPos.left }}
     >
       <div ref={listRef} className="max-h-[240px] overflow-y-auto py-1">
-        {contacts.map(({ pubkey, profile }, index) => (
+        {contacts.map(({ pubkey }, index) => (
           <MentionItem
             key={pubkey}
             pubkey={pubkey}
-            profile={profile}
             isSelected={index === selectedIndex}
-            onClick={() => selectContact(pubkey)}
+            onClick={() => selectContact(contacts[index].pubkey)}
           />
         ))}
       </div>
@@ -328,15 +333,16 @@ export function MentionAutocomplete({
 
 function MentionItem({
   pubkey,
-  profile,
   isSelected,
   onClick,
 }: {
   pubkey: string;
-  profile: ProfileContent | undefined;
   isSelected: boolean;
   onClick: () => void;
 }) {
+  // useProfile subscribes reactively via the User cast (same as UserAvatar),
+  // so the name updates as soon as the kind:0 event lands in the store.
+  const profile = useProfile(pubkey);
   const displayName =
     profile?.display_name ??
     profile?.displayName ??

@@ -47,6 +47,8 @@ export interface NostrComposerProps {
   activeTab?: "write" | "preview";
   onTabChange?: (tab: "write" | "preview") => void;
   onFocusChange?: (focused: boolean) => void;
+  /** Pubkeys to surface first in @ mention results (e.g. repo maintainers, thread participants) */
+  priorityPubkeys?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +66,7 @@ export function NostrComposer({
   activeTab: activeTabProp,
   onTabChange,
   onFocusChange,
+  priorityPubkeys,
 }: NostrComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [internalTab, setInternalTab] = useState<"write" | "preview">("write");
@@ -148,6 +151,7 @@ export function NostrComposer({
             rows={rows}
             className={className}
             minHeight={minHeight}
+            priorityPubkeys={priorityPubkeys}
           />
         </div>
 
@@ -201,6 +205,7 @@ interface WriteAreaProps {
   rows?: number;
   className?: string;
   minHeight?: string;
+  priorityPubkeys?: string[];
 }
 
 function WriteArea({
@@ -214,6 +219,7 @@ function WriteArea({
   rows,
   className,
   minHeight,
+  priorityPubkeys,
 }: WriteAreaProps) {
   return (
     <div className="relative">
@@ -236,6 +242,7 @@ function WriteArea({
         textareaRef={textareaRef}
         content={value}
         onInsertMention={onInsertMention}
+        priorityPubkeys={priorityPubkeys}
       />
     </div>
   );
