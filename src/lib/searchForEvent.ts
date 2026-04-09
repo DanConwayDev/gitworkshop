@@ -126,6 +126,13 @@ export type SearchSignal =
       kind: "connection-failed" | "timeout" | "error";
     }
   | { type: "group-exhausted"; group: string }
+  /**
+   * Fires when the immediate-tier settle signal fires: the earlier of
+   * (first relay EOSE/error + settleTime ms) or (deferTimeout ms).
+   * At this point the deletion check starts and deferred groups activate.
+   * The UI can use this to show the "Search more relays" button early.
+   */
+  | { type: "settled" }
   | { type: "deletion-found"; event: NostrEvent }
   | { type: "vanish-found"; event: NostrEvent }
   | { type: "concluded-not-found" };
@@ -271,6 +278,7 @@ export function searchForEvent(
       settleFired = true;
       settled$.next();
       settled$.complete();
+      subscriber.next({ type: "settled" });
       runDeletionCheck();
     }
 

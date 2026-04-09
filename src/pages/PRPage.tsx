@@ -661,9 +661,7 @@ export default function PRPage() {
         backPath={`${repoBasePath}/prs`}
         backLabel="Back to PRs"
         onSearchMore={
-          !searchMoreActive && search.concludedNotFound
-            ? handleSearchMore
-            : undefined
+          !searchMoreActive && search.settled ? handleSearchMore : undefined
         }
         searchMoreActive={searchMoreActive}
       />

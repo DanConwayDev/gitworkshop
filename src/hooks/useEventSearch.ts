@@ -62,6 +62,13 @@ export interface EventSearchState {
   vanishEvent: NostrEvent | undefined;
   /** True once all groups are exhausted and deletion/vanish check is complete */
   concludedNotFound: boolean;
+  /**
+   * True once the immediate-tier settle signal fires (first EOSE + debounce,
+   * or deferTimeout hard deadline). At this point the deletion check is
+   * running and deferred groups have activated. Safe to show "Search more
+   * relays" button from here.
+   */
+  settled: boolean;
 }
 
 const INITIAL_STATE: EventSearchState = {
@@ -74,6 +81,7 @@ const INITIAL_STATE: EventSearchState = {
   vanished: false,
   vanishEvent: undefined,
   concludedNotFound: false,
+  settled: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -142,6 +150,9 @@ function reduceSignal(
         activeGroup:
           state.activeGroup === signal.group ? null : state.activeGroup,
       };
+
+    case "settled":
+      return { ...state, settled: true };
 
     case "deletion-found":
       return {

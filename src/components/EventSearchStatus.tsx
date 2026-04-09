@@ -165,6 +165,14 @@ export function EventSearchStatus({
     !search.deleted &&
     !search.vanished;
 
+  // Deletion check is running between settle and concludedNotFound
+  const isDeletionChecking =
+    search.settled &&
+    !search.concludedNotFound &&
+    !search.found &&
+    !search.deleted &&
+    !search.vanished;
+
   const groups = groupRelaysByLabel(search.relayStatuses);
 
   // Determine the headline
@@ -233,20 +241,29 @@ export function EventSearchStatus({
                   </ul>
                 </div>
               ))}
+
+              {/* Deletion check in-progress indicator */}
+              {isDeletionChecking && (
+                <div className="flex items-center gap-2 pt-1 border-t border-border/40">
+                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground/50" />
+                  <span className="text-xs text-muted-foreground/70">
+                    Checking for deletion requests…
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
 
-        {/* Search more relays button (curated mode) */}
+        {/* Search more relays — shown as soon as the immediate search has settled */}
         {onSearchMore && !search.found && !searchMoreActive && (
-          <div className="flex justify-center">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onSearchMore}
-              className="gap-1.5"
-            >
-              <Search className="h-3.5 w-3.5" />
+          <div className="rounded-lg border border-dashed border-border p-5 space-y-3 text-center">
+            <p className="text-sm text-muted-foreground">
+              By default, only relays curated by the repository maintainers are
+              searched. The {itemLabel.toLowerCase()} may exist on other relays.
+            </p>
+            <Button onClick={onSearchMore} className="gap-2">
+              <Search className="h-4 w-4" />
               Search more relays
             </Button>
           </div>

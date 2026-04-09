@@ -131,9 +131,7 @@ export default function IssuePage() {
         backPath={`${repoBasePath}/issues`}
         backLabel="Back to issues"
         onSearchMore={
-          !searchMoreActive && search.concludedNotFound
-            ? handleSearchMore
-            : undefined
+          !searchMoreActive && search.settled ? handleSearchMore : undefined
         }
         searchMoreActive={searchMoreActive}
       />
