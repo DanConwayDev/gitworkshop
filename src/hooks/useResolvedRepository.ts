@@ -19,11 +19,7 @@ import {
 } from "@/services/nostr";
 import { withGapFill } from "@/lib/withGapFill";
 import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
-import {
-  gitIndexRelays,
-  extraRelays,
-  relayCurationMode,
-} from "@/services/settings";
+import { gitIndexRelays, extraRelays } from "@/services/settings";
 import { RepositoryModel } from "@/models/RepositoryModel";
 import { RepositoryRelayGroup } from "@/models/RepositoryRelayGroup";
 import type { Filter } from "applesauce-core/helpers";
@@ -130,8 +126,6 @@ export function useResolvedRepository(
   const key = `${pubkey}:${dTag}`;
   const hintsKey = relayHints.join(",");
 
-  const curationMode = use$(relayCurationMode);
-
   // ── Layer 1: search for the repo announcement via useEventSearch ─────────
   // Check if the event is already in the store — skip the search if so.
   const alreadyInStore =
@@ -159,17 +153,18 @@ export function useResolvedRepository(
       ),
     });
 
-    if (curationMode === "outbox") {
-      // Outbox mode: add extra relays as fallback
-      groups.push({
-        label: "extra relays",
-        relays$: extraRelays,
-      });
-    }
+    // Always add extra relays as a fallback for repo announcement discovery.
+    // Curation mode only gates issue/PR subscription breadth — the initial
+    // repo announcement search should always fall back to extra relays so
+    // repos not indexed by the git index can still be found.
+    groups.push({
+      label: "extra relays",
+      relays$: extraRelays,
+    });
 
     return groups;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [curationMode, hintsKey]);
+  }, [hintsKey]);
 
   const searchTarget = useMemo<SearchTarget | undefined>(() => {
     if (!pubkey || !dTag || alreadyInStore) return undefined;
