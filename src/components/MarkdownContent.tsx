@@ -238,9 +238,9 @@ function NostrProfileMention({ pubkey }: { pubkey: string }) {
   return (
     <Link
       to={userPath}
-      className="inline-flex items-center gap-1 align-middle text-primary hover:underline font-medium"
+      className="inline-flex items-center gap-1 align-middle bg-muted border border-border rounded-full px-1.5 py-0.5 text-sm text-foreground hover:bg-accent hover:text-accent-foreground font-medium transition-colors"
     >
-      <UserAvatar pubkey={pubkey} size="xs" className="shrink-0" />@
+      <UserAvatar pubkey={pubkey} size="xs" className="shrink-0" />
       <span className={cn(isPlaceholder && "text-muted-foreground font-mono")}>
         {displayName}
       </span>

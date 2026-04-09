@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { nip19, type NostrEvent } from "nostr-tools";
 import { useUserPath } from "@/hooks/useUserPath";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
+import { UserAvatar } from "@/components/UserAvatar";
 import { cn } from "@/lib/utils";
 
 interface NoteContentProps {
@@ -125,11 +126,12 @@ function NostrMention({ pubkey }: { pubkey: string }) {
     <Link
       to={userPath}
       className={cn(
-        "font-medium hover:underline",
-        isPlaceholder ? "text-muted-foreground font-mono" : "text-blue-500",
+        "inline-flex items-center gap-1 align-middle bg-muted border border-border rounded-full px-1.5 py-0.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
+        isPlaceholder ? "text-muted-foreground font-mono" : "text-foreground",
       )}
     >
-      @{displayName}
+      <UserAvatar pubkey={pubkey} size="xs" className="shrink-0" />
+      {displayName}
     </Link>
   );
 }
