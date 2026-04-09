@@ -317,6 +317,43 @@ export interface Nip34ItemDetailLoaderResult {
 }
 
 /**
+ * Merge two EventSearchState objects into one for display.
+ *
+ * The primary search is the authoritative source; the extra search adds
+ * relay statuses and can contribute found/deleted/vanished signals.
+ * concludedNotFound is only true when BOTH searches have concluded.
+ */
+function mergeSearchStates(
+  primary: EventSearchState,
+  extra: EventSearchState | undefined,
+): EventSearchState {
+  if (!extra) return primary;
+
+  // If either found the event, use that result
+  if (extra.found && !primary.found) {
+    return {
+      ...extra,
+      relayStatuses: { ...primary.relayStatuses, ...extra.relayStatuses },
+      settled: primary.settled || extra.settled,
+    };
+  }
+
+  return {
+    relayStatuses: { ...primary.relayStatuses, ...extra.relayStatuses },
+    activeGroup: primary.activeGroup ?? extra.activeGroup,
+    found: primary.found || extra.found,
+    event: primary.event ?? extra.event,
+    deleted: primary.deleted || extra.deleted,
+    deletionEvent: primary.deletionEvent ?? extra.deletionEvent,
+    vanished: primary.vanished || extra.vanished,
+    vanishEvent: primary.vanishEvent ?? extra.vanishEvent,
+    // Only conclude not-found when both searches are done
+    concludedNotFound: primary.concludedNotFound && extra.concludedNotFound,
+    settled: primary.settled || extra.settled,
+  };
+}
+
+/**
  * Fetches a single NIP-34 item's root event from relays and triggers
  * list + thread loading.
  *
@@ -329,6 +366,10 @@ export interface Nip34ItemDetailLoaderResult {
  *      - curated mode: git index + extra relays are NOT auto-added (user must
  *        trigger expansion via the UI)
  *   3. Trigger useNip34ItemLoader with includeThread: true
+ *
+ * When extraSearchGroups is provided (user clicked "search more relays"), a
+ * separate useEventSearch is run for those groups so the primary search is
+ * never torn down and restarted. The two states are merged for display.
  *
  * @param itemId          - The event ID of the root issue / PR / patch
  * @param repoRelayGroup  - Base relay group from useResolvedRepository
@@ -387,11 +428,6 @@ export function useNip34ItemDetailLoader(
       });
     }
 
-    // Curated mode: user-triggered expansion groups (if any)
-    if (extraSearchGroups) {
-      groups.push(...extraSearchGroups);
-    }
-
     // Fallback when no repo relay group yet: use git index relays directly
     if (!repoRelayGroup) {
       groups.push({
@@ -401,19 +437,37 @@ export function useNip34ItemDetailLoader(
     }
 
     return groups;
-  }, [
-    repoRelayGroup,
-    extraRelaysForMaintainerMailboxCoverage,
-    curationMode,
-    extraSearchGroups,
-  ]);
+  }, [repoRelayGroup, extraRelaysForMaintainerMailboxCoverage, curationMode]);
 
   const searchTarget = useMemo<SearchTarget | undefined>(() => {
     if (!itemId || alreadyInStore) return undefined;
     return { type: "event", id: itemId };
   }, [itemId, alreadyInStore]);
 
-  const search = useEventSearch(searchTarget, searchGroups);
+  const primarySearch = useEventSearch(searchTarget, searchGroups);
+
+  // ── Extra relay search (user-triggered "search more relays") ─────────────
+  // Run as a completely separate useEventSearch so the primary search is
+  // never torn down and restarted when extra groups are added.
+  const extraSearchTarget = useMemo<SearchTarget | undefined>(() => {
+    if (!itemId || alreadyInStore || !extraSearchGroups?.length)
+      return undefined;
+    return { type: "event", id: itemId };
+  }, [itemId, alreadyInStore, extraSearchGroups?.length]);
+
+  const extraSearch = useEventSearch(
+    extraSearchTarget,
+    extraSearchGroups ?? [],
+  );
+
+  // Merge primary + extra search states for the UI
+  const search = useMemo(
+    () =>
+      primarySearch !== undefined
+        ? mergeSearchStates(primarySearch, extraSearch)
+        : undefined,
+    [primarySearch, extraSearch],
+  );
 
   // ── 3. Trigger loading (list + thread) ───────────────────────────────────
   useNip34ItemLoader(itemId, repoRelayGroup, {

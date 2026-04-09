@@ -165,9 +165,10 @@ export function EventSearchStatus({
     !search.deleted &&
     !search.vanished;
 
-  // Deletion check is running between settle and concludedNotFound
+  // Deletion check is running: settled, no active relay group, and not yet concluded
   const isDeletionChecking =
     search.settled &&
+    search.activeGroup === null &&
     !search.concludedNotFound &&
     !search.found &&
     !search.deleted &&
@@ -191,7 +192,7 @@ export function EventSearchStatus({
     icon = <UserX className="h-8 w-8 text-muted-foreground" />;
   } else if (search.concludedNotFound) {
     headline = `${itemLabel} not found`;
-    description = `This ${itemLabel.toLowerCase()} could not be found on any of the relays we searched.`;
+    description = `This ${itemLabel.toLowerCase()} could not be found on any of the relays we searched. Deletion requests were also checked.`;
     icon = <SearchX className="h-8 w-8 text-muted-foreground" />;
   } else if (isSearching) {
     headline = search.activeGroup
