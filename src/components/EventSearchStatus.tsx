@@ -8,14 +8,18 @@
  * Used by IssuePage, PRPage, and potentially EventRedirect.
  */
 
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { eventIdToNevent } from "@/lib/routeUtils";
 import {
   ArrowLeft,
   AlertCircle,
   CheckCircle2,
+  Copy,
+  Check,
   Loader2,
   SearchX,
   Search,
@@ -159,6 +163,17 @@ export function EventSearchStatus({
   onSearchMore,
   searchMoreActive,
 }: EventSearchStatusProps) {
+  const [copied, setCopied] = useState(false);
+
+  const nevent = eventId ? eventIdToNevent(eventId) : undefined;
+
+  function handleCopy() {
+    if (!nevent) return;
+    navigator.clipboard.writeText(nevent).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
   const isSearching =
     !search.found &&
     !search.concludedNotFound &&
@@ -191,8 +206,8 @@ export function EventSearchStatus({
       "The author published a request to vanish (NIP-62), asking all relays to delete their events.";
     icon = <UserX className="h-8 w-8 text-muted-foreground" />;
   } else if (search.concludedNotFound) {
-    headline = `${itemLabel} not found`;
-    description = `This ${itemLabel.toLowerCase()} could not be found on any of the relays we searched. Deletion requests were also checked.`;
+    headline = `${itemLabel} not found on repository relays`;
+    description = `No deletion request found either.`;
     icon = <SearchX className="h-8 w-8 text-muted-foreground" />;
   } else if (isSearching) {
     headline = search.activeGroup
@@ -210,7 +225,7 @@ export function EventSearchStatus({
   return (
     <div className="container max-w-screen-xl px-4 md:px-8 py-12">
       <div className="max-w-lg mx-auto space-y-6">
-        {/* Header */}
+        {/* Header + primary action */}
         <div className="flex flex-col items-center text-center space-y-4">
           <div className="p-4 rounded-full bg-muted">{icon}</div>
           <div className="space-y-2">
@@ -218,13 +233,43 @@ export function EventSearchStatus({
             {description && (
               <p className="text-sm text-muted-foreground">{description}</p>
             )}
-            {eventId && (
-              <p className="text-xs font-mono text-muted-foreground/70 break-all">
-                {eventId}
-              </p>
-            )}
           </div>
+          {onSearchMore && !search.found && !searchMoreActive && (
+            <div className="flex flex-col items-center space-y-3">
+              <Button onClick={onSearchMore} className="gap-2">
+                <Search className="h-4 w-4" />
+                Try more relays
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                Only maintainer-curated relays were searched.
+                <br />
+                {itemLabel} may exist on others.
+              </p>
+            </div>
+          )}
         </div>
+
+        {/* Event ID */}
+        {nevent && (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-border/50 bg-muted/40 px-3 py-2">
+            <p className="text-xs font-mono text-muted-foreground/70 truncate">
+              {nevent}
+            </p>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={handleCopy}
+              title="Copy nevent"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </div>
+        )}
 
         {/* Relay status grouped by label */}
         {groups.length > 0 && (
@@ -254,20 +299,6 @@ export function EventSearchStatus({
               )}
             </CardContent>
           </Card>
-        )}
-
-        {/* Search more relays — shown as soon as the immediate search has settled */}
-        {onSearchMore && !search.found && !searchMoreActive && (
-          <div className="rounded-lg border border-dashed border-border p-5 space-y-3 text-center">
-            <p className="text-sm text-muted-foreground">
-              By default, only relays curated by the repository maintainers are
-              searched. The {itemLabel.toLowerCase()} may exist on other relays.
-            </p>
-            <Button onClick={onSearchMore} className="gap-2">
-              <Search className="h-4 w-4" />
-              Search more relays
-            </Button>
-          </div>
         )}
 
         {/* Back link */}
