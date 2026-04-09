@@ -194,7 +194,11 @@ function EventRedirect({
       groups.push({ label: "hint relays", relays$: of(hintRelays) });
     }
     groups.push({ label: "git index", relays$: gitIndexRelays });
-    groups.push({ label: "extra relays", relays$: extraRelays });
+    groups.push({
+      label: "extra relays",
+      relays$: extraRelays,
+      deferred: true,
+    });
     return groups;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hintsKey]);

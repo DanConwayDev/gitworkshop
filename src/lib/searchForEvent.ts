@@ -2,23 +2,29 @@
  * searchForEvent
  *
  * A self-contained RxJS observable factory that searches for a specific Nostr
- * event across an ordered sequence of relay groups. It emits a rich stream of
- * discriminated-union status signals so consumers can build detailed UIs
- * (per-relay status indicators, group labels, deletion/vanish detection).
+ * event across relay groups split into two tiers.
  *
  * Design:
- *   - Groups are tried in order. The first group starts immediately; later
- *     groups activate only after the previous group is exhausted (all relays
- *     hit EOSE without finding the event).
- *   - Within a group, relays$ is reactive — if the observable emits new relay
- *     URLs while the group is active, those relays are added to the search.
- *   - Once any relay finds the event, the search completes (no further groups
- *     are activated).
- *   - After all groups are exhausted without finding the event, a deletion
- *     check (kind:5) and vanish check (kind:62 / NIP-62) are fired
+ *   Tier 1 — "immediate" groups (deferred: false, the default):
+ *     All immediate groups start simultaneously the moment the search begins.
+ *     Within each group, relays$ is reactive — new URLs emitted while the
+ *     group is active are subscribed to immediately.
+ *
+ *   Tier 2 — "deferred" groups (deferred: true):
+ *     Deferred groups activate after a "settle" signal fires on the immediate
+ *     tier. The settle signal is the earlier of:
+ *       • first relay EOSE/error across any immediate group + settleTime ms
+ *       • deferTimeout ms from search start (hard deadline)
+ *     Once the settle fires, all deferred groups start simultaneously (same
+ *     parallel behaviour as immediate groups).
+ *
+ *   Completion:
+ *     Once any relay finds the event the search completes immediately.
+ *     After all groups (both tiers) are exhausted without finding the event,
+ *     a deletion check (kind:5) and vanish check (kind:62 / NIP-62) run
  *     automatically if the author pubkey is known.
- *   - A settle signal (200ms debounce after first relay EOSE) triggers the
- *     deletion/vanish check early — we don't wait for all relays to finish.
+ *     The settle signal also triggers the deletion check early — we don't
+ *     wait for every relay to finish.
  *
  * This is NOT a hook. It's a pure RxJS factory consumed via use$() in hooks.
  */
@@ -27,7 +33,7 @@ import type { RelayPool } from "applesauce-relay";
 import { completeOnEose, onlyEvents } from "applesauce-relay";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
-import { Observable, Subject, Subscription, EMPTY } from "rxjs";
+import { Observable, Subject, Subscription, EMPTY, timer } from "rxjs";
 import {
   take,
   map,
@@ -62,12 +68,24 @@ export type SearchTarget =
       pubkey: string;
     };
 
-/** A named group of relays to search, tried in sequence. */
+/**
+ * A named group of relays to search.
+ *
+ * Immediate groups (deferred: false, default) all start at the same time.
+ * Deferred groups (deferred: true) start after the immediate-tier settle
+ * signal fires (first EOSE + settleTime ms, or deferTimeout ms, whichever
+ * comes first).
+ */
 export interface RelayGroupSpec {
   /** Human-readable label for UI display (e.g. "repo relays", "git index") */
   label: string;
   /** Reactive list of relay URLs. The group activates when this emits. */
   relays$: Observable<string[]>;
+  /**
+   * When true this group is held back until the immediate-tier settle fires.
+   * Default: false (immediate).
+   */
+  deferred?: boolean;
 }
 
 /** Per-relay status in the search. */
@@ -96,8 +114,18 @@ export type SearchSignal =
   | { type: "concluded-not-found" };
 
 export interface SearchForEventOptions {
-  /** Settle debounce window in ms. Default: 200 */
+  /**
+   * Debounce window after the first relay EOSE/error before the settle fires.
+   * Default: 200 ms.
+   */
   settleTime?: number;
+  /**
+   * Hard deadline from search start after which the settle fires regardless
+   * of whether any relay has responded. Also acts as the maximum wait before
+   * deferred groups start.
+   * Default: 4000 ms.
+   */
+  deferTimeout?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,11 +164,9 @@ function buildDeletionFilters(target: SearchTarget): Filter[] {
   const filters: Filter[] = [];
   switch (target.type) {
     case "event":
-      // kind:5 referencing this event ID
       filters.push({ kinds: [5], "#e": [target.id] } as Filter);
       break;
     case "address": {
-      // kind:5 from the author referencing this coordinate
       const coord = `${target.kind}:${target.pubkey}:${target.dTag}`;
       filters.push({
         kinds: [5],
@@ -150,7 +176,6 @@ function buildDeletionFilters(target: SearchTarget): Filter[] {
       break;
     }
     case "profile":
-      // Profiles aren't deleted via kind:5 in practice
       break;
   }
   return filters;
@@ -166,13 +191,16 @@ function buildVanishFilter(pubkey: string): Filter {
 // ---------------------------------------------------------------------------
 
 /**
- * Search for a specific Nostr event across ordered relay groups.
+ * Search for a specific Nostr event across relay groups.
  *
- * @param pool     - RelayPool instance
- * @param target   - What to search for (event by ID, addressable event, or profile)
- * @param groups   - Ordered relay groups to search (tried sequentially)
- * @param opts     - Options
- * @returns Observable of SearchSignal — subscribe via use$()
+ * Immediate groups (deferred: false) all start simultaneously.
+ * Deferred groups (deferred: true) start after the immediate-tier settle
+ * fires (first EOSE + settleTime ms, or deferTimeout ms hard deadline).
+ *
+ * @param pool   - RelayPool instance
+ * @param target - What to search for
+ * @param groups - Relay groups (immediate and/or deferred)
+ * @param opts   - Options
  */
 export function searchForEvent(
   pool: RelayPool,
@@ -183,6 +211,7 @@ export function searchForEvent(
   if (groups.length === 0) return EMPTY;
 
   const settleTime = opts.settleTime ?? 200;
+  const deferTimeout = opts.deferTimeout ?? 4000;
   const searchFilter = buildFilter(target);
 
   return new Observable<SearchSignal>((subscriber) => {
@@ -197,38 +226,81 @@ export function searchForEvent(
     teardown.add(() => found$.complete());
 
     // -----------------------------------------------------------------------
-    // Process a single relay group
+    // Settle signal
+    //
+    // Fires when the immediate tier has "settled": the earlier of
+    //   • first relay EOSE/error across any immediate group + settleTime ms
+    //   • deferTimeout ms from now (hard deadline)
+    //
+    // Used to:
+    //   1. Trigger deletion check early (don't wait for all relays)
+    //   2. Activate deferred groups
     // -----------------------------------------------------------------------
-    function processGroup(groupIndex: number): void {
-      if (found || groupIndex >= groups.length) {
-        if (!found) {
-          // All groups exhausted — run deletion/vanish check then conclude
-          runDeletionCheck();
-        }
-        return;
-      }
+    const anyImmediateResponse$ = new Subject<void>();
+    const settled$ = new Subject<void>();
+    let settleFired = false;
 
-      const group = groups[groupIndex];
+    function fireSettle(): void {
+      if (settleFired || found) return;
+      settleFired = true;
+      settled$.next();
+      settled$.complete();
+      runDeletionCheck();
+    }
+
+    // Debounced path: first response + settleTime ms
+    const debounceSub = anyImmediateResponse$
+      .pipe(debounceTime(settleTime), take(1), takeUntil(found$))
+      .subscribe(() => fireSettle());
+    teardown.add(debounceSub);
+
+    // Hard deadline path: deferTimeout ms from start
+    const timeoutSub = timer(deferTimeout)
+      .pipe(takeUntil(found$))
+      .subscribe(() => fireSettle());
+    teardown.add(timeoutSub);
+
+    // -----------------------------------------------------------------------
+    // Track exhausted groups for "all done" detection
+    // -----------------------------------------------------------------------
+    const immediateGroups = groups.filter((g) => !g.deferred);
+    const deferredGroups = groups.filter((g) => g.deferred);
+
+    let immediateExhaustedCount = 0;
+    let deferredExhaustedCount = 0;
+
+    function onGroupExhausted(deferred: boolean): void {
+      if (deferred) {
+        deferredExhaustedCount++;
+        if (deferredExhaustedCount >= deferredGroups.length) {
+          // All deferred groups done — conclude
+          runDeletionCheck();
+          // concludeNotFound is called from runDeletionCheck's complete handler
+        }
+      } else {
+        immediateExhaustedCount++;
+        if (immediateExhaustedCount >= immediateGroups.length) {
+          // All immediate groups done — fire settle now (don't wait for debounce)
+          fireSettle();
+          if (deferredGroups.length === 0) {
+            // No deferred groups — conclude
+            runDeletionCheck();
+          }
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Start a single relay group
+    // -----------------------------------------------------------------------
+    function startGroup(group: RelayGroupSpec, isDeferred: boolean): void {
       const groupLabel = group.label;
 
-      // Per-relay tracking within this group
       const activeRelays = new Set<string>();
       const eoseRelays = new Set<string>();
       const subscribedRelays = new Set<string>();
+      let groupExhausted = false;
 
-      // Settle signal for this group: debounce EOSE across relays
-      const relayEose$ = new Subject<void>();
-      const settled$ = relayEose$.pipe(debounceTime(settleTime), take(1));
-
-      // When settled, fire deletion check if event not found yet
-      const settleSub = settled$.subscribe(() => {
-        if (!found) {
-          runDeletionCheck();
-        }
-      });
-      teardown.add(settleSub);
-
-      // Subscribe to a single relay within this group
       function subscribeToRelay(relayUrl: string): void {
         if (subscribedRelays.has(relayUrl) || found) return;
         subscribedRelays.add(relayUrl);
@@ -241,7 +313,6 @@ export function searchForEvent(
           group: groupLabel,
         });
 
-        // Open a per-relay subscription so we get per-relay EOSE
         const sub = pool
           .subscription([relayUrl], [searchFilter], { reconnect: false })
           .pipe(takeUntil(found$))
@@ -257,9 +328,10 @@ export function searchForEvent(
                   relay: relayUrl,
                   group: groupLabel,
                 });
-                relayEose$.next();
 
-                // Check if all relays in this group have reported EOSE
+                // Nudge the settle debounce for immediate groups
+                if (!isDeferred) anyImmediateResponse$.next();
+
                 if (
                   activeRelays.size === 0 &&
                   subscribedRelays.size === eoseRelays.size
@@ -267,7 +339,6 @@ export function searchForEvent(
                   checkGroupExhausted();
                 }
               } else {
-                // Got an event
                 const event = msg as NostrEvent;
                 if (!found) {
                   found = true;
@@ -290,9 +361,10 @@ export function searchForEvent(
                 group: groupLabel,
                 error: err instanceof Error ? err : new Error(String(err)),
               });
-              relayEose$.next(); // treat error as "done" for settle purposes
 
-              // Check if all relays in this group are done
+              // Errors also nudge the settle debounce for immediate groups
+              if (!isDeferred) anyImmediateResponse$.next();
+
               if (activeRelays.size === 0 && subscribedRelays.size > 0) {
                 checkGroupExhausted();
               }
@@ -301,9 +373,6 @@ export function searchForEvent(
 
         teardown.add(sub);
 
-        // Emit "searching" once the subscription is open
-        // (pool.subscription opens the connection synchronously in the
-        // subscribe call, so by this point we're connected or connecting)
         if (!found) {
           subscriber.next({
             type: "relay-searching",
@@ -313,26 +382,19 @@ export function searchForEvent(
         }
       }
 
-      // Track whether we've already declared this group exhausted
-      let groupExhausted = false;
-
       function checkGroupExhausted(): void {
         if (groupExhausted || found) return;
-        // Only exhaust if all subscribed relays have either EOSE'd or errored
         const allDone = subscribedRelays.size > 0 && activeRelays.size === 0;
         if (!allDone) return;
 
         groupExhausted = true;
         subscriber.next({ type: "group-exhausted", group: groupLabel });
-
-        // Move to next group
-        processGroup(groupIndex + 1);
+        onGroupExhausted(isDeferred);
       }
 
-      // Subscribe to the reactive relay list for this group
+      // Subscribe to the reactive relay list
       const relaySub = group.relays$
         .pipe(
-          // Flatten to deduplicated URL list
           map((urls) => [...new Set(urls)]),
           distinctUntilChanged(
             (a, b) =>
@@ -344,14 +406,13 @@ export function searchForEvent(
           next: (urls) => {
             if (found) return;
             if (urls.length === 0) {
-              // Empty group — exhaust immediately if no relays subscribed yet
               if (subscribedRelays.size === 0) {
                 groupExhausted = true;
                 subscriber.next({
                   type: "group-exhausted",
                   group: groupLabel,
                 });
-                processGroup(groupIndex + 1);
+                onGroupExhausted(isDeferred);
               }
               return;
             }
@@ -360,14 +421,13 @@ export function searchForEvent(
             }
           },
           error: () => {
-            // If the relay list observable errors, exhaust the group
             if (!groupExhausted && !found) {
               groupExhausted = true;
               subscriber.next({
                 type: "group-exhausted",
                 group: groupLabel,
               });
-              processGroup(groupIndex + 1);
+              onGroupExhausted(isDeferred);
             }
           },
         });
@@ -396,15 +456,12 @@ export function searchForEvent(
       ];
 
       if (allFilters.length === 0 || allRelaysSearched.length === 0) {
-        // Nothing to check — conclude immediately
         concludeNotFound();
         return;
       }
 
-      // Deduplicate relay URLs
       const relays = [...new Set(allRelaysSearched)];
 
-      // One-shot request: complete on EOSE
       const sub = pool
         .subscription(relays, allFilters, { reconnect: false })
         .pipe(completeOnEose(), onlyEvents(), takeUntil(found$))
@@ -412,7 +469,6 @@ export function searchForEvent(
           next: (event) => {
             if (found) return;
             if (event.kind === 62) {
-              // NIP-62 vanish request — check if it covers relays we searched
               const relayTags = event.tags
                 .filter(([t]) => t === "relay")
                 .map(([, v]) => v);
@@ -426,7 +482,6 @@ export function searchForEvent(
             }
           },
           error: () => {
-            // Deletion check failure is non-fatal — just conclude
             concludeNotFound();
           },
           complete: () => {
@@ -449,7 +504,29 @@ export function searchForEvent(
     // -----------------------------------------------------------------------
     // Start
     // -----------------------------------------------------------------------
-    processGroup(0);
+
+    // All immediate groups start right away, in parallel
+    for (const group of immediateGroups) {
+      startGroup(group, false);
+    }
+
+    // If there are no immediate groups at all, fire settle immediately so
+    // deferred groups start without waiting
+    if (immediateGroups.length === 0) {
+      fireSettle();
+    }
+
+    // Deferred groups start once the settle fires
+    if (deferredGroups.length > 0) {
+      const deferSub = settled$.pipe(take(1)).subscribe(() => {
+        if (!found) {
+          for (const group of deferredGroups) {
+            startGroup(group, true);
+          }
+        }
+      });
+      teardown.add(deferSub);
+    }
 
     return teardown;
   });

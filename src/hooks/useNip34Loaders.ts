@@ -383,6 +383,7 @@ export function useNip34ItemDetailLoader(
       groups.push({
         label: "extra relays",
         relays$: extraRelays,
+        deferred: true,
       });
     }
 

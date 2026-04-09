@@ -168,13 +168,16 @@ export function useResolvedRepository(
       ),
     });
 
-    // Always add extra relays as a fallback for repo announcement discovery.
+    // Extra relays are deferred: they start only after the immediate tier
+    // (NIP-05 relays + relay hints + git index) has settled — i.e. first
+    // relay response + 200 ms debounce, or 4 s hard timeout.
     // Curation mode only gates issue/PR subscription breadth — the initial
     // repo announcement search should always fall back to extra relays so
     // repos not indexed by the git index can still be found.
     groups.push({
       label: "extra relays",
       relays$: extraRelays,
+      deferred: true,
     });
 
     return groups;
