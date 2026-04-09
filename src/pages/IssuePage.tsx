@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
@@ -15,7 +15,9 @@ import {
   LabelChangeCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
+import { EventSearchStatus } from "@/components/EventSearchStatus";
 import { useResolvedIssue } from "@/hooks/useResolvedIssue";
+import type { RelayGroupSpec } from "@/hooks/useEventSearch";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -27,6 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { gitIndexRelays, extraRelays } from "@/services/settings";
 import { ArrowLeft, MessageCircle, Zap, Users, Clock, Pin } from "lucide-react";
 
 export default function IssuePage() {
@@ -39,12 +42,28 @@ export default function IssuePage() {
     [repo?.maintainerSet],
   );
 
+  // ── "Search more relays" expansion (curated mode) ────────────────────────
+  const [searchMoreActive, setSearchMoreActive] = useState(false);
+
+  const extraSearchGroups = useMemo<RelayGroupSpec[]>(() => {
+    if (!searchMoreActive) return [];
+    return [
+      { label: "git index", relays$: gitIndexRelays },
+      { label: "extra relays", relays$: extraRelays },
+    ];
+  }, [searchMoreActive]);
+
+  const handleSearchMore = useCallback(() => {
+    setSearchMoreActive(true);
+  }, []);
+
   // ── Unified issue resolution ─────────────────────────────────────────────
-  const issue = useResolvedIssue(
+  const { issue, search } = useResolvedIssue(
     issueId,
     resolved?.repoRelayGroup,
     resolved?.extraRelaysForMaintainerMailboxCoverage,
     selectedMaintainers,
+    extraSearchGroups,
   );
 
   // Ordered priority pubkeys for @ mention autocomplete:
@@ -81,6 +100,39 @@ export default function IssuePage() {
       : "Issue - ngit",
     description: issue?.body.slice(0, 160) ?? "Loading issue...",
   });
+
+  // ── Not-found / searching / deleted / vanished state ─────────────────────
+  const showSearchStatus =
+    !issue &&
+    search &&
+    (search.concludedNotFound ||
+      search.deleted ||
+      search.vanished ||
+      search.activeGroup !== null);
+
+  if (showSearchStatus) {
+    const repoBasePath = repoToPath(
+      pubkey,
+      repoId,
+      resolved?.repo?.relays ?? [],
+      nip05,
+    );
+    return (
+      <EventSearchStatus
+        search={search}
+        eventId={issueId}
+        itemLabel="Issue"
+        backPath={`${repoBasePath}/issues`}
+        backLabel="Back to issues"
+        onSearchMore={
+          !searchMoreActive && search.concludedNotFound
+            ? handleSearchMore
+            : undefined
+        }
+        searchMoreActive={searchMoreActive}
+      />
+    );
+  }
 
   return (
     <>

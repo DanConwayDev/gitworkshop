@@ -1,5 +1,12 @@
+import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
+import {
+  useEventSearch,
+  type EventSearchState,
+  type RelayGroupSpec,
+} from "./useEventSearch";
+import type { SearchTarget } from "@/lib/searchForEvent";
 import type { RelayGroup, IRelay } from "applesauce-relay";
 import type { NostrEvent } from "nostr-tools";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
@@ -10,14 +17,13 @@ import {
   liveness,
   nip34ListLoader,
   nip34ThreadItemLoader,
-  pool,
+  eventStore as globalEventStore,
 } from "@/services/nostr";
-import { gitIndexRelays, relayCurationMode } from "@/services/settings";
-import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
-import { resilientSubscription } from "@/lib/resilientSubscription";
-import { withGapFill } from "@/lib/withGapFill";
-import type { Filter } from "applesauce-core/helpers";
+import {
+  gitIndexRelays,
+  extraRelays,
+  relayCurationMode,
+} from "@/services/settings";
 
 /** Max healthy inbox relays to take for the item author. */
 const MAX_INBOX_RELAYS = 3;
@@ -303,71 +309,110 @@ export function useNip34ItemLoaderBatch(
 // Detail-page loader — shared by useResolvedIssue and useResolvedPR
 // ---------------------------------------------------------------------------
 
+export interface Nip34ItemDetailLoaderResult {
+  /** Stable string key for use in downstream use$() dep arrays */
+  maintainerKey: string;
+  /** Search state from useEventSearch — undefined until search starts */
+  search: EventSearchState | undefined;
+}
+
 /**
  * Fetches a single NIP-34 item's root event from relays and triggers
  * list + thread loading.
  *
  * Shared between useResolvedIssue and useResolvedPR. Both hooks need the same
- * three steps:
- *   1. Fetch root event by ID from repoRelayGroup (or fallback gitIndexRelays)
- *   2. In outbox mode, also fetch from extraRelaysForMaintainerMailboxCoverage
+ * steps:
+ *   1. Check if the event is already in the EventStore (skip search if so)
+ *   2. Search for the root event via useEventSearch with ordered relay groups:
+ *      - repo relays (always)
+ *      - outbox mode: also includes extra maintainer mailbox relays
+ *      - curated mode: git index + extra relays are NOT auto-added (user must
+ *        trigger expansion via the UI)
  *   3. Trigger useNip34ItemLoader with includeThread: true
  *
  * @param itemId          - The event ID of the root issue / PR / patch
  * @param repoRelayGroup  - Base relay group from useResolvedRepository
  * @param extraRelaysForMaintainerMailboxCoverage - Delta relay group for outbox mode
  * @param maintainers     - Effective maintainer set (used to derive a stable key)
- * @returns maintainerKey - Stable string key for use in downstream use$() dep arrays
+ * @param extraSearchGroups - Additional relay groups to search (e.g. when user
+ *                            clicks "search more relays" in curated mode)
  */
 export function useNip34ItemDetailLoader(
   itemId: string | undefined,
   repoRelayGroup: RelayGroup | undefined,
   extraRelaysForMaintainerMailboxCoverage: RelayGroup | undefined,
   maintainers: Set<string> | undefined,
-): string {
-  const store = useEventStore();
+  extraSearchGroups?: RelayGroupSpec[],
+): Nip34ItemDetailLoaderResult {
   const curationMode = use$(relayCurationMode);
 
-  // ── 1. Fetch root event by ID from relays ──────────────────────────────
-  use$(() => {
-    if (!itemId) return undefined;
-    const filters: Filter[] = [{ ids: [itemId] }];
-    if (repoRelayGroup) {
-      return withGapFill(
-        repoRelayGroup.subscription(filters, {
-          reconnect: Infinity,
-          resubscribe: Infinity,
-        }),
-        pool,
-        () => repoRelayGroup.relays.map((r) => r.url),
-        filters,
-      ).pipe(onlyEvents(), mapEventsToStore(store));
-    }
-    return resilientSubscription(pool, gitIndexRelays.getValue(), filters).pipe(
-      onlyEvents(),
-      mapEventsToStore(store),
-    );
-  }, [itemId, repoRelayGroup, store]);
+  // ── 1. Check if event is already in the store ────────────────────────────
+  const alreadyInStore = itemId
+    ? globalEventStore.getByFilters([{ ids: [itemId] }]).length > 0
+    : false;
 
-  // ── 2. In outbox mode, also fetch from extra maintainer mailbox relays ──
-  use$(() => {
-    if (
-      !itemId ||
-      curationMode !== "outbox" ||
-      !extraRelaysForMaintainerMailboxCoverage
-    )
-      return undefined;
-    const filters: Filter[] = [{ ids: [itemId] }];
-    return withGapFill(
-      extraRelaysForMaintainerMailboxCoverage.subscription(filters, {
-        reconnect: Infinity,
-        resubscribe: Infinity,
-      }),
-      pool,
-      () => extraRelaysForMaintainerMailboxCoverage.relays.map((r) => r.url),
-      filters,
-    ).pipe(onlyEvents(), mapEventsToStore(store));
-  }, [itemId, curationMode, extraRelaysForMaintainerMailboxCoverage, store]);
+  // ── 2. Search for root event via useEventSearch ──────────────────────────
+  // Build relay groups based on curation mode:
+  //   - Always: repo relays
+  //   - Outbox mode: + extra maintainer mailbox relays, + git index, + extra relays
+  //   - Curated mode: only repo relays initially; user can add more via extraSearchGroups
+  const searchGroups = useMemo<RelayGroupSpec[]>(() => {
+    const groups: RelayGroupSpec[] = [];
+
+    // Primary: repo relays (reactive — grows as RepositoryRelayGroup discovers relays)
+    if (repoRelayGroup) {
+      groups.push({
+        label: "repo relays",
+        relays$: relayGroupUrls$(repoRelayGroup),
+      });
+    }
+
+    if (curationMode === "outbox") {
+      // Outbox mode: add maintainer mailbox relays as second group
+      if (extraRelaysForMaintainerMailboxCoverage) {
+        groups.push({
+          label: "maintainer outbox relays",
+          relays$: relayGroupUrls$(extraRelaysForMaintainerMailboxCoverage),
+        });
+      }
+      // Then git index + extra relays as fallback
+      groups.push({
+        label: "git index",
+        relays$: gitIndexRelays,
+      });
+      groups.push({
+        label: "extra relays",
+        relays$: extraRelays,
+      });
+    }
+
+    // Curated mode: user-triggered expansion groups (if any)
+    if (extraSearchGroups) {
+      groups.push(...extraSearchGroups);
+    }
+
+    // Fallback when no repo relay group yet: use git index relays directly
+    if (!repoRelayGroup) {
+      groups.push({
+        label: "git index",
+        relays$: gitIndexRelays,
+      });
+    }
+
+    return groups;
+  }, [
+    repoRelayGroup,
+    extraRelaysForMaintainerMailboxCoverage,
+    curationMode,
+    extraSearchGroups,
+  ]);
+
+  const searchTarget = useMemo<SearchTarget | undefined>(() => {
+    if (!itemId || alreadyInStore) return undefined;
+    return { type: "event", id: itemId };
+  }, [itemId, alreadyInStore]);
+
+  const search = useEventSearch(searchTarget, searchGroups);
 
   // ── 3. Trigger loading (list + thread) ───────────────────────────────────
   useNip34ItemLoader(itemId, repoRelayGroup, {
@@ -375,6 +420,9 @@ export function useNip34ItemDetailLoader(
     includeAuthorNip65: curationMode === "outbox",
   });
 
-  // Return a stable maintainer key for downstream use$() dep arrays
-  return maintainers ? [...maintainers].sort().join(",") : "loading";
+  const maintainerKey = maintainers
+    ? [...maintainers].sort().join(",")
+    : "loading";
+
+  return { maintainerKey, search };
 }

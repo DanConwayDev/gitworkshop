@@ -3,11 +3,11 @@
  *
  * Replaces the ~10 per-item hooks (usePRStatus, usePRTip, usePRLabels,
  * usePRSubjectRenames, usePatchChain, usePRUpdates, usePRAllComments, etc.)
- * with a single hook that returns a `ResolvedPR`.
+ * with a single hook that returns a `ResolvedPR` plus search state.
  *
  * Internally:
- * 1. Fetches the root event from relays and triggers tiered loading via
- *    useNip34ItemDetailLoader
+ * 1. Fetches the root event from relays via useEventSearch (through
+ *    useNip34ItemDetailLoader) and triggers tiered loading
  * 2. For patches: fetches patch chain events from relays
  * 3. Subscribes to PRDetailModel which reactively produces ResolvedPR
  * 4. For patch revisions: batch-loads revision root comments
@@ -27,6 +27,7 @@ import {
   useNip34ItemDetailLoader,
   useNip34ItemLoaderBatch,
 } from "./useNip34Loaders";
+import type { EventSearchState, RelayGroupSpec } from "./useEventSearch";
 import { PRDetailModel } from "@/models/PRDetailModel";
 import { PATCH_KIND, type ResolvedPR } from "@/lib/nip34";
 import { relayCurationMode } from "@/services/settings";
@@ -39,6 +40,12 @@ export interface UseResolvedPROptions {
   fallbackCloneUrls?: string[];
 }
 
+export interface ResolvedPRResult {
+  pr: ResolvedPR | undefined;
+  /** Search state — undefined if the event was already in the store */
+  search: EventSearchState | undefined;
+}
+
 /**
  * Unified hook for the PR/patch detail page.
  *
@@ -47,6 +54,7 @@ export interface UseResolvedPROptions {
  * @param extraRelaysForMaintainerMailboxCoverage - Delta relay group for outbox mode
  * @param maintainers     - Effective maintainer set from repo resolution
  * @param options         - Additional options
+ * @param extraSearchGroups - Additional relay groups for user-triggered expansion
  */
 export function useResolvedPR(
   prId: string | undefined,
@@ -54,16 +62,18 @@ export function useResolvedPR(
   extraRelaysForMaintainerMailboxCoverage: RelayGroup | undefined,
   maintainers: Set<string> | undefined,
   _options?: UseResolvedPROptions,
-): ResolvedPR | undefined {
+  extraSearchGroups?: RelayGroupSpec[],
+): ResolvedPRResult {
   const store = useEventStore();
   const curationMode = use$(relayCurationMode);
 
   // ── 1. Fetch root event + tiered loading (shared with useResolvedIssue) ──
-  const maintainerKey = useNip34ItemDetailLoader(
+  const { maintainerKey, search } = useNip34ItemDetailLoader(
     prId,
     repoRelayGroup,
     extraRelaysForMaintainerMailboxCoverage,
     maintainers,
+    extraSearchGroups,
   );
 
   // ── 2. For patches: fetch patch chain events from relays ────────────────
@@ -135,5 +145,5 @@ export function useResolvedPR(
     includeAuthorNip65: curationMode === "outbox",
   });
 
-  return resolved;
+  return { pr: resolved, search };
 }

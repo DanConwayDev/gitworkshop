@@ -23,7 +23,10 @@ import {
 import { ThreadTree } from "@/components/ThreadTree";
 
 import { useResolvedPR } from "@/hooks/useResolvedPR";
+import { EventSearchStatus } from "@/components/EventSearchStatus";
+import type { RelayGroupSpec } from "@/hooks/useEventSearch";
 import { useRepoContext } from "@/pages/repo/RepoContext";
+import { gitIndexRelays, extraRelays } from "@/services/settings";
 import { useGitPool } from "@/hooks/useGitPool";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -37,6 +40,7 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
+  AlertCircle,
   ArrowLeft,
   MessageCircle,
   Zap,
@@ -45,7 +49,6 @@ import {
   GitPullRequest,
   GitCommitHorizontal,
   FileDiff,
-  AlertCircle,
   Loader2,
   Pin,
 } from "lucide-react";
@@ -110,12 +113,29 @@ export default function PRPage() {
     [repo?.maintainerSet],
   );
 
+  // ── "Search more relays" expansion (curated mode) ────────────────────────
+  const [searchMoreActive, setSearchMoreActive] = useState(false);
+
+  const extraSearchGroups = useMemo<RelayGroupSpec[]>(() => {
+    if (!searchMoreActive) return [];
+    return [
+      { label: "git index", relays$: gitIndexRelays },
+      { label: "extra relays", relays$: extraRelays },
+    ];
+  }, [searchMoreActive]);
+
+  const handleSearchMore = useCallback(() => {
+    setSearchMoreActive(true);
+  }, []);
+
   // ── Unified PR/Patch resolution ─────────────────────────────────────────
-  const pr = useResolvedPR(
+  const { pr, search } = useResolvedPR(
     prId,
     resolved?.repoRelayGroup,
     resolved?.extraRelaysForMaintainerMailboxCoverage,
     selectedMaintainers,
+    undefined, // options
+    extraSearchGroups,
   );
 
   // Ordered priority pubkeys for @ mention autocomplete:
@@ -611,6 +631,39 @@ export default function PRPage() {
     commitDetailPatchMergeBase.baseCommitId,
     repoRelayHints,
   ]);
+
+  // ── Not-found / searching / deleted / vanished state ─────────────────────
+  const showSearchStatus =
+    !pr &&
+    search &&
+    (search.concludedNotFound ||
+      search.deleted ||
+      search.vanished ||
+      search.activeGroup !== null);
+
+  if (showSearchStatus) {
+    const repoBasePath = repoToPath(
+      pubkey,
+      repoId,
+      resolved?.repo?.relays ?? [],
+      nip05,
+    );
+    return (
+      <EventSearchStatus
+        search={search}
+        eventId={prId}
+        itemLabel="PR"
+        backPath={`${repoBasePath}/prs`}
+        backLabel="Back to PRs"
+        onSearchMore={
+          !searchMoreActive && search.concludedNotFound
+            ? handleSearchMore
+            : undefined
+        }
+        searchMoreActive={searchMoreActive}
+      />
+    );
+  }
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange}>

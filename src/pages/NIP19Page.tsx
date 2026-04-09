@@ -6,17 +6,22 @@ import {
 import { use$ } from "applesauce-react/hooks";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 import { nip19 } from "nostr-tools";
-import { eventStore, pool } from "../services/nostr";
+import { useMemo } from "react";
+import { of } from "rxjs";
+import { eventStore } from "../services/nostr";
 import { REPO_KIND, ISSUE_KIND, PATCH_KIND, PR_KIND } from "../lib/nip34";
 import { eventIdToNevent, isNip05, standardizeNip05 } from "../lib/routeUtils";
 import { useRepoPath } from "../hooks/useRepoPath";
 import UserPage from "./UserPage";
 import NotFound from "./NotFound";
 import { UnsupportedEventPage } from "./UnsupportedEventPage";
-import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
-import { resilientSubscription } from "@/lib/resilientSubscription";
-import { gitIndexRelays } from "../services/settings";
+import { EventSearchStatus } from "@/components/EventSearchStatus";
+import {
+  useEventSearch,
+  type RelayGroupSpec,
+  type SearchTarget,
+} from "@/hooks/useEventSearch";
+import { gitIndexRelays, extraRelays } from "../services/settings";
 import { useDnsIdentity } from "../hooks/useDnsIdentity";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
@@ -168,32 +173,41 @@ function LoadingState({ message }: { message: string }) {
 function EventRedirect({
   eventId,
   hintRelays,
+  authorPubkey,
   commentId,
   stargazerPubkey,
 }: {
   eventId: string;
   hintRelays: string[];
+  /** Author pubkey if known (from nevent). Enables vanish check. */
+  authorPubkey?: string;
   /** If set, this is a comment permalink — we're resolving the root event. */
   commentId?: string;
   /** If set, this is a star reaction permalink — open the stargazers popover. */
   stargazerPubkey?: string;
 }) {
-  // Fetch the event from hint relays (if any) and git index relays in parallel.
-  // Hint relays are tried first but we don't skip the index — the event may
-  // only be on one of them.
-  use$(() => {
-    const filters = [{ ids: [eventId] }];
-    const indexRelays = gitIndexRelays.getValue();
-    // Deduplicate: hint relays first, then any index relays not already included
-    const allRelays = [
-      ...hintRelays,
-      ...indexRelays.filter((r) => !hintRelays.includes(r)),
-    ];
-    return resilientSubscription(pool, allRelays, filters, {
-      paginate: false,
-    }).pipe(onlyEvents(), mapEventsToStore(eventStore));
-  }, [eventId, hintRelays.join(",")]);
+  // Build relay groups: hint relays first, then git index, then extra relays
+  const hintsKey = hintRelays.join(",");
+  const searchGroups = useMemo<RelayGroupSpec[]>(() => {
+    const groups: RelayGroupSpec[] = [];
+    if (hintRelays.length > 0) {
+      groups.push({ label: "hint relays", relays$: of(hintRelays) });
+    }
+    groups.push({ label: "git index", relays$: gitIndexRelays });
+    groups.push({ label: "extra relays", relays$: extraRelays });
+    return groups;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hintsKey]);
 
+  const searchTarget = useMemo<SearchTarget>(
+    () => ({ type: "event", id: eventId, authorPubkey }),
+    [eventId, authorPubkey],
+  );
+
+  const search = useEventSearch(searchTarget, searchGroups);
+
+  // Also subscribe to the store for the event (it may already be there or
+  // arrive via the search)
   const event = use$(
     () =>
       eventStore.event(eventId) as unknown as Observable<
@@ -202,7 +216,20 @@ function EventRedirect({
     [eventId],
   );
 
+  // Show search status while searching or if concluded not-found/deleted/vanished
   if (!event) {
+    if (
+      search &&
+      (search.concludedNotFound || search.deleted || search.vanished)
+    ) {
+      return (
+        <EventSearchStatus
+          search={search}
+          eventId={eventId}
+          itemLabel="Event"
+        />
+      );
+    }
     return <LoadingState message={`Fetching event…`} />;
   }
 
@@ -381,17 +408,25 @@ export function NIP19Page() {
       const decoded = nip19.decode(identifier);
       let eventId: string;
       let hintRelays: string[] = [];
+      let authorPubkey: string | undefined;
 
       if (decoded.type === "note") {
         eventId = decoded.data;
       } else if (decoded.type === "nevent") {
         eventId = decoded.data.id;
         hintRelays = decoded.data.relays ?? [];
+        authorPubkey = decoded.data.author;
       } else {
         return <NotFound />;
       }
 
-      return <EventRedirect eventId={eventId} hintRelays={hintRelays} />;
+      return (
+        <EventRedirect
+          eventId={eventId}
+          hintRelays={hintRelays}
+          authorPubkey={authorPubkey}
+        />
+      );
     } catch {
       return <NotFound />;
     }
