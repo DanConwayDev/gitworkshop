@@ -11,6 +11,7 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   AlertCircle,
@@ -51,23 +52,45 @@ function RelayStatusIcon({ status }: { status: RelaySearchStatus }) {
     case "found":
       return <CheckCircle2 className="h-3 w-3 shrink-0 text-green-500" />;
     case "error":
-      return <XCircle className="h-3 w-3 shrink-0 text-destructive/60" />;
+      return <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive/80" />;
     case "connection-failed":
-      return <WifiOff className="h-3 w-3 shrink-0 text-destructive/60" />;
+      return <WifiOff className="h-3.5 w-3.5 shrink-0 text-destructive/80" />;
     case "timeout":
-      return <Clock className="h-3 w-3 shrink-0 text-amber-500/70" />;
+      return <Clock className="h-3 w-3 shrink-0 text-muted-foreground/60" />;
   }
 }
 
-function relayStatusLabel(status: RelaySearchStatus): string | undefined {
-  switch (status) {
-    case "connection-failed":
-      return "connection failed";
-    case "timeout":
-      return "no response";
-    default:
-      return undefined;
-  }
+function RelayRow({ url, status }: { url: string; status: RelaySearchStatus }) {
+  // Both "connection-failed" and "error" mean we couldn't reach the relay —
+  // treat them identically in the UI.
+  const isFailed = status === "connection-failed" || status === "error";
+  const isTimeout = status === "timeout";
+
+  return (
+    <li className="flex items-center gap-2 text-xs font-mono py-0.5">
+      <RelayStatusIcon status={status} />
+      <span
+        className={cn(
+          "truncate flex-1",
+          isFailed
+            ? "line-through text-destructive/60"
+            : "text-muted-foreground",
+        )}
+      >
+        {url}
+      </span>
+      {isFailed && (
+        <span className="shrink-0 text-xs font-sans text-destructive/80">
+          connection failure
+        </span>
+      )}
+      {isTimeout && (
+        <span className="shrink-0 text-xs font-sans italic text-muted-foreground/60">
+          no response
+        </span>
+      )}
+    </li>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -200,23 +223,9 @@ export function EventSearchStatus({
                     {group.label}
                   </p>
                   <ul className="space-y-1">
-                    {group.relays.map(({ url, status }) => {
-                      const label = relayStatusLabel(status);
-                      return (
-                        <li
-                          key={url}
-                          className="flex items-center gap-2 text-xs font-mono text-muted-foreground"
-                        >
-                          <RelayStatusIcon status={status} />
-                          <span className="truncate flex-1">{url}</span>
-                          {label && (
-                            <span className="shrink-0 text-xs font-sans text-muted-foreground/60 italic">
-                              {label}
-                            </span>
-                          )}
-                        </li>
-                      );
-                    })}
+                    {group.relays.map(({ url, status }) => (
+                      <RelayRow key={url} url={url} status={status} />
+                    ))}
                   </ul>
                 </div>
               ))}
