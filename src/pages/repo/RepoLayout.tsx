@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
 import { useResolvedRepository } from "@/hooks/useResolvedRepository";
 import RepoIssuesPage from "./RepoIssuesPage";
@@ -176,6 +176,16 @@ function RepoLayoutResolved({
     nip05Relays,
   );
   const repo = resolved?.repo;
+
+  // Delay showing the repo search status page so the skeleton shows first.
+  // Timer starts on mount (keyed to pubkey+repoId) and is never reset by
+  // transient relay group changes mid-search.
+  const [repoSearchDelayElapsed, setRepoSearchDelayElapsed] = useState(false);
+  useEffect(() => {
+    setRepoSearchDelayElapsed(false);
+    const timer = setTimeout(() => setRepoSearchDelayElapsed(true), 1500);
+    return () => clearTimeout(timer);
+  }, [pubkey, repoId]);
 
   // Prefetch NIP-05 identities for all maintainers so useRepoPath can resolve
   // them synchronously from the IDB cache on subsequent visits.
@@ -574,8 +584,8 @@ function RepoLayoutResolved({
         (repoSearch.concludedNotFound ||
           repoSearch.deleted ||
           repoSearch.vanished ||
-          // Show search status once relays are being searched (not just skeleton)
-          Object.keys(repoSearch.relayStatuses).length > 0) &&
+          (Object.keys(repoSearch.relayStatuses).length > 0 &&
+            repoSearchDelayElapsed)) &&
         !repoSearch.found ? (
         <EventSearchStatus
           search={repoSearch}

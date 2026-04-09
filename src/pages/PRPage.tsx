@@ -633,13 +633,18 @@ export default function PRPage() {
   ]);
 
   // ── Not-found / searching / deleted / vanished state ─────────────────────
-  const showSearchStatus =
-    !pr &&
-    search &&
-    (search.concludedNotFound ||
-      search.deleted ||
-      search.vanished ||
-      search.activeGroup !== null);
+  // Show skeleton first, then reveal the relay-status page after a short
+  // delay. The timer starts as soon as the search begins and is never reset
+  // by transient gaps (e.g. relay group changes mid-search). It only resets
+  // when the item ID changes (new navigation).
+  const [searchDelayElapsed, setSearchDelayElapsed] = useState(false);
+  useEffect(() => {
+    setSearchDelayElapsed(false);
+    const timer = setTimeout(() => setSearchDelayElapsed(true), 1500);
+    return () => clearTimeout(timer);
+  }, [prId]);
+
+  const showSearchStatus = !pr && search && searchDelayElapsed && !search.found;
 
   if (showSearchStatus) {
     const repoBasePath = repoToPath(

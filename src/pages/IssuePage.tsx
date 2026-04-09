@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
@@ -102,13 +102,19 @@ export default function IssuePage() {
   });
 
   // ── Not-found / searching / deleted / vanished state ─────────────────────
+  // Show skeleton first, then reveal the relay-status page after a short
+  // delay. The timer starts as soon as the search begins and is never reset
+  // by transient gaps (e.g. relay group changes mid-search). It only resets
+  // when the item ID changes (new navigation).
+  const [searchDelayElapsed, setSearchDelayElapsed] = useState(false);
+  useEffect(() => {
+    setSearchDelayElapsed(false);
+    const timer = setTimeout(() => setSearchDelayElapsed(true), 1500);
+    return () => clearTimeout(timer);
+  }, [issueId]);
+
   const showSearchStatus =
-    !issue &&
-    search &&
-    (search.concludedNotFound ||
-      search.deleted ||
-      search.vanished ||
-      search.activeGroup !== null);
+    !issue && search && searchDelayElapsed && !search.found;
 
   if (showSearchStatus) {
     const repoBasePath = repoToPath(
