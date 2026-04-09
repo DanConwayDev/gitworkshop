@@ -206,7 +206,9 @@ export function EventSearchStatus({
       "The author published a request to vanish (NIP-62), asking all relays to delete their events.";
     icon = <UserX className="h-8 w-8 text-muted-foreground" />;
   } else if (search.concludedNotFound) {
-    headline = `${itemLabel} not found on repository relays`;
+    headline = searchMoreActive
+      ? `${itemLabel} not found on any searched relays`
+      : `${itemLabel} not found on repository relays`;
     description = `No deletion request found either.`;
     icon = <SearchX className="h-8 w-8 text-muted-foreground" />;
   } else if (isSearching) {

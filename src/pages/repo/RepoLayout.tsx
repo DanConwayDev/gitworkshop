@@ -592,6 +592,7 @@ function RepoLayoutResolved({
           itemLabel="Repository"
           backPath="/"
           backLabel="Back to repositories"
+          searchMoreActive={true}
         />
       ) : subPage === "issue" || subPage === "pr" || subPage === "pr-commit" ? (
         /* Show an issue/PR-shaped skeleton while the repo context resolves,
