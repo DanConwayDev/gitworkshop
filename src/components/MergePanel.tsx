@@ -412,7 +412,7 @@ export function MergePanel({
       await outboxStore.publish(signedState, [
         repoCoord,
         "git-index",
-        "extra-relays",
+        "fallback-relays",
       ]);
 
       setMergeStep("done");
@@ -531,7 +531,7 @@ export function MergePanel({
       await outboxStore.publish(signedState, [
         repoCoord,
         "git-index",
-        "extra-relays",
+        "fallback-relays",
       ]);
 
       setMergeStep("done");

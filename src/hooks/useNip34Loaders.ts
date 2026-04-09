@@ -21,7 +21,7 @@ import {
 } from "@/services/nostr";
 import {
   gitIndexRelays,
-  extraRelays,
+  fallbackRelays,
   relayCurationMode,
 } from "@/services/settings";
 
@@ -422,8 +422,8 @@ export function useNip34ItemDetailLoader(
         relays$: gitIndexRelays,
       });
       groups.push({
-        label: "extra relays",
-        relays$: extraRelays,
+        label: "fallback relays",
+        relays$: fallbackRelays,
         deferred: true,
       });
     }

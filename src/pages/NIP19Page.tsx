@@ -21,7 +21,7 @@ import {
   type RelayGroupSpec,
   type SearchTarget,
 } from "@/hooks/useEventSearch";
-import { gitIndexRelays, extraRelays } from "../services/settings";
+import { gitIndexRelays, fallbackRelays } from "../services/settings";
 import { useDnsIdentity } from "../hooks/useDnsIdentity";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
@@ -195,8 +195,8 @@ function EventRedirect({
     }
     groups.push({ label: "git index", relays$: gitIndexRelays });
     groups.push({
-      label: "extra relays",
-      relays$: extraRelays,
+      label: "fallback relays",
+      relays$: fallbackRelays,
       deferred: true,
     });
     return groups;

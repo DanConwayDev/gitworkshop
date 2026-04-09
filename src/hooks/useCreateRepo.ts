@@ -166,7 +166,7 @@ export function useCreateRepo() {
         // Also publish to outbox/index relays (fire-and-forget via outbox store)
         await outboxStore.publish(signedAnnouncement, [
           "git-index",
-          "extra-relays",
+          "fallback-relays",
         ]);
 
         // Add to local store for immediate UI update

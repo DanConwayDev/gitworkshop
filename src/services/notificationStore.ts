@@ -49,7 +49,11 @@ import { mapEventsToStore } from "applesauce-core";
 import { MailboxesModel } from "applesauce-core/models";
 import { onlyEvents } from "applesauce-relay";
 import { pool, eventStore, addressLoader } from "@/services/nostr";
-import { extraRelays, lookupRelays, gitIndexRelays } from "@/services/settings";
+import {
+  fallbackRelays,
+  lookupRelays,
+  gitIndexRelays,
+} from "@/services/settings";
 import {
   buildNotificationFilters,
   buildNotificationBadgeFilters,
@@ -150,8 +154,8 @@ export function updateReadState(
 // ---------------------------------------------------------------------------
 
 /**
- * Observable of the user's NIP-65 inbox relays merged with extraRelays.
- * Emits immediately with extraRelays alone (startWith), then re-emits
+ * Observable of the user's NIP-65 inbox relays merged with fallbackRelays.
+ * Emits immediately with fallbackRelays alone (startWith), then re-emits
  * whenever MailboxesModel updates. This ensures subscriptions start right
  * away and automatically expand to the user's real inbox relays once the
  * kind:10002 event arrives from the relay.
@@ -159,7 +163,7 @@ export function updateReadState(
 function inboxRelaysObservable(pubkey: string) {
   return combineLatest([
     eventStore.model(MailboxesModel, pubkey).pipe(startWith(undefined)),
-    extraRelays,
+    fallbackRelays,
   ]).pipe(
     map(([mailboxes, extra]) => {
       const inboxes = mailboxes?.inboxes ?? [];
@@ -216,7 +220,7 @@ export function acquireNotificationStore(
   // ---------------------------------------------------------------------------
   // Phase 1 — Badge: live subscription with limit:10 badge filters.
   // Reactive to MailboxesModel — re-subscribes when inbox relays change.
-  // Starts immediately with extraRelays, expands once kind:10002 arrives.
+  // Starts immediately with fallbackRelays, expands once kind:10002 arrives.
   // ---------------------------------------------------------------------------
   const badgeFilters = buildNotificationBadgeFilters(pubkey);
 

@@ -29,7 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { gitIndexRelays, extraRelays } from "@/services/settings";
+import { gitIndexRelays, fallbackRelays } from "@/services/settings";
 import { ArrowLeft, MessageCircle, Zap, Users, Clock, Pin } from "lucide-react";
 
 export default function IssuePage() {
@@ -49,7 +49,7 @@ export default function IssuePage() {
     if (!searchMoreActive) return [];
     return [
       { label: "git index", relays$: gitIndexRelays },
-      { label: "extra relays", relays$: extraRelays },
+      { label: "fallback relays", relays$: fallbackRelays },
     ];
   }, [searchMoreActive]);
 

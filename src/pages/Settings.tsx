@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  extraRelays,
+  fallbackRelays,
   gitIndexRelays,
   lookupRelays,
   relayCurationMode,
@@ -724,38 +724,39 @@ function DefaultNostrConnectRelaysSection() {
   );
 }
 
-function ExtraRelaysSection() {
-  const extraRelaysList = use$(extraRelays);
+function FallbackRelaysSection() {
+  const fallbackRelaysList = use$(fallbackRelays);
 
-  const handleAddExtraRelay = (relay: string) => {
-    const newRelays = [...new Set([...(extraRelaysList || []), relay])];
-    extraRelays.next(newRelays);
+  const handleAddFallbackRelay = (relay: string) => {
+    const newRelays = [...new Set([...(fallbackRelaysList || []), relay])];
+    fallbackRelays.next(newRelays);
   };
 
-  const handleRemoveExtraRelay = (relay: string) => {
-    const newRelays = (extraRelaysList || []).filter((r) => r !== relay);
-    extraRelays.next(newRelays);
+  const handleRemoveFallbackRelay = (relay: string) => {
+    const newRelays = (fallbackRelaysList || []).filter((r) => r !== relay);
+    fallbackRelays.next(newRelays);
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Extra Relays</CardTitle>
+        <CardTitle>Fallback Relays</CardTitle>
         <CardDescription>
-          Always used when fetching or publishing events across the app
+          Used as a last resort when no other relay source (outbox, repo relays,
+          or git index) is available for fetching or publishing events
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          {extraRelaysList?.map((relay, index) => (
+          {fallbackRelaysList?.map((relay, index) => (
             <RelayItem
               key={index}
               relay={relay}
-              onRemove={() => handleRemoveExtraRelay(relay)}
+              onRemove={() => handleRemoveFallbackRelay(relay)}
             />
           ))}
         </div>
-        <NewRelayForm onAdd={handleAddExtraRelay} />
+        <NewRelayForm onAdd={handleAddFallbackRelay} />
       </CardContent>
     </Card>
   );
@@ -782,7 +783,7 @@ export default function Settings() {
       <DefaultNostrConnectRelaysSection />
       <OutboxRelaysSection />
       <InboxRelaysSection />
-      <ExtraRelaysSection />
+      <FallbackRelaysSection />
     </div>
   );
 }

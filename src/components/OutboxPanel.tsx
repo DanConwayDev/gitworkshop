@@ -393,7 +393,7 @@ function GroupLabel({ groupId }: { groupId: string }) {
 
   // Static settings-based groups
   const STATIC_LABELS: Record<string, string> = {
-    "extra-relays": "Extra Relays",
+    "fallback-relays": "Fallback Relays",
     "index-relays": "Index Relays",
     "git-index": "Git Index",
     "bootstrap-relays": "Bootstrap Relays",

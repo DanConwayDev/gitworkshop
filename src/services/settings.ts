@@ -78,19 +78,23 @@ export function persist<T>(
 }
 
 /**
- * Default relay list for querying events.
+ * Fallback relay list used when no other relay source is available.
  * Users can customize this in settings.
  */
-const DEFAULT_EXTRA_RELAYS = relaySet([
+const DEFAULT_FALLBACK_RELAYS = relaySet([
   "wss://relay.ditto.pub",
   "wss://relay.damus.io",
   "wss://nos.lol",
 ]);
 
-export const extraRelays = new BehaviorSubject<string[]>(DEFAULT_EXTRA_RELAYS);
+export const fallbackRelays = new BehaviorSubject<string[]>(
+  DEFAULT_FALLBACK_RELAYS,
+);
 
-// Persist the extra relays to localStorage
-persist(extraRelays, "extraRelays", { defaultValue: DEFAULT_EXTRA_RELAYS });
+// Persist the fallback relays to localStorage
+persist(fallbackRelays, "extraRelays", {
+  defaultValue: DEFAULT_FALLBACK_RELAYS,
+});
 
 /**
  * Lookup relays for finding user relay hints (NIP-65, profile relays, etc.)

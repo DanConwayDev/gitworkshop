@@ -26,7 +26,7 @@ import { useResolvedPR } from "@/hooks/useResolvedPR";
 import { EventSearchStatus } from "@/components/EventSearchStatus";
 import type { RelayGroupSpec } from "@/hooks/useEventSearch";
 import { useRepoContext } from "@/pages/repo/RepoContext";
-import { gitIndexRelays, extraRelays } from "@/services/settings";
+import { gitIndexRelays, fallbackRelays } from "@/services/settings";
 import { useGitPool } from "@/hooks/useGitPool";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -120,7 +120,7 @@ export default function PRPage() {
     if (!searchMoreActive) return [];
     return [
       { label: "git index", relays$: gitIndexRelays },
-      { label: "extra relays", relays$: extraRelays },
+      { label: "fallback relays", relays$: fallbackRelays },
     ];
   }, [searchMoreActive]);
 

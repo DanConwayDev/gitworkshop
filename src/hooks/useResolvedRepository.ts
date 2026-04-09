@@ -19,7 +19,7 @@ import {
 } from "@/services/nostr";
 import { withGapFill } from "@/lib/withGapFill";
 import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
-import { gitIndexRelays, extraRelays } from "@/services/settings";
+import { gitIndexRelays, fallbackRelays } from "@/services/settings";
 import { RepositoryModel } from "@/models/RepositoryModel";
 import { RepositoryRelayGroup } from "@/models/RepositoryRelayGroup";
 import type { Filter } from "applesauce-core/helpers";
@@ -172,11 +172,11 @@ export function useResolvedRepository(
     // (NIP-05 relays + relay hints + git index) has settled — i.e. first
     // relay response + 200 ms debounce, or 4 s hard timeout.
     // Curation mode only gates issue/PR subscription breadth — the initial
-    // repo announcement search should always fall back to extra relays so
+    // repo announcement search should always fall back to fallback relays so
     // repos not indexed by the git index can still be found.
     groups.push({
-      label: "extra relays",
-      relays$: extraRelays,
+      label: "fallback relays",
+      relays$: fallbackRelays,
       deferred: true,
     });
 

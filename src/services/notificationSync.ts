@@ -267,10 +267,10 @@ function nsecEnvelopeGroupIds(pubkey: string): string[] {
 /**
  * Group IDs for the notification state event (authored by the dedicated
  * notification keypair). Publishes to the user's outbox relays, falling back
- * to "extra-relays" if none are configured.
+ * to "fallback-relays" if none are configured.
  */
 function stateEventGroupIds(pubkey: string): string[] {
-  return [`outbox:${pubkey}`, "extra-relays"];
+  return [`outbox:${pubkey}`, "fallback-relays"];
 }
 
 // ---------------------------------------------------------------------------

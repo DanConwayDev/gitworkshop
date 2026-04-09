@@ -17,7 +17,7 @@
  * Both events are published through outboxStore so retry logic and the
  * outbox panel apply. We bypass the generic nostr.ts publish() and call
  * outboxStore.publish() directly (same pattern as nip34.ts) so we can
- * supply precise relay groups rather than the user's extraRelays fallback.
+ * supply precise relay groups rather than the user's fallbackRelays.
  */
 
 import type { Action } from "applesauce-actions";

@@ -24,7 +24,7 @@ import { filter, map, timeout } from "rxjs/operators";
 import { MailboxesModel } from "applesauce-core/models";
 import { cacheRequest, saveEvents } from "./cache";
 import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
-import { extraRelays, lookupRelays, gitIndexRelays } from "./settings";
+import { fallbackRelays, lookupRelays, gitIndexRelays } from "./settings";
 import {
   ISSUE_KIND,
   PR_ROOT_KINDS,
@@ -124,7 +124,7 @@ async function resolveMailboxes(pubkey: string) {
  *   - "30617:<pubkey>:<d>"   → repo's declared relays from the EventStore
  *
  *   Static (settings-based):
- *   - "extra-relays"         → user-configured extra relays (extraRelays setting)
+ *   - "fallback-relays"      → user-configured fallback relays (fallbackRelays setting)
  *   - "index-relays"         → lookup/user-index relays (lookupRelays setting)
  *   - "git-index"            → git index relay (wss://index.ngit.dev)
  *   - "bootstrap-relays"     → hardcoded new-account bootstrap relays
@@ -176,7 +176,7 @@ const relayGroupResolver: RelayGroupResolver = async (groupId) => {
   }
 
   // Static settings-based groups
-  if (groupId === "extra-relays") return extraRelays.getValue();
+  if (groupId === "fallback-relays") return fallbackRelays.getValue();
   if (groupId === "index-relays") return lookupRelays.getValue();
   if (groupId === "git-index") return gitIndexRelays.getValue();
   if (groupId === "bootstrap-relays") {
@@ -247,7 +247,7 @@ watchAnyMailboxForOutboxReResolve();
  *
  * This is the low-level publish used by the ActionRunner for built-in
  * applesauce actions (UpdateProfile, AddOutboxRelay, etc.). It publishes to
- * the union of the provided relays and the global extraRelays fallback, and
+ * the union of the provided relays and the global fallbackRelays, and
  * records the attempt in the outbox store for retry and UI display.
  *
  * For NIP-34 events (issues, status changes, renames) use the dedicated
@@ -265,7 +265,7 @@ export async function publish(
   // Add to local store immediately for optimistic updates
   eventStore.add(event);
 
-  const groupIds = [`outbox:${event.pubkey}`, "extra-relays"];
+  const groupIds = [`outbox:${event.pubkey}`, "fallback-relays"];
   if (extraGroupIds) groupIds.push(...extraGroupIds);
   await outboxStore.publish(event, groupIds);
 }
@@ -283,7 +283,7 @@ export async function publish(
 export const eventLoader = createEventLoaderForStore(eventStore, pool, {
   cacheRequest,
   lookupRelays: lookupRelays.getValue(),
-  extraRelays: extraRelays,
+  extraRelays: fallbackRelays,
   followRelayHints: true,
   bufferTime: 1000, // Batch requests within 1 second
 });
@@ -294,7 +294,7 @@ export const eventLoader = createEventLoaderForStore(eventStore, pool, {
  */
 export const addressLoader = createAddressLoader(pool, {
   cacheRequest,
-  extraRelays: extraRelays,
+  extraRelays: fallbackRelays,
   eventStore,
   lookupRelays: lookupRelays.getValue(),
 });
@@ -311,7 +311,7 @@ export const reactionsLoader = createReactionsLoader(pool, {
 /** Create loader for loading zaps for other events */
 export const zapsLoader = createZapsLoader(pool, {
   cacheRequest,
-  extraRelays,
+  extraRelays: fallbackRelays,
   eventStore,
 });
 
