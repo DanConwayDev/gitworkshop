@@ -126,8 +126,8 @@ function NostrMention({ pubkey }: { pubkey: string }) {
     <Link
       to={userPath}
       className={cn(
-        "inline-flex items-center gap-1 align-middle bg-muted border border-border rounded-full px-1.5 py-0.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
-        isPlaceholder ? "text-muted-foreground font-mono" : "text-foreground",
+        "inline-flex items-center gap-1 align-middle bg-muted border border-border rounded-full px-1.5 py-0.5 text-sm text-foreground font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
+        isPlaceholder && "text-muted-foreground font-mono",
       )}
     >
       <UserAvatar pubkey={pubkey} size="xs" className="shrink-0" />
