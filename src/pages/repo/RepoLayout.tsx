@@ -20,6 +20,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useLoadProfile } from "@/hooks/useLoadProfile";
 import { useUserPath } from "@/hooks/useUserPath";
 import { UserAvatar } from "@/components/UserAvatar";
+import { EventSearchStatus } from "@/components/EventSearchStatus";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { withGapFill } from "@/lib/withGapFill";
@@ -170,7 +171,11 @@ function RepoLayoutResolved({
   nip05?: string;
 }) {
   const store = useEventStore();
-  const resolved = useResolvedRepository(pubkey, repoId, relayHints);
+  const { resolved, repoSearch } = useResolvedRepository(
+    pubkey,
+    repoId,
+    relayHints,
+  );
   const repo = resolved?.repo;
 
   // Prefetch NIP-05 identities for all maintainers so useRepoPath can resolve
@@ -400,6 +405,7 @@ function RepoLayoutResolved({
           pubkey,
           repoId,
           resolved,
+          repoSearch,
           issues,
           prs,
           queryOptions,
@@ -565,6 +571,19 @@ function RepoLayoutResolved({
             <RepoAboutPage />
           ) : null}
         </RepoContext.Provider>
+      ) : repoSearch &&
+        (repoSearch.concludedNotFound ||
+          repoSearch.deleted ||
+          repoSearch.vanished ||
+          // Show search status once relays are being searched (not just skeleton)
+          Object.keys(repoSearch.relayStatuses).length > 0) &&
+        !repoSearch.found ? (
+        <EventSearchStatus
+          search={repoSearch}
+          itemLabel="Repository"
+          backPath="/"
+          backLabel="Back to repositories"
+        />
       ) : (
         <div className="container max-w-screen-xl px-4 md:px-8 py-6">
           <Skeleton className="h-64 w-full" />

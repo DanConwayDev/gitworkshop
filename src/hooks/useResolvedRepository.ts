@@ -1,22 +1,35 @@
 import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
+import {
+  useEventSearch,
+  type EventSearchState,
+  type RelayGroupSpec,
+} from "./useEventSearch";
+import type { SearchTarget } from "@/lib/searchForEvent";
 import { includeMailboxes, mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { RelayGroup } from "applesauce-relay";
 import type { RelayGroup as RelayGroupType } from "applesauce-relay";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
-import { pool, liveness } from "@/services/nostr";
-import { resilientSubscription } from "@/lib/resilientSubscription";
+import {
+  pool,
+  liveness,
+  eventStore as globalEventStore,
+} from "@/services/nostr";
 import { withGapFill } from "@/lib/withGapFill";
 import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
-import { gitIndexRelays } from "@/services/settings";
+import {
+  gitIndexRelays,
+  extraRelays,
+  relayCurationMode,
+} from "@/services/settings";
 import { RepositoryModel } from "@/models/RepositoryModel";
 import { RepositoryRelayGroup } from "@/models/RepositoryRelayGroup";
 import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
 import { combineLatest, of } from "rxjs";
-import { switchMap } from "rxjs/operators";
+import { switchMap, map } from "rxjs/operators";
 
 /** Max healthy mailbox relays to take per maintainer when querying NIP-65 relays. */
 const MAX_MAILBOX_RELAYS_PER_USER = 3;
@@ -32,6 +45,16 @@ export interface ResolvedRepository {
    *  When outbox curation mode is enabled, subscribe to this group IN ADDITION
    *  to repoRelayGroup — do not swap one for the other. */
   extraRelaysForMaintainerMailboxCoverage: RelayGroupType;
+}
+
+/** Full result from useResolvedRepository, including search state for the
+ *  repo announcement itself. */
+export interface ResolvedRepositoryResult {
+  /** The resolved repository data and relay groups, or undefined while loading. */
+  resolved: ResolvedRepository | undefined;
+  /** Search state for the repo announcement — undefined if the event was
+   *  already in the store (no search needed). */
+  repoSearch: EventSearchState | undefined;
 }
 
 /**
@@ -75,9 +98,11 @@ function addMailboxRelaysToGroup(
  * Fetch and reactively resolve a single repository by selected maintainer
  * pubkey + d-tag.
  *
- * Layer 1: fetch the selected maintainer's announcement from gitIndexRelays.
- *          Skips the relay query if the announcement is already in the store,
- *          proceeding directly to Layer 2.
+ * Layer 1: search for the selected maintainer's announcement via useEventSearch.
+ *          Searches ordered relay groups sequentially (git index + relay hints
+ *          first, then outbox-mode extras). Skips the search if the announcement
+ *          is already in the store. Provides per-relay status signals and
+ *          not-found / deleted / vanished detection.
  *
  * Layer 2: RepositoryModel — reactive BFS chain resolution. Emits a new
  *          ResolvedRepo whenever any announcement in the chain changes.
@@ -92,44 +117,66 @@ function addMailboxRelaysToGroup(
  *          Always runs (not gated on useItemAuthorRelays) so announcement
  *          discovery is always thorough.
  *
- * Returns both groups. Callers always use repoRelayGroup and, when outbox
- * curation mode is enabled, additionally subscribe to
+ * Returns both groups plus search state. Callers always use repoRelayGroup
+ * and, when outbox curation mode is enabled, additionally subscribe to
  * extraRelaysForMaintainerMailboxCoverage.
  */
 export function useResolvedRepository(
   pubkey: string | undefined,
   dTag: string | undefined,
   relayHints: string[] = [],
-): ResolvedRepository | undefined {
+): ResolvedRepositoryResult {
   const store = useEventStore();
   const key = `${pubkey}:${dTag}`;
   const hintsKey = relayHints.join(",");
 
-  // Subscribe to gitIndexRelays so Layer 1 re-runs when the user changes
-  // their git index relay settings.
-  const liveGitIndexRelays =
-    use$(() => gitIndexRelays, []) ?? gitIndexRelays.getValue();
-  const gitIndexRelayKey = liveGitIndexRelays.join(",");
+  const curationMode = use$(relayCurationMode);
 
-  // Layer 1: seed the store with the selected maintainer's announcement.
-  // Skip the relay query if the event is already in the store cache.
-  // Include any URL relay hints so we can find the repo even if it isn't
-  // indexed on the default git index relays.
-  use$(() => {
-    if (!pubkey || !dTag) return undefined;
-    if (store.getReplaceable(REPO_KIND, pubkey, dTag)) return undefined;
-    const filter: Filter[] = [
-      { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
-    ];
-    const relays = [
-      ...liveGitIndexRelays,
-      ...relayHints.filter((r) => !liveGitIndexRelays.includes(r)),
-    ];
-    return resilientSubscription(pool, relays, filter).pipe(
-      onlyEvents(),
-      mapEventsToStore(store),
-    );
-  }, [key, hintsKey, gitIndexRelayKey, store]);
+  // ── Layer 1: search for the repo announcement via useEventSearch ─────────
+  // Check if the event is already in the store — skip the search if so.
+  const alreadyInStore =
+    pubkey && dTag
+      ? !!globalEventStore.getReplaceable(REPO_KIND, pubkey, dTag)
+      : false;
+
+  // Build relay groups based on curation mode:
+  //   - Always: git index relays + relay hints (merged into one group)
+  //   - Outbox mode: + extra relays as fallback
+  //   - Curated mode: only git index + hints
+  const searchGroups = useMemo<RelayGroupSpec[]>(() => {
+    const groups: RelayGroupSpec[] = [];
+
+    // Primary: git index relays + relay hints merged into one group.
+    // Use a static observable since these don't change within a render cycle
+    // (gitIndexRelays is a BehaviorSubject, relay hints are from the URL).
+    groups.push({
+      label: "git index",
+      relays$: gitIndexRelays.pipe(
+        map((gitRelays) => [
+          ...gitRelays,
+          ...relayHints.filter((r) => !gitRelays.includes(r)),
+        ]),
+      ),
+    });
+
+    if (curationMode === "outbox") {
+      // Outbox mode: add extra relays as fallback
+      groups.push({
+        label: "extra relays",
+        relays$: extraRelays,
+      });
+    }
+
+    return groups;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [curationMode, hintsKey]);
+
+  const searchTarget = useMemo<SearchTarget | undefined>(() => {
+    if (!pubkey || !dTag || alreadyInStore) return undefined;
+    return { type: "address", kind: REPO_KIND, pubkey, dTag };
+  }, [pubkey, dTag, alreadyInStore]);
+
+  const repoSearch = useEventSearch(searchTarget, searchGroups);
 
   // Layer 2: subscribe to the model.
   const repo = use$(() => {
@@ -272,7 +319,10 @@ export function useResolvedRepository(
     extraRelaysForMaintainerMailboxCoverage,
   ]);
 
-  if (!repo || !repoRelayGroup || !extraRelaysForMaintainerMailboxCoverage)
-    return undefined;
-  return { repo, repoRelayGroup, extraRelaysForMaintainerMailboxCoverage };
+  const resolved: ResolvedRepository | undefined =
+    repo && repoRelayGroup && extraRelaysForMaintainerMailboxCoverage
+      ? { repo, repoRelayGroup, extraRelaysForMaintainerMailboxCoverage }
+      : undefined;
+
+  return { resolved, repoSearch };
 }

@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { ResolvedRepository } from "@/hooks/useResolvedRepository";
+import type { EventSearchState } from "@/hooks/useEventSearch";
 import type {
   ResolvedIssueLite,
   ResolvedPRLite,
@@ -14,6 +15,9 @@ export interface RepoContextValue {
   repoId: string;
   /** The resolved repository data and relay groups. */
   resolved: ResolvedRepository | undefined;
+  /** Search state for the repo announcement — undefined if the event was
+   *  already in the store (no search needed). */
+  repoSearch: EventSearchState | undefined;
   issues: ResolvedIssueLite[] | undefined;
   prs: ResolvedPRLite[] | undefined;
   queryOptions: RepoQueryOptions;
