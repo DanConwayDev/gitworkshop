@@ -13,8 +13,6 @@ import { formatDistanceToNow } from "date-fns";
 import { EditableSubject } from "@/components/EditSubjectInline";
 import {
   EventBodyCard,
-  EventBodyCardSkeleton,
-  CommentSkeleton,
   CoverNoteCard,
   SubjectRenameCard,
   StatusChangeCard,
@@ -34,7 +32,6 @@ import { LabelBadge } from "@/components/LabelBadge";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { ReplyBox } from "@/components/ReplyBox";
 import { CoverNoteBox } from "@/components/CoverNoteBox";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -722,19 +719,7 @@ export default function PRPage() {
               {/* Right: tabs */}
               <div className="shrink-0">{tabBar}</div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex gap-3">
-                <Skeleton className="h-6 w-16 rounded-full" />
-                <Skeleton className="h-7 w-96" />
-              </div>
-              <div className="flex gap-3">
-                <Skeleton className="h-6 w-6 rounded-full" />
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-4 w-20" />
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -743,6 +728,13 @@ export default function PRPage() {
         {/* Commit detail view — shown instead of tab panels when on a commit URL */}
         {prCommitId ? (
           commitDetailContent
+        ) : !pr ? (
+          <div className="min-h-[40vh] flex items-center justify-center">
+            <div className="text-center space-y-3">
+              <div className="h-8 w-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-sm text-muted-foreground">Fetching PR…</p>
+            </div>
+          </div>
         ) : (
           <div
             className={cn(
@@ -787,64 +779,54 @@ export default function PRPage() {
                 ) : null}
 
                 {/* PR / patch body */}
-                {pr ? (
-                  <EventBodyCard
-                    event={pr.rootEvent}
-                    content={pr.body}
-                    commits={
-                      pr.itemType === "pr" && prCommits.length > 0
-                        ? prCommits.map((c) => ({
-                            hash: c.hash,
-                            subject: c.message.split("\n")[0],
+                <EventBodyCard
+                  event={pr.rootEvent}
+                  content={pr.body}
+                  commits={
+                    pr.itemType === "pr" && prCommits.length > 0
+                      ? prCommits.map((c) => ({
+                          hash: c.hash,
+                          subject: c.message.split("\n")[0],
+                          href: prBasePath
+                            ? `${prBasePath}/commit/${c.hash}`
+                            : undefined,
+                        }))
+                      : pr.itemType === "patch" &&
+                          pr.initialPatchCommits &&
+                          pr.initialPatchCommits.length > 0
+                        ? pr.initialPatchCommits.map((c) => ({
+                            hash: c.commitId ?? c.eventId,
+                            subject: c.subject,
+                            noCommitId: !c.commitId,
                             href: prBasePath
-                              ? `${prBasePath}/commit/${c.hash}`
+                              ? `${prBasePath}/commit/${eventIdToNevent(c.eventId, repoRelayHints)}`
                               : undefined,
                           }))
-                        : pr.itemType === "patch" &&
-                            pr.initialPatchCommits &&
-                            pr.initialPatchCommits.length > 0
-                          ? pr.initialPatchCommits.map((c) => ({
-                              hash: c.commitId ?? c.eventId,
-                              subject: c.subject,
-                              noCommitId: !c.commitId,
-                              href: prBasePath
-                                ? `${prBasePath}/commit/${eventIdToNevent(c.eventId, repoRelayHints)}`
-                                : undefined,
-                            }))
-                          : undefined
-                    }
-                    commitsSuperseded={
-                      pr.itemType === "patch" &&
-                      pr.firstRevisionInlined === true &&
-                      pr.revisions.length > 1
-                    }
-                    commitsLatestHref={
-                      pr.itemType === "patch" &&
-                      pr.firstRevisionInlined === true &&
-                      pr.revisions.length > 1 &&
-                      prBasePath
-                        ? `${prBasePath}/commits`
                         : undefined
-                    }
-                    hasCoverLetter={
-                      pr.itemType === "patch" && !!pr.hasCoverLetter
-                    }
-                  />
-                ) : (
-                  <EventBodyCardSkeleton />
-                )}
+                  }
+                  commitsSuperseded={
+                    pr.itemType === "patch" &&
+                    pr.firstRevisionInlined === true &&
+                    pr.revisions.length > 1
+                  }
+                  commitsLatestHref={
+                    pr.itemType === "patch" &&
+                    pr.firstRevisionInlined === true &&
+                    pr.revisions.length > 1 &&
+                    prBasePath
+                      ? `${prBasePath}/commits`
+                      : undefined
+                  }
+                  hasCoverLetter={
+                    pr.itemType === "patch" && !!pr.hasCoverLetter
+                  }
+                />
 
                 {/* Interleaved timeline */}
                 <div className="space-y-1">
                   <Separator />
 
-                  {!pr ? (
-                    <div className="space-y-3 pt-3">
-                      {Array.from({ length: 2 }).map((_, i) => (
-                        <CommentSkeleton key={i} />
-                      ))}
-                    </div>
-                  ) : pr.timelineNodes.length === 0 ? (
+                  {pr.timelineNodes.length === 0 ? (
                     <div className="py-8 text-center text-muted-foreground/60 text-sm">
                       No activity yet. The conversation awaits its first voice.
                     </div>

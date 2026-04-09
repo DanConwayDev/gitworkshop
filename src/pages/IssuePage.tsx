@@ -7,8 +7,6 @@ import { formatDistanceToNow } from "date-fns";
 import { EditableSubject } from "@/components/EditSubjectInline";
 import {
   EventBodyCard,
-  EventBodyCardSkeleton,
-  CommentSkeleton,
   CoverNoteCard,
   SubjectRenameCard,
   StatusChangeCard,
@@ -25,7 +23,6 @@ import { LabelBadge } from "@/components/LabelBadge";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { ReplyBox } from "@/components/ReplyBox";
 import { CoverNoteBox } from "@/components/CoverNoteBox";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -178,254 +175,243 @@ export default function IssuePage() {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex gap-3">
-                <Skeleton className="h-6 w-16 rounded-full" />
-                <Skeleton className="h-7 w-96" />
-              </div>
-              <div className="flex gap-3">
-                <Skeleton className="h-6 w-6 rounded-full" />
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-4 w-20" />
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
 
       {/* Content */}
       <div className="container max-w-screen-xl px-4 md:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
-          {/* Main content */}
-          <div className="min-w-0 space-y-4">
-            {/* Cover note — pinned note from author/maintainer */}
-            {coverNoteEditing && issue ? (
-              <CoverNoteBox
-                rootEvent={issue.rootEvent}
-                repoCoords={issue.repoCoords}
-                initialContent={issue.coverNotes?.[0]?.content ?? ""}
-                onSubmitted={() => setCoverNoteEditing(false)}
-                onCancel={() => setCoverNoteEditing(false)}
-                priorityPubkeys={mentionPriorityPubkeys}
-              />
-            ) : issue?.coverNotes && issue.coverNotes.length > 0 ? (
-              <CoverNoteCard
-                events={issue.coverNotes}
-                onEdit={canEdit ? () => setCoverNoteEditing(true) : undefined}
-              />
-            ) : canEdit && issue ? (
-              /* Subtle "Add cover note" button — only for authorised users */
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setCoverNoteEditing(true)}
-                className="gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground h-7 -ml-2"
-              >
-                <Pin className="h-3 w-3" />
-                Add cover note
-              </Button>
-            ) : null}
+        {!issue ? (
+          <div className="min-h-[40vh] flex items-center justify-center">
+            <div className="text-center space-y-3">
+              <div className="h-8 w-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-sm text-muted-foreground">Fetching issue…</p>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+            {/* Main content */}
+            <div className="min-w-0 space-y-4">
+              {/* Cover note — pinned note from author/maintainer */}
+              {coverNoteEditing && issue ? (
+                <CoverNoteBox
+                  rootEvent={issue.rootEvent}
+                  repoCoords={issue.repoCoords}
+                  initialContent={issue.coverNotes?.[0]?.content ?? ""}
+                  onSubmitted={() => setCoverNoteEditing(false)}
+                  onCancel={() => setCoverNoteEditing(false)}
+                  priorityPubkeys={mentionPriorityPubkeys}
+                />
+              ) : issue?.coverNotes && issue.coverNotes.length > 0 ? (
+                <CoverNoteCard
+                  events={issue.coverNotes}
+                  onEdit={canEdit ? () => setCoverNoteEditing(true) : undefined}
+                />
+              ) : canEdit && issue ? (
+                /* Subtle "Add cover note" button — only for authorised users */
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCoverNoteEditing(true)}
+                  className="gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground h-7 -ml-2"
+                >
+                  <Pin className="h-3 w-3" />
+                  Add cover note
+                </Button>
+              ) : null}
 
-            {/* Issue body */}
-            {issue ? (
+              {/* Issue body */}
               <EventBodyCard event={issue.rootEvent} content={issue.body} />
-            ) : (
-              <EventBodyCardSkeleton />
-            )}
 
-            {/* Thread: comments + subject renames */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <MessageCircle className="h-4 w-4" />
-                <span>
-                  {issue
-                    ? `${issue.commentCount} ${issue.commentCount === 1 ? "comment" : "comments"}`
-                    : "Loading comments..."}
-                </span>
+              {/* Thread: comments + subject renames */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <MessageCircle className="h-4 w-4" />
+                  <span>
+                    {`${issue.commentCount} ${issue.commentCount === 1 ? "comment" : "comments"}`}
+                  </span>
+                </div>
+
+                <Separator />
+
+                {issue.timelineNodes.length === 0 ? (
+                  <div className="py-8 text-center text-muted-foreground/60 text-sm">
+                    No comments yet. The conversation awaits its first voice.
+                  </div>
+                ) : (
+                  <div
+                    className="min-w-0 border-l pl-1 space-y-0.5"
+                    style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
+                  >
+                    {issue.timelineNodes.map((node, idx) => {
+                      if (node.type === "rename") {
+                        return (
+                          <SubjectRenameCard
+                            key={node.event.id}
+                            event={node.event}
+                            oldSubject={node.oldSubject}
+                            newSubject={node.newSubject}
+                          />
+                        );
+                      }
+                      if (node.type === "status") {
+                        return (
+                          <StatusChangeCard
+                            key={node.event.id}
+                            event={node.event}
+                            status={node.status}
+                            authorised={node.authorised}
+                            variant="issue"
+                          />
+                        );
+                      }
+                      if (node.type === "label") {
+                        return (
+                          <LabelChangeCard
+                            key={node.event.id}
+                            event={node.event}
+                            labels={node.labels}
+                            authorised={node.authorised}
+                          />
+                        );
+                      }
+                      // thread node
+                      return (
+                        <ThreadTree
+                          key={`thread-${node.node.event.id}-${idx}`}
+                          node={node.node}
+                          threadContext={
+                            activeAccount && issue
+                              ? {
+                                  rootEvent: issue.rootEvent,
+                                  repoCoords: issue.repoCoords,
+                                  priorityPubkeys: mentionPriorityPubkeys,
+                                }
+                              : undefined
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
-              <Separator />
-
-              {!issue ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 2 }).map((_, i) => (
-                    <CommentSkeleton key={i} />
-                  ))}
-                </div>
-              ) : issue.timelineNodes.length === 0 ? (
-                <div className="py-8 text-center text-muted-foreground/60 text-sm">
-                  No comments yet. The conversation awaits its first voice.
-                </div>
-              ) : (
-                <div
-                  className="min-w-0 border-l pl-1 space-y-0.5"
-                  style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
-                >
-                  {issue.timelineNodes.map((node, idx) => {
-                    if (node.type === "rename") {
-                      return (
-                        <SubjectRenameCard
-                          key={node.event.id}
-                          event={node.event}
-                          oldSubject={node.oldSubject}
-                          newSubject={node.newSubject}
-                        />
-                      );
-                    }
-                    if (node.type === "status") {
-                      return (
-                        <StatusChangeCard
-                          key={node.event.id}
-                          event={node.event}
-                          status={node.status}
-                          authorised={node.authorised}
-                          variant="issue"
-                        />
-                      );
-                    }
-                    if (node.type === "label") {
-                      return (
-                        <LabelChangeCard
-                          key={node.event.id}
-                          event={node.event}
-                          labels={node.labels}
-                          authorised={node.authorised}
-                        />
-                      );
-                    }
-                    // thread node
-                    return (
-                      <ThreadTree
-                        key={`thread-${node.node.event.id}-${idx}`}
-                        node={node.node}
-                        threadContext={
-                          activeAccount && issue
-                            ? {
-                                rootEvent: issue.rootEvent,
-                                repoCoords: issue.repoCoords,
-                                priorityPubkeys: mentionPriorityPubkeys,
-                              }
-                            : undefined
-                        }
-                      />
-                    );
-                  })}
-                </div>
+              {/* Reply box — always shown; anonymous posting handled inside */}
+              {issue && (
+                <ReplyBox
+                  rootEvent={issue.rootEvent}
+                  priorityPubkeys={mentionPriorityPubkeys}
+                />
               )}
             </div>
 
-            {/* Reply box — always shown; anonymous posting handled inside */}
-            {issue && (
-              <ReplyBox
-                rootEvent={issue.rootEvent}
-                priorityPubkeys={mentionPriorityPubkeys}
-              />
-            )}
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-4">
-            {/* Stats card */}
-            <Card>
-              <CardContent className="p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Status</span>
-                  <StatusBadge status={issue?.status ?? "open"} />
-                </div>
-
-                {canEdit && issue && issue.status !== "deleted" && (
-                  <ChangeStatusDropdown
-                    itemId={issue.id}
-                    itemAuthorPubkey={issue.pubkey}
-                    repoCoords={issue.repoCoords}
-                    currentStatus={issue.status}
-                    options={[
-                      { value: "open", label: "Open" },
-                      { value: "resolved", label: "Resolved" },
-                      { value: "closed", label: "Closed" },
-                    ]}
-                  />
-                )}
-
-                <Separator />
-
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <MessageCircle className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Comments</span>
-                    <span className="ml-auto font-medium">
-                      {issue?.commentCount ?? 0}
+            {/* Sidebar */}
+            <div className="space-y-4">
+              {/* Stats card */}
+              <Card>
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      Status
                     </span>
+                    <StatusBadge status={issue?.status ?? "open"} />
                   </div>
 
-                  <div className="flex items-center gap-2 text-sm">
-                    <Zap className="h-4 w-4 text-amber-500" />
-                    <span className="text-muted-foreground">Zaps</span>
-                    <span className="ml-auto font-medium">
-                      {issue?.zapCount ?? 0}
-                    </span>
-                  </div>
+                  {canEdit && issue && issue.status !== "deleted" && (
+                    <ChangeStatusDropdown
+                      itemId={issue.id}
+                      itemAuthorPubkey={issue.pubkey}
+                      repoCoords={issue.repoCoords}
+                      currentStatus={issue.status}
+                      options={[
+                        { value: "open", label: "Open" },
+                        { value: "resolved", label: "Resolved" },
+                        { value: "closed", label: "Closed" },
+                      ]}
+                    />
+                  )}
 
-                  <div className="flex items-center gap-2 text-sm">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Participants</span>
-                    <span className="ml-auto font-medium">
-                      {issue?.participants.length ?? 0}
-                    </span>
-                  </div>
-                </div>
+                  <Separator />
 
-                <Separator />
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm">
+                      <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Comments</span>
+                      <span className="ml-auto font-medium">
+                        {issue?.commentCount ?? 0}
+                      </span>
+                    </div>
 
-                {/* Participant avatars */}
-                {issue && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Participants
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {issue.participants.map((pk) => (
-                        <UserAvatar
-                          key={pk}
-                          pubkey={pk}
-                          size="sm"
-                          linkToProfile
-                        />
-                      ))}
+                    <div className="flex items-center gap-2 text-sm">
+                      <Zap className="h-4 w-4 text-amber-500" />
+                      <span className="text-muted-foreground">Zaps</span>
+                      <span className="ml-auto font-medium">
+                        {issue?.zapCount ?? 0}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-sm">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">
+                        Participants
+                      </span>
+                      <span className="ml-auto font-medium">
+                        {issue?.participants.length ?? 0}
+                      </span>
                     </div>
                   </div>
-                )}
 
-                {/* Labels */}
-                {issue && issue.labels.length > 0 && (
-                  <>
-                    <Separator />
+                  <Separator />
+
+                  {/* Participant avatars */}
+                  {issue && (
                     <div>
                       <p className="text-xs text-muted-foreground mb-2">
-                        Labels
+                        Participants
                       </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {issue.labels.map((label) => (
-                          <LabelBadge key={label} label={label} />
+                      <div className="flex flex-wrap gap-1">
+                        {issue.participants.map((pk) => (
+                          <UserAvatar
+                            key={pk}
+                            pubkey={pk}
+                            size="sm"
+                            linkToProfile
+                          />
                         ))}
                       </div>
                     </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+                  )}
 
-            {/* Back link */}
-            <Link
-              to={`${repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)}/issues`}
-              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back to issues
-            </Link>
+                  {/* Labels */}
+                  {issue && issue.labels.length > 0 && (
+                    <>
+                      <Separator />
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Labels
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {issue.labels.map((label) => (
+                            <LabelBadge key={label} label={label} />
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Back link */}
+              <Link
+                to={`${repoToPath(pubkey, repoId, repo?.relays ?? [], nip05)}/issues`}
+                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to issues
+              </Link>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </>
   );
