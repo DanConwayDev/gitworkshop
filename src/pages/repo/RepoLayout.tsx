@@ -593,11 +593,27 @@ function RepoLayoutResolved({
           backPath="/"
           backLabel="Back to repositories"
         />
-      ) : (
-        <div className="container max-w-screen-xl px-4 md:px-8 py-6">
-          <Skeleton className="h-64 w-full" />
-        </div>
-      )}
+      ) : subPage === "issue" || subPage === "pr" || subPage === "pr-commit" ? (
+        /* Show an issue/PR-shaped skeleton while the repo context resolves,
+           so the transition to the real page feels seamless. */
+        <>
+          <div className="border-b border-border/40">
+            <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-4">
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  <Skeleton className="h-6 w-16 rounded-full" />
+                  <Skeleton className="h-7 w-96" />
+                </div>
+                <div className="flex gap-3">
+                  <Skeleton className="h-6 w-6 rounded-full" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
