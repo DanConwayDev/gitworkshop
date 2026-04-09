@@ -133,17 +133,12 @@ function RepoLayoutNip05({
     return <Nip05ResolveError nip05={nip05} reason={identity.reason} />;
   }
 
-  // Merge relay hints: identity relays first (authoritative), then URL hints
-  const mergedRelays = [
-    ...identity.relays,
-    ...relayHints.filter((r) => !identity.relays.includes(r)),
-  ];
-
   return (
     <RepoLayoutResolved
       pubkey={identity.pubkey}
       repoId={repoId}
-      relayHints={mergedRelays}
+      nip05Relays={identity.relays}
+      relayHints={relayHints}
       location={location}
       splat={splat}
       nip05={nip05}
@@ -158,6 +153,7 @@ function RepoLayoutNip05({
 function RepoLayoutResolved({
   pubkey,
   repoId,
+  nip05Relays,
   relayHints,
   location,
   splat,
@@ -165,6 +161,8 @@ function RepoLayoutResolved({
 }: {
   pubkey: string;
   repoId: string;
+  /** Relay hints from NIP-05 identity resolution (shown as their own group). */
+  nip05Relays?: string[];
   relayHints: string[];
   location: ReturnType<typeof useLocation>;
   splat: string;
@@ -175,6 +173,7 @@ function RepoLayoutResolved({
     pubkey,
     repoId,
     relayHints,
+    nip05Relays,
   );
   const repo = resolved?.repo;
 

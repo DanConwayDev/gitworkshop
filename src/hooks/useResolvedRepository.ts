@@ -121,10 +121,12 @@ export function useResolvedRepository(
   pubkey: string | undefined,
   dTag: string | undefined,
   relayHints: string[] = [],
+  nip05Relays: string[] = [],
 ): ResolvedRepositoryResult {
   const store = useEventStore();
   const key = `${pubkey}:${dTag}`;
   const hintsKey = relayHints.join(",");
+  const nip05RelaysKey = nip05Relays.join(",");
 
   // ── Layer 1: search for the repo announcement via useEventSearch ─────────
   // Check if the event is already in the store — skip the search if so.
@@ -140,16 +142,29 @@ export function useResolvedRepository(
   const searchGroups = useMemo<RelayGroupSpec[]>(() => {
     const groups: RelayGroupSpec[] = [];
 
-    // Primary: git index relays + relay hints merged into one group.
-    // Use a static observable since these don't change within a render cycle
-    // (gitIndexRelays is a BehaviorSubject, relay hints are from the URL).
+    // First: NIP-05 identity relays — most authoritative for nip05 routes.
+    if (nip05Relays.length > 0) {
+      groups.push({
+        label: "NIP-05 relays",
+        relays$: of(nip05Relays),
+      });
+    }
+
+    // Second: URL relay hints (naddr hints etc.), excluding any NIP-05 relays.
+    const urlOnlyHints = relayHints.filter((r) => !nip05Relays.includes(r));
+    if (urlOnlyHints.length > 0) {
+      groups.push({
+        label: "relay hints",
+        relays$: of(urlOnlyHints),
+      });
+    }
+
+    // Third: git index relays (excluding hints already covered above).
+    const allHints = new Set([...nip05Relays, ...relayHints]);
     groups.push({
       label: "git index",
       relays$: gitIndexRelays.pipe(
-        map((gitRelays) => [
-          ...gitRelays,
-          ...relayHints.filter((r) => !gitRelays.includes(r)),
-        ]),
+        map((gitRelays) => gitRelays.filter((r) => !allHints.has(r))),
       ),
     });
 
@@ -164,7 +179,7 @@ export function useResolvedRepository(
 
     return groups;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hintsKey]);
+  }, [hintsKey, nip05RelaysKey]);
 
   const searchTarget = useMemo<SearchTarget | undefined>(() => {
     if (!pubkey || !dTag || alreadyInStore) return undefined;
