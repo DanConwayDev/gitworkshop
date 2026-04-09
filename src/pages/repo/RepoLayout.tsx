@@ -400,7 +400,7 @@ function RepoLayoutResolved({
   }, [splat, prId]);
 
   const ctxValue: RepoContextValue | null =
-    pubkey && repoId
+    pubkey && repoId && resolved
       ? {
           pubkey,
           repoId,
