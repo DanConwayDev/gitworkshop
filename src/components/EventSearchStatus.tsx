@@ -52,9 +52,13 @@ function RelayStatusIcon({ status }: { status: RelaySearchStatus }) {
     case "found":
       return <CheckCircle2 className="h-3 w-3 shrink-0 text-green-500" />;
     case "error":
-      return <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive/80" />;
+      return (
+        <XCircle className="h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-400" />
+      );
     case "connection-failed":
-      return <WifiOff className="h-3.5 w-3.5 shrink-0 text-destructive/80" />;
+      return (
+        <WifiOff className="h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-400" />
+      );
     case "timeout":
       return <Clock className="h-3 w-3 shrink-0 text-muted-foreground/60" />;
   }
@@ -73,14 +77,14 @@ function RelayRow({ url, status }: { url: string; status: RelaySearchStatus }) {
         className={cn(
           "truncate flex-1",
           isFailed
-            ? "line-through text-destructive/60"
+            ? "line-through text-red-600/70 dark:text-red-400/70"
             : "text-muted-foreground",
         )}
       >
         {url}
       </span>
       {isFailed && (
-        <span className="shrink-0 text-xs font-sans text-destructive/80">
+        <span className="shrink-0 text-xs font-sans text-red-600 dark:text-red-400">
           connection failure
         </span>
       )}
