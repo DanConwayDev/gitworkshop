@@ -84,6 +84,7 @@ export function persist<T>(
 const DEFAULT_EXTRA_RELAYS = relaySet([
   "wss://relay.ditto.pub",
   "wss://relay.damus.io",
+  "wss://nos.lol",
 ]);
 
 export const extraRelays = new BehaviorSubject<string[]>(DEFAULT_EXTRA_RELAYS);
