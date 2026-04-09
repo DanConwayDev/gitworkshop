@@ -130,7 +130,7 @@ function reduceSignal(
         ...state,
         relayStatuses: {
           ...state.relayStatuses,
-          [signal.relay]: { status: "error", group: signal.group },
+          [signal.relay]: { status: signal.kind, group: signal.group },
         },
       };
 

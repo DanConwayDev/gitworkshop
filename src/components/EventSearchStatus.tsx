@@ -21,6 +21,8 @@ import {
   Trash2,
   UserX,
   XCircle,
+  WifiOff,
+  Clock,
 } from "lucide-react";
 import type {
   EventSearchState,
@@ -50,6 +52,21 @@ function RelayStatusIcon({ status }: { status: RelaySearchStatus }) {
       return <CheckCircle2 className="h-3 w-3 shrink-0 text-green-500" />;
     case "error":
       return <XCircle className="h-3 w-3 shrink-0 text-destructive/60" />;
+    case "connection-failed":
+      return <WifiOff className="h-3 w-3 shrink-0 text-destructive/60" />;
+    case "timeout":
+      return <Clock className="h-3 w-3 shrink-0 text-amber-500/70" />;
+  }
+}
+
+function relayStatusLabel(status: RelaySearchStatus): string | undefined {
+  switch (status) {
+    case "connection-failed":
+      return "connection failed";
+    case "timeout":
+      return "no response";
+    default:
+      return undefined;
   }
 }
 
@@ -183,15 +200,23 @@ export function EventSearchStatus({
                     {group.label}
                   </p>
                   <ul className="space-y-1">
-                    {group.relays.map(({ url, status }) => (
-                      <li
-                        key={url}
-                        className="flex items-center gap-2 text-xs font-mono text-muted-foreground"
-                      >
-                        <RelayStatusIcon status={status} />
-                        <span className="truncate">{url}</span>
-                      </li>
-                    ))}
+                    {group.relays.map(({ url, status }) => {
+                      const label = relayStatusLabel(status);
+                      return (
+                        <li
+                          key={url}
+                          className="flex items-center gap-2 text-xs font-mono text-muted-foreground"
+                        >
+                          <RelayStatusIcon status={status} />
+                          <span className="truncate flex-1">{url}</span>
+                          {label && (
+                            <span className="shrink-0 text-xs font-sans text-muted-foreground/60 italic">
+                              {label}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ))}

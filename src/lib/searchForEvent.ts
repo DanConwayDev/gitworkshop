@@ -33,13 +33,21 @@ import type { RelayPool } from "applesauce-relay";
 import { completeOnEose, onlyEvents } from "applesauce-relay";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
-import { Observable, Subject, Subscription, EMPTY, timer } from "rxjs";
+import {
+  Observable,
+  Subject,
+  Subscription,
+  EMPTY,
+  timer,
+  TimeoutError,
+} from "rxjs";
 import {
   take,
   map,
   takeUntil,
   debounceTime,
   distinctUntilChanged,
+  timeout,
 } from "rxjs/operators";
 
 // ---------------------------------------------------------------------------
@@ -94,7 +102,9 @@ export type RelaySearchStatus =
   | "searching"
   | "eose"
   | "found"
-  | "error";
+  | "error"
+  | "connection-failed"
+  | "timeout";
 
 /** Discriminated union of all signals emitted by searchForEvent. */
 export type SearchSignal =
@@ -107,7 +117,14 @@ export type SearchSignal =
       group: string;
       event: NostrEvent;
     }
-  | { type: "relay-error"; relay: string; group: string; error: Error }
+  | {
+      type: "relay-error";
+      relay: string;
+      group: string;
+      error: Error;
+      /** "connection-failed" = relay never connected; "timeout" = connected but no response; "error" = other */
+      kind: "connection-failed" | "timeout" | "error";
+    }
   | { type: "group-exhausted"; group: string }
   | { type: "deletion-found"; event: NostrEvent }
   | { type: "vanish-found"; event: NostrEvent }
@@ -126,6 +143,14 @@ export interface SearchForEventOptions {
    * Default: 4000 ms.
    */
   deferTimeout?: number;
+  /**
+   * Per-relay timeout: if a relay does not emit EOSE or an event within this
+   * many milliseconds, it is treated as an error. This handles relays that
+   * accept the connection but never respond, or relays that fail to connect
+   * and whose req() observable hangs indefinitely.
+   * Default: 8000 ms.
+   */
+  relayTimeout?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +237,7 @@ export function searchForEvent(
 
   const settleTime = opts.settleTime ?? 200;
   const deferTimeout = opts.deferTimeout ?? 4000;
+  const relayTimeout = opts.relayTimeout ?? 8000;
   const searchFilter = buildFilter(target);
 
   return new Observable<SearchSignal>((subscriber) => {
@@ -313,9 +339,33 @@ export function searchForEvent(
           group: groupLabel,
         });
 
-        const sub = pool
-          .subscription([relayUrl], [searchFilter], { reconnect: false })
+        // Track whether the relay ever establishes a WebSocket connection
+        // before the timeout fires. We subscribe to connected$ immediately so
+        // we capture the very first connection attempt, not the state at
+        // timeout time (by which point the relay may have reconnected).
+        let everConnected = false;
+        const relayInstance = pool.relay(relayUrl);
+        const connSub = relayInstance.connected$
           .pipe(takeUntil(found$))
+          .subscribe((connected) => {
+            if (connected) everConnected = true;
+          });
+        teardown.add(connSub);
+
+        // Use relayInstance.req() directly instead of pool.req([url]) to
+        // bypass RelayGroup.internalSubscription()'s catchError wrapper, which
+        // silently converts connection errors into fake EOSE messages — making
+        // an unreachable relay look like a successful empty response.
+        const sub = relayInstance
+          .req([searchFilter])
+          .pipe(
+            // If the relay doesn't respond within relayTimeout ms, treat it as
+            // an error. This handles relays that fail to connect (req() hangs
+            // indefinitely because the Relay class catches connection errors
+            // internally and retries — it never propagates them to subscribers).
+            timeout({ first: relayTimeout }),
+            takeUntil(found$),
+          )
           .subscribe({
             next: (msg) => {
               if (found) return;
@@ -355,11 +405,22 @@ export function searchForEvent(
             },
             error: (err) => {
               activeRelays.delete(relayUrl);
+              // Classify the error using the connection history we tracked:
+              // - TimeoutError + never connected → connection-failed (unreachable)
+              // - TimeoutError + was connected   → timeout (connected but no response)
+              // - anything else                  → generic error
+              let errorKind: "connection-failed" | "timeout" | "error";
+              if (err instanceof TimeoutError) {
+                errorKind = everConnected ? "timeout" : "connection-failed";
+              } else {
+                errorKind = "error";
+              }
               subscriber.next({
                 type: "relay-error",
                 relay: relayUrl,
                 group: groupLabel,
                 error: err instanceof Error ? err : new Error(String(err)),
+                kind: errorKind,
               });
 
               // Errors also nudge the settle debounce for immediate groups
@@ -463,7 +524,7 @@ export function searchForEvent(
       const relays = [...new Set(allRelaysSearched)];
 
       const sub = pool
-        .subscription(relays, allFilters, { reconnect: false })
+        .req(relays, allFilters)
         .pipe(completeOnEose(), onlyEvents(), takeUntil(found$))
         .subscribe({
           next: (event) => {
