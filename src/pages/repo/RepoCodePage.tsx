@@ -1615,7 +1615,7 @@ function ReadmeViewer({
             />
           </Suspense>
         ) : (
-          <pre className="text-sm whitespace-pre-wrap font-mono text-foreground/80 leading-relaxed">
+          <pre className="text-sm whitespace-pre-wrap font-mono text-foreground/80 leading-relaxed break-words overflow-x-auto">
             {content}
           </pre>
         )}
