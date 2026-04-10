@@ -16,6 +16,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Check,
+  CheckCircle2,
   Copy,
   Download,
   Eye,
@@ -55,6 +56,7 @@ export function AuthModal() {
 
   const [view, setView] = useState<AuthModalView>(initialView);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [loginSuccessVisible, setLoginSuccessVisible] = useState(false);
 
   // Create-account state
   const [createStep, setCreateStep] =
@@ -86,6 +88,7 @@ export function AuthModal() {
       setAckExposure(false);
       setIsPublishing(false);
       setNameError("");
+      setLoginSuccessVisible(false);
       // When opened directly on sign-in, skip the outer modal and go straight
       // to LoginDialog
       if (initialView === "sign-in") {
@@ -114,9 +117,13 @@ export function AuthModal() {
   }, [view, closeAuthModal]);
 
   const handleLoginSuccess = useCallback(() => {
-    setLoginDialogOpen(false);
-    closeAuthModal();
-    onAuthSuccess?.();
+    setLoginSuccessVisible(true);
+    setTimeout(() => {
+      setLoginSuccessVisible(false);
+      setLoginDialogOpen(false);
+      closeAuthModal();
+      onAuthSuccess?.();
+    }, 1000);
   }, [closeAuthModal, onAuthSuccess]);
 
   // ---------------------------------------------------------------------------
@@ -524,6 +531,25 @@ export function AuthModal() {
         onLogin={handleLoginSuccess}
         onCreateAccount={handleCreateAccountFromLogin}
       />
+
+      {/* Success dialog — same backdrop + sizing as LoginDialog, shown for 1 s */}
+      <Dialog open={loginSuccessVisible}>
+        <DialogContent
+          className="max-w-[95vw] sm:max-w-sm max-h-[90dvh] p-0 gap-0 overflow-hidden rounded-2xl flex flex-col items-center justify-center min-h-64 [&>button]:hidden"
+          aria-describedby={undefined}
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <div className="flex flex-col items-center justify-center gap-4 py-12">
+            <div className="flex items-center justify-center w-24 h-24 rounded-full bg-green-500/15">
+              <CheckCircle2 className="w-14 h-14 text-green-500" />
+            </div>
+            <p className="text-lg font-semibold text-green-600 dark:text-green-400">
+              Logged in!
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
