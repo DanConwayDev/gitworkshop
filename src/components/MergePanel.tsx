@@ -207,9 +207,7 @@ export function MergePanel({
     const tzMins = (Math.abs(tzOffset) % 60).toString().padStart(2, "0");
     return {
       name: profile?.displayName || profile?.name || "Anonymous",
-      email:
-        profile?.nip05 ??
-        `${nip19.npubEncode(account.pubkey).slice(0, 16)}@nostr`,
+      email: profile?.nip05 ?? `${nip19.npubEncode(account.pubkey)}@nostr`,
       timestamp: now,
       timezone: `${tzSign}${tzHours}${tzMins}`,
     };
@@ -311,8 +309,7 @@ export function MergePanel({
       const committerName =
         profile?.displayName || profile?.name || "Anonymous";
       const committerEmail =
-        profile?.nip05 ??
-        `${nip19.npubEncode(account.pubkey).slice(0, 16)}@nostr`;
+        profile?.nip05 ?? `${nip19.npubEncode(account.pubkey)}@nostr`;
 
       const now = Math.floor(Date.now() / 1000);
       const tzOffset = new Date().getTimezoneOffset();
