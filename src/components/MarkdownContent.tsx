@@ -14,6 +14,7 @@ import { cn, markdownUrlTransform } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 import rehypeHighlight from "rehype-highlight";
 import { remarkNostrMentions } from "applesauce-content/markdown";
 import type { Components } from "react-markdown";
@@ -89,7 +90,7 @@ const highlightLanguages = {
   yaml,
 };
 
-const remarkPlugins = [remarkGfm, remarkNostrMentions];
+const remarkPlugins = [remarkGfm, remarkBreaks, remarkNostrMentions];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const rehypePlugins: any[] = [
   [rehypeHighlight, { languages: highlightLanguages, detect: false }],

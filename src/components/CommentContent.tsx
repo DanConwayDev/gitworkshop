@@ -17,6 +17,7 @@
 import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 import { remarkNostrMentions } from "applesauce-content/markdown";
 import { decodePointer } from "applesauce-core/helpers";
 import type { Components } from "react-markdown";
@@ -163,7 +164,7 @@ const components: Components = {
   ),
 };
 
-const remarkPlugins = [remarkGfm, remarkNostrMentions];
+const remarkPlugins = [remarkGfm, remarkBreaks, remarkNostrMentions];
 
 // ---------------------------------------------------------------------------
 // Public component
