@@ -118,8 +118,19 @@ export function useLoginActions() {
         const secretKey = decoded.data; // Uint8Array
         const signer = new PrivateKeySigner(secretKey);
         const pubkey = await signer.getPublicKey();
-        const account = new Accounts.PrivateKeyAccount(pubkey, signer);
 
+        // Only skip adding if a PrivateKey account for this pubkey already
+        // exists — a different signer type for the same pubkey is a distinct
+        // account and should be added separately.
+        const existing = accounts
+          .getAccountsForPubkey(pubkey)
+          .find((a) => a instanceof Accounts.PrivateKeyAccount);
+        if (existing) {
+          accounts.setActive(existing);
+          return;
+        }
+
+        const account = new Accounts.PrivateKeyAccount(pubkey, signer);
         accounts.addAccount(account);
         accounts.setActive(account);
       } catch (error) {
@@ -209,7 +220,12 @@ export function useLoginActions() {
 
         const pubkey = await window.nostr!.getPublicKey();
 
-        const existing = accounts.getAccountForPubkey(pubkey);
+        // Only skip adding if an Extension account for this pubkey already
+        // exists — a different signer type for the same pubkey is a distinct
+        // account and should be added separately.
+        const existing = accounts
+          .getAccountsForPubkey(pubkey)
+          .find((a) => a instanceof Accounts.ExtensionAccount);
         if (existing) {
           accounts.setActive(existing);
           return;
