@@ -327,8 +327,15 @@ export function MergePanel({
         timezone,
       };
 
-      const patchAuthorNpub = nip19.npubEncode(pr.pubkey);
-      const authorDisplayName = patchAuthorNpub.slice(0, 16) + "...";
+      const prNevent = nip19.neventEncode({
+        id: pr.rootEvent.id,
+        author: pr.pubkey,
+        relays: repo.relays.slice(0, 3),
+      });
+
+      // Use the latest cover note body if present, otherwise fall back to the
+      // original PR body.
+      const prDescription = pr.coverNote?.content || pr.body || undefined;
 
       const mergeCommitObj = await createMergeCommitObject(
         mergeability.buildResult.finalTreeHash,
@@ -336,7 +343,9 @@ export function MergePanel({
         mergeability.buildResult.tipCommitHash,
         committer,
         pr.currentSubject || pr.originalSubject,
-        authorDisplayName,
+        pr.itemType,
+        prNevent,
+        prDescription,
       );
 
       const allObjects: PackableObject[] = [

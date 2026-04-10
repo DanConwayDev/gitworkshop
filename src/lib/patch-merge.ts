@@ -839,14 +839,16 @@ export async function applyPatchChainToTip(
  *   - parents = [defaultBranchHead, patchTipCommitHash]
  *   - author = patch author (from the root patch)
  *   - committer = the logged-in maintainer
- *   - message = "Merge patch '<subject>' from <author-name>"
+ *   - message = "Merge patch '<subject>' from <author-name>\n\n<description>\n\nNostr-PR: <nevent>"
  *
  * @param finalTreeHash       - Tree hash from buildPatchChainObjects
  * @param defaultBranchHead   - Current HEAD of the default branch
  * @param patchTipCommitHash  - Tip commit hash of the patch chain
  * @param committer           - The maintainer performing the merge
  * @param subject             - The PR/patch subject for the merge message
- * @param authorName          - The patch author's display name
+ * @param itemType            - Whether this is a "patch" (kind:1617) or "pr" (kind:1618)
+ * @param nevent              - NIP-19 nevent identifier for the PR/patch event
+ * @param description         - Cover note content or original PR body (optional)
  */
 export async function createMergeCommitObject(
   finalTreeHash: string,
@@ -854,9 +856,18 @@ export async function createMergeCommitObject(
   patchTipCommitHash: string,
   committer: CommitPerson,
   subject: string,
-  authorName: string,
+  itemType: "patch" | "pr",
+  nevent: string,
+  description?: string,
 ): Promise<PackableObject> {
-  const message = `Merge patch '${subject}' from ${authorName}`;
+  const label = itemType === "pr" ? "PR" : "patch";
+  let message = `Merge ${label} '${subject}'`;
+
+  if (description && description.trim()) {
+    message += `\n\n${description.trim()}`;
+  }
+
+  message += `\n\nNostr-PR: ${nevent}`;
 
   const commitData: CommitData = {
     treeHash: finalTreeHash,
