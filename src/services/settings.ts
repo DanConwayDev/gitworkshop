@@ -1,5 +1,6 @@
 import { relaySet } from "applesauce-core/helpers";
-import { BehaviorSubject, Subject, Subscription } from "rxjs";
+import { BehaviorSubject, Observable, Subject, Subscription } from "rxjs";
+import { map, distinctUntilChanged } from "rxjs/operators";
 
 /**
  * Persists a BehaviorSubject or Subject to localStorage.
@@ -98,6 +99,28 @@ persist(fallbackRelays, "extraRelays", {
 });
 
 /**
+ * Returns an observable that emits true when the subject's current value
+ * differs from the serialized default — i.e. the user has customised it.
+ * Uses JSON serialization for comparison (same logic as `persist`).
+ */
+function isCustomised$<T>(
+  subject: BehaviorSubject<T>,
+  defaultValue: T,
+): Observable<boolean> {
+  const serializedDefault = JSON.stringify(defaultValue);
+  return subject.pipe(
+    map((v) => JSON.stringify(v) !== serializedDefault),
+    distinctUntilChanged(),
+  );
+}
+
+/** True when the user has customised the fallback relay list. */
+export const fallbackRelaysCustomised$ = isCustomised$(
+  fallbackRelays,
+  DEFAULT_FALLBACK_RELAYS,
+);
+
+/**
  * Lookup relays for finding user relay hints (NIP-65, profile relays, etc.)
  * These are used by the event loaders to find events more efficiently.
  */
@@ -114,6 +137,12 @@ export const lookupRelays = new BehaviorSubject<string[]>(
 // Persist the lookup relays to localStorage
 persist(lookupRelays, "lookupRelays", { defaultValue: DEFAULT_LOOKUP_RELAYS });
 
+/** True when the user has customised the lookup relay list. */
+export const lookupRelaysCustomised$ = isCustomised$(
+  lookupRelays,
+  DEFAULT_LOOKUP_RELAYS,
+);
+
 /**
  * Git index relays — store repository announcements (kind 30617) across the
  * network. Used for discovering repositories published via ngit.
@@ -128,6 +157,12 @@ export const gitIndexRelays = new BehaviorSubject<string[]>(
 persist(gitIndexRelays, "gitIndexRelays", {
   defaultValue: DEFAULT_GIT_INDEX_RELAYS,
 });
+
+/** True when the user has customised the git index relay list. */
+export const gitIndexRelaysCustomised$ = isCustomised$(
+  gitIndexRelays,
+  DEFAULT_GIT_INDEX_RELAYS,
+);
 
 /**
  * Relay curation mode.
@@ -184,6 +219,12 @@ export const defaultNostrConnectRelays = new BehaviorSubject<string[]>([
 persist(defaultNostrConnectRelays, "defaultNostrConnectRelays", {
   defaultValue: [...DEFAULT_NOSTR_CONNECT_RELAYS],
 });
+
+/** True when the user has customised the default remote signer relay list. */
+export const nostrConnectRelaysCustomised$ = isCustomised$(
+  defaultNostrConnectRelays,
+  [...DEFAULT_NOSTR_CONNECT_RELAYS],
+);
 
 // ---------------------------------------------------------------------------
 // Default Grasp servers

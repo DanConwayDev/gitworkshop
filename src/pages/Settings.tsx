@@ -15,14 +15,18 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   fallbackRelays,
+  fallbackRelaysCustomised$,
   gitIndexRelays,
+  gitIndexRelaysCustomised$,
   lookupRelays,
+  lookupRelaysCustomised$,
   relayCurationMode,
   DEFAULT_GRASP_SERVERS,
   DEFAULT_FALLBACK_RELAYS,
   DEFAULT_LOOKUP_RELAYS,
   DEFAULT_GIT_INDEX_RELAYS,
   defaultNostrConnectRelays,
+  nostrConnectRelaysCustomised$,
   DEFAULT_NOSTR_CONNECT_RELAYS,
   type RelayCurationMode,
 } from "@/services/settings";
@@ -131,6 +135,8 @@ function RelayCurationSection() {
 function DiscoveryRelaysSection() {
   const lookupRelaysList = use$(lookupRelays);
   const gitIndexRelaysList = use$(gitIndexRelays);
+  const lookupCustomised = use$(lookupRelaysCustomised$);
+  const gitIndexCustomised = use$(gitIndexRelaysCustomised$);
 
   const handleAddLookupRelay = (relay: string) => {
     const newRelays = [...new Set([...(lookupRelaysList || []), relay])];
@@ -169,16 +175,18 @@ function DiscoveryRelaysSection() {
                 Used for discovering user profiles and relay lists
               </p>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-muted-foreground shrink-0"
-              onClick={() => lookupRelays.next([...DEFAULT_LOOKUP_RELAYS])}
-            >
-              <RotateCcw className="h-3 w-3 mr-1" />
-              Reset
-            </Button>
+            {lookupCustomised && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground shrink-0"
+                onClick={() => lookupRelays.next([...DEFAULT_LOOKUP_RELAYS])}
+              >
+                <RotateCcw className="h-3 w-3 mr-1" />
+                Reset
+              </Button>
+            )}
           </div>
           <div className="space-y-2">
             {lookupRelaysList?.map((relay, index) => (
@@ -200,16 +208,20 @@ function DiscoveryRelaysSection() {
                 Used for discovering repository announcements published via ngit
               </p>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-muted-foreground shrink-0"
-              onClick={() => gitIndexRelays.next([...DEFAULT_GIT_INDEX_RELAYS])}
-            >
-              <RotateCcw className="h-3 w-3 mr-1" />
-              Reset
-            </Button>
+            {gitIndexCustomised && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground shrink-0"
+                onClick={() =>
+                  gitIndexRelays.next([...DEFAULT_GIT_INDEX_RELAYS])
+                }
+              >
+                <RotateCcw className="h-3 w-3 mr-1" />
+                Reset
+              </Button>
+            )}
           </div>
           <div className="space-y-2">
             {gitIndexRelaysList?.map((relay, index) => (
@@ -530,6 +542,13 @@ function GraspRelaysSection() {
   // The list to render — draft if open, otherwise published
   const displayDomains = draftDomains ?? servers.map((s) => s.domain);
 
+  // True when the user has a published list that differs from the defaults
+  const publishedDomains = servers.map((s) => s.domain);
+  const graspIsNonDefault =
+    isFromUserList &&
+    (publishedDomains.length !== DEFAULT_GRASP_SERVERS.length ||
+      publishedDomains.some((d, i) => d !== DEFAULT_GRASP_SERVERS[i]));
+
   return (
     <Card>
       <CardHeader>
@@ -540,7 +559,7 @@ function GraspRelaysSection() {
               Servers used to host your git repositories via the Grasp protocol
             </CardDescription>
           </div>
-          {account && isFromUserList && (
+          {account && graspIsNonDefault && (
             <Button
               type="button"
               variant="ghost"
@@ -744,6 +763,7 @@ function GraspRelaysSection() {
 
 function DefaultNostrConnectRelaysSection() {
   const relaysList = use$(defaultNostrConnectRelays);
+  const isCustomised = use$(nostrConnectRelaysCustomised$);
 
   const handleAdd = (relay: string) => {
     const newRelays = [...new Set([...(relaysList || []), relay])];
@@ -768,18 +788,22 @@ function DefaultNostrConnectRelaysSection() {
               accounts.
             </CardDescription>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-muted-foreground shrink-0 mt-0.5"
-            onClick={() =>
-              defaultNostrConnectRelays.next([...DEFAULT_NOSTR_CONNECT_RELAYS])
-            }
-          >
-            <RotateCcw className="h-3 w-3 mr-1" />
-            Reset
-          </Button>
+          {isCustomised && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground shrink-0 mt-0.5"
+              onClick={() =>
+                defaultNostrConnectRelays.next([
+                  ...DEFAULT_NOSTR_CONNECT_RELAYS,
+                ])
+              }
+            >
+              <RotateCcw className="h-3 w-3 mr-1" />
+              Reset
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -800,6 +824,7 @@ function DefaultNostrConnectRelaysSection() {
 
 function FallbackRelaysSection() {
   const fallbackRelaysList = use$(fallbackRelays);
+  const isCustomised = use$(fallbackRelaysCustomised$);
 
   const handleAddFallbackRelay = (relay: string) => {
     const newRelays = [...new Set([...(fallbackRelaysList || []), relay])];
@@ -823,16 +848,18 @@ function FallbackRelaysSection() {
               events
             </CardDescription>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-muted-foreground shrink-0 mt-0.5"
-            onClick={() => fallbackRelays.next([...DEFAULT_FALLBACK_RELAYS])}
-          >
-            <RotateCcw className="h-3 w-3 mr-1" />
-            Reset
-          </Button>
+          {isCustomised && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground shrink-0 mt-0.5"
+              onClick={() => fallbackRelays.next([...DEFAULT_FALLBACK_RELAYS])}
+            >
+              <RotateCcw className="h-3 w-3 mr-1" />
+              Reset
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
