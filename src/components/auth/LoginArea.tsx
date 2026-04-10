@@ -2,10 +2,15 @@
 // It is important that all functionality in this file is preserved, and should only be modified if explicitly requested.
 
 import { Button } from "@/components/ui/button.tsx";
-import { useActiveAccount } from "applesauce-react/hooks";
+import {
+  use$,
+  useAccountManager,
+  useActiveAccount,
+} from "applesauce-react/hooks";
 import { AccountSwitcher } from "./AccountSwitcher";
 import { useAuthModal } from "@/contexts/AuthModalContext";
 import { cn } from "@/lib/utils";
+import { LoggedOutAccountList } from "./LoggedOutAccountList";
 
 export interface LoginAreaProps {
   className?: string;
@@ -13,12 +18,19 @@ export interface LoginAreaProps {
 
 export function LoginArea({ className }: LoginAreaProps) {
   const activeAccount = useActiveAccount();
+  const accountManager = useAccountManager();
+  const accounts = use$(accountManager.accounts$);
   const { openAuthModal } = useAuthModal();
 
   return (
     <div className={cn("inline-flex items-center justify-center", className)}>
       {activeAccount ? (
         <AccountSwitcher onAddAccountClick={() => openAuthModal("sign-in")} />
+      ) : accounts && accounts.length > 0 ? (
+        <LoggedOutAccountList
+          accounts={accounts}
+          onAddAccountClick={() => openAuthModal("sign-in")}
+        />
       ) : (
         <div className="flex gap-3 justify-center">
           <Button

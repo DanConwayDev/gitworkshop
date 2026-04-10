@@ -230,11 +230,23 @@ export function useLoginActions() {
 
     /**
      * Log out the current user.
-     * Removes the active account from the account manager.
+     * If other accounts exist, switches to the first available one.
+     * If this is the only account, removes it entirely.
      */
     logout(): void {
       const activeAccount = accounts.getActive();
-      if (activeAccount) {
+      if (!activeAccount) return;
+
+      const allAccounts = accounts.accounts$.getValue();
+      const otherAccounts = allAccounts.filter(
+        (a) => a.id !== activeAccount.id,
+      );
+
+      if (otherAccounts.length > 0) {
+        // Switch to another account rather than removing this one
+        accounts.setActive(otherAccounts[0]);
+      } else {
+        // No other accounts — remove entirely (full logout)
         accounts.removeAccount(activeAccount.id);
       }
     },

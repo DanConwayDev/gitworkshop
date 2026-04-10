@@ -126,8 +126,15 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
     accountManager.setActive(account);
   };
 
-  const handleRemoveAccount = (account: IAccount) => {
-    accountManager.removeAccount(account.id);
+  const handleLogout = () => {
+    const allAccounts = accounts.filter((a) => a.id !== activeAccount.id);
+    if (allAccounts.length > 0) {
+      // Switch to another account rather than removing this one
+      accountManager.setActive(allAccounts[0]);
+    } else {
+      // No other accounts — remove entirely (full logout)
+      accountManager.removeAccount(activeAccount.id);
+    }
   };
 
   return (
@@ -200,7 +207,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
           <span>Add another account</span>
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => handleRemoveAccount(activeAccount)}
+          onClick={handleLogout}
           className="flex items-center gap-2 cursor-pointer p-2 rounded-md text-red-500"
         >
           <LogOut className="w-4 h-4" />
