@@ -81,10 +81,11 @@ export function persist<T>(
  * Fallback relay list used when no other relay source is available.
  * Users can customize this in settings.
  */
-const DEFAULT_FALLBACK_RELAYS = relaySet([
+export const DEFAULT_FALLBACK_RELAYS = relaySet([
   "wss://relay.ditto.pub",
   "wss://relay.damus.io",
   "wss://nos.lol",
+  "wss://relay.primal.net",
 ]);
 
 export const fallbackRelays = new BehaviorSubject<string[]>(
@@ -100,7 +101,7 @@ persist(fallbackRelays, "extraRelays", {
  * Lookup relays for finding user relay hints (NIP-65, profile relays, etc.)
  * These are used by the event loaders to find events more efficiently.
  */
-const DEFAULT_LOOKUP_RELAYS = relaySet([
+export const DEFAULT_LOOKUP_RELAYS = relaySet([
   "wss://purplepag.es/",
   "wss://index.hzrd149.com/",
   "wss://indexer.coracle.social/",
@@ -117,7 +118,7 @@ persist(lookupRelays, "lookupRelays", { defaultValue: DEFAULT_LOOKUP_RELAYS });
  * Git index relays — store repository announcements (kind 30617) across the
  * network. Used for discovering repositories published via ngit.
  */
-const DEFAULT_GIT_INDEX_RELAYS = relaySet(["wss://index.ngit.dev"]);
+export const DEFAULT_GIT_INDEX_RELAYS = relaySet(["wss://index.ngit.dev"]);
 
 export const gitIndexRelays = new BehaviorSubject<string[]>(
   DEFAULT_GIT_INDEX_RELAYS,
