@@ -127,14 +127,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   };
 
   const handleLogout = () => {
-    const allAccounts = accounts.filter((a) => a.id !== activeAccount.id);
-    if (allAccounts.length > 0) {
-      // Switch to another account rather than removing this one
-      accountManager.setActive(allAccounts[0]);
-    } else {
-      // No other accounts — remove entirely (full logout)
-      accountManager.removeAccount(activeAccount.id);
-    }
+    accountManager.removeAccount(activeAccount.id);
   };
 
   return (
