@@ -335,11 +335,15 @@ export function repoToPath(
 ): string {
   const identity = pubkeyToIdentity(pubkey, nip05);
 
+  // Percent-encode the repo identifier so characters like spaces or emoji
+  // are safe as URL path segments (NIP-34 §nostr:// clone URL spec).
+  const encodedRepoId = encodeURIComponent(repoId);
+
   const relay = relays[0];
   if (relay) {
     // Strip scheme — wss://relay.damus.io → relay.damus.io
     const hint = relay.replace(/^wss?:\/\//, "");
-    return `/${identity}/${hint}/${repoId}`;
+    return `/${identity}/${hint}/${encodedRepoId}`;
   }
-  return `/${identity}/${repoId}`;
+  return `/${identity}/${encodedRepoId}`;
 }

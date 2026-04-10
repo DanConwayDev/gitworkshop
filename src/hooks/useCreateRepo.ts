@@ -117,8 +117,10 @@ export function useCreateRepo() {
         setState({ step: "signing-events" });
 
         // Build clone URLs and relay URLs for all selected Grasp servers
+        // Percent-encode the identifier per GRASP-01 §Git Smart HTTP path spec
+        const encodedIdentifier = encodeURIComponent(input.identifier);
         const cloneUrls = input.graspServers.map(
-          (s) => `https://${s.domain}/${npub}/${input.identifier}.git`,
+          (s) => `https://${s.domain}/${npub}/${encodedIdentifier}.git`,
         );
         const relayUrls = input.graspServers.map((s) => s.wsUrl);
 
@@ -306,8 +308,10 @@ export function useCreateRepo() {
           npub,
         });
 
+        // Percent-encode the identifier per GRASP-01 §Git Smart HTTP path spec
+        const encodedIdentifier = encodeURIComponent(input.identifier);
         const cloneUrls = input.graspServers.map(
-          (s) => `https://${s.domain}/${npub}/${input.identifier}.git`,
+          (s) => `https://${s.domain}/${npub}/${encodedIdentifier}.git`,
         );
 
         const refUpdates: RefUpdate[] = [

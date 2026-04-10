@@ -156,10 +156,12 @@ export function RepoAboutPanel({ repo, variant }: RepoAboutPanelProps) {
   const relayHint = repo.relays[0]
     ? repo.relays[0].replace(/^wss?:\/\//, "").replace(/\/$/, "")
     : undefined;
+  // Percent-encode the identifier per NIP-34 §nostr:// clone URL spec
+  const encodedDTag = encodeURIComponent(repo.dTag);
   const nostrCloneUrl = identitySegment
     ? relayHint
-      ? `nostr://${identitySegment}/${relayHint}/${repo.dTag}`
-      : `nostr://${identitySegment}/${repo.dTag}`
+      ? `nostr://${identitySegment}/${relayHint}/${encodedDTag}`
+      : `nostr://${identitySegment}/${encodedDTag}`
     : undefined;
   const nostrCloneCommand = nostrCloneUrl
     ? `git clone ${nostrCloneUrl}`
