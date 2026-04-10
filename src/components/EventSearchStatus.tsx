@@ -28,6 +28,7 @@ import {
   XCircle,
   WifiOff,
   Clock,
+  RotateCcw,
 } from "lucide-react";
 import type {
   EventSearchState,
@@ -152,6 +153,8 @@ export interface EventSearchStatusProps {
   onSearchMore?: () => void;
   /** Whether the "search more" action is currently active */
   searchMoreActive?: boolean;
+  /** Callback to retry the search across all relays */
+  onRetry?: () => void;
 }
 
 export function EventSearchStatus({
@@ -162,6 +165,7 @@ export function EventSearchStatus({
   backLabel,
   onSearchMore,
   searchMoreActive,
+  onRetry,
 }: EventSearchStatusProps) {
   const [copied, setCopied] = useState(false);
 
@@ -275,7 +279,18 @@ export function EventSearchStatus({
 
         {/* Relay status grouped by label */}
         {groups.length > 0 && (
-          <Card>
+          <Card className="relative">
+            {onRetry && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-2 right-2 h-6 w-6 text-muted-foreground hover:text-foreground"
+                onClick={onRetry}
+                title="Retry all relays"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
+            )}
             <CardContent className="p-4 space-y-4">
               {groups.map((group) => (
                 <div key={group.label} className="space-y-2">

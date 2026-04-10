@@ -189,14 +189,16 @@ function reduceSignal(
  *
  * Found events are automatically added to the global EventStore.
  *
- * @param target - What to search for, or undefined to skip
- * @param groups - Ordered relay groups (tried sequentially)
- * @param opts   - Options passed to searchForEvent
+ * @param target   - What to search for, or undefined to skip
+ * @param groups   - Ordered relay groups (tried sequentially)
+ * @param opts     - Options passed to searchForEvent
+ * @param retryKey - Increment to force a fresh search (re-subscribes the observable)
  */
 export function useEventSearch(
   target: SearchTarget | undefined,
   groups: RelayGroupSpec[],
   opts?: SearchForEventOptions,
+  retryKey?: number,
 ): EventSearchState | undefined {
   const store = useEventStore();
 
@@ -243,7 +245,7 @@ export function useEventSearch(
       // Share so multiple subscribers don't create multiple searches
       shareReplay(1),
     ) as unknown as Observable<EventSearchState>;
-  }, [targetKey, groupsKey, store]);
+  }, [targetKey, groupsKey, store, retryKey]);
 }
 
 // Re-export types for convenience

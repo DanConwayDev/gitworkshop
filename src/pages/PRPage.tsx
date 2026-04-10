@@ -110,6 +110,10 @@ export default function PRPage() {
     [repo?.maintainerSet],
   );
 
+  // ── Retry search ─────────────────────────────────────────────────────────
+  const [retryKey, setRetryKey] = useState(0);
+  const handleRetry = useCallback(() => setRetryKey((k) => k + 1), []);
+
   // ── "Search more relays" expansion (curated mode) ────────────────────────
   const [searchMoreActive, setSearchMoreActive] = useState(false);
 
@@ -133,6 +137,7 @@ export default function PRPage() {
     selectedMaintainers,
     undefined, // options
     extraSearchGroups,
+    retryKey,
   );
 
   // Ordered priority pubkeys for @ mention autocomplete:
@@ -661,6 +666,7 @@ export default function PRPage() {
           !searchMoreActive && search.settled ? handleSearchMore : undefined
         }
         searchMoreActive={searchMoreActive}
+        onRetry={handleRetry}
       />
     );
   }

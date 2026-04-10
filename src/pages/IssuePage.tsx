@@ -39,6 +39,10 @@ export default function IssuePage() {
     [repo?.maintainerSet],
   );
 
+  // ── Retry search ─────────────────────────────────────────────────────────
+  const [retryKey, setRetryKey] = useState(0);
+  const handleRetry = useCallback(() => setRetryKey((k) => k + 1), []);
+
   // ── "Search more relays" expansion (curated mode) ────────────────────────
   const [searchMoreActive, setSearchMoreActive] = useState(false);
 
@@ -61,6 +65,7 @@ export default function IssuePage() {
     resolved?.extraRelaysForMaintainerMailboxCoverage,
     selectedMaintainers,
     extraSearchGroups,
+    retryKey,
   );
 
   // Ordered priority pubkeys for @ mention autocomplete:
@@ -131,6 +136,7 @@ export default function IssuePage() {
           !searchMoreActive && search.settled ? handleSearchMore : undefined
         }
         searchMoreActive={searchMoreActive}
+        onRetry={handleRetry}
       />
     );
   }

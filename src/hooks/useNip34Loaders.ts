@@ -377,6 +377,7 @@ function mergeSearchStates(
  * @param maintainers     - Effective maintainer set (used to derive a stable key)
  * @param extraSearchGroups - Additional relay groups to search (e.g. when user
  *                            clicks "search more relays" in curated mode)
+ * @param retryKey        - Increment to force a fresh search across all relays
  */
 export function useNip34ItemDetailLoader(
   itemId: string | undefined,
@@ -384,6 +385,7 @@ export function useNip34ItemDetailLoader(
   extraRelaysForMaintainerMailboxCoverage: RelayGroup | undefined,
   maintainers: Set<string> | undefined,
   extraSearchGroups?: RelayGroupSpec[],
+  retryKey?: number,
 ): Nip34ItemDetailLoaderResult {
   const curationMode = use$(relayCurationMode);
 
@@ -444,7 +446,12 @@ export function useNip34ItemDetailLoader(
     return { type: "event", id: itemId };
   }, [itemId, alreadyInStore]);
 
-  const primarySearch = useEventSearch(searchTarget, searchGroups);
+  const primarySearch = useEventSearch(
+    searchTarget,
+    searchGroups,
+    undefined,
+    retryKey,
+  );
 
   // ── Extra relay search (user-triggered "search more relays") ─────────────
   // Run as a completely separate useEventSearch so the primary search is
@@ -458,6 +465,8 @@ export function useNip34ItemDetailLoader(
   const extraSearch = useEventSearch(
     extraSearchTarget,
     extraSearchGroups ?? [],
+    undefined,
+    retryKey,
   );
 
   // Merge primary + extra search states for the UI

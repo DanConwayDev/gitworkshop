@@ -34,6 +34,7 @@ export interface ResolvedIssueResult {
  * @param extraRelaysForMaintainerMailboxCoverage - Delta relay group for outbox mode
  * @param maintainers     - Effective maintainer set from repo resolution
  * @param extraSearchGroups - Additional relay groups for user-triggered expansion
+ * @param retryKey        - Increment to force a fresh search across all relays
  */
 export function useResolvedIssue(
   issueId: string | undefined,
@@ -41,6 +42,7 @@ export function useResolvedIssue(
   extraRelaysForMaintainerMailboxCoverage: RelayGroup | undefined,
   maintainers: Set<string> | undefined,
   extraSearchGroups?: RelayGroupSpec[],
+  retryKey?: number,
 ): ResolvedIssueResult {
   const store = useEventStore();
 
@@ -50,6 +52,7 @@ export function useResolvedIssue(
     extraRelaysForMaintainerMailboxCoverage,
     maintainers,
     extraSearchGroups,
+    retryKey,
   );
 
   const issue = use$(() => {

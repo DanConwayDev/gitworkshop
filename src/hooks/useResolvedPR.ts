@@ -55,6 +55,7 @@ export interface ResolvedPRResult {
  * @param maintainers     - Effective maintainer set from repo resolution
  * @param options         - Additional options
  * @param extraSearchGroups - Additional relay groups for user-triggered expansion
+ * @param retryKey        - Increment to force a fresh search across all relays
  */
 export function useResolvedPR(
   prId: string | undefined,
@@ -63,6 +64,7 @@ export function useResolvedPR(
   maintainers: Set<string> | undefined,
   _options?: UseResolvedPROptions,
   extraSearchGroups?: RelayGroupSpec[],
+  retryKey?: number,
 ): ResolvedPRResult {
   const store = useEventStore();
   const curationMode = use$(relayCurationMode);
@@ -74,6 +76,7 @@ export function useResolvedPR(
     extraRelaysForMaintainerMailboxCoverage,
     maintainers,
     extraSearchGroups,
+    retryKey,
   );
 
   // ── 2. For patches: fetch patch chain events from relays ────────────────
