@@ -118,9 +118,18 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
         onLogin();
         onClose();
       } catch (error) {
-        // Don't show an error if the dialog was simply closed
-        if (error instanceof Error && error.name !== "AbortError") {
-          setConnectError(error.message);
+        // Don't show an error if the abort was intentional (dialog closed or
+        // relay list changed). The signer rejects with a plain Error("Aborted")
+        // rather than a DOMException with name "AbortError", so we check both
+        // the signal's aborted flag and the conventional name.
+        const wasAborted =
+          abortControllerRef.current?.signal.aborted ||
+          (error instanceof Error && error.name === "AbortError") ||
+          (error instanceof Error && error.message === "Aborted");
+        if (!wasAborted) {
+          setConnectError(
+            error instanceof Error ? error.message : "Connection failed",
+          );
         }
         setIsWaitingForConnect(false);
       }
