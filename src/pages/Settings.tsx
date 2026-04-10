@@ -19,7 +19,11 @@ import {
   lookupRelays,
   relayCurationMode,
   DEFAULT_GRASP_SERVERS,
+  DEFAULT_FALLBACK_RELAYS,
+  DEFAULT_LOOKUP_RELAYS,
+  DEFAULT_GIT_INDEX_RELAYS,
   defaultNostrConnectRelays,
+  DEFAULT_NOSTR_CONNECT_RELAYS,
   type RelayCurationMode,
 } from "@/services/settings";
 import { validateGraspServer } from "@/lib/grasp";
@@ -38,7 +42,15 @@ import {
 } from "applesauce-actions/actions/mailboxes";
 import { runner } from "@/services/actions";
 import { cn } from "@/lib/utils";
-import { Shield, Globe, Server, Loader2, Info, Plus } from "lucide-react";
+import {
+  Shield,
+  Globe,
+  Server,
+  Loader2,
+  Info,
+  Plus,
+  RotateCcw,
+} from "lucide-react";
 
 const CURATION_OPTIONS: {
   value: RelayCurationMode;
@@ -150,11 +162,23 @@ function DiscoveryRelaysSection() {
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-3">
-          <div>
-            <h3 className="text-sm font-semibold">Users</h3>
-            <p className="text-xs text-muted-foreground">
-              Used for discovering user profiles and relay lists
-            </p>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Users</h3>
+              <p className="text-xs text-muted-foreground">
+                Used for discovering user profiles and relay lists
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground shrink-0"
+              onClick={() => lookupRelays.next([...DEFAULT_LOOKUP_RELAYS])}
+            >
+              <RotateCcw className="h-3 w-3 mr-1" />
+              Reset
+            </Button>
           </div>
           <div className="space-y-2">
             {lookupRelaysList?.map((relay, index) => (
@@ -169,11 +193,23 @@ function DiscoveryRelaysSection() {
         </div>
 
         <div className="border-t pt-6 space-y-3">
-          <div>
-            <h3 className="text-sm font-semibold">Repositories</h3>
-            <p className="text-xs text-muted-foreground">
-              Used for discovering repository announcements published via ngit
-            </p>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Repositories</h3>
+              <p className="text-xs text-muted-foreground">
+                Used for discovering repository announcements published via ngit
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground shrink-0"
+              onClick={() => gitIndexRelays.next([...DEFAULT_GIT_INDEX_RELAYS])}
+            >
+              <RotateCcw className="h-3 w-3 mr-1" />
+              Reset
+            </Button>
           </div>
           <div className="space-y-2">
             {gitIndexRelaysList?.map((relay, index) => (
@@ -497,10 +533,31 @@ function GraspRelaysSection() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Grasp Servers</CardTitle>
-        <CardDescription>
-          Servers used to host your git repositories via the Grasp protocol
-        </CardDescription>
+        <div className="flex items-start justify-between gap-2">
+          <div className="space-y-1.5">
+            <CardTitle>Grasp Servers</CardTitle>
+            <CardDescription>
+              Servers used to host your git repositories via the Grasp protocol
+            </CardDescription>
+          </div>
+          {account && isFromUserList && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground shrink-0 mt-0.5"
+              disabled={publishing}
+              onClick={() => void handleSaveDefaults()}
+            >
+              {publishing ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <RotateCcw className="h-3 w-3 mr-1" />
+              )}
+              Reset
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (
@@ -701,12 +758,29 @@ function DefaultNostrConnectRelaysSection() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Default Remote Signer Relays</CardTitle>
-        <CardDescription>
-          Rendezvous relays used when connecting a new remote signer (NIP-46).
-          These are negotiated at login time and stored in the bunker URI —
-          changing them only affects new logins, not existing accounts.
-        </CardDescription>
+        <div className="flex items-start justify-between gap-2">
+          <div className="space-y-1.5">
+            <CardTitle>Default Remote Signer Relays</CardTitle>
+            <CardDescription>
+              Rendezvous relays used when connecting a new remote signer
+              (NIP-46). These are negotiated at login time and stored in the
+              bunker URI — changing them only affects new logins, not existing
+              accounts.
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-muted-foreground shrink-0 mt-0.5"
+            onClick={() =>
+              defaultNostrConnectRelays.next([...DEFAULT_NOSTR_CONNECT_RELAYS])
+            }
+          >
+            <RotateCcw className="h-3 w-3 mr-1" />
+            Reset
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
@@ -740,11 +814,26 @@ function FallbackRelaysSection() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Fallback Relays</CardTitle>
-        <CardDescription>
-          Used as a last resort when no other relay source (outbox, repo relays,
-          or git index) is available for fetching or publishing events
-        </CardDescription>
+        <div className="flex items-start justify-between gap-2">
+          <div className="space-y-1.5">
+            <CardTitle>Fallback Relays</CardTitle>
+            <CardDescription>
+              Used as a last resort when no other relay source (outbox, repo
+              relays, or git index) is available for fetching or publishing
+              events
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-muted-foreground shrink-0 mt-0.5"
+            onClick={() => fallbackRelays.next([...DEFAULT_FALLBACK_RELAYS])}
+          >
+            <RotateCcw className="h-3 w-3 mr-1" />
+            Reset
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
