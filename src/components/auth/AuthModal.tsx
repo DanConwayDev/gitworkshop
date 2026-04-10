@@ -16,7 +16,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Check,
-  CheckCircle2,
   Copy,
   Download,
   Eye,
@@ -34,12 +33,71 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "@/hooks/useToast";
 import { useLoginActions } from "@/hooks/useLoginActions";
+import { useProfile } from "@/hooks/useProfile";
+import { useActiveAccount } from "applesauce-react/hooks";
 import { runner } from "@/services/actions";
 import { CreateAccount } from "@/actions/account";
 import { useAuthModal, type AuthModalView } from "@/contexts/AuthModalContext";
 import LoginDialog from "./LoginDialog";
+
+// ---------------------------------------------------------------------------
+// LoginSuccessDialog — whimsical post-login greeting
+// ---------------------------------------------------------------------------
+
+const GREETINGS = ["Hey there", "You're in", "Hello"];
+
+function LoginSuccessDialog({ open }: { open: boolean }) {
+  const account = useActiveAccount();
+  const profile = useProfile(account?.pubkey);
+
+  const greeting = GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
+  const displayName =
+    profile?.displayName ?? profile?.name ?? account?.pubkey?.slice(0, 8);
+  const initials =
+    profile?.name?.slice(0, 2).toUpperCase() ??
+    account?.pubkey?.slice(0, 2).toUpperCase() ??
+    "??";
+
+  return (
+    <Dialog open={open}>
+      <DialogContent
+        className="max-w-[95vw] sm:max-w-sm max-h-[90dvh] p-0 gap-0 overflow-hidden rounded-2xl flex flex-col items-center justify-center min-h-64 [&>button]:hidden"
+        aria-describedby={undefined}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
+        <div className="flex flex-col items-center justify-center gap-8 py-16 px-8 text-center">
+          {/* Avatar with a glowing ring */}
+          <div className="relative">
+            <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl scale-125" />
+            <Avatar className="h-28 w-28 ring-4 ring-primary/30 relative">
+              {profile?.picture && (
+                <AvatarImage src={profile.picture} alt={displayName} />
+              )}
+              <AvatarFallback className="text-3xl font-bold bg-gradient-to-br from-primary/30 to-primary/10">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+
+          {/* Greeting */}
+          <div className="space-y-2">
+            <p className="text-2xl font-bold">
+              {greeting}, <span className="text-primary">{displayName}</span>!
+              ✨
+            </p>
+            <p className="text-sm text-muted-foreground">
+              You&apos;re all set and ready to go.
+            </p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -123,7 +181,7 @@ export function AuthModal() {
       setLoginDialogOpen(false);
       closeAuthModal();
       onAuthSuccess?.();
-    }, 1000);
+    }, 2000);
   }, [closeAuthModal, onAuthSuccess]);
 
   // ---------------------------------------------------------------------------
@@ -532,24 +590,8 @@ export function AuthModal() {
         onCreateAccount={handleCreateAccountFromLogin}
       />
 
-      {/* Success dialog — same backdrop + sizing as LoginDialog, shown for 1 s */}
-      <Dialog open={loginSuccessVisible}>
-        <DialogContent
-          className="max-w-[95vw] sm:max-w-sm max-h-[90dvh] p-0 gap-0 overflow-hidden rounded-2xl flex flex-col items-center justify-center min-h-64 [&>button]:hidden"
-          aria-describedby={undefined}
-          onInteractOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
-        >
-          <div className="flex flex-col items-center justify-center gap-4 py-12">
-            <div className="flex items-center justify-center w-24 h-24 rounded-full bg-green-500/15">
-              <CheckCircle2 className="w-14 h-14 text-green-500" />
-            </div>
-            <p className="text-lg font-semibold text-green-600 dark:text-green-400">
-              Logged in!
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Success dialog — whimsical greeting, shown for 1.5 s after login */}
+      <LoginSuccessDialog open={loginSuccessVisible} />
     </>
   );
 }
