@@ -543,7 +543,7 @@ export function PatchFilesTab({
           onSelect={handleFileSelect}
           loading
         />
-        <div className="flex-1 min-w-0 p-3 overflow-hidden">
+        <div className="flex-1 min-w-0 p-3 overflow-x-clip">
           <DiffView diff="" loadingFiles={phase.changes} />
         </div>
       </div>
@@ -644,7 +644,7 @@ export function PatchFilesTab({
           activeFile={activeFile}
           onSelect={handleFileSelect}
         />
-        <div className="flex-1 min-w-0 p-3 overflow-hidden">
+        <div className="flex-1 min-w-0 p-3 overflow-x-clip">
           <DiffView diff={phase.diff} expandedFile={activeFile} />
         </div>
       </div>
