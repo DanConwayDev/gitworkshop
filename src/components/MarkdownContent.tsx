@@ -18,6 +18,33 @@ import remarkBreaks from "remark-breaks";
 import rehypeHighlight from "rehype-highlight";
 import { remarkNostrMentions } from "applesauce-content/markdown";
 import type { Components } from "react-markdown";
+
+// Minimal mdast node types needed for the remark plugin below.
+// We define them inline to avoid a direct `mdast` package dependency.
+interface MdastNode {
+  type: string;
+}
+interface MdastParent extends MdastNode {
+  children: MdastNode[];
+}
+interface MdastText extends MdastNode {
+  type: "text";
+  value: string;
+}
+interface MdastLink extends MdastParent {
+  type: "link";
+  url: string;
+  children: MdastNode[];
+}
+interface MdastImage extends MdastNode {
+  type: "image";
+  url: string;
+  alt: string;
+  title: string | null;
+}
+interface MdastRoot extends MdastParent {
+  type: "root";
+}
 import { decodePointer } from "applesauce-core/helpers";
 import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import { WrappableCodeBlock } from "@/components/WrappableCodeBlock";
@@ -90,7 +117,93 @@ const highlightLanguages = {
   yaml,
 };
 
-const remarkPlugins = [remarkGfm, remarkBreaks, remarkNostrMentions];
+// ---------------------------------------------------------------------------
+// Remark plugin: convert bare image URLs to <img> nodes
+// ---------------------------------------------------------------------------
+// In Nostr, images are embedded by pasting a bare URL (not markdown ![](url)
+// syntax). remarkGfm auto-links these into `link` nodes. This plugin converts
+// any link node whose URL resolves to an image file into an `image` node so
+// that react-markdown renders it as <img> instead of <a>.
+
+const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|avif|bmp|tiff?)(\?.*)?$/i;
+const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|ogv)(\?.*)?$/i;
+
+function isImageUrl(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    return IMAGE_EXTENSIONS.test(pathname);
+  } catch {
+    return IMAGE_EXTENSIONS.test(url);
+  }
+}
+
+function isVideoUrl(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    return VIDEO_EXTENSIONS.test(pathname);
+  } catch {
+    return VIDEO_EXTENSIONS.test(url);
+  }
+}
+
+/**
+ * Remark plugin that converts bare image/video URLs (auto-linked by remarkGfm)
+ * into image nodes. Video URLs become image nodes with alt="__video__" so the
+ * `img` component override can render a <video> element instead.
+ *
+ * Only converts links where the link text equals the URL (i.e. auto-linked
+ * bare URLs, not explicitly written markdown links like [label](url)).
+ */
+function remarkBareMediaUrls() {
+  return (tree: MdastRoot) => {
+    walkParent(tree);
+  };
+}
+
+function walkParent(node: MdastParent) {
+  for (let i = 0; i < node.children.length; i++) {
+    const child = node.children[i];
+
+    if (child.type === "link") {
+      const link = child as MdastLink;
+      const url = link.url;
+
+      // Only convert auto-linked bare URLs (link text === url)
+      const linkText =
+        link.children.length === 1 && link.children[0].type === "text"
+          ? (link.children[0] as MdastText).value
+          : null;
+      if (linkText !== url) continue;
+
+      if (isImageUrl(url)) {
+        const imageNode: MdastImage = {
+          type: "image",
+          url,
+          alt: "",
+          title: null,
+        };
+        node.children.splice(i, 1, imageNode);
+      } else if (isVideoUrl(url)) {
+        const videoNode: MdastImage = {
+          type: "image",
+          url,
+          alt: "__video__",
+          title: null,
+        };
+        node.children.splice(i, 1, videoNode);
+      }
+    } else if ("children" in child) {
+      walkParent(child as MdastParent);
+    }
+  }
+}
+
+const remarkPlugins = [
+  remarkGfm,
+  remarkBreaks,
+  remarkNostrMentions,
+  remarkBareMediaUrls,
+];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const rehypePlugins: any[] = [
   [rehypeHighlight, { languages: highlightLanguages, detect: false }],
@@ -308,8 +421,20 @@ function buildComponents(
       );
     },
 
-    // Git-aware image rendering
+    // Git-aware image rendering + video support
     img: ({ src, alt }) => {
+      // Video URLs are represented as image nodes with alt="__video__"
+      if (alt === "__video__" && src) {
+        return (
+          <video
+            src={src}
+            controls
+            className="max-w-full rounded-md my-3"
+            preload="metadata"
+          />
+        );
+      }
+
       if (hasGitContext && src && isRelativeSrc(src)) {
         return (
           <GitImage

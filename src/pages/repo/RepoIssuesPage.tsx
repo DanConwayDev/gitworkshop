@@ -298,7 +298,7 @@ function IssueRow({
     { addSuffix: true },
   );
 
-  const nevent = eventIdToNevent(issue.id, repoRelays);
+  const nevent = eventIdToNevent(issue.id, repoRelays.slice(0, 1));
 
   return (
     <li className="group hover:bg-accent/40 transition-colors">

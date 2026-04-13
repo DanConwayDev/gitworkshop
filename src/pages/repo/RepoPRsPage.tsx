@@ -268,7 +268,7 @@ function PRRow({
     addSuffix: true,
   });
 
-  const nevent = eventIdToNevent(pr.id, repoRelays);
+  const nevent = eventIdToNevent(pr.id, repoRelays.slice(0, 1));
 
   return (
     <li className="group hover:bg-accent/40 transition-colors">
