@@ -21,6 +21,7 @@ import {
   EmbeddedEventByIdPreview,
   EmbeddedEventByAddressPreview,
 } from "@/components/EmbeddedEventPreview";
+import { isImageURL, isVideoURL } from "applesauce-core/helpers";
 
 // ---------------------------------------------------------------------------
 // Mention component — renders nprofile / npub as inline avatar + name
@@ -49,15 +50,50 @@ function MentionComponent({ pubkey }: { pubkey: string }) {
 
 const components: ComponentMap = {
   text: ({ node }) => <span>{node.value}</span>,
-  link: ({ node }) => (
-    <a
-      href={node.href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-primary hover:underline break-all"
-    >
-      {node.value}
-    </a>
+  link: ({ node }) => {
+    if (isImageURL(node.href)) {
+      return (
+        <img
+          src={node.href}
+          alt=""
+          className="max-w-full rounded-md my-2"
+          loading="lazy"
+        />
+      );
+    }
+    if (isVideoURL(node.href)) {
+      return (
+        <video
+          src={node.href}
+          controls
+          className="max-w-full rounded-md my-2"
+          preload="metadata"
+        />
+      );
+    }
+    return (
+      <a
+        href={node.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:underline break-all"
+      >
+        {node.value}
+      </a>
+    );
+  },
+  gallery: ({ node }) => (
+    <div className="grid grid-cols-2 gap-1 my-2">
+      {node.links.map((src) => (
+        <img
+          key={src}
+          src={src}
+          alt=""
+          className="w-full rounded-md object-cover aspect-square"
+          loading="lazy"
+        />
+      ))}
+    </div>
   ),
   mention: ({ node }) => {
     const { decoded } = node;

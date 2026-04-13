@@ -21,6 +21,7 @@ import remarkBreaks from "remark-breaks";
 import { remarkNostrMentions } from "applesauce-content/markdown";
 import { decodePointer } from "applesauce-core/helpers";
 import type { Components } from "react-markdown";
+import { remarkBareMediaUrls } from "@/lib/remarkBareMediaUrls";
 import { useUserPath } from "@/hooks/useUserPath";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -138,6 +139,28 @@ const components: Components = {
   ),
   li: ({ children }) => <li className="leading-6 break-words">{children}</li>,
 
+  // Bare image/video URLs converted by remarkBareMediaUrls
+  img: ({ src, alt }) => {
+    if (alt === "__video__" && src) {
+      return (
+        <video
+          src={src}
+          controls
+          className="max-w-full rounded-md my-2"
+          preload="metadata"
+        />
+      );
+    }
+    return (
+      <img
+        src={src}
+        alt={alt ?? ""}
+        className="max-w-full rounded-md my-2"
+        loading="lazy"
+      />
+    );
+  },
+
   strong: ({ children }) => (
     <strong className="font-semibold text-foreground">{children}</strong>
   ),
@@ -164,7 +187,12 @@ const components: Components = {
   ),
 };
 
-const remarkPlugins = [remarkGfm, remarkBreaks, remarkNostrMentions];
+const remarkPlugins = [
+  remarkGfm,
+  remarkBreaks,
+  remarkNostrMentions,
+  remarkBareMediaUrls,
+];
 
 // ---------------------------------------------------------------------------
 // Public component
