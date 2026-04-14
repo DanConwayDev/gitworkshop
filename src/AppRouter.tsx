@@ -10,6 +10,7 @@ import { ScrollToTop } from "./components/ScrollToTop";
 import { AppHeader } from "./components/AppHeader";
 import { AppFooter } from "./components/AppFooter";
 
+import Index from "./pages/Index";
 import RepositoriesPage from "./pages/RepositoriesPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import RelayPage from "./pages/RelayPage";
@@ -117,9 +118,11 @@ function LegacyRedirect() {
     );
   }
 
-  // /repos — redirect to home (repo listing)
+  // /repos — redirect to search (repo listing)
   if (raw === "repos" || raw.startsWith("repos/")) {
-    return <Navigate to={`/${location.search}${location.hash}`} replace />;
+    return (
+      <Navigate to={`/search${location.search}${location.hash}`} replace />
+    );
   }
 
   // /install[/] — redirect to /ngit
@@ -169,7 +172,8 @@ export function AppRouter() {
         <AppHeader />
         <main className="flex-1 flex flex-col">
           <Routes>
-            <Route path="/" element={<RepositoriesPage />} />
+            <Route path="/" element={<Index />} />
+            <Route path="/search" element={<RepositoriesPage />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/ngit" element={<NgitPage />} />
