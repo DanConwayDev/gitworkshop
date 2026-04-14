@@ -5,6 +5,7 @@ import { lazy, Suspense, useState, type RefObject } from "react";
 import { formatDistanceToNow, format } from "date-fns";
 import type { NostrEvent } from "nostr-tools";
 import { Link } from "react-router-dom";
+import { diffLines, type Change } from "diff";
 import { UserLink } from "@/components/UserAvatar";
 import { useUnreadHighlight } from "@/hooks/useUnreadHighlight";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -33,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -507,6 +509,40 @@ export interface ThreadContext {
  *                  history and {} icons. Clicking it calls this callback so
  *                  the parent can open the CoverNoteBox composer.
  */
+/** Renders a line-by-line diff between two text strings. */
+function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
+  const changes: Change[] = diffLines(oldText, newText);
+
+  return (
+    <div className="font-mono text-xs rounded-md border border-border/50 overflow-hidden">
+      {changes.map((change, i) => {
+        const lines = change.value.replace(/\n$/, "").split("\n");
+        const bg = change.added
+          ? "bg-green-500/10 text-green-700 dark:text-green-400"
+          : change.removed
+            ? "bg-red-500/10 text-red-700 dark:text-red-400 line-through"
+            : "text-muted-foreground";
+        const prefix = change.added ? "+" : change.removed ? "−" : " ";
+
+        return lines.map((line, j) => (
+          <div
+            key={`${i}-${j}`}
+            className={cn(
+              "flex gap-2 px-3 py-0.5 leading-5 min-h-[1.5rem]",
+              bg,
+            )}
+          >
+            <span className="select-none w-3 shrink-0 opacity-60">
+              {prefix}
+            </span>
+            <span className="whitespace-pre-wrap break-all">{line}</span>
+          </div>
+        ));
+      })}
+    </div>
+  );
+}
+
 export function CoverNoteCard({
   events,
   onEdit,
@@ -516,6 +552,8 @@ export function CoverNoteCard({
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [jsonOpen, setJsonOpen] = useState(false);
+  /** Index of the version whose diff is being previewed, or null when closed. */
+  const [diffIndex, setDiffIndex] = useState<number | null>(null);
 
   const event = events[selectedIndex];
   if (!event) return null;
@@ -525,6 +563,15 @@ export function CoverNoteCard({
   });
 
   const hasMultiple = events.length > 1;
+
+  // Diff modal data — computed only when open
+  const diffEvent = diffIndex !== null ? events[diffIndex] : null;
+  // "previous" is the version one step older (higher index = older, newest-first)
+  const diffPrevEvent =
+    diffIndex !== null ? (events[diffIndex + 1] ?? null) : null;
+
+  const versionLabel = (idx: number) =>
+    idx === 0 ? "Latest" : `v${events.length - idx}`;
 
   return (
     <>
@@ -610,7 +657,7 @@ export function CoverNoteCard({
                   {events.map((ev, idx) => (
                     <DropdownMenuItem
                       key={ev.id}
-                      onClick={() => setSelectedIndex(idx)}
+                      onClick={() => setDiffIndex(idx)}
                       className={cn(
                         "flex flex-col items-start gap-0.5 cursor-pointer",
                         idx === selectedIndex && "bg-accent",
@@ -663,6 +710,94 @@ export function CoverNoteCard({
               {JSON.stringify(event, null, 2)}
             </pre>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Version diff modal */}
+      <Dialog
+        open={diffIndex !== null}
+        onOpenChange={(open) => {
+          if (!open) setDiffIndex(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b border-border/50">
+            <DialogTitle className="text-sm font-medium flex items-center gap-2">
+              <History className="h-4 w-4 text-muted-foreground" />
+              {diffIndex !== null && (
+                <>
+                  Cover note ·{" "}
+                  <span className="font-semibold">
+                    {versionLabel(diffIndex)}
+                  </span>
+                  {diffPrevEvent ? (
+                    <>
+                      <span className="text-muted-foreground font-normal">
+                        {" "}
+                        vs{" "}
+                      </span>
+                      <span className="font-semibold">
+                        {versionLabel(diffIndex + 1)}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground font-normal">
+                      {" "}
+                      (first version)
+                    </span>
+                  )}
+                </>
+              )}
+            </DialogTitle>
+            {diffEvent && (
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {formatDistanceToNow(new Date(diffEvent.created_at * 1000), {
+                  addSuffix: true,
+                })}
+                <span className="mx-1 opacity-40">·</span>
+                by{" "}
+                <UserLink
+                  pubkey={diffEvent.pubkey}
+                  avatarSize="xs"
+                  nameClassName="text-xs font-medium text-foreground"
+                />
+              </p>
+            )}
+          </DialogHeader>
+
+          <div className="flex-1 overflow-auto px-5 py-4">
+            {diffEvent &&
+              (diffPrevEvent ? (
+                <DiffView
+                  oldText={diffPrevEvent.content}
+                  newText={diffEvent.content}
+                />
+              ) : (
+                /* First version — show full content as all-added */
+                <DiffView oldText="" newText={diffEvent.content} />
+              ))}
+          </div>
+
+          <DialogFooter className="px-5 py-3 border-t border-border/50 flex-row justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDiffIndex(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => {
+                if (diffIndex !== null) setSelectedIndex(diffIndex);
+                setDiffIndex(null);
+              }}
+            >
+              View full version
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
