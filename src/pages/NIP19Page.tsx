@@ -156,8 +156,15 @@ function getNip10RootId(event: NostrEvent): string | undefined {
 // ---------------------------------------------------------------------------
 
 function LoadingState({ message }: { message: string }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setVisible(true), 1000);
+    return () => clearTimeout(id);
+  }, []);
   return (
-    <div className="min-h-[50vh] flex items-center justify-center">
+    <div
+      className={`min-h-[50vh] flex items-center justify-center transition-opacity duration-500 ${visible ? "opacity-100" : "opacity-0"}`}
+    >
       <div className="text-center space-y-3">
         <div className="h-8 w-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto" />
         <p className="text-sm text-muted-foreground">{message}</p>

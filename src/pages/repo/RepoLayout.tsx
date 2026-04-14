@@ -624,8 +624,15 @@ function RepoLayoutResolved({
 // ---------------------------------------------------------------------------
 
 function Nip05LoadingState({ nip05 }: { nip05: string }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setVisible(true), 1000);
+    return () => clearTimeout(id);
+  }, []);
   return (
-    <div className="min-h-full flex items-center justify-center">
+    <div
+      className={`min-h-full flex items-center justify-center transition-opacity duration-500 ${visible ? "opacity-100" : "opacity-0"}`}
+    >
       <div className="text-center space-y-4 max-w-md px-4">
         <div className="flex justify-center">
           <div className="p-4 rounded-full bg-pink-500/10">
