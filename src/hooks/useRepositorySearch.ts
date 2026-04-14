@@ -256,8 +256,38 @@ export function useRepositorySearch(
         for (const ev of repoEvents) eventStore.add(ev);
         for (const ev of userEvents) eventStore.add(ev);
 
-        setSearchRepoEvents(repoEvents);
-        setMatchedUserPubkeys(new Set(userEvents.map((ev) => ev.pubkey)));
+        const matchedPubkeys = new Set(userEvents.map((ev) => ev.pubkey));
+
+        // Fetch repos authored by matched users so user-name searches return results
+        let userRepoEvents: NostrEvent[] = [];
+        if (matchedPubkeys.size > 0) {
+          userRepoEvents = await lastValueFrom(
+            pool
+              .request(relays, [
+                {
+                  kinds: [REPO_KIND],
+                  authors: [...matchedPubkeys],
+                  limit: PAGE_SIZE,
+                } as Filter,
+              ])
+              .pipe(onlyEvents(), toArray()),
+            { defaultValue: [] as NostrEvent[] },
+          );
+          for (const ev of userRepoEvents) eventStore.add(ev);
+        }
+
+        // Merge repo events, deduplicating by event id
+        const allRepoEvents = repoEvents.slice();
+        const seenIds = new Set(repoEvents.map((ev) => ev.id));
+        for (const ev of userRepoEvents) {
+          if (!seenIds.has(ev.id)) {
+            seenIds.add(ev.id);
+            allRepoEvents.push(ev);
+          }
+        }
+
+        setSearchRepoEvents(allRepoEvents);
+        setMatchedUserPubkeys(matchedPubkeys);
       } catch {
         setSearchRepoEvents([]);
         setMatchedUserPubkeys(new Set());
