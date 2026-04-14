@@ -21,8 +21,10 @@ import { cn } from "@/lib/utils";
 // NIP-19 regex — matches bare identifiers not already preceded by "nostr:"
 // ---------------------------------------------------------------------------
 
+// Matches bare NIP-19 identifiers that are preceded by whitespace or start-of-string
+// (same approach as applesauce Tokens.nostrLink) so identifiers inside URLs are not transformed.
 const NIP19_BARE_RE =
-  /(?<!nostr:)\b(npub1|nprofile1|note1|nevent1|naddr1)[023456789acdefghjklmnpqrstuvwxyz]+\b/g;
+  /(?<=^|\s)(npub1|nprofile1|note1|nevent1|naddr1)[023456789acdefghjklmnpqrstuvwxyz]+/gm;
 
 const NSEC_RE = /nsec1[023456789acdefghjklmnpqrstuvwxyz]+/;
 
@@ -75,17 +77,9 @@ export function NostrComposer({
   // Detect nsec in value
   const hasNsec = NSEC_RE.test(value);
 
-  // Handle value changes: normalise bare NIP-19 identifiers
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      let newValue = e.target.value;
-
-      // Normalise bare NIP-19 identifiers → prepend "nostr:"
-      if (NIP19_BARE_RE.test(newValue)) {
-        NIP19_BARE_RE.lastIndex = 0; // reset after test
-        newValue = newValue.replace(NIP19_BARE_RE, "nostr:$&");
-      }
-
+      const newValue = e.target.value.replace(NIP19_BARE_RE, "nostr:$&");
       onChange(newValue);
     },
     [onChange],
