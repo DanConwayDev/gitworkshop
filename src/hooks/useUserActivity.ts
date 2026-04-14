@@ -46,7 +46,39 @@ import {
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
-import { switchMap, map, of } from "rxjs";
+import { switchMap, map, of, distinctUntilChanged } from "rxjs";
+
+/** Root item kinds — events that carry the `a` repo coord tag directly. */
+const ROOT_ITEM_KINDS = new Set([ISSUE_KIND, PATCH_KIND, PR_KIND]);
+
+/**
+ * Extract the parent root event ID from a secondary event.
+ * Mirrors the logic in ActivityFeed.tsx `getParentEventId`.
+ */
+function getSecondaryParentId(event: NostrEvent): string | undefined {
+  // NIP-22 comments use uppercase E for the thread root
+  if (event.kind === COMMENT_KIND) {
+    return event.tags.find(([t]) => t === "E")?.[1];
+  }
+  // Status events and cover notes: prefer e tag with "root" marker
+  const rootMarked = event.tags.find(
+    ([t, , , marker]) => t === "e" && marker === "root",
+  )?.[1];
+  if (rootMarked) return rootMarked;
+  return event.tags.find(([t]) => t === "e")?.[1];
+}
+
+/** Returns true for secondary event kinds that reference a root item. */
+function isSecondaryKind(kind: number): boolean {
+  return (
+    kind === COMMENT_KIND ||
+    kind === COVER_NOTE_KIND ||
+    kind === STATUS_OPEN ||
+    kind === STATUS_RESOLVED ||
+    kind === STATUS_CLOSED ||
+    kind === STATUS_DRAFT
+  );
+}
 
 /** Git-related root kinds that make a comment or cover note count as git activity. */
 const GIT_ROOT_KINDS = new Set([
@@ -212,6 +244,70 @@ export function useUserActivity(
         return resilientSubscription(pool, repoRelays, [filter], {
           paginate: false,
         }).pipe(onlyEvents(), mapEventsToStore(store));
+      }),
+    );
+  }, [pubkey, store]);
+
+  // -------------------------------------------------------------------------
+  // Phase 3: fetch missing root events for orphaned secondary events
+  //
+  // Secondary events (comments, status changes, cover notes) reference their
+  // parent root event (issue/PR/patch) via an E or e tag. When those root
+  // events aren't in the store yet, the activity feed can't resolve the repo
+  // coordinate and shows "No repository". This phase watches the activity
+  // events in the store, finds any secondary events whose parent root isn't
+  // present, and fetches those missing parents from the outbox relays.
+  // -------------------------------------------------------------------------
+  use$(() => {
+    if (!pubkey) return undefined;
+
+    const activityFilter: Filter = {
+      kinds: ACTIVITY_KINDS,
+      authors: [pubkey],
+    };
+
+    // Combine the activity timeline with the user's outbox relays so we can
+    // fetch missing parents from the right relays.
+    return store.mailboxes(pubkey).pipe(
+      map((mailboxes) => mailboxes?.outboxes ?? []),
+      switchMap((outboxes) => {
+        const relays =
+          outboxes.length > 0 ? outboxes : gitIndexRelays.getValue();
+
+        return (
+          store.timeline([activityFilter]) as unknown as Observable<
+            NostrEvent[]
+          >
+        ).pipe(
+          // Collect the set of missing parent IDs as a sorted string so we
+          // only re-subscribe when the set actually changes.
+          map((events) => {
+            const missingIds = new Set<string>();
+            for (const ev of events) {
+              if (!isSecondaryKind(ev.kind)) continue;
+              const parentId = getSecondaryParentId(ev);
+              if (!parentId) continue;
+              if (!store.getEvent(parentId)) missingIds.add(parentId);
+            }
+            return [...missingIds].sort().join(",");
+          }),
+          distinctUntilChanged(),
+          switchMap((missingKey) => {
+            if (!missingKey || relays.length === 0) return of(undefined);
+
+            const ids = missingKey.split(",").filter(Boolean);
+            if (ids.length === 0) return of(undefined);
+
+            const filter: Filter = {
+              kinds: [...ROOT_ITEM_KINDS],
+              ids,
+            };
+
+            return resilientSubscription(pool, relays, [filter], {
+              paginate: false,
+            }).pipe(onlyEvents(), mapEventsToStore(store));
+          }),
+        );
       }),
     );
   }, [pubkey, store]);

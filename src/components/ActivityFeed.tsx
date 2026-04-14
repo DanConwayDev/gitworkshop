@@ -722,6 +722,19 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
 function RepoGroupSection({ group }: { group: RepoGroup }) {
   const [expanded, setExpanded] = useState(false);
 
+  // When the repo coord couldn't be resolved from the activity events alone
+  // (e.g. the user only has secondary events — comments/status — whose root
+  // item wasn't in the fetched set), try to resolve it reactively from the
+  // store. The root item may arrive later as events stream in.
+  const orphanParentId =
+    !group.repoCoord && group.items.length > 0
+      ? getParentEventId(group.items[0]!.events[0]!)
+      : undefined;
+  const resolvedParent = useParentEvent(orphanParentId);
+  const resolvedRepoCoord =
+    group.repoCoord ??
+    (resolvedParent ? getRepoCoord(resolvedParent) : undefined);
+
   const counts = countKinds(group.items);
   const summaryParts = buildSummaryParts(counts);
 
@@ -743,10 +756,10 @@ function RepoGroupSection({ group }: { group: RepoGroup }) {
         </div>
 
         {/* Repo badge or "No repository" */}
-        {group.repoCoord ? (
+        {resolvedRepoCoord ? (
           <span onClick={(e) => e.stopPropagation()}>
             <RepoBadge
-              coord={group.repoCoord}
+              coord={resolvedRepoCoord}
               className="text-xs font-medium"
             />
           </span>
