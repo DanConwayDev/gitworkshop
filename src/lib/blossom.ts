@@ -79,6 +79,95 @@ export function appendExtensionIfMissing(
 }
 
 // ---------------------------------------------------------------------------
+// Image resizing
+// ---------------------------------------------------------------------------
+
+/** Maximum dimension (width or height) for uploaded images. */
+const MAX_IMAGE_DIMENSION = 1920;
+
+/** JPEG quality for resized images (0–1). */
+const JPEG_QUALITY = 0.85;
+
+/**
+ * Resize an image file so its longest side is at most MAX_IMAGE_DIMENSION
+ * pixels, encoding as whichever of JPEG/PNG is smaller.
+ *
+ * If the image already fits within the limit, the original file is returned
+ * unchanged. Non-image files are returned as-is.
+ */
+export async function resizeImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;
+
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    return file; // Unsupported format — skip resize
+  }
+
+  const { width, height } = bitmap;
+
+  if (width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION) {
+    bitmap.close();
+    return file;
+  }
+
+  const scale = MAX_IMAGE_DIMENSION / Math.max(width, height);
+  const newWidth = Math.round(width * scale);
+  const newHeight = Math.round(height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = newWidth;
+  canvas.height = newHeight;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bitmap.close();
+    return file; // Canvas unavailable — skip resize
+  }
+
+  ctx.drawImage(bitmap, 0, 0, newWidth, newHeight);
+  bitmap.close();
+
+  // Encode as both JPEG and PNG, pick the smaller one
+  const [jpegBlob, pngBlob] = await Promise.all([
+    canvasToBlob(canvas, "image/jpeg", JPEG_QUALITY),
+    canvasToBlob(canvas, "image/png"),
+  ]);
+
+  const best =
+    jpegBlob.size <= pngBlob.size
+      ? { blob: jpegBlob, ext: ".jpg", mime: "image/jpeg" as const }
+      : { blob: pngBlob, ext: ".png", mime: "image/png" as const };
+
+  return new File([best.blob], replaceExtension(file.name, best.ext), {
+    type: best.mime,
+  });
+}
+
+/** Promisified canvas.toBlob. */
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality?: number,
+): Promise<Blob> {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error(`Failed to encode ${type}`))),
+      type,
+      quality,
+    );
+  });
+}
+
+/** Replace or append a file extension. */
+function replaceExtension(filename: string, ext: string): string {
+  const dotIndex = filename.lastIndexOf(".");
+  const base = dotIndex > 0 ? filename.slice(0, dotIndex) : filename;
+  return base + ext;
+}
+
+// ---------------------------------------------------------------------------
 // Image metadata (dimensions + blurhash)
 // ---------------------------------------------------------------------------
 
@@ -181,6 +270,9 @@ export async function blossomUpload(
     throw new Error("No Blossom servers configured");
   }
 
+  // Resize images larger than 1920px before uploading
+  file = await resizeImage(file);
+
   const x = await sha256Hex(file);
   const now = Date.now();
   const expiration = now + 60_000;
@@ -261,7 +353,7 @@ export async function blossomUpload(
   const uploadedServer = servers.find((s) => uploadedUrl.startsWith(s));
   const mirrorServers = servers.filter((s) => s !== uploadedServer);
   if (mirrorServers.length > 0) {
-    blossomMirror(uploadedUrl, mirrorServers, signer).catch(() => {
+    blossomMirror(uploadedUrl, x, mirrorServers, signer).catch(() => {
       // Mirroring is best-effort — never fail the upload if it fails
     });
   }
@@ -276,17 +368,20 @@ export async function blossomUpload(
 /** Mirror a blob to additional Blossom servers (BUD-04). Fire-and-forget. */
 async function blossomMirror(
   sourceUrl: string,
+  sha256: string,
   servers: string[],
   signer: BlossomSigner,
 ): Promise<void> {
   const now = Date.now();
 
+  // BUD-11: PUT /mirror requires t="upload" and x=<sha256> tags
   const event = await signer.signEvent({
     kind: 24242,
     content: "Mirror blob",
     created_at: Math.floor(now / 1000),
     tags: [
-      ["t", "mirror"],
+      ["t", "upload"],
+      ["x", sha256],
       ["expiration", Math.floor((now + 60_000) / 1000).toString()],
     ],
   });

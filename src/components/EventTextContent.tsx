@@ -22,6 +22,7 @@ import {
   EmbeddedEventByAddressPreview,
 } from "@/components/EmbeddedEventPreview";
 import { isImageURL, isVideoURL } from "applesauce-core/helpers";
+import { BlossomImage, BlossomVideo } from "@/components/BlossomMedia";
 
 // ---------------------------------------------------------------------------
 // Mention component — renders nprofile / npub as inline avatar + name
@@ -53,22 +54,12 @@ const components: ComponentMap = {
   link: ({ node }) => {
     if (isImageURL(node.href)) {
       return (
-        <img
-          src={node.href}
-          alt=""
-          className="max-w-full rounded-md my-2"
-          loading="lazy"
-        />
+        <BlossomImage src={node.href} className="max-w-full rounded-md my-2" />
       );
     }
     if (isVideoURL(node.href)) {
       return (
-        <video
-          src={node.href}
-          controls
-          className="max-w-full rounded-md my-2"
-          preload="metadata"
-        />
+        <BlossomVideo src={node.href} className="max-w-full rounded-md my-2" />
       );
     }
     return (
@@ -85,12 +76,10 @@ const components: ComponentMap = {
   gallery: ({ node }) => (
     <div className="grid grid-cols-2 gap-1 my-2">
       {node.links.map((src) => (
-        <img
+        <BlossomImage
           key={src}
           src={src}
-          alt=""
           className="w-full rounded-md object-cover aspect-square"
-          loading="lazy"
         />
       ))}
     </div>
