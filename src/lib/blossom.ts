@@ -313,6 +313,7 @@ async function blossomMirror(
 // ---------------------------------------------------------------------------
 
 export const DEFAULT_BLOSSOM_SERVERS = [
-  "https://blossom.band",
+  "https://blossom.ditto.pub",
+  "https://blossom.dreamith.to",
   "https://blossom.primal.net",
 ];
