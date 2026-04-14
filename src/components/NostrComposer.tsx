@@ -277,8 +277,16 @@ export const NostrComposer = forwardRef<
         {/* Preview area */}
         {activeTab === "preview" && (
           <div
-            className={cn("px-3 py-2 text-sm overflow-auto", className)}
-            style={{ minHeight: minHeight ?? `${rows * 1.5}rem` }}
+            className={cn(
+              "px-3 py-2 text-sm overflow-auto",
+              "[&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border hover:[&::-webkit-scrollbar-thumb]:bg-border/80",
+              className,
+            )}
+            style={{
+              minHeight: minHeight ?? `${rows * 1.5}rem`,
+              scrollbarWidth: "thin",
+              scrollbarColor: "hsl(var(--border)) transparent",
+            }}
           >
             <CommentContent content={value} />
           </div>
@@ -367,11 +375,15 @@ function WriteArea({
         rows={rows}
         className={cn(
           "resize-none text-sm border-0 shadow-none focus-visible:ring-0 bg-transparent overflow-y-auto",
+          // Style native scrollbar to match shadcn ScrollBar (bg-border thumb, thin track)
+          "[&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border hover:[&::-webkit-scrollbar-thumb]:bg-border/80",
           className,
         )}
         style={{
           ...(minHeight ? { minHeight } : undefined),
           maxHeight,
+          scrollbarWidth: "thin",
+          scrollbarColor: "hsl(var(--border)) transparent",
         }}
       />
       <MentionAutocomplete
