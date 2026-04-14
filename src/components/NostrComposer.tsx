@@ -6,15 +6,17 @@
  * - NIP-19 paste → nostr: prefix normalisation
  * - nsec guard with inline warning
  * - NIP-19 embed preview chips below the textarea
+ * - Blossom image upload via file picker button or paste
  */
 import { useRef, useCallback, useMemo, useState } from "react";
 import { nip19 } from "nostr-tools";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Paperclip, Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CommentContent } from "@/components/CommentContent";
 import { MentionAutocomplete } from "@/components/MentionAutocomplete";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
+import { useBlossomUpload } from "@/hooks/useBlossomUpload";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -70,9 +72,12 @@ export function NostrComposer({
   priorityPubkeys,
 }: NostrComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [internalTab, setInternalTab] = useState<"write" | "preview">("write");
   const activeTab = activeTabProp ?? internalTab;
   const _setActiveTab = onTabChange ?? setInternalTab;
+
+  const { uploadFile, isUploading } = useBlossomUpload();
 
   // Detect nsec in value
   const hasNsec = NSEC_RE.test(value);
@@ -113,6 +118,60 @@ export function NostrComposer({
     [value, onChange],
   );
 
+  // Insert a URL at the current cursor position (or append)
+  const insertUrl = useCallback(
+    (url: string) => {
+      const textarea = textareaRef.current;
+      const pos = textarea?.selectionStart ?? value.length;
+      const before = value.slice(0, pos);
+      const after = value.slice(pos);
+      // Add spacing around the URL so it renders as a standalone link
+      const prefix = before.length > 0 && !before.endsWith("\n") ? "\n" : "";
+      const suffix = after.length > 0 && !after.startsWith("\n") ? "\n" : "";
+      const insertion = `${prefix}${url}${suffix}`;
+      const newValue = before + insertion + after;
+      onChange(newValue);
+
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current;
+        if (!ta) return;
+        const newPos = pos + insertion.length;
+        ta.setSelectionRange(newPos, newPos);
+        ta.focus();
+      });
+    },
+    [value, onChange],
+  );
+
+  // Handle file selected via the file picker button
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      // Reset so the same file can be re-selected
+      e.target.value = "";
+      const url = await uploadFile(file);
+      if (url) insertUrl(url);
+    },
+    [uploadFile, insertUrl],
+  );
+
+  // Handle paste — intercept image data from clipboard
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = Array.from(e.clipboardData.items);
+      const imageItem = items.find((item) => item.type.startsWith("image/"));
+      if (!imageItem) return;
+
+      e.preventDefault();
+      const file = imageItem.getAsFile();
+      if (!file) return;
+      const url = await uploadFile(file);
+      if (url) insertUrl(url);
+    },
+    [uploadFile, insertUrl],
+  );
+
   // Extract unique nostr: identifiers from value for preview chips
   const embedIdentifiers = useMemo(() => {
     const matches = new Set<string>();
@@ -139,8 +198,9 @@ export function NostrComposer({
             onChange={handleChange}
             onInsertMention={handleInsertMention}
             onFocusChange={onFocusChange}
+            onPaste={handlePaste}
             placeholder={placeholder}
-            disabled={disabled}
+            disabled={disabled || isUploading}
             rows={rows}
             className={className}
             minHeight={minHeight}
@@ -157,6 +217,34 @@ export function NostrComposer({
             <CommentContent content={value} />
           </div>
         )}
+
+        {/* Bottom toolbar */}
+        <div className="flex items-center gap-1 border-t border-input px-2 py-1">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            className="hidden"
+            onChange={handleFileChange}
+            disabled={disabled || isUploading}
+          />
+
+          {/* Upload button */}
+          <button
+            type="button"
+            title="Attach image or video (Blossom)"
+            disabled={disabled || isUploading}
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isUploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Paperclip className="h-4 w-4" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* nsec guard */}
@@ -193,6 +281,7 @@ interface WriteAreaProps {
     replacement: string;
   }) => void;
   onFocusChange?: (focused: boolean) => void;
+  onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
   placeholder?: string;
   disabled?: boolean;
   rows?: number;
@@ -207,6 +296,7 @@ function WriteArea({
   onChange,
   onInsertMention,
   onFocusChange,
+  onPaste,
   placeholder,
   disabled,
   rows,
@@ -222,6 +312,7 @@ function WriteArea({
         onChange={onChange}
         onFocus={() => onFocusChange?.(true)}
         onBlur={() => onFocusChange?.(false)}
+        onPaste={onPaste}
         placeholder={placeholder}
         disabled={disabled}
         rows={rows}
