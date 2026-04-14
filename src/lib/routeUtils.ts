@@ -268,10 +268,13 @@ export function relayUrlToSegment(url: string): string {
 function normalizeRelayHint(hint: string): string | undefined {
   let url = decodeURIComponent(hint);
   if (!url.includes("://")) url = "wss://" + url;
-  // Basic sanity check
+  // Basic sanity check — return the parsed (normalized) form so it matches
+  // the URL the RelayPool stores via its own normalizeURL call (which uses
+  // new URL().toString() and therefore adds a trailing slash for bare domains).
   try {
     const parsed = new URL(url);
-    if (parsed.protocol === "wss:" || parsed.protocol === "ws:") return url;
+    if (parsed.protocol === "wss:" || parsed.protocol === "ws:")
+      return parsed.toString();
   } catch {
     // ignore
   }
