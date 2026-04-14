@@ -10,6 +10,11 @@
  *   - 1617  Git patch (root)
  *   - 1618  Git pull request
  *   - 1111  NIP-22 comment on a git item (filtered by K tag)
+ *   - 1624  Cover note on a git item
+ *   - 1630  Status: open
+ *   - 1631  Status: resolved
+ *   - 1632  Status: closed
+ *   - 1633  Status: draft
  *
  * For comments (kind 1111) we only include ones where the `K` tag references
  * a git-related root kind (1621, 1617, 1618, 30617).
@@ -30,6 +35,11 @@ import {
   PATCH_KIND,
   PR_KIND,
   COMMENT_KIND,
+  COVER_NOTE_KIND,
+  STATUS_OPEN,
+  STATUS_RESOLVED,
+  STATUS_CLOSED,
+  STATUS_DRAFT,
   REPO_KIND,
   getRepoRelays,
 } from "@/lib/nip34";
@@ -38,7 +48,7 @@ import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
 import { switchMap, map, of } from "rxjs";
 
-/** Git-related root kinds that make a comment count as git activity. */
+/** Git-related root kinds that make a comment or cover note count as git activity. */
 const GIT_ROOT_KINDS = new Set([
   String(ISSUE_KIND),
   String(PATCH_KIND),
@@ -46,8 +56,23 @@ const GIT_ROOT_KINDS = new Set([
   String(REPO_KIND),
 ]);
 
+/** Status event kinds. */
+export const STATUS_KINDS_ACTIVITY = [
+  STATUS_OPEN,
+  STATUS_RESOLVED,
+  STATUS_CLOSED,
+  STATUS_DRAFT,
+] as const;
+
 /** All activity kinds to fetch from relays. */
-const ACTIVITY_KINDS = [ISSUE_KIND, PATCH_KIND, PR_KIND, COMMENT_KIND];
+const ACTIVITY_KINDS = [
+  ISSUE_KIND,
+  PATCH_KIND,
+  PR_KIND,
+  COMMENT_KIND,
+  COVER_NOTE_KIND,
+  ...STATUS_KINDS_ACTIVITY,
+];
 
 /** Maximum number of activity items to return. */
 const ACTIVITY_LIMIT = 50;
@@ -63,6 +88,29 @@ export function isGitComment(event: NostrEvent): boolean {
 }
 
 /**
+ * Returns true if a kind:1624 cover note is on a git-related item.
+ * Checks the `k` tag (lowercase) which cover notes use for the root event's kind.
+ */
+export function isGitCoverNote(event: NostrEvent): boolean {
+  if (event.kind !== COVER_NOTE_KIND) return false;
+  const kTag = event.tags.find(([t]) => t === "k")?.[1];
+  return kTag !== undefined && GIT_ROOT_KINDS.has(kTag);
+}
+
+/**
+ * Returns true if a status event (1630-1633) references a git item.
+ * Checks the `k` tag for the root event's kind.
+ */
+export function isGitStatusEvent(event: NostrEvent): boolean {
+  if (!(STATUS_KINDS_ACTIVITY as readonly number[]).includes(event.kind))
+    return false;
+  // Status events reference the root item via an `e` tag; the `k` tag
+  // (lowercase) holds the root event's kind.
+  const kTag = event.tags.find(([t]) => t === "k")?.[1];
+  return kTag !== undefined && GIT_ROOT_KINDS.has(kTag);
+}
+
+/**
  * Returns true if the event is a git activity item we want to display.
  */
 export function isGitActivity(event: NostrEvent): boolean {
@@ -70,6 +118,9 @@ export function isGitActivity(event: NostrEvent): boolean {
   if (event.kind === PATCH_KIND) return true;
   if (event.kind === PR_KIND) return true;
   if (event.kind === COMMENT_KIND) return isGitComment(event);
+  if (event.kind === COVER_NOTE_KIND) return isGitCoverNote(event);
+  if ((STATUS_KINDS_ACTIVITY as readonly number[]).includes(event.kind))
+    return isGitStatusEvent(event);
   return false;
 }
 
