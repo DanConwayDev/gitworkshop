@@ -10,14 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  GitBranch,
-  Search,
-  ExternalLink,
-  Sparkles,
-  Loader2,
-  User,
-} from "lucide-react";
+import { GitBranch, Search, ExternalLink, Loader2, User } from "lucide-react";
 import type { ResolvedRepo } from "@/lib/nip34";
 import { formatDistanceToNow } from "date-fns";
 
@@ -80,52 +73,17 @@ export default function RepositoriesPage({
 
   return (
     <div className="min-h-full">
-      {/* Hero section */}
-      <div className="relative isolate overflow-hidden border-b border-border/40">
-        {!search && (
-          <>
-            <div className="absolute inset-0 -z-10 bg-gradient-to-br from-pink-500/5 via-transparent to-pink-500/5" />
-            <div className="absolute top-0 left-1/4 w-96 h-96 -z-10 bg-pink-500/10 rounded-full blur-3xl" />
-            <div className="absolute bottom-0 right-1/4 w-72 h-72 -z-10 bg-pink-500/10 rounded-full blur-3xl" />
-          </>
-        )}
-
-        <div
-          className={`container max-w-screen-xl px-4 md:px-8 ${search ? "py-4" : "py-12 md:py-16"}`}
-        >
-          {!search && (
-            <>
-              <div className="flex items-center gap-3 mb-4">
-                <Sparkles className="h-5 w-5 text-pink-500" />
-                <span className="text-sm font-medium text-muted-foreground">
-                  {relayLabel ? relayLabel : "Powered by Nostr"}
-                </span>
-              </div>
-              <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">
-                <span className="bg-gradient-to-r from-pink-600 via-pink-500 to-pink-600 dark:from-pink-400 dark:via-pink-400 dark:to-pink-400 bg-clip-text text-transparent">
-                  Git Repositories
-                </span>
-              </h1>
-              <p className="text-muted-foreground text-lg max-w-2xl mb-6">
-                {relayLabel
-                  ? `Searching repository announcements on ${relayLabel}.`
-                  : "Searching repository announcements on Nostr."}
-              </p>
-            </>
-          )}
-
-          {/* In search mode, show a compact relay label if one is set */}
-          {search && relayLabel && (
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-3.5 w-3.5 text-pink-500" />
-              <span className="text-sm text-muted-foreground">
-                {relayLabel}
-              </span>
-            </div>
-          )}
+      {/* Header */}
+      <div className="border-b border-border/40">
+        <div className="container max-w-screen-xl px-4 md:px-8 py-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-semibold">
+              {relayLabel ?? "Repository announcements"}
+            </h1>
+          </div>
 
           {/* Relay status banner (connection state, repo count, etc.) */}
-          {relayStatusBanner && <div className="mb-4">{relayStatusBanner}</div>}
+          {relayStatusBanner && <div>{relayStatusBanner}</div>}
 
           <div className="flex items-center gap-4">
             <div className="relative max-w-md flex-1">
