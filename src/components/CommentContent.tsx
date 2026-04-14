@@ -14,6 +14,7 @@
  * Does NOT support: syntax highlighting, git-relative images, heading anchors.
  * Use MarkdownContent for full markdown (issue/PR bodies, README files).
  */
+import React from "react";
 import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -126,10 +127,21 @@ const components: Components = {
     </blockquote>
   ),
 
-  // Paragraphs — tighter spacing than full MarkdownContent
-  p: ({ children }) => (
-    <p className="my-1.5 leading-6 break-words">{children}</p>
-  ),
+  // Paragraphs — tighter spacing than full MarkdownContent.
+  // Use a <div> when children contain block-level embeds (EmbeddedEventPreview
+  // renders a <div>) to avoid invalid <div> inside <p> nesting.
+  p: ({ children }) => {
+    // A child is "block-level" if it's a React component (not a plain HTML
+    // string element like span/a/code/strong/em). EmbeddedEventPreview and
+    // NostrProfileMention are components, so they trigger this path.
+    const hasBlockChild = React.Children.toArray(children).some(
+      (child) => React.isValidElement(child) && typeof child.type !== "string",
+    );
+    if (hasBlockChild) {
+      return <div className="my-1.5 leading-6 break-words">{children}</div>;
+    }
+    return <p className="my-1.5 leading-6 break-words">{children}</p>;
+  },
 
   // Lists
   ul: ({ children }) => (
