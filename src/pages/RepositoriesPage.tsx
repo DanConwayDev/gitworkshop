@@ -114,10 +114,18 @@ export default function RepositoriesPage({
             </>
           )}
 
-          {/* Relay status banner (connection state, repo count, etc.) */}
-          {relayStatusBanner && (
-            <div className={search ? "" : "mb-6"}>{relayStatusBanner}</div>
+          {/* In search mode, show a compact relay label if one is set */}
+          {search && relayLabel && (
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-3.5 w-3.5 text-pink-500" />
+              <span className="text-sm text-muted-foreground">
+                {relayLabel}
+              </span>
+            </div>
           )}
+
+          {/* Relay status banner (connection state, repo count, etc.) */}
+          {relayStatusBanner && <div className="mb-4">{relayStatusBanner}</div>}
 
           <div className="flex items-center gap-4">
             <div className="relative max-w-md flex-1">
