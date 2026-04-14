@@ -1,10 +1,9 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
-import { useAllRepositories } from "@/hooks/useAllRepositories";
+import { useRepositorySearch } from "@/hooks/useRepositorySearch";
 import { useRepoPath } from "@/hooks/useRepoPath";
 import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
-import { useProfilesForPubkeys } from "@/hooks/useProfilesForPubkeys";
 import { UserLink } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -16,11 +15,10 @@ import {
   ExternalLink,
   Sparkles,
   Loader2,
+  User,
 } from "lucide-react";
 import type { ResolvedRepo } from "@/lib/nip34";
 import { formatDistanceToNow } from "date-fns";
-
-const PAGE_SIZE = 50;
 
 interface RepositoriesPageProps {
   /** When set, query this relay instead of the user's configured git index relays. */
@@ -33,10 +31,11 @@ export default function RepositoriesPage({
   relayOverride,
   relayLabel,
 }: RepositoriesPageProps) {
-  const { repos, isSyncing } = useAllRepositories(relayOverride);
   const [search, setSearch] = useState("");
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const { repos, isLoading, hasMore, loadMore, matchedUserPubkeys } =
+    useRepositorySearch(search, relayOverride);
 
   const title = relayLabel
     ? `Repositories on ${relayLabel} - ngit`
@@ -49,78 +48,31 @@ export default function RepositoriesPage({
       : "Browse git repositories on Nostr",
   });
 
-  // Collect all unique maintainer pubkeys across all repos so we can fetch
-  // their profiles and include author names in the search filter.
-  const allMaintainerPubkeys = useMemo(() => {
-    if (!repos) return [];
-    const seen = new Set<string>();
-    for (const repo of repos) {
-      for (const pk of repo.maintainerSet) seen.add(pk);
-    }
-    return Array.from(seen);
-  }, [repos]);
+  // IntersectionObserver sentinel for infinite scroll (browse mode only)
+  const handleIntersect = useCallback(() => {
+    if (hasMore && !isLoading) loadMore();
+  }, [hasMore, isLoading, loadMore]);
 
-  const profileMap = useProfilesForPubkeys(allMaintainerPubkeys);
-
-  // Reset visible count when search changes so results start from the top
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [search]);
-
-  const filtered = useMemo(() => {
-    if (!repos) return undefined;
-    if (!search.trim()) return repos;
-    const q = search.toLowerCase();
-    return repos.filter((r) => {
-      if (
-        r.name.toLowerCase().includes(q) ||
-        r.description.toLowerCase().includes(q) ||
-        r.labels.some((l) => l.toLowerCase().includes(q))
-      )
-        return true;
-
-      // Also match against maintainer display names / usernames.
-      // Cover all four name fields: current (display_name, name) and their
-      // deprecated aliases (displayName, username) which older profiles may use.
-      return r.maintainerSet.some((pk) => {
-        const profile = profileMap.get(pk);
-        if (!profile) return false;
-        return [
-          profile.display_name,
-          profile.displayName,
-          profile.name,
-          profile.username,
-        ].some((n) => n && n.toLowerCase().includes(q));
-      });
-    });
-  }, [repos, search, profileMap]);
-
-  const visible = useMemo(
-    () => filtered?.slice(0, visibleCount),
-    [filtered, visibleCount],
-  );
-
-  const loadMore = useCallback(() => {
-    setVisibleCount((c) => c + PAGE_SIZE);
-  }, []);
-
-  // IntersectionObserver sentinel for infinite scroll
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) loadMore();
+        if (entries[0].isIntersecting) handleIntersect();
       },
       { rootMargin: "200px" },
     );
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [loadMore]);
+  }, [handleIntersect]);
 
-  const hasMore = filtered !== undefined && visibleCount < filtered.length;
+  // Determine what to render in the list area
+  const showSkeletons =
+    repos === undefined || (isLoading && repos.length === 0);
+  const showEmpty = !showSkeletons && repos !== undefined && repos.length === 0;
+  const showList = !showSkeletons && repos !== undefined && repos.length > 0;
 
   return (
     <div className="min-h-full">
@@ -159,22 +111,12 @@ export default function RepositoriesPage({
               />
             </div>
 
-            {/* Sync status indicator */}
-            {isSyncing && (
+            {/* Loading indicator — only shown during active fetches */}
+            {isLoading && repos !== undefined && repos.length > 0 && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin text-pink-500" />
-                <span>Syncing…</span>
-                {repos && (
-                  <span className="text-muted-foreground/60">
-                    {repos.length} found
-                  </span>
-                )}
+                <span>Loading…</span>
               </div>
-            )}
-            {!isSyncing && repos && (
-              <span className="text-sm text-muted-foreground/60">
-                {repos.length} repositories
-              </span>
             )}
           </div>
         </div>
@@ -182,13 +124,13 @@ export default function RepositoriesPage({
 
       {/* Repository list */}
       <div className="container max-w-screen-xl px-4 md:px-8 py-8">
-        {!visible ? (
+        {showSkeletons ? (
           <div className="grid gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <RepoSkeleton key={i} />
             ))}
           </div>
-        ) : visible.length === 0 ? (
+        ) : showEmpty ? (
           <Card className="border-dashed">
             <CardContent className="py-16 text-center">
               <GitBranch className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
@@ -198,43 +140,48 @@ export default function RepositoriesPage({
                   : "No repositories found on this relay"}
               </p>
               <p className="text-muted-foreground/60 text-sm mt-1">
-                {isSyncing
-                  ? "Still syncing — check back in a moment"
-                  : "Try a different search or check back later"}
+                Try a different search or check back later
               </p>
             </CardContent>
           </Card>
-        ) : (
+        ) : showList ? (
           <>
             <div className="grid gap-3">
-              {visible.map((repo) => (
+              {repos!.map((repo) => (
                 <RepoCard
                   key={`${repo.selectedMaintainer}:${repo.dTag}`}
                   repo={repo}
+                  isUserMatch={repo.maintainerSet.some((pk) =>
+                    matchedUserPubkeys.has(pk),
+                  )}
                 />
               ))}
             </div>
 
-            {/* Infinite scroll sentinel */}
+            {/* Infinite scroll sentinel — only in browse mode */}
             {hasMore && (
               <div ref={sentinelRef} className="flex justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" />
+                {isLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" />
+                ) : (
+                  <div className="h-5 w-5" />
+                )}
               </div>
             )}
-
-            {!hasMore && filtered && filtered.length > PAGE_SIZE && (
-              <p className="text-center text-sm text-muted-foreground/40 py-8">
-                All {filtered.length} repositories loaded
-              </p>
-            )}
           </>
-        )}
+        ) : null}
       </div>
     </div>
   );
 }
 
-function RepoCard({ repo }: { repo: ResolvedRepo }) {
+interface RepoCardProps {
+  repo: ResolvedRepo;
+  /** True when a maintainer of this repo matched the NIP-50 user search. */
+  isUserMatch?: boolean;
+}
+
+function RepoCard({ repo, isUserMatch }: RepoCardProps) {
   const repoPath = useRepoPath(repo.selectedMaintainer, repo.dTag, repo.relays);
   const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
     addSuffix: true,
@@ -257,6 +204,15 @@ function RepoCard({ repo }: { repo: ResolvedRepo }) {
                 <h3 className="font-semibold text-base truncate group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
                   {repo.name}
                 </h3>
+                {isUserMatch && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 shrink-0"
+                    title="Maintainer matched your search"
+                  >
+                    <User className="h-2.5 w-2.5" />
+                    user match
+                  </span>
+                )}
               </div>
 
               {repo.description && (
