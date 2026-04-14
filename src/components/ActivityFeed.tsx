@@ -645,25 +645,18 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
     <div>
       {/* Item header row */}
       <div
-        className={cn(
-          "flex items-start gap-2.5 py-2 px-2 rounded-md transition-colors",
-          item.events.length > 1
-            ? "cursor-pointer hover:bg-muted/40"
-            : "cursor-default",
-        )}
-        onClick={() => item.events.length > 1 && setExpanded((v) => !v)}
-        role={item.events.length > 1 ? "button" : undefined}
-        aria-expanded={item.events.length > 1 ? expanded : undefined}
+        className="flex items-start gap-2.5 py-2 px-2 rounded-md transition-colors cursor-pointer hover:bg-muted/40"
+        onClick={() => setExpanded((v) => !v)}
+        role="button"
+        aria-expanded={expanded}
       >
-        {/* Expand chevron or spacer */}
+        {/* Expand chevron */}
         <div className="w-4 shrink-0 flex items-center justify-center mt-1">
-          {item.events.length > 1 ? (
-            expanded ? (
-              <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
-            ) : (
-              <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
-            )
-          ) : null}
+          {expanded ? (
+            <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
+          ) : (
+            <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+          )}
         </div>
 
         <ItemIcon kind={item.rootKind} className="mt-0.5" />
@@ -720,7 +713,7 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
 // ---------------------------------------------------------------------------
 
 function RepoGroupSection({ group }: { group: RepoGroup }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   // When the repo coord couldn't be resolved from the activity events alone
   // (e.g. the user only has secondary events — comments/status — whose root
