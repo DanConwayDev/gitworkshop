@@ -39,6 +39,8 @@ type OutboxStatus = "publishing" | "broadly-published" | "partial" | "failed";
 
 function outboxSummaryStatus(item: OutboxItem): OutboxStatus {
   if (item.broadlySent) return "broadly-published";
+  // No relays yet — relay group resolution is still in progress
+  if (item.relays.length === 0) return "publishing";
   const anyPending = item.relays.some(
     (r) => r.status === "pending" || r.status === "retrying",
   );
@@ -96,15 +98,16 @@ export function OutboxStatusBadge({ event }: { event: NostrEvent }) {
   const successCount = item.relays.filter((r) => r.status === "success").length;
   const totalCount = item.relays.length;
 
+  const countSuffix = totalCount > 0 ? ` (${successCount}/${totalCount})` : "";
   const label = {
-    publishing: `publishing... (${successCount}/${totalCount})`,
-    partial: `publishing... (${successCount}/${totalCount})`,
+    publishing: `publishing...${countSuffix}`,
+    partial: `publishing...${countSuffix}`,
     "broadly-published": "published",
-    failed: `failed (${successCount}/${totalCount})`,
+    failed: `failed${countSuffix}`,
   }[status];
 
   const colorClass = {
-    publishing: "text-muted-foreground/60",
+    publishing: "text-yellow-600/80 dark:text-yellow-400/80",
     partial: "text-yellow-600/80 dark:text-yellow-400/80",
     "broadly-published": "text-green-600/80 dark:text-green-400/80",
     failed: "text-destructive/80",

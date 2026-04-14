@@ -85,10 +85,11 @@ export function CreateIssue(
     eventStore.add(signed);
 
     const notifyPubkeys = ownerPubkey !== self ? [ownerPubkey] : [];
-    await outboxStore.publish(
-      signed,
-      buildGroupIds(self, [repoCoord], notifyPubkeys),
-    );
+    // Fire-and-forget: publishing to the outbox can continue in the background
+    // after the event is signed and added to the local store.
+    outboxStore
+      .publish(signed, buildGroupIds(self, [repoCoord], notifyPubkeys))
+      .catch(console.error);
   };
 }
 
@@ -125,10 +126,10 @@ export function ChangeIssueStatus(
     const notifyPubkeys = [
       ...new Set([itemAuthorPubkey, ...repoOwners].filter((pk) => pk !== self)),
     ];
-    await outboxStore.publish(
-      signed,
-      buildGroupIds(self, repoCoords, notifyPubkeys),
-    );
+    // Fire-and-forget: publishing to the outbox can continue in the background.
+    outboxStore
+      .publish(signed, buildGroupIds(self, repoCoords, notifyPubkeys))
+      .catch(console.error);
   };
 }
 
@@ -154,7 +155,10 @@ export function RenameIssueSubject(
     // without waiting for a relay round-trip.
     eventStore.add(signed);
 
-    await outboxStore.publish(signed, buildGroupIds(self, repoCoords));
+    // Fire-and-forget: publishing to the outbox can continue in the background.
+    outboxStore
+      .publish(signed, buildGroupIds(self, repoCoords))
+      .catch(console.error);
   };
 }
 
@@ -176,7 +180,10 @@ export function AttachIssueLabels(
     // UI without waiting for a relay round-trip.
     eventStore.add(signed);
 
-    await outboxStore.publish(signed, buildGroupIds(self, repoCoords));
+    // Fire-and-forget: publishing to the outbox can continue in the background.
+    outboxStore
+      .publish(signed, buildGroupIds(self, repoCoords))
+      .catch(console.error);
   };
 }
 
@@ -205,10 +212,10 @@ export function CreateReaction(
 
     const notifyPubkeys =
       targetEvent.pubkey !== self ? [targetEvent.pubkey] : [];
-    await outboxStore.publish(
-      signed,
-      buildGroupIds(self, repoCoords, notifyPubkeys),
-    );
+    // Fire-and-forget: publishing to the outbox can continue in the background.
+    outboxStore
+      .publish(signed, buildGroupIds(self, repoCoords, notifyPubkeys))
+      .catch(console.error);
   };
 }
 
@@ -260,10 +267,10 @@ export function CreateComment(
       ...new Set([rootPubkey, parent.pubkey].filter((pk) => pk !== self)),
     ];
 
-    await outboxStore.publish(
-      signed,
-      buildGroupIds(self, repoCoords, notifyPubkeys),
-    );
+    // Fire-and-forget: publishing to the outbox can continue in the background.
+    outboxStore
+      .publish(signed, buildGroupIds(self, repoCoords, notifyPubkeys))
+      .catch(console.error);
   };
 }
 
@@ -292,7 +299,10 @@ export function CreateCoverNote(
     // waiting for a relay round-trip.
     eventStore.add(signed);
 
-    await outboxStore.publish(signed, buildGroupIds(self, repoCoords));
+    // Fire-and-forget: publishing to the outbox can continue in the background.
+    outboxStore
+      .publish(signed, buildGroupIds(self, repoCoords))
+      .catch(console.error);
   };
 }
 
@@ -329,6 +339,9 @@ export function DeleteEvent(
     // Add to local store immediately so the UI can react
     eventStore.add(signed);
 
-    await outboxStore.publish(signed, buildGroupIds(self, repoCoords));
+    // Fire-and-forget: publishing to the outbox can continue in the background.
+    outboxStore
+      .publish(signed, buildGroupIds(self, repoCoords))
+      .catch(console.error);
   };
 }

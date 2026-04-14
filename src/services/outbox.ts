@@ -397,6 +397,23 @@ class OutboxStore {
     // Deduplicate group IDs
     const uniqueGroupIds = [...new Set(groupIds)];
 
+    // Insert a provisional item immediately (no relays yet) so the
+    // OutboxStatusBadge appears on the event card without any delay while
+    // relay group resolution is still in progress.
+    const provisionalItem: OutboxItem = {
+      id: event.id,
+      event,
+      broadlySent: false,
+      relays: [],
+      createdAt: Math.floor(Date.now() / 1000),
+      relayGroupDefs: uniqueGroupIds,
+      ...(options?.hidden ? { hidden: true } : {}),
+    };
+    const currentItems = this.items$.getValue();
+    if (!currentItems.some((i) => i.id === event.id)) {
+      this.items$.next([provisionalItem, ...currentItems]);
+    }
+
     // Resolve all groups in parallel
     const resolvedGroups = await this.resolveGroups(
       uniqueGroupIds,

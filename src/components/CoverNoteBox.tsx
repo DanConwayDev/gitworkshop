@@ -178,7 +178,7 @@ export function CoverNoteBox({
                 {isPending ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Saving...
+                    Signing...
                   </>
                 ) : (
                   "Save cover note"
