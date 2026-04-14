@@ -164,14 +164,38 @@ function isRootItem(kind: number): boolean {
 }
 
 /**
- * Get the parent event ID that a secondary event references.
- * For comments/status/cover-notes: the lowercase `e` tag is the immediate parent.
+ * Get the root event ID that a secondary event references.
+ *
+ * Resolution order:
+ *   1. NIP-22 comments (kind 1111): uppercase `E` tag — NIP-22 root pointer.
+ *      This directly identifies the issue/PR/patch that was commented on.
+ *   2. Status events (1630-1633) and cover notes (1624): lowercase `e` tag
+ *      with a "root" marker, falling back to the first lowercase `e` tag.
+ *      (These events are not NIP-22 and don't use uppercase E.)
  */
 function getParentEventId(event: NostrEvent): string | undefined {
+  // NIP-22 comments use uppercase E for the thread root
+  if (event.kind === COMMENT_KIND) {
+    return event.tags.find(([t]) => t === "E")?.[1];
+  }
+
+  // Status events and cover notes: prefer e tag with "root" marker
+  const rootMarked = event.tags.find(
+    ([t, , , marker]) => t === "e" && marker === "root",
+  )?.[1];
+  if (rootMarked) return rootMarked;
+
+  // Fall back to first e tag
   return event.tags.find(([t]) => t === "e")?.[1];
 }
 
 function getParentKind(event: NostrEvent): number | undefined {
+  // NIP-22 comments use uppercase K for the root event's kind
+  if (event.kind === COMMENT_KIND) {
+    const kTag = event.tags.find(([t]) => t === "K")?.[1];
+    return kTag ? parseInt(kTag, 10) : undefined;
+  }
+  // Status events and cover notes use lowercase k
   const kTag = event.tags.find(([t]) => t === "k")?.[1];
   return kTag ? parseInt(kTag, 10) : undefined;
 }
@@ -236,6 +260,7 @@ function buildItemGroups(events: NostrEvent[]): ItemGroup[] {
     } else if (isSecondaryEvent(ev.kind)) {
       const parentId = getParentEventId(ev);
       if (parentId && rootById.has(parentId)) {
+        if (!groupMap.has(parentId)) groupMap.set(parentId, []);
         groupMap.get(parentId)!.push(ev);
       } else if (parentId) {
         // Parent not in our set — group orphans by parent ID
@@ -291,20 +316,52 @@ function buildItemGroups(events: NostrEvent[]): ItemGroup[] {
   return groups;
 }
 
-function groupByRepo(events: NostrEvent[]): RepoGroup[] {
-  const groups = new Map<string, NostrEvent[]>();
-  const NO_REPO = "__no_repo__";
-
-  for (const ev of events) {
-    const coord = getRepoCoord(ev) ?? NO_REPO;
-    const existing = groups.get(coord) ?? [];
-    existing.push(ev);
-    groups.set(coord, existing);
+/**
+ * Resolve the repo coordinate for an item group.
+ *
+ * Priority:
+ *   1. The rootEvent's own `a` / `A` tag (most reliable — root items always
+ *      carry the repo coord directly).
+ *   2. Any secondary event in the group that happens to carry an `a` / `A`
+ *      tag (cover notes and some status events include it).
+ *   3. undefined — repo unknown (will be shown as "No repository").
+ */
+function resolveGroupRepoCoord(group: ItemGroup): string | undefined {
+  // Root event is the authoritative source
+  if (group.rootEvent) {
+    const coord = getRepoCoord(group.rootEvent);
+    if (coord) return coord;
   }
 
-  return Array.from(groups.entries()).map(([coord, evs]) => ({
+  // Fall back to any secondary event that carries the tag
+  for (const ev of group.events) {
+    const coord = getRepoCoord(ev);
+    if (coord) return coord;
+  }
+
+  return undefined;
+}
+
+function groupByRepo(events: NostrEvent[]): RepoGroup[] {
+  // Build item groups first (globally), so secondary events are attached to
+  // their root item before we try to resolve the repo coord. If we split by
+  // repo first, secondary events (which lack an `a` tag) land in __no_repo__
+  // and never get matched to their root item.
+  const itemGroups = buildItemGroups(events);
+
+  const repoMap = new Map<string, ItemGroup[]>();
+  const NO_REPO = "__no_repo__";
+
+  for (const group of itemGroups) {
+    const coord = resolveGroupRepoCoord(group) ?? NO_REPO;
+    const existing = repoMap.get(coord) ?? [];
+    existing.push(group);
+    repoMap.set(coord, existing);
+  }
+
+  return Array.from(repoMap.entries()).map(([coord, items]) => ({
     repoCoord: coord === NO_REPO ? undefined : coord,
-    items: buildItemGroups(evs),
+    items,
   }));
 }
 
@@ -471,24 +528,26 @@ function eventVerb(event: NostrEvent): string {
   }
 }
 
-/** Hook: resolve the parent event title for a comment or cover note. */
-function useParentTitle(event: NostrEvent): string | undefined {
+/**
+ * Hook: resolve the parent event (issue/PR/patch) for a secondary event.
+ * Returns the event from the store if present, undefined otherwise.
+ */
+function useParentEvent(parentId: string | undefined): NostrEvent | undefined {
   const store = useEventStore();
-  const parentId = isSecondaryEvent(event.kind)
-    ? getParentEventId(event)
-    : undefined;
-
   return use$(() => {
     if (!parentId) return undefined;
     const filter: Filter = { ids: [parentId] };
-    return store.timeline([filter]).pipe(
-      map((events) => {
-        const ev = events[0];
-        if (!ev) return undefined;
-        return extractSubject(ev);
-      }),
-    );
+    return store.timeline([filter]).pipe(map((evs) => evs[0]));
   }, [parentId, store]);
+}
+
+/** Hook: resolve the parent event title for a comment or cover note. */
+function useParentTitle(event: NostrEvent): string | undefined {
+  const parentId = isSecondaryEvent(event.kind)
+    ? getParentEventId(event)
+    : undefined;
+  const parentEvent = useParentEvent(parentId);
+  return parentEvent ? extractSubject(parentEvent) : undefined;
 }
 
 function ActivityEventRow({ event }: { event: NostrEvent }) {
@@ -558,11 +617,18 @@ function ActivityEventRow({ event }: { event: NostrEvent }) {
 function ItemGroupRow({ item }: { item: ItemGroup }) {
   const [expanded, setExpanded] = useState(false);
 
-  const title = item.rootEvent
-    ? getActivityTitle(item.rootEvent)
-    : item.fallbackTitle;
+  // When the root item isn't in our event set, try to resolve it from the
+  // store reactively (it may arrive later as events stream in).
+  const orphanParentId = !item.rootEvent
+    ? getParentEventId(item.events[0]!)
+    : undefined;
+  const resolvedParent = useParentEvent(orphanParentId);
 
-  const path = item.rootEvent ? getActivityPath(item.rootEvent) : undefined;
+  const effectiveRoot = item.rootEvent ?? resolvedParent;
+  const title = effectiveRoot
+    ? getActivityTitle(effectiveRoot)
+    : item.fallbackTitle;
+  const path = effectiveRoot ? getActivityPath(effectiveRoot) : undefined;
 
   // Count secondary events (interactions beyond the root opening)
   const secondaryCount = item.events.filter((ev) =>
