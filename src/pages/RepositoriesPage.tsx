@@ -96,6 +96,7 @@ export default function RepositoriesPage({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10 bg-background/60 backdrop-blur-sm border-border/60 focus-visible:ring-pink-500/30"
+                autoFocus
               />
             </div>
 
