@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useCallback, useMemo } from "react";
 import type React from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useRepositorySearch } from "@/hooks/useRepositorySearch";
 import { useRepoPath } from "@/hooks/useRepoPath";
@@ -31,7 +31,11 @@ export default function RepositoriesPage({
   relayLabel,
   relayStatusBanner,
 }: RepositoriesPageProps) {
-  const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get("q") ?? "";
+  const setSearch = (value: string) => {
+    setSearchParams(value ? { q: value } : {}, { replace: true });
+  };
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const { repos, isLoading, hasMore, loadMore, matchedUserPubkeys } =
