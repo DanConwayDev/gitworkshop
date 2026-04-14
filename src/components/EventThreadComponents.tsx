@@ -633,12 +633,14 @@ export function CoverNoteCard({
                           })}
                         </span>
                       </div>
-                      <span className="text-xs text-muted-foreground/70 truncate w-full">
-                        by{" "}
-                        <span className="font-mono text-[10px]">
-                          {ev.pubkey.slice(0, 8)}…
-                        </span>
-                      </span>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground/70 truncate w-full">
+                        <span>by</span>
+                        <UserLink
+                          pubkey={ev.pubkey}
+                          avatarSize="xs"
+                          nameClassName="text-xs font-medium text-foreground"
+                        />
+                      </div>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>

@@ -240,7 +240,7 @@ export function UserName({ pubkey, className, linkToProfile }: UserNameProps) {
 interface UserLinkProps {
   pubkey: string;
   className?: string;
-  avatarSize?: "xs" | "sm" | "md" | "lg";
+  avatarSize?: "xs" | "sm" | "md" | "lg" | "xl";
   nameClassName?: string;
   /** Set to true when UserLink is already inside an <a> element to avoid invalid nested anchors. */
   noLink?: boolean;
