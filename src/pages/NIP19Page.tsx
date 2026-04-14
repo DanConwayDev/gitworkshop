@@ -6,7 +6,7 @@ import {
 import { use$ } from "applesauce-react/hooks";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 import { nip19 } from "nostr-tools";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { of } from "rxjs";
 import { eventStore } from "../services/nostr";
 import { REPO_KIND, ISSUE_KIND, PATCH_KIND, PR_KIND } from "../lib/nip34";
@@ -220,12 +220,20 @@ function EventRedirect({
     [eventId],
   );
 
-  // Show search status while searching or if concluded not-found/deleted/vanished
+  // Delay showing the search status page so the plain spinner shows first for
+  // up to 2s. Skip the delay if the search has already concluded (not found /
+  // deleted / vanished) so we never sit on the spinner after the answer is known.
+  const [searchDelayElapsed, setSearchDelayElapsed] = useState(false);
+  useEffect(() => {
+    setSearchDelayElapsed(false);
+    const timer = setTimeout(() => setSearchDelayElapsed(true), 2000);
+    return () => clearTimeout(timer);
+  }, [eventId]);
+
   if (!event) {
-    if (
-      search &&
-      (search.concludedNotFound || search.deleted || search.vanished)
-    ) {
+    const searchConcluded =
+      search && (search.concludedNotFound || search.deleted || search.vanished);
+    if (search && (searchDelayElapsed || searchConcluded) && !search.found) {
       return (
         <EventSearchStatus
           search={search}
@@ -234,7 +242,7 @@ function EventRedirect({
         />
       );
     }
-    return <LoadingState message={`Fetching event…`} />;
+    return <LoadingState message="Fetching event…" />;
   }
 
   const kind = event.kind;
