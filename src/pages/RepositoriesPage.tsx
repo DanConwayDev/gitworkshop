@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type React from "react";
 import { Link } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
@@ -13,6 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { GitBranch, Search, ExternalLink, Loader2, User } from "lucide-react";
 import type { ResolvedRepo } from "@/lib/nip34";
 import { formatDistanceToNow } from "date-fns";
+import { use$ } from "@/hooks/use$";
+import { pool } from "@/services/nostr";
+import { gitIndexRelays } from "@/services/settings";
 
 interface RepositoriesPageProps {
   /** When set, query this relay instead of the user's configured git index relays. */
@@ -104,6 +107,9 @@ export default function RepositoriesPage({
               </div>
             )}
           </div>
+
+          {/* Relay pills — show which relays are being searched */}
+          <RelayPillsRow relayOverride={relayOverride} />
         </div>
       </div>
 
@@ -251,6 +257,63 @@ function RepoCard({ repo, isUserMatch }: RepoCardProps) {
         </CardContent>
       </Card>
     </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Relay pills
+// ---------------------------------------------------------------------------
+
+/** Single relay pill with a live connection-status dot. */
+function RelayPill({ relayUrl }: { relayUrl: string }) {
+  const inst = useMemo(() => pool.relay(relayUrl), [relayUrl]);
+  const connected = use$(() => inst.connected$, [inst]);
+
+  const label = relayUrl.replace(/^wss?:\/\//, "").replace(/\/$/, "");
+
+  // Three states: undefined = connecting, true = connected, false = disconnected
+  const dotClass =
+    connected === undefined
+      ? "bg-amber-400"
+      : connected
+        ? "bg-green-500"
+        : "bg-muted-foreground/40";
+
+  const title =
+    connected === undefined
+      ? `${relayUrl} — connecting…`
+      : connected
+        ? `${relayUrl} — connected`
+        : `${relayUrl} — disconnected`;
+
+  return (
+    <span
+      title={title}
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono text-muted-foreground bg-muted/60 border border-border/50 select-none"
+    >
+      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotClass}`} />
+      {label}
+    </span>
+  );
+}
+
+/** Row of relay pills shown below the search box. */
+function RelayPillsRow({ relayOverride }: { relayOverride?: string[] }) {
+  const liveGitIndexRelays =
+    use$(() => gitIndexRelays, []) ?? gitIndexRelays.getValue();
+  const relays = relayOverride ?? liveGitIndexRelays;
+
+  if (relays.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs text-muted-foreground/60 mr-0.5">
+        Searching:
+      </span>
+      {relays.map((url) => (
+        <RelayPill key={url} relayUrl={url} />
+      ))}
+    </div>
   );
 }
 
