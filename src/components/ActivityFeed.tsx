@@ -1,19 +1,29 @@
 /**
  * ActivityFeed — renders a user's recent git activity.
  *
- * Layout:
- *   - Grouped by time period (Today / This week / Last week / Last month /
- *     2 months ago), then by repository within each period.
- *   - Each item shows: icon · verb · title · "in {RepoBadge}" · timestamp
- *   - Comments show "commented in {repo}" with the comment snippet as the
- *     title; parent title is shown when already in the EventStore.
- *   - Status events show "closed issue" / "resolved PR" etc.
- *   - Cover notes show "posted cover note on {item} in {repo}".
+ * Three-level collapsible hierarchy:
  *
- * The component is stateless — it receives raw events from useUserActivity
- * and renders them.
+ *   Level 1 — Repo row (collapsed by default)
+ *     "user/repo  ·  2 PRs  ·  4 issues  ·  3 comments"
+ *     Click to expand → shows Level 2 rows
+ *
+ *   Level 2 — Item row (PR / issue / patch, collapsed by default)
+ *     "[Icon] Fix the parser bug  ·  3 interactions"
+ *     Click to expand → shows Level 3 rows
+ *
+ *   Level 3 — Individual activity event
+ *     "opened issue  ·  3 days ago"
+ *     "commented: …snippet…  ·  2 days ago"
+ *     "closed  ·  1 day ago"
+ *
+ * Events that have no parent item (e.g. a standalone issue with no comments)
+ * still appear as a Level 2 row with a single Level 3 entry.
+ *
+ * The component is stateless w.r.t. data — it receives raw events from
+ * useUserActivity and renders them.
  */
 
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   startOfDay,
@@ -22,6 +32,7 @@ import {
   startOfMonth,
   subMonths,
   formatDistanceToNow,
+  format,
 } from "date-fns";
 import {
   CircleDot,
@@ -33,9 +44,12 @@ import {
   FileText,
   GitMerge,
   StickyNote,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { RepoBadge } from "@/components/RepoBadge";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import { use$ } from "@/hooks/use$";
@@ -56,6 +70,7 @@ import {
 import type { NostrEvent } from "nostr-tools";
 import type { Filter } from "applesauce-core/helpers";
 import { map } from "rxjs/operators";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Time-bucket helpers
@@ -115,15 +130,11 @@ function getActivityTitle(event: NostrEvent): string {
 
 /**
  * Extract the repo coordinate from an activity event.
- * Issues/patches/PRs/status events use an `a` tag pointing to the repo.
- * Comments use an `a` tag (lowercase) for the repo coord.
  */
 function getRepoCoord(event: NostrEvent): string | undefined {
-  // Direct `a` tag pointing to a repo (kind 30617)
   const aTag = event.tags.find(([t]) => t === "a")?.[1];
   if (aTag?.startsWith("30617:")) return aTag;
 
-  // NIP-22 comments: uppercase `A` = root event coord (may be a repo)
   const upperA = event.tags.find(([t]) => t === "A")?.[1];
   if (upperA?.startsWith("30617:")) return upperA;
 
@@ -135,151 +146,31 @@ function getActivityPath(event: NostrEvent): string {
   return `/${eventIdToNevent(event.id)}`;
 }
 
-// ---------------------------------------------------------------------------
-// Verb + description helpers
-// ---------------------------------------------------------------------------
+/** True for event kinds that are "secondary" — they act on a parent item. */
+function isSecondaryEvent(kind: number): boolean {
+  return (
+    kind === COMMENT_KIND ||
+    kind === COVER_NOTE_KIND ||
+    kind === STATUS_OPEN ||
+    kind === STATUS_RESOLVED ||
+    kind === STATUS_CLOSED ||
+    kind === STATUS_DRAFT
+  );
+}
 
-interface ActivityDescription {
-  /** Short verb phrase, e.g. "opened issue" */
-  verb: string;
-  /** The title / subject to display as the main line */
-  title: string;
-  /**
-   * Optional secondary label shown between verb and repo badge.
-   * e.g. "on issue: Fix the parser" for a comment.
-   */
-  parentLabel?: string;
+/** True for event kinds that are "root" items (issues, patches, PRs). */
+function isRootItem(kind: number): boolean {
+  return kind === ISSUE_KIND || kind === PATCH_KIND || kind === PR_KIND;
 }
 
 /**
- * Hook: resolve the parent event title for a comment or cover note.
- * Returns undefined while loading or when not found.
+ * Get the parent event ID that a secondary event references.
+ * For comments/status/cover-notes: the lowercase `e` tag is the immediate parent.
  */
-function useParentTitle(event: NostrEvent): string | undefined {
-  const store = useEventStore();
-
-  // For comments: the immediate parent `e` tag (lowercase) is the item
-  const eTag = event.tags.find(([t]) => t === "e")?.[1];
-  // For status events: same — `e` tag points to the root item
-  const parentId = eTag;
-
-  return use$(() => {
-    if (!parentId) return undefined;
-    const filter: Filter = { ids: [parentId] };
-    return store.timeline([filter]).pipe(
-      map((events) => {
-        const ev = events[0];
-        if (!ev) return undefined;
-        return extractSubject(ev);
-      }),
-    );
-  }, [parentId, store]);
+function getParentEventId(event: NostrEvent): string | undefined {
+  return event.tags.find(([t]) => t === "e")?.[1];
 }
 
-function activityDescription(
-  event: NostrEvent,
-): Omit<ActivityDescription, "parentLabel"> {
-  switch (event.kind) {
-    case ISSUE_KIND:
-      return { verb: "opened issue", title: getActivityTitle(event) };
-    case PATCH_KIND:
-      return { verb: "submitted patch", title: getActivityTitle(event) };
-    case PR_KIND:
-      return { verb: "opened PR", title: getActivityTitle(event) };
-    case COMMENT_KIND:
-      return { verb: "commented", title: getActivityTitle(event) };
-    case COVER_NOTE_KIND:
-      return { verb: "posted cover note", title: getActivityTitle(event) };
-    case STATUS_OPEN:
-      return { verb: "reopened", title: getActivityTitle(event) };
-    case STATUS_RESOLVED:
-      return { verb: "resolved", title: getActivityTitle(event) };
-    case STATUS_CLOSED:
-      return { verb: "closed", title: getActivityTitle(event) };
-    case STATUS_DRAFT:
-      return { verb: "marked as draft", title: getActivityTitle(event) };
-    default:
-      return { verb: "activity", title: getActivityTitle(event) };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Icons
-// ---------------------------------------------------------------------------
-
-function ActivityIcon({ kind }: { kind: number }) {
-  switch (kind) {
-    case ISSUE_KIND:
-      return (
-        <div className="p-1.5 rounded-md bg-blue-500/10 shrink-0">
-          <CircleDot className="h-3.5 w-3.5 text-blue-500" />
-        </div>
-      );
-    case PATCH_KIND:
-      return (
-        <div className="p-1.5 rounded-md bg-amber-500/10 shrink-0">
-          <GitCommitHorizontal className="h-3.5 w-3.5 text-amber-500" />
-        </div>
-      );
-    case PR_KIND:
-      return (
-        <div className="p-1.5 rounded-md bg-purple-500/10 shrink-0">
-          <GitPullRequest className="h-3.5 w-3.5 text-purple-500" />
-        </div>
-      );
-    case COMMENT_KIND:
-      return (
-        <div className="p-1.5 rounded-md bg-emerald-500/10 shrink-0">
-          <MessageCircle className="h-3.5 w-3.5 text-emerald-500" />
-        </div>
-      );
-    case COVER_NOTE_KIND:
-      return (
-        <div className="p-1.5 rounded-md bg-sky-500/10 shrink-0">
-          <StickyNote className="h-3.5 w-3.5 text-sky-500" />
-        </div>
-      );
-    case STATUS_OPEN:
-      return (
-        <div className="p-1.5 rounded-md bg-blue-500/10 shrink-0">
-          <CircleDot className="h-3.5 w-3.5 text-blue-500" />
-        </div>
-      );
-    case STATUS_RESOLVED:
-      return (
-        <div className="p-1.5 rounded-md bg-emerald-500/10 shrink-0">
-          <GitMerge className="h-3.5 w-3.5 text-emerald-500" />
-        </div>
-      );
-    case STATUS_CLOSED:
-      return (
-        <div className="p-1.5 rounded-md bg-red-500/10 shrink-0">
-          <XCircle className="h-3.5 w-3.5 text-red-500" />
-        </div>
-      );
-    case STATUS_DRAFT:
-      return (
-        <div className="p-1.5 rounded-md bg-muted shrink-0">
-          <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-      );
-    default:
-      return (
-        <div className="p-1.5 rounded-md bg-muted shrink-0">
-          <Activity className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-      );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// ActivityItem
-// ---------------------------------------------------------------------------
-
-/**
- * Determine the kind of the item a status/comment/cover-note refers to.
- * Returns the `k` tag value (lowercase) as a number, or undefined.
- */
 function getParentKind(event: NostrEvent): number | undefined {
   const kTag = event.tags.find(([t]) => t === "k")?.[1];
   return kTag ? parseInt(kTag, 10) : undefined;
@@ -298,107 +189,106 @@ function parentKindLabel(kind: number | undefined): string {
   }
 }
 
-/** True for event kinds whose own content is not the primary title. */
-function isSecondaryEvent(kind: number): boolean {
-  return (
-    kind === COMMENT_KIND ||
-    kind === COVER_NOTE_KIND ||
-    kind === STATUS_OPEN ||
-    kind === STATUS_RESOLVED ||
-    kind === STATUS_CLOSED ||
-    kind === STATUS_DRAFT
-  );
-}
-
-function ActivityItem({ event }: { event: NostrEvent }) {
-  const { verb, title: ownTitle } = activityDescription(event);
-  const repoCoord = getRepoCoord(event);
-  const path = getActivityPath(event);
-  const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
-    addSuffix: true,
-  });
-
-  const needsParentContext = isSecondaryEvent(event.kind);
-
-  // Always call the hook (rules of hooks) — pass empty tags when not needed
-  // so parentId is undefined and the observable returns undefined immediately.
-  const parentTitle = useParentTitle(
-    needsParentContext ? event : { ...event, tags: [] },
-  );
-  const parentKind = needsParentContext ? getParentKind(event) : undefined;
-  const itemLabel = parentKindLabel(parentKind);
-
-  // For status events and cover notes: the parent title IS the main title.
-  // For comments: the comment snippet is the main title; parent is context.
-  const isStatusOrCoverNote = event.kind !== COMMENT_KIND && needsParentContext;
-
-  const displayTitle = isStatusOrCoverNote
-    ? (parentTitle ?? ownTitle)
-    : ownTitle;
-
-  // Context line shown below the verb for comments
-  let contextLine: string | undefined;
-  if (event.kind === COMMENT_KIND) {
-    if (parentTitle) {
-      contextLine = `on ${itemLabel}: ${parentTitle.length > 60 ? parentTitle.slice(0, 60) + "…" : parentTitle}`;
-    } else {
-      contextLine = `on ${itemLabel}`;
-    }
-  } else if (event.kind === COVER_NOTE_KIND) {
-    if (parentTitle) {
-      contextLine = `on ${itemLabel}: ${parentTitle.length > 60 ? parentTitle.slice(0, 60) + "…" : parentTitle}`;
-    } else {
-      contextLine = `on ${itemLabel}`;
-    }
-  }
-
-  return (
-    <Link to={path} className="group block">
-      <div className="flex items-start gap-3 py-2.5 px-1 rounded-lg transition-colors hover:bg-muted/40">
-        <ActivityIcon kind={event.kind} />
-
-        <div className="flex-1 min-w-0">
-          {/* Main title line */}
-          <p className="text-sm font-medium leading-snug line-clamp-2 group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors mb-0.5">
-            {displayTitle}
-          </p>
-
-          {/* Verb + context + repo badge + timestamp */}
-          <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
-            <span className="shrink-0">{verb}</span>
-
-            {contextLine && (
-              <span className="shrink-0 text-muted-foreground/70">
-                {contextLine}
-              </span>
-            )}
-
-            {repoCoord && (
-              <>
-                <span className="shrink-0 text-muted-foreground/40">in</span>
-                <span onClick={(e) => e.preventDefault()} className="shrink-0">
-                  <RepoBadge coord={repoCoord} className="text-[10px]" />
-                </span>
-              </>
-            )}
-
-            <span className="text-muted-foreground/50 ml-auto shrink-0">
-              {timeAgo}
-            </span>
-          </div>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// Repo group within a time bucket
+// Grouping logic
 // ---------------------------------------------------------------------------
+
+/**
+ * An "item group" is a root item (issue/patch/PR) plus all secondary events
+ * that reference it. If a secondary event has no known root item in the
+ * current event set, it forms its own synthetic group.
+ */
+interface ItemGroup {
+  /** The root event (issue/patch/PR), if known. */
+  rootEvent: NostrEvent | undefined;
+  /** Synthetic title when rootEvent is absent. */
+  fallbackTitle: string;
+  /** The kind of the root item (for icon/label). */
+  rootKind: number;
+  /** All events in this group, newest-first. */
+  events: NostrEvent[];
+}
 
 interface RepoGroup {
   repoCoord: string | undefined;
-  events: NostrEvent[];
+  items: ItemGroup[];
+}
+
+function buildItemGroups(events: NostrEvent[]): ItemGroup[] {
+  // Index root items by their event ID
+  const rootById = new Map<string, NostrEvent>();
+  for (const ev of events) {
+    if (isRootItem(ev.kind)) {
+      rootById.set(ev.id, ev);
+    }
+  }
+
+  // Map from root item ID → collected events (root + secondaries)
+  const groupMap = new Map<string, NostrEvent[]>();
+  // Orphan secondaries whose parent isn't in our event set
+  const orphans: NostrEvent[] = [];
+
+  for (const ev of events) {
+    if (isRootItem(ev.kind)) {
+      // Ensure the root item has a group entry
+      if (!groupMap.has(ev.id)) groupMap.set(ev.id, []);
+      groupMap.get(ev.id)!.push(ev);
+    } else if (isSecondaryEvent(ev.kind)) {
+      const parentId = getParentEventId(ev);
+      if (parentId && rootById.has(parentId)) {
+        groupMap.get(parentId)!.push(ev);
+      } else if (parentId) {
+        // Parent not in our set — group orphans by parent ID
+        if (!groupMap.has(parentId)) groupMap.set(parentId, []);
+        groupMap.get(parentId)!.push(ev);
+      } else {
+        orphans.push(ev);
+      }
+    }
+  }
+
+  const groups: ItemGroup[] = [];
+
+  for (const [id, evs] of groupMap.entries()) {
+    const root = rootById.get(id);
+    const sorted = [...evs].sort((a, b) => b.created_at - a.created_at);
+
+    // Determine root kind: from root event, or from `k` tag of first secondary
+    let rootKind = root?.kind ?? ISSUE_KIND;
+    if (!root && sorted.length > 0) {
+      rootKind = getParentKind(sorted[0]) ?? ISSUE_KIND;
+    }
+
+    groups.push({
+      rootEvent: root,
+      fallbackTitle: root
+        ? getActivityTitle(root)
+        : sorted[0]
+          ? `(${parentKindLabel(getParentKind(sorted[0]))})`
+          : "(unknown)",
+      rootKind,
+      events: sorted,
+    });
+  }
+
+  // Each orphan (no parent ID) becomes its own single-event group
+  for (const ev of orphans) {
+    groups.push({
+      rootEvent: undefined,
+      fallbackTitle: getActivityTitle(ev),
+      rootKind: getParentKind(ev) ?? ev.kind,
+      events: [ev],
+    });
+  }
+
+  // Sort groups by most-recent event
+  groups.sort((a, b) => {
+    const aTs = a.events[0]?.created_at ?? 0;
+    const bTs = b.events[0]?.created_at ?? 0;
+    return bTs - aTs;
+  });
+
+  return groups;
 }
 
 function groupByRepo(events: NostrEvent[]): RepoGroup[] {
@@ -414,24 +304,421 @@ function groupByRepo(events: NostrEvent[]): RepoGroup[] {
 
   return Array.from(groups.entries()).map(([coord, evs]) => ({
     repoCoord: coord === NO_REPO ? undefined : coord,
-    events: evs,
+    items: buildItemGroups(evs),
   }));
 }
 
-function RepoGroupSection({ group }: { group: RepoGroup }) {
+// ---------------------------------------------------------------------------
+// Summary helpers (for the repo-level collapsed row)
+// ---------------------------------------------------------------------------
+
+interface KindCounts {
+  issues: number;
+  patches: number;
+  prs: number;
+  comments: number;
+  statusChanges: number;
+}
+
+function countKinds(items: ItemGroup[]): KindCounts {
+  const counts: KindCounts = {
+    issues: 0,
+    patches: 0,
+    prs: 0,
+    comments: 0,
+    statusChanges: 0,
+  };
+
+  for (const item of items) {
+    if (item.rootKind === ISSUE_KIND) counts.issues++;
+    else if (item.rootKind === PATCH_KIND) counts.patches++;
+    else if (item.rootKind === PR_KIND) counts.prs++;
+
+    for (const ev of item.events) {
+      if (ev.kind === COMMENT_KIND || ev.kind === COVER_NOTE_KIND)
+        counts.comments++;
+      if (
+        ev.kind === STATUS_OPEN ||
+        ev.kind === STATUS_RESOLVED ||
+        ev.kind === STATUS_CLOSED ||
+        ev.kind === STATUS_DRAFT
+      )
+        counts.statusChanges++;
+    }
+  }
+
+  return counts;
+}
+
+function buildSummaryParts(counts: KindCounts): string[] {
+  const parts: string[] = [];
+  if (counts.prs > 0)
+    parts.push(`${counts.prs} ${counts.prs === 1 ? "PR" : "PRs"}`);
+  if (counts.issues > 0)
+    parts.push(`${counts.issues} ${counts.issues === 1 ? "issue" : "issues"}`);
+  if (counts.patches > 0)
+    parts.push(
+      `${counts.patches} ${counts.patches === 1 ? "patch" : "patches"}`,
+    );
+  if (counts.comments > 0)
+    parts.push(
+      `${counts.comments} ${counts.comments === 1 ? "comment" : "comments"}`,
+    );
+  if (counts.statusChanges > 0)
+    parts.push(
+      `${counts.statusChanges} ${counts.statusChanges === 1 ? "status change" : "status changes"}`,
+    );
+  return parts;
+}
+
+// ---------------------------------------------------------------------------
+// Icons
+// ---------------------------------------------------------------------------
+
+function ItemIcon({ kind, className }: { kind: number; className?: string }) {
+  const base = cn("shrink-0", className);
+  switch (kind) {
+    case ISSUE_KIND:
+      return (
+        <div className={cn("p-1.5 rounded-md bg-blue-500/10", base)}>
+          <CircleDot className="h-3.5 w-3.5 text-blue-500" />
+        </div>
+      );
+    case PATCH_KIND:
+      return (
+        <div className={cn("p-1.5 rounded-md bg-amber-500/10", base)}>
+          <GitCommitHorizontal className="h-3.5 w-3.5 text-amber-500" />
+        </div>
+      );
+    case PR_KIND:
+      return (
+        <div className={cn("p-1.5 rounded-md bg-purple-500/10", base)}>
+          <GitPullRequest className="h-3.5 w-3.5 text-purple-500" />
+        </div>
+      );
+    case COMMENT_KIND:
+      return (
+        <div className={cn("p-1.5 rounded-md bg-emerald-500/10", base)}>
+          <MessageCircle className="h-3.5 w-3.5 text-emerald-500" />
+        </div>
+      );
+    case COVER_NOTE_KIND:
+      return (
+        <div className={cn("p-1.5 rounded-md bg-sky-500/10", base)}>
+          <StickyNote className="h-3.5 w-3.5 text-sky-500" />
+        </div>
+      );
+    case STATUS_OPEN:
+      return (
+        <div className={cn("p-1.5 rounded-md bg-blue-500/10", base)}>
+          <CircleDot className="h-3.5 w-3.5 text-blue-500" />
+        </div>
+      );
+    case STATUS_RESOLVED:
+      return (
+        <div className={cn("p-1.5 rounded-md bg-emerald-500/10", base)}>
+          <GitMerge className="h-3.5 w-3.5 text-emerald-500" />
+        </div>
+      );
+    case STATUS_CLOSED:
+      return (
+        <div className={cn("p-1.5 rounded-md bg-red-500/10", base)}>
+          <XCircle className="h-3.5 w-3.5 text-red-500" />
+        </div>
+      );
+    case STATUS_DRAFT:
+      return (
+        <div className={cn("p-1.5 rounded-md bg-muted", base)}>
+          <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+        </div>
+      );
+    default:
+      return (
+        <div className={cn("p-1.5 rounded-md bg-muted", base)}>
+          <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+        </div>
+      );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Level 3 — individual activity event row
+// ---------------------------------------------------------------------------
+
+/** Short verb for an individual event in the expanded item view. */
+function eventVerb(event: NostrEvent): string {
+  switch (event.kind) {
+    case ISSUE_KIND:
+      return "opened issue";
+    case PATCH_KIND:
+      return "submitted patch";
+    case PR_KIND:
+      return "opened PR";
+    case COMMENT_KIND:
+      return "commented";
+    case COVER_NOTE_KIND:
+      return "posted cover note";
+    case STATUS_OPEN:
+      return "reopened";
+    case STATUS_RESOLVED:
+      return "resolved";
+    case STATUS_CLOSED:
+      return "closed";
+    case STATUS_DRAFT:
+      return "marked as draft";
+    default:
+      return "activity";
+  }
+}
+
+/** Hook: resolve the parent event title for a comment or cover note. */
+function useParentTitle(event: NostrEvent): string | undefined {
+  const store = useEventStore();
+  const parentId = isSecondaryEvent(event.kind)
+    ? getParentEventId(event)
+    : undefined;
+
+  return use$(() => {
+    if (!parentId) return undefined;
+    const filter: Filter = { ids: [parentId] };
+    return store.timeline([filter]).pipe(
+      map((events) => {
+        const ev = events[0];
+        if (!ev) return undefined;
+        return extractSubject(ev);
+      }),
+    );
+  }, [parentId, store]);
+}
+
+function ActivityEventRow({ event }: { event: NostrEvent }) {
+  const path = getActivityPath(event);
+  const verb = eventVerb(event);
+  const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
+    addSuffix: true,
+  });
+  const fullDate = format(
+    new Date(event.created_at * 1000),
+    "MMM d, yyyy 'at' h:mm a",
+  );
+
+  // For comments/cover-notes: show a snippet of the content
+  const isComment =
+    event.kind === COMMENT_KIND || event.kind === COVER_NOTE_KIND;
+  const snippet = isComment
+    ? event.content.split("\n")[0].trim().slice(0, 100) +
+      (event.content.length > 100 ? "…" : "")
+    : undefined;
+
+  // For secondary events without a root in our set, show parent context
+  const parentTitle = useParentTitle(event);
+  const parentKind = isSecondaryEvent(event.kind)
+    ? getParentKind(event)
+    : undefined;
+
+  return (
+    <Link
+      to={path}
+      className="group flex items-start gap-2.5 py-2 px-2 rounded-md hover:bg-muted/40 transition-colors"
+    >
+      <ItemIcon kind={event.kind} className="mt-0.5" />
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-foreground/80 group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
+            {verb}
+          </span>
+          {snippet && (
+            <span className="text-xs text-muted-foreground truncate max-w-[280px]">
+              {snippet}
+            </span>
+          )}
+          {!isComment && parentTitle && (
+            <span className="text-xs text-muted-foreground/60">
+              on {parentKindLabel(parentKind)}: {parentTitle.slice(0, 60)}
+              {parentTitle.length > 60 ? "…" : ""}
+            </span>
+          )}
+        </div>
+        <p
+          className="text-[11px] text-muted-foreground/50 mt-0.5"
+          title={fullDate}
+        >
+          {timeAgo}
+        </p>
+      </div>
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Level 2 — item row (PR / issue / patch)
+// ---------------------------------------------------------------------------
+
+function ItemGroupRow({ item }: { item: ItemGroup }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const title = item.rootEvent
+    ? getActivityTitle(item.rootEvent)
+    : item.fallbackTitle;
+
+  const path = item.rootEvent ? getActivityPath(item.rootEvent) : undefined;
+
+  // Count secondary events (interactions beyond the root opening)
+  const secondaryCount = item.events.filter((ev) =>
+    isSecondaryEvent(ev.kind),
+  ).length;
+
+  // Most recent event timestamp
+  const latestTs = item.events[0]?.created_at;
+  const timeAgo = latestTs
+    ? formatDistanceToNow(new Date(latestTs * 1000), { addSuffix: true })
+    : "";
+
   return (
     <div>
-      {group.repoCoord && (
-        <div className="flex items-center gap-2 mb-1 px-1">
-          <RepoBadge coord={group.repoCoord} className="text-xs" />
-          <div className="flex-1 h-px bg-border/40" />
+      {/* Item header row */}
+      <div
+        className={cn(
+          "flex items-start gap-2.5 py-2 px-2 rounded-md transition-colors",
+          item.events.length > 1
+            ? "cursor-pointer hover:bg-muted/40"
+            : "cursor-default",
+        )}
+        onClick={() => item.events.length > 1 && setExpanded((v) => !v)}
+        role={item.events.length > 1 ? "button" : undefined}
+        aria-expanded={item.events.length > 1 ? expanded : undefined}
+      >
+        {/* Expand chevron or spacer */}
+        <div className="w-4 shrink-0 flex items-center justify-center mt-1">
+          {item.events.length > 1 ? (
+            expanded ? (
+              <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
+            ) : (
+              <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+            )
+          ) : null}
+        </div>
+
+        <ItemIcon kind={item.rootKind} className="mt-0.5" />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start gap-2 flex-wrap">
+            {/* Title — links to the root item if we have it */}
+            {path ? (
+              <Link
+                to={path}
+                className="text-sm font-medium leading-snug hover:text-pink-600 dark:hover:text-pink-400 transition-colors line-clamp-2"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {title}
+              </Link>
+            ) : (
+              <span className="text-sm font-medium leading-snug text-muted-foreground line-clamp-2">
+                {title}
+              </span>
+            )}
+
+            {/* Interaction count badge */}
+            {secondaryCount > 0 && (
+              <Badge
+                variant="secondary"
+                className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-normal"
+              >
+                {secondaryCount}{" "}
+                {secondaryCount === 1 ? "interaction" : "interactions"}
+              </Badge>
+            )}
+          </div>
+
+          <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+            {timeAgo}
+          </p>
+        </div>
+      </div>
+
+      {/* Expanded: individual activity events */}
+      {expanded && (
+        <div className="ml-6 pl-3 border-l border-border/40 space-y-0.5 mb-1">
+          {item.events.map((ev) => (
+            <ActivityEventRow key={ev.id} event={ev} />
+          ))}
         </div>
       )}
-      <div className="divide-y divide-border/20">
-        {group.events.map((ev) => (
-          <ActivityItem key={ev.id} event={ev} />
-        ))}
-      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Level 1 — repo group row
+// ---------------------------------------------------------------------------
+
+function RepoGroupSection({ group }: { group: RepoGroup }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const counts = countKinds(group.items);
+  const summaryParts = buildSummaryParts(counts);
+
+  return (
+    <div className="rounded-lg border border-border/50 overflow-hidden">
+      {/* Repo header — always visible, click to expand */}
+      <button
+        className="w-full flex items-center gap-3 px-3 py-2.5 bg-muted/30 hover:bg-muted/60 transition-colors text-left"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        {/* Chevron */}
+        <div className="shrink-0">
+          {expanded ? (
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
+          )}
+        </div>
+
+        {/* Repo badge or "No repository" */}
+        {group.repoCoord ? (
+          <span onClick={(e) => e.stopPropagation()}>
+            <RepoBadge
+              coord={group.repoCoord}
+              className="text-xs font-medium"
+            />
+          </span>
+        ) : (
+          <span className="text-xs font-medium text-muted-foreground">
+            No repository
+          </span>
+        )}
+
+        {/* Summary pills */}
+        <div className="flex items-center gap-1.5 flex-wrap ml-1">
+          {summaryParts.map((part) => (
+            <span
+              key={part}
+              className="text-[11px] text-muted-foreground/70 bg-background/60 border border-border/40 rounded-full px-2 py-0.5 leading-none"
+            >
+              {part}
+            </span>
+          ))}
+        </div>
+
+        {/* Item count on the right */}
+        <span className="ml-auto text-[11px] text-muted-foreground/40 shrink-0">
+          {group.items.length} {group.items.length === 1 ? "item" : "items"}
+        </span>
+      </button>
+
+      {/* Expanded: item rows */}
+      {expanded && (
+        <div className="divide-y divide-border/20 px-1 py-1">
+          {group.items.map((item, i) => (
+            <ItemGroupRow
+              key={item.rootEvent?.id ?? `orphan-${i}`}
+              item={item}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -458,7 +745,7 @@ function TimeBucketSection({ bucket, events }: TimeBucketData) {
         <div className="flex-1 h-px bg-border/40" />
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {repoGroups.map((group, i) => (
           <RepoGroupSection
             key={group.repoCoord ?? `no-repo-${i}`}
@@ -476,15 +763,15 @@ function TimeBucketSection({ bucket, events }: TimeBucketData) {
 
 function ActivitySkeleton() {
   return (
-    <div className="flex items-start gap-3 py-2.5 px-1">
-      <Skeleton className="h-7 w-7 rounded-md shrink-0" />
-      <div className="flex-1 space-y-1.5">
-        <Skeleton className="h-4 w-3/4" />
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-3 w-16" />
-          <Skeleton className="h-4 w-28 rounded-full" />
-          <Skeleton className="h-3 w-14 ml-auto" />
+    <div className="rounded-lg border border-border/50 overflow-hidden">
+      <div className="flex items-center gap-3 px-3 py-2.5 bg-muted/30">
+        <Skeleton className="h-3.5 w-3.5 rounded" />
+        <Skeleton className="h-4 w-32 rounded-full" />
+        <div className="flex gap-1.5">
+          <Skeleton className="h-4 w-12 rounded-full" />
+          <Skeleton className="h-4 w-16 rounded-full" />
         </div>
+        <Skeleton className="h-3 w-10 ml-auto" />
       </div>
     </div>
   );
@@ -503,14 +790,13 @@ export function ActivityFeed({ events }: ActivityFeedProps) {
   if (!events) {
     return (
       <div className="space-y-6">
-        {/* Fake bucket header */}
         <div>
           <div className="flex items-center gap-3 mb-3">
             <Skeleton className="h-3 w-12" />
             <div className="flex-1 h-px bg-border/40" />
           </div>
-          <div className="space-y-1">
-            {Array.from({ length: 5 }).map((_, i) => (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
               <ActivitySkeleton key={i} />
             ))}
           </div>
