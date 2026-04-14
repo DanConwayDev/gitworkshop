@@ -22,9 +22,184 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <style>
+      body {
+        margin: 0;
+        background: #fcfcfd;
+        scrollbar-gutter: stable;
+      }
+      html.dark body {
+        background: #16171e;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #16171e;
+        }
+      }
+    </style>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <style>
+        #app-splash {
+          position: fixed;
+          inset: 0;
+          background: #fcfcfd;
+          font-family:
+            system-ui,
+            -apple-system,
+            sans-serif;
+          z-index: 9999;
+        }
+        @media (prefers-color-scheme: dark) {
+          #app-splash {
+            background: #16171e;
+          }
+          #app-splash .splash-name {
+            color: #ede9f6;
+          }
+          #app-splash .splash-tagline {
+            color: #7a7490;
+          }
+          #app-splash .splash-ring {
+            border-color: #2a2535;
+            border-top-color: #ff79c6;
+          }
+        }
+        html.dark #app-splash {
+          background: #16171e;
+        }
+        html.dark #app-splash .splash-name {
+          color: #ede9f6;
+        }
+        html.dark #app-splash .splash-tagline {
+          color: #7a7490;
+        }
+        html.dark #app-splash .splash-ring {
+          border-color: #2a2535;
+          border-top-color: #ff79c6;
+        }
+        .splash-logo {
+          width: 64px;
+          height: 64px;
+          border-radius: 16px;
+          flex-shrink: 0;
+        }
+        .splash-name {
+          font-size: 22px;
+          font-weight: 600;
+          letter-spacing: -0.3px;
+          color: #1e1b2e;
+          margin: 0;
+        }
+        .splash-tagline {
+          font-size: 13px;
+          color: #8b8699;
+          margin: 0;
+        }
+        .splash-ring {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          border: 3px solid #ede9f6;
+          border-top-color: #ff79c6;
+          animation: splash-spin 0.75s linear infinite;
+        }
+        @keyframes splash-spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        #splash-content {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 20px;
+          opacity: 0;
+          animation: splash-fade-in 0.4s ease-out 2s forwards;
+        }
+        @keyframes splash-fade-in {
+          to {
+            opacity: 1;
+          }
+        }
+      </style>
+      <div id="app-splash">
+        <div id="splash-content">
+          <svg
+            class="splash-logo"
+            xmlns="http://www.w3.org/2000/svg"
+            width="64"
+            height="64"
+            fill="none"
+          >
+            <g clip-path="url(#a)">
+              <rect
+                width="64"
+                height="64"
+                x="64"
+                y="64"
+                fill="#9333EA"
+                rx="16"
+                transform="rotate(-180 64 64)"
+              />
+              <path
+                fill="#fff"
+                fill-rule="evenodd"
+                d="M14.999 34.961v-17.96h4v17.96c0 3.172 1.492 6.152 4.015 8.036L28.377 47a14.026 14.026 0 0 1 5.622 11.24V64h-4v-5.76c0-3.17-1.492-6.15-4.015-8.035l-5.363-4.004a14.027 14.027 0 0 1-5.622-11.24Z"
+                clip-rule="evenodd"
+              />
+              <path
+                fill="#fff"
+                fill-rule="evenodd"
+                d="M48.999 34.961v-17.96h-4v17.96c0 3.172-1.492 6.152-4.015 8.036L35.62 47a14.027 14.027 0 0 0-5.622 11.24V64h4v-5.76c0-3.17 1.492-6.15 4.015-8.035l5.363-4.004A14.027 14.027 0 0 0 49 34.962Z"
+                clip-rule="evenodd"
+              />
+              <path
+                fill="#fff"
+                fill-rule="evenodd"
+                d="M29.799 64.001V27.887h4.4V64h-4.4Z"
+                clip-rule="evenodd"
+              />
+              <path
+                fill="#fff"
+                d="M40.999 18.001a6 6 0 1 1 12 0 6 6 0 0 1-12 0Zm-29.985 0a6 6 0 1 1 12 0 6 6 0 0 1-12 0Zm15.985 12a5 5 0 1 1 10 0 5 5 0 0 1-10 0Z"
+              />
+            </g>
+            <defs>
+              <clipPath id="a">
+                <rect
+                  width="64"
+                  height="64"
+                  x="64"
+                  y="64"
+                  fill="#fff"
+                  rx="16"
+                  transform="rotate(-180 64 64)"
+                />
+              </clipPath>
+            </defs>
+          </svg>
+          <div
+            style="
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              gap: 4px;
+            "
+          >
+            <p class="splash-name">GitWorkshop</p>
+            <p class="splash-tagline">Decentralized Git</p>
+          </div>
+          <div class="splash-ring"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
