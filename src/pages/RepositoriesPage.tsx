@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import type React from "react";
 import { Link } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useRepositorySearch } from "@/hooks/useRepositorySearch";
@@ -25,11 +26,14 @@ interface RepositoriesPageProps {
   relayOverride?: string[];
   /** Display label for the relay (e.g. "relay.ngit.dev") shown in the hero. */
   relayLabel?: string;
+  /** Optional banner rendered below the hero description (e.g. relay status). */
+  relayStatusBanner?: React.ReactNode;
 }
 
 export default function RepositoriesPage({
   relayOverride,
   relayLabel,
+  relayStatusBanner,
 }: RepositoriesPageProps) {
   const [search, setSearch] = useState("");
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -94,11 +98,14 @@ export default function RepositoriesPage({
               Git Repositories
             </span>
           </h1>
-          <p className="text-muted-foreground text-lg max-w-2xl mb-8">
+          <p className="text-muted-foreground text-lg max-w-2xl mb-6">
             {relayLabel
               ? `Repositories indexed on ${relayLabel}.`
               : "Decentralized code collaboration. Browse repositories, track issues, and contribute -- all over Nostr."}
           </p>
+
+          {/* Relay status banner (connection state, repo count, etc.) */}
+          {relayStatusBanner && <div className="mb-6">{relayStatusBanner}</div>}
 
           <div className="flex items-center gap-4">
             <div className="relative max-w-md flex-1">
