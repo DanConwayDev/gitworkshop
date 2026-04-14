@@ -10,8 +10,10 @@ import { useUserProfileSubscription } from "@/hooks/useUserProfileSubscription";
 import { useUserFollowedRepos } from "@/hooks/useUserFollowedRepos";
 import { useUserGitAuthorFollows } from "@/hooks/useUserGitAuthorFollows";
 import { useUserStarredRepos } from "@/hooks/useUserStarredRepos";
+import { useUserActivity } from "@/hooks/useUserActivity";
 import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
 import { useRepoPath } from "@/hooks/useRepoPath";
+import { ActivityFeed } from "@/components/ActivityFeed";
 import { useIsFollowing } from "@/hooks/useIsFollowing";
 import { useIsGitAuthorFollowing } from "@/hooks/useIsGitAuthorFollowing";
 import { useRobustFollowActions } from "@/hooks/useRobustFollowActions";
@@ -36,6 +38,7 @@ import {
   Star,
   Users,
   Eye,
+  Activity,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -55,9 +58,19 @@ interface UserPageProps {
   pubkey: string;
 }
 
-type TabId = "repositories" | "followed" | "starred" | "git-follows";
+type TabId =
+  | "activity"
+  | "repositories"
+  | "followed"
+  | "starred"
+  | "git-follows";
 
 const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
+  {
+    id: "activity",
+    label: "Activity",
+    icon: <Activity className="h-3.5 w-3.5" />,
+  },
   {
     id: "repositories",
     label: "Repositories",
@@ -85,17 +98,18 @@ export default function UserPage({ pubkey }: UserPageProps) {
   const profile = useProfile(pubkey);
   const repos = useUserRepositories(pubkey);
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get("tab") as TabId | null) ?? "repositories";
+  const activeTab = (searchParams.get("tab") as TabId | null) ?? "activity";
 
   const setTab = (tab: TabId) => {
-    setSearchParams(tab === "repositories" ? {} : { tab });
+    setSearchParams(tab === "activity" ? {} : { tab });
   };
 
   // Subscribe to this user's replaceable events (kind 0, 3, 10002, 10017,
   // 10018) for the duration of the profile page visit. No-op for own profile.
   useUserProfileSubscription(pubkey);
 
-  // Reactive data for the three non-repository tabs
+  // Reactive data for tabs
+  const activity = useUserActivity(pubkey);
   const followedRepos = useUserFollowedRepos(pubkey);
   const gitAuthorFollows = useUserGitAuthorFollows(pubkey);
   const starredRepos = useUserStarredRepos(pubkey);
@@ -238,15 +252,17 @@ export default function UserPage({ pubkey }: UserPageProps) {
             {TABS.map((tab) => {
               const isActive = activeTab === tab.id;
               const count =
-                tab.id === "repositories"
-                  ? (repos?.length ?? null)
-                  : tab.id === "followed"
-                    ? (followedRepos?.length ?? null)
-                    : tab.id === "starred"
-                      ? (starredRepos?.length ?? null)
-                      : tab.id === "git-follows"
-                        ? (gitAuthorFollows?.length ?? null)
-                        : null;
+                tab.id === "activity"
+                  ? (activity?.length ?? null)
+                  : tab.id === "repositories"
+                    ? (repos?.length ?? null)
+                    : tab.id === "followed"
+                      ? (followedRepos?.length ?? null)
+                      : tab.id === "starred"
+                        ? (starredRepos?.length ?? null)
+                        : tab.id === "git-follows"
+                          ? (gitAuthorFollows?.length ?? null)
+                          : null;
               return (
                 <button
                   key={tab.id}
@@ -281,6 +297,8 @@ export default function UserPage({ pubkey }: UserPageProps) {
 
       {/* Tab content */}
       <div className="container max-w-screen-xl px-4 md:px-8 py-8">
+        {activeTab === "activity" && <ActivityFeed events={activity} />}
+
         {activeTab === "repositories" && (
           <>
             {!repos ? (
