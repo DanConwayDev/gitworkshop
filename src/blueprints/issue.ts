@@ -45,6 +45,11 @@ export interface IssueOptions {
    * Produces `p` tags for profile mentions and `q` tags for event/address references.
    */
   contentTags?: NostrTag[];
+  /**
+   * Additional raw tags to append verbatim (e.g. NIP-94 `imeta` tags from
+   * Blossom uploads). Each element is a tag tuple like `["imeta", "url ...", ...]`.
+   */
+  extraTags?: string[][];
 }
 
 /**
@@ -64,6 +69,7 @@ export function IssueBlueprint(
   options?: IssueOptions,
 ) {
   const contentTags = options?.contentTags ?? [];
+  const extraTags = options?.extraTags ?? [];
   return blueprint(
     ISSUE_KIND,
     addRepositoryTag(repoCoord),
@@ -76,6 +82,10 @@ export function IssueBlueprint(
     // Append p/q tags for NIP-19 references found in the body
     ...(contentTags.length > 0
       ? [modifyPublicTags((tags) => [...tags, ...contentTags])]
+      : []),
+    // Append any extra tags (e.g. imeta tags from Blossom uploads)
+    ...(extraTags.length > 0
+      ? [modifyPublicTags((tags) => [...tags, ...extraTags])]
       : []),
   );
 }

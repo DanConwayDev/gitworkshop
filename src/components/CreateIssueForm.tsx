@@ -13,6 +13,7 @@ import { LabelBadge } from "@/components/LabelBadge";
 import { NostrComposer } from "@/components/NostrComposer";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { extractContentTags } from "@/lib/nostrContentTags";
+import type { Nip94Tags } from "@/hooks/useBlossomUpload";
 import { Loader2, Plus, X, CircleDot } from "lucide-react";
 import { Expressions } from "applesauce-core/helpers/regexp";
 import { stripInvisibleChar } from "applesauce-core/helpers/string";
@@ -101,6 +102,8 @@ export function CreateIssueForm({
   const [isPending, setIsPending] = useState(false);
   const [anonMode, setAnonMode] = useState(false);
   const [showHashtagHint, setShowHashtagHint] = useState(false);
+  /** NIP-94 tag groups accumulated from Blossom uploads in this session */
+  const [uploadedTagGroups, setUploadedTagGroups] = useState<Nip94Tags[]>([]);
   const { openAuthModal } = useAuthModal();
   const hashtagHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -159,6 +162,10 @@ export function CreateIssueForm({
     [addLabel],
   );
 
+  const handleUploadedTags = useCallback((tags: Nip94Tags) => {
+    setUploadedTagGroups((prev) => [...prev, tags]);
+  }, []);
+
   const submitIssue = useCallback(
     async (
       trimmedSubject: string,
@@ -168,6 +175,12 @@ export function CreateIssueForm({
     ) => {
       const activeRunner =
         !isLoggedIn && useAnonMode ? createAnonRunner() : runner;
+
+      // Build imeta tags from all uploads in this compose session
+      const extraTags = uploadedTagGroups.map((group) => {
+        const fields = group.map(([k, v]) => `${k} ${v}`);
+        return ["imeta", ...fields];
+      });
 
       setIsPending(true);
       try {
@@ -180,6 +193,7 @@ export function CreateIssueForm({
           {
             labels: allLabels,
             contentTags: extractContentTags(trimmedContent),
+            extraTags: extraTags.length > 0 ? extraTags : undefined,
           },
         );
 
@@ -188,6 +202,7 @@ export function CreateIssueForm({
           description: `"${trimmedSubject}" has been published.`,
         });
 
+        setUploadedTagGroups([]);
         onSuccess?.();
       } catch (err) {
         const message =
@@ -201,7 +216,7 @@ export function CreateIssueForm({
         setIsPending(false);
       }
     },
-    [repoCoord, ownerPubkey, toast, onSuccess, isLoggedIn],
+    [repoCoord, ownerPubkey, toast, onSuccess, isLoggedIn, uploadedTagGroups],
   );
 
   const handleSubmit = useCallback(
@@ -296,6 +311,7 @@ export function CreateIssueForm({
           rows={8}
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          onUploadedTags={handleUploadedTags}
         />
         <p className="text-xs text-muted-foreground">
           Markdown supported — code blocks, links, lists, etc.

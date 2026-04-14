@@ -7,6 +7,8 @@
  * - nsec guard with inline warning
  * - NIP-19 embed preview chips below the textarea
  * - Blossom image upload via file picker button or paste
+ * - onUploadedTags: fires with NIP-94 tags after each upload so parents can
+ *   inject imeta tags into published events
  */
 import { useRef, useCallback, useMemo, useState } from "react";
 import { nip19 } from "nostr-tools";
@@ -16,7 +18,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { CommentContent } from "@/components/CommentContent";
 import { MentionAutocomplete } from "@/components/MentionAutocomplete";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
-import { useBlossomUpload } from "@/hooks/useBlossomUpload";
+import { useBlossomUpload, type Nip94Tags } from "@/hooks/useBlossomUpload";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -52,6 +54,11 @@ export interface NostrComposerProps {
   onFocusChange?: (focused: boolean) => void;
   /** Pubkeys to surface first in @ mention results (e.g. repo maintainers, thread participants) */
   priorityPubkeys?: string[];
+  /**
+   * Called after each successful Blossom upload with the NIP-94 tag array.
+   * Use this to accumulate imeta tags for injection into the published event.
+   */
+  onUploadedTags?: (tags: Nip94Tags) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +77,7 @@ export function NostrComposer({
   onTabChange,
   onFocusChange,
   priorityPubkeys,
+  onUploadedTags,
 }: NostrComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -150,10 +158,13 @@ export function NostrComposer({
       if (!file) return;
       // Reset so the same file can be re-selected
       e.target.value = "";
-      const url = await uploadFile(file);
-      if (url) insertUrl(url);
+      const tags = await uploadFile(file);
+      if (tags) {
+        insertUrl(tags[0][1]);
+        onUploadedTags?.(tags);
+      }
     },
-    [uploadFile, insertUrl],
+    [uploadFile, insertUrl, onUploadedTags],
   );
 
   // Handle paste — intercept image data from clipboard
@@ -166,10 +177,13 @@ export function NostrComposer({
       e.preventDefault();
       const file = imageItem.getAsFile();
       if (!file) return;
-      const url = await uploadFile(file);
-      if (url) insertUrl(url);
+      const tags = await uploadFile(file);
+      if (tags) {
+        insertUrl(tags[0][1]);
+        onUploadedTags?.(tags);
+      }
     },
-    [uploadFile, insertUrl],
+    [uploadFile, insertUrl, onUploadedTags],
   );
 
   // Extract unique nostr: identifiers from value for preview chips

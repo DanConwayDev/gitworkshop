@@ -141,6 +141,9 @@ importers:
       applesauce-signers:
         specifier: ^5
         version: 5.1.0(typescript@5.9.3)
+      blurhash:
+        specifier: ^2.0.5
+        version: 2.0.5
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -2956,6 +2959,12 @@ packages:
         integrity: sha512-Ceh+7ox5qe7LJuLHoY0feh3pHuUDHAcRUeyL2VYghZwfpkNIy/+8Ocg0a3UuSoYzavmylwuLWQOf3hl0jjMMIw==,
       }
     engines: { node: ">=8" }
+
+  blurhash@2.0.5:
+    resolution:
+      {
+        integrity: sha512-cRygWd7kGBQO3VEhPiTgq4Wc43ctsM+o46urrmPOiuAe+07fzlSB9OJVdpgDL0jPqXUVQ9ht7aq7kxOeJHRK+w==,
+      }
 
   body-parser@2.2.2:
     resolution:
@@ -8424,6 +8433,8 @@ snapshots:
   baseline-browser-mapping@2.10.0: {}
 
   binary-extensions@2.3.0: {}
+
+  blurhash@2.0.5: {}
 
   body-parser@2.2.2:
     dependencies:

@@ -30,6 +30,7 @@ import {
   EmbeddedEventByIdPreview,
   EmbeddedEventByAddressPreview,
 } from "@/components/EmbeddedEventPreview";
+import { BlossomImage, BlossomVideo } from "@/components/BlossomMedia";
 
 // Note: getOrCreatePool is safe to call here because the pool is already
 // subscribed by useGitPool higher in the tree (RepoCodePage). We are just
@@ -195,10 +196,10 @@ function GitImage({
 
   if (!src) return null;
 
-  // Absolute URL — render directly
+  // Absolute URL — render with Blossom fallback
   if (!isRelativeSrc(src)) {
     return (
-      <img
+      <BlossomImage
         src={src}
         alt={alt ?? ""}
         className="max-w-full rounded-md my-3"
@@ -319,12 +320,7 @@ function buildComponents(
       // Video URLs are represented as image nodes with alt="__video__"
       if (alt === "__video__" && src) {
         return (
-          <video
-            src={src}
-            controls
-            className="max-w-full rounded-md my-3"
-            preload="metadata"
-          />
+          <BlossomVideo src={src} className="max-w-full rounded-md my-3" />
         );
       }
 
@@ -339,8 +335,9 @@ function buildComponents(
           />
         );
       }
+      if (!src) return null;
       return (
-        <img
+        <BlossomImage
           src={src}
           alt={alt ?? ""}
           className="max-w-full rounded-md my-3"

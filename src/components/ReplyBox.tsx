@@ -20,6 +20,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { CreateComment } from "@/actions/nip34";
 import { NostrComposer } from "@/components/NostrComposer";
+import type { Nip94Tags } from "@/hooks/useBlossomUpload";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,8 @@ export function ReplyBox({
   const [focused, setFocused] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [anonMode, setAnonMode] = useState(false);
+  /** NIP-94 tag groups accumulated from Blossom uploads in this session */
+  const [uploadedTagGroups, setUploadedTagGroups] = useState<Nip94Tags[]>([]);
   const { toast } = useToast();
   const { openAuthModal } = useAuthModal();
 
@@ -74,14 +77,26 @@ export function ReplyBox({
   // For a top-level comment that's the root; for a reply it's the comment.
   const parent = parentEvent ?? rootEvent;
 
+  const handleUploadedTags = useCallback((tags: Nip94Tags) => {
+    setUploadedTagGroups((prev) => [...prev, tags]);
+  }, []);
+
   const submitComment = useCallback(
     async (trimmed: string, useAnonMode: boolean) => {
       const activeRunner =
         !isLoggedIn && useAnonMode ? createAnonRunner() : runner;
 
+      // Build imeta tags from all uploads in this compose session
+      const extraTags = uploadedTagGroups.map((group) => {
+        const fields = group.map(([k, v]) => `${k} ${v}`);
+        return ["imeta", ...fields];
+      });
+
       setIsPending(true);
       try {
-        await activeRunner.run(CreateComment, parent, trimmed, rootEvent);
+        await activeRunner.run(CreateComment, parent, trimmed, rootEvent, {
+          extraTags: extraTags.length > 0 ? extraTags : undefined,
+        });
 
         toast({
           title: "Comment posted",
@@ -90,6 +105,7 @@ export function ReplyBox({
 
         setBody("");
         setActiveTab("write");
+        setUploadedTagGroups([]);
         onSubmitted?.();
       } catch (err) {
         const message =
@@ -103,7 +119,7 @@ export function ReplyBox({
         setIsPending(false);
       }
     },
-    [parent, rootEvent, onSubmitted, toast, isLoggedIn],
+    [parent, rootEvent, onSubmitted, toast, isLoggedIn, uploadedTagGroups],
   );
 
   const handleSubmit = useCallback(
@@ -149,6 +165,7 @@ export function ReplyBox({
           onTabChange={setActiveTab}
           onFocusChange={setFocused}
           priorityPubkeys={priorityPubkeys}
+          onUploadedTags={handleUploadedTags}
         />
 
         <div className="flex items-center justify-between gap-2">

@@ -31,6 +31,7 @@ import {
   EmbeddedEventByIdPreview,
   EmbeddedEventByAddressPreview,
 } from "@/components/EmbeddedEventPreview";
+import { BlossomImage, BlossomVideo } from "@/components/BlossomMedia";
 
 // ---------------------------------------------------------------------------
 // Inline Nostr profile mention — avatar + @name
@@ -142,17 +143,11 @@ const components: Components = {
   // Bare image/video URLs converted by remarkBareMediaUrls
   img: ({ src, alt }) => {
     if (alt === "__video__" && src) {
-      return (
-        <video
-          src={src}
-          controls
-          className="max-w-full rounded-md my-2"
-          preload="metadata"
-        />
-      );
+      return <BlossomVideo src={src} className="max-w-full rounded-md my-2" />;
     }
+    if (!src) return null;
     return (
-      <img
+      <BlossomImage
         src={src}
         alt={alt ?? ""}
         className="max-w-full rounded-md my-2"

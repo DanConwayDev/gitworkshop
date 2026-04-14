@@ -17,7 +17,10 @@ import type { Action } from "applesauce-actions";
 import type { NostrEvent } from "nostr-tools";
 import { IssueBlueprint, type IssueOptions } from "@/blueprints/issue";
 import { CommentBlueprint, type CommentOptions } from "@/blueprints/comment";
-import { CoverNoteBlueprint } from "@/blueprints/cover-note";
+import {
+  CoverNoteBlueprint,
+  type CoverNoteOptions,
+} from "@/blueprints/cover-note";
 import { StatusChangeBlueprint, STATUS_KIND_MAP } from "@/blueprints/status";
 import {
   IssueSubjectRenameBlueprint,
@@ -219,6 +222,15 @@ export function CreateReaction(
   };
 }
 
+/** Extended options for CreateComment — adds extraTags on top of CommentBlueprintOptions. */
+export interface CreateCommentOptions extends CommentOptions {
+  /**
+   * Additional raw tags to append verbatim (e.g. NIP-94 `imeta` tags from
+   * Blossom uploads). Each element is a tag tuple like `["imeta", "url ...", ...]`.
+   */
+  extraTags?: string[][];
+}
+
 /**
  * Post a NIP-22 comment (kind:1111) on a NIP-34 issue, PR/patch, or an
  * existing comment.
@@ -230,21 +242,26 @@ export function CreateReaction(
  * @param content   - Markdown body of the comment
  * @param rootEvent - The root issue/PR/patch event — used to notify its author
  *                    when `parent` is a reply-to-comment rather than the root itself
- * @param options   - Optional CommentBlueprintOptions (alt, expiration, etc.)
+ * @param options   - Optional options (alt, expiration, extraTags, etc.)
  */
 export function CreateComment(
   parent: NostrEvent,
   content: string,
   rootEvent?: NostrEvent,
-  options?: CommentOptions,
+  options?: CreateCommentOptions,
 ): Action {
   return async ({ factory, sign, self }) => {
+    const { extraTags, ...blueprintOptions } = options ?? {};
     const draft = await factory.create(
       CommentBlueprint,
       parent,
       content,
-      options,
+      blueprintOptions,
     );
+    // Append imeta / extra tags that CommentBlueprint doesn't handle natively
+    if (extraTags && extraTags.length > 0) {
+      draft.tags = [...draft.tags, ...extraTags];
+    }
     const signed = await sign(draft);
 
     // Add to local store immediately so the comment appears in the thread
@@ -285,14 +302,21 @@ export function CreateComment(
  * @param rootEvent  - The root issue / PR / patch event being annotated
  * @param content    - Markdown body of the cover note
  * @param repoCoords - Repo coordinate strings for relay group keying
+ * @param options    - Optional: extraTags (e.g. imeta from Blossom uploads)
  */
 export function CreateCoverNote(
   rootEvent: NostrEvent,
   content: string,
   repoCoords?: string[],
+  options?: CoverNoteOptions,
 ): Action {
   return async ({ factory, sign, self }) => {
-    const draft = await factory.create(CoverNoteBlueprint, rootEvent, content);
+    const draft = await factory.create(
+      CoverNoteBlueprint,
+      rootEvent,
+      content,
+      options,
+    );
     const signed = await sign(draft);
 
     // Add to local store immediately so the cover note appears without

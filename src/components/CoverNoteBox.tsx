@@ -22,6 +22,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { CreateCoverNote } from "@/actions/nip34";
 import { NostrComposer } from "@/components/NostrComposer";
+import type { Nip94Tags } from "@/hooks/useBlossomUpload";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,8 @@ export function CoverNoteBox({
   const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
   const [focused, setFocused] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  /** NIP-94 tag groups accumulated from Blossom uploads in this session */
+  const [uploadedTagGroups, setUploadedTagGroups] = useState<Nip94Tags[]>([]);
   const { toast } = useToast();
 
   const account = useActiveAccount();
@@ -69,6 +72,10 @@ export function CoverNoteBox({
 
   const showToggle = focused || hasPreviewableContent(body);
 
+  const handleUploadedTags = useCallback((tags: Nip94Tags) => {
+    setUploadedTagGroups((prev) => [...prev, tags]);
+  }, []);
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -76,15 +83,24 @@ export function CoverNoteBox({
       const trimmed = body.trim();
       if (!trimmed) return;
 
+      // Build imeta tags from all uploads in this compose session
+      const extraTags = uploadedTagGroups.map((group) => {
+        const fields = group.map(([k, v]) => `${k} ${v}`);
+        return ["imeta", ...fields];
+      });
+
       setIsPending(true);
       try {
-        await runner.run(CreateCoverNote, rootEvent, trimmed, repoCoords);
+        await runner.run(CreateCoverNote, rootEvent, trimmed, repoCoords, {
+          extraTags: extraTags.length > 0 ? extraTags : undefined,
+        });
 
         toast({
           title: "Cover note saved",
           description: "Your cover note has been published.",
         });
 
+        setUploadedTagGroups([]);
         onSubmitted?.();
       } catch (err) {
         const message =
@@ -98,7 +114,7 @@ export function CoverNoteBox({
         setIsPending(false);
       }
     },
-    [body, rootEvent, repoCoords, onSubmitted, toast],
+    [body, rootEvent, repoCoords, onSubmitted, toast, uploadedTagGroups],
   );
 
   return (
@@ -134,6 +150,7 @@ export function CoverNoteBox({
             onTabChange={setActiveTab}
             onFocusChange={setFocused}
             priorityPubkeys={priorityPubkeys}
+            onUploadedTags={handleUploadedTags}
           />
 
           <div className="flex items-center justify-between gap-2">

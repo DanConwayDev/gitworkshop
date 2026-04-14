@@ -2,26 +2,35 @@
  * useBlossomUpload — upload a File to the user's configured Blossom servers.
  *
  * Reads the user's kind:10063 server list via UserBlossomServersModel and
- * falls back to https://blossom.band when none are configured.
+ * falls back to DEFAULT_BLOSSOM_SERVERS when none are configured.
  *
- * Uses nostr-tools' built-in BlossomClient (NIP-B7) which handles auth
- * header signing automatically via the account signer.
+ * Features (matching ditto's useUploadFile):
+ *   - Uploads to all configured servers simultaneously (Promise.any — fastest wins)
+ *   - Mirrors the blob to remaining servers in the background (BUD-04)
+ *   - 30-second per-server timeout
+ *   - Returns full NIP-94 tags (url, x, ox, size, m, dim, blurhash) for imeta injection
+ *   - Appends file extension to content-addressed URLs if missing
  *
  * Returns:
- *   uploadFile(file) — uploads and returns the public URL
+ *   uploadFile(file) — uploads and returns NIP-94 tags (or null on failure)
  *   isUploading      — true while an upload is in flight
  */
 
 import { useCallback, useState } from "react";
-import { BlossomClient } from "nostr-tools/nipb7";
-import type { Signer } from "nostr-tools/signer";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import { UserBlossomServersModel } from "applesauce-common/models";
 import { useToast } from "@/hooks/useToast";
+import {
+  blossomUpload,
+  DEFAULT_BLOSSOM_SERVERS,
+  type Nip94Tags,
+  type BlossomSigner,
+} from "@/lib/blossom";
+import type { EventTemplate } from "nostr-tools";
 
-const FALLBACK_SERVER = "https://blossom.band";
+export type { Nip94Tags };
 
 export function useBlossomUpload() {
   const account = useActiveAccount();
@@ -39,7 +48,7 @@ export function useBlossomUpload() {
   );
 
   const uploadFile = useCallback(
-    async (file: File): Promise<string | null> => {
+    async (file: File): Promise<Nip94Tags | null> => {
       if (!account) {
         toast({
           title: "Not logged in",
@@ -49,26 +58,25 @@ export function useBlossomUpload() {
         return null;
       }
 
-      // Pick the first configured server or fall back
-      const serverUrl =
+      // Use configured servers or fall back to defaults
+      const servers =
         blossomServers && blossomServers.length > 0
-          ? blossomServers[0].toString()
-          : FALLBACK_SERVER;
+          ? blossomServers.map((s) => s.toString())
+          : DEFAULT_BLOSSOM_SERVERS;
 
-      // Wrap the account signer in the shape BlossomClient expects.
-      // Cast via unknown because applesauce returns NostrEvent while nostr-tools
-      // Signer expects VerifiedEvent — the runtime shape is identical.
-      const signer = {
-        signEvent: (template: Parameters<Signer["signEvent"]>[0]) =>
-          account.signer.signEvent(template) as ReturnType<Signer["signEvent"]>,
+      // Wrap the applesauce signer into the shape blossomUpload expects.
+      // The runtime shape is identical — the cast is purely for TypeScript.
+      const signer: BlossomSigner = {
+        signEvent: (template: EventTemplate) =>
+          account.signer.signEvent(template) as ReturnType<
+            BlossomSigner["signEvent"]
+          >,
         getPublicKey: () => Promise.resolve(account.pubkey),
-      } satisfies Signer;
+      };
 
       setIsUploading(true);
       try {
-        const client = new BlossomClient(serverUrl, signer);
-        const blob = await client.uploadFile(file);
-        return blob.url;
+        return await blossomUpload(file, servers, signer);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Upload failed";
         toast({
