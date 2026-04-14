@@ -17,6 +17,7 @@
 import {
   useRef,
   useCallback,
+  useEffect,
   useMemo,
   useState,
   useImperativeHandle,
@@ -78,6 +79,11 @@ export interface NostrComposerProps {
    * Use this to accumulate imeta tags for injection into the published event.
    */
   onUploadedTags?: (tags: Nip94Tags) => void;
+  /**
+   * CSS max-height for the auto-expanding textarea (e.g. "40vh", "300px").
+   * Defaults to "60vh" so the composer never overflows a modal or viewport.
+   */
+  maxHeight?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +102,7 @@ export const NostrComposer = forwardRef<
     rows = 6,
     className,
     minRows,
+    maxHeight = "60vh",
     activeTab: activeTabProp,
     onTabChange,
     onFocusChange,
@@ -247,7 +254,7 @@ export const NostrComposer = forwardRef<
       />
 
       {/* Composer box: textarea or preview */}
-      <div className="rounded-md border border-input bg-background/60 focus-within:ring-1 focus-within:ring-ring">
+      <div className="rounded-md border border-input bg-background/60 focus-within:ring-1 focus-within:ring-ring overflow-hidden">
         {/* Write area */}
         <div className={cn(activeTab === "preview" ? "hidden" : undefined)}>
           <WriteArea
@@ -262,6 +269,7 @@ export const NostrComposer = forwardRef<
             rows={rows}
             className={className}
             minHeight={minHeight}
+            maxHeight={maxHeight}
             priorityPubkeys={priorityPubkeys}
           />
         </div>
@@ -317,6 +325,7 @@ interface WriteAreaProps {
   rows?: number;
   className?: string;
   minHeight?: string;
+  maxHeight?: string;
   priorityPubkeys?: string[];
 }
 
@@ -332,8 +341,18 @@ function WriteArea({
   rows,
   className,
   minHeight,
+  maxHeight = "60vh",
   priorityPubkeys,
 }: WriteAreaProps) {
+  // Auto-expand: reset height to "auto" first so scrollHeight reflects the
+  // true content height, then clamp to maxHeight.
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, [value, textareaRef]);
+
   return (
     <div className="relative">
       <Textarea
@@ -347,10 +366,13 @@ function WriteArea({
         disabled={disabled}
         rows={rows}
         className={cn(
-          "resize-y text-sm border-0 shadow-none focus-visible:ring-0 bg-transparent",
+          "resize-none text-sm border-0 shadow-none focus-visible:ring-0 bg-transparent overflow-y-auto",
           className,
         )}
-        style={minHeight ? { minHeight } : undefined}
+        style={{
+          ...(minHeight ? { minHeight } : undefined),
+          maxHeight,
+        }}
       />
       <MentionAutocomplete
         textareaRef={textareaRef}

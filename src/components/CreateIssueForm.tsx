@@ -294,6 +294,7 @@ export function CreateIssueForm({
           placeholder="Describe the issue in detail. Markdown is supported."
           disabled={isPending}
           rows={8}
+          maxHeight="40vh"
           activeTab={activeTab}
           onTabChange={setActiveTab}
           onUploadedTags={handleUploadedTags}
