@@ -10,11 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuthModal } from "@/contexts/AuthModalContext";
 import { LabelBadge } from "@/components/LabelBadge";
-import { NostrComposer } from "@/components/NostrComposer";
+import {
+  NostrComposer,
+  type NostrComposerHandle,
+} from "@/components/NostrComposer";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { extractContentTags } from "@/lib/nostrContentTags";
 import type { Nip94Tags } from "@/hooks/useBlossomUpload";
-import { Loader2, Plus, X, CircleDot } from "lucide-react";
+import { Loader2, Paperclip, Plus, X, CircleDot } from "lucide-react";
 import { Expressions } from "applesauce-core/helpers/regexp";
 import { stripInvisibleChar } from "applesauce-core/helpers/string";
 
@@ -105,6 +108,7 @@ export function CreateIssueForm({
   /** NIP-94 tag groups accumulated from Blossom uploads in this session */
   const [uploadedTagGroups, setUploadedTagGroups] = useState<Nip94Tags[]>([]);
   const { openAuthModal } = useAuthModal();
+  const composerRef = useRef<NostrComposerHandle>(null);
   const hashtagHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -280,12 +284,37 @@ export function CreateIssueForm({
 
       {/* Description */}
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="issue-content" className="text-sm font-medium">
-            Description
-          </Label>
+        <Label htmlFor="issue-content" className="text-sm font-medium">
+          Description
+        </Label>
+        <NostrComposer
+          ref={composerRef}
+          value={content}
+          onChange={setContent}
+          placeholder="Describe the issue in detail. Markdown is supported."
+          disabled={isPending}
+          rows={8}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onUploadedTags={handleUploadedTags}
+        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title="Attach image or video (Blossom)"
+            disabled={isPending || composerRef.current?.isUploading}
+            onClick={() => composerRef.current?.triggerAttach()}
+            className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {composerRef.current?.isUploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Paperclip className="h-4 w-4" />
+            )}
+          </button>
+
           {hasPreviewableContent(content) && (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
               {(["write", "preview"] as const).map((tab) => (
                 <button
                   key={tab}
@@ -303,16 +332,6 @@ export function CreateIssueForm({
             </div>
           )}
         </div>
-        <NostrComposer
-          value={content}
-          onChange={setContent}
-          placeholder="Describe the issue in detail. Markdown is supported."
-          disabled={isPending}
-          rows={8}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          onUploadedTags={handleUploadedTags}
-        />
         <p className="text-xs text-muted-foreground">
           Markdown supported — code blocks, links, lists, etc.
         </p>

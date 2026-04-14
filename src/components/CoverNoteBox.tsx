@@ -13,7 +13,7 @@
  * callback which triggers this component to open.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { NostrEvent } from "nostr-tools";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { runner } from "@/services/actions";
@@ -21,12 +21,15 @@ import { useToast } from "@/hooks/useToast";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { CreateCoverNote } from "@/actions/nip34";
-import { NostrComposer } from "@/components/NostrComposer";
+import {
+  NostrComposer,
+  type NostrComposerHandle,
+} from "@/components/NostrComposer";
 import type { Nip94Tags } from "@/hooks/useBlossomUpload";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Pin, Loader2, X } from "lucide-react";
+import { Pin, Loader2, Paperclip, X } from "lucide-react";
 
 export interface CoverNoteBoxProps {
   /** The root issue / PR / patch event */
@@ -57,6 +60,7 @@ export function CoverNoteBox({
   onCancel,
   priorityPubkeys,
 }: CoverNoteBoxProps) {
+  const composerRef = useRef<NostrComposerHandle>(null);
   const [body, setBody] = useState(initialContent);
   const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
   const [focused, setFocused] = useState(false);
@@ -138,8 +142,15 @@ export function CoverNoteBox({
         </Avatar>
 
         {/* Composer */}
-        <form onSubmit={handleSubmit} className="flex-1 space-y-2">
+        <form
+          onSubmit={handleSubmit}
+          className="flex-1 space-y-2"
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false);
+          }}
+        >
           <NostrComposer
+            ref={composerRef}
             value={body}
             onChange={setBody}
             placeholder="Write a cover note (markdown supported)..."
@@ -148,30 +159,49 @@ export function CoverNoteBox({
             minRows={4}
             activeTab={activeTab}
             onTabChange={setActiveTab}
-            onFocusChange={setFocused}
+            onFocusChange={(f) => {
+              if (f) setFocused(true);
+            }}
             priorityPubkeys={priorityPubkeys}
             onUploadedTags={handleUploadedTags}
           />
 
-          <div className="flex items-center justify-between gap-2">
-            <div
-              className={`flex items-center gap-1 transition-opacity duration-200 ${showToggle ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-            >
-              {(["write", "preview"] as const).map((tab) => (
+          <div className="flex items-center gap-2">
+            {/* Attach + Write/Preview — visible on focus or when there is content */}
+            {showToggle && (
+              <>
                 <button
-                  key={tab}
                   type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className={`rounded px-2 py-0.5 text-xs font-medium capitalize transition-colors ${
-                    activeTab === tab
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  title="Attach image or video (Blossom)"
+                  disabled={isPending || composerRef.current?.isUploading}
+                  onClick={() => composerRef.current?.triggerAttach()}
+                  className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {tab}
+                  {composerRef.current?.isUploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Paperclip className="h-4 w-4" />
+                  )}
                 </button>
-              ))}
-            </div>
+
+                <div className="flex items-center gap-0.5">
+                  {(["write", "preview"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setActiveTab(tab)}
+                      className={`rounded px-2 py-0.5 text-xs font-medium capitalize transition-colors ${
+                        activeTab === tab
+                          ? "bg-muted text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             <div className="flex items-center gap-2 ml-auto">
               <Button

@@ -1,18 +1,29 @@
 /**
  * NostrComposer — a drop-in replacement for <Textarea> with nostr-aware features:
  *
- * - Write / Preview toggle (bottom toolbar, always visible)
+ * - Write / Preview toggle (controlled by parent via activeTab / onTabChange)
  * - @ mention autocomplete via MentionAutocomplete
  * - NIP-19 paste → nostr: prefix normalisation
  * - nsec guard with inline warning
  * - NIP-19 embed preview chips below the textarea
- * - Blossom image upload via file picker button or paste
+ * - Blossom image upload via paste or triggerAttach() on the forwarded ref
  * - onUploadedTags: fires with NIP-94 tags after each upload so parents can
  *   inject imeta tags into published events
+ *
+ * The upload button and Write/Preview toggle live in the parent's action row,
+ * not inside this component. Use the forwarded ref to call triggerAttach() and
+ * read isUploading from it.
  */
-import { useRef, useCallback, useMemo, useState } from "react";
+import {
+  useRef,
+  useCallback,
+  useMemo,
+  useState,
+  useImperativeHandle,
+  forwardRef,
+} from "react";
 import { nip19 } from "nostr-tools";
-import { AlertTriangle, Paperclip, Loader2 } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/UserAvatar";
 import { CommentContent } from "@/components/CommentContent";
@@ -25,16 +36,24 @@ import { cn } from "@/lib/utils";
 // NIP-19 regex — matches bare identifiers not already preceded by "nostr:"
 // ---------------------------------------------------------------------------
 
-// Matches bare NIP-19 identifiers that are preceded by whitespace or start-of-string
-// (same approach as applesauce Tokens.nostrLink) so identifiers inside URLs are not transformed.
 const NIP19_BARE_RE =
   /(?<=^|\s)(npub1|nprofile1|note1|nevent1|naddr1)[023456789acdefghjklmnpqrstuvwxyz]+/gm;
 
 const NSEC_RE = /nsec1[023456789acdefghjklmnpqrstuvwxyz]+/;
 
-// Matches nostr:npub1..., nostr:nprofile1..., nostr:note1..., etc.
 const NOSTR_EMBED_RE =
   /nostr:(npub1|nprofile1|note1|nevent1|naddr1)[023456789acdefghjklmnpqrstuvwxyz]+/g;
+
+// ---------------------------------------------------------------------------
+// Imperative handle — exposed to parents via ref
+// ---------------------------------------------------------------------------
+
+export interface NostrComposerHandle {
+  /** Open the file picker to attach an image/video */
+  triggerAttach: () => void;
+  /** True while a Blossom upload is in progress */
+  isUploading: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -48,11 +67,11 @@ export interface NostrComposerProps {
   rows?: number;
   className?: string;
   minRows?: number;
-  /** Controlled preview mode — when provided the toggle is owned by the parent */
+  /** Controlled preview mode — owned by the parent */
   activeTab?: "write" | "preview";
   onTabChange?: (tab: "write" | "preview") => void;
   onFocusChange?: (focused: boolean) => void;
-  /** Pubkeys to surface first in @ mention results (e.g. repo maintainers, thread participants) */
+  /** Pubkeys to surface first in @ mention results */
   priorityPubkeys?: string[];
   /**
    * Called after each successful Blossom upload with the NIP-94 tag array.
@@ -65,20 +84,26 @@ export interface NostrComposerProps {
 // NostrComposer
 // ---------------------------------------------------------------------------
 
-export function NostrComposer({
-  value,
-  onChange,
-  placeholder,
-  disabled,
-  rows = 6,
-  className,
-  minRows,
-  activeTab: activeTabProp,
-  onTabChange,
-  onFocusChange,
-  priorityPubkeys,
-  onUploadedTags,
-}: NostrComposerProps) {
+export const NostrComposer = forwardRef<
+  NostrComposerHandle,
+  NostrComposerProps
+>(function NostrComposer(
+  {
+    value,
+    onChange,
+    placeholder,
+    disabled,
+    rows = 6,
+    className,
+    minRows,
+    activeTab: activeTabProp,
+    onTabChange,
+    onFocusChange,
+    priorityPubkeys,
+    onUploadedTags,
+  },
+  ref,
+) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [internalTab, setInternalTab] = useState<"write" | "preview">("write");
@@ -87,6 +112,16 @@ export function NostrComposer({
 
   const { uploadFile, isUploading } = useBlossomUpload();
 
+  // Expose triggerAttach + isUploading to parents
+  useImperativeHandle(
+    ref,
+    () => ({
+      triggerAttach: () => fileInputRef.current?.click(),
+      isUploading,
+    }),
+    [isUploading],
+  );
+
   // Detect nsec in value
   const hasNsec = NSEC_RE.test(value);
 
@@ -94,8 +129,10 @@ export function NostrComposer({
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const newValue = e.target.value.replace(NIP19_BARE_RE, "nostr:$&");
       onChange(newValue);
+      // Collapse back to write mode when content is cleared
+      if (!newValue) _setActiveTab("write");
     },
-    [onChange],
+    [onChange, _setActiveTab],
   );
 
   // Insert mention from MentionAutocomplete
@@ -114,7 +151,6 @@ export function NostrComposer({
       const newValue = before + replacement + after;
       onChange(newValue);
 
-      // Restore cursor position after React re-render
       requestAnimationFrame(() => {
         const textarea = textareaRef.current;
         if (!textarea) return;
@@ -133,7 +169,6 @@ export function NostrComposer({
       const pos = textarea?.selectionStart ?? value.length;
       const before = value.slice(0, pos);
       const after = value.slice(pos);
-      // Add spacing around the URL so it renders as a standalone link
       const prefix = before.length > 0 && !before.endsWith("\n") ? "\n" : "";
       const suffix = after.length > 0 && !after.startsWith("\n") ? "\n" : "";
       const insertion = `${prefix}${url}${suffix}`;
@@ -151,12 +186,11 @@ export function NostrComposer({
     [value, onChange],
   );
 
-  // Handle file selected via the file picker button
+  // Handle file selected via the hidden file input
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      // Reset so the same file can be re-selected
       e.target.value = "";
       const tags = await uploadFile(file);
       if (tags) {
@@ -192,7 +226,7 @@ export function NostrComposer({
     let match: RegExpExecArray | null;
     NOSTR_EMBED_RE.lastIndex = 0;
     while ((match = NOSTR_EMBED_RE.exec(value)) !== null) {
-      matches.add(match[0]); // e.g. "nostr:npub1abc..."
+      matches.add(match[0]);
       if (matches.size >= 5) break;
     }
     return Array.from(matches);
@@ -202,7 +236,17 @@ export function NostrComposer({
 
   return (
     <div className="space-y-2">
-      {/* Composer box: textarea (or preview) + bottom toolbar in one bordered unit */}
+      {/* Hidden file input — triggered by parent via ref.triggerAttach() */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*"
+        className="hidden"
+        onChange={handleFileChange}
+        disabled={disabled || isUploading}
+      />
+
+      {/* Composer box: textarea or preview */}
       <div className="rounded-md border border-input bg-background/60 focus-within:ring-1 focus-within:ring-ring">
         {/* Write area */}
         <div className={cn(activeTab === "preview" ? "hidden" : undefined)}>
@@ -231,34 +275,6 @@ export function NostrComposer({
             <CommentContent content={value} />
           </div>
         )}
-
-        {/* Bottom toolbar */}
-        <div className="flex items-center gap-1 border-t border-input px-2 py-1">
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,video/*"
-            className="hidden"
-            onChange={handleFileChange}
-            disabled={disabled || isUploading}
-          />
-
-          {/* Upload button */}
-          <button
-            type="button"
-            title="Attach image or video (Blossom)"
-            disabled={disabled || isUploading}
-            onClick={() => fileInputRef.current?.click()}
-            className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {isUploading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Paperclip className="h-4 w-4" />
-            )}
-          </button>
-        </div>
       </div>
 
       {/* nsec guard */}
@@ -279,7 +295,7 @@ export function NostrComposer({
       )}
     </div>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // WriteArea — textarea + MentionAutocomplete overlay
@@ -331,7 +347,7 @@ function WriteArea({
         disabled={disabled}
         rows={rows}
         className={cn(
-          "resize-y text-sm border-0 shadow-none focus-visible:ring-0 bg-transparent rounded-b-none",
+          "resize-y text-sm border-0 shadow-none focus-visible:ring-0 bg-transparent",
           className,
         )}
         style={minHeight ? { minHeight } : undefined}
@@ -351,7 +367,6 @@ function WriteArea({
 // ---------------------------------------------------------------------------
 
 function EmbedChip({ identifier }: { identifier: string }) {
-  // identifier is like "nostr:npub1abc..." or "nostr:note1abc..."
   const raw = identifier.slice(6); // strip "nostr:"
 
   let type: string = "";
@@ -373,7 +388,6 @@ function EmbedChip({ identifier }: { identifier: string }) {
     return <ProfileChip pubkey={pubkey} />;
   }
 
-  // note / nevent / naddr — show truncated pill
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground">
       {raw.slice(0, 12)}…
