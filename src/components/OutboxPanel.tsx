@@ -102,6 +102,8 @@ function kindLabel(kind: number): string {
       return "Git Authors List";
     case 10018:
       return "Git Repos List";
+    case 10617:
+      return "Pinned Repos List";
     case NIP78_KIND:
       return "App Data";
     default:
