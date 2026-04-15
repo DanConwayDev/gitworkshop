@@ -270,7 +270,9 @@ export default function UserPage({ pubkey }: UserPageProps) {
 
       {/* Tab content */}
       <div className="container max-w-screen-xl px-4 md:px-8 py-8">
-        {activeTab === "activity" && <ActivityFeed events={activity} />}
+        {activeTab === "activity" && (
+          <ActivityFeed events={activity} pageUserPubkey={pubkey} />
+        )}
 
         {activeTab === "repositories" && (
           <>

@@ -42,6 +42,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RepoBadge } from "@/components/RepoBadge";
+import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
@@ -57,6 +58,7 @@ import {
   STATUS_DRAFT,
   extractPatchSubject,
 } from "@/lib/nip34";
+import { cn } from "@/lib/utils";
 import type { NostrEvent } from "nostr-tools";
 import type { Filter } from "applesauce-core/helpers";
 import { map } from "rxjs/operators";
@@ -501,10 +503,119 @@ function InlineItemIcon({ kind }: { kind: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// ItemLinkBadge — compact badge for a PR / issue / patch link
+//
+// Layout:  [icon] [subject…] [avatar name…]
+//
+// • The icon section is fixed-width and coloured by kind.
+// • The subject section truncates with "…" when space is tight.
+// • The author section (avatar + name) is omitted when the event was authored
+//   by the user whose activity page we're viewing (pageUserPubkey).
+// • The name also truncates when the badge is very narrow.
+// ---------------------------------------------------------------------------
+
+interface ItemLinkBadgeProps {
+  /** Navigation path for the link. */
+  to: string;
+  /** Kind of the root item (drives icon + colour). */
+  kind: number;
+  /** Display title / subject. */
+  title: string;
+  /** pubkey of the event author. */
+  authorPubkey: string;
+  /**
+   * pubkey of the user whose activity page is being viewed.
+   * When it matches authorPubkey the author section is hidden.
+   */
+  pageUserPubkey?: string;
+}
+
+function ItemLinkBadge({
+  to,
+  kind,
+  title,
+  authorPubkey,
+  pageUserPubkey,
+}: ItemLinkBadgeProps) {
+  const showAuthor = authorPubkey !== pageUserPubkey;
+
+  // Icon + colour by kind
+  let Icon = Activity;
+  let iconColour = "text-muted-foreground/50";
+  if (kind === ISSUE_KIND) {
+    Icon = CircleDot;
+    iconColour = "text-blue-500";
+  } else if (kind === PATCH_KIND) {
+    Icon = GitCommitHorizontal;
+    iconColour = "text-amber-500";
+  } else if (kind === PR_KIND) {
+    Icon = GitPullRequest;
+    iconColour = "text-purple-500";
+  }
+
+  return (
+    <Link
+      to={to}
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "inline-flex items-center gap-0 min-w-0 max-w-full",
+        "rounded-md border border-border/60 bg-muted/30",
+        "hover:bg-muted/60 hover:border-border transition-colors",
+        "text-xs font-medium",
+        "overflow-hidden",
+      )}
+    >
+      {/* Icon section — fixed, coloured */}
+      <span
+        className={cn(
+          "flex items-center justify-center shrink-0",
+          "px-1.5 py-1 border-r border-border/60 bg-muted/40",
+        )}
+      >
+        <Icon className={cn("h-3 w-3", iconColour)} />
+      </span>
+
+      {/* Subject section — truncates */}
+      <span className="px-1.5 py-1 truncate min-w-0 flex-1 text-foreground">
+        {title}
+      </span>
+
+      {/* Author section — hidden when it's the page user */}
+      {showAuthor && (
+        <span
+          className={cn(
+            "flex items-center gap-1 shrink-0",
+            "px-1.5 py-1 border-l border-border/60 bg-muted/20",
+            "max-w-[7rem]",
+          )}
+        >
+          <UserAvatar
+            pubkey={authorPubkey}
+            size="xs"
+            className="shrink-0"
+            showFollowIndicator={false}
+          />
+          <UserName
+            pubkey={authorPubkey}
+            className="text-[11px] text-muted-foreground truncate min-w-0"
+          />
+        </span>
+      )}
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Level 2 — item row (PR / issue / patch) — flat, no expand/collapse
 // ---------------------------------------------------------------------------
 
-function ItemGroupRow({ item }: { item: ItemGroup }) {
+function ItemGroupRow({
+  item,
+  pageUserPubkey,
+}: {
+  item: ItemGroup;
+  pageUserPubkey?: string;
+}) {
   // When the root item isn't in our event set, try to resolve it from the
   // store reactively (it may arrive later as events stream in).
   const orphanParentId = !item.rootEvent
@@ -573,11 +684,14 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
     ? format(new Date(displayTs * 1000), "MMM d, yyyy 'at' h:mm a")
     : "";
 
+  // Author pubkey: prefer root event author, fall back to first event author
+  const authorPubkey = effectiveRoot?.pubkey ?? item.events[0]?.pubkey ?? "";
+
   return (
     <div className="py-2 px-2 space-y-1">
       {/* ── Single summary line ── */}
-      {/* "opened issue [and 2 comments] on {icon} {subject}  ·  3 days ago" */}
-      <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
+      {/* "opened issue [and 2 comments] · {badge}  ·  3 days ago" */}
+      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
         <span className="text-xs text-muted-foreground shrink-0">
           {primaryVerb}
         </span>
@@ -591,27 +705,24 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
           </span>
         ))}
 
-        <span className="text-xs text-muted-foreground/60 shrink-0">on</span>
-
-        {/* Inline icon — no background box, just the raw icon in its colour */}
-        <InlineItemIcon kind={item.rootKind} />
-
-        {/* Subject link */}
+        {/* Item badge — icon + subject + author */}
         {rootPath ? (
-          <Link
+          <ItemLinkBadge
             to={rootPath}
-            className="text-xs font-medium text-foreground hover:text-pink-600 dark:hover:text-pink-400 transition-colors min-w-0 truncate"
-          >
-            {title}
-          </Link>
+            kind={item.rootKind}
+            title={title}
+            authorPubkey={authorPubkey}
+            pageUserPubkey={pageUserPubkey}
+          />
         ) : (
-          <span className="text-xs font-medium text-muted-foreground min-w-0 truncate">
-            {title}
+          <span className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/30 px-1.5 py-1 text-xs font-medium text-muted-foreground min-w-0 overflow-hidden">
+            <InlineItemIcon kind={item.rootKind} />
+            <span className="truncate">{title}</span>
           </span>
         )}
 
         <span
-          className="text-[11px] text-muted-foreground/60 shrink-0 ml-0.5"
+          className="text-[11px] text-muted-foreground/60 shrink-0"
           title={displayFullDate}
         >
           {displayTimeAgo}
@@ -664,7 +775,13 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
 // Level 1 — repo group row
 // ---------------------------------------------------------------------------
 
-function RepoGroupSection({ group }: { group: RepoGroup }) {
+function RepoGroupSection({
+  group,
+  pageUserPubkey,
+}: {
+  group: RepoGroup;
+  pageUserPubkey?: string;
+}) {
   const [expanded, setExpanded] = useState(true);
 
   // When the repo coord couldn't be resolved from the activity events alone
@@ -739,6 +856,7 @@ function RepoGroupSection({ group }: { group: RepoGroup }) {
             <ItemGroupRow
               key={item.rootEvent?.id ?? `orphan-${i}`}
               item={item}
+              pageUserPubkey={pageUserPubkey}
             />
           ))}
         </div>
@@ -754,9 +872,10 @@ function RepoGroupSection({ group }: { group: RepoGroup }) {
 interface TimeBucketData {
   bucket: TimeBucket;
   events: NostrEvent[];
+  pageUserPubkey?: string;
 }
 
-function TimeBucketSection({ bucket, events }: TimeBucketData) {
+function TimeBucketSection({ bucket, events, pageUserPubkey }: TimeBucketData) {
   const repoGroups = groupByRepo(events);
 
   return (
@@ -774,6 +893,7 @@ function TimeBucketSection({ bucket, events }: TimeBucketData) {
           <RepoGroupSection
             key={group.repoCoord ?? `no-repo-${i}`}
             group={group}
+            pageUserPubkey={pageUserPubkey}
           />
         ))}
       </div>
@@ -808,9 +928,15 @@ function ActivitySkeleton() {
 interface ActivityFeedProps {
   /** Raw activity events, sorted newest-first. undefined = loading. */
   events: NostrEvent[] | undefined;
+  /**
+   * pubkey of the user whose activity page is being viewed.
+   * When provided, the author section of item badges is hidden for events
+   * authored by this user (since it's redundant on their own page).
+   */
+  pageUserPubkey?: string;
 }
 
-export function ActivityFeed({ events }: ActivityFeedProps) {
+export function ActivityFeed({ events, pageUserPubkey }: ActivityFeedProps) {
   if (!events) {
     return (
       <div className="space-y-6">
@@ -866,7 +992,12 @@ export function ActivityFeed({ events }: ActivityFeedProps) {
   return (
     <div className="space-y-8">
       {buckets.map(({ bucket, events: bucketEvents }) => (
-        <TimeBucketSection key={bucket} bucket={bucket} events={bucketEvents} />
+        <TimeBucketSection
+          key={bucket}
+          bucket={bucket}
+          events={bucketEvents}
+          pageUserPubkey={pageUserPubkey}
+        />
       ))}
     </div>
   );
