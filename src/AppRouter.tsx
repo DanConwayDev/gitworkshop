@@ -18,6 +18,7 @@ import RepoLayout from "./pages/repo/RepoLayout";
 import Settings from "./pages/Settings";
 import { NIP19Page } from "./pages/NIP19Page";
 import NgitPage from "./pages/NgitPage";
+import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 import { useRepoPath } from "./hooks/useRepoPath";
 import { REPO_KIND } from "./lib/nip34";
@@ -177,6 +178,7 @@ export function AppRouter() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/ngit" element={<NgitPage />} />
+            <Route path="/about" element={<About />} />
             {/* /relay/:relaySegment — browse repos on a specific relay.
                 The segment uses the same format as relay hints: wss:// is stripped,
                 ws:// is URL-encoded. e.g. /relay/relay.ngit.dev
