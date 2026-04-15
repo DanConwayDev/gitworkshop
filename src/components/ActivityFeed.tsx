@@ -357,69 +357,6 @@ function groupByRepo(events: NostrEvent[]): RepoGroup[] {
 }
 
 // ---------------------------------------------------------------------------
-// Summary helpers (for the repo-level collapsed row)
-// ---------------------------------------------------------------------------
-
-interface KindCounts {
-  issues: number;
-  patches: number;
-  prs: number;
-  comments: number;
-  statusChanges: number;
-}
-
-function countKinds(items: ItemGroup[]): KindCounts {
-  const counts: KindCounts = {
-    issues: 0,
-    patches: 0,
-    prs: 0,
-    comments: 0,
-    statusChanges: 0,
-  };
-
-  for (const item of items) {
-    if (item.rootKind === ISSUE_KIND) counts.issues++;
-    else if (item.rootKind === PATCH_KIND) counts.patches++;
-    else if (item.rootKind === PR_KIND) counts.prs++;
-
-    for (const ev of item.events) {
-      if (ev.kind === COMMENT_KIND || ev.kind === COVER_NOTE_KIND)
-        counts.comments++;
-      if (
-        ev.kind === STATUS_OPEN ||
-        ev.kind === STATUS_RESOLVED ||
-        ev.kind === STATUS_CLOSED ||
-        ev.kind === STATUS_DRAFT
-      )
-        counts.statusChanges++;
-    }
-  }
-
-  return counts;
-}
-
-function buildSummaryParts(counts: KindCounts): string[] {
-  const parts: string[] = [];
-  if (counts.prs > 0)
-    parts.push(`${counts.prs} ${counts.prs === 1 ? "PR" : "PRs"}`);
-  if (counts.issues > 0)
-    parts.push(`${counts.issues} ${counts.issues === 1 ? "issue" : "issues"}`);
-  if (counts.patches > 0)
-    parts.push(
-      `${counts.patches} ${counts.patches === 1 ? "patch" : "patches"}`,
-    );
-  if (counts.comments > 0)
-    parts.push(
-      `${counts.comments} ${counts.comments === 1 ? "comment" : "comments"}`,
-    );
-  if (counts.statusChanges > 0)
-    parts.push(
-      `${counts.statusChanges} ${counts.statusChanges === 1 ? "status change" : "status changes"}`,
-    );
-  return parts;
-}
-
-// ---------------------------------------------------------------------------
 // Icons
 // ---------------------------------------------------------------------------
 
@@ -804,65 +741,40 @@ function RepoGroupSection({
     group.repoCoord ??
     (resolvedParent ? getRepoCoord(resolvedParent) : undefined);
 
-  const counts = countKinds(group.items);
-  const summaryParts = buildSummaryParts(counts);
-
   return (
-    <div className="rounded-lg border border-border/50 overflow-hidden">
-      {/* Repo header — always visible, click to expand */}
-      <button
-        className="w-full flex items-center gap-3 px-3 py-2.5 bg-muted/30 hover:bg-muted/60 transition-colors text-left"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-      >
-        {/* Chevron */}
-        <div className="shrink-0">
-          {expanded ? (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
-        </div>
-
+    <div>
+      {/* Repo header — inline: badge then chevron toggle */}
+      <div className="flex items-center gap-1.5 mb-1">
         {/* Repo badge or "No repository" */}
         {resolvedRepoCoord ? (
-          <span onClick={(e) => e.stopPropagation()}>
-            <RepoBadge
-              coord={resolvedRepoCoord}
-              className="text-xs font-medium"
-            />
-          </span>
+          <RepoBadge
+            coord={resolvedRepoCoord}
+            className="text-xs font-medium"
+          />
         ) : (
           <span className="text-xs font-medium text-muted-foreground">
             No repository
           </span>
         )}
 
-        {/* Summary pills — only shown when collapsed */}
-        {!expanded && (
-          <div className="flex items-center gap-1.5 flex-wrap ml-1">
-            {summaryParts.map((part) => (
-              <span
-                key={part}
-                className="text-[11px] text-muted-foreground bg-background/60 border border-border/60 rounded-full px-2 py-0.5 leading-none"
-              >
-                {part}
-              </span>
-            ))}
-          </div>
-        )}
+        {/* Chevron toggle — sits right after the badge */}
+        <button
+          className="flex items-center justify-center rounded p-0.5 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-label={expanded ? "Collapse" : "Expand"}
+        >
+          {expanded ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
+        </button>
+      </div>
 
-        {/* Item count on the right — only shown when collapsed */}
-        {!expanded && (
-          <span className="ml-auto text-[11px] text-muted-foreground/70 shrink-0">
-            {group.items.length} {group.items.length === 1 ? "item" : "items"}
-          </span>
-        )}
-      </button>
-
-      {/* Expanded: item rows */}
+      {/* Expanded: item rows, indented */}
       {expanded && (
-        <div className="divide-y divide-border/20 px-1 py-1">
+        <div className="pl-3 space-y-0 divide-y divide-border/20">
           {group.items.map((item, i) => (
             <ItemGroupRow
               key={item.rootEvent?.id ?? `orphan-${i}`}
@@ -918,15 +830,14 @@ function TimeBucketSection({ bucket, events, pageUserPubkey }: TimeBucketData) {
 
 function ActivitySkeleton() {
   return (
-    <div className="rounded-lg border border-border/50 overflow-hidden">
-      <div className="flex items-center gap-3 px-3 py-2.5 bg-muted/30">
-        <Skeleton className="h-3.5 w-3.5 rounded" />
+    <div>
+      <div className="flex items-center gap-1.5 mb-1">
         <Skeleton className="h-4 w-32 rounded-full" />
-        <div className="flex gap-1.5">
-          <Skeleton className="h-4 w-12 rounded-full" />
-          <Skeleton className="h-4 w-16 rounded-full" />
-        </div>
-        <Skeleton className="h-3 w-10 ml-auto" />
+        <Skeleton className="h-3 w-3 rounded" />
+      </div>
+      <div className="pl-3 space-y-1">
+        <Skeleton className="h-3 w-48" />
+        <Skeleton className="h-3 w-36" />
       </div>
     </div>
   );
