@@ -253,7 +253,7 @@ export default function UserPage({ pubkey }: UserPageProps) {
               const isActive = activeTab === tab.id;
               const count =
                 tab.id === "activity"
-                  ? (activity?.length ?? null)
+                  ? null
                   : tab.id === "repositories"
                     ? (repos?.length ?? null)
                     : tab.id === "followed"
