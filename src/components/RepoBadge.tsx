@@ -133,6 +133,12 @@ interface RepoBadgeProps {
    */
   repoNameOnly?: boolean;
 
+  /**
+   * When true, renders as a plain <span> instead of a <Link>. Use this when
+   * RepoBadge is already inside an <a> element to avoid nested anchor tags.
+   */
+  asSpan?: boolean;
+
   /** Extra classes forwarded to the outer <span>. */
   className?: string;
 }
@@ -152,6 +158,7 @@ export function RepoBadge({
   coord,
   repoName,
   repoNameOnly,
+  asSpan,
   className,
 }: RepoBadgeProps) {
   const parsed = parseCoord(coord);
@@ -176,6 +183,7 @@ export function RepoBadge({
       dTag={parsed.dTag}
       repoName={repoName}
       repoNameOnly={repoNameOnly}
+      asSpan={asSpan}
       className={className}
     />
   );
@@ -187,27 +195,28 @@ function RepoBadgeInner({
   dTag,
   repoName,
   repoNameOnly,
+  asSpan,
   className,
 }: {
   pubkey: string;
   dTag: string;
   repoName?: string;
   repoNameOnly?: boolean;
+  asSpan?: boolean;
   className?: string;
 }) {
   const name = useRepoName(pubkey, dTag, repoName);
   const npub = nip19.npubEncode(pubkey);
   const repoPath = `/${npub}/${dTag}`;
 
-  return (
-    <Link
-      to={repoPath}
-      onClick={(e) => e.stopPropagation()}
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary-foreground hover:bg-secondary/80 transition-colors",
-        className,
-      )}
-    >
+  const badgeClass = cn(
+    "inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary-foreground transition-colors",
+    !asSpan && "hover:bg-secondary/80",
+    className,
+  );
+
+  const content = (
+    <>
       {!repoNameOnly && (
         <>
           <UserAvatar
@@ -223,6 +232,20 @@ function RepoBadgeInner({
         </>
       )}
       <span className="font-medium">{name}</span>
+    </>
+  );
+
+  if (asSpan) {
+    return <span className={badgeClass}>{content}</span>;
+  }
+
+  return (
+    <Link
+      to={repoPath}
+      onClick={(e) => e.stopPropagation()}
+      className={badgeClass}
+    >
+      {content}
     </Link>
   );
 }
