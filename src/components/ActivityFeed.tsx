@@ -578,20 +578,20 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
       {/* ── Single summary line ── */}
       {/* "opened issue [and 2 comments] on {icon} {subject}  ·  3 days ago" */}
       <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
-        <span className="text-xs text-muted-foreground/70 shrink-0">
+        <span className="text-xs text-muted-foreground shrink-0">
           {primaryVerb}
         </span>
 
         {suffixParts.map((part) => (
           <span
             key={part}
-            className="text-xs text-muted-foreground/60 shrink-0"
+            className="text-xs text-muted-foreground/80 shrink-0"
           >
             {part}
           </span>
         ))}
 
-        <span className="text-xs text-muted-foreground/40 shrink-0">on</span>
+        <span className="text-xs text-muted-foreground/60 shrink-0">on</span>
 
         {/* Inline icon — no background box, just the raw icon in its colour */}
         <InlineItemIcon kind={item.rootKind} />
@@ -600,18 +600,18 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
         {rootPath ? (
           <Link
             to={rootPath}
-            className="text-xs font-medium text-muted-foreground hover:text-pink-600 dark:hover:text-pink-400 transition-colors min-w-0 truncate"
+            className="text-xs font-medium text-foreground hover:text-pink-600 dark:hover:text-pink-400 transition-colors min-w-0 truncate"
           >
             {title}
           </Link>
         ) : (
-          <span className="text-xs font-medium text-muted-foreground/60 min-w-0 truncate">
+          <span className="text-xs font-medium text-muted-foreground min-w-0 truncate">
             {title}
           </span>
         )}
 
         <span
-          className="text-[11px] text-muted-foreground/35 shrink-0 ml-0.5"
+          className="text-[11px] text-muted-foreground/60 shrink-0 ml-0.5"
           title={displayFullDate}
         >
           {displayTimeAgo}
@@ -620,7 +620,7 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
 
       {/* ── Comment snippets (indented) ── */}
       {comments.length > 0 && (
-        <div className="space-y-0.5 pl-1.5 border-l border-border/30">
+        <div className="space-y-0.5 pl-1.5 border-l border-border/50">
           {comments
             .slice()
             .sort((a, b) => a.created_at - b.created_at)
@@ -641,12 +641,12 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
                   to={commentPath}
                   className="group flex items-start gap-1.5 py-0.5 px-1 rounded hover:bg-muted/40 transition-colors"
                 >
-                  <CornerDownRight className="h-3 w-3 text-muted-foreground/30 shrink-0 mt-0.5" />
-                  <span className="text-xs text-muted-foreground/70 group-hover:text-foreground transition-colors leading-relaxed min-w-0 flex-1">
+                  <CornerDownRight className="h-3 w-3 text-muted-foreground/50 shrink-0 mt-0.5" />
+                  <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors leading-relaxed min-w-0 flex-1">
                     {snippet}
                   </span>
                   <span
-                    className="text-[10px] text-muted-foreground/30 shrink-0 ml-1 mt-0.5"
+                    className="text-[10px] text-muted-foreground/60 shrink-0 ml-1 mt-0.5"
                     title={commentFullDate}
                   >
                     {commentTimeAgo}
@@ -694,9 +694,9 @@ function RepoGroupSection({ group }: { group: RepoGroup }) {
         {/* Chevron */}
         <div className="shrink-0">
           {expanded ? (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60" />
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
           )}
         </div>
 
@@ -719,7 +719,7 @@ function RepoGroupSection({ group }: { group: RepoGroup }) {
           {summaryParts.map((part) => (
             <span
               key={part}
-              className="text-[11px] text-muted-foreground/70 bg-background/60 border border-border/40 rounded-full px-2 py-0.5 leading-none"
+              className="text-[11px] text-muted-foreground bg-background/60 border border-border/60 rounded-full px-2 py-0.5 leading-none"
             >
               {part}
             </span>
@@ -727,7 +727,7 @@ function RepoGroupSection({ group }: { group: RepoGroup }) {
         </div>
 
         {/* Item count on the right */}
-        <span className="ml-auto text-[11px] text-muted-foreground/40 shrink-0">
+        <span className="ml-auto text-[11px] text-muted-foreground/70 shrink-0">
           {group.items.length} {group.items.length === 1 ? "item" : "items"}
         </span>
       </button>
