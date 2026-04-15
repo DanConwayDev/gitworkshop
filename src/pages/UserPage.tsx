@@ -39,8 +39,15 @@ import {
   Users,
   Eye,
   Activity,
+  MoreHorizontal,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useActiveAccount } from "applesauce-react/hooks";
 import {
   AlertDialog,
@@ -248,50 +255,16 @@ export default function UserPage({ pubkey }: UserPageProps) {
       {/* Tabs nav */}
       <div className="border-b border-border/60">
         <div className="container max-w-screen-xl px-4 md:px-8">
-          <nav className="flex gap-1 -mb-px" aria-label="Profile tabs">
-            {TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
-              const count =
-                tab.id === "activity"
-                  ? null
-                  : tab.id === "repositories"
-                    ? (repos?.length ?? null)
-                    : tab.id === "followed"
-                      ? (followedRepos?.length ?? null)
-                      : tab.id === "starred"
-                        ? (starredRepos?.length ?? null)
-                        : tab.id === "git-follows"
-                          ? (gitAuthorFollows?.length ?? null)
-                          : null;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setTab(tab.id)}
-                  className={cn(
-                    "inline-flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors",
-                    isActive
-                      ? "border-pink-500 text-pink-600 dark:text-pink-400"
-                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
-                  )}
-                >
-                  {tab.icon}
-                  {tab.label}
-                  {count !== null && (
-                    <Badge
-                      variant={isActive ? "default" : "secondary"}
-                      className={cn(
-                        "text-[10px] px-1.5 py-0 h-4 min-w-4",
-                        isActive &&
-                          "bg-pink-500/20 text-pink-600 dark:text-pink-400 border-0",
-                      )}
-                    >
-                      {count}
-                    </Badge>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+          <TabsNav
+            activeTab={activeTab}
+            setTab={setTab}
+            counts={{
+              repositories: repos?.length ?? null,
+              followed: followedRepos?.length ?? null,
+              starred: starredRepos?.length ?? null,
+              "git-follows": gitAuthorFollows?.length ?? null,
+            }}
+          />
         </div>
       </div>
 
@@ -431,6 +404,177 @@ export default function UserPage({ pubkey }: UserPageProps) {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// TabsNav
+//
+// Mobile  (<sm): all 5 tabs, icon-only — fits comfortably in any phone width
+// sm+          : labels shown; secondary tabs ("Starred", "Followed Authors")
+//                collapse into a "…" dropdown to keep the bar tidy on narrow
+//                desktop / tablet widths
+// ---------------------------------------------------------------------------
+
+// Tabs always shown with labels on sm+ screens
+const PRIMARY_TABS: TabId[] = ["activity", "repositories", "followed"];
+// Tabs that collapse into the "…" dropdown on sm+ screens
+const SECONDARY_TABS: TabId[] = ["starred", "git-follows"];
+
+interface TabsNavProps {
+  activeTab: TabId;
+  setTab: (tab: TabId) => void;
+  counts: Partial<Record<TabId, number | null>>;
+}
+
+function TabsNav({ activeTab, setTab, counts }: TabsNavProps) {
+  const secondaryIsActive = SECONDARY_TABS.includes(activeTab);
+
+  return (
+    <nav className="flex gap-1 -mb-px" aria-label="Profile tabs">
+      {/* Mobile: all tabs, icon-only */}
+      <div className="flex sm:hidden gap-1">
+        {TABS.map((tab) => {
+          const isActive = activeTab === tab.id;
+          const count = counts[tab.id] ?? null;
+          return (
+            <TabButton
+              key={tab.id}
+              tab={tab}
+              isActive={isActive}
+              count={count}
+              iconOnly
+              onClick={() => setTab(tab.id)}
+            />
+          );
+        })}
+      </div>
+
+      {/* sm+: primary tabs with labels */}
+      <div className="hidden sm:flex gap-1">
+        {TABS.filter((t) => PRIMARY_TABS.includes(t.id)).map((tab) => {
+          const isActive = activeTab === tab.id;
+          const count = counts[tab.id] ?? null;
+          return (
+            <TabButton
+              key={tab.id}
+              tab={tab}
+              isActive={isActive}
+              count={count}
+              onClick={() => setTab(tab.id)}
+            />
+          );
+        })}
+      </div>
+
+      {/* sm+: secondary tabs with labels (md+) or in "…" dropdown (sm–md) */}
+      <div className="hidden md:flex gap-1">
+        {TABS.filter((t) => SECONDARY_TABS.includes(t.id)).map((tab) => {
+          const isActive = activeTab === tab.id;
+          const count = counts[tab.id] ?? null;
+          return (
+            <TabButton
+              key={tab.id}
+              tab={tab}
+              isActive={isActive}
+              count={count}
+              onClick={() => setTab(tab.id)}
+            />
+          );
+        })}
+      </div>
+
+      {/* "…" dropdown — sm to md only */}
+      <div className="hidden sm:flex md:hidden items-end pb-px">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
+                secondaryIsActive
+                  ? "border-pink-500 text-pink-600 dark:text-pink-400"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+              )}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+              <span className="sr-only">More</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {TABS.filter((t) => SECONDARY_TABS.includes(t.id)).map((tab) => {
+              const count = counts[tab.id] ?? null;
+              return (
+                <DropdownMenuItem
+                  key={tab.id}
+                  onClick={() => setTab(tab.id)}
+                  className="flex items-center gap-2"
+                >
+                  {tab.icon}
+                  {tab.label}
+                  {count !== null && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] px-1.5 py-0 h-4 min-w-4 ml-auto"
+                    >
+                      {count}
+                    </Badge>
+                  )}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </nav>
+  );
+}
+
+interface TabButtonProps {
+  tab: { id: TabId; label: string; icon: ReactNode };
+  isActive: boolean;
+  count: number | null;
+  iconOnly?: boolean;
+  onClick: () => void;
+}
+
+function TabButton({
+  tab,
+  isActive,
+  count,
+  iconOnly = false,
+  onClick,
+}: TabButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      title={iconOnly ? tab.label : undefined}
+      className={cn(
+        "inline-flex items-center gap-2 border-b-2 transition-colors text-sm font-medium",
+        iconOnly ? "px-3 py-3" : "px-4 py-3",
+        isActive
+          ? "border-pink-500 text-pink-600 dark:text-pink-400"
+          : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+      )}
+    >
+      {tab.icon}
+      {!iconOnly && tab.label}
+      {!iconOnly && count !== null && (
+        <Badge
+          variant={isActive ? "default" : "secondary"}
+          className={cn(
+            "text-[10px] px-1.5 py-0 h-4 min-w-4",
+            isActive &&
+              "bg-pink-500/20 text-pink-600 dark:text-pink-400 border-0",
+          )}
+        >
+          {count}
+        </Badge>
+      )}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
 
 function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
   const repoPath = useRepoPath(repo.selectedMaintainer, repo.dTag, repo.relays);
