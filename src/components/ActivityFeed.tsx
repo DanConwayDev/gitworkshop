@@ -578,7 +578,7 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
       {/* ── Single summary line ── */}
       {/* "opened issue [and 2 comments] on {icon} {subject}  ·  3 days ago" */}
       <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
-        <span className="text-xs text-foreground/70 font-medium shrink-0">
+        <span className="text-xs text-muted-foreground/70 shrink-0">
           {primaryVerb}
         </span>
 
@@ -620,7 +620,7 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
 
       {/* ── Comment snippets (indented) ── */}
       {comments.length > 0 && (
-        <div className="space-y-0.5 pl-4 border-l-2 border-border/30 ml-1">
+        <div className="space-y-0.5 pl-1.5 border-l border-border/30">
           {comments
             .slice()
             .sort((a, b) => a.created_at - b.created_at)
