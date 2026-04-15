@@ -1,6 +1,7 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { nip19 } from "nostr-tools";
+import type { NostrEvent } from "nostr-tools";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { useProfile } from "@/hooks/useProfile";
@@ -44,6 +45,7 @@ import {
   Users,
   Eye,
   Activity,
+  LayoutDashboard,
   MoreHorizontal,
   Pin,
   PinOff,
@@ -93,6 +95,7 @@ interface UserPageProps {
 }
 
 type TabId =
+  | "overview"
   | "activity"
   | "repositories"
   | "followed"
@@ -100,6 +103,11 @@ type TabId =
   | "git-follows";
 
 const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
+  {
+    id: "overview",
+    label: "Overview",
+    icon: <LayoutDashboard className="h-3.5 w-3.5" />,
+  },
   {
     id: "activity",
     label: "Activity",
@@ -132,10 +140,10 @@ export default function UserPage({ pubkey }: UserPageProps) {
   const profile = useProfile(pubkey);
   const repos = useUserRepositories(pubkey);
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get("tab") as TabId | null) ?? "activity";
+  const activeTab = (searchParams.get("tab") as TabId | null) ?? "overview";
 
   const setTab = (tab: TabId) => {
-    setSearchParams(tab === "activity" ? {} : { tab });
+    setSearchParams(tab === "overview" ? {} : { tab });
   };
 
   // Subscribe to this user's replaceable events (kind 0, 3, 10002, 10017,
@@ -301,6 +309,16 @@ export default function UserPage({ pubkey }: UserPageProps) {
 
       {/* Tab content */}
       <div className="container max-w-screen-xl px-4 md:px-8 py-8">
+        {activeTab === "overview" && (
+          <OverviewTab
+            repos={repos}
+            pinnedRepos={pinnedRepos}
+            activity={activity}
+            pubkey={pubkey}
+            onViewAllRepos={() => setTab("repositories")}
+          />
+        )}
+
         {activeTab === "activity" && (
           <ActivityFeed events={activity} pageUserPubkey={pubkey} />
         )}
@@ -425,9 +443,9 @@ export default function UserPage({ pubkey }: UserPageProps) {
 // ---------------------------------------------------------------------------
 
 // Tabs always shown with labels on sm+ screens
-const PRIMARY_TABS: TabId[] = ["activity", "repositories", "followed"];
+const PRIMARY_TABS: TabId[] = ["overview", "activity", "repositories"];
 // Tabs that collapse into the "…" dropdown on sm+ screens
-const SECONDARY_TABS: TabId[] = ["starred", "git-follows"];
+const SECONDARY_TABS: TabId[] = ["followed", "starred", "git-follows"];
 
 interface TabsNavProps {
   activeTab: TabId;
@@ -579,6 +597,129 @@ function TabButton({
         </Badge>
       )}
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OverviewTab — featured repos then recent activity below
+// ---------------------------------------------------------------------------
+
+interface OverviewTabProps {
+  repos: ResolvedRepo[] | undefined;
+  pinnedRepos: ResolvedRepo[] | undefined;
+  activity: NostrEvent[] | undefined;
+  pubkey: string;
+  onViewAllRepos: () => void;
+}
+
+function OverviewTab({
+  repos,
+  pinnedRepos,
+  activity,
+  pubkey,
+  onViewAllRepos,
+}: OverviewTabProps) {
+  // Pinned repos first; fall back to most-recent if none pinned
+  const featuredRepos: ResolvedRepo[] | undefined = (() => {
+    if (!repos) return undefined;
+    if (pinnedRepos && pinnedRepos.length > 0) return pinnedRepos.slice(0, 6);
+    return repos.slice(0, 6);
+  })();
+
+  const hasMore =
+    repos !== undefined && repos.length > (featuredRepos?.length ?? 0);
+
+  return (
+    <div className="space-y-10">
+      {/* Repositories section */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-3.5 w-3.5 text-muted-foreground/60" />
+            <h2 className="text-sm font-semibold text-foreground/80 uppercase tracking-wider">
+              Repositories
+            </h2>
+          </div>
+          {(hasMore || (repos !== undefined && repos.length > 0)) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5"
+              onClick={onViewAllRepos}
+            >
+              View all
+              {repos !== undefined && repos.length > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] px-1.5 py-0 h-4 min-w-4"
+                >
+                  {repos.length}
+                </Badge>
+              )}
+            </Button>
+          )}
+        </div>
+
+        {!featuredRepos ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <RepoSkeleton variant="pinned" />
+            <RepoSkeleton variant="pinned" />
+            <RepoSkeleton variant="pinned" />
+          </div>
+        ) : featuredRepos.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="py-10 px-6 text-center">
+              <GitBranch className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+              <p className="text-sm text-muted-foreground">
+                No repositories found.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {featuredRepos.map((repo) => {
+                const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
+                return (
+                  <PinnedRepoCard
+                    key={coord}
+                    repo={repo}
+                    isDraggable={false}
+                    isDragging={false}
+                    dragHandleProps={{}}
+                  />
+                );
+              })}
+            </div>
+            {hasMore && (
+              <div className="mt-4 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 text-muted-foreground hover:text-foreground"
+                  onClick={onViewAllRepos}
+                >
+                  <GitBranch className="h-3.5 w-3.5" />
+                  View all {repos!.length} repositories
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Recent activity section */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Activity className="h-3.5 w-3.5 text-muted-foreground/60" />
+          <h2 className="text-sm font-semibold text-foreground/80 uppercase tracking-wider">
+            Recent Activity
+          </h2>
+        </div>
+        <ActivityFeed events={activity} pageUserPubkey={pubkey} limit={20} />
+      </div>
+    </div>
   );
 }
 

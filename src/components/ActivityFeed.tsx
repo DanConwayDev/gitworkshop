@@ -856,9 +856,18 @@ interface ActivityFeedProps {
    * authored by this user (since it's redundant on their own page).
    */
   pageUserPubkey?: string;
+  /**
+   * When set, only the first `limit` events are rendered. Useful for
+   * summary/overview panels where you don't want the full feed.
+   */
+  limit?: number;
 }
 
-export function ActivityFeed({ events, pageUserPubkey }: ActivityFeedProps) {
+export function ActivityFeed({
+  events,
+  pageUserPubkey,
+  limit,
+}: ActivityFeedProps) {
   if (!events) {
     return (
       <div className="space-y-6">
@@ -899,8 +908,9 @@ export function ActivityFeed({ events, pageUserPubkey }: ActivityFeedProps) {
     "last-month",
     "older",
   ];
+  const visibleEvents = limit !== undefined ? events.slice(0, limit) : events;
   const bucketMap = new Map<TimeBucket, NostrEvent[]>();
-  for (const ev of events) {
+  for (const ev of visibleEvents) {
     const bucket = getTimeBucket(ev.created_at);
     const existing = bucketMap.get(bucket) ?? [];
     existing.push(ev);
