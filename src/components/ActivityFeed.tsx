@@ -1,23 +1,19 @@
 /**
  * ActivityFeed — renders a user's recent git activity.
  *
- * Three-level collapsible hierarchy:
+ * Two-level hierarchy:
  *
- *   Level 1 — Repo row (collapsed by default)
+ *   Level 1 — Repo section (always expanded)
  *     "user/repo  ·  2 PRs  ·  4 issues  ·  3 comments"
- *     Click to expand → shows Level 2 rows
+ *     Click header to collapse/expand
  *
- *   Level 2 — Item row (PR / issue / patch, collapsed by default)
- *     "[Icon] Fix the parser bug  ·  3 interactions"
- *     Click to expand → shows Level 3 rows
- *
- *   Level 3 — Individual activity event
- *     "opened issue  ·  3 days ago"
- *     "commented: …snippet…  ·  2 days ago"
- *     "closed  ·  1 day ago"
- *
- * Events that have no parent item (e.g. a standalone issue with no comments)
- * still appear as a Level 2 row with a single Level 3 entry.
+ *   Level 2 — Item row (PR / issue / patch, always expanded)
+ *     "[Icon] Fix the parser bug"  ← title linked to root item
+ *     "opened issue  ·  3 days ago"  ← high-signal creation line
+ *     "5 comments  ·  <subject-link>"  ← links to earliest comment
+ *       "first line of comment 1"  ← indented, links to that comment
+ *       "first line of comment 2"
+ *     "closed  ·  2 days ago"  ← status changes
  *
  * The component is stateless w.r.t. data — it receives raw events from
  * useUserActivity and renders them.
@@ -38,18 +34,13 @@ import {
   CircleDot,
   GitPullRequest,
   GitCommitHorizontal,
-  MessageCircle,
   Activity,
-  XCircle,
-  FileText,
-  GitMerge,
-  StickyNote,
   ChevronRight,
   ChevronDown,
+  CornerDownRight,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { RepoBadge } from "@/components/RepoBadge";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import { use$ } from "@/hooks/use$";
@@ -65,12 +56,10 @@ import {
   STATUS_CLOSED,
   STATUS_DRAFT,
   extractPatchSubject,
-  extractSubject,
 } from "@/lib/nip34";
 import type { NostrEvent } from "nostr-tools";
 import type { Filter } from "applesauce-core/helpers";
 import { map } from "rxjs/operators";
-import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Time-bucket helpers
@@ -432,101 +421,9 @@ function buildSummaryParts(counts: KindCounts): string[] {
 // Icons
 // ---------------------------------------------------------------------------
 
-function ItemIcon({ kind, className }: { kind: number; className?: string }) {
-  const base = cn("shrink-0", className);
-  switch (kind) {
-    case ISSUE_KIND:
-      return (
-        <div className={cn("p-1.5 rounded-md bg-blue-500/10", base)}>
-          <CircleDot className="h-3.5 w-3.5 text-blue-500" />
-        </div>
-      );
-    case PATCH_KIND:
-      return (
-        <div className={cn("p-1.5 rounded-md bg-amber-500/10", base)}>
-          <GitCommitHorizontal className="h-3.5 w-3.5 text-amber-500" />
-        </div>
-      );
-    case PR_KIND:
-      return (
-        <div className={cn("p-1.5 rounded-md bg-purple-500/10", base)}>
-          <GitPullRequest className="h-3.5 w-3.5 text-purple-500" />
-        </div>
-      );
-    case COMMENT_KIND:
-      return (
-        <div className={cn("p-1.5 rounded-md bg-emerald-500/10", base)}>
-          <MessageCircle className="h-3.5 w-3.5 text-emerald-500" />
-        </div>
-      );
-    case COVER_NOTE_KIND:
-      return (
-        <div className={cn("p-1.5 rounded-md bg-sky-500/10", base)}>
-          <StickyNote className="h-3.5 w-3.5 text-sky-500" />
-        </div>
-      );
-    case STATUS_OPEN:
-      return (
-        <div className={cn("p-1.5 rounded-md bg-blue-500/10", base)}>
-          <CircleDot className="h-3.5 w-3.5 text-blue-500" />
-        </div>
-      );
-    case STATUS_RESOLVED:
-      return (
-        <div className={cn("p-1.5 rounded-md bg-emerald-500/10", base)}>
-          <GitMerge className="h-3.5 w-3.5 text-emerald-500" />
-        </div>
-      );
-    case STATUS_CLOSED:
-      return (
-        <div className={cn("p-1.5 rounded-md bg-red-500/10", base)}>
-          <XCircle className="h-3.5 w-3.5 text-red-500" />
-        </div>
-      );
-    case STATUS_DRAFT:
-      return (
-        <div className={cn("p-1.5 rounded-md bg-muted", base)}>
-          <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-      );
-    default:
-      return (
-        <div className={cn("p-1.5 rounded-md bg-muted", base)}>
-          <Activity className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-      );
-  }
-}
-
 // ---------------------------------------------------------------------------
-// Level 3 — individual activity event row
+// Helpers for the new flat item display
 // ---------------------------------------------------------------------------
-
-/** Short verb for an individual event in the expanded item view. */
-function eventVerb(event: NostrEvent): string {
-  switch (event.kind) {
-    case ISSUE_KIND:
-      return "opened issue";
-    case PATCH_KIND:
-      return "submitted patch";
-    case PR_KIND:
-      return "opened PR";
-    case COMMENT_KIND:
-      return "commented";
-    case COVER_NOTE_KIND:
-      return "posted cover note";
-    case STATUS_OPEN:
-      return "reopened";
-    case STATUS_RESOLVED:
-      return "resolved";
-    case STATUS_CLOSED:
-      return "closed";
-    case STATUS_DRAFT:
-      return "marked as draft";
-    default:
-      return "activity";
-  }
-}
 
 /**
  * Hook: resolve the parent event (issue/PR/patch) for a secondary event.
@@ -541,82 +438,73 @@ function useParentEvent(parentId: string | undefined): NostrEvent | undefined {
   }, [parentId, store]);
 }
 
-/** Hook: resolve the parent event title for a comment or cover note. */
-function useParentTitle(event: NostrEvent): string | undefined {
-  const parentId = isSecondaryEvent(event.kind)
-    ? getParentEventId(event)
-    : undefined;
-  const parentEvent = useParentEvent(parentId);
-  return parentEvent ? extractSubject(parentEvent) : undefined;
+/** Verb for the root-item creation line. */
+function rootCreationVerb(kind: number): string {
+  switch (kind) {
+    case ISSUE_KIND:
+      return "opened issue";
+    case PATCH_KIND:
+      return "submitted patch";
+    case PR_KIND:
+      return "opened PR";
+    default:
+      return "created";
+  }
 }
 
-function ActivityEventRow({ event }: { event: NostrEvent }) {
-  const path = getActivityPath(event);
-  const verb = eventVerb(event);
-  const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
-    addSuffix: true,
-  });
-  const fullDate = format(
-    new Date(event.created_at * 1000),
-    "MMM d, yyyy 'at' h:mm a",
-  );
+/** Verb for a status-change event. */
+function statusVerb(kind: number): string {
+  switch (kind) {
+    case STATUS_OPEN:
+      return "reopened";
+    case STATUS_RESOLVED:
+      return "resolved";
+    case STATUS_CLOSED:
+      return "closed";
+    case STATUS_DRAFT:
+      return "marked as draft";
+    default:
+      return "status changed";
+  }
+}
 
-  // For comments/cover-notes: show a snippet of the content
-  const isComment =
-    event.kind === COMMENT_KIND || event.kind === COVER_NOTE_KIND;
-  const snippet = isComment
-    ? event.content.split("\n")[0].trim().slice(0, 100) +
-      (event.content.length > 100 ? "…" : "")
-    : undefined;
+/** Extract the first non-empty line of a comment, truncated. */
+function commentFirstLine(content: string, maxLen = 120): string {
+  const line =
+    content
+      .split("\n")
+      .find((l) => l.trim().length > 0)
+      ?.trim() ?? "";
+  return line.length > maxLen ? line.slice(0, maxLen) + "…" : line || "(empty)";
+}
 
-  // For secondary events without a root in our set, show parent context
-  const parentTitle = useParentTitle(event);
-  const parentKind = isSecondaryEvent(event.kind)
-    ? getParentKind(event)
-    : undefined;
-
-  return (
-    <Link
-      to={path}
-      className="group flex items-start gap-2.5 py-2 px-2 rounded-md hover:bg-muted/40 transition-colors"
-    >
-      <ItemIcon kind={event.kind} className="mt-0.5" />
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-medium text-foreground/80 group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
-            {verb}
-          </span>
-          {snippet && (
-            <span className="text-xs text-muted-foreground truncate max-w-[280px]">
-              {snippet}
-            </span>
-          )}
-          {!isComment && parentTitle && (
-            <span className="text-xs text-muted-foreground/60">
-              on {parentKindLabel(parentKind)}: {parentTitle.slice(0, 60)}
-              {parentTitle.length > 60 ? "…" : ""}
-            </span>
-          )}
-        </div>
-        <p
-          className="text-[11px] text-muted-foreground/50 mt-0.5"
-          title={fullDate}
-        >
-          {timeAgo}
-        </p>
-      </div>
-    </Link>
-  );
+/** Raw inline icon — no background box, just the coloured icon glyph. */
+function InlineItemIcon({ kind }: { kind: number }) {
+  switch (kind) {
+    case ISSUE_KIND:
+      return (
+        <CircleDot className="h-3 w-3 text-blue-500 shrink-0 inline-block" />
+      );
+    case PATCH_KIND:
+      return (
+        <GitCommitHorizontal className="h-3 w-3 text-amber-500 shrink-0 inline-block" />
+      );
+    case PR_KIND:
+      return (
+        <GitPullRequest className="h-3 w-3 text-purple-500 shrink-0 inline-block" />
+      );
+    default:
+      return (
+        <Activity className="h-3 w-3 text-muted-foreground/50 shrink-0 inline-block" />
+      );
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Level 2 — item row (PR / issue / patch)
+// Level 2 — item row (PR / issue / patch) — flat, no expand/collapse
 // ---------------------------------------------------------------------------
 
 function ItemGroupRow({ item }: { item: ItemGroup }) {
-  const [expanded, setExpanded] = useState(false);
-
   // When the root item isn't in our event set, try to resolve it from the
   // store reactively (it may arrive later as events stream in).
   const orphanParentId = !item.rootEvent
@@ -628,80 +516,144 @@ function ItemGroupRow({ item }: { item: ItemGroup }) {
   const title = effectiveRoot
     ? getActivityTitle(effectiveRoot)
     : item.fallbackTitle;
-  const path = effectiveRoot ? getActivityPath(effectiveRoot) : undefined;
+  const rootPath = effectiveRoot ? getActivityPath(effectiveRoot) : undefined;
 
-  // Count secondary events (interactions beyond the root opening)
-  const secondaryCount = item.events.filter((ev) =>
-    isSecondaryEvent(ev.kind),
-  ).length;
+  // Partition events
+  const comments = item.events.filter(
+    (ev) => ev.kind === COMMENT_KIND || ev.kind === COVER_NOTE_KIND,
+  );
+  const statusChanges = item.events.filter(
+    (ev) =>
+      ev.kind === STATUS_OPEN ||
+      ev.kind === STATUS_RESOLVED ||
+      ev.kind === STATUS_CLOSED ||
+      ev.kind === STATUS_DRAFT,
+  );
+  const rootCreated = item.rootEvent !== undefined;
 
-  // Most recent event timestamp
-  const latestTs = item.events[0]?.created_at;
-  const timeAgo = latestTs
-    ? formatDistanceToNow(new Date(latestTs * 1000), { addSuffix: true })
+  // Timestamp: prefer root creation time, else most recent event
+  const rootTs = item.rootEvent?.created_at;
+
+  // Build the action verb: "opened issue [and 2 comments]" or
+  // "commented [and closed]" (for orphan-only groups)
+  const commentCount = comments.length;
+  const statusCount = statusChanges.length;
+
+  // Primary verb — what the user did to this item
+  let primaryVerb: string;
+  if (rootCreated) {
+    primaryVerb = rootCreationVerb(item.rootKind);
+  } else if (commentCount > 0) {
+    primaryVerb = commentCount === 1 ? "commented" : `${commentCount} comments`;
+  } else if (statusCount > 0) {
+    primaryVerb = statusVerb(statusChanges[0]!.kind);
+  } else {
+    primaryVerb = "activity";
+  }
+
+  // Suffix additions: "and 2 comments", "and closed", etc.
+  const suffixParts: string[] = [];
+  if (rootCreated && commentCount > 0) {
+    suffixParts.push(
+      `and ${commentCount === 1 ? "1 comment" : `${commentCount} comments`}`,
+    );
+  }
+  if (rootCreated && statusCount > 0) {
+    suffixParts.push(
+      `and ${statusVerb(statusChanges[statusChanges.length - 1]!.kind)}`,
+    );
+  }
+
+  // Timestamp: prefer root creation time, else most recent event
+  const displayTs = rootTs ?? item.events[0]?.created_at;
+  const displayTimeAgo = displayTs
+    ? formatDistanceToNow(new Date(displayTs * 1000), { addSuffix: true })
+    : "";
+  const displayFullDate = displayTs
+    ? format(new Date(displayTs * 1000), "MMM d, yyyy 'at' h:mm a")
     : "";
 
   return (
-    <div>
-      {/* Item header row */}
-      <div
-        className="flex items-start gap-2.5 py-2 px-2 rounded-md transition-colors cursor-pointer hover:bg-muted/40"
-        onClick={() => setExpanded((v) => !v)}
-        role="button"
-        aria-expanded={expanded}
-      >
-        {/* Expand chevron */}
-        <div className="w-4 shrink-0 flex items-center justify-center mt-1">
-          {expanded ? (
-            <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
-          ) : (
-            <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
-          )}
-        </div>
+    <div className="py-2 px-2 space-y-1">
+      {/* ── Single summary line ── */}
+      {/* "opened issue [and 2 comments] on {icon} {subject}  ·  3 days ago" */}
+      <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
+        <span className="text-xs text-foreground/70 font-medium shrink-0">
+          {primaryVerb}
+        </span>
 
-        <ItemIcon kind={item.rootKind} className="mt-0.5" />
+        {suffixParts.map((part) => (
+          <span
+            key={part}
+            className="text-xs text-muted-foreground/60 shrink-0"
+          >
+            {part}
+          </span>
+        ))}
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start gap-2 flex-wrap">
-            {/* Title — links to the root item if we have it */}
-            {path ? (
-              <Link
-                to={path}
-                className="text-sm font-medium leading-snug hover:text-pink-600 dark:hover:text-pink-400 transition-colors line-clamp-2"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {title}
-              </Link>
-            ) : (
-              <span className="text-sm font-medium leading-snug text-muted-foreground line-clamp-2">
-                {title}
-              </span>
-            )}
+        <span className="text-xs text-muted-foreground/40 shrink-0">on</span>
 
-            {/* Interaction count badge */}
-            {secondaryCount > 0 && (
-              <Badge
-                variant="secondary"
-                className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-normal"
-              >
-                {secondaryCount}{" "}
-                {secondaryCount === 1 ? "interaction" : "interactions"}
-              </Badge>
-            )}
-          </div>
+        {/* Inline icon — no background box, just the raw icon in its colour */}
+        <InlineItemIcon kind={item.rootKind} />
 
-          <p className="text-[11px] text-muted-foreground/50 mt-0.5">
-            {timeAgo}
-          </p>
-        </div>
+        {/* Subject link */}
+        {rootPath ? (
+          <Link
+            to={rootPath}
+            className="text-xs font-medium text-muted-foreground hover:text-pink-600 dark:hover:text-pink-400 transition-colors min-w-0 truncate"
+          >
+            {title}
+          </Link>
+        ) : (
+          <span className="text-xs font-medium text-muted-foreground/60 min-w-0 truncate">
+            {title}
+          </span>
+        )}
+
+        <span
+          className="text-[11px] text-muted-foreground/35 shrink-0 ml-0.5"
+          title={displayFullDate}
+        >
+          {displayTimeAgo}
+        </span>
       </div>
 
-      {/* Expanded: individual activity events */}
-      {expanded && (
-        <div className="ml-6 pl-3 border-l border-border/40 space-y-0.5 mb-1">
-          {item.events.map((ev) => (
-            <ActivityEventRow key={ev.id} event={ev} />
-          ))}
+      {/* ── Comment snippets (indented) ── */}
+      {comments.length > 0 && (
+        <div className="space-y-0.5 pl-4 border-l-2 border-border/30 ml-1">
+          {comments
+            .slice()
+            .sort((a, b) => a.created_at - b.created_at)
+            .map((comment) => {
+              const snippet = commentFirstLine(comment.content);
+              const commentPath = getActivityPath(comment);
+              const commentTimeAgo = formatDistanceToNow(
+                new Date(comment.created_at * 1000),
+                { addSuffix: true },
+              );
+              const commentFullDate = format(
+                new Date(comment.created_at * 1000),
+                "MMM d, yyyy 'at' h:mm a",
+              );
+              return (
+                <Link
+                  key={comment.id}
+                  to={commentPath}
+                  className="group flex items-start gap-1.5 py-0.5 px-1 rounded hover:bg-muted/40 transition-colors"
+                >
+                  <CornerDownRight className="h-3 w-3 text-muted-foreground/30 shrink-0 mt-0.5" />
+                  <span className="text-xs text-muted-foreground/70 group-hover:text-foreground transition-colors leading-relaxed min-w-0 flex-1">
+                    {snippet}
+                  </span>
+                  <span
+                    className="text-[10px] text-muted-foreground/30 shrink-0 ml-1 mt-0.5"
+                    title={commentFullDate}
+                  >
+                    {commentTimeAgo}
+                  </span>
+                </Link>
+              );
+            })}
         </div>
       )}
     </div>
