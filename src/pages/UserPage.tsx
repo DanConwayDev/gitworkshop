@@ -19,7 +19,10 @@ import { useIsGitAuthorFollowing } from "@/hooks/useIsGitAuthorFollowing";
 import { useRobustFollowActions } from "@/hooks/useRobustFollowActions";
 import { useRobustGitAuthorFollowActions } from "@/hooks/useRobustGitAuthorFollowActions";
 import { useRobustPinnedRepoActions } from "@/hooks/useRobustPinnedRepoActions";
-import { useUserPinnedCoords } from "@/hooks/useUserPinnedRepos";
+import {
+  useUserPinnedRepos,
+  useUserPinnedCoords,
+} from "@/hooks/useUserPinnedRepos";
 import { useToast } from "@/hooks/useToast";
 import { UserAvatar, UserLink, UserName } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,8 +47,11 @@ import {
   MoreHorizontal,
   Pin,
   PinOff,
+  GripVertical,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState, useCallback, type ReactNode } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,6 +70,23 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { ResolvedRepo } from "@/lib/nip34";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface UserPageProps {
   pubkey: string;
@@ -125,6 +148,7 @@ export default function UserPage({ pubkey }: UserPageProps) {
   const gitAuthorFollows = useUserGitAuthorFollows(pubkey);
   const starredRepos = useUserStarredRepos(pubkey);
   const pinnedCoords = useUserPinnedCoords(pubkey);
+  const pinnedRepos = useUserPinnedRepos(pubkey);
 
   // Prefetch NIP-05 identity so useRepoPath resolves it from IDB on next visit
   usePrefetchNip05([pubkey]);
@@ -282,38 +306,13 @@ export default function UserPage({ pubkey }: UserPageProps) {
         )}
 
         {activeTab === "repositories" && (
-          <>
-            {!repos ? (
-              <div className="grid gap-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <RepoSkeleton key={i} />
-                ))}
-              </div>
-            ) : repos.length === 0 ? (
-              <Card className="border-dashed">
-                <CardContent className="py-12 px-8 text-center">
-                  <GitBranch className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground">
-                    No repository announcements found for this user.
-                  </p>
-                  <p className="text-muted-foreground/60 text-sm mt-1">
-                    They may not have published any repositories yet.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-3">
-                {repos.map((repo) => (
-                  <UserRepoCard
-                    key={`${repo.selectedMaintainer}:${repo.dTag}`}
-                    repo={repo}
-                    pinnedCoords={pinnedCoords}
-                    showPinControl={isOwnProfile}
-                  />
-                ))}
-              </div>
-            )}
-          </>
+          <RepositoriesTab
+            repos={repos}
+            pinnedRepos={pinnedRepos}
+            pinnedCoords={pinnedCoords}
+            isOwnProfile={isOwnProfile}
+            pubkey={pubkey}
+          />
         )}
 
         {activeTab === "followed" && (
@@ -584,6 +583,486 @@ function TabButton({
 }
 
 // ---------------------------------------------------------------------------
+// RepositoriesTab — pinned section at top, other repos below
+// ---------------------------------------------------------------------------
+
+interface RepositoriesTabProps {
+  repos: ResolvedRepo[] | undefined;
+  pinnedRepos: ResolvedRepo[] | undefined;
+  pinnedCoords: string[] | undefined;
+  isOwnProfile: boolean;
+  pubkey: string;
+}
+
+function RepositoriesTab({
+  repos,
+  pinnedRepos,
+  pinnedCoords,
+  isOwnProfile,
+  pubkey,
+}: RepositoriesTabProps) {
+  const loading = !repos;
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        {/* Pinned skeleton */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Skeleton className="h-4 w-4 rounded" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <RepoSkeleton variant="pinned" />
+            <RepoSkeleton variant="pinned" />
+          </div>
+        </div>
+        {/* Other skeleton */}
+        <div>
+          <Skeleton className="h-4 w-36 mb-4" />
+          <div className="grid gap-2">
+            <RepoSkeleton />
+            <RepoSkeleton />
+            <RepoSkeleton />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (repos.length === 0) {
+    return (
+      <Card className="border-dashed">
+        <CardContent className="py-12 px-8 text-center">
+          <GitBranch className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+          <p className="text-muted-foreground">
+            No repository announcements found for this user.
+          </p>
+          <p className="text-muted-foreground/60 text-sm mt-1">
+            They may not have published any repositories yet.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const pinnedCoordSet = new Set(pinnedCoords ?? []);
+  const otherRepos = repos.filter((r) => {
+    const coord = `30617:${r.selectedMaintainer}:${r.dTag}`;
+    return !pinnedCoordSet.has(coord);
+  });
+
+  // Resolved pinned repos in order (may be undefined while loading)
+  const resolvedPinned = pinnedRepos ?? [];
+
+  return (
+    <div className="space-y-8">
+      <PinnedReposSection
+        pinnedRepos={resolvedPinned}
+        pinnedCoords={pinnedCoords ?? []}
+        isOwnProfile={isOwnProfile}
+        pubkey={pubkey}
+      />
+
+      {otherRepos.length > 0 && (
+        <OtherReposSection
+          repos={otherRepos}
+          pinnedCoords={pinnedCoords}
+          isOwnProfile={isOwnProfile}
+          hasPinned={resolvedPinned.length > 0}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PinnedReposSection — drag-to-reorder grid of pinned repos
+// ---------------------------------------------------------------------------
+
+interface PinnedReposSectionProps {
+  pinnedRepos: ResolvedRepo[];
+  pinnedCoords: string[];
+  isOwnProfile: boolean;
+  pubkey: string;
+}
+
+function PinnedReposSection({
+  pinnedRepos,
+  pinnedCoords,
+  isOwnProfile,
+}: PinnedReposSectionProps) {
+  const { reorderPinnedRepos, pending } = useRobustPinnedRepoActions();
+  const { toast } = useToast();
+
+  // Local optimistic order — mirrors pinnedCoords but lets us reorder instantly
+  const [localOrder, setLocalOrder] = useState<string[] | null>(null);
+  const effectiveOrder = localOrder ?? pinnedCoords;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      const oldIndex = effectiveOrder.indexOf(active.id as string);
+      const newIndex = effectiveOrder.indexOf(over.id as string);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const newOrder = arrayMove(effectiveOrder, oldIndex, newIndex);
+      setLocalOrder(newOrder);
+
+      try {
+        await reorderPinnedRepos(newOrder);
+        setLocalOrder(null); // server confirmed — let reactive state take over
+      } catch (err) {
+        setLocalOrder(null); // revert
+        toast({
+          title: "Failed to reorder pinned repositories",
+          description:
+            err instanceof Error
+              ? err.message
+              : "An unexpected error occurred.",
+          variant: "destructive",
+        });
+      }
+    },
+    [effectiveOrder, reorderPinnedRepos, toast],
+  );
+
+  // Build display list in effective order
+  const orderedPinned = effectiveOrder
+    .map((coord) =>
+      pinnedRepos.find(
+        (r) => `30617:${r.selectedMaintainer}:${r.dTag}` === coord,
+      ),
+    )
+    .filter((r): r is ResolvedRepo => !!r);
+
+  const hasPinned = orderedPinned.length > 0;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-4">
+        <Pin className="h-3.5 w-3.5 text-pink-500" />
+        <h2 className="text-sm font-semibold text-foreground/80 uppercase tracking-wider">
+          Pinned
+        </h2>
+        {isOwnProfile && hasPinned && (
+          <span className="text-xs text-muted-foreground/50 ml-1">
+            · drag to reorder
+          </span>
+        )}
+        {isOwnProfile && pending && (
+          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground ml-1" />
+        )}
+      </div>
+
+      {hasPinned ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={effectiveOrder}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              {orderedPinned.map((repo) => {
+                const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
+                return (
+                  <SortablePinnedRepoCard
+                    key={coord}
+                    id={coord}
+                    repo={repo}
+                    isDraggable={isOwnProfile}
+                  />
+                );
+              })}
+            </div>
+          </SortableContext>
+        </DndContext>
+      ) : isOwnProfile ? (
+        <Card className="border-dashed border-pink-500/20 bg-pink-500/[0.02]">
+          <CardContent className="py-8 px-6 text-center">
+            <Pin className="h-8 w-8 mx-auto text-pink-500/30 mb-2" />
+            <p className="text-sm text-muted-foreground">
+              No pinned repositories yet.
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-1">
+              Pin repos from the list below to showcase them here.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OtherReposSection — compact collapsible list of non-pinned repos
+// ---------------------------------------------------------------------------
+
+interface OtherReposSectionProps {
+  repos: ResolvedRepo[];
+  pinnedCoords: string[] | undefined;
+  isOwnProfile: boolean;
+  hasPinned: boolean;
+}
+
+function OtherReposSection({
+  repos,
+  pinnedCoords,
+  isOwnProfile,
+  hasPinned,
+}: OtherReposSectionProps) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <div>
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        className="flex items-center gap-2 mb-4 group"
+      >
+        {collapsed ? (
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-foreground transition-colors" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-foreground transition-colors" />
+        )}
+        <h2 className="text-sm font-semibold text-muted-foreground/70 uppercase tracking-wider group-hover:text-foreground/80 transition-colors">
+          {hasPinned ? "Other repositories" : "Repositories"}
+        </h2>
+        <span className="text-xs text-muted-foreground/40">
+          ({repos.length})
+        </span>
+      </button>
+
+      {!collapsed && (
+        <div className="grid gap-2">
+          {repos.map((repo) => (
+            <UserRepoCard
+              key={`${repo.selectedMaintainer}:${repo.dTag}`}
+              repo={repo}
+              pinnedCoords={pinnedCoords}
+              showPinControl={isOwnProfile}
+              compact
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SortablePinnedRepoCard — pinned card with drag handle
+// ---------------------------------------------------------------------------
+
+interface SortablePinnedRepoCardProps {
+  id: string;
+  repo: ResolvedRepo;
+  isDraggable: boolean;
+}
+
+function SortablePinnedRepoCard({
+  id,
+  repo,
+  isDraggable,
+}: SortablePinnedRepoCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <PinnedRepoCard
+        repo={repo}
+        isDraggable={isDraggable}
+        isDragging={isDragging}
+        dragHandleProps={isDraggable ? { ...attributes, ...listeners } : {}}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PinnedRepoCard — larger featured card for pinned repos
+// ---------------------------------------------------------------------------
+
+interface PinnedRepoCardProps {
+  repo: ResolvedRepo;
+  isDraggable: boolean;
+  isDragging: boolean;
+  dragHandleProps: React.HTMLAttributes<HTMLButtonElement>;
+}
+
+function PinnedRepoCard({
+  repo,
+  isDraggable,
+  isDragging,
+  dragHandleProps,
+}: PinnedRepoCardProps) {
+  const repoPath = useRepoPath(repo.selectedMaintainer, repo.dTag, repo.relays);
+  const navigate = useNavigate();
+  const { pinRepo, unpinRepo, pending } = useRobustPinnedRepoActions();
+  const { toast } = useToast();
+  const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
+    addSuffix: true,
+  });
+  const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
+
+  const handleUnpin = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await unpinRepo(coord);
+    } catch (err) {
+      toast({
+        title: "Failed to unpin repository",
+        description:
+          err instanceof Error ? err.message : "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Suppress unused warning — pinRepo is available for future use
+  void pinRepo;
+
+  return (
+    <div
+      className={cn(
+        "group block cursor-pointer select-none",
+        isDragging && "opacity-50",
+      )}
+      onClick={() => !isDragging && navigate(repoPath)}
+    >
+      <Card
+        className={cn(
+          "transition-all duration-200 h-full",
+          isDragging
+            ? "shadow-lg shadow-pink-500/10 border-pink-500/30 ring-1 ring-pink-500/20"
+            : "hover:shadow-md hover:shadow-pink-500/5 hover:border-pink-500/20 group-hover:-translate-y-0.5",
+        )}
+      >
+        <CardContent className="p-5 flex flex-col h-full gap-3">
+          {/* Header row */}
+          <div className="flex items-start gap-2">
+            {isDraggable && (
+              <button
+                {...dragHandleProps}
+                onClick={(e) => e.stopPropagation()}
+                className="mt-0.5 p-0.5 rounded text-muted-foreground/30 hover:text-muted-foreground/70 transition-colors cursor-grab active:cursor-grabbing shrink-0 touch-none"
+                title="Drag to reorder"
+                aria-label="Drag to reorder"
+              >
+                <GripVertical className="h-4 w-4" />
+              </button>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-1.5 rounded-md bg-gradient-to-br from-pink-500/15 to-pink-500/5 shrink-0">
+                  <GitBranch className="h-4 w-4 text-pink-500" />
+                </div>
+                <h3 className="font-semibold text-base truncate group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
+                  {repo.name}
+                </h3>
+              </div>
+            </div>
+            {/* Actions */}
+            <div className="flex items-center gap-1 shrink-0">
+              {isDraggable && (
+                <button
+                  onClick={handleUnpin}
+                  disabled={pending}
+                  title="Unpin repository"
+                  className="p-1 rounded text-muted-foreground/30 hover:text-pink-500 opacity-0 group-hover:opacity-100 transition-all"
+                >
+                  {pending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <PinOff className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              )}
+              {repo.webUrls.length > 0 && (
+                <a
+                  href={repo.webUrls[0]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 text-muted-foreground/30 hover:text-pink-500 opacity-0 group-hover:opacity-100 transition-all"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Description */}
+          {repo.description ? (
+            <p className="text-sm text-muted-foreground line-clamp-2 flex-1">
+              {repo.description}
+            </p>
+          ) : (
+            <div className="flex-1" />
+          )}
+
+          {/* Footer */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              {repo.maintainerSet.map((pk) => (
+                <UserLink
+                  key={pk}
+                  pubkey={pk}
+                  avatarSize="sm"
+                  nameClassName="text-xs text-muted-foreground"
+                />
+              ))}
+            </div>
+            <span className="text-xs text-muted-foreground/50">{timeAgo}</span>
+            {repo.labels.length > 0 && (
+              <div className="flex gap-1 flex-wrap">
+                {repo.labels.slice(0, 3).map((label) => (
+                  <Badge
+                    key={label}
+                    variant="secondary"
+                    className="text-[10px] px-1.5 py-0 h-5"
+                  >
+                    {label}
+                  </Badge>
+                ))}
+                {repo.labels.length > 3 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    +{repo.labels.length - 3}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
@@ -593,12 +1072,15 @@ interface UserRepoCardProps {
   pinnedCoords?: string[];
   /** When true, show the pin/unpin control (own profile only). */
   showPinControl?: boolean;
+  /** Compact variant for the "other repos" section. */
+  compact?: boolean;
 }
 
 function UserRepoCard({
   repo,
   pinnedCoords,
   showPinControl = false,
+  compact = false,
 }: UserRepoCardProps) {
   const repoPath = useRepoPath(repo.selectedMaintainer, repo.dTag, repo.relays);
   const navigate = useNavigate();
@@ -608,6 +1090,55 @@ function UserRepoCard({
 
   const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
   const isPinned = pinnedCoords?.includes(coord) ?? false;
+
+  if (compact) {
+    return (
+      <div
+        className="group block cursor-pointer"
+        onClick={() => navigate(repoPath)}
+      >
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-transparent hover:border-border/60 hover:bg-muted/30 transition-all duration-150">
+          <GitBranch className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+          <div className="flex-1 min-w-0 flex items-center gap-3">
+            <span className="text-sm font-medium truncate group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
+              {repo.name}
+            </span>
+            {repo.description && (
+              <span className="text-xs text-muted-foreground/60 truncate hidden sm:block">
+                {repo.description}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-muted-foreground/40 hidden md:block">
+              {timeAgo}
+            </span>
+            {repo.labels.slice(0, 2).map((label) => (
+              <Badge
+                key={label}
+                variant="secondary"
+                className="text-[10px] px-1.5 py-0 h-4 hidden sm:inline-flex"
+              >
+                {label}
+              </Badge>
+            ))}
+            {showPinControl && <PinButton coord={coord} isPinned={isPinned} />}
+            {repo.webUrls.length > 0 && (
+              <a
+                href={repo.webUrls[0]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground/30 hover:text-pink-500 opacity-0 group-hover:opacity-100 transition-all"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -981,23 +1512,33 @@ function GitAuthorFollowButton({ pubkey }: { pubkey: string }) {
   );
 }
 
-function RepoSkeleton() {
-  return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="flex items-center gap-2.5 mb-3">
-          <Skeleton className="h-7 w-7 rounded-md" />
-          <Skeleton className="h-5 w-48" />
-        </div>
-        <div className="ml-9 space-y-2">
-          <Skeleton className="h-4 w-full max-w-md" />
+function RepoSkeleton({ variant }: { variant?: "pinned" } = {}) {
+  if (variant === "pinned") {
+    return (
+      <Card>
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <Skeleton className="h-7 w-7 rounded-md" />
+            <Skeleton className="h-5 w-36" />
+          </div>
+          <div className="space-y-1.5">
+            <Skeleton className="h-3.5 w-full" />
+            <Skeleton className="h-3.5 w-4/5" />
+          </div>
           <div className="flex items-center gap-3">
             <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-5 w-14 rounded-full" />
+            <Skeleton className="h-4 w-14 rounded-full" />
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    );
+  }
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5">
+      <Skeleton className="h-3.5 w-3.5 rounded shrink-0" />
+      <Skeleton className="h-4 w-40" />
+      <Skeleton className="h-3 w-24 ml-auto hidden sm:block" />
+    </div>
   );
 }
 

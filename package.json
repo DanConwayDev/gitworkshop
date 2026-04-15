@@ -10,6 +10,9 @@
     "format": "prettier -w ."
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@fiatjaf/git-natural-api": "npm:@jsr/fiatjaf__git-natural-api@^0.2.4",
     "@fontsource-variable/inter": "^5.2.8",
     "@getalby/sdk": "^5.1.2",

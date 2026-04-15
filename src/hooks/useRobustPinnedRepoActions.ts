@@ -18,6 +18,7 @@ import { useRobustReplaceableAction } from "@/hooks/useRobustReplaceableAction";
 import {
   PinGitRepo,
   UnpinGitRepo,
+  ReorderPinnedRepos,
   PINNED_REPOS_KIND,
 } from "@/actions/pinnedRepoActions";
 
@@ -26,13 +27,16 @@ export interface RobustPinnedRepoActionsResult {
   pinRepo: (coord: string) => Promise<void>;
   /** Remove a repo coordinate from the pinned repos list. Throws if connectivity is insufficient. */
   unpinRepo: (coord: string) => Promise<void>;
-  /** True while a pin or unpin operation is in progress. */
+  /** Replace the entire ordered list of pinned repo coordinates. Throws if connectivity is insufficient. */
+  reorderPinnedRepos: (coords: string[]) => Promise<void>;
+  /** True while a pin, unpin, or reorder operation is in progress. */
   pending: boolean;
 }
 
 export function useRobustPinnedRepoActions(): RobustPinnedRepoActionsResult {
   const { run: pinRepoAction } = useAction(PinGitRepo);
   const { run: unpinRepoAction } = useAction(UnpinGitRepo);
+  const { run: reorderAction } = useAction(ReorderPinnedRepos);
   const { execute, pending } = useRobustReplaceableAction();
 
   const pinRepo = useCallback(
@@ -45,5 +49,11 @@ export function useRobustPinnedRepoActions(): RobustPinnedRepoActionsResult {
     [execute, unpinRepoAction],
   );
 
-  return { pinRepo, unpinRepo, pending };
+  const reorderPinnedRepos = useCallback(
+    (coords: string[]) =>
+      execute(PINNED_REPOS_KIND, () => reorderAction(coords)),
+    [execute, reorderAction],
+  );
+
+  return { pinRepo, unpinRepo, reorderPinnedRepos, pending };
 }
