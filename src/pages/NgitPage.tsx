@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -376,6 +376,12 @@ function InstallNgit() {
 // ---------------------------------------------------------------------------
 
 export default function NgitPage() {
+  const location = useLocation();
+  const expandQuickStart = !!(
+    location.state as { expandQuickStart?: boolean } | null
+  )?.expandQuickStart;
+  const defaultOpen = expandQuickStart ? ["contributor", "maintainer"] : [];
+
   return (
     <div className="container max-w-screen-md px-4 md:px-8 py-10 space-y-12">
       {/* Install section */}
@@ -395,124 +401,150 @@ export default function NgitPage() {
       </section>
 
       {/* Quick start */}
-      <section className="space-y-6">
+      <section className="space-y-4">
         <h2 className="text-2xl font-semibold">Quick start</h2>
 
-        {/* Contributor */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium" id="contributor">
-            Contributor
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Pre-requisite: install ngit and git-remote-nostr (above).
-          </p>
+        <Accordion type="multiple" defaultValue={defaultOpen}>
+          {/* Contributor */}
+          <AccordionItem value="contributor">
+            <AccordionTrigger
+              className="text-lg font-medium hover:no-underline"
+              id="contributor"
+            >
+              Contributor
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-4 pt-1">
+                <p className="text-sm text-muted-foreground">
+                  Pre-requisite: install ngit and git-remote-nostr (above).
+                </p>
 
-          <div className="space-y-4 text-sm">
-            <div>
-              <h4 className="font-medium mb-1">1. Find a repository</h4>
-              <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
-                <li>
-                  <Link to="/" className="text-pink-500 hover:underline">
-                    Search gitworkshop.dev
-                  </Link>{" "}
-                  for the repository
-                </li>
-                <li>Explore PRs and issues</li>
-                <li>Copy the git clone URL</li>
-              </ul>
-            </div>
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <h4 className="font-medium mb-1">1. Find a repository</h4>
+                    <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
+                      <li>
+                        <Link to="/" className="text-pink-500 hover:underline">
+                          Search gitworkshop.dev
+                        </Link>{" "}
+                        for the repository
+                      </li>
+                      <li>Explore PRs and issues</li>
+                      <li>Copy the git clone URL</li>
+                    </ul>
+                  </div>
 
-            <div>
-              <h4 className="font-medium mb-1">2. Clone the repository</h4>
-              <CodeBlock>git clone nostr://npub123/repo-identifier</CodeBlock>
-            </div>
+                  <div>
+                    <h4 className="font-medium mb-1">
+                      2. Clone the repository
+                    </h4>
+                    <CodeBlock>
+                      git clone nostr://npub123/repo-identifier
+                    </CodeBlock>
+                  </div>
 
-            <div>
-              <h4 className="font-medium mb-1">3. Submit a PR</h4>
-              <p className="text-muted-foreground mb-2">
-                Push a branch with the{" "}
-                <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
-                  pr/
-                </code>{" "}
-                prefix:
-              </p>
-              <div className="space-y-1">
-                <CodeBlock>git checkout -b pr/great-feature</CodeBlock>
-                <CodeBlock>git commit -am "improve the world"</CodeBlock>
-                <CodeBlock>git push -u</CodeBlock>
+                  <div>
+                    <h4 className="font-medium mb-1">3. Submit a PR</h4>
+                    <p className="text-muted-foreground mb-2">
+                      Push a branch with the{" "}
+                      <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
+                        pr/
+                      </code>{" "}
+                      prefix:
+                    </p>
+                    <div className="space-y-1">
+                      <CodeBlock>git checkout -b pr/great-feature</CodeBlock>
+                      <CodeBlock>git commit -am "improve the world"</CodeBlock>
+                      <CodeBlock>git push -u</CodeBlock>
+                    </div>
+                    <p className="text-muted-foreground mt-2">
+                      Or use ngit for more options (cover letter, etc.):
+                    </p>
+                    <CodeBlock>ngit send</CodeBlock>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1">4. View open PRs</h4>
+                    <CodeBlock>git branch -r --list origin/pr/*</CodeBlock>
+                    <p className="text-muted-foreground mt-1">Or with ngit:</p>
+                    <CodeBlock>ngit list</CodeBlock>
+                  </div>
+                </div>
               </div>
-              <p className="text-muted-foreground mt-2">
-                Or use ngit for more options (cover letter, etc.):
-              </p>
-              <CodeBlock>ngit send</CodeBlock>
-            </div>
+            </AccordionContent>
+          </AccordionItem>
 
-            <div>
-              <h4 className="font-medium mb-1">4. View open PRs</h4>
-              <CodeBlock>git branch -r --list origin/pr/*</CodeBlock>
-              <p className="text-muted-foreground mt-1">Or with ngit:</p>
-              <CodeBlock>ngit list</CodeBlock>
-            </div>
-          </div>
-        </div>
+          {/* Maintainer */}
+          <AccordionItem value="maintainer">
+            <AccordionTrigger
+              className="text-lg font-medium hover:no-underline"
+              id="maintainer"
+            >
+              Maintainer
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-4 pt-1">
+                <p className="text-sm text-muted-foreground">
+                  Pre-requisite: install ngit and git-remote-nostr (above).
+                </p>
 
-        {/* Maintainer */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium" id="maintainer">
-            Maintainer
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Pre-requisite: install ngit and git-remote-nostr (above).
-          </p>
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <h4 className="font-medium mb-1">
+                      1. Create a local git repo
+                    </h4>
+                    <div className="space-y-1">
+                      <CodeBlock>git init</CodeBlock>
+                      <CodeBlock>git commit -am "initial commit"</CodeBlock>
+                    </div>
+                  </div>
 
-          <div className="space-y-4 text-sm">
-            <div>
-              <h4 className="font-medium mb-1">1. Create a local git repo</h4>
-              <div className="space-y-1">
-                <CodeBlock>git init</CodeBlock>
-                <CodeBlock>git commit -am "initial commit"</CodeBlock>
+                  <div>
+                    <h4 className="font-medium mb-1">2. Initialise on Nostr</h4>
+                    <CodeBlock>ngit init</CodeBlock>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1">3. View PRs</h4>
+                    <CodeBlock>git branch -r --list origin/pr/*</CodeBlock>
+                    <p className="text-muted-foreground mt-1">
+                      Or with ngit (includes apply options):
+                    </p>
+                    <CodeBlock>ngit list</CodeBlock>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1">
+                      4. Merge / incorporate PRs
+                    </h4>
+                    <p className="text-muted-foreground mb-2">
+                      PR status is automatically updated when you merge the
+                      branch:
+                    </p>
+                    <div className="space-y-1">
+                      <CodeBlock>git checkout master</CodeBlock>
+                      <CodeBlock>git merge pr/great-feature</CodeBlock>
+                      <CodeBlock>git push</CodeBlock>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1">
+                      5. Consider disabling PRs and issues elsewhere
+                    </h4>
+                    <p className="text-muted-foreground">
+                      If you push to GitHub, Codeberg, Bitbucket, etc., consider
+                      disabling their PRs and issues so everything is managed on
+                      Nostr. For GitHub, use{" "}
+                      <em>Repo Settings &gt; Features</em> for issues (disabling
+                      PRs is not yet possible on GitHub).
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
-
-            <div>
-              <h4 className="font-medium mb-1">2. Initialise on Nostr</h4>
-              <CodeBlock>ngit init</CodeBlock>
-            </div>
-
-            <div>
-              <h4 className="font-medium mb-1">3. View PRs</h4>
-              <CodeBlock>git branch -r --list origin/pr/*</CodeBlock>
-              <p className="text-muted-foreground mt-1">
-                Or with ngit (includes apply options):
-              </p>
-              <CodeBlock>ngit list</CodeBlock>
-            </div>
-
-            <div>
-              <h4 className="font-medium mb-1">4. Merge / incorporate PRs</h4>
-              <p className="text-muted-foreground mb-2">
-                PR status is automatically updated when you merge the branch:
-              </p>
-              <div className="space-y-1">
-                <CodeBlock>git checkout master</CodeBlock>
-                <CodeBlock>git merge pr/great-feature</CodeBlock>
-                <CodeBlock>git push</CodeBlock>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="font-medium mb-1">
-                5. Consider disabling PRs and issues elsewhere
-              </h4>
-              <p className="text-muted-foreground">
-                If you push to GitHub, Codeberg, Bitbucket, etc., consider
-                disabling their PRs and issues so everything is managed on
-                Nostr. For GitHub, use <em>Repo Settings &gt; Features</em> for
-                issues (disabling PRs is not yet possible on GitHub).
-              </p>
-            </div>
-          </div>
-        </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </section>
     </div>
   );

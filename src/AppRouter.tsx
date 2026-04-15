@@ -92,6 +92,7 @@ function NaddrSubPathRedirect({
 //   /repo/<rest>           → /<rest>          (with /proposal(s)/ → /prs/)
 //   /repos                 → /               (repo listing)
 //   /install[/]            → /ngit
+//   /quick-start[/]        → /ngit
 //   /naddr1.../<subpath>   → /<repoPath>/<subpath>  (naddr with sub-path)
 //   /<any>/.../proposals/  → /<any>/.../prs/  (old PR tab name)
 // ---------------------------------------------------------------------------
@@ -126,8 +127,13 @@ function LegacyRedirect() {
     );
   }
 
-  // /install[/] — redirect to /ngit
-  if (raw === "install" || raw === "install/") {
+  // /install[/] and /quick-start[/] — redirect to /ngit
+  if (
+    raw === "install" ||
+    raw === "install/" ||
+    raw === "quick-start" ||
+    raw === "quick-start/"
+  ) {
     return <Navigate to="/ngit" replace />;
   }
 
@@ -178,6 +184,18 @@ export function AppRouter() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/ngit" element={<NgitPage />} />
+            {/* Backwards-compat redirects — must be before /:nip19 */}
+            <Route path="/install" element={<Navigate to="/ngit" replace />} />
+            <Route
+              path="/quick-start"
+              element={
+                <Navigate
+                  to="/ngit"
+                  state={{ expandQuickStart: true }}
+                  replace
+                />
+              }
+            />
             <Route path="/about" element={<About />} />
             {/* /relay/:relaySegment — browse repos on a specific relay.
                 The segment uses the same format as relay hints: wss:// is stripped,
