@@ -208,6 +208,8 @@ export const DEFAULT_NOSTR_CONNECT_RELAYS: readonly string[] = [
   "wss://bucket.coracle.social",
   "wss://nos.lol",
   "wss://relay.ditto.pub",
+  "wss://relay.primal.net",
+  "wss://nrs.primal.net",
 ];
 
 export const defaultNostrConnectRelays = new BehaviorSubject<string[]>([
