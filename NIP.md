@@ -46,6 +46,46 @@ The high-water-mark model keeps the payload compact:
 
 This is the same model used by [gitworkshop.dev](https://gitworkshop.dev) for notification state, adapted from localStorage to NIP-78 for cross-device sync.
 
+---
+
+## Pinned Git Repositories (kind 10617)
+
+A NIP-51 standard replaceable list that stores a user's curated, ordered set of their own repositories to highlight on their profile page.
+
+### Event Structure
+
+```json
+{
+  "kind": 10617,
+  "tags": [
+    ["a", "30617:<pubkey>:<dtag>"],
+    ["a", "30617:<pubkey>:<dtag>"]
+  ],
+  "content": ""
+}
+```
+
+### Tag Schema
+
+| Tag | Description                                                                       |
+| --- | --------------------------------------------------------------------------------- |
+| `a` | Address pointer to a kind:30617 repository announcement. One tag per pinned repo. |
+
+### Ordering
+
+The order of `a` tags in the event is significant — it defines the display order of pinned repositories on the user's profile page. Clients SHOULD preserve tag order when modifying the list and SHOULD append new pins to the end.
+
+### Design Rationale
+
+Follows the same NIP-51 standard list pattern as:
+
+- kind:10017 — Git authors follow list
+- kind:10018 — Git repositories follow list
+
+Uses `a` tags (address pointers to kind:30617 announcements) consistent with kind:10018. The list is intended for a user's **own** repositories only, acting as a curated showcase rather than a general-purpose follow list.
+
+---
+
 ### Notification Events
 
 The following events are considered "notifications" for a user with pubkey `P`:

@@ -12,6 +12,7 @@
  *   kind 10017 — NIP-51 Git authors follow list
  *   kind 10018 — NIP-51 Git repositories follow list
  *   kind 10317 — Grasp server list
+ *   kind 10617 — pinned git repositories list
  *
  * Events are piped directly into the EventStore (and therefore the IndexedDB
  * cache via persistEventsToCache) so they are immediately available to any
@@ -54,6 +55,7 @@ export const USER_REPLACEABLE_KINDS = [
   10017, // NIP-51 Git authors follow list
   10018, // NIP-51 Git repositories follow list
   10317, // Grasp server list
+  10617, // pinned git repositories list
 ] as const;
 
 /**

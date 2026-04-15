@@ -90,6 +90,7 @@ const KIND_LABELS: Record<number, string> = {
   10017: "git authors list",
   10018: "git repositories list",
   10317: "grasp server list",
+  10617: "pinned repositories list",
 };
 
 function kindLabel(kind: number): string {

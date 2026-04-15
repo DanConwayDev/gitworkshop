@@ -18,6 +18,8 @@ import { useIsFollowing } from "@/hooks/useIsFollowing";
 import { useIsGitAuthorFollowing } from "@/hooks/useIsGitAuthorFollowing";
 import { useRobustFollowActions } from "@/hooks/useRobustFollowActions";
 import { useRobustGitAuthorFollowActions } from "@/hooks/useRobustGitAuthorFollowActions";
+import { useRobustPinnedRepoActions } from "@/hooks/useRobustPinnedRepoActions";
+import { useUserPinnedCoords } from "@/hooks/useUserPinnedRepos";
 import { useToast } from "@/hooks/useToast";
 import { UserAvatar, UserLink, UserName } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +42,8 @@ import {
   Eye,
   Activity,
   MoreHorizontal,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import {
@@ -120,10 +124,13 @@ export default function UserPage({ pubkey }: UserPageProps) {
   const followedRepos = useUserFollowedRepos(pubkey);
   const gitAuthorFollows = useUserGitAuthorFollows(pubkey);
   const starredRepos = useUserStarredRepos(pubkey);
+  const pinnedCoords = useUserPinnedCoords(pubkey);
 
   // Prefetch NIP-05 identity so useRepoPath resolves it from IDB on next visit
   usePrefetchNip05([pubkey]);
   const npub = nip19.npubEncode(pubkey);
+  const account = useActiveAccount();
+  const isOwnProfile = !!account && account.pubkey === pubkey;
 
   const displayName =
     profile?.displayName ?? profile?.name ?? npub.slice(0, 16) + "...";
@@ -300,6 +307,8 @@ export default function UserPage({ pubkey }: UserPageProps) {
                   <UserRepoCard
                     key={`${repo.selectedMaintainer}:${repo.dTag}`}
                     repo={repo}
+                    pinnedCoords={pinnedCoords}
+                    showPinControl={isOwnProfile}
                   />
                 ))}
               </div>
@@ -578,12 +587,27 @@ function TabButton({
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
+interface UserRepoCardProps {
+  repo: ResolvedRepo;
+  /** The set of pinned coords for the profile being viewed. */
+  pinnedCoords?: string[];
+  /** When true, show the pin/unpin control (own profile only). */
+  showPinControl?: boolean;
+}
+
+function UserRepoCard({
+  repo,
+  pinnedCoords,
+  showPinControl = false,
+}: UserRepoCardProps) {
   const repoPath = useRepoPath(repo.selectedMaintainer, repo.dTag, repo.relays);
   const navigate = useNavigate();
   const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
     addSuffix: true,
   });
+
+  const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
+  const isPinned = pinnedCoords?.includes(coord) ?? false;
 
   return (
     <div
@@ -601,6 +625,12 @@ function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
                 <h3 className="font-semibold text-base truncate group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
                   {repo.name}
                 </h3>
+                {isPinned && (
+                  <Pin
+                    className="h-3.5 w-3.5 text-pink-500 shrink-0"
+                    aria-label="Pinned"
+                  />
+                )}
               </div>
 
               {repo.description && (
@@ -646,21 +676,77 @@ function UserRepoCard({ repo }: { repo: ResolvedRepo }) {
               </div>
             </div>
 
-            {repo.webUrls.length > 0 && (
-              <a
-                href={repo.webUrls[0]}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground/40 group-hover:text-pink-500 transition-colors shrink-0 mt-1"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <ExternalLink className="h-4 w-4" />
-              </a>
-            )}
+            <div className="flex items-center gap-1.5 shrink-0 mt-1">
+              {showPinControl && (
+                <PinButton coord={coord} isPinned={isPinned} />
+              )}
+              {repo.webUrls.length > 0 && (
+                <a
+                  href={repo.webUrls[0]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground/40 group-hover:text-pink-500 transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PinButton — pin/unpin a repo from the logged-in user's pinned list
+// ---------------------------------------------------------------------------
+
+function PinButton({ coord, isPinned }: { coord: string; isPinned: boolean }) {
+  const { pinRepo, unpinRepo, pending } = useRobustPinnedRepoActions();
+  const { toast } = useToast();
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (isPinned) {
+        await unpinRepo(coord);
+      } else {
+        await pinRepo(coord);
+      }
+    } catch (err) {
+      toast({
+        title: isPinned
+          ? "Failed to unpin repository"
+          : "Failed to pin repository",
+        description:
+          err instanceof Error ? err.message : "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={pending}
+      title={isPinned ? "Unpin repository" : "Pin repository"}
+      className={cn(
+        "p-1 rounded transition-colors",
+        isPinned
+          ? "text-pink-500 hover:text-pink-600 dark:hover:text-pink-400"
+          : "text-muted-foreground/40 hover:text-pink-500 opacity-0 group-hover:opacity-100",
+      )}
+    >
+      {pending ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : isPinned ? (
+        <PinOff className="h-3.5 w-3.5" />
+      ) : (
+        <Pin className="h-3.5 w-3.5" />
+      )}
+    </button>
   );
 }
 
