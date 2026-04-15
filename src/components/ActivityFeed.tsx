@@ -524,10 +524,11 @@ interface ItemLinkBadgeProps {
   /** pubkey of the event author. */
   authorPubkey: string;
   /**
-   * pubkey of the user whose activity page is being viewed.
-   * When it matches authorPubkey the author section is hidden.
+   * When true the author section is omitted — use only when the activity line
+   * already makes clear who created the item (e.g. "opened PR", "opened issue").
+   * For verbs like "commented" or "closed" the author section must be shown.
    */
-  pageUserPubkey?: string;
+  hideAuthor?: boolean;
 }
 
 function ItemLinkBadge({
@@ -535,9 +536,9 @@ function ItemLinkBadge({
   kind,
   title,
   authorPubkey,
-  pageUserPubkey,
+  hideAuthor,
 }: ItemLinkBadgeProps) {
-  const showAuthor = authorPubkey !== pageUserPubkey;
+  const showAuthor = !hideAuthor;
 
   // Icon + colour by kind
   let Icon = Activity;
@@ -687,6 +688,12 @@ function ItemGroupRow({
   // Author pubkey: prefer root event author, fall back to first event author
   const authorPubkey = effectiveRoot?.pubkey ?? item.events[0]?.pubkey ?? "";
 
+  // Only hide the author in the badge when the line already makes clear who
+  // created the item (primary verb is a creation verb) AND it's the page user.
+  // For "commented", "closed", etc. the badge refers to someone else's item so
+  // the author must always be shown.
+  const hideAuthor = rootCreated && authorPubkey === pageUserPubkey;
+
   return (
     <div className="py-2 px-2 space-y-1">
       {/* ── Single summary line ── */}
@@ -712,7 +719,7 @@ function ItemGroupRow({
             kind={item.rootKind}
             title={title}
             authorPubkey={authorPubkey}
-            pageUserPubkey={pageUserPubkey}
+            hideAuthor={hideAuthor}
           />
         ) : (
           <span className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/30 px-1.5 py-1 text-xs font-medium text-muted-foreground min-w-0 overflow-hidden">
