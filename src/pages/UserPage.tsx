@@ -1114,32 +1114,33 @@ function UserRepoCard({
         onClick={() => navigate(repoPath)}
       >
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-transparent hover:border-border/60 hover:bg-muted/30 transition-all duration-150">
-          <GitBranch className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+          <GitBranch className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-0.5 self-start" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-sm font-medium truncate group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
                 {repo.name}
               </span>
-              {repo.description && (
-                <span className="text-xs text-muted-foreground/60 truncate hidden sm:block min-w-0">
-                  {repo.description}
-                </span>
-              )}
             </div>
+            {(repo.description || repo.labels.length > 0) && (
+              <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                {repo.description && (
+                  <span className="text-xs text-muted-foreground/60 truncate min-w-0">
+                    {repo.description}
+                  </span>
+                )}
+                {repo.labels.slice(0, 2).map((label) => (
+                  <Badge
+                    key={label}
+                    variant="secondary"
+                    className="text-[10px] px-1.5 py-0 h-4 shrink-0"
+                  >
+                    {label}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs text-muted-foreground/40 hidden md:block">
-              {timeAgo}
-            </span>
-            {repo.labels.slice(0, 2).map((label) => (
-              <Badge
-                key={label}
-                variant="secondary"
-                className="text-[10px] px-1.5 py-0 h-4 hidden sm:inline-flex"
-              >
-                {label}
-              </Badge>
-            ))}
             {showPinControl && <PinButton coord={coord} isPinned={isPinned} />}
             {repo.webUrls.length > 0 && (
               <a
