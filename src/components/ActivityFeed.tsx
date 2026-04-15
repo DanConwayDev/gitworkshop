@@ -838,22 +838,26 @@ function RepoGroupSection({
           </span>
         )}
 
-        {/* Summary pills */}
-        <div className="flex items-center gap-1.5 flex-wrap ml-1">
-          {summaryParts.map((part) => (
-            <span
-              key={part}
-              className="text-[11px] text-muted-foreground bg-background/60 border border-border/60 rounded-full px-2 py-0.5 leading-none"
-            >
-              {part}
-            </span>
-          ))}
-        </div>
+        {/* Summary pills — only shown when collapsed */}
+        {!expanded && (
+          <div className="flex items-center gap-1.5 flex-wrap ml-1">
+            {summaryParts.map((part) => (
+              <span
+                key={part}
+                className="text-[11px] text-muted-foreground bg-background/60 border border-border/60 rounded-full px-2 py-0.5 leading-none"
+              >
+                {part}
+              </span>
+            ))}
+          </div>
+        )}
 
-        {/* Item count on the right */}
-        <span className="ml-auto text-[11px] text-muted-foreground/70 shrink-0">
-          {group.items.length} {group.items.length === 1 ? "item" : "items"}
-        </span>
+        {/* Item count on the right — only shown when collapsed */}
+        {!expanded && (
+          <span className="ml-auto text-[11px] text-muted-foreground/70 shrink-0">
+            {group.items.length} {group.items.length === 1 ? "item" : "items"}
+          </span>
+        )}
       </button>
 
       {/* Expanded: item rows */}
