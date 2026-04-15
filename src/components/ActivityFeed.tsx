@@ -675,7 +675,7 @@ function ItemGroupRow({
 
       {/* ── Comment snippets (indented) ── */}
       {comments.length > 0 && (
-        <div className="space-y-0.5 pl-1.5 border-l border-border/50">
+        <div className="space-y-0.5 pl-1.5 border-l border-border/50 min-w-0 overflow-hidden">
           {comments
             .slice()
             .sort((a, b) => a.created_at - b.created_at)
@@ -694,10 +694,10 @@ function ItemGroupRow({
                 <Link
                   key={comment.id}
                   to={commentPath}
-                  className="group flex items-start gap-1.5 py-0.5 px-1 rounded hover:bg-muted/40 transition-colors"
+                  className="group flex items-start gap-1.5 py-0.5 px-1 rounded hover:bg-muted/40 transition-colors min-w-0 overflow-hidden"
                 >
                   <CornerDownRight className="h-3 w-3 text-muted-foreground/50 shrink-0 mt-0.5" />
-                  <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors leading-relaxed min-w-0 flex-1">
+                  <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors leading-relaxed min-w-0 flex-1 truncate">
                     {snippet}
                   </span>
                   <span
