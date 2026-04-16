@@ -1492,6 +1492,7 @@ function FileContentBody({
               cloneUrls={cloneUrls}
               commitHash={commitHash}
               filePath={filePath}
+              allowHtml
             />
           </Suspense>
         </div>
@@ -1612,6 +1613,7 @@ function ReadmeViewer({
               cloneUrls={cloneUrls}
               commitHash={commitHash}
               filePath={readmePath}
+              allowHtml
             />
           </Suspense>
         ) : (

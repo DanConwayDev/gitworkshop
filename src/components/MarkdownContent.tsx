@@ -9,13 +9,15 @@
  * Usage:
  *   const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
  */
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { cn, markdownUrlTransform } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import rehypeHighlight from "rehype-highlight";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { remarkNostrMentions } from "applesauce-content/markdown";
 import type { Components } from "react-markdown";
 import { remarkBareMediaUrls } from "@/lib/remarkBareMediaUrls";
@@ -99,7 +101,18 @@ const remarkPlugins = [
   remarkBareMediaUrls,
 ];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const rehypePlugins: any[] = [
+const rehypePluginsBase: any[] = [
+  [rehypeHighlight, { languages: highlightLanguages, detect: false }],
+];
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const rehypePluginsWithHtml: any[] = [
+  // 1. Parse raw HTML strings embedded in the markdown source.
+  rehypeRaw,
+  // 2. Sanitize before highlighting — strips scripts/event-handlers etc.
+  //    defaultSchema matches GitHub's allowlist (div, details, summary, …).
+  [rehypeSanitize, defaultSchema],
+  // 3. Syntax-highlight code blocks (runs on already-sanitised tree).
   [rehypeHighlight, { languages: highlightLanguages, detect: false }],
 ];
 
@@ -112,10 +125,12 @@ const rehypePlugins: any[] = [
  * e.g. filePath="docs/guide.md", src="./images/foo.png" → "docs/images/foo.png"
  */
 function resolveRelativePath(filePath: string, src: string): string {
-  // Build a fake absolute URL so URL() handles ".." etc.
+  // Build a fake absolute URL so URL() handles ".." and normalises the path.
+  // decodeURIComponent turns %20-encoded segments back to literal characters
+  // so they match directory/file names in the git tree (e.g. "3rd Logo - Ziton").
   const base = `https://x/${filePath}`;
   try {
-    return new URL(src, base).pathname.slice(1); // strip leading "/"
+    return decodeURIComponent(new URL(src, base).pathname.slice(1));
   } catch {
     return src;
   }
@@ -133,6 +148,9 @@ function isRelativeSrc(src: string): boolean {
 interface GitImageProps {
   src?: string;
   alt?: string;
+  width?: number | string;
+  height?: number | string;
+  title?: string;
   cloneUrls: string[];
   commitHash: string;
   filePath: string;
@@ -141,6 +159,9 @@ interface GitImageProps {
 function GitImage({
   src,
   alt,
+  width,
+  height,
+  title,
   cloneUrls,
   commitHash,
   filePath,
@@ -204,6 +225,9 @@ function GitImage({
         alt={alt ?? ""}
         className="max-w-full rounded-md my-3"
         loading="lazy"
+        width={width}
+        height={height}
+        title={title}
       />
     );
   }
@@ -225,12 +249,32 @@ function GitImage({
     );
   }
 
+  // Promote width/height to inline styles — Tailwind preflight sets
+  // `height: auto` on img elements which overrides HTML attributes.
+  const sizeStyle: React.CSSProperties = {};
+  if (width !== undefined)
+    sizeStyle.width =
+      typeof width === "number"
+        ? width
+        : /^\d+$/.test(String(width))
+          ? `${width}px`
+          : width;
+  if (height !== undefined)
+    sizeStyle.height =
+      typeof height === "number"
+        ? height
+        : /^\d+$/.test(String(height))
+          ? `${height}px`
+          : height;
+
   return (
     <img
       src={dataUri}
       alt={alt ?? ""}
       className="max-w-full rounded-md my-3"
       loading="lazy"
+      title={title}
+      style={Object.keys(sizeStyle).length > 0 ? sizeStyle : undefined}
     />
   );
 }
@@ -316,7 +360,7 @@ function buildComponents(
     },
 
     // Git-aware image rendering + video support
-    img: ({ src, alt }) => {
+    img: ({ src, alt, width, height, title }) => {
       // Video URLs are represented as image nodes with alt="__video__"
       if (alt === "__video__" && src) {
         return (
@@ -329,6 +373,9 @@ function buildComponents(
           <GitImage
             src={src}
             alt={alt}
+            width={width}
+            height={height}
+            title={title}
             cloneUrls={cloneUrls}
             commitHash={commitHash!}
             filePath={filePath}
@@ -342,6 +389,9 @@ function buildComponents(
           alt={alt ?? ""}
           className="max-w-full rounded-md my-3"
           loading="lazy"
+          width={width}
+          height={height}
+          title={title}
         />
       );
     },
@@ -534,6 +584,13 @@ export interface MarkdownContentProps {
    * Used to resolve relative image paths correctly.
    */
   filePath?: string;
+  /**
+   * Allow raw HTML embedded in the markdown source (e.g. <div>, <details>).
+   * Only enable for trusted, file-based content such as README files.
+   * Must NOT be enabled for user-generated Nostr content (issues, PRs, comments).
+   * Defaults to false.
+   */
+  allowHtml?: boolean;
 }
 
 export function MarkdownContent({
@@ -542,8 +599,10 @@ export function MarkdownContent({
   cloneUrls = [],
   commitHash = null,
   filePath = "",
+  allowHtml = false,
 }: MarkdownContentProps) {
   const components = buildComponents(cloneUrls, commitHash, filePath);
+  const rehypePlugins = allowHtml ? rehypePluginsWithHtml : rehypePluginsBase;
 
   return (
     <div
