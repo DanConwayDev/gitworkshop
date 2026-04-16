@@ -24,7 +24,7 @@ import {
   Pin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { RepoBadge } from "@/components/RepoBadge";
@@ -148,17 +148,17 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
   const hasMore = (sorted?.length ?? 0) > INITIAL_VISIBLE;
 
   return (
-    <Card className="h-fit">
-      <CardHeader className="pb-3 pt-5 px-5">
+    <div className="h-fit">
+      <div className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-semibold">
+          <h3 className="text-base font-semibold">
             <Link
               to={`${userPath}?tab=repositories`}
               className="hover:text-pink-600 dark:hover:text-pink-400 transition-colors"
             >
               My repositories
             </Link>
-          </CardTitle>
+          </h3>
           <Button
             size="sm"
             variant="ghost"
@@ -171,8 +171,8 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
             </Link>
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="px-5 pb-5">
+      </div>
+      <div>
         {repos === undefined ? (
           <div className="space-y-0.5">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -229,8 +229,8 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -251,9 +251,9 @@ function FollowedReposPanel({ pubkey }: { pubkey: string }) {
   const hasMore = (sorted?.length ?? 0) > INITIAL_VISIBLE;
 
   return (
-    <Card className="h-fit">
-      <CardHeader className="pb-3 pt-5 px-5">
-        <CardTitle className="text-base font-semibold flex items-center gap-2">
+    <div className="h-fit">
+      <div className="pb-3">
+        <h3 className="text-base font-semibold flex items-center gap-2">
           <Eye className="h-4 w-4 text-muted-foreground" />
           <Link
             to={`${userPath}?tab=followed`}
@@ -261,9 +261,9 @@ function FollowedReposPanel({ pubkey }: { pubkey: string }) {
           >
             Followed repositories
           </Link>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-5 pb-5">
+        </h3>
+      </div>
+      <div>
         {repos === undefined ? (
           <div className="space-y-0.5">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -312,8 +312,8 @@ function FollowedReposPanel({ pubkey }: { pubkey: string }) {
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -335,10 +335,10 @@ function NotificationsPanel() {
     (items?.filter((item) => !item.archived).length ?? 0) > NOTIF_LIMIT;
 
   return (
-    <Card>
-      <CardHeader className="pb-3 pt-5 px-5">
+    <div>
+      <div className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <h3 className="text-base font-semibold flex items-center gap-2">
             <Bell className="h-4 w-4 text-muted-foreground" />
             Notifications
             {unreadCount > 0 && (
@@ -349,7 +349,7 @@ function NotificationsPanel() {
                 {unreadCount}
               </Badge>
             )}
-          </CardTitle>
+          </h3>
           <div className="flex items-center gap-1">
             {unreadCount > 0 && (
               <Button
@@ -375,10 +375,10 @@ function NotificationsPanel() {
             </Button>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="p-0 pb-2">
+      </div>
+      <div>
         {!inboxItems || (inboxItems.length === 0 && history.loading) ? (
-          <div className="px-5 space-y-3 py-2">
+          <div className="space-y-3 py-2">
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3">
                 <Skeleton className="h-3.5 w-3.5 rounded shrink-0" />
@@ -390,7 +390,7 @@ function NotificationsPanel() {
             ))}
           </div>
         ) : inboxItems.length === 0 ? (
-          <div className="px-5 py-8 text-center">
+          <div className="py-8 text-center">
             <Inbox className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
             <p className="text-sm text-muted-foreground">Your inbox is empty</p>
           </div>
@@ -407,7 +407,7 @@ function NotificationsPanel() {
               ))}
             </ul>
             {hasMore && (
-              <div className="px-4 pt-2">
+              <div className="pt-2">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -423,8 +423,8 @@ function NotificationsPanel() {
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -494,8 +494,9 @@ export function Dashboard() {
           </div>
 
           {/* ---- Right column: repo quick-links ---- */}
-          <div className="order-1 md:order-2 w-full md:w-80 lg:w-96 md:max-w-sm shrink-0 space-y-4">
+          <div className="order-1 md:order-2 w-full md:w-80 lg:w-96 md:max-w-sm shrink-0 space-y-6">
             <MyRepositoriesPanel pubkey={pubkey} />
+            <Separator className="opacity-40" />
             <FollowedReposPanel pubkey={pubkey} />
           </div>
         </div>
