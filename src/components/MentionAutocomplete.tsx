@@ -253,10 +253,15 @@ export function MentionAutocomplete({
     detectMention(content, textarea.selectionStart);
   }, [content, detectMention, textareaRef]);
 
-  // Dismiss on any scroll so the fixed dropdown doesn't float away from the textarea
+  // Dismiss on any scroll outside the dropdown list so the fixed dropdown
+  // doesn't float away from the textarea. Scroll events originating inside
+  // the list itself (from keyboard navigation scrollIntoView) are ignored.
   useEffect(() => {
     if (!isOpen) return;
-    const handleScroll = () => setIsOpen(false);
+    const handleScroll = (e: Event) => {
+      if (listRef.current?.contains(e.target as Node)) return;
+      setIsOpen(false);
+    };
     window.addEventListener("scroll", handleScroll, {
       capture: true,
       passive: true,
