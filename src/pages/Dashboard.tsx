@@ -1,11 +1,12 @@
 /**
  * Dashboard — shown to logged-in users on the root route.
  *
- * Layout (top → bottom):
- *   1. Greeting header
- *   2. Quick-launch: My repositories + Followed repositories (side by side)
- *   3. Notifications panel (compact, inbox only, max 5 items)
- *   4. "Continue where you left off" — recent personal activity (subtle, limited)
+ * Desktop layout (md+):
+ *   Left column (~65%):  Greeting → Notifications → Continue where you left off
+ *   Right column (~35%): My repositories → Followed repositories
+ *
+ * Mobile layout (< md):
+ *   Single column: Greeting → My repos → Followed repos → Notifications → Activity
  */
 
 import { Link } from "react-router-dom";
@@ -18,12 +19,14 @@ import {
   Check,
   Activity,
   ChevronDown,
-  ChevronRight as ChevronRightIcon,
+  ChevronUp,
+  Pin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { RepoBadge } from "@/components/RepoBadge";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { useUserActivity } from "@/hooks/useUserActivity";
 import { useUserRepositories } from "@/hooks/useUserRepositories";
@@ -31,8 +34,7 @@ import { useUserFollowedRepos } from "@/hooks/useUserFollowedRepos";
 import { useUserPinnedCoords } from "@/hooks/useUserPinnedRepos";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useUserProfileSubscription } from "@/hooks/useUserProfileSubscription";
-import { useRepoPath } from "@/hooks/useRepoPath";
-import { UserLink } from "@/components/UserAvatar";
+import { useUserPath } from "@/hooks/useUserPath";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { useProfile } from "@/hooks/useProfile";
 
@@ -53,7 +55,7 @@ function GreetingHeader({ pubkey }: { pubkey: string }) {
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   return (
-    <div className="mb-10">
+    <div className="mb-8">
       <h1 className="text-3xl font-semibold tracking-tight text-foreground">
         {greeting}
         {name ? `, ${name.split(" ")[0]}` : ""}
@@ -66,28 +68,32 @@ function GreetingHeader({ pubkey }: { pubkey: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Repo list — clean, name-only rows
+// Repo badge row (used by both panels)
 // ---------------------------------------------------------------------------
 
-function RepoNameRow({ repo }: { repo: ResolvedRepo }) {
-  const repoPath = useRepoPath(repo.selectedMaintainer, repo.dTag, repo.relays);
+function RepoBadgeRow({
+  repo,
+  isPinned,
+}: {
+  repo: ResolvedRepo;
+  isPinned?: boolean;
+}) {
+  const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
 
   return (
-    <Link
-      to={repoPath}
-      className="group flex items-center py-2.5 rounded-lg hover:bg-muted/50 transition-colors px-2 -mx-2"
-    >
-      <span className="text-sm font-medium truncate group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
-        {repo.name}
-      </span>
-    </Link>
+    <div className="flex items-center gap-1.5 py-1">
+      {isPinned && (
+        <Pin className="h-3 w-3 text-muted-foreground/50 shrink-0 -rotate-45" />
+      )}
+      <RepoBadge coord={coord} repoName={repo.name} />
+    </div>
   );
 }
 
-function RepoNameRowSkeleton() {
+function RepoBadgeRowSkeleton() {
   return (
-    <div className="py-2.5 px-2">
-      <Skeleton className="h-4 w-36" />
+    <div className="py-1">
+      <Skeleton className="h-5 w-40 rounded-full" />
     </div>
   );
 }
@@ -96,9 +102,15 @@ function RepoNameRowSkeleton() {
 // My repositories panel
 // ---------------------------------------------------------------------------
 
+const INITIAL_VISIBLE = 5;
+
 function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
   const repos = useUserRepositories(pubkey);
   const pinnedCoords = useUserPinnedCoords(pubkey);
+  const userPath = useUserPath(pubkey);
+  const [expanded, setExpanded] = useState(false);
+
+  const pinnedSet = useMemo(() => new Set(pinnedCoords ?? []), [pinnedCoords]);
 
   const sorted = repos
     ? [...repos].sort((a, b) => {
@@ -113,14 +125,20 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
       })
     : undefined;
 
-  const displayRepos = sorted?.slice(0, 6);
+  const displayRepos = expanded ? sorted : sorted?.slice(0, INITIAL_VISIBLE);
+  const hasMore = (sorted?.length ?? 0) > INITIAL_VISIBLE;
 
   return (
-    <Card className="h-full">
+    <Card className="h-fit">
       <CardHeader className="pb-3 pt-5 px-5">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-semibold">
-            My repositories
+            <Link
+              to={`${userPath}?tab=repositories`}
+              className="hover:text-pink-600 dark:hover:text-pink-400 transition-colors"
+            >
+              My repositories
+            </Link>
           </CardTitle>
           <Button
             size="sm"
@@ -137,33 +155,44 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
       </CardHeader>
       <CardContent className="px-5 pb-5">
         {repos === undefined ? (
-          <div className="space-y-0">
+          <div className="space-y-0.5">
             {Array.from({ length: 4 }).map((_, i) => (
-              <RepoNameRowSkeleton key={i} />
+              <RepoBadgeRowSkeleton key={i} />
             ))}
           </div>
         ) : displayRepos && displayRepos.length > 0 ? (
           <>
-            <div className="space-y-0">
-              {displayRepos.map((repo) => (
-                <RepoNameRow
-                  key={`${repo.selectedMaintainer}:${repo.dTag}`}
-                  repo={repo}
-                />
-              ))}
+            <div className="flex flex-wrap gap-x-1 gap-y-0.5">
+              {displayRepos.map((repo) => {
+                const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
+                return (
+                  <RepoBadgeRow
+                    key={coord}
+                    repo={repo}
+                    isPinned={pinnedSet.has(coord)}
+                  />
+                );
+              })}
             </div>
-            {sorted && sorted.length > 6 && (
-              <div className="mt-4 pt-3 border-t border-border/40">
+            {hasMore && (
+              <div className="mt-3 pt-2 border-t border-border/40">
                 <Button
                   variant="ghost"
                   size="sm"
                   className="w-full h-7 text-xs text-muted-foreground"
-                  asChild
+                  onClick={() => setExpanded((v) => !v)}
                 >
-                  <Link to="/search">
-                    View all {sorted.length} repositories
-                    <ArrowRight className="h-3 w-3 ml-1.5" />
-                  </Link>
+                  {expanded ? (
+                    <>
+                      Show less
+                      <ChevronUp className="h-3 w-3 ml-1.5" />
+                    </>
+                  ) : (
+                    <>
+                      Show all {sorted?.length} repositories
+                      <ChevronDown className="h-3 w-3 ml-1.5" />
+                    </>
+                  )}
                 </Button>
               </div>
             )}
@@ -190,71 +219,66 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
 // Followed repos panel
 // ---------------------------------------------------------------------------
 
-function FollowedRepoNameRow({ repo }: { repo: ResolvedRepo }) {
-  const repoPath = useRepoPath(repo.selectedMaintainer, repo.dTag, repo.relays);
-
-  return (
-    <Link
-      to={repoPath}
-      className="group flex items-center gap-2 py-2.5 rounded-lg hover:bg-muted/50 transition-colors px-2 -mx-2"
-    >
-      <span className="text-sm font-medium truncate group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors flex-1 min-w-0">
-        {repo.name}
-      </span>
-      <div className="shrink-0">
-        {repo.maintainerSet.slice(0, 1).map((pk) => (
-          <UserLink
-            key={pk}
-            pubkey={pk}
-            avatarSize="xs"
-            nameClassName="text-[10px] text-muted-foreground"
-            noLink
-          />
-        ))}
-      </div>
-    </Link>
-  );
-}
-
 function FollowedReposPanel({ pubkey }: { pubkey: string }) {
   const repos = useUserFollowedRepos(pubkey);
+  const userPath = useUserPath(pubkey);
+  const [expanded, setExpanded] = useState(false);
 
   const sorted = repos
     ? [...repos].sort((a, b) => b.updatedAt - a.updatedAt)
     : undefined;
 
-  const displayRepos = sorted?.slice(0, 6);
+  const displayRepos = expanded ? sorted : sorted?.slice(0, INITIAL_VISIBLE);
+  const hasMore = (sorted?.length ?? 0) > INITIAL_VISIBLE;
 
   return (
-    <Card className="h-full">
+    <Card className="h-fit">
       <CardHeader className="pb-3 pt-5 px-5">
         <CardTitle className="text-base font-semibold flex items-center gap-2">
           <Eye className="h-4 w-4 text-muted-foreground" />
-          Followed repositories
+          <Link
+            to={`${userPath}?tab=followed`}
+            className="hover:text-pink-600 dark:hover:text-pink-400 transition-colors"
+          >
+            Followed repositories
+          </Link>
         </CardTitle>
       </CardHeader>
       <CardContent className="px-5 pb-5">
         {repos === undefined ? (
-          <div className="space-y-0">
+          <div className="space-y-0.5">
             {Array.from({ length: 4 }).map((_, i) => (
-              <RepoNameRowSkeleton key={i} />
+              <RepoBadgeRowSkeleton key={i} />
             ))}
           </div>
         ) : displayRepos && displayRepos.length > 0 ? (
           <>
-            <div className="space-y-0">
-              {displayRepos.map((repo) => (
-                <FollowedRepoNameRow
-                  key={`${repo.selectedMaintainer}:${repo.dTag}`}
-                  repo={repo}
-                />
-              ))}
+            <div className="flex flex-wrap gap-x-1 gap-y-0.5">
+              {displayRepos.map((repo) => {
+                const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
+                return <RepoBadgeRow key={coord} repo={repo} />;
+              })}
             </div>
-            {sorted && sorted.length > 6 && (
-              <div className="mt-4 pt-3 border-t border-border/40">
-                <p className="text-xs text-muted-foreground text-center">
-                  +{sorted.length - 6} more followed repositories
-                </p>
+            {hasMore && (
+              <div className="mt-3 pt-2 border-t border-border/40">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full h-7 text-xs text-muted-foreground"
+                  onClick={() => setExpanded((v) => !v)}
+                >
+                  {expanded ? (
+                    <>
+                      Show less
+                      <ChevronUp className="h-3 w-3 ml-1.5" />
+                    </>
+                  ) : (
+                    <>
+                      Show all {sorted?.length} repositories
+                      <ChevronDown className="h-3 w-3 ml-1.5" />
+                    </>
+                  )}
+                </Button>
               </div>
             )}
           </>
@@ -386,24 +410,20 @@ function NotificationsPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// "Continue where you left off" — collapsible activity summary
+// "Continue where you left off" — expanded by default
 // ---------------------------------------------------------------------------
 
 function RecentActivitySection({ pubkey }: { pubkey: string }) {
   const events = useUserActivity(pubkey);
-  const [expanded, setExpanded] = useState(false);
 
   // Only show if there's something to show
   if (events !== undefined && events.length === 0) return null;
 
   return (
     <div>
-      <button
-        className="flex items-center gap-2 group mb-0 w-full text-left"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <Activity className="h-4 w-4 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors" />
-        <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+      <div className="flex items-center gap-2 mb-4">
+        <Activity className="h-4 w-4 text-muted-foreground/60" />
+        <span className="text-sm font-medium text-muted-foreground">
           Continue where you left off
         </span>
         {events && events.length > 0 && (
@@ -411,20 +431,11 @@ function RecentActivitySection({ pubkey }: { pubkey: string }) {
             ({events.length} recent items)
           </span>
         )}
-        <span className="ml-auto text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
-          {expanded ? (
-            <ChevronDown className="h-3.5 w-3.5" />
-          ) : (
-            <ChevronRightIcon className="h-3.5 w-3.5" />
-          )}
-        </span>
-      </button>
+      </div>
 
-      {expanded && (
-        <div className="mt-4 pl-6 border-l border-border/40">
-          <ActivityFeed events={events} pageUserPubkey={pubkey} limit={15} />
-        </div>
-      )}
+      <div className="pl-6 border-l border-border/40">
+        <ActivityFeed events={events} pageUserPubkey={pubkey} limit={15} />
+      </div>
     </div>
   );
 }
@@ -443,33 +454,32 @@ export function Dashboard() {
 
   return (
     <div className="min-h-full">
-      <div className="container max-w-screen-xl px-4 md:px-8 py-10 md:py-14 space-y-10">
-        {/* Greeting */}
-        <GreetingHeader pubkey={pubkey} />
+      <div className="container max-w-screen-xl px-4 md:px-8 py-10 md:py-14">
+        {/* Mobile: greeting at top */}
+        <div className="md:hidden">
+          <GreetingHeader pubkey={pubkey} />
+        </div>
 
-        {/* Quick-launch: my repos + followed repos */}
-        <section>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60 mb-4">
-            Your repositories
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-6">
+        {/* Two-column layout on desktop */}
+        <div className="flex flex-col md:flex-row gap-8">
+          {/* ---- Left column: greeting (desktop) + notifications + activity ---- */}
+          <div className="order-2 md:order-1 flex-1 min-w-0 space-y-8">
+            {/* Desktop-only greeting */}
+            <div className="hidden md:block">
+              <GreetingHeader pubkey={pubkey} />
+            </div>
+
+            <NotificationsPanel />
+
+            <RecentActivitySection pubkey={pubkey} />
+          </div>
+
+          {/* ---- Right column: repo quick-links ---- */}
+          <div className="order-1 md:order-2 w-full md:w-80 lg:w-96 md:max-w-sm shrink-0 space-y-4">
             <MyRepositoriesPanel pubkey={pubkey} />
             <FollowedReposPanel pubkey={pubkey} />
           </div>
-        </section>
-
-        {/* Notifications */}
-        <section>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60 mb-4">
-            Inbox
-          </h2>
-          <NotificationsPanel />
-        </section>
-
-        {/* Recent personal activity — collapsed by default */}
-        <section className="pb-6">
-          <RecentActivitySection pubkey={pubkey} />
-        </section>
+        </div>
       </div>
     </div>
   );
