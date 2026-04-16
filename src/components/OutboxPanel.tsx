@@ -779,7 +779,17 @@ export function OutboxItemDetail({ item }: { item: OutboxItem }) {
 
 type FilterMode = "all" | "pending" | "failed";
 
-export function OutboxPanel({ onClose }: { onClose: () => void }) {
+interface OutboxPanelProps {
+  /** "popover" (default) constrains height; "page" removes the height limit. */
+  variant?: "popover" | "page";
+  onClose?: () => void;
+}
+
+export function OutboxPanel({
+  variant = "popover",
+  onClose,
+}: OutboxPanelProps) {
+  const handleClose = onClose ?? (() => {});
   const allItems = use$(outboxStore.items$) ?? [];
   // Filter out hidden items (e.g. notification state updates) from the UI
   const items = allItems.filter((i) => !i.hidden);
@@ -849,14 +859,16 @@ export function OutboxPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Items */}
-      <ScrollArea className="max-h-[440px]">
+      <ScrollArea
+        className={variant === "popover" ? "max-h-[440px]" : undefined}
+      >
         {filtered.length === 0 ? (
           <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
             {filter === "all" ? "No published events yet" : "Nothing here"}
           </div>
         ) : (
           filtered.map((item) => (
-            <OutboxItemRow key={item.id} item={item} onClose={onClose} />
+            <OutboxItemRow key={item.id} item={item} onClose={handleClose} />
           ))
         )}
       </ScrollArea>

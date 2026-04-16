@@ -16,6 +16,7 @@ import NotificationsPage from "./pages/NotificationsPage";
 import RelayPage from "./pages/RelayPage";
 import RepoLayout from "./pages/repo/RepoLayout";
 import Settings from "./pages/Settings";
+import OutboxPage from "./pages/OutboxPage";
 import { NIP19Page } from "./pages/NIP19Page";
 import NgitPage from "./pages/NgitPage";
 import About from "./pages/About";
@@ -182,6 +183,7 @@ export function AppRouter() {
             <Route path="/" element={<Index />} />
             <Route path="/search" element={<RepositoriesPage />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/outbox" element={<OutboxPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/ngit" element={<NgitPage />} />
             {/* Backwards-compat redirects — must be before /:nip19 */}

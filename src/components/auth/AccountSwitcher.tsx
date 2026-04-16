@@ -32,11 +32,14 @@ import {
   Key,
   LogOut,
   Puzzle,
+  Send,
+  Settings,
   UserIcon,
   UserPlus,
   Wifi,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { OutboxPendingBadge } from "@/components/OutboxPanel";
 
 function SignerTypeBadge({ account }: { account: IAccount }) {
   if (account instanceof ExtensionAccount)
@@ -115,6 +118,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   const accounts = use$(accountManager.accounts$);
   const activeProfile = useProfile(activeAccount?.pubkey);
   const activeUserPath = useUserPath(activeAccount?.pubkey ?? "");
+  const navigate = useNavigate();
   const { name: displayName, isPlaceholder: activeIsPlaceholder } =
     useUserDisplayName(activeAccount?.pubkey ?? "");
 
@@ -178,6 +182,22 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
               </span>
             </div>
           </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => navigate("/outbox")}
+          className="flex items-center gap-2 cursor-pointer p-2 rounded-md"
+        >
+          <Send className="w-4 h-4" />
+          <span className="flex-1">Outbox</span>
+          <OutboxPendingBadge />
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => navigate("/settings")}
+          className="flex items-center gap-2 cursor-pointer p-2 rounded-md"
+        >
+          <Settings className="w-4 h-4" />
+          <span>Settings</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <div className="font-medium text-sm px-2 py-1.5 text-muted-foreground">
