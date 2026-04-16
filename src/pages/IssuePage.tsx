@@ -159,6 +159,9 @@ export default function IssuePage() {
               </div>
 
               <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground ml-[calc(theme(spacing.3)+4.5rem-3.5rem)]">
+                <code className="font-mono text-xs text-muted-foreground/80">
+                  #{issue.id.slice(0, 8)}
+                </code>
                 <UserLink
                   pubkey={issue.pubkey}
                   avatarSize="sm"

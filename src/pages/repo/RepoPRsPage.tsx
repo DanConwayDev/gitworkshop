@@ -298,6 +298,10 @@ function PRRow({
             ))}
           </div>
           <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+            <code className="font-mono text-[10px] text-muted-foreground/80">
+              #{pr.id.slice(0, 8)}
+            </code>
+            <span className="text-muted-foreground/40">&middot;</span>
             <span>active {lastActive}</span>
             <span className="text-muted-foreground/40">&middot;</span>
             <UserAvatar
