@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { nip19 } from "nostr-tools";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useContactSearch } from "@/hooks/useContactSearch";
@@ -200,13 +201,19 @@ export function MentionAutocomplete({
       setIsOpen(true);
       setSelectedIndex(0);
 
-      // Position the dropdown below the @ character
+      // Position the dropdown below the @ character.
+      // Use fixed (viewport) coordinates so the dropdown escapes any
+      // overflow:hidden ancestor (e.g. the composer border wrapper).
       const coords = getCaretCoordinates(textarea, atPos);
       const lineHeight =
         parseFloat(window.getComputedStyle(textarea).lineHeight) || 20;
+      const rect = textarea.getBoundingClientRect();
       setDropdownPos({
-        top: coords.top + lineHeight + 4,
-        left: Math.max(0, Math.min(coords.left, textarea.clientWidth - 280)),
+        top: rect.top + coords.top + lineHeight + 4,
+        left: Math.max(
+          0,
+          Math.min(rect.left + coords.left, window.innerWidth - 280),
+        ),
       });
     },
     [textareaRef],
@@ -319,9 +326,12 @@ export function MentionAutocomplete({
     return null;
   }
 
-  return (
+  // Render via portal so the dropdown escapes any overflow:hidden or
+  // CSS-transform ancestor (e.g. Radix Dialog), while fixed coordinates
+  // keep it anchored to the correct viewport position.
+  return createPortal(
     <div
-      className="absolute z-[100] w-[280px] rounded-xl border border-border bg-popover shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150"
+      className="fixed z-[100] w-[280px] rounded-xl border border-border bg-popover shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150"
       style={{ top: dropdownPos.top, left: dropdownPos.left }}
     >
       <div ref={listRef} className="max-h-[240px] overflow-y-auto py-1">
@@ -334,7 +344,8 @@ export function MentionAutocomplete({
           />
         ))}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
