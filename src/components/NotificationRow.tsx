@@ -217,9 +217,7 @@ function ThreadNotificationRow({
             {compact ? (
               // Compact sub-row: repo badge + unread text
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                {repoCoord && (
-                  <RepoBadge coord={repoCoord} repoNameOnly asSpan />
-                )}
+                {repoCoord && <RepoBadge coord={repoCoord} asSpan />}
                 {summary.unreadText && (
                   <span
                     className={cn(
@@ -268,7 +266,7 @@ function ThreadNotificationRow({
                     <span className="text-muted-foreground/40 text-xs">
                       &middot;
                     </span>
-                    <RepoBadge coord={repoCoord} repoNameOnly asSpan />
+                    <RepoBadge coord={repoCoord} asSpan />
                   </>
                 )}
               </div>
@@ -457,9 +455,7 @@ function SocialNotificationRow({
               >
                 starred
               </span>
-              {item.repoCoord && (
-                <RepoBadge coord={item.repoCoord} repoNameOnly />
-              )}
+              {item.repoCoord && <RepoBadge coord={item.repoCoord} />}
             </div>
             {!compact && (
               <div className="mt-1">
