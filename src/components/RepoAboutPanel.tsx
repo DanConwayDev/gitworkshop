@@ -1004,7 +1004,7 @@ function FullVariantActionBar({
               label="gitworkshop.dev"
               value={`https://gitworkshop.dev/${nip19Id}`}
             />
-            <CopyRow label="event id" value={`nostr:${nip19Id}`} />
+            <CopyRow label="event id" value={nip19Id} />
             <CopyRow label="ditto.pub" value={`https://ditto.pub/${nip19Id}`} />
             {isAddressableKind(selectedAnnouncement.kind) ? (
               <CopyRow
@@ -1075,7 +1075,7 @@ function AnnouncementEventActions({ event }: { event: NostrEvent }) {
               label="gitworkshop.dev"
               value={`https://gitworkshop.dev/${nip19Id}`}
             />
-            <CopyRow label="event id" value={`nostr:${nip19Id}`} />
+            <CopyRow label="event id" value={nip19Id} />
             <CopyRow label="ditto.pub" value={`https://ditto.pub/${nip19Id}`} />
             {isAddressableKind(event.kind) ? (
               <CopyRow
