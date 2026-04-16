@@ -403,6 +403,7 @@ function NotificationsPanel() {
                   item={item}
                   actions={actions}
                   compact
+                  currentView="inbox"
                 />
               ))}
             </ul>

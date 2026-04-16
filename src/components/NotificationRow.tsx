@@ -131,66 +131,37 @@ function ThreadNotificationRow({
   const nevent = eventIdToNevent(item.rootId);
   const linkPath = buildNotificationLink(nevent, item);
 
-  // Full layout extras
   const commenters = compact ? [] : getCommenters(item);
   const lastActive = formatDistanceToNow(new Date(item.latestActivity * 1000), {
     addSuffix: true,
   });
-
-  // Compact unread icon
-  const UnreadIcon = summary.hasMerge
-    ? GitMerge
-    : summary.hasClosed
-      ? XCircle
-      : MessageCircle;
-  const unreadIconColor = summary.hasMerge
-    ? "text-pink-500"
-    : summary.hasClosed
-      ? "text-red-500"
-      : "text-muted-foreground";
-
-  const dotSize = compact ? "h-1.5 w-1.5" : "h-2 w-2";
-  const dotPad = compact ? "" : "pt-1.5";
 
   return (
     <li
       className={cn(
         "group transition-colors",
         item.unread
-          ? compact
-            ? "bg-accent/20 border-l-2 border-l-pink-500"
-            : "bg-accent/30 hover:bg-accent/50 border-l-2 border-l-pink-500"
-          : compact
-            ? "border-l-2 border-l-transparent"
-            : "hover:bg-accent/20 border-l-2 border-l-transparent",
+          ? "bg-accent/30 hover:bg-accent/50 border-l-2 border-l-pink-500"
+          : "hover:bg-accent/20 border-l-2 border-l-transparent",
       )}
     >
-      <div className={compact ? undefined : "flex items-start"}>
+      <div className="flex items-start">
         <Link
           to={linkPath}
-          className={cn(
-            "flex items-start gap-3 min-w-0",
-            compact ? "px-4 py-3 items-center" : "flex-1 px-3 py-3",
-          )}
+          className="flex items-start gap-3 min-w-0 flex-1 px-3 py-3"
           onClick={() => actions.markAsRead(item.rootId)}
         >
           {/* Unread dot */}
-          <div className={compact ? "shrink-0" : "w-2 pt-1.5 shrink-0"}>
+          <div className="w-2 pt-1.5 shrink-0">
             {item.unread ? (
-              <div
-                className={cn(
-                  "rounded-full bg-pink-500 shrink-0",
-                  dotSize,
-                  dotPad,
-                )}
-              />
+              <div className="h-2 w-2 rounded-full bg-pink-500 shrink-0" />
             ) : (
-              <div className={cn(dotSize, "shrink-0")} />
+              <div className="h-2 w-2 shrink-0" />
             )}
           </div>
 
           {/* Type icon */}
-          <div className={compact ? undefined : "pt-0.5 shrink-0"}>
+          <div className="pt-0.5 shrink-0">
             <RootTypeIcon type={rootType} compact={compact} />
           </div>
 
@@ -198,82 +169,55 @@ function ThreadNotificationRow({
           <div className="flex-1 min-w-0">
             <p
               className={cn(
-                "text-sm",
-                compact ? "truncate" : "line-clamp-1",
+                "text-sm line-clamp-1",
                 item.unread
                   ? "font-medium text-foreground"
                   : "text-foreground/80",
               )}
             >
-              {compact
-                ? title.length > 60
-                  ? `${title.slice(0, 57)}...`
-                  : title
-                : title.length > 70
-                  ? `${title.slice(0, 67)}...`
-                  : title}
+              {title.length > 70 ? `${title.slice(0, 67)}...` : title}
             </p>
 
-            {compact ? (
-              // Compact sub-row: repo badge + unread text
-              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                {repoCoord && <RepoBadge coord={repoCoord} asSpan />}
-                {summary.unreadText && (
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-0.5 text-xs",
-                      item.unread
-                        ? "text-pink-600 dark:text-pink-400 font-medium"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    <UnreadIcon className={cn("h-3 w-3", unreadIconColor)} />
-                    {summary.unreadText}
+            {/* Sub-row: timestamp · purpose · unread text · repo badge */}
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className="text-xs text-muted-foreground shrink-0">
+                active {lastActive}
+              </span>
+              {summary.purpose && (
+                <>
+                  <span className="text-muted-foreground/40 text-xs">
+                    &middot;
                   </span>
-                )}
-              </div>
-            ) : (
-              // Full sub-row: timestamp · purpose · unread text · repo badge
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="text-xs text-muted-foreground shrink-0">
-                  active {lastActive}
-                </span>
-                {summary.purpose && (
-                  <>
-                    <span className="text-muted-foreground/40 text-xs">
-                      &middot;
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {summary.purpose}
-                    </span>
-                  </>
-                )}
-                {summary.unreadText && (
-                  <>
-                    <span className="text-muted-foreground/40 text-xs">
-                      &middot;
-                    </span>
-                    <UnreadSummaryBadge
-                      summary={summary.unreadText}
-                      hasMerge={summary.hasMerge}
-                      hasClosed={summary.hasClosed}
-                      isUnread={item.unread}
-                    />
-                  </>
-                )}
-                {repoCoord && (
-                  <>
-                    <span className="text-muted-foreground/40 text-xs">
-                      &middot;
-                    </span>
-                    <RepoBadge coord={repoCoord} asSpan />
-                  </>
-                )}
-              </div>
-            )}
+                  <span className="text-xs text-muted-foreground">
+                    {summary.purpose}
+                  </span>
+                </>
+              )}
+              {summary.unreadText && (
+                <>
+                  <span className="text-muted-foreground/40 text-xs">
+                    &middot;
+                  </span>
+                  <UnreadSummaryBadge
+                    summary={summary.unreadText}
+                    hasMerge={summary.hasMerge}
+                    hasClosed={summary.hasClosed}
+                    isUnread={item.unread}
+                  />
+                </>
+              )}
+              {repoCoord && (
+                <>
+                  <span className="text-muted-foreground/40 text-xs">
+                    &middot;
+                  </span>
+                  <RepoBadge coord={repoCoord} asSpan />
+                </>
+              )}
+            </div>
           </div>
 
-          {/* Commenter avatars — full layout only, hidden on hover */}
+          {/* Commenter avatars — hidden on hover, hidden in compact */}
           {!compact && (
             <div className="hidden md:flex items-center gap-1 self-center shrink-0 group-hover:hidden">
               {commenters.slice(0, 3).map((pk) => (
@@ -291,73 +235,58 @@ function ThreadNotificationRow({
               )}
             </div>
           )}
+        </Link>
 
-          {/* Compact archive button — inside the link area, stops propagation */}
-          {compact && (
+        {/* Action buttons — outside the link, visible on hover. Icon-only when compact. */}
+        <div className="hidden md:group-hover:flex items-center gap-1 self-center pr-3 shrink-0">
+          {item.unread ? (
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                actions.markAsArchived(item.rootId);
-              }}
-              title="Archive"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsRead(item.rootId)}
+              title="Mark as read"
             >
-              <Archive className="h-3 w-3" />
+              <Eye className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Read"}
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsUnread(item.rootId)}
+              title="Mark as unread"
+            >
+              <EyeOff className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Unread"}
             </Button>
           )}
-        </Link>
-
-        {/* Full layout action buttons — outside the link, visible on hover */}
-        {!compact && (
-          <div className="hidden md:group-hover:flex items-center gap-1 self-center pr-3 shrink-0">
-            {item.unread ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => actions.markAsRead(item.rootId)}
-              >
-                <Eye className="h-3 w-3 mr-1" />
-                Read
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => actions.markAsUnread(item.rootId)}
-              >
-                <EyeOff className="h-3 w-3 mr-1" />
-                Unread
-              </Button>
-            )}
-            {currentView === "inbox" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => actions.markAsArchived(item.rootId)}
-              >
-                <Archive className="h-3 w-3 mr-1" />
-                Archive
-              </Button>
-            )}
-            {currentView === "archived" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => actions.markAsUnarchived(item.rootId)}
-              >
-                <ArchiveRestore className="h-3 w-3 mr-1" />
-                Inbox
-              </Button>
-            )}
-          </div>
-        )}
+          {currentView === "inbox" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsArchived(item.rootId)}
+              title="Archive"
+            >
+              <Archive className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Archive"}
+            </Button>
+          )}
+          {currentView === "archived" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsUnarchived(item.rootId)}
+              title="Move to inbox"
+            >
+              <ArchiveRestore className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Inbox"}
+            </Button>
+          )}
+        </div>
       </div>
     </li>
   );
@@ -383,71 +312,51 @@ function SocialNotificationRow({
     addSuffix: true,
   });
 
-  const avatarSize = compact ? "h-4 w-4 text-[8px]" : "h-5 w-5 text-[8px]";
-  const maxActors = compact ? 3 : 5;
-  const dotSize = compact ? "h-1.5 w-1.5" : "h-2 w-2";
-
   return (
     <li
       className={cn(
         "group transition-colors",
         item.unread
-          ? compact
-            ? "bg-accent/20 border-l-2 border-l-pink-500"
-            : "bg-accent/30 hover:bg-accent/50 border-l-2 border-l-pink-500"
-          : compact
-            ? "border-l-2 border-l-transparent"
-            : "hover:bg-accent/20 border-l-2 border-l-transparent",
+          ? "bg-accent/30 hover:bg-accent/50 border-l-2 border-l-pink-500"
+          : "hover:bg-accent/20 border-l-2 border-l-transparent",
       )}
     >
-      <div className={compact ? undefined : "flex items-start"}>
+      <div className="flex items-start">
         <div
-          className={cn(
-            "flex items-start gap-3 min-w-0 cursor-default",
-            compact ? "px-4 py-3 items-center flex-1" : "flex-1 px-3 py-3",
-          )}
+          className="flex items-start gap-3 min-w-0 cursor-default flex-1 px-3 py-3"
           onClick={() => actions.markAsRead(item.rootId)}
         >
           {/* Unread dot */}
-          {item.unread ? (
-            <div className={cn("rounded-full bg-pink-500 shrink-0", dotSize)} />
-          ) : (
-            <div className={cn(dotSize, "shrink-0")} />
-          )}
+          <div className="w-2 pt-1.5 shrink-0">
+            {item.unread ? (
+              <div className="h-2 w-2 rounded-full bg-pink-500 shrink-0" />
+            ) : (
+              <div className="h-2 w-2 shrink-0" />
+            )}
+          </div>
 
           {/* Star icon */}
-          <Star
-            className={cn(
-              "text-yellow-500 shrink-0",
-              compact ? "h-3.5 w-3.5" : "h-4 w-4",
-            )}
-          />
+          <Star className="h-4 w-4 text-yellow-500 shrink-0 mt-0.5" />
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <div
-              className={cn(
-                "flex items-center flex-wrap",
-                compact ? "gap-1" : "gap-1.5",
-              )}
-            >
-              {actorPubkeys.slice(0, maxActors).map((pk) => (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {actorPubkeys.slice(0, 5).map((pk) => (
                 <UserAvatar
                   key={pk}
                   pubkey={pk}
                   size="sm"
-                  className={avatarSize}
+                  className="h-5 w-5 text-[8px]"
                 />
               ))}
-              {actorPubkeys.length > maxActors && (
+              {actorPubkeys.length > 5 && (
                 <span className="text-xs text-muted-foreground">
-                  +{actorPubkeys.length - maxActors}
+                  +{actorPubkeys.length - 5}
                 </span>
               )}
               <span
                 className={cn(
-                  "text-sm",
-                  compact ? "" : "ml-0.5",
+                  "text-sm ml-0.5",
                   item.unread
                     ? "font-medium text-foreground"
                     : "text-foreground/80",
@@ -455,66 +364,73 @@ function SocialNotificationRow({
               >
                 starred
               </span>
-              {item.repoCoord && <RepoBadge coord={item.repoCoord} />}
             </div>
-            {!compact && (
-              <div className="mt-1">
-                <span className="text-xs text-muted-foreground">
-                  {lastActive}
-                </span>
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              <span className="text-xs text-muted-foreground shrink-0">
+                {lastActive}
+              </span>
+              {item.repoCoord && (
+                <>
+                  <span className="text-muted-foreground/40 text-xs">
+                    &middot;
+                  </span>
+                  <RepoBadge coord={item.repoCoord} asSpan />
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Full layout action buttons */}
-        {!compact && (
-          <div className="hidden md:group-hover:flex items-center gap-1 self-center pr-3 shrink-0">
-            {item.unread ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => actions.markAsRead(item.rootId)}
-              >
-                <Eye className="h-3 w-3 mr-1" />
-                Read
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => actions.markAsUnread(item.rootId)}
-              >
-                <EyeOff className="h-3 w-3 mr-1" />
-                Unread
-              </Button>
-            )}
-            {currentView === "inbox" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => actions.markAsArchived(item.rootId)}
-              >
-                <Archive className="h-3 w-3 mr-1" />
-                Archive
-              </Button>
-            )}
-            {currentView === "archived" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => actions.markAsUnarchived(item.rootId)}
-              >
-                <ArchiveRestore className="h-3 w-3 mr-1" />
-                Inbox
-              </Button>
-            )}
-          </div>
-        )}
+        {/* Action buttons — icon-only when compact */}
+        <div className="hidden md:group-hover:flex items-center gap-1 self-center pr-3 shrink-0">
+          {item.unread ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsRead(item.rootId)}
+              title="Mark as read"
+            >
+              <Eye className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Read"}
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsUnread(item.rootId)}
+              title="Mark as unread"
+            >
+              <EyeOff className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Unread"}
+            </Button>
+          )}
+          {currentView === "inbox" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsArchived(item.rootId)}
+              title="Archive"
+            >
+              <Archive className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Archive"}
+            </Button>
+          )}
+          {currentView === "archived" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsUnarchived(item.rootId)}
+              title="Move to inbox"
+            >
+              <ArchiveRestore className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Inbox"}
+            </Button>
+          )}
+        </div>
       </div>
     </li>
   );
