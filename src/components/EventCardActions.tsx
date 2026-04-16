@@ -125,15 +125,15 @@ export function EventCardActions({ event, className }: EventCardActionsProps) {
               label="gitworkshop.dev"
               value={`https://gitworkshop.dev/${nip19Id}`}
             />
-            <CopyRow label="nostr:" value={`nostr:${nip19Id}`} />
-            <CopyRow label="njump.me" value={`https://njump.me/${nip19Id}`} />
+            <CopyRow label="event id" value={`nostr:${nip19Id}`} />
+            <CopyRow label="ditto.pub" value={`https://ditto.pub/${nip19Id}`} />
             {isAddressableKind(event.kind) ? (
               <CopyRow
                 label="coordinate"
                 value={getReplaceableAddress(event) ?? event.id}
               />
             ) : (
-              <CopyRow label="event id" value={event.id} />
+              <CopyRow label="hex event id" value={event.id} />
             )}
           </div>
         </DialogContent>

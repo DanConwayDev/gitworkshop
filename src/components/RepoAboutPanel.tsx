@@ -1004,8 +1004,8 @@ function FullVariantActionBar({
               label="gitworkshop.dev"
               value={`https://gitworkshop.dev/${nip19Id}`}
             />
-            <CopyRow label="nostr:" value={`nostr:${nip19Id}`} />
-            <CopyRow label="njump.me" value={`https://njump.me/${nip19Id}`} />
+            <CopyRow label="event id" value={`nostr:${nip19Id}`} />
+            <CopyRow label="ditto.pub" value={`https://ditto.pub/${nip19Id}`} />
             {isAddressableKind(selectedAnnouncement.kind) ? (
               <CopyRow
                 label="coordinate"
@@ -1015,7 +1015,7 @@ function FullVariantActionBar({
                 }
               />
             ) : (
-              <CopyRow label="event id" value={selectedAnnouncement.id} />
+              <CopyRow label="hex event id" value={selectedAnnouncement.id} />
             )}
           </div>
         </DialogContent>
@@ -1075,15 +1075,15 @@ function AnnouncementEventActions({ event }: { event: NostrEvent }) {
               label="gitworkshop.dev"
               value={`https://gitworkshop.dev/${nip19Id}`}
             />
-            <CopyRow label="nostr:" value={`nostr:${nip19Id}`} />
-            <CopyRow label="njump.me" value={`https://njump.me/${nip19Id}`} />
+            <CopyRow label="event id" value={`nostr:${nip19Id}`} />
+            <CopyRow label="ditto.pub" value={`https://ditto.pub/${nip19Id}`} />
             {isAddressableKind(event.kind) ? (
               <CopyRow
                 label="coordinate"
                 value={getReplaceableAddress(event) ?? event.id}
               />
             ) : (
-              <CopyRow label="event id" value={event.id} />
+              <CopyRow label="hex event id" value={event.id} />
             )}
           </div>
         </DialogContent>
