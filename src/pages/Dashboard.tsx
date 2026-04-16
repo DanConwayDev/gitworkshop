@@ -10,6 +10,7 @@
  */
 
 import { Link } from "react-router-dom";
+import { nip19 } from "nostr-tools";
 import {
   Bell,
   Plus,
@@ -68,31 +69,49 @@ function GreetingHeader({ pubkey }: { pubkey: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Repo badge row (used by both panels)
+// Repo rows
 // ---------------------------------------------------------------------------
 
-function RepoBadgeRow({
+/** Plain name link — used in "My repositories" where the author is implicit. */
+function RepoNameLink({
   repo,
   isPinned,
 }: {
   repo: ResolvedRepo;
   isPinned?: boolean;
 }) {
-  const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
+  const npub = nip19.npubEncode(repo.selectedMaintainer);
+  const repoPath = `/${npub}/${repo.dTag}`;
 
   return (
-    <div className="flex items-center gap-1.5 py-1">
+    <div className="flex items-center gap-1.5 py-0.5">
       {isPinned && (
         <Pin className="h-3 w-3 text-muted-foreground/50 shrink-0 -rotate-45" />
       )}
+      <Link
+        to={repoPath}
+        className="text-sm hover:text-pink-600 dark:hover:text-pink-400 transition-colors truncate"
+      >
+        {repo.name || repo.dTag}
+      </Link>
+    </div>
+  );
+}
+
+/** Badge row with author — used in "Followed repositories". */
+function RepoBadgeRow({ repo }: { repo: ResolvedRepo }) {
+  const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
+
+  return (
+    <div className="py-0.5">
       <RepoBadge coord={coord} repoName={repo.name} />
     </div>
   );
 }
 
-function RepoBadgeRowSkeleton() {
+function RepoRowSkeleton() {
   return (
-    <div className="py-1">
+    <div className="py-0.5">
       <Skeleton className="h-5 w-40 rounded-full" />
     </div>
   );
@@ -102,7 +121,7 @@ function RepoBadgeRowSkeleton() {
 // My repositories panel
 // ---------------------------------------------------------------------------
 
-const INITIAL_VISIBLE = 5;
+const INITIAL_VISIBLE = 15;
 
 function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
   const repos = useUserRepositories(pubkey);
@@ -156,17 +175,17 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
       <CardContent className="px-5 pb-5">
         {repos === undefined ? (
           <div className="space-y-0.5">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <RepoBadgeRowSkeleton key={i} />
+            {Array.from({ length: 5 }).map((_, i) => (
+              <RepoRowSkeleton key={i} />
             ))}
           </div>
         ) : displayRepos && displayRepos.length > 0 ? (
           <>
-            <div className="flex flex-wrap gap-x-1 gap-y-0.5">
+            <div className="space-y-0">
               {displayRepos.map((repo) => {
                 const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
                 return (
-                  <RepoBadgeRow
+                  <RepoNameLink
                     key={coord}
                     repo={repo}
                     isPinned={pinnedSet.has(coord)}
@@ -247,13 +266,13 @@ function FollowedReposPanel({ pubkey }: { pubkey: string }) {
       <CardContent className="px-5 pb-5">
         {repos === undefined ? (
           <div className="space-y-0.5">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <RepoBadgeRowSkeleton key={i} />
+            {Array.from({ length: 5 }).map((_, i) => (
+              <RepoRowSkeleton key={i} />
             ))}
           </div>
         ) : displayRepos && displayRepos.length > 0 ? (
           <>
-            <div className="flex flex-wrap gap-x-1 gap-y-0.5">
+            <div className="space-y-0">
               {displayRepos.map((repo) => {
                 const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
                 return <RepoBadgeRow key={coord} repo={repo} />;
