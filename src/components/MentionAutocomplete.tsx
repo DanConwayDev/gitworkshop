@@ -253,6 +253,18 @@ export function MentionAutocomplete({
     detectMention(content, textarea.selectionStart);
   }, [content, detectMention, textareaRef]);
 
+  // Dismiss on any scroll so the fixed dropdown doesn't float away from the textarea
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleScroll = () => setIsOpen(false);
+    window.addEventListener("scroll", handleScroll, {
+      capture: true,
+      passive: true,
+    });
+    return () =>
+      window.removeEventListener("scroll", handleScroll, { capture: true });
+  }, [isOpen]);
+
   // Handle keyboard navigation within the dropdown
   useEffect(() => {
     if (!isOpen || contacts.length === 0) return;
