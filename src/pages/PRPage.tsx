@@ -80,6 +80,7 @@ import { withGapFill } from "@/lib/withGapFill";
 import { pool } from "@/services/nostr";
 import { PATCH_KIND, PR_KIND, extractPatchDiff } from "@/lib/nip34";
 import { eventIdToNevent } from "@/lib/routeUtils";
+import { nip19 } from "nostr-tools";
 import {
   buildSyntheticCommit,
   buildSyntheticCommitFallback,
@@ -961,19 +962,21 @@ export default function PRPage() {
                   )}
                 </div>
 
-                {/* Merge panel — shown for patch-type PRs on Grasp repos, for maintainers */}
+                {/* Merge panel — shown for PRs and patches on Grasp repos, for maintainers */}
                 {pr &&
                   repo &&
-                  pr.itemType === "patch" &&
                   repo.graspCloneUrls.length > 0 &&
                   isMaintainer &&
                   (pr.status === "open" || pr.status === "draft") &&
-                  patchChain &&
-                  patchChain.length > 0 && (
+                  (pr.itemType === "pr"
+                    ? !!pr.tip.commitId
+                    : patchChain && patchChain.length > 0) && (
                     <MergePanel
                       pr={pr}
                       repo={repo}
-                      patchChain={patchChain}
+                      patchChain={
+                        pr.itemType === "patch" ? patchChain : undefined
+                      }
                       gitPool={gitPool}
                       effectiveCloneUrls={effectiveCloneUrls}
                       behindCount={behindCount}
@@ -982,8 +985,17 @@ export default function PRPage() {
                         defaultBranchHead ?? repoState?.headCommitId
                       }
                       guessedBaseCommitId={
-                        patchMergeBase.isGuessed
+                        pr.itemType === "patch" && patchMergeBase.isGuessed
                           ? patchMergeBase.baseCommitId
+                          : undefined
+                      }
+                      prNevent={
+                        pr.itemType === "pr"
+                          ? nip19.neventEncode({
+                              id: pr.rootEvent.id,
+                              author: pr.pubkey,
+                              relays: resolved?.repo?.relays?.slice(0, 3) ?? [],
+                            })
                           : undefined
                       }
                     />

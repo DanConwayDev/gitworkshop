@@ -70,6 +70,10 @@ import {
   usePatchMergeability,
   type MergeabilityStatus,
 } from "@/hooks/usePatchMergeability";
+import {
+  usePRMergeability,
+  type PRMergeabilityStatus,
+} from "@/hooks/usePRMergeability";
 import { createMergeCommitObject } from "@/lib/patch-merge";
 import { createPackfile, type PackableObject } from "@/lib/git-packfile";
 import { pushToGitServer, type RefUpdate } from "@/lib/git-push";
@@ -90,12 +94,15 @@ import type { ResolvedPR, ResolvedRepo } from "@/lib/nip34";
 // ---------------------------------------------------------------------------
 
 interface MergePanelProps {
-  /** The resolved PR (must be itemType === "patch") */
+  /** The resolved PR (patch-type or pr-type) */
   pr: ResolvedPR;
   /** The resolved repository */
   repo: ResolvedRepo;
-  /** The patch chain (cover letters excluded) */
-  patchChain: Patch[];
+  /**
+   * The patch chain (cover letters excluded). Required for patch-type items.
+   * Omit (or pass undefined) for PR-type items.
+   */
+  patchChain?: Patch[];
   /** GitGraspPool for fetching base tree / file content */
   gitPool: GitGraspPool | null;
   /** All effective clone URLs */
@@ -109,8 +116,14 @@ interface MergePanelProps {
   /**
    * Guessed base commit ID from the timestamp heuristic, used when the first
    * patch has no `parent-commit` tag. Passed through to usePatchMergeability.
+   * Only relevant for patch-type items.
    */
   guessedBaseCommitId?: string;
+  /**
+   * NIP-19 nevent identifier for the PR event.
+   * Required for PR-type items (used in the merge commit message).
+   */
+  prNevent?: string;
 }
 
 type MergeStep =
@@ -186,6 +199,7 @@ export function MergePanel({
   defaultBranchName,
   defaultBranchHead,
   guessedBaseCommitId,
+  prNevent,
 }: MergePanelProps) {
   const account = useActiveAccount();
   const profile = useMyProfile();
@@ -213,16 +227,52 @@ export function MergePanel({
     };
   }, [account, profile]);
 
-  // Eagerly check mergeability — both strategies in parallel
-  const mergeability = usePatchMergeability(
-    patchChain,
+  const isPRType = pr.itemType === "pr";
+
+  // Eagerly check mergeability — both strategies in parallel (patch-type only)
+  const patchMergeability = usePatchMergeability(
+    isPRType ? undefined : patchChain,
     gitPool,
     effectiveCloneUrls,
-    true,
+    !isPRType,
     guessedBaseCommitId,
     defaultBranchHead,
     maintainerCommitter,
   );
+
+  // PR-type mergeability: fetch tip tree and pre-build merge commit
+  const prDescription = pr.coverNote?.content || pr.body || undefined;
+  const prMergeability = usePRMergeability(
+    isPRType ? pr.tip.commitId : undefined,
+    defaultBranchHead,
+    maintainerCommitter,
+    pr.currentSubject || pr.originalSubject,
+    prNevent ?? "",
+    prDescription,
+    gitPool,
+    effectiveCloneUrls,
+    isPRType,
+  );
+
+  // Unified mergeability view for the render logic
+  const mergeability = isPRType
+    ? {
+        status: prMergeability.status as
+          | MergeabilityStatus
+          | PRMergeabilityStatus,
+        buildResult: null,
+        applyResult: null,
+        conflicts: [] as import("@/lib/patch-merge").MergeConflict[],
+        errorMessage: prMergeability.errorMessage,
+        mergeStrategyError: null,
+        recheck: prMergeability.recheck,
+      }
+    : {
+        ...patchMergeability,
+        status: patchMergeability.status as
+          | MergeabilityStatus
+          | PRMergeabilityStatus,
+      };
 
   const defaultBranchRef = `refs/heads/${defaultBranchName}`;
 
@@ -238,8 +288,9 @@ export function MergePanel({
     defaultBranchHead &&
     mergeStep === "idle";
 
-  // Can we show the apply-to-tip button?
+  // Can we show the apply-to-tip button? (patch-type only)
   const canApplyToTip =
+    !isPRType &&
     mergeability.status === "ready-apply-only" &&
     defaultBranchHead &&
     mergeStep === "idle";
@@ -395,7 +446,7 @@ export function MergePanel({
         ["r", mergeCommitObj.hash],
       ];
 
-      for (const patch of patchChain) {
+      for (const patch of patchChain ?? []) {
         statusTags.push(["q", patch.event.id, "", patch.pubkey]);
       }
 
@@ -514,7 +565,7 @@ export function MergePanel({
         ["r", newTipCommitHash],
       ];
 
-      for (const patch of patchChain) {
+      for (const patch of patchChain ?? []) {
         statusTags.push(["q", patch.event.id, "", patch.pubkey]);
       }
 
@@ -541,9 +592,10 @@ export function MergePanel({
       ]);
 
       setMergeStep("done");
+      const patchCount = patchChain?.length ?? 0;
       toast({
         title: "Patch applied",
-        description: `${patchChain.length} commit${patchChain.length !== 1 ? "s" : ""} applied to ${defaultBranchName} (tip: ${newTipCommitHash.slice(0, 8)}).`,
+        description: `${patchCount} commit${patchCount !== 1 ? "s" : ""} applied to ${defaultBranchName} (tip: ${newTipCommitHash.slice(0, 8)}).`,
       });
     } catch (err) {
       const message =
@@ -565,6 +617,112 @@ export function MergePanel({
     gitPool,
     pr,
     patchChain,
+    pushObjects,
+    repo,
+    graspRelayUrls,
+    toast,
+  ]);
+
+  // ── PR merge orchestration ────────────────────────────────────────────────
+
+  const handlePRMerge = useCallback(async () => {
+    if (!account || !prMergeability.result || !defaultBranchHead) {
+      return;
+    }
+
+    setMergeStep("building");
+    setMergeError(null);
+
+    try {
+      const { mergeCommitObj } = prMergeability.result;
+
+      // ── Step 2+3: Publish state + push ────────────────────────────────
+      const stateTemplate = await factory.create(
+        RepoStateBlueprint,
+        repo.dTag,
+        mergeCommitObj.hash,
+        defaultBranchName,
+      );
+
+      const signedState = await account.signer.signEvent(
+        stateTemplate as EventTemplate,
+      );
+
+      setMergeStep("publishing-state");
+      await publishToGraspRelays(signedState, graspRelayUrls);
+      eventStore.add(signedState);
+
+      setMergeStep("pushing");
+      await pushObjects([mergeCommitObj], {
+        oldHash: defaultBranchHead,
+        newHash: mergeCommitObj.hash,
+        refName: defaultBranchRef,
+      });
+
+      // ── Step 4+5: Status + broadcast ──────────────────────────────────
+      setMergeStep("publishing-status");
+
+      const statusKind = STATUS_KIND_MAP["resolved"];
+      const statusDraft = await factory.create(
+        StatusChangeBlueprint,
+        statusKind,
+        pr.rootEvent.id,
+        pr.repoCoords,
+        pr.pubkey,
+        account.pubkey,
+      );
+
+      const statusTags = [
+        ...(statusDraft.tags ?? []),
+        ["merge-commit", mergeCommitObj.hash],
+        ["r", mergeCommitObj.hash],
+      ];
+
+      const statusTemplate: EventTemplate = {
+        ...statusDraft,
+        tags: statusTags,
+      };
+
+      const signedStatus = await account.signer.signEvent(statusTemplate);
+
+      const repoCoord = repoCoordinate(repo.selectedMaintainer, repo.dTag);
+      await outboxStore.publish(signedStatus, [
+        `outbox:${account.pubkey}`,
+        repoCoord,
+        "git-index",
+      ]);
+      eventStore.add(signedStatus);
+
+      setMergeStep("broadcasting-state");
+      await outboxStore.publish(signedState, [
+        repoCoord,
+        "git-index",
+        "fallback-relays",
+      ]);
+
+      setMergeStep("done");
+      toast({
+        title: "PR merged",
+        description: `Merge commit ${mergeCommitObj.hash.slice(0, 8)} pushed to ${defaultBranchName}.`,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Merge failed unexpectedly";
+      setMergeStep("failed");
+      setMergeError(message);
+      toast({
+        title: "Merge failed",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  }, [
+    account,
+    prMergeability.result,
+    defaultBranchHead,
+    defaultBranchName,
+    defaultBranchRef,
+    pr,
     pushObjects,
     repo,
     graspRelayUrls,
@@ -600,6 +758,7 @@ export function MergePanel({
                     false
                   }
                   isBaseGuessed={!!guessedBaseCommitId}
+                  isPRType={isPRType}
                 />
               </div>
 
@@ -642,7 +801,9 @@ export function MergePanel({
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Merge this patch?</AlertDialogTitle>
+                        <AlertDialogTitle>
+                          Merge this {isPRType ? "PR" : "patch"}?
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
                           This will create a merge commit on{" "}
                           <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
@@ -658,8 +819,14 @@ export function MergePanel({
                                 {behindCount} commit
                                 {behindCount !== 1 ? "s" : ""}
                               </strong>{" "}
-                              ahead of the patch base, but the patches apply
-                              cleanly.
+                              ahead of the {isPRType ? "PR" : "patch"} base.
+                              {isPRType && (
+                                <>
+                                  {" "}
+                                  Consider updating the PR branch first to avoid
+                                  an outdated merge tree.
+                                </>
+                              )}
                             </>
                           )}
                         </AlertDialogDescription>
@@ -667,7 +834,7 @@ export function MergePanel({
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
-                          onClick={handleMerge}
+                          onClick={isPRType ? handlePRMerge : handleMerge}
                           className="bg-green-600 hover:bg-green-700 text-white"
                         >
                           <GitMerge className="h-3.5 w-3.5 mr-1.5" />
@@ -818,7 +985,7 @@ function StatusIcon({
   status,
   mergeStep,
 }: {
-  status: MergeabilityStatus;
+  status: MergeabilityStatus | PRMergeabilityStatus;
   mergeStep: MergeStep;
 }) {
   if (mergeStep === "done") {
@@ -855,19 +1022,21 @@ function StatusHeadline({
   behindCount,
   allHashesVerified,
   isBaseGuessed,
+  isPRType,
 }: {
-  status: MergeabilityStatus;
+  status: MergeabilityStatus | PRMergeabilityStatus;
   mergeStep: MergeStep;
   mergeError: string | null;
   defaultBranchName: string;
   behindCount: number | undefined;
   allHashesVerified: boolean;
   isBaseGuessed: boolean;
+  isPRType: boolean;
 }) {
   if (mergeStep === "done") {
     return (
       <p className="text-sm font-medium text-green-600">
-        Patch applied to{" "}
+        {isPRType ? "PR" : "Patch"} merged into{" "}
         <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
           {defaultBranchName}
         </code>
@@ -889,7 +1058,7 @@ function StatusHeadline({
     case "loading":
       return (
         <p className="text-sm text-muted-foreground">
-          Checking if this patch can be merged into{" "}
+          Checking if this {isPRType ? "PR" : "patch"} can be merged into{" "}
           <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
             {defaultBranchName}
           </code>
@@ -900,19 +1069,19 @@ function StatusHeadline({
       return (
         <div>
           <p className="text-sm font-medium text-green-600">
-            No merge conflicts with{" "}
+            Ready to merge into{" "}
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
               {defaultBranchName}
             </code>
           </p>
           {behindCount !== undefined && behindCount > 0 && (
             <p className="text-xs text-amber-600 mt-0.5">
-              Default branch is {behindCount} commit
-              {behindCount !== 1 ? "s" : ""} ahead of the patch base, but
-              patches apply cleanly.
+              {isPRType
+                ? `Default branch is ${behindCount} commit${behindCount !== 1 ? "s" : ""} ahead of the PR base. Consider updating the PR branch first.`
+                : `Default branch is ${behindCount} commit${behindCount !== 1 ? "s" : ""} ahead of the patch base, but patches apply cleanly.`}
             </p>
           )}
-          {isBaseGuessed && (
+          {!isPRType && isBaseGuessed && (
             <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1">
               <Info className="h-3 w-3 shrink-0" />
               Merge base approximated from patch timestamp (no{" "}
@@ -922,7 +1091,7 @@ function StatusHeadline({
               tag).
             </p>
           )}
-          {!allHashesVerified && (
+          {!isPRType && !allHashesVerified && (
             <p className="text-xs text-amber-600 mt-0.5">
               Diffs applied correctly. Tooling produced commit ID mismatch but
               for cosmetic reasons only (GPG signatures, whitespace, timezone
