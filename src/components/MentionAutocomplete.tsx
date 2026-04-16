@@ -334,7 +334,14 @@ export function MentionAutocomplete({
       className="fixed z-[100] w-[280px] rounded-xl border border-border bg-popover shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150"
       style={{ top: dropdownPos.top, left: dropdownPos.left }}
     >
-      <div ref={listRef} className="max-h-[240px] overflow-y-auto py-1">
+      <div
+        ref={listRef}
+        className="max-h-[240px] overflow-y-auto py-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border hover:[&::-webkit-scrollbar-thumb]:bg-border/80"
+        style={{
+          scrollbarWidth: "thin",
+          scrollbarColor: "hsl(var(--border)) transparent",
+        }}
+      >
         {contacts.map(({ pubkey }, index) => (
           <MentionItem
             key={pubkey}
