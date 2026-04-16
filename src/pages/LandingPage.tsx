@@ -12,13 +12,13 @@
 import { Link } from "react-router-dom";
 import {
   GitBranch,
+  GitCommitHorizontal,
   Terminal,
   Search,
   Shield,
   Key,
   Globe,
   ArrowRight,
-  GitCommitHorizontal,
   Users,
   Zap,
 } from "lucide-react";
@@ -118,7 +118,9 @@ function FeaturedRepos() {
       <div className="container max-w-screen-xl px-4 md:px-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h2 className="text-2xl font-bold mb-1">Active repositories</h2>
+            <h2 className="text-2xl font-bold mb-1">
+              Recently created repositories
+            </h2>
             <p className="text-muted-foreground text-sm">
               Live from the Nostr git index — no central server required
             </p>
@@ -351,11 +353,11 @@ function FooterCTA() {
           </Badge>
 
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Ready to own your git workflow?
+            Your repo. Your keypair. No platform.
           </h2>
           <p className="text-muted-foreground text-lg mb-8 max-w-xl mx-auto">
-            Join the growing network of developers collaborating over Nostr — no
-            platform lock-in, no account required.
+            Push code, track issues, and collaborate — all over Nostr. No
+            account to create, no platform to trust.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -413,9 +415,17 @@ export function LandingPage() {
             </h1>
 
             <p className="text-lg md:text-xl text-muted-foreground mb-10 leading-relaxed max-w-xl mx-auto">
-              Decentralized code collaboration over Nostr. No GitHub account
-              needed, censorship-resistant, and fully compatible with your
-              existing git workflow.
+              Decentralized code collaboration over Nostr and{" "}
+              <a
+                href="https://gitgrasp.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground underline underline-offset-2 decoration-pink-500/50 hover:decoration-pink-500 transition-colors"
+              >
+                GRASP
+              </a>
+              . No GitHub account needed, censorship-resistant, and fully
+              compatible with your existing git workflow.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -438,8 +448,7 @@ export function LandingPage() {
             </div>
 
             <p className="mt-6 text-xs text-muted-foreground/60">
-              Browse to see the ecosystem is alive · Install to start
-              collaborating
+              Start in your browser · Push code with the ngit CLI
             </p>
           </div>
         </div>

@@ -9,7 +9,7 @@ const Index = () => {
   useSeoMeta({
     title: "ngit — Decentralized Git over Nostr",
     description:
-      "Decentralized code collaboration over Nostr. Browse repositories, track issues, and contribute — without a central server.",
+      "Distributed code collaboration with Nostr. Browse repositories, track issues, and contribute — without a central server.",
   });
 
   if (account) {
