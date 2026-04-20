@@ -1123,6 +1123,22 @@ export class GitHttpClient {
           objects: result.rawObjects,
         };
         this.cache.putRawObjects(commitHash, entry);
+
+        // The commit object is always present in the blob:none packfile
+        // (it is the "want" object). Parsing and caching it here means
+        // fetchCommit's getCommit() check returns a hit, eliminating the
+        // parallel tree:0 (fetchCommitsOnly) request on initial load.
+        if (!this.cache.peekCommit(commitHash)) {
+          const commitObj = result.rawObjects.get(commitHash);
+          if (commitObj) {
+            try {
+              this.cache.putCommit(parseCommit(commitObj.data, commitHash));
+            } catch {
+              // parseCommit failure is non-fatal — fetchCommit will retry
+            }
+          }
+        }
+
         return entry;
       })
       .finally(() => {
