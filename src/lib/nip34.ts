@@ -721,7 +721,7 @@ export interface ResolvedIssueLite {
    * via NIP-09. Populated on detail pages; always an empty set on list pages
    * where label deletion events are not fetched.
    */
-  deletedLabelEventIds: Set<string>;
+  deletedEssentialEventIds: Set<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -775,11 +775,11 @@ export interface ResolveEssentialsOptions {
   prUpdateEvents?: NostrEvent[];
   /**
    * NIP-09 deletion events (kind:5) that reference one or more essential event
-   * IDs (e.g. label events). Used to exclude labels whose source event has been
-   * deleted by its author. Only deletions where the deleter's pubkey matches the
-   * target event's author are honoured.
+   * IDs (status events, label/rename events). Used to exclude essentials whose
+   * source event has been deleted by its author. Only deletions where the
+   * deleter's pubkey matches the target event's author are honoured.
    */
-  labelDeletionEvents?: NostrEvent[];
+  essentialDeletionEvents?: NostrEvent[];
 }
 
 /**
@@ -1002,7 +1002,7 @@ function buildResolvedList(
         authorisedUsers,
         // List model doesn't fetch deletion events for individual label events —
         // label deletions are only resolved on detail pages.
-        deletedLabelEventIds: new Set<string>(),
+        deletedEssentialEventIds: new Set<string>(),
       };
     })
     .sort((a, b) => b.lastActivityAt - a.lastActivityAt);
@@ -1090,7 +1090,7 @@ export interface ResolvedPRLite {
    * via NIP-09. Forwarded to buildTimelineNodes so label timeline entries are
    * suppressed for deleted events.
    */
-  deletedLabelEventIds: Set<string>;
+  deletedEssentialEventIds: Set<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1121,22 +1121,22 @@ export function resolveItemEssentials(
   const {
     mergeStatusRequiresMaintainer = false,
     prUpdateEvents,
-    labelDeletionEvents,
+    essentialDeletionEvents,
   } = options;
   const rootId = rootEvent.id;
   const rootPubkey = rootEvent.pubkey;
 
-  // ── Build deleted label event ID set ─────────────────────────────────────
-  // A deletion of a label event is valid only when the deleter's pubkey
-  // matches the pubkey that originally published the label event.
+  // ── Build deleted essential event ID set ─────────────────────────────────
+  // A deletion is valid only when the deleter's pubkey matches the pubkey
+  // that originally published the target essential event (status or label).
   const essentialById = new Map(essentialEvents.map((e) => [e.id, e]));
-  const deletedLabelEventIds = new Set<string>();
-  for (const delEv of labelDeletionEvents ?? []) {
+  const deletedEssentialEventIds = new Set<string>();
+  for (const delEv of essentialDeletionEvents ?? []) {
     for (const [t, id] of delEv.tags) {
       if (t !== "e") continue;
       const target = essentialById.get(id);
       if (target && delEv.pubkey === target.pubkey) {
-        deletedLabelEventIds.add(id);
+        deletedEssentialEventIds.add(id);
       }
     }
   }
@@ -1165,6 +1165,8 @@ export function resolveItemEssentials(
 
     // Status events (kinds 1630-1633)
     if ((STATUS_KINDS as readonly number[]).includes(ev.kind)) {
+      // Skip status events that have been deleted by their author.
+      if (deletedEssentialEventIds.has(ev.id)) continue;
       const isMergeStatus =
         ev.kind === STATUS_RESOLVED || ev.kind === STATUS_CLOSED;
       if (mergeStatusRequiresMaintainer && isMergeStatus) {
@@ -1183,7 +1185,7 @@ export function resolveItemEssentials(
     if (ev.kind === LABEL_KIND) {
       if (!isAuthor && !isMaintainer) continue;
       // Skip label events that have been deleted by their author.
-      if (deletedLabelEventIds.has(ev.id)) continue;
+      if (deletedEssentialEventIds.has(ev.id)) continue;
 
       const subjectLabel = ev.tags.find(
         ([t, , ns]) => t === "l" && ns === SUBJECT_LABEL_NAMESPACE,
@@ -1288,7 +1290,7 @@ export function resolveItemEssentials(
     participantCount: participantPubkeys.size,
     zapCount: filteredZapCount,
     authorisedUsers,
-    deletedLabelEventIds,
+    deletedEssentialEventIds,
     subjectRenames: sortedRenames,
   };
 }
@@ -1522,11 +1524,11 @@ interface BuildTimelineBaseArgs {
   /** Authorised users set (maintainers + item author). */
   authorisedUsers: Set<string>;
   /**
-   * Set of label event IDs (kind:1985) deleted by their author via NIP-09.
-   * Label timeline nodes whose event ID appears here are omitted.
-   * Comes from resolveItemEssentials.deletedLabelEventIds.
+   * Set of essential event IDs (status, label/rename) deleted by their author
+   * via NIP-09. Label timeline nodes whose event ID appears here are omitted.
+   * Comes from resolveItemEssentials.deletedEssentialEventIds.
    */
-  deletedLabelEventIds?: Set<string>;
+  deletedEssentialEventIds?: Set<string>;
 }
 
 export interface BuildIssueTimelineArgs extends BuildTimelineBaseArgs {
@@ -1630,7 +1632,7 @@ export function buildTimelineNodes(
     .filter(
       (ev) =>
         ev.kind === LABEL_KIND &&
-        !args.deletedLabelEventIds?.has(ev.id) &&
+        !args.deletedEssentialEventIds?.has(ev.id) &&
         ev.tags.some(([t, , ns]) => t === "l" && ns === ISSUE_LABEL_NAMESPACE),
     )
     .map((ev) => {

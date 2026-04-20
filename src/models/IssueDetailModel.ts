@@ -78,23 +78,23 @@ export function IssueDetailModel(
     // Zaps
     const zaps$ = store.timeline([{ kinds: [9735], "#e": [rootId] } as Filter]);
 
-    // Deletion events for individual essential events (e.g. label deletions).
-    // Derived reactively from essentials$: extract label event IDs, then
-    // query for kind:5 deletions referencing those IDs. Re-subscribes
-    // automatically whenever the set of label event IDs changes.
-    const labelDeletions$ = essentials$.pipe(
+    // Deletion events for all essential events (status, label/rename).
+    // Derived reactively from essentials$: extract all non-deletion essential
+    // event IDs, then query for kind:5 deletions referencing those IDs.
+    // Re-subscribes automatically whenever the set of essential IDs changes.
+    const essentialDeletions$ = essentials$.pipe(
       map((evs) =>
         (evs as NostrEvent[])
-          .filter((e) => e.kind === LABEL_KIND)
+          .filter((e) => e.kind !== DELETION_KIND)
           .map((e) => e.id),
       ),
       distinctUntilChanged(
         (a, b) => a.length === b.length && a.every((id, i) => id === b[i]),
       ),
-      switchMap((labelIds) => {
-        if (labelIds.length === 0) return of([] as NostrEvent[]);
+      switchMap((essentialIds) => {
+        if (essentialIds.length === 0) return of([] as NostrEvent[]);
         return store
-          .timeline([{ kinds: [DELETION_KIND], "#e": labelIds } as Filter])
+          .timeline([{ kinds: [DELETION_KIND], "#e": essentialIds } as Filter])
           .pipe(map((evs) => evs as NostrEvent[]));
       }),
     );
@@ -106,7 +106,7 @@ export function IssueDetailModel(
       legacyReplies$,
       coverNotes$,
       zaps$,
-      labelDeletions$,
+      essentialDeletions$,
     ]).pipe(
       auditTime(50),
       map(
@@ -117,7 +117,7 @@ export function IssueDetailModel(
           legacyReplyEvents,
           coverNoteEvents,
           zapEvents,
-          labelDeletionEvents,
+          essentialDeletionEvents,
         ]) => {
           const roots = rootEvents as NostrEvent[];
           const rootEvent = roots[0];
@@ -142,7 +142,9 @@ export function IssueDetailModel(
             allComments,
             zaps,
             effectiveMaintainers,
-            { labelDeletionEvents: labelDeletionEvents as NostrEvent[] },
+            {
+              essentialDeletionEvents: essentialDeletionEvents as NostrEvent[],
+            },
           );
 
           // ── Cover note ─────────────────────────────────────────────
@@ -168,7 +170,7 @@ export function IssueDetailModel(
             comments: allComments,
             essentials,
             authorisedUsers: core.authorisedUsers,
-            deletedLabelEventIds: core.deletedLabelEventIds,
+            deletedEssentialEventIds: core.deletedEssentialEventIds,
           });
 
           // ── Participants ────────────────────────────────────────────
@@ -193,7 +195,7 @@ export function IssueDetailModel(
             participantCount: participantSet.size,
             zapCount: core.zapCount,
             authorisedUsers: core.authorisedUsers,
-            deletedLabelEventIds: core.deletedLabelEventIds,
+            deletedEssentialEventIds: core.deletedEssentialEventIds,
 
             // Detail fields
             body: extractBody(rootEvent),
