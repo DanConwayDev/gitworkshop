@@ -230,7 +230,11 @@ export default function IssuePage() {
               ) : null}
 
               {/* Issue body */}
-              <EventBodyCard event={issue.rootEvent} content={issue.body} />
+              <EventBodyCard
+                event={issue.rootEvent}
+                content={issue.body}
+                repoCoords={issue.repoCoords}
+              />
 
               {/* Thread: comments + subject renames */}
               <div className="space-y-3">

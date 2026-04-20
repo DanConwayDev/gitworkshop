@@ -830,6 +830,7 @@ export default function PRPage() {
                   hasCoverLetter={
                     pr.itemType === "patch" && !!pr.hasCoverLetter
                   }
+                  repoCoords={pr.repoCoords}
                 />
 
                 {/* Interleaved timeline */}

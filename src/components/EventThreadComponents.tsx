@@ -1,7 +1,7 @@
 /**
  * Shared components used in both IssuePage and PRPage thread views.
  */
-import { lazy, Suspense, useState, type RefObject } from "react";
+import { lazy, Suspense, useState, useCallback, type RefObject } from "react";
 import { formatDistanceToNow, format } from "date-fns";
 import type { NostrEvent } from "nostr-tools";
 import { Link } from "react-router-dom";
@@ -20,6 +20,7 @@ import {
   RotateCcw,
   ShieldAlert,
   Tag,
+  Trash2,
 } from "lucide-react";
 import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
@@ -31,6 +32,16 @@ import { StatusBadge, StatusIcon } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import type { IssueStatus } from "@/lib/nip34";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +55,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useActiveAccount } from "applesauce-react/hooks";
+import { DeleteEvent } from "@/actions/nip34";
+import { runner } from "@/services/actions";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -80,6 +96,12 @@ interface EventBodyCardProps {
    * sourced from a [PATCH 0/N] cover-letter patch.
    */
   hasCoverLetter?: boolean;
+  /**
+   * Repository coordinate string(s) (e.g. "30617:<pubkey>:<d-tag>"). When
+   * provided the event author will see a delete button next to the share
+   * button, matching the behaviour of comments in the thread.
+   */
+  repoCoords?: string[];
 }
 
 export function EventBodyCard({
@@ -89,123 +111,207 @@ export function EventBodyCard({
   commitsSuperseded,
   commitsLatestHref,
   hasCoverLetter,
+  repoCoords,
 }: EventBodyCardProps) {
   const body = content ?? event.content;
   const createdAt = new Date(event.created_at * 1000);
 
-  return (
-    <Card className="overflow-hidden">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <UserLink
-              pubkey={event.pubkey}
-              avatarSize="md"
-              nameClassName="text-sm"
-            />
-            <span className="inline-flex items-center gap-1.5 flex-wrap">
-              <p className="text-xs text-muted-foreground">
-                {format(createdAt, "MMM d, yyyy 'at' h:mm a")}
-              </p>
-              <OutboxStatusBadge event={event} />
-              {hasCoverLetter && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 text-[11px] text-muted-foreground font-medium">
-                  <Mail className="h-2.5 w-2.5" />
-                  cover letter
-                </span>
-              )}
-            </span>
-          </div>
-          <EventCardActions event={event} />
-        </div>
-      </CardHeader>
-      <CardContent className="min-w-0 space-y-4">
-        {body ? (
-          <Suspense
-            fallback={<div className="h-16 animate-pulse bg-muted rounded" />}
-          >
-            <MarkdownContent content={body} />
-          </Suspense>
-        ) : (
-          <span className="text-muted-foreground italic text-sm">
-            No description provided.
-          </span>
-        )}
+  const activeAccount = useActiveAccount();
+  const isOwn = !!activeAccount && activeAccount.pubkey === event.pubkey;
 
-        {commits && commits.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <p className="text-xs font-medium text-muted-foreground">
-                {commits.length} commit{commits.length !== 1 ? "s" : ""}
-              </p>
-              {commitsSuperseded && (
-                <>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-600/80 dark:text-amber-400/80 font-medium">
-                    <RotateCcw className="h-2.5 w-2.5" />
-                    outdated
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = useCallback(async () => {
+    if (deleting || !repoCoords) return;
+    setDeleting(true);
+    try {
+      await runner.run(
+        DeleteEvent,
+        [event],
+        repoCoords,
+        deleteReason.trim() || undefined,
+      );
+    } catch (err) {
+      console.error("[EventBodyCard] failed to delete event:", err);
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+      setDeleteReason("");
+    }
+  }, [deleting, event, repoCoords, deleteReason]);
+
+  return (
+    <>
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-wrap">
+              <UserLink
+                pubkey={event.pubkey}
+                avatarSize="md"
+                nameClassName="text-sm"
+              />
+              <span className="inline-flex items-center gap-1.5 flex-wrap">
+                <p className="text-xs text-muted-foreground">
+                  {format(createdAt, "MMM d, yyyy 'at' h:mm a")}
+                </p>
+                <OutboxStatusBadge event={event} />
+                {hasCoverLetter && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 text-[11px] text-muted-foreground font-medium">
+                    <Mail className="h-2.5 w-2.5" />
+                    cover letter
                   </span>
-                  {commitsLatestHref && (
-                    <Link
-                      to={commitsLatestHref}
-                      className="text-[11px] text-amber-600/70 dark:text-amber-400/70 hover:text-amber-600 dark:hover:text-amber-400 underline underline-offset-2"
-                    >
-                      view latest
-                    </Link>
-                  )}
-                </>
-              )}
+                )}
+              </span>
             </div>
-            <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 divide-y divide-border/30">
-              {commits.map((c) => {
-                const inner = (
-                  <>
-                    <span
-                      className={cn(
-                        "text-[11px] shrink-0",
-                        c.noCommitId ? "" : "font-mono",
-                        commitsSuperseded
-                          ? "line-through text-muted-foreground/50"
-                          : c.noCommitId
-                            ? "text-muted-foreground/50 italic"
-                            : "text-muted-foreground/70",
-                      )}
-                    >
-                      {c.noCommitId ? "[unknown]" : c.hash.slice(0, 7)}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-sm truncate",
-                        commitsSuperseded
-                          ? "line-through text-foreground/40"
-                          : "text-foreground/80",
-                      )}
-                    >
-                      {c.subject}
-                    </span>
-                  </>
-                );
-                return c.href ? (
-                  <Link
-                    key={c.hash}
-                    to={c.href}
-                    className="flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1 transition-colors hover:bg-muted/40"
-                  >
-                    {inner}
-                  </Link>
-                ) : (
-                  <div
-                    key={c.hash}
-                    className="flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1"
-                  >
-                    {inner}
-                  </div>
-                );
-              })}
+            <div className="flex items-center gap-0.5">
+              {isOwn && repoCoords && (
+                <button
+                  type="button"
+                  onClick={() => setDeleteOpen(true)}
+                  className="flex items-center text-xs text-muted-foreground/50 hover:text-destructive transition-colors px-1.5 py-0.5 rounded"
+                  aria-label="Delete"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <EventCardActions event={event} />
             </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent className="min-w-0 space-y-4">
+          {body ? (
+            <Suspense
+              fallback={<div className="h-16 animate-pulse bg-muted rounded" />}
+            >
+              <MarkdownContent content={body} />
+            </Suspense>
+          ) : (
+            <span className="text-muted-foreground italic text-sm">
+              No description provided.
+            </span>
+          )}
+
+          {commits && commits.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {commits.length} commit{commits.length !== 1 ? "s" : ""}
+                </p>
+                {commitsSuperseded && (
+                  <>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-600/80 dark:text-amber-400/80 font-medium">
+                      <RotateCcw className="h-2.5 w-2.5" />
+                      outdated
+                    </span>
+                    {commitsLatestHref && (
+                      <Link
+                        to={commitsLatestHref}
+                        className="text-[11px] text-amber-600/70 dark:text-amber-400/70 hover:text-amber-600 dark:hover:text-amber-400 underline underline-offset-2"
+                      >
+                        view latest
+                      </Link>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 divide-y divide-border/30">
+                {commits.map((c) => {
+                  const inner = (
+                    <>
+                      <span
+                        className={cn(
+                          "text-[11px] shrink-0",
+                          c.noCommitId ? "" : "font-mono",
+                          commitsSuperseded
+                            ? "line-through text-muted-foreground/50"
+                            : c.noCommitId
+                              ? "text-muted-foreground/50 italic"
+                              : "text-muted-foreground/70",
+                        )}
+                      >
+                        {c.noCommitId ? "[unknown]" : c.hash.slice(0, 7)}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-sm truncate",
+                          commitsSuperseded
+                            ? "line-through text-foreground/40"
+                            : "text-foreground/80",
+                        )}
+                      >
+                        {c.subject}
+                      </span>
+                    </>
+                  );
+                  return c.href ? (
+                    <Link
+                      key={c.hash}
+                      to={c.href}
+                      className="flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1 transition-colors hover:bg-muted/40"
+                    >
+                      {inner}
+                    </Link>
+                  ) : (
+                    <div
+                      key={c.hash}
+                      className="flex items-center gap-2 py-0.5 min-w-0 rounded px-1 -mx-1"
+                    >
+                      {inner}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog
+        open={deleteOpen}
+        onOpenChange={(v) => !v && setDeleteOpen(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will publish a deletion request. Other clients may honour it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5 py-1">
+            <Label htmlFor="delete-body-reason" className="text-sm">
+              Reason{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Textarea
+              id="delete-body-reason"
+              rows={2}
+              placeholder="e.g. posted by mistake"
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setDeleteOpen(false);
+                setDeleteReason("");
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
