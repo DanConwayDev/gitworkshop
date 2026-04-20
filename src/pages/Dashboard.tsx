@@ -23,6 +23,7 @@ import {
   ChevronUp,
   Pin,
 } from "lucide-react";
+import { CreateRepoDialog } from "@/components/CreateRepoDialog";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -128,6 +129,7 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
   const pinnedCoords = useUserPinnedCoords(pubkey);
   const userPath = useUserPath(pubkey);
   const [expanded, setExpanded] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const pinnedSet = useMemo(() => new Set(pinnedCoords ?? []), [pinnedCoords]);
 
@@ -163,12 +165,10 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
             size="sm"
             variant="ghost"
             className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-            asChild
+            onClick={() => setCreateDialogOpen(true)}
           >
-            <Link to="/new">
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              New
-            </Link>
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            New
           </Button>
         </div>
       </div>
@@ -230,6 +230,11 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
           </div>
         )}
       </div>
+
+      <CreateRepoDialog
+        isOpen={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+      />
     </div>
   );
 }
