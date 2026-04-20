@@ -377,6 +377,8 @@ loadAllNip05FromIdb().then((entries) => {
 const NIP34_ESSENTIALS_BUFFER = 100;
 const NIP34_COMMENTS_BUFFER = 500;
 const NIP34_THREAD_BUFFER = 500;
+/** Longer buffer for deletion-of-essentials loader — less time-critical. */
+const NIP34_ESSENTIAL_DELETIONS_BUFFER = 2000;
 
 /**
  * Essentials loader (#e tag).
@@ -426,6 +428,31 @@ export const nip34CommentsLoader = createPaginatedTagValueLoader(pool, "E", {
   kinds: [1111, 1619],
   bufferTime: NIP34_COMMENTS_BUFFER,
 });
+
+/**
+ * Deletion-of-essentials loader.
+ *
+ * Fetches kind:5 deletion requests that reference a specific essential event
+ * (label event, status event, etc.) via its `#e` tag. Called once per
+ * essential event ID discovered by nip34EssentialsLoader.
+ *
+ * Uses a longer buffer time than the essentials loader because deletion events
+ * are lower-priority — they only affect display after the referenced event is
+ * already known.
+ *
+ * Multiple calls within the buffer window are batched into a single relay REQ
+ * automatically (same createPaginatedTagValueLoader mechanism).
+ */
+export const nip34EssentialDeletionsLoader = createPaginatedTagValueLoader(
+  pool,
+  "e",
+  {
+    cacheRequest,
+    eventStore,
+    kinds: [5],
+    bufferTime: NIP34_ESSENTIAL_DELETIONS_BUFFER,
+  },
+);
 
 /**
  * Thread loader — replies (#e tag). All events referencing a thread member
@@ -518,10 +545,44 @@ export function nip34ListLoader(
   itemId: string,
   relays: string[],
 ): Observable<PaginatedTagValueResponse> {
-  return merge(
-    nip34EssentialsLoader({ value: itemId, relays }),
-    nip34CommentsLoader({ value: itemId, relays }),
-  );
+  return new Observable<PaginatedTagValueResponse>((subscriber) => {
+    // Track essential event IDs we have already fired the deletion loader for
+    // so we don't duplicate subscriptions when the loader delivers the same
+    // event more than once.
+    const seenEssentialIds = new Set<string>();
+
+    const essentialsSub = nip34EssentialsLoader({
+      value: itemId,
+      relays,
+    }).subscribe({
+      next: (msg) => {
+        subscriber.next(msg);
+        if (msg !== "EOSE") {
+          const event = msg as NostrEvent;
+          if (!seenEssentialIds.has(event.id)) {
+            seenEssentialIds.add(event.id);
+            // Fire deletion loader for this essential event's ID.
+            // Calls within the buffer window are batched automatically.
+            nip34EssentialDeletionsLoader({
+              value: event.id,
+              relays,
+            }).subscribe(subscriber);
+          }
+        }
+      },
+      error: (err) => subscriber.error(err),
+    });
+
+    const commentsSub = nip34CommentsLoader({
+      value: itemId,
+      relays,
+    }).subscribe(subscriber);
+
+    return () => {
+      essentialsSub.unsubscribe();
+      commentsSub.unsubscribe();
+    };
+  });
 }
 
 /**

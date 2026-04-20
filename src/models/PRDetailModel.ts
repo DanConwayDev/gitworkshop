@@ -1,5 +1,10 @@
-import { combineLatest } from "rxjs";
-import { auditTime, map } from "rxjs/operators";
+import { combineLatest, of } from "rxjs";
+import {
+  auditTime,
+  distinctUntilChanged,
+  map,
+  switchMap,
+} from "rxjs/operators";
 import type { Model } from "applesauce-core/event-store";
 import type { NostrEvent } from "nostr-tools";
 import type { Filter } from "applesauce-core/helpers";
@@ -91,6 +96,26 @@ export function PRDetailModel(
     // Zaps
     const zaps$ = store.timeline([{ kinds: [9735], "#e": [rootId] } as Filter]);
 
+    // Deletion events for individual essential events (e.g. label deletions).
+    // Derived reactively from essentials$: extract label event IDs, then
+    // query for kind:5 deletions referencing those IDs.
+    const labelDeletions$ = essentials$.pipe(
+      map((evs) =>
+        (evs as NostrEvent[])
+          .filter((e) => e.kind === LABEL_KIND)
+          .map((e) => e.id),
+      ),
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((id, i) => id === b[i]),
+      ),
+      switchMap((labelIds) => {
+        if (labelIds.length === 0) return of([] as NostrEvent[]);
+        return store
+          .timeline([{ kinds: [DELETION_KIND], "#e": labelIds } as Filter])
+          .pipe(map((evs) => evs as NostrEvent[]));
+      }),
+    );
+
     return combineLatest([
       root$,
       essentials$,
@@ -99,6 +124,7 @@ export function PRDetailModel(
       updates$,
       coverNotes$,
       zaps$,
+      labelDeletions$,
     ]).pipe(
       auditTime(50),
       map(
@@ -110,6 +136,7 @@ export function PRDetailModel(
           updateEvents,
           coverNoteEvents,
           zapEvents,
+          labelDeletionEvents,
         ]) => {
           const roots = rootEvents as NostrEvent[];
           const rootEvent = roots[0];
@@ -148,6 +175,7 @@ export function PRDetailModel(
             {
               mergeStatusRequiresMaintainer: true,
               prUpdateEvents,
+              labelDeletionEvents: labelDeletionEvents as NostrEvent[],
             },
           );
 
@@ -330,6 +358,7 @@ export function PRDetailModel(
             comments: mergedComments,
             essentials,
             authorisedUsers: core.authorisedUsers,
+            deletedLabelEventIds: core.deletedLabelEventIds,
             revisions,
             revisionRootIds,
           });
@@ -414,6 +443,7 @@ export function PRDetailModel(
             participantCount: participantSet.size,
             zapCount: core.zapCount,
             authorisedUsers: core.authorisedUsers,
+            deletedLabelEventIds: core.deletedLabelEventIds,
 
             // Detail fields
             body: extractBody(rootEvent),
