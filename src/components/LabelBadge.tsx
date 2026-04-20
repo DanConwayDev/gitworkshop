@@ -6,7 +6,7 @@ import { Tag } from "lucide-react";
  * Deterministic color from a string.
  * Returns a tailwind-compatible hue class.
  */
-function labelColor(label: string): string {
+export function labelColor(label: string): string {
   let hash = 0;
   for (let i = 0; i < label.length; i++) {
     hash = label.charCodeAt(i) + ((hash << 5) - hash);

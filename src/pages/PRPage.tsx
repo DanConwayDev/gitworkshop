@@ -29,7 +29,7 @@ import { useGitPool } from "@/hooks/useGitPool";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
-import { ManageLabels } from "@/components/ManageLabels";
+import { ManageLabels, type LabelEventEntry } from "@/components/ManageLabels";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { ReplyBox } from "@/components/ReplyBox";
 import { CoverNoteBox } from "@/components/CoverNoteBox";
@@ -82,6 +82,7 @@ import { pool } from "@/services/nostr";
 import { PATCH_KIND, PR_KIND, extractPatchDiff } from "@/lib/nip34";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import { nip19 } from "nostr-tools";
+import type { NostrEvent } from "nostr-tools";
 import {
   buildSyntheticCommit,
   buildSyntheticCommitFallback,
@@ -349,6 +350,26 @@ export default function PRPage() {
     if (!activeAccount || !pr) return false;
     return pr.maintainers.has(activeAccount.pubkey);
   }, [activeAccount, pr]);
+
+  // ── Label event map — maps each deletable label to its source event ─────────
+  const labelEventMap = useMemo<Map<string, LabelEventEntry>>(() => {
+    if (!pr) return new Map();
+    const tTagLabels = new Set<string>(
+      (pr.rootEvent as NostrEvent).tags
+        .filter(([t, v]) => t === "t" && v)
+        .map(([, v]) => v as string),
+    );
+    const map = new Map<string, LabelEventEntry>();
+    for (const node of pr.timelineNodes) {
+      if (node.type !== "label" || !node.authorised) continue;
+      for (const label of node.labels) {
+        if (!tTagLabels.has(label) && !map.has(label)) {
+          map.set(label, { event: node.event, eventLabels: node.labels });
+        }
+      }
+    }
+    return map;
+  }, [pr]);
 
   // ── Cover note editor state ───────────────────────────────────────────────
   const [coverNoteEditing, setCoverNoteEditing] = useState(false);
@@ -1239,6 +1260,7 @@ export default function PRPage() {
                         repoCoords={pr.repoCoords}
                         currentLabels={pr.labels}
                         canEdit={canEdit && pr.status !== "deleted"}
+                        labelEventMap={labelEventMap}
                       />
                     </>
                   )}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { NostrEvent } from "nostr-tools";
 import { Link } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
@@ -20,7 +21,7 @@ import { useRepoContext } from "@/pages/repo/RepoContext";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
-import { ManageLabels } from "@/components/ManageLabels";
+import { ManageLabels, type LabelEventEntry } from "@/components/ManageLabels";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { ReplyBox } from "@/components/ReplyBox";
 import { CoverNoteBox } from "@/components/CoverNoteBox";
@@ -93,6 +94,29 @@ export default function IssuePage() {
     if (!activeAccount || !issue) return false;
     return issue.authorisedUsers.has(activeAccount.pubkey);
   }, [activeAccount, issue]);
+
+  // ── Label event map — maps each deletable label to its source event ─────────
+  // Labels from the root event's t-tags are excluded (can't be deleted via
+  // a label event). If the same label exists as both a t-tag and a label event,
+  // it stays non-deletable (deleting the event wouldn't remove the t-tag label).
+  const labelEventMap = useMemo<Map<string, LabelEventEntry>>(() => {
+    if (!issue) return new Map();
+    const tTagLabels = new Set<string>(
+      (issue.rootEvent as NostrEvent).tags
+        .filter(([t, v]) => t === "t" && v)
+        .map(([, v]) => v as string),
+    );
+    const map = new Map<string, LabelEventEntry>();
+    for (const node of issue.timelineNodes) {
+      if (node.type !== "label" || !node.authorised) continue;
+      for (const label of node.labels) {
+        if (!tTagLabels.has(label) && !map.has(label)) {
+          map.set(label, { event: node.event, eventLabels: node.labels });
+        }
+      }
+    }
+    return map;
+  }, [issue]);
 
   // ── Cover note editor state ───────────────────────────────────────────────
   const [coverNoteEditing, setCoverNoteEditing] = useState(false);
@@ -408,6 +432,7 @@ export default function IssuePage() {
                         repoCoords={issue.repoCoords}
                         currentLabels={issue.labels}
                         canEdit={canEdit && issue.status !== "deleted"}
+                        labelEventMap={labelEventMap}
                       />
                     </>
                   )}
