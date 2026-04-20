@@ -20,6 +20,7 @@ import { useRepoContext } from "@/pages/repo/RepoContext";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
+import { ManageLabels } from "@/components/ManageLabels";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { ReplyBox } from "@/components/ReplyBox";
 import { CoverNoteBox } from "@/components/CoverNoteBox";
@@ -399,19 +400,15 @@ export default function IssuePage() {
                   )}
 
                   {/* Labels */}
-                  {issue && issue.labels.length > 0 && (
+                  {issue && (canEdit || issue.labels.length > 0) && (
                     <>
                       <Separator />
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          Labels
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {issue.labels.map((label) => (
-                            <LabelBadge key={label} label={label} />
-                          ))}
-                        </div>
-                      </div>
+                      <ManageLabels
+                        itemId={issue.id}
+                        repoCoords={issue.repoCoords}
+                        currentLabels={issue.labels}
+                        canEdit={canEdit && issue.status !== "deleted"}
+                      />
                     </>
                   )}
                 </CardContent>

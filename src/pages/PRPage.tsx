@@ -29,6 +29,7 @@ import { useGitPool } from "@/hooks/useGitPool";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LabelBadge } from "@/components/LabelBadge";
+import { ManageLabels } from "@/components/ManageLabels";
 import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { ReplyBox } from "@/components/ReplyBox";
 import { CoverNoteBox } from "@/components/CoverNoteBox";
@@ -1230,19 +1231,15 @@ export default function PRPage() {
                   )}
 
                   {/* Labels */}
-                  {pr && pr.labels.length > 0 && (
+                  {pr && (canEdit || pr.labels.length > 0) && (
                     <>
                       <Separator />
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          Labels
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {pr.labels.map((label) => (
-                            <LabelBadge key={label} label={label} />
-                          ))}
-                        </div>
-                      </div>
+                      <ManageLabels
+                        itemId={pr.rootEvent.id}
+                        repoCoords={pr.repoCoords}
+                        currentLabels={pr.labels}
+                        canEdit={canEdit && pr.status !== "deleted"}
+                      />
                     </>
                   )}
                 </CardContent>
