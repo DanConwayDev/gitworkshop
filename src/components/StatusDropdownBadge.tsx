@@ -12,11 +12,8 @@ import { badgeVariants } from "@/components/ui/badge-variants";
 import { Loader2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { IssueStatus } from "@/lib/nip34";
-import {
-  StatusBadge,
-  statusConfig,
-  prStatusOverrides,
-} from "@/components/StatusBadge";
+import { StatusBadge } from "@/components/StatusBadge";
+import { statusConfig, prStatusOverrides } from "@/lib/statusConfig";
 
 export interface StatusOption {
   value: Exclude<IssueStatus, "deleted">;

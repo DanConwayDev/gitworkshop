@@ -4,7 +4,7 @@ import { runner } from "@/services/actions";
 import { AttachIssueLabels, DeleteEvent } from "@/actions/nip34";
 import { useToast } from "@/hooks/useToast";
 import { useActiveAccount } from "applesauce-react/hooks";
-import { labelColor } from "@/components/LabelBadge";
+import { labelColor } from "@/lib/labelColor";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
