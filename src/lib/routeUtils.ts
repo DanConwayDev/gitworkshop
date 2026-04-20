@@ -138,7 +138,15 @@ export function eventIdToNevent(id: string, relays?: string[]): string {
 }
 
 /** Sub-paths that appear after the repo identifier in the URL. */
-const REPO_SUB_PATHS = ["issues", "prs", "about", "commits", "commit", "tree"];
+const REPO_SUB_PATHS = [
+  "issues",
+  "prs",
+  "about",
+  "edit",
+  "commits",
+  "commit",
+  "tree",
+];
 
 /**
  * Strip known sub-paths from the end of a splat so the parser only sees the

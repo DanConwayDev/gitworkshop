@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { UserLink, UserAvatar, UserName } from "@/components/UserAvatar";
 import { Badge } from "@/components/ui/badge";
@@ -36,8 +36,13 @@ import {
   ChevronRight,
   Server,
   Info,
+  Pencil,
 } from "lucide-react";
-import { graspCloneUrlNpub, type ResolvedRepo } from "@/lib/nip34";
+import {
+  graspCloneUrlNpub,
+  getRepoRelays,
+  type ResolvedRepo,
+} from "@/lib/nip34";
 import { GraspLogo } from "@/components/GraspLogo";
 import type { NostrEvent } from "nostr-tools";
 import { nip19 } from "nostr-tools";
@@ -52,6 +57,7 @@ import { cn } from "@/lib/utils";
 import { relayUrlToSegment, repoToPath } from "@/lib/routeUtils";
 import { format } from "date-fns";
 import { useRepoContext } from "@/pages/repo/RepoContext";
+import { useActiveAccount } from "applesauce-react/hooks";
 
 // ---------------------------------------------------------------------------
 // Helpers (shared)
@@ -206,7 +212,17 @@ function SidebarVariant({
   hasAnyCloneUrl: boolean;
 }) {
   const { nip05 } = useRepoContext();
-  const aboutPath = `${repoToPath(repo.selectedMaintainer, repo.dTag, repo.relays, nip05)}/about`;
+  const account = useActiveAccount();
+  const repoBasePath = repoToPath(
+    repo.selectedMaintainer,
+    repo.dTag,
+    repo.relays,
+    nip05,
+  );
+  const aboutPath = `${repoBasePath}/about`;
+  const editPath = `${repoBasePath}/edit`;
+  const isMaintainer =
+    account?.pubkey && account.pubkey === repo.selectedMaintainer;
   const selectedAnnouncement = repo.announcements.find(
     (a) => a.pubkey === repo.selectedMaintainer,
   );
@@ -374,7 +390,7 @@ function SidebarVariant({
           )}
         </div>
 
-        {/* Footer: show more + announcement action buttons */}
+        {/* Footer: show more + announcement action buttons + edit */}
         <div className="px-4 pb-3 -mt-1 flex items-center justify-between">
           {aboutPath ? (
             <Link
@@ -387,29 +403,44 @@ function SidebarVariant({
           ) : (
             <span />
           )}
-          {isMultiAnnouncement ? (
-            <>
+          <div className="flex items-center gap-0.5">
+            {isMaintainer && (
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6 text-muted-foreground/50 hover:text-foreground"
-                title="View raw announcement events"
-                onClick={() => setMultiModalOpen(true)}
+                title="Edit repository"
+                asChild
               >
-                <Braces className="h-3 w-3" />
+                <Link to={editPath}>
+                  <Pencil className="h-3 w-3" />
+                </Link>
               </Button>
-              <MultiAnnouncementsModal
-                announcements={repo.announcements}
-                selectedMaintainer={repo.selectedMaintainer}
-                open={multiModalOpen}
-                onOpenChange={setMultiModalOpen}
-              />
-            </>
-          ) : (
-            selectedAnnouncement && (
-              <AnnouncementEventActions event={selectedAnnouncement} />
-            )
-          )}
+            )}
+            {isMultiAnnouncement ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground/50 hover:text-foreground"
+                  title="View raw announcement events"
+                  onClick={() => setMultiModalOpen(true)}
+                >
+                  <Braces className="h-3 w-3" />
+                </Button>
+                <MultiAnnouncementsModal
+                  announcements={repo.announcements}
+                  selectedMaintainer={repo.selectedMaintainer}
+                  open={multiModalOpen}
+                  onOpenChange={setMultiModalOpen}
+                />
+              </>
+            ) : (
+              selectedAnnouncement && (
+                <AnnouncementEventActions event={selectedAnnouncement} />
+              )
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -429,6 +460,37 @@ function FullVariant({
   nostrCloneUrl: string | undefined;
   nostrCloneCommand: string | undefined;
 }) {
+  const { nip05 } = useRepoContext();
+  const account = useActiveAccount();
+  const isMaintainer =
+    account?.pubkey && account.pubkey === repo.selectedMaintainer;
+  const editPath = `${repoToPath(repo.selectedMaintainer, repo.dTag, repo.relays, nip05)}/edit`;
+
+  // For union display: find which relays/clone URLs are from other maintainers
+  const selectedAnnouncement = useMemo(
+    () => repo.announcements.find((a) => a.pubkey === repo.selectedMaintainer),
+    [repo],
+  );
+  const isMultiMaintainer = repo.announcements.length > 1;
+
+  // Relays in other maintainers' announcements but NOT in the selected maintainer's
+  const unionOnlyRelayUrls = useMemo((): Set<string> => {
+    if (!isMultiMaintainer || !selectedAnnouncement) return new Set();
+    const myRelays = new Set(getRepoRelays(selectedAnnouncement));
+    return new Set(repo.relays.filter((r) => !myRelays.has(r)));
+  }, [isMultiMaintainer, selectedAnnouncement, repo.relays]);
+
+  // Helper: get the contributor pubkey for a union relay/clone
+  const getContributorPubkey = useCallback(
+    (value: string, isClone: boolean): string => {
+      const provenance = isClone
+        ? repo.cloneUrlProvenance
+        : repo.relayProvenance;
+      return provenance.find((p) => p.value === value)?.pubkey ?? "";
+    },
+    [repo.cloneUrlProvenance, repo.relayProvenance],
+  );
+
   return (
     <div className="space-y-6">
       {/* Description */}
@@ -525,20 +587,46 @@ function FullVariant({
             <GraspLogo className="h-3.5 w-3.5 text-pink-500" />
             Grasp Servers
           </h3>
-          <div className="flex flex-wrap gap-1.5">
-            {repo.relays
-              .filter((r) => isGraspRelay(r, repo.graspServerDomains))
-              .map((relay) => (
-                <Link
-                  key={relay}
-                  to={`/relay/${relayUrlToSegment(relay)}`}
-                  title={relay}
-                  className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                >
-                  {displayRelay(relay)}
-                </Link>
-              ))}
-          </div>
+          {/* Own announcement's Grasp relays */}
+          {repo.relays.some(
+            (r) =>
+              isGraspRelay(r, repo.graspServerDomains) &&
+              !unionOnlyRelayUrls.has(r),
+          ) && (
+            <div className="flex flex-wrap gap-1.5">
+              {repo.relays
+                .filter(
+                  (r) =>
+                    isGraspRelay(r, repo.graspServerDomains) &&
+                    !unionOnlyRelayUrls.has(r),
+                )
+                .map((relay) => (
+                  <Link
+                    key={relay}
+                    to={`/relay/${relayUrlToSegment(relay)}`}
+                    title={relay}
+                    className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  >
+                    {displayRelay(relay)}
+                  </Link>
+                ))}
+            </div>
+          )}
+          {/* Union relays from co-maintainers */}
+          {repo.relays.some(
+            (r) =>
+              isGraspRelay(r, repo.graspServerDomains) &&
+              unionOnlyRelayUrls.has(r),
+          ) && (
+            <UnionRelayGroup
+              relays={repo.relays.filter(
+                (r) =>
+                  isGraspRelay(r, repo.graspServerDomains) &&
+                  unionOnlyRelayUrls.has(r),
+              )}
+              getContributor={(r) => getContributorPubkey(r, false)}
+            />
+          )}
         </section>
       )}
 
@@ -551,20 +639,46 @@ function FullVariant({
               ? "Other Relays"
               : "Relays"}
           </h3>
-          <div className="flex flex-wrap gap-1.5">
-            {repo.relays
-              .filter((r) => !isGraspRelay(r, repo.graspServerDomains))
-              .map((relay) => (
-                <Link
-                  key={relay}
-                  to={`/relay/${relayUrlToSegment(relay)}`}
-                  title={relay}
-                  className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                >
-                  {displayRelay(relay)}
-                </Link>
-              ))}
-          </div>
+          {/* Own announcement's non-Grasp relays */}
+          {repo.relays.some(
+            (r) =>
+              !isGraspRelay(r, repo.graspServerDomains) &&
+              !unionOnlyRelayUrls.has(r),
+          ) && (
+            <div className="flex flex-wrap gap-1.5">
+              {repo.relays
+                .filter(
+                  (r) =>
+                    !isGraspRelay(r, repo.graspServerDomains) &&
+                    !unionOnlyRelayUrls.has(r),
+                )
+                .map((relay) => (
+                  <Link
+                    key={relay}
+                    to={`/relay/${relayUrlToSegment(relay)}`}
+                    title={relay}
+                    className="text-xs font-mono bg-muted/50 px-2 py-0.5 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  >
+                    {displayRelay(relay)}
+                  </Link>
+                ))}
+            </div>
+          )}
+          {/* Union relays from co-maintainers */}
+          {repo.relays.some(
+            (r) =>
+              !isGraspRelay(r, repo.graspServerDomains) &&
+              unionOnlyRelayUrls.has(r),
+          ) && (
+            <UnionRelayGroup
+              relays={repo.relays.filter(
+                (r) =>
+                  !isGraspRelay(r, repo.graspServerDomains) &&
+                  unionOnlyRelayUrls.has(r),
+              )}
+              getContributor={(r) => getContributorPubkey(r, false)}
+            />
+          )}
         </section>
       )}
 
@@ -625,11 +739,12 @@ function FullVariant({
         </section>
       )}
 
-      {/* Bottom action bar: share + raw event */}
+      {/* Bottom action bar: edit + share + raw event */}
       {repo.announcements.length > 0 && (
         <FullVariantActionBar
           announcements={repo.announcements}
           selectedMaintainer={repo.selectedMaintainer}
+          editPath={isMaintainer ? editPath : undefined}
         />
       )}
     </div>
@@ -928,9 +1043,11 @@ function AnnouncementEventRows({
 function FullVariantActionBar({
   announcements,
   selectedMaintainer,
+  editPath,
 }: {
   announcements: NostrEvent[];
   selectedMaintainer: string;
+  editPath?: string;
 }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -947,6 +1064,17 @@ function FullVariantActionBar({
       <Separator className="mb-4" />
 
       <div className="flex items-center gap-3">
+        {/* Edit button — only shown for the maintainer */}
+        {editPath && (
+          <Link
+            to={editPath}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </Link>
+        )}
+
         {/* Share button — always opens modal */}
         <button
           type="button"
@@ -1360,5 +1488,54 @@ function CloneDropdown({
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// UnionRelayGroup — shows relays contributed only by co-maintainers
+// ---------------------------------------------------------------------------
+
+function UnionRelayGroup({
+  relays,
+  getContributor,
+}: {
+  relays: string[];
+  getContributor: (url: string) => string;
+}) {
+  return (
+    <div className="mt-1.5 space-y-1">
+      <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide flex items-center gap-1">
+        <Users className="h-2.5 w-2.5" />
+        Via co-maintainers
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {relays.map((relay) => {
+          const contributor = getContributor(relay);
+          return (
+            <div
+              key={relay}
+              className="inline-flex items-center gap-1 rounded-full border border-border/40 bg-muted/30 pl-1.5 pr-2 py-0.5"
+              title={`${relay} — contributed by co-maintainer`}
+            >
+              <Link
+                to={`/relay/${relayUrlToSegment(relay)}`}
+                className="text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {displayRelay(relay)}
+              </Link>
+              {contributor && (
+                <span className="text-[9px] text-muted-foreground/50 flex items-center gap-0.5">
+                  via{" "}
+                  <UserName
+                    pubkey={contributor}
+                    className="text-[9px] text-muted-foreground/50"
+                  />
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

@@ -5,6 +5,7 @@ import RepoIssuesPage from "./RepoIssuesPage";
 import RepoPRsPage from "./RepoPRsPage";
 import RepoCodePage from "./RepoCodePage";
 import RepoAboutPage from "./RepoAboutPage";
+import RepoEditPage from "./RepoEditPage";
 import RepoCommitsPage from "./RepoCommitsPage";
 import RepoCommitPage from "./RepoCommitPage";
 import IssuePage from "@/pages/IssuePage";
@@ -254,7 +255,7 @@ function RepoLayoutResolved({
 
   // Build the base path from the splat so tab links stay consistent with
   // whatever URL format the user arrived with (npub, nip05, relay hint, etc.)
-  // Strip any trailing sub-paths (issues, prs, about, tree, commit, commits)
+  // Strip any trailing sub-paths (issues, prs, about, edit, tree, commit, commits)
   // to get the repo root.
   const basePath = useMemo(() => {
     const full = `/${splat}`;
@@ -263,6 +264,7 @@ function RepoLayoutResolved({
       "/issues",
       "/prs",
       "/about",
+      "/edit",
       "/tree",
       "/commit",
       "/commits",
@@ -302,7 +304,8 @@ function RepoLayoutResolved({
       | "pr-commit"
       | "commits"
       | "commit"
-      | "about";
+      | "about"
+      | "edit";
     issueId?: string;
     prId?: string;
     /** Everything after /tree/ — ref resolution happens inside useGitExplorer */
@@ -384,6 +387,11 @@ function RepoLayoutResolved({
         return { subPage: "issue", issueId };
       }
       return { subPage: "issues" };
+    }
+
+    const editIdx = segments.indexOf("edit");
+    if (editIdx !== -1) {
+      return { subPage: "edit" };
     }
 
     const aboutIdx = segments.indexOf("about");
@@ -578,6 +586,8 @@ function RepoLayoutResolved({
             <RepoPRsPage />
           ) : subPage === "about" ? (
             <RepoAboutPage />
+          ) : subPage === "edit" ? (
+            <RepoEditPage />
           ) : null}
         </RepoContext.Provider>
       ) : repoSearch &&
