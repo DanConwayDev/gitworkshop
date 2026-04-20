@@ -392,6 +392,21 @@ export class GitHttpClient {
    * queued but not yet completed.  Prevents duplicate tasks.
    */
   private pendingBackgroundParse = new Set<string>();
+  /**
+   * In-flight dedup for blob:none packfile fetches, keyed by commitHash.
+   *
+   * On first load, fetchCommit launches up to 7 concurrent findObjectByPath
+   * calls (one per README_NAMES candidate) via Promise.any.  Without dedup,
+   * every one of them would independently issue an identical blob:none HTTP
+   * request.  This map ensures only one request is in flight per commit at
+   * any time; subsequent callers join the existing promise.
+   *
+   * The stored promise uses its own AbortController (never aborted) because
+   * fetchPackfile does not honour AbortSignal anyway — the HTTP request always
+   * runs to completion.  Individual callers check their own signal after the
+   * shared promise resolves.
+   */
+  private inFlightRawObjects = new Map<string, Promise<RawObjectsEntry>>();
 
   constructor(cache: GitObjectCache, cors: CorsProxyManager) {
     this.cache = cache;
@@ -780,42 +795,27 @@ export class GitHttpClient {
     const cached = await this.cache.getTree(commitHash, nestLimit);
     if (cached) return cached;
 
-    // 2. Raw objects cache — re-parse in memory, no network
-    const rawEntry = this.cache.peekRawObjects(commitHash);
-    if (rawEntry) {
-      const rootObj = rawEntry.objects.get(rawEntry.rootTreeHash);
-      if (rootObj) {
-        const tree = loadTree(rootObj, rawEntry.objects, nestLimit);
-        this.cache.putTree(commitHash, nestLimit, tree);
-        this.scheduleBackgroundFullParse(commitHash, rawEntry);
-        return tree;
-      }
-    }
-
-    // 3. Network fetch (deepen=1 — always correct; server sends all tree objects)
+    // 2. Raw objects cache / in-flight dedup / network fetch (all via getRawObjects)
     const effectiveUrl = this.cors.resolveUrl(url);
     const serverCaps = await this.getServerCaps(url, signal);
     if (signal.aborted) return null;
 
     try {
-      const result = await fetchDirectoryTree(
+      const rawEntry = await this.getRawObjects(
         effectiveUrl,
         commitHash,
         serverCaps,
         signal,
-        nestLimit, // parseDepth for initial shallow render
       );
       if (signal.aborted) return null;
 
-      // Stash raw objects in L1 so subsequent depth changes skip the network
-      const newRawEntry: RawObjectsEntry = {
-        rootTreeHash: result.rootTreeHash,
-        objects: result.rawObjects,
-      };
-      this.cache.putRawObjects(commitHash, newRawEntry);
-      this.cache.putTree(commitHash, nestLimit, result.tree);
-      this.scheduleBackgroundFullParse(commitHash, newRawEntry);
-      return result.tree;
+      const rootObj = rawEntry.objects.get(rawEntry.rootTreeHash);
+      if (!rootObj) return null;
+
+      const tree = loadTree(rootObj, rawEntry.objects, nestLimit);
+      this.cache.putTree(commitHash, nestLimit, tree);
+      this.scheduleBackgroundFullParse(commitHash, rawEntry);
+      return tree;
     } catch {
       if (signal.aborted) return null;
       return null;
@@ -1054,37 +1054,86 @@ export class GitHttpClient {
 
     const nestLimit = segments.length;
 
-    // Raw objects cache — re-parse in memory, no network
-    const rawEntry = this.cache.peekRawObjects(commitHash);
-    if (rawEntry) {
-      const rootObj = rawEntry.objects.get(rawEntry.rootTreeHash);
-      if (rootObj) {
-        const tree = loadTree(rootObj, rawEntry.objects, nestLimit);
-        return findInTree(tree, segments);
-      }
-    }
-
-    // Network fetch (deepen=1 — server sends all tree objects for one commit)
-    const result = await fetchDirectoryTree(
+    // Raw objects cache / in-flight dedup / network fetch (all via getRawObjects)
+    const rawEntry = await this.getRawObjects(
       effectiveUrl,
       commitHash,
       serverCaps,
       signal,
-      nestLimit, // parseDepth = path depth
     );
     if (signal.aborted) return undefined;
 
-    // Stash raw objects so future calls (same or different depth) skip the network
-    this.cache.putRawObjects(commitHash, {
-      rootTreeHash: result.rootTreeHash,
-      objects: result.rawObjects,
-    });
-    this.scheduleBackgroundFullParse(commitHash, {
-      rootTreeHash: result.rootTreeHash,
-      objects: result.rawObjects,
-    });
+    const rootObj = rawEntry.objects.get(rawEntry.rootTreeHash);
+    if (!rootObj) return undefined;
 
-    return findInTree(result.tree, segments);
+    const tree = loadTree(rootObj, rawEntry.objects, nestLimit);
+    this.scheduleBackgroundFullParse(commitHash, rawEntry);
+    return findInTree(tree, segments);
+  }
+
+  /**
+   * Get the raw blob:none packfile objects for a commit, with three tiers:
+   *
+   *  1. L1 raw objects cache — synchronous, zero cost.
+   *  2. In-flight dedup — if a blob:none request for this commit is already
+   *     in progress (e.g. several README name candidates from fetchCommit
+   *     running concurrently), all callers share the single in-flight promise
+   *     instead of each launching an identical HTTP request.
+   *  3. Network fetch — fetchDirectoryTree with deepen=1 and a standalone
+   *     AbortController that is never aborted.  fetchPackfile does not honour
+   *     AbortSignal, so the request always runs to completion regardless; using
+   *     a long-lived signal ensures the result is cached and shared even if the
+   *     caller that initiated the fetch aborts before it finishes.
+   *
+   * Each caller checks its own signal after awaiting this method.
+   */
+  private getRawObjects(
+    effectiveUrl: string,
+    commitHash: string,
+    serverCaps: string[],
+    signal: AbortSignal,
+  ): Promise<RawObjectsEntry> {
+    // 1. L1 hit
+    const cached = this.cache.peekRawObjects(commitHash);
+    if (cached) return Promise.resolve(cached);
+
+    // 2. Join in-flight request
+    const inFlight = this.inFlightRawObjects.get(commitHash);
+    if (inFlight) {
+      return inFlight.then((entry) => {
+        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+        return entry;
+      });
+    }
+
+    // 3. Start new fetch — tied to its own never-aborted signal
+    if (signal.aborted)
+      return Promise.reject(new DOMException("Aborted", "AbortError"));
+
+    const fetchPromise = fetchDirectoryTree(
+      effectiveUrl,
+      commitHash,
+      serverCaps,
+      new AbortController().signal, // never aborted — see jsdoc above
+      1, // parseDepth=1 for the initial tree; callers re-parse from raw objects
+    )
+      .then((result) => {
+        const entry: RawObjectsEntry = {
+          rootTreeHash: result.rootTreeHash,
+          objects: result.rawObjects,
+        };
+        this.cache.putRawObjects(commitHash, entry);
+        return entry;
+      })
+      .finally(() => {
+        this.inFlightRawObjects.delete(commitHash);
+      });
+
+    this.inFlightRawObjects.set(commitHash, fetchPromise);
+    return fetchPromise.then((entry) => {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      return entry;
+    });
   }
 
   /**
