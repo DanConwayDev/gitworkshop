@@ -196,6 +196,13 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
         .filter(Boolean) ?? [],
     [selectedAnnouncement],
   );
+  const currentEucHash = useMemo(
+    () =>
+      selectedAnnouncement?.tags.find(
+        ([t, , marker]) => t === "r" && marker === "euc",
+      )?.[1] ?? "",
+    [selectedAnnouncement],
+  );
 
   // ---------------------------------------------------------------------------
   // Form state
@@ -215,7 +222,6 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   // Grasp server selection
   const [selectedDomains, setSelectedDomains] =
     useState<string[]>(currentGraspDomains);
-  const [graspSectionOpen, setGraspSectionOpen] = useState(false);
   const [customDomain, setCustomDomain] = useState("");
   const [customDomainError, setCustomDomainError] = useState<
     string | undefined
@@ -235,6 +241,17 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   const [gitServerInputError, setGitServerInputError] = useState<
     string | undefined
   >();
+
+  // Earliest unique commit hash
+  const [eucHash, setEucHash] = useState(currentEucHash);
+
+  // Other-section open state (auto-open if the repo already has entries there)
+  const [otherRelaysOpen, setOtherRelaysOpen] = useState(
+    () => currentOtherRelays.length > 0,
+  );
+  const [otherGitServersOpen, setOtherGitServersOpen] = useState(
+    () => currentOtherGitServers.length > 0,
+  );
 
   // Submit state
   const [isSaving, setIsSaving] = useState(false);
@@ -485,8 +502,10 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   // Save
   // ---------------------------------------------------------------------------
 
-  const canSave =
-    name.trim().length > 0 && selectedDomains.length > 0 && !isSaving;
+  const hasInfrastructure =
+    selectedDomains.length > 0 ||
+    (otherRelays.length > 0 && otherGitServers.length > 0);
+  const canSave = name.trim().length > 0 && hasInfrastructure && !isSaving;
 
   const handleSave = useCallback(async () => {
     if (!canSave || !account) return;
@@ -509,10 +528,6 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
       const graspRelayUrls = selectedDomains.map((domain) => `wss://${domain}`);
       const allRelayUrls = [...graspRelayUrls, ...otherRelays];
 
-      // Preserve EUC tag from existing announcement
-      const eucTag = selectedAnnouncement.tags.find(
-        ([t, , marker]) => t === "r" && marker === "euc",
-      );
       // Preserve maintainers tag
       const maintainersTag = selectedAnnouncement.tags.find(
         ([t]) => t === "maintainers",
@@ -533,7 +548,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
             ? [["relays", ...allRelayUrls] as string[]]
             : []),
           ["alt", `git repository: ${name.trim()}`],
-          ...(eucTag ? [eucTag] : []),
+          ...(eucHash.trim() ? [["r", eucHash.trim(), "euc"] as string[]] : []),
           ...(maintainersTag ? [maintainersTag] : []),
           ...webUrls.map((u) => ["web", u] as string[]),
           ...topics.map((t) => ["t", t] as string[]),
@@ -567,19 +582,10 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
     description,
     webUrls,
     topics,
+    eucHash,
     basePath,
     navigate,
   ]);
-
-  // ---------------------------------------------------------------------------
-  // Grasp section label
-  // ---------------------------------------------------------------------------
-
-  const graspLabel = useMemo(() => {
-    if (selectedDomains.length === 0) return "No servers selected";
-    if (selectedDomains.length === 1) return selectedDomains[0];
-    return `${selectedDomains.length} servers`;
-  }, [selectedDomains]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -613,12 +619,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-description">
-                Description{" "}
-                <span className="font-normal text-muted-foreground">
-                  (optional)
-                </span>
-              </Label>
+              <Label htmlFor="edit-description">Description</Label>
               <Textarea
                 id="edit-description"
                 value={description}
@@ -631,12 +632,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
 
             {/* Website */}
             <div className="space-y-2">
-              <Label>
-                Website{" "}
-                <span className="font-normal text-muted-foreground">
-                  (optional)
-                </span>
-              </Label>
+              <Label>Website</Label>
               {webUrls.length > 0 && (
                 <div className="space-y-1.5">
                   {webUrls.map((url) => (
@@ -688,12 +684,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
 
             {/* Topics */}
             <div className="space-y-2">
-              <Label>
-                Topics{" "}
-                <span className="font-normal text-muted-foreground">
-                  (optional)
-                </span>
-              </Label>
+              <Label>Topics</Label>
               {topics.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-1">
                   {topics.map((t) => (
@@ -741,39 +732,45 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                 </Button>
               </div>
             </div>
+
+            {/* Earliest unique commit */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-euc">Earliest unique commit</Label>
+              <Input
+                id="edit-euc"
+                value={eucHash}
+                onChange={(e) => setEucHash(e.target.value)}
+                placeholder="40-character git commit hash"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                The earliest commit hash that uniquely identifies this
+                repository — used to track it across forks and renames. Set
+                automatically by <code className="font-mono">ngit push</code>.
+              </p>
+            </div>
           </section>
 
           <Separator />
 
-          {/* ── Grasp servers ──────────────────────────────────────────── */}
+          {/* ── Infrastructure ─────────────────────────────────────────── */}
           <section className="space-y-3">
-            <Collapsible
-              open={graspSectionOpen}
-              onOpenChange={setGraspSectionOpen}
-            >
-              <CollapsibleTrigger asChild>
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between rounded-md px-1 py-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <span className="flex items-center gap-1.5 font-medium text-foreground/90">
-                    {graspSectionOpen ? (
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    )}
-                    <GraspLogo className="h-3.5 w-3.5 text-pink-500" />
-                    Grasp servers
-                  </span>
-                  {!graspSectionOpen && (
-                    <span className="text-xs font-mono text-muted-foreground/70">
-                      {graspLabel}
-                    </span>
-                  )}
-                </button>
-              </CollapsibleTrigger>
+            <div>
+              <h2 className="text-sm font-semibold">Infrastructure</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Grasp servers provide git hosting and Nostr relay in one.
+                Alternatively, specify both a relay and a git server manually.
+              </p>
+            </div>
 
-              <CollapsibleContent className="space-y-3 pt-2 pl-1">
+            {/* Grasp servers — always visible, primary path */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-1.5 px-1">
+                <GraspLogo className="h-3.5 w-3.5 text-pink-500" />
+                <span className="text-sm font-medium">Grasp servers</span>
+              </div>
+
+              <div className="space-y-3 pl-1">
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Grasp servers host your git data and act as relays. Clone and
                   relay URLs are auto-generated from your server selection.
@@ -877,9 +874,10 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                   )}
                 </div>
 
-                {selectedDomains.length === 0 && (
+                {!hasInfrastructure && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 px-0.5">
-                    Select at least one Grasp server to continue.
+                    Select at least one Grasp server, or add both a relay and a
+                    git server below.
                   </p>
                 )}
 
@@ -898,177 +896,231 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                     )}
                   </UnionSection>
                 )}
+              </div>
+            </div>
+
+            {/* Other relays — optional, collapsed by default */}
+            <Collapsible
+              open={otherRelaysOpen}
+              onOpenChange={setOtherRelaysOpen}
+            >
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-md px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    {otherRelaysOpen ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
+                    <Radio className="h-3 w-3" />
+                    <span className="font-medium">Other relays</span>
+                    <span className="font-normal opacity-60 ml-0.5">
+                      (optional)
+                    </span>
+                  </span>
+                  {!otherRelaysOpen && otherRelays.length > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] h-4 px-1.5"
+                    >
+                      {otherRelays.length}
+                    </Badge>
+                  )}
+                </button>
+              </CollapsibleTrigger>
+
+              <CollapsibleContent className="space-y-3 pt-2 pl-1">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Additional Nostr relay URLs beyond Grasp servers.
+                </p>
+
+                {otherRelays.length > 0 && (
+                  <div className="space-y-1.5">
+                    {otherRelays.map((url) => (
+                      <div
+                        key={url}
+                        className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-1.5"
+                      >
+                        <code className="text-xs font-mono text-foreground/80 flex-1 truncate">
+                          {url}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRelay(url)}
+                          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          aria-label={`Remove ${url}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="wss://relay.example.com"
+                      value={relayInput}
+                      onChange={(e) => {
+                        setRelayInput(e.target.value);
+                        setRelayInputError(undefined);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddRelay();
+                        }
+                      }}
+                      className="h-8 text-sm font-mono"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddRelay}
+                      className="h-8 px-2.5 shrink-0"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  {relayInputError && (
+                    <p className="text-xs text-red-500 px-0.5">
+                      {relayInputError}
+                    </p>
+                  )}
+                </div>
+
+                {/* Union relays from other maintainers */}
+                {unionOnlyRelays.length > 0 && (
+                  <UnionSection label="Covered by co-maintainers (read-only)">
+                    {unionOnlyRelays.map(({ url, contributorPubkey }) => (
+                      <UnionItem
+                        key={url}
+                        value={url}
+                        contributorPubkey={contributorPubkey}
+                        monospace
+                      />
+                    ))}
+                  </UnionSection>
+                )}
               </CollapsibleContent>
             </Collapsible>
-          </section>
 
-          <Separator />
-
-          {/* ── Other relays ───────────────────────────────────────────── */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-1.5">
-              <Radio className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium">Other relays</h3>
-              <span className="text-xs text-muted-foreground">(optional)</span>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed -mt-1">
-              Additional Nostr relay URLs beyond Grasp servers.
-            </p>
-
-            {otherRelays.length > 0 && (
-              <div className="space-y-1.5">
-                {otherRelays.map((url) => (
-                  <div
-                    key={url}
-                    className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-1.5"
-                  >
-                    <code className="text-xs font-mono text-foreground/80 flex-1 truncate">
-                      {url}
-                    </code>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveRelay(url)}
-                      className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                      aria-label={`Remove ${url}`}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="wss://relay.example.com"
-                  value={relayInput}
-                  onChange={(e) => {
-                    setRelayInput(e.target.value);
-                    setRelayInputError(undefined);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAddRelay();
-                    }
-                  }}
-                  className="h-8 text-sm font-mono"
-                />
-                <Button
+            {/* Other git servers — optional, collapsed by default */}
+            <Collapsible
+              open={otherGitServersOpen}
+              onOpenChange={setOtherGitServersOpen}
+            >
+              <CollapsibleTrigger asChild>
+                <button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddRelay}
-                  className="h-8 px-2.5 shrink-0"
+                  className="flex w-full items-center justify-between rounded-md px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-              {relayInputError && (
-                <p className="text-xs text-red-500 px-0.5">{relayInputError}</p>
-              )}
-            </div>
-
-            {/* Union relays from other maintainers */}
-            {unionOnlyRelays.length > 0 && (
-              <UnionSection label="Covered by co-maintainers (read-only)">
-                {unionOnlyRelays.map(({ url, contributorPubkey }) => (
-                  <UnionItem
-                    key={url}
-                    value={url}
-                    contributorPubkey={contributorPubkey}
-                    monospace
-                  />
-                ))}
-              </UnionSection>
-            )}
-          </section>
-
-          <Separator />
-
-          {/* ── Other git servers ──────────────────────────────────────── */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-1.5">
-              <GitBranch className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium">Other git servers</h3>
-              <span className="text-xs text-muted-foreground">(optional)</span>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed -mt-1">
-              Additional raw git clone URLs beyond Grasp servers (e.g. GitHub
-              mirrors).
-            </p>
-
-            {otherGitServers.length > 0 && (
-              <div className="space-y-1.5">
-                {otherGitServers.map((url) => (
-                  <div
-                    key={url}
-                    className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-1.5"
-                  >
-                    <code className="text-xs font-mono text-foreground/80 flex-1 truncate break-all">
-                      {url}
-                    </code>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveGitServer(url)}
-                      className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                      aria-label={`Remove ${url}`}
+                  <span className="flex items-center gap-1.5">
+                    {otherGitServersOpen ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
+                    <GitBranch className="h-3 w-3" />
+                    <span className="font-medium">Other git servers</span>
+                    <span className="font-normal opacity-60 ml-0.5">
+                      (optional)
+                    </span>
+                  </span>
+                  {!otherGitServersOpen && otherGitServers.length > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] h-4 px-1.5"
                     >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+                      {otherGitServers.length}
+                    </Badge>
+                  )}
+                </button>
+              </CollapsibleTrigger>
 
-            <div className="space-y-1.5">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="https://github.com/user/repo.git"
-                  value={gitServerInput}
-                  onChange={(e) => {
-                    setGitServerInput(e.target.value);
-                    setGitServerInputError(undefined);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAddGitServer();
-                    }
-                  }}
-                  className="h-8 text-sm font-mono"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddGitServer}
-                  className="h-8 px-2.5 shrink-0"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-              {gitServerInputError && (
-                <p className="text-xs text-red-500 px-0.5">
-                  {gitServerInputError}
+              <CollapsibleContent className="space-y-3 pt-2 pl-1">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Additional raw git clone URLs beyond Grasp servers (e.g.
+                  GitHub mirrors).
                 </p>
-              )}
-            </div>
 
-            {/* Union git servers from other maintainers */}
-            {unionOnlyGitServers.length > 0 && (
-              <UnionSection label="Covered by co-maintainers (read-only)">
-                {unionOnlyGitServers.map(({ url, contributorPubkey }) => (
-                  <UnionItem
-                    key={url}
-                    value={url}
-                    contributorPubkey={contributorPubkey}
-                    monospace
-                  />
-                ))}
-              </UnionSection>
-            )}
+                {otherGitServers.length > 0 && (
+                  <div className="space-y-1.5">
+                    {otherGitServers.map((url) => (
+                      <div
+                        key={url}
+                        className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-1.5"
+                      >
+                        <code className="text-xs font-mono text-foreground/80 flex-1 truncate break-all">
+                          {url}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveGitServer(url)}
+                          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          aria-label={`Remove ${url}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="https://github.com/user/repo.git"
+                      value={gitServerInput}
+                      onChange={(e) => {
+                        setGitServerInput(e.target.value);
+                        setGitServerInputError(undefined);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddGitServer();
+                        }
+                      }}
+                      className="h-8 text-sm font-mono"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddGitServer}
+                      className="h-8 px-2.5 shrink-0"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  {gitServerInputError && (
+                    <p className="text-xs text-red-500 px-0.5">
+                      {gitServerInputError}
+                    </p>
+                  )}
+                </div>
+
+                {/* Union git servers from other maintainers */}
+                {unionOnlyGitServers.length > 0 && (
+                  <UnionSection label="Covered by co-maintainers (read-only)">
+                    {unionOnlyGitServers.map(({ url, contributorPubkey }) => (
+                      <UnionItem
+                        key={url}
+                        value={url}
+                        contributorPubkey={contributorPubkey}
+                        monospace
+                      />
+                    ))}
+                  </UnionSection>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
           </section>
 
           {/* ── Error / actions ────────────────────────────────────────── */}
