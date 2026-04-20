@@ -10,7 +10,7 @@ import {
   GitMerge,
 } from "lucide-react";
 
-const statusConfig: Record<
+export const statusConfig: Record<
   IssueStatus,
   { label: string; className: string; icon: React.ElementType }
 > = {
@@ -47,7 +47,7 @@ const statusConfig: Record<
 };
 
 /** PR/patch variant overrides for status labels and icons. */
-const prStatusOverrides: Partial<
+export const prStatusOverrides: Partial<
   Record<IssueStatus, { label: string; icon: React.ElementType }>
 > = {
   resolved: {

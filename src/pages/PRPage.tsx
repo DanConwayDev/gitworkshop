@@ -27,10 +27,9 @@ import { useRepoContext } from "@/pages/repo/RepoContext";
 import { gitIndexRelays, fallbackRelays } from "@/services/settings";
 import { useGitPool } from "@/hooks/useGitPool";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusDropdownBadge } from "@/components/StatusDropdownBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { ManageLabels, type LabelEventEntry } from "@/components/ManageLabels";
-import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { ReplyBox } from "@/components/ReplyBox";
 import { CoverNoteBox } from "@/components/CoverNoteBox";
 import { Card, CardContent } from "@/components/ui/card";
@@ -704,10 +703,20 @@ export default function PRPage() {
               {/* Left: title + meta */}
               <div className="min-w-0 pb-4">
                 <div className="flex items-start gap-3 mb-3">
-                  <StatusBadge
+                  <StatusDropdownBadge
                     status={pr.status}
                     variant="pr"
                     className="mt-1 shrink-0"
+                    canEdit={canEdit && pr.status !== "deleted"}
+                    itemId={pr.rootEvent.id}
+                    itemAuthorPubkey={pr.pubkey}
+                    repoCoords={pr.repoCoords}
+                    options={[
+                      { value: "open", label: "Open" },
+                      { value: "resolved", label: "Merged" },
+                      { value: "closed", label: "Closed" },
+                      { value: "draft", label: "Draft" },
+                    ]}
                   />
                   <EditableSubject
                     issueId={pr.rootEvent.id}
@@ -1146,15 +1155,13 @@ export default function PRPage() {
                     <span className="text-sm text-muted-foreground">
                       Status
                     </span>
-                    <StatusBadge status={pr?.status ?? "open"} variant="pr" />
-                  </div>
-
-                  {canEdit && pr && pr.status !== "deleted" && (
-                    <ChangeStatusDropdown
-                      itemId={pr.rootEvent.id}
-                      itemAuthorPubkey={pr.pubkey}
-                      repoCoords={pr.repoCoords}
-                      currentStatus={pr.status}
+                    <StatusDropdownBadge
+                      status={pr?.status ?? "open"}
+                      variant="pr"
+                      canEdit={canEdit && !!pr && pr.status !== "deleted"}
+                      itemId={pr?.rootEvent.id}
+                      itemAuthorPubkey={pr?.pubkey}
+                      repoCoords={pr?.repoCoords}
                       options={[
                         { value: "open", label: "Open" },
                         { value: "resolved", label: "Merged" },
@@ -1162,7 +1169,7 @@ export default function PRPage() {
                         { value: "draft", label: "Draft" },
                       ]}
                     />
-                  )}
+                  </div>
 
                   {/* Ahead / behind */}
                   {(aheadCount !== undefined || behindCount !== undefined) && (

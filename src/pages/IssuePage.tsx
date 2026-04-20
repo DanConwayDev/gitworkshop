@@ -19,10 +19,9 @@ import { useResolvedIssue } from "@/hooks/useResolvedIssue";
 import type { RelayGroupSpec } from "@/hooks/useEventSearch";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusDropdownBadge } from "@/components/StatusDropdownBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { ManageLabels, type LabelEventEntry } from "@/components/ManageLabels";
-import { ChangeStatusDropdown } from "@/components/ChangeStatusDropdown";
 import { ReplyBox } from "@/components/ReplyBox";
 import { CoverNoteBox } from "@/components/CoverNoteBox";
 import { Card, CardContent } from "@/components/ui/card";
@@ -174,7 +173,19 @@ export default function IssuePage() {
           {issue ? (
             <div>
               <div className="flex items-start gap-3 mb-3">
-                <StatusBadge status={issue.status} className="mt-1" />
+                <StatusDropdownBadge
+                  status={issue.status}
+                  className="mt-1"
+                  canEdit={canEdit && issue.status !== "deleted"}
+                  itemId={issue.id}
+                  itemAuthorPubkey={issue.pubkey}
+                  repoCoords={issue.repoCoords}
+                  options={[
+                    { value: "open", label: "Open" },
+                    { value: "resolved", label: "Resolved" },
+                    { value: "closed", label: "Closed" },
+                  ]}
+                />
                 <EditableSubject
                   issueId={issue.id}
                   currentSubject={issue.currentSubject || issue.originalSubject}
@@ -355,22 +366,19 @@ export default function IssuePage() {
                     <span className="text-sm text-muted-foreground">
                       Status
                     </span>
-                    <StatusBadge status={issue?.status ?? "open"} />
-                  </div>
-
-                  {canEdit && issue && issue.status !== "deleted" && (
-                    <ChangeStatusDropdown
-                      itemId={issue.id}
-                      itemAuthorPubkey={issue.pubkey}
-                      repoCoords={issue.repoCoords}
-                      currentStatus={issue.status}
+                    <StatusDropdownBadge
+                      status={issue?.status ?? "open"}
+                      canEdit={canEdit && !!issue && issue.status !== "deleted"}
+                      itemId={issue?.id}
+                      itemAuthorPubkey={issue?.pubkey}
+                      repoCoords={issue?.repoCoords}
                       options={[
                         { value: "open", label: "Open" },
                         { value: "resolved", label: "Resolved" },
                         { value: "closed", label: "Closed" },
                       ]}
                     />
-                  )}
+                  </div>
 
                   <Separator />
 
