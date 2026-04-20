@@ -411,6 +411,103 @@ export function CommentSkeleton() {
 }
 
 // ---------------------------------------------------------------------------
+// DeleteEventButton — reusable delete button + confirm dialog for timeline markers
+// ---------------------------------------------------------------------------
+
+function DeleteEventButton({
+  event,
+  repoCoords,
+  label = "event",
+}: {
+  event: NostrEvent;
+  repoCoords: string[];
+  label?: string;
+}) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = useCallback(async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await runner.run(
+        DeleteEvent,
+        [event],
+        repoCoords,
+        deleteReason.trim() || undefined,
+      );
+    } catch (err) {
+      console.error("[DeleteEventButton] failed to delete:", err);
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+      setDeleteReason("");
+    }
+  }, [deleting, event, repoCoords, deleteReason]);
+
+  const reasonId = `delete-${event.id.slice(0, 8)}-reason`;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setDeleteOpen(true)}
+        className="flex items-center text-xs text-muted-foreground/60 hover:text-destructive transition-colors px-1.5 py-0.5 rounded"
+        aria-label={`Delete ${label}`}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+
+      <AlertDialog
+        open={deleteOpen}
+        onOpenChange={(v) => !v && setDeleteOpen(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this {label}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will send a deletion request (NIP-09). Not all relays honour
+              deletion requests — the event may remain visible on some clients.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5 py-1">
+            <Label htmlFor={reasonId} className="text-sm">
+              Reason{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Textarea
+              id={reasonId}
+              placeholder={`Why are you deleting this ${label}?`}
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              rows={2}
+              className="resize-none text-sm"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setDeleteOpen(false);
+                setDeleteReason("");
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "Sending…" : "Send deletion request"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // SubjectRenameCard
 // ---------------------------------------------------------------------------
 
@@ -418,14 +515,19 @@ export function SubjectRenameCard({
   event,
   oldSubject,
   newSubject,
+  repoCoords,
 }: {
   event: NostrEvent;
   oldSubject: string;
   newSubject: string;
+  repoCoords?: string[];
 }) {
   const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
     addSuffix: true,
   });
+
+  const activeAccount = useActiveAccount();
+  const isOwn = !!activeAccount && activeAccount.pubkey === event.pubkey;
 
   return (
     <div className="relative flex gap-3 py-1.5 pl-1">
@@ -457,6 +559,17 @@ export function SubjectRenameCard({
           <span className="font-medium text-foreground">{newSubject}</span>
         </p>
       </div>
+
+      <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
+        {isOwn && repoCoords && (
+          <DeleteEventButton
+            event={event}
+            repoCoords={repoCoords}
+            label="title change"
+          />
+        )}
+        <EventCardActions event={event} />
+      </div>
     </div>
   );
 }
@@ -470,16 +583,21 @@ export function StatusChangeCard({
   status,
   authorised,
   variant = "issue",
+  repoCoords,
 }: {
   event: NostrEvent;
   status: IssueStatus;
   /** True when the author is a maintainer or the item author. */
   authorised: boolean;
   variant?: "issue" | "pr";
+  repoCoords?: string[];
 }) {
   const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
     addSuffix: true,
   });
+
+  const activeAccount = useActiveAccount();
+  const isOwn = !!activeAccount && activeAccount.pubkey === event.pubkey;
 
   return (
     <div className="relative flex gap-3 py-1.5 pl-1">
@@ -513,6 +631,17 @@ export function StatusChangeCard({
           </p>
         )}
       </div>
+
+      <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
+        {isOwn && repoCoords && (
+          <DeleteEventButton
+            event={event}
+            repoCoords={repoCoords}
+            label="status change"
+          />
+        )}
+        <EventCardActions event={event} />
+      </div>
     </div>
   );
 }
@@ -525,15 +654,20 @@ export function LabelChangeCard({
   event,
   labels,
   authorised,
+  repoCoords,
 }: {
   event: NostrEvent;
   labels: string[];
   /** True when the author is a maintainer or the item author. */
   authorised: boolean;
+  repoCoords?: string[];
 }) {
   const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
     addSuffix: true,
   });
+
+  const activeAccount = useActiveAccount();
+  const isOwn = !!activeAccount && activeAccount.pubkey === event.pubkey;
 
   return (
     <div className="relative flex gap-3 py-1.5 pl-1">
@@ -571,6 +705,17 @@ export function LabelChangeCard({
             User is not a maintainer — label change not applied
           </p>
         )}
+      </div>
+
+      <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
+        {isOwn && repoCoords && (
+          <DeleteEventButton
+            event={event}
+            repoCoords={repoCoords}
+            label="label change"
+          />
+        )}
+        <EventCardActions event={event} />
       </div>
     </div>
   );

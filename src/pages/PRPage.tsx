@@ -917,6 +917,7 @@ export default function PRPage() {
                                 event={node.event}
                                 oldSubject={node.oldSubject}
                                 newSubject={node.newSubject}
+                                repoCoords={pr.repoCoords}
                               />
                             );
                           }
@@ -928,6 +929,7 @@ export default function PRPage() {
                                 status={node.status}
                                 authorised={node.authorised}
                                 variant="pr"
+                                repoCoords={pr.repoCoords}
                               />
                             );
                           }
@@ -938,6 +940,7 @@ export default function PRPage() {
                                 event={node.event}
                                 labels={node.labels}
                                 authorised={node.authorised}
+                                repoCoords={pr.repoCoords}
                               />
                             );
                           }

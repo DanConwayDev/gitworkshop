@@ -264,6 +264,7 @@ export default function IssuePage() {
                             event={node.event}
                             oldSubject={node.oldSubject}
                             newSubject={node.newSubject}
+                            repoCoords={issue.repoCoords}
                           />
                         );
                       }
@@ -275,6 +276,7 @@ export default function IssuePage() {
                             status={node.status}
                             authorised={node.authorised}
                             variant="issue"
+                            repoCoords={issue.repoCoords}
                           />
                         );
                       }
@@ -285,6 +287,7 @@ export default function IssuePage() {
                             event={node.event}
                             labels={node.labels}
                             authorised={node.authorised}
+                            repoCoords={issue.repoCoords}
                           />
                         );
                       }
