@@ -16,6 +16,7 @@ import type {
   Commit,
   Tree,
   InfoRefsUploadPackResponse,
+  ParsedObject,
 } from "@fiatjaf/git-natural-api";
 
 // ---------------------------------------------------------------------------
@@ -34,6 +35,21 @@ const STORE_COMMIT_HISTORY = "commitHistory";
 
 /** Default TTL for infoRefs entries */
 export const DEFAULT_INFO_REFS_TTL_MS = 60_000; // 1 minute
+
+/**
+ * Sentinel nestLimit used when caching a fully-recursive tree parse.
+ * Any request for nestLimit ≤ FULL_NEST_LIMIT is satisfied by this entry.
+ */
+export const FULL_NEST_LIMIT = 999;
+
+/**
+ * Raw packfile objects for a commit (blob:none fetch).
+ * Stored L1-only — derived data that can be re-fetched cheaply.
+ */
+export interface RawObjectsEntry {
+  rootTreeHash: string;
+  objects: Map<string, ParsedObject>;
+}
 
 // IDB record types
 interface CommitRecord {
@@ -135,6 +151,12 @@ const memInfoRefs = new Map<
 >();
 /** key: `${commitHash}:${maxCommits}` → Commit[] */
 const memCommitHistory = new Map<string, Commit[]>();
+/**
+ * L1-only raw packfile objects cache, keyed by commitHash.
+ * Not persisted to IDB — raw objects are reconstructable from a single HTTP
+ * request and are only useful within the current page session.
+ */
+const memRawObjects = new Map<string, RawObjectsEntry>();
 
 // ---------------------------------------------------------------------------
 // GitObjectCache — the public API
@@ -262,21 +284,47 @@ export class GitObjectCache {
   // -----------------------------------------------------------------------
 
   peekTree(commitHash: string, nestLimit: number): Tree | undefined {
-    return memTrees.get(`${commitHash}:${nestLimit}`);
+    // Exact match (O(1) fast path)
+    const exact = memTrees.get(`${commitHash}:${nestLimit}`);
+    if (exact) return exact;
+    // Scan for any entry with a deeper parse that satisfies this request.
+    // The "full:${commitHash}" diff-cache entries use a different prefix and
+    // are never matched here.
+    const prefix = `${commitHash}:`;
+    for (const [key, tree] of memTrees) {
+      if (!key.startsWith(prefix)) continue;
+      const cachedLimit = parseInt(key.slice(prefix.length), 10);
+      if (!isNaN(cachedLimit) && cachedLimit >= nestLimit) return tree;
+    }
+    return undefined;
   }
 
   async getTree(
     commitHash: string,
     nestLimit: number,
   ): Promise<Tree | undefined> {
-    const k = `${commitHash}:${nestLimit}`;
-    const mem = memTrees.get(k);
-    if (mem) return mem;
-    const record = await idbGet<TreeRecord>(STORE_TREES, k);
-    if (record) {
-      memTrees.set(k, record.tree);
-      return record.tree;
+    // L1 scan with >= check (also warms L1 if a deeper entry is found)
+    const memHit = this.peekTree(commitHash, nestLimit);
+    if (memHit) return memHit;
+
+    // IDB exact key
+    const exactKey = `${commitHash}:${nestLimit}`;
+    const exactRecord = await idbGet<TreeRecord>(STORE_TREES, exactKey);
+    if (exactRecord) {
+      memTrees.set(exactKey, exactRecord.tree);
+      return exactRecord.tree;
     }
+
+    // IDB FULL_NEST_LIMIT key — background full-parse result survives page reloads
+    if (nestLimit < FULL_NEST_LIMIT) {
+      const fullKey = `${commitHash}:${FULL_NEST_LIMIT}`;
+      const fullRecord = await idbGet<TreeRecord>(STORE_TREES, fullKey);
+      if (fullRecord) {
+        memTrees.set(fullKey, fullRecord.tree);
+        return fullRecord.tree;
+      }
+    }
+
     return undefined;
   }
 
@@ -313,6 +361,24 @@ export class GitObjectCache {
     const k = `full:${commitHash}`;
     memTrees.set(k, tree);
     idbPut(STORE_TREES, { key: k, tree }).catch(() => {});
+  }
+
+  // -----------------------------------------------------------------------
+  // Raw packfile objects (L1 only — no IDB, no TTL)
+  //
+  // Stores the blob:none packfile objects map for a commit so that subsequent
+  // tree requests at different depths can re-parse from memory instead of
+  // re-fetching from the network.
+  // -----------------------------------------------------------------------
+
+  /** Synchronous L1-only peek */
+  peekRawObjects(commitHash: string): RawObjectsEntry | undefined {
+    return memRawObjects.get(commitHash);
+  }
+
+  /** Store raw objects for a commit (L1 only) */
+  putRawObjects(commitHash: string, entry: RawObjectsEntry): void {
+    memRawObjects.set(commitHash, entry);
   }
 
   // -----------------------------------------------------------------------

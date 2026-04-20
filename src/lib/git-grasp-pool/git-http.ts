@@ -58,7 +58,8 @@ function createWantRequest(
   return pkts.map(pktEncode).join("");
 }
 import type { CorsProxyManager } from "./cors-proxy";
-import type { GitObjectCache } from "./cache";
+import type { GitObjectCache, RawObjectsEntry } from "./cache";
+import { FULL_NEST_LIMIT } from "./cache";
 import type { ErrorClass, UrlErrorKind } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -253,33 +254,37 @@ async function fetchCommitsOnly(
  * Fetch the directory tree at a commit (blob:none filter).
  * Requires the server to support "filter".
  *
- * @param deepen   - Git protocol commit-graph depth (controls how many commits
- *                   the server walks; use 1 to fetch just the tip commit).
- *                   The server always sends ALL tree objects for those commits
- *                   regardless of this value.
+ * Always passes deepen=1 to the server — fetching one commit's worth of tree
+ * objects. The server sends ALL tree objects for that commit regardless of
+ * this value; "deepen" only controls commit-graph ancestry traversal.
+ *
  * @param parseDepth - How many directory levels to build in the returned Tree
  *                   structure. undefined = full recursive parse of everything
- *                   the server sent. Defaults to deepen for backwards
- *                   compatibility with the file-browser callers.
+ *                   the server sent.
+ *
+ * Returns the parsed tree alongside the raw objects map and rootTreeHash so
+ * callers can cache the raw objects for subsequent depth-only re-parses.
  */
 async function fetchDirectoryTree(
   effectiveUrl: string,
   commitHash: string,
-  deepen: number,
   serverCaps: string[],
   signal: AbortSignal,
   parseDepth?: number,
-): Promise<Tree> {
+): Promise<{
+  tree: Tree;
+  rootTreeHash: string;
+  rawObjects: Map<string, ParsedObject>;
+}> {
   if (signal.aborted) throw new Error("aborted");
   const caps = selectCapabilities(serverCaps);
   if (!serverCaps.includes("filter"))
     throw new Error("git server does not support filter capability");
   caps.push("filter");
-  // deepen controls the commit-graph depth sent to the server.
-  // parseDepth controls how deep loadTree() builds the in-memory structure.
-  // They are independent: deepen=1 always causes the server to send ALL tree
-  // objects for that one commit; parseDepth limits what we parse from them.
-  const want = createWantRequest(commitHash, caps, deepen, "blob:none");
+  // deepen=1: fetch only the tip commit. The server still sends ALL tree
+  // objects for that commit, so parseDepth independently controls how much
+  // of those objects loadTree() builds into the in-memory structure.
+  const want = createWantRequest(commitHash, caps, 1, "blob:none");
   const result = await fetchPackfile(effectiveUrl, want);
   if (signal.aborted) throw new Error("aborted");
 
@@ -293,7 +298,8 @@ async function fetchDirectoryTree(
 
   // When parseDepth is undefined, loadTree recurses into every subtree object
   // the server sent — giving us the complete directory structure.
-  return loadTree(rootTreeObj, result.objects, parseDepth);
+  const tree = loadTree(rootTreeObj, result.objects, parseDepth);
+  return { tree, rootTreeHash, rawObjects: result.objects };
 }
 
 /**
@@ -381,6 +387,11 @@ export class GitHttpClient {
    * Checked synchronously to avoid any new HTTP request.
    */
   private permanentFailures = new Map<string, PermanentFetchError>();
+  /**
+   * Commit hashes for which a background full-parse idle task has been
+   * queued but not yet completed.  Prevents duplicate tasks.
+   */
+  private pendingBackgroundParse = new Set<string>();
 
   constructor(cache: GitObjectCache, cors: CorsProxyManager) {
     this.cache = cache;
@@ -747,6 +758,17 @@ export class GitHttpClient {
 
   /**
    * Fetch directory tree at a commit, checking cache first.
+   *
+   * Cache hierarchy:
+   *  1. Parsed tree cache (L1 + IDB) — check for any entry with nestLimit >=
+   *     the requested depth; a deeper cached parse satisfies a shallower request.
+   *  2. Raw objects cache (L1 only) — if we already have the packfile objects
+   *     in memory from a previous fetch, re-parse at the new depth without any
+   *     network request.
+   *  3. Network fetch — always with deepen=1 (fetches one commit's tree objects).
+   *     After fetching, raw objects are stashed in L1 so subsequent requests
+   *     at any depth skip the network. A background idle task then does the
+   *     full recursive parse and warms the parsed-tree cache at FULL_NEST_LIMIT.
    */
   async fetchTree(
     url: string,
@@ -754,25 +776,46 @@ export class GitHttpClient {
     nestLimit: number,
     signal: AbortSignal,
   ): Promise<Tree | null> {
+    // 1. Parsed tree cache (L1 + IDB, with >= nestLimit check)
     const cached = await this.cache.getTree(commitHash, nestLimit);
     if (cached) return cached;
 
+    // 2. Raw objects cache — re-parse in memory, no network
+    const rawEntry = this.cache.peekRawObjects(commitHash);
+    if (rawEntry) {
+      const rootObj = rawEntry.objects.get(rawEntry.rootTreeHash);
+      if (rootObj) {
+        const tree = loadTree(rootObj, rawEntry.objects, nestLimit);
+        this.cache.putTree(commitHash, nestLimit, tree);
+        this.scheduleBackgroundFullParse(commitHash, rawEntry);
+        return tree;
+      }
+    }
+
+    // 3. Network fetch (deepen=1 — always correct; server sends all tree objects)
     const effectiveUrl = this.cors.resolveUrl(url);
     const serverCaps = await this.getServerCaps(url, signal);
     if (signal.aborted) return null;
 
     try {
-      const tree = await fetchDirectoryTree(
+      const result = await fetchDirectoryTree(
         effectiveUrl,
         commitHash,
-        nestLimit,
         serverCaps,
         signal,
-        nestLimit, // parseDepth matches deepen for file-browser callers
+        nestLimit, // parseDepth for initial shallow render
       );
       if (signal.aborted) return null;
-      this.cache.putTree(commitHash, nestLimit, tree);
-      return tree;
+
+      // Stash raw objects in L1 so subsequent depth changes skip the network
+      const newRawEntry: RawObjectsEntry = {
+        rootTreeHash: result.rootTreeHash,
+        objects: result.rawObjects,
+      };
+      this.cache.putRawObjects(commitHash, newRawEntry);
+      this.cache.putTree(commitHash, nestLimit, result.tree);
+      this.scheduleBackgroundFullParse(commitHash, newRawEntry);
+      return result.tree;
     } catch {
       if (signal.aborted) return null;
       return null;
@@ -993,7 +1036,7 @@ export class GitHttpClient {
 
   /**
    * Find a tree entry by path within a commit.
-   * Fetches the directory tree (blob:none) and navigates to the path.
+   * Uses raw objects cache when available; falls back to a network fetch.
    */
   private async findObjectByPath(
     effectiveUrl: string,
@@ -1010,16 +1053,75 @@ export class GitHttpClient {
     if (segments.length === 0) return undefined;
 
     const nestLimit = segments.length;
-    const tree = await fetchDirectoryTree(
+
+    // Raw objects cache — re-parse in memory, no network
+    const rawEntry = this.cache.peekRawObjects(commitHash);
+    if (rawEntry) {
+      const rootObj = rawEntry.objects.get(rawEntry.rootTreeHash);
+      if (rootObj) {
+        const tree = loadTree(rootObj, rawEntry.objects, nestLimit);
+        return findInTree(tree, segments);
+      }
+    }
+
+    // Network fetch (deepen=1 — server sends all tree objects for one commit)
+    const result = await fetchDirectoryTree(
       effectiveUrl,
       commitHash,
-      nestLimit,
       serverCaps,
       signal,
-      nestLimit, // parseDepth matches deepen for path-lookup callers
+      nestLimit, // parseDepth = path depth
     );
     if (signal.aborted) return undefined;
 
-    return findInTree(tree, segments);
+    // Stash raw objects so future calls (same or different depth) skip the network
+    this.cache.putRawObjects(commitHash, {
+      rootTreeHash: result.rootTreeHash,
+      objects: result.rawObjects,
+    });
+    this.scheduleBackgroundFullParse(commitHash, {
+      rootTreeHash: result.rootTreeHash,
+      objects: result.rawObjects,
+    });
+
+    return findInTree(result.tree, segments);
+  }
+
+  /**
+   * Schedule a background idle task to fully parse all tree objects for a
+   * commit and warm the parsed-tree cache at FULL_NEST_LIMIT.
+   *
+   * This means that after the first (shallow) render, subsequent navigations
+   * to any depth within the same commit skip both the network and the re-parse.
+   *
+   * Uses requestIdleCallback when available; falls back to setTimeout(0).
+   * Deduplicates: at most one pending task per commitHash.
+   */
+  private scheduleBackgroundFullParse(
+    commitHash: string,
+    rawEntry: RawObjectsEntry,
+  ): void {
+    // Already have a full parse cached or scheduled
+    if (this.cache.peekTree(commitHash, FULL_NEST_LIMIT)) return;
+    if (this.pendingBackgroundParse.has(commitHash)) return;
+
+    this.pendingBackgroundParse.add(commitHash);
+
+    const run = () => {
+      this.pendingBackgroundParse.delete(commitHash);
+      // Double-check after idle — another path may have populated the cache
+      if (this.cache.peekTree(commitHash, FULL_NEST_LIMIT)) return;
+      const rootObj = rawEntry.objects.get(rawEntry.rootTreeHash);
+      if (!rootObj) return;
+      // parseDepth=undefined → fully recursive parse of all objects the server sent
+      const fullTree = loadTree(rootObj, rawEntry.objects, undefined);
+      this.cache.putTree(commitHash, FULL_NEST_LIMIT, fullTree);
+    };
+
+    if (typeof requestIdleCallback !== "undefined") {
+      requestIdleCallback(run);
+    } else {
+      setTimeout(run, 0);
+    }
   }
 }
