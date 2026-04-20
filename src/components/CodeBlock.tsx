@@ -224,7 +224,7 @@ export const CodeBlock = memo(function CodeBlock({
           !wordWrap && "overflow-x-auto",
         )}
       >
-        <table className="w-full border-collapse">
+        <table className="w-full border-collapse table-fixed">
           <tbody>
             {(tokens ?? plainLines).map((line, i) => {
               const lineNum = startLine + i;
@@ -250,7 +250,7 @@ export const CodeBlock = memo(function CodeBlock({
                         isHighlighted &&
                           "bg-yellow-500/10 dark:bg-yellow-400/10",
                       )}
-                      style={{ minWidth: `${gutterWidth + 2}ch` }}
+                      style={{ width: `${gutterWidth + 2}ch` }}
                     >
                       {lineNum}
                     </td>
