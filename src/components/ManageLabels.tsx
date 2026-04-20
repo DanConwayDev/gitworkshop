@@ -31,8 +31,8 @@ interface ManageLabelsProps {
  * Sidebar section that displays current NIP-32 labels and lets authorised
  * users (repo maintainer or issue/PR author) add new ones.
  *
- * Adding a label publishes a kind:1985 label event via `AttachIssueLabels`.
- * Labels are additive — existing labels are never removed by this component.
+ * Each label is published immediately as a kind:1985 label event via
+ * `AttachIssueLabels` — one event per label, no staging step required.
  */
 export function ManageLabels({
   itemId,
@@ -42,8 +42,6 @@ export function ManageLabels({
 }: ManageLabelsProps) {
   const { toast } = useToast();
 
-  // Local "staged" labels  — typed but not yet submitted.
-  const [staged, setStaged] = useState<string[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -56,14 +54,17 @@ export function ManageLabels({
     }
   }, [isEditing]);
 
-  /** Append the current input value to the staged list. */
-  const stageLabel = useCallback(() => {
+  const closeEditor = useCallback(() => {
+    setIsEditing(false);
+    setInputValue("");
+  }, []);
+
+  /** Publish the current input value as a label immediately. */
+  const applyLabel = useCallback(async () => {
     const normalised = normaliseLabel(inputValue);
     if (!normalised) return;
 
-    const alreadyExists =
-      currentLabels.includes(normalised) || staged.includes(normalised);
-    if (alreadyExists) {
+    if (currentLabels.includes(normalised)) {
       toast({
         title: "Label already exists",
         description: `"${normalised}" is already applied.`,
@@ -71,72 +72,36 @@ export function ManageLabels({
       });
       return;
     }
-    setStaged((prev) => [...prev, normalised]);
-    setInputValue("");
-  }, [inputValue, currentLabels, staged, toast]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        stageLabel();
-        return;
-      }
-      if (e.key === "Escape") {
-        setIsEditing(false);
-        setStaged([]);
-        setInputValue("");
-      }
-    },
-    [stageLabel],
-  );
-
-  const removeStaged = useCallback((label: string) => {
-    setStaged((prev) => prev.filter((l) => l !== label));
-  }, []);
-
-  const handleCancel = useCallback(() => {
-    setIsEditing(false);
-    setStaged([]);
-    setInputValue("");
-  }, []);
-
-  const handleApply = useCallback(async () => {
-    // Stage whatever is still in the input first.
-    const extra = normaliseLabel(inputValue);
-    const toPublish = [
-      ...staged,
-      ...(extra && !currentLabels.includes(extra) && !staged.includes(extra)
-        ? [extra]
-        : []),
-    ];
-
-    if (toPublish.length === 0) {
-      setIsEditing(false);
-      setInputValue("");
-      return;
-    }
 
     setIsPending(true);
     try {
-      await runner.run(AttachIssueLabels, itemId, toPublish, repoCoords);
-      toast({
-        title: toPublish.length === 1 ? "Label added" : "Labels added",
-        description: toPublish.map((l) => `"${l}"`).join(", "),
-      });
-      setStaged([]);
+      await runner.run(AttachIssueLabels, itemId, [normalised], repoCoords);
       setInputValue("");
-      setIsEditing(false);
+      inputRef.current?.focus();
     } catch (err) {
       toast({
-        title: "Failed to add labels",
+        title: "Failed to add label",
         description: err instanceof Error ? err.message : undefined,
         variant: "destructive",
       });
     } finally {
       setIsPending(false);
     }
-  }, [inputValue, staged, currentLabels, itemId, repoCoords, toast]);
+  }, [inputValue, currentLabels, itemId, repoCoords, toast]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        applyLabel();
+        return;
+      }
+      if (e.key === "Escape") {
+        closeEditor();
+      }
+    },
+    [applyLabel, closeEditor],
+  );
 
   // Nothing to show when there are no labels and the user cannot edit.
   if (!canEdit && currentLabels.length === 0) return null;
@@ -146,13 +111,17 @@ export function ManageLabels({
       {/* Heading row */}
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs text-muted-foreground">Labels</p>
-        {canEdit && !isEditing && (
+        {canEdit && (
           <button
-            onClick={() => setIsEditing(true)}
+            onClick={() => (isEditing ? closeEditor() : setIsEditing(true))}
             className="text-muted-foreground/50 hover:text-muted-foreground transition-colors rounded p-0.5 hover:bg-muted"
-            aria-label="Add label"
+            aria-label={isEditing ? "Close label editor" : "Add label"}
           >
-            <Plus className="h-3.5 w-3.5" />
+            {isEditing ? (
+              <X className="h-3.5 w-3.5" />
+            ) : (
+              <Plus className="h-3.5 w-3.5" />
+            )}
           </button>
         )}
       </div>
@@ -171,79 +140,33 @@ export function ManageLabels({
         <p className="text-xs text-muted-foreground/50">None yet</p>
       )}
 
-      {/* Inline editor */}
+      {/* Inline input */}
       {canEdit && isEditing && (
-        <div className="space-y-2 mt-1">
-          {/* Staged (not yet saved) labels */}
-          {staged.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {staged.map((label) => (
-                <span
-                  key={label}
-                  className="inline-flex items-center gap-0.5 text-xs rounded-full bg-muted px-2 py-0.5 text-muted-foreground"
-                >
-                  {label}
-                  <button
-                    onClick={() => removeStaged(label)}
-                    aria-label={`Remove "${label}"`}
-                    className="hover:text-foreground transition-colors"
-                  >
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Text input row */}
-          <div className="flex gap-1">
-            <Input
-              ref={inputRef}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="label-name"
-              className="h-7 text-xs flex-1 min-w-0"
-              disabled={isPending}
-              aria-label="New label"
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-2 shrink-0"
-              onClick={stageLabel}
-              disabled={isPending || !inputValue.trim()}
-              aria-label="Stage label"
-            >
+        <div className="flex gap-1 mt-1">
+          <Input
+            ref={inputRef}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="label-name"
+            className="h-7 text-xs flex-1 min-w-0"
+            disabled={isPending}
+            aria-label="New label"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 shrink-0"
+            onClick={applyLabel}
+            disabled={isPending || !inputValue.trim()}
+            aria-label="Add label"
+          >
+            {isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
               <Plus className="h-3 w-3" />
-            </Button>
-          </div>
-
-          {/* Apply / Cancel */}
-          <div className="flex gap-1.5 justify-end">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 px-2 text-xs text-muted-foreground"
-              onClick={handleCancel}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={handleApply}
-              disabled={
-                isPending || (staged.length === 0 && !inputValue.trim())
-              }
-            >
-              {isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-              ) : null}
-              Apply
-            </Button>
-          </div>
+            )}
+          </Button>
         </div>
       )}
     </div>
