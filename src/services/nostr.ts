@@ -161,19 +161,45 @@ const relayGroupResolver: RelayGroupResolver = async (groupId) => {
   }
 
   // Repo coord: "30617:<pubkey>:<d>"
+  //
+  // BFS through the full recursive maintainer chain so that ALL relay URLs
+  // declared in any announcement in the chain are returned, not just the
+  // relays from the single entry-point announcement. This mirrors the
+  // RepositoryRelayGroup model (which is the reactive/additive counterpart
+  // used for READ subscriptions). At publish-time all announcements that
+  // have arrived in the EventStore are used; any that arrive later will be
+  // picked up by outboxStore.reResolveRelayGroups() when triggered.
   if (groupId.startsWith("30617:")) {
     const parts = groupId.split(":");
     const pubkey = parts[1];
     const d = parts[2];
     if (!pubkey || !d) return [];
-    const repoEvents = eventStore.getByFilters({
-      kinds: [30617],
-      authors: [pubkey],
-      "#d": [d],
-    } as Filter);
-    const repoEvent = repoEvents[0];
-    if (!repoEvent || !isValidRepository(repoEvent)) return [];
-    return new Repository(repoEvent, eventStore).relays;
+
+    const allRelays = new Set<string>();
+    const visited = new Set<string>();
+    const queue = [pubkey];
+
+    while (queue.length > 0) {
+      const pk = queue.shift()!;
+      if (visited.has(pk)) continue;
+      visited.add(pk);
+
+      const events = eventStore.getByFilters({
+        kinds: [30617],
+        authors: [pk],
+        "#d": [d],
+      } as Filter);
+      const ev = events[0];
+      if (!ev || !isValidRepository(ev)) continue;
+
+      const repo = new Repository(ev, eventStore);
+      for (const relay of repo.relays) allRelays.add(relay);
+      for (const maintainer of repo.maintainers) {
+        if (!visited.has(maintainer)) queue.push(maintainer);
+      }
+    }
+
+    return [...allRelays];
   }
 
   // Static settings-based groups
@@ -244,6 +270,15 @@ function watchAnyMailboxForOutboxReResolve(): () => void {
 watchAnyMailboxForOutboxReResolve();
 
 /**
+ * Event kinds accepted by the git index relay (wss://index.ngit.dev).
+ * Any event published to "git-index" must be one of these kinds.
+ */
+const GIT_INDEX_KINDS = new Set([
+  30617, // NIP-34 repository announcements
+  10317, // User GRASP server lists
+]);
+
+/**
  * Publish an event to the configured relays.
  *
  * This is the low-level publish used by the ActionRunner for built-in
@@ -254,6 +289,10 @@ watchAnyMailboxForOutboxReResolve();
  * For NIP-34 events (issues, status changes, renames) use the dedicated
  * Action functions in src/actions/nip34.ts which resolve the correct relay
  * groups (user outbox + repo relays + notification inboxes) automatically.
+ *
+ * Kind:30617 (repo announcements) and kind:10317 (GRASP lists) are
+ * automatically also published to "git-index" — the git index relay only
+ * accepts these two kinds, so only they should ever be sent there.
  *
  * @param event          - The signed Nostr event to publish
  * @param extraGroupIds  - Additional group IDs to publish to alongside the
@@ -268,6 +307,13 @@ export async function publish(
 
   const groupIds = [`outbox:${event.pubkey}`, "fallback-relays"];
   if (extraGroupIds) groupIds.push(...extraGroupIds);
+
+  // Automatically include "git-index" for kinds it accepts, deduplicating
+  // in case the caller already added it explicitly.
+  if (GIT_INDEX_KINDS.has(event.kind) && !groupIds.includes("git-index")) {
+    groupIds.push("git-index");
+  }
+
   await outboxStore.publish(event, groupIds);
 }
 

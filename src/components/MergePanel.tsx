@@ -86,8 +86,7 @@ import { StatusChangeBlueprint, STATUS_KIND_MAP } from "@/blueprints/status";
 import type { CommitPerson } from "@/lib/git-objects";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
-import { repoCoordinate } from "@/lib/nip34";
-import type { ResolvedPR, ResolvedRepo } from "@/lib/nip34";
+import type { ResolvedRepo, ResolvedPR } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -457,18 +456,17 @@ export function MergePanel({
 
       const signedStatus = await account.signer.signEvent(statusTemplate);
 
-      const repoCoord = repoCoordinate(repo.selectedMaintainer, repo.dTag);
       await outboxStore.publish(signedStatus, [
         `outbox:${account.pubkey}`,
-        repoCoord,
-        "git-index",
+        ...repo.allCoordinates,
+        ...(pr.pubkey !== account.pubkey ? [`inbox:${pr.pubkey}`] : []),
       ]);
       eventStore.add(signedStatus);
 
       setMergeStep("broadcasting-state");
       await outboxStore.publish(signedState, [
-        repoCoord,
-        "git-index",
+        `outbox:${account.pubkey}`,
+        ...repo.allCoordinates,
         "fallback-relays",
       ]);
 
@@ -576,18 +574,17 @@ export function MergePanel({
 
       const signedStatus = await account.signer.signEvent(statusTemplate);
 
-      const repoCoord = repoCoordinate(repo.selectedMaintainer, repo.dTag);
       await outboxStore.publish(signedStatus, [
         `outbox:${account.pubkey}`,
-        repoCoord,
-        "git-index",
+        ...repo.allCoordinates,
+        ...(pr.pubkey !== account.pubkey ? [`inbox:${pr.pubkey}`] : []),
       ]);
       eventStore.add(signedStatus);
 
       setMergeStep("broadcasting-state");
       await outboxStore.publish(signedState, [
-        repoCoord,
-        "git-index",
+        `outbox:${account.pubkey}`,
+        ...repo.allCoordinates,
         "fallback-relays",
       ]);
 
@@ -685,18 +682,17 @@ export function MergePanel({
 
       const signedStatus = await account.signer.signEvent(statusTemplate);
 
-      const repoCoord = repoCoordinate(repo.selectedMaintainer, repo.dTag);
       await outboxStore.publish(signedStatus, [
         `outbox:${account.pubkey}`,
-        repoCoord,
-        "git-index",
+        ...repo.allCoordinates,
+        ...(pr.pubkey !== account.pubkey ? [`inbox:${pr.pubkey}`] : []),
       ]);
       eventStore.add(signedStatus);
 
       setMergeStep("broadcasting-state");
       await outboxStore.publish(signedState, [
-        repoCoord,
-        "git-index",
+        `outbox:${account.pubkey}`,
+        ...repo.allCoordinates,
         "fallback-relays",
       ]);
 
