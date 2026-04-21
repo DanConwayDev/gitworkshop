@@ -1,5 +1,5 @@
 /**
- * NIP-34 Actions — CreateIssue, ChangeIssueStatus, RenameIssueSubject, CreateComment.
+ * NIP-34 Actions — CreateIssue, ChangeIssueStatus, RenameIssueSubject, CreateComment, DeleteEvent.
  *
  * Relay strategy — callers declare intent via group ID strings; the outbox
  * store resolves them to relay URLs via its relayGroupResolver:
@@ -8,6 +8,9 @@
  *   - "30617:<pubkey>:<d>"     → repo's declared relays (one per coord)
  *   - "inbox:<notifyPubkey>"   → notification recipient's NIP-65 read relays
  *                                (resolved lazily; retried when kind:10002 arrives)
+ *
+ * Deletion requests (kind:5) mirror the relay groups of the original event:
+ * outbox + repo relays + inbox of any p/P-tagged pubkeys on the deleted events.
  *
  * The git index (wss://index.ngit.dev) is intentionally NOT a publish target —
  * it syncs from other relays and should not receive direct publishes.
@@ -345,9 +348,13 @@ export function CreateCoverNote(
  * Send a NIP-09 deletion request (kind:5) for one or more events.
  *
  * The deletion request is published to the same relay groups as the original
- * event so relays that hold the event receive the request.
- *
- * Publishes to: user outbox + repo relays. No notification needed.
+ * event was published to, so every relay holding the event receives the request:
+ *   - user outbox (always)
+ *   - repo relays (when repoCoords are provided)
+ *   - inbox relays of any pubkeys tagged in the original events — these are
+ *     the same notification targets that received the event, derived from the
+ *     p/P tags on the events being deleted (e.g. root author on comments,
+ *     target author on reactions, item author + repo owners on status changes).
  *
  * @param events     - The event(s) to request deletion of (must be authored by self)
  * @param repoCoords - Repo coordinate strings for relay group keying
@@ -374,9 +381,23 @@ export function DeleteEvent(
     // Add to local store immediately so the UI can react
     eventStore.add(signed);
 
+    // Derive notification pubkeys from the events being deleted.
+    // The original publish sent to inbox:<pubkey> for every p/P tag on the
+    // event (e.g. root author on comments, target author on reactions, item
+    // author + repo owners on status changes). We must reach those same relays
+    // with the deletion request.
+    const notifyPubkeys = new Set<string>();
+    for (const ev of events) {
+      for (const [t, pk] of ev.tags) {
+        if ((t === "p" || t === "P") && pk && pk !== self) {
+          notifyPubkeys.add(pk);
+        }
+      }
+    }
+
     // Fire-and-forget: publishing to the outbox can continue in the background.
     outboxStore
-      .publish(signed, buildGroupIds(self, repoCoords))
+      .publish(signed, buildGroupIds(self, repoCoords, [...notifyPubkeys]))
       .catch(console.error);
   };
 }
