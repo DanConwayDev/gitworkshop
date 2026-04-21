@@ -79,6 +79,7 @@ import {
   getOrCreateNotificationSigner,
   evictNotificationSigner,
 } from "./notificationSync";
+import { BACKOFF_RECONNECT } from "@/lib/relay";
 
 // ---------------------------------------------------------------------------
 // localStorage helpers
@@ -233,7 +234,7 @@ export function acquireNotificationStore(
       switchMap((relays) =>
         pool
           .subscription(relays, badgeFilters, {
-            reconnect: Infinity,
+            reconnect: BACKOFF_RECONNECT,
             resubscribe: Infinity,
           })
           .pipe(onlyEvents(), mapEventsToStore(eventStore)),
@@ -338,7 +339,7 @@ export function acquireNotificationStore(
       switchMap((relays) =>
         pool
           .subscription(relays, [ownRepoFilter], {
-            reconnect: Infinity,
+            reconnect: BACKOFF_RECONNECT,
             resubscribe: Infinity,
           })
           .pipe(onlyEvents(), mapEventsToStore(eventStore)),
@@ -419,7 +420,7 @@ export function acquireNotificationStore(
         const subs = [
           pool
             .subscription(repoRelays, [starFilter], {
-              reconnect: Infinity,
+              reconnect: BACKOFF_RECONNECT,
               resubscribe: Infinity,
             })
             .pipe(onlyEvents(), mapEventsToStore(eventStore)),
@@ -431,7 +432,7 @@ export function acquireNotificationStore(
           subs.push(
             pool
               .subscription(extraRepoRelays, badgeFilters, {
-                reconnect: Infinity,
+                reconnect: BACKOFF_RECONNECT,
                 resubscribe: Infinity,
               })
               .pipe(onlyEvents(), mapEventsToStore(eventStore)),

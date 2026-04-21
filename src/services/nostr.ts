@@ -37,6 +37,7 @@ import {
   type PaginatedTagValueResponse,
 } from "@/lib/tagValuePaginatedLoader";
 import { withGapFill } from "@/lib/withGapFill";
+import { BACKOFF_RECONNECT } from "@/lib/relay";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
 
 /**
@@ -662,7 +663,7 @@ export function nip34RepoLoader(
       relayGroup.subscription(
         [{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter],
         {
-          reconnect: Infinity,
+          reconnect: BACKOFF_RECONNECT,
           resubscribe: Infinity,
         },
       ),
@@ -700,7 +701,7 @@ export function nip34RepoLoader(
     ];
     const repoMetaSub = withGapFill(
       relayGroup.subscription(repoMetaFilters, {
-        reconnect: Infinity,
+        reconnect: BACKOFF_RECONNECT,
         resubscribe: Infinity,
       }),
       pool,

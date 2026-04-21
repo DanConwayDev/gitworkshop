@@ -10,7 +10,8 @@
  *   - All pointers in a window are merged into one filter per relay URL
  *
  * Per relay, for each batch window:
- *   1. A single pool.subscription() is opened (no limit, reconnect: Infinity).
+ *   1. A single pool.subscription() is opened (no limit, reconnect: false +
+ *      defer() + retry() for lastReceivedAt-aware reconnect).
  *      This serves as both the live feed and the initial depth probe.
  *   2. Events arriving before EOSE are counted and the oldest timestamp tracked.
  *   3. After EOSE:
@@ -19,9 +20,9 @@
  *        is kicked off using loadBlocksFromRelay, starting from the oldest
  *        event seen, until the relay returns 0 events.
  *   4. The live subscription stays open throughout and after pagination,
- *      reconnecting automatically on disconnect (reconnect: Infinity).
- *      On reconnect the relay replays recent history; eoseSeen remains true
- *      so pagination is not re-triggered.
+ *      reconnecting automatically via defer() + retry() with backoff.
+ *      On reconnect, since: lastReceivedAt avoids replaying full history;
+ *      eoseSeen remains true so pagination is not re-triggered.
  *
  * Pagination modes:
  *   - Auto (default): pagination is triggered automatically after EOSE if the
@@ -441,7 +442,7 @@ function processBatch(
  * the EOSE signal is not needed.
  *
  * - Batches pointers by bufferTime/bufferSize (same as createTagValueLoader)
- * - Opens a live subscription per relay (reconnect: Infinity)
+ * - Opens a live subscription per relay (reconnect: false + defer/retry backoff)
  * - Paginates backward per relay until exhausted
  * - Skips already-exhausted relay+batch combos on subsequent calls
  * - Emits "EOSE" settleTime ms after the first relay finishes its current work

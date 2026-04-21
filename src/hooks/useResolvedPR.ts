@@ -23,6 +23,7 @@ import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { withGapFill } from "@/lib/withGapFill";
 import { pool } from "@/services/nostr";
+import { BACKOFF_RECONNECT } from "@/lib/relay";
 import {
   useNip34ItemDetailLoader,
   useNip34ItemLoaderBatch,
@@ -89,7 +90,7 @@ export function useResolvedPR(
     if (repoRelayGroup) {
       return withGapFill(
         repoRelayGroup.subscription([filter], {
-          reconnect: Infinity,
+          reconnect: BACKOFF_RECONNECT,
           resubscribe: Infinity,
         }),
         pool,
@@ -107,7 +108,7 @@ export function useResolvedPR(
     if (repoRelayGroup) {
       return withGapFill(
         repoRelayGroup.subscription([filter], {
-          reconnect: Infinity,
+          reconnect: BACKOFF_RECONNECT,
           resubscribe: Infinity,
         }),
         pool,

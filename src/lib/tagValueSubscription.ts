@@ -37,6 +37,7 @@ import type { RelayPool, SubscriptionOptions } from "applesauce-relay";
 import { onlyEvents } from "applesauce-relay";
 import { mapEventsToStore } from "applesauce-core";
 import type { EventStore } from "applesauce-core";
+import { BACKOFF_RECONNECT } from "@/lib/relay";
 
 export type TagValuePointer = {
   /** The tag value to subscribe to (e.g. an event ID) */
@@ -128,7 +129,7 @@ export function createTagValueSubscription(
   const bufferMax = opts.bufferSize ?? 200;
 
   const subOpts: SubscriptionOptions = {
-    reconnect: Infinity,
+    reconnect: BACKOFF_RECONNECT,
     resubscribe: Infinity,
   };
 
