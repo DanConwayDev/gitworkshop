@@ -39,11 +39,13 @@ import {
   buildNotificationLink,
 } from "@/lib/notificationUtils";
 import { eventIdToNevent } from "@/lib/routeUtils";
+import { StatusIcon } from "@/components/StatusIcon";
 import type { NotificationActions } from "@/hooks/useNotifications";
 import type {
   NotificationItem,
   SocialNotificationItem,
 } from "@/lib/notifications";
+import type { ResolvedIssueLite } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
 // ViewTab — only relevant for the full layout's action buttons
@@ -116,16 +118,19 @@ function ThreadNotificationRow({
   actions,
   compact,
   currentView,
+  resolvedMap,
 }: {
   item: NotificationItem;
   actions: NotificationActions;
   compact: boolean;
   currentView: ViewTab;
+  resolvedMap?: Map<string, ResolvedIssueLite>;
 }) {
   const rootEvent = useRootEvent(item.rootId);
 
+  const resolved = resolvedMap?.get(item.rootId);
   const rootType = inferRootType(item);
-  const title = resolveTitle(rootEvent, item);
+  const title = resolved?.currentSubject ?? resolveTitle(rootEvent, item);
   const repoCoord = resolveRepoCoord(rootEvent, item);
   const summary = buildNotificationSummary(item);
   const nevent = eventIdToNevent(item.rootId);
@@ -160,9 +165,23 @@ function ThreadNotificationRow({
             )}
           </div>
 
-          {/* Type icon */}
+          {/* Type / status icon */}
           <div className="pt-0.5 shrink-0">
-            <RootTypeIcon type={rootType} compact={compact} />
+            {resolved ? (
+              <StatusIcon
+                status={resolved.status}
+                variant={
+                  rootType === "patch"
+                    ? "patch"
+                    : rootType === "pr"
+                      ? "pr"
+                      : "issue"
+                }
+                className={compact ? "h-3.5 w-3.5" : "h-4 w-4"}
+              />
+            ) : (
+              <RootTypeIcon type={rootType} compact={compact} />
+            )}
           </div>
 
           {/* Title + metadata */}
@@ -445,11 +464,13 @@ export function NotificationRow({
   actions,
   compact = false,
   currentView = "inbox",
+  resolvedMap,
 }: {
   item: NotificationItem;
   actions: NotificationActions;
   compact?: boolean;
   currentView?: ViewTab;
+  resolvedMap?: Map<string, ResolvedIssueLite>;
 }) {
   // Always call hooks unconditionally — React rules of hooks.
   // useRootEvent is called inside ThreadNotificationRow, but we need to
@@ -471,6 +492,7 @@ export function NotificationRow({
       actions={actions}
       compact={compact}
       currentView={currentView}
+      resolvedMap={resolvedMap}
     />
   );
 }

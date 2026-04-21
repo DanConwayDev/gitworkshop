@@ -22,6 +22,7 @@ import {
   NotificationSkeleton,
   type ViewTab,
 } from "@/components/NotificationRow";
+import { useNotificationPageEssentials } from "@/hooks/useNotificationPageEssentials";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -64,6 +65,8 @@ export default function NotificationsPage() {
     (safePage - 1) * ITEMS_PER_PAGE,
     safePage * ITEMS_PER_PAGE,
   );
+
+  const resolvedMap = useNotificationPageEssentials(pageItems ?? []);
 
   // Reset page when switching tabs
   const handleTabChange = useCallback((tab: ViewTab) => {
@@ -189,6 +192,7 @@ export default function NotificationsPage() {
                 item={item}
                 actions={actions}
                 currentView={currentView}
+                resolvedMap={resolvedMap}
               />
             ))}
           </ul>
