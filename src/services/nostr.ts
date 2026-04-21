@@ -15,16 +15,22 @@ import type { NostrEvent } from "nostr-tools";
 import { verifyEvent } from "nostr-tools";
 import {
   Observable,
+  Subscription,
   merge,
   distinctUntilChanged,
   firstValueFrom,
   of,
 } from "rxjs";
-import { filter, map, timeout } from "rxjs/operators";
+import { filter, map, take, timeout } from "rxjs/operators";
 import { MailboxesModel } from "applesauce-core/models";
 import { cacheRequest, saveEvents } from "./cache";
 import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
-import { fallbackRelays, lookupRelays, gitIndexRelays } from "./settings";
+import {
+  fallbackRelays,
+  lookupRelays,
+  gitIndexRelays,
+  relayCurationMode,
+} from "./settings";
 import {
   ISSUE_KIND,
   PR_ROOT_KINDS,
@@ -633,6 +639,13 @@ export function nip34ListLoader(
 }
 
 /**
+ * Max inbox relay URLs to query per item author when resolveAuthorInbox is
+ * enabled. Keeps the relay connection count bounded even for authors with many
+ * read relays declared in their kind:10002.
+ */
+const MAX_AUTHOR_INBOX_RELAYS = 3;
+
+/**
  * Supplemental relay loader for outbox/uncensored mode.
  *
  * Mirrors nip34RepoLoader but targets the extra maintainer mailbox relay group
@@ -652,12 +665,40 @@ export function nip34SupplementalRelayLoader(
   coords: string[],
   relayGroup: RelayGroup,
 ): Observable<NostrEvent> {
+  const resolveAuthorInbox = relayCurationMode.getValue() === "outbox";
+
   return new Observable<NostrEvent>((subscriber) => {
     const seenIds = new Set<string>();
     const knownRelayUrls = new Set<string>();
+    // Aggregates all per-item inbox subscriptions for cleanup on teardown.
+    const inboxSubs = new Subscription();
 
     function fireLoaders(id: string, relays: string[]): void {
       nip34ListLoader(id, relays).subscribe(subscriber);
+    }
+
+    // When in outbox mode, reactively fetch the root event author's NIP-65
+    // inbox relays and query essentials from any not already covered by the
+    // relay group. Seeding perItemQueried with knownRelayUrls prevents
+    // double-querying when an inbox relay overlaps with a group relay.
+    function fireAuthorInboxLoaders(ev: NostrEvent): void {
+      const perItemQueried = new Set(knownRelayUrls);
+      addressLoader({ kind: 10002, pubkey: ev.pubkey }).subscribe();
+      const s = eventStore
+        .model(MailboxesModel, ev.pubkey)
+        .pipe(
+          filter((m): m is NonNullable<typeof m> => m !== undefined),
+          take(1),
+        )
+        .subscribe((mailboxes) => {
+          const newRelays = mailboxes.inboxes
+            .slice(0, MAX_AUTHOR_INBOX_RELAYS)
+            .filter((r) => !perItemQueried.has(r));
+          if (newRelays.length === 0) return;
+          for (const r of newRelays) perItemQueried.add(r);
+          nip34ListLoader(ev.id, newRelays).subscribe(subscriber);
+        });
+      inboxSubs.add(s);
     }
 
     const relays$ = (relayGroup as unknown as { relays$: Observable<IRelay[]> })
@@ -699,6 +740,7 @@ export function nip34SupplementalRelayLoader(
           if (!seenIds.has(ev.id)) {
             seenIds.add(ev.id);
             fireLoaders(ev.id, [...knownRelayUrls]);
+            if (resolveAuthorInbox) fireAuthorInboxLoaders(ev);
           }
         },
         error: (err) => subscriber.error(err),
@@ -708,6 +750,7 @@ export function nip34SupplementalRelayLoader(
     return () => {
       relaySub.unsubscribe();
       itemSub.unsubscribe();
+      inboxSubs.unsubscribe();
     };
   });
 }
@@ -737,16 +780,44 @@ export function nip34RepoLoader(
   coords: string[],
   relayGroup: RelayGroup,
 ): Observable<NostrEvent> {
+  const resolveAuthorInbox = relayCurationMode.getValue() === "outbox";
+
   return new Observable<NostrEvent>((subscriber) => {
     const seenIds = new Set<string>();
     // Track relay URLs we have already fired loaders against so we can detect
     // genuinely new relays when the group grows.
     const knownRelayUrls = new Set<string>();
+    // Aggregates all per-item inbox subscriptions for cleanup on teardown.
+    const inboxSubs = new Subscription();
 
     // Fire nip34ListLoader for a single item against a specific set of relays.
     // Inline so it can close over subscriber and seenIds.
     function fireLoaders(id: string, relays: string[]): void {
       nip34ListLoader(id, relays).subscribe(subscriber);
+    }
+
+    // When in outbox mode, reactively fetch the root event author's NIP-65
+    // inbox relays and query essentials from any not already covered by the
+    // relay group. Seeding perItemQueried with knownRelayUrls prevents
+    // double-querying when an inbox relay overlaps with a group relay.
+    function fireAuthorInboxLoaders(ev: NostrEvent): void {
+      const perItemQueried = new Set(knownRelayUrls);
+      addressLoader({ kind: 10002, pubkey: ev.pubkey }).subscribe();
+      const s = eventStore
+        .model(MailboxesModel, ev.pubkey)
+        .pipe(
+          filter((m): m is NonNullable<typeof m> => m !== undefined),
+          take(1),
+        )
+        .subscribe((mailboxes) => {
+          const newRelays = mailboxes.inboxes
+            .slice(0, MAX_AUTHOR_INBOX_RELAYS)
+            .filter((r) => !perItemQueried.has(r));
+          if (newRelays.length === 0) return;
+          for (const r of newRelays) perItemQueried.add(r);
+          nip34ListLoader(ev.id, newRelays).subscribe(subscriber);
+        });
+      inboxSubs.add(s);
     }
 
     // Subscribe to RelayGroup relay list changes. relays$ is protected in TS
@@ -807,6 +878,7 @@ export function nip34RepoLoader(
             // populated by the relaySub above (relays$ is a BehaviorSubject
             // so relaySub fires synchronously before itemSub can emit).
             fireLoaders(ev.id, [...knownRelayUrls]);
+            if (resolveAuthorInbox) fireAuthorInboxLoaders(ev);
           }
         },
         error: (err) => subscriber.error(err),
@@ -843,6 +915,7 @@ export function nip34RepoLoader(
       relaySub.unsubscribe();
       itemSub.unsubscribe();
       repoMetaSub.unsubscribe();
+      inboxSubs.unsubscribe();
     };
   });
 }
