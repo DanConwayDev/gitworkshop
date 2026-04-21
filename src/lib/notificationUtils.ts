@@ -12,6 +12,7 @@ import {
   PATCH_KIND,
   PR_KIND,
   COMMENT_KIND,
+  COVER_NOTE_KIND,
   STATUS_RESOLVED,
   STATUS_CLOSED,
   STATUS_OPEN,
@@ -156,6 +157,7 @@ export function buildNotificationSummary(
   const unreadEvents = item.events.filter((ev) => unreadIdSet.has(ev.id));
 
   let commentCount = 0;
+  let coverNoteCount = 0;
   let merged = false;
   let closed = false;
   let reopened = false;
@@ -163,7 +165,9 @@ export function buildNotificationSummary(
   let newRevision = false;
 
   for (const ev of unreadEvents) {
-    if (ev.kind === COMMENT_KIND || ev.kind === 1 || ev.kind === 1622) {
+    if (ev.kind === COVER_NOTE_KIND) {
+      coverNoteCount++;
+    } else if (ev.kind === COMMENT_KIND || ev.kind === 1 || ev.kind === 1622) {
       commentCount++;
     } else if (ev.kind === STATUS_RESOLVED) {
       merged = true;
@@ -189,6 +193,11 @@ export function buildNotificationSummary(
   if (commentCount > 0) {
     parts.push(
       `${commentCount} new ${commentCount === 1 ? "comment" : "comments"}`,
+    );
+  }
+  if (coverNoteCount > 0) {
+    parts.push(
+      `${coverNoteCount} cover ${coverNoteCount === 1 ? "note" : "notes"} updated`,
     );
   }
 

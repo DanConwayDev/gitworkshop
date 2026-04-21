@@ -6,9 +6,9 @@
  * Thread notifications — activity on issues/PRs/patches:
  *   1. NIP-22 comments (kind:1111) on issues/PRs/patches authored by us
  *      (uppercase #P tag + #K filter for NIP-34 root kinds)
- *   2. New issues/PRs/patches/PR-updates/status-changes that tag us via #p
- *      (someone filed an issue on our repo, pushed a PR update, closed an
- *      issue we authored, etc.)
+ *   2. New issues/PRs/patches/PR-updates/status-changes/cover-notes that tag
+ *      us via #p (someone filed an issue on our repo, pushed a PR update,
+ *      closed an issue we authored, posted a cover note on our item, etc.)
  *   3. Legacy NIP-34 replies (kind:1622) that tag us via #p
  *
  * Social notifications — repo stars:
@@ -36,6 +36,7 @@ import {
   PR_KIND,
   PR_UPDATE_KIND,
   COMMENT_KIND,
+  COVER_NOTE_KIND,
   LEGACY_REPLY_KIND,
   STATUS_KINDS,
   REPO_KIND,
@@ -176,6 +177,7 @@ export function buildNotificationBadgeFilters(pubkey: string): Filter[] {
         PR_KIND,
         PATCH_KIND,
         PR_UPDATE_KIND,
+        COVER_NOTE_KIND,
         ...STATUS_KINDS,
         LEGACY_REPLY_KIND,
       ],
@@ -191,10 +193,10 @@ export function buildNotificationBadgeFilters(pubkey: string): Filter[] {
  * Two filters:
  *   1. NIP-22 comments on NIP-34 root events authored by us (#P + #K)
  *   2. Events that tag us directly (#p) — new issues, PRs, patches,
- *      PR updates (kind:1619), status changes (kinds:1630–1633), and
- *      kind:1622 legacy NIP-34 replies. Kind:1 generic text notes are
- *      intentionally excluded — they are not git-related and would flood
- *      notifications with unrelated Nostr mentions.
+ *      PR updates (kind:1619), status changes (kinds:1630–1633), cover notes
+ *      (kind:1624), and kind:1622 legacy NIP-34 replies. Kind:1 generic text
+ *      notes are intentionally excluded — they are not git-related and would
+ *      flood notifications with unrelated Nostr mentions.
  *
  * @param pubkey - The user's pubkey
  * @param since  - If provided, only fetch events after this Unix timestamp
@@ -228,6 +230,7 @@ export function buildNotificationFilters(
         PR_KIND,
         PATCH_KIND,
         PR_UPDATE_KIND,
+        COVER_NOTE_KIND,
         ...STATUS_KINDS,
         LEGACY_REPLY_KIND,
       ],
