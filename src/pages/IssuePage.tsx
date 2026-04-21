@@ -191,6 +191,7 @@ export default function IssuePage() {
                   currentSubject={issue.currentSubject || issue.originalSubject}
                   canEdit={canEdit}
                   repoCoords={issue.repoCoords}
+                  issueAuthorPubkey={issue.pubkey}
                 />
               </div>
 
@@ -441,6 +442,7 @@ export default function IssuePage() {
                         currentLabels={issue.labels}
                         canEdit={canEdit && issue.status !== "deleted"}
                         labelEventMap={labelEventMap}
+                        issueAuthorPubkey={issue.pubkey}
                       />
                     </>
                   )}

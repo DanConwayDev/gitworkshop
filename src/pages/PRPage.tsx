@@ -723,6 +723,7 @@ export default function PRPage() {
                     currentSubject={pr.currentSubject || pr.originalSubject}
                     canEdit={canEdit}
                     repoCoords={pr.repoCoords}
+                    issueAuthorPubkey={pr.pubkey}
                   />
                 </div>
 
@@ -1268,6 +1269,7 @@ export default function PRPage() {
                         currentLabels={pr.labels}
                         canEdit={canEdit && pr.status !== "deleted"}
                         labelEventMap={labelEventMap}
+                        issueAuthorPubkey={pr.pubkey}
                       />
                     </>
                   )}

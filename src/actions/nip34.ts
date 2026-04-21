@@ -139,12 +139,13 @@ export function ChangeIssueStatus(
 /**
  * Rename a NIP-34 issue subject via a NIP-32 label event (kind:1985).
  *
- * Publishes to: user outbox + repo relays. No notification needed.
+ * Publishes to: user outbox + repo relays + item author's inbox (deferred).
  */
 export function RenameIssueSubject(
   issueId: string,
   newSubject: string,
   repoCoords?: string[],
+  issueAuthorPubkey?: string,
 ): Action {
   return async ({ factory, sign, self }) => {
     const draft = await factory.create(
@@ -158,9 +159,13 @@ export function RenameIssueSubject(
     // without waiting for a relay round-trip.
     eventStore.add(signed);
 
+    const notifyPubkeys =
+      issueAuthorPubkey && issueAuthorPubkey !== self
+        ? [issueAuthorPubkey]
+        : [];
     // Fire-and-forget: publishing to the outbox can continue in the background.
     outboxStore
-      .publish(signed, buildGroupIds(self, repoCoords))
+      .publish(signed, buildGroupIds(self, repoCoords, notifyPubkeys))
       .catch(console.error);
   };
 }
@@ -168,12 +173,13 @@ export function RenameIssueSubject(
 /**
  * Attach labels to a NIP-34 issue via a NIP-32 label event (kind:1985).
  *
- * Publishes to: user outbox + repo relays. No notification needed.
+ * Publishes to: user outbox + repo relays + item author's inbox (deferred).
  */
 export function AttachIssueLabels(
   issueId: string,
   labels: string[],
   repoCoords?: string[],
+  issueAuthorPubkey?: string,
 ): Action {
   return async ({ factory, sign, self }) => {
     const draft = await factory.create(IssueLabelBlueprint, issueId, labels);
@@ -183,9 +189,13 @@ export function AttachIssueLabels(
     // UI without waiting for a relay round-trip.
     eventStore.add(signed);
 
+    const notifyPubkeys =
+      issueAuthorPubkey && issueAuthorPubkey !== self
+        ? [issueAuthorPubkey]
+        : [];
     // Fire-and-forget: publishing to the outbox can continue in the background.
     outboxStore
-      .publish(signed, buildGroupIds(self, repoCoords))
+      .publish(signed, buildGroupIds(self, repoCoords, notifyPubkeys))
       .catch(console.error);
   };
 }
@@ -297,7 +307,7 @@ export function CreateComment(
  * A cover note is a pinned note posted by the item author or a maintainer
  * that appears above the first description card on an issue or PR page.
  *
- * Publishes to: user outbox + repo relays. No notification needed.
+ * Publishes to: user outbox + repo relays + item author's inbox (deferred).
  *
  * @param rootEvent  - The root issue / PR / patch event being annotated
  * @param content    - Markdown body of the cover note
@@ -323,9 +333,10 @@ export function CreateCoverNote(
     // waiting for a relay round-trip.
     eventStore.add(signed);
 
+    const notifyPubkeys = rootEvent.pubkey !== self ? [rootEvent.pubkey] : [];
     // Fire-and-forget: publishing to the outbox can continue in the background.
     outboxStore
-      .publish(signed, buildGroupIds(self, repoCoords))
+      .publish(signed, buildGroupIds(self, repoCoords, notifyPubkeys))
       .catch(console.error);
   };
 }

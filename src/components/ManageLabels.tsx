@@ -59,6 +59,8 @@ interface ManageLabelsProps {
    * Only labels where the active account is the event author get a delete button.
    */
   labelEventMap?: Map<string, LabelEventEntry>;
+  /** Author pubkey of the issue/PR — used to send an inbox notification. */
+  issueAuthorPubkey?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +121,7 @@ export function ManageLabels({
   currentLabels,
   canEdit,
   labelEventMap,
+  issueAuthorPubkey,
 }: ManageLabelsProps) {
   const { toast } = useToast();
   const activeAccount = useActiveAccount();
@@ -168,7 +171,13 @@ export function ManageLabels({
 
     setIsPending(true);
     try {
-      await runner.run(AttachIssueLabels, itemId, [normalised], repoCoords);
+      await runner.run(
+        AttachIssueLabels,
+        itemId,
+        [normalised],
+        repoCoords,
+        issueAuthorPubkey,
+      );
       setInputValue("");
       inputRef.current?.focus();
     } catch (err) {
@@ -180,7 +189,7 @@ export function ManageLabels({
     } finally {
       setIsPending(false);
     }
-  }, [inputValue, currentLabels, itemId, repoCoords, toast]);
+  }, [inputValue, currentLabels, itemId, repoCoords, issueAuthorPubkey, toast]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -241,7 +250,13 @@ export function ManageLabels({
     try {
       await runner.run(DeleteEvent, [multiEntry.event], repoCoords);
       if (remaining.length > 0) {
-        await runner.run(AttachIssueLabels, itemId, remaining, repoCoords);
+        await runner.run(
+          AttachIssueLabels,
+          itemId,
+          remaining,
+          repoCoords,
+          issueAuthorPubkey,
+        );
       }
     } catch (err) {
       toast({
@@ -255,7 +270,15 @@ export function ManageLabels({
       setMultiEntry(null);
       setMultiLabel("");
     }
-  }, [multiEntry, multiDeleting, multiLabel, repoCoords, itemId, toast]);
+  }, [
+    multiEntry,
+    multiDeleting,
+    multiLabel,
+    repoCoords,
+    itemId,
+    issueAuthorPubkey,
+    toast,
+  ]);
 
   /**
    * Multi-label "remove all":
