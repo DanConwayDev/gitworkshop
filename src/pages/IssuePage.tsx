@@ -34,6 +34,14 @@ export default function IssuePage() {
   const { pubkey, repoId, resolved, issueId, nip05 } = useRepoContext();
   const repo = resolved?.repo;
 
+  // All confirmed co-maintainer coordinates — gives the full union of relay
+  // groups for publishing. Falls back to the issue's own `a` tag coords if
+  // the resolved repo isn't available yet (shouldn't happen in practice).
+  // Using allCoordinates instead of issue.repoCoords ensures comments, status
+  // changes, labels etc. reach every co-maintainer's relay set, not just the
+  // single maintainer baked into the issue's `a` tag at creation time.
+  const repoAllCoords = repo?.allCoordinates;
+
   // Compute the effective maintainer set.
   const selectedMaintainers = useMemo(
     () => (repo?.maintainerSet ? new Set(repo.maintainerSet) : undefined),
@@ -179,7 +187,7 @@ export default function IssuePage() {
                   canEdit={canEdit && issue.status !== "deleted"}
                   itemId={issue.id}
                   itemAuthorPubkey={issue.pubkey}
-                  repoCoords={issue.repoCoords}
+                  repoCoords={repoAllCoords ?? issue.repoCoords}
                   options={[
                     { value: "open", label: "Open" },
                     { value: "resolved", label: "Resolved" },
@@ -190,7 +198,7 @@ export default function IssuePage() {
                   issueId={issue.id}
                   currentSubject={issue.currentSubject || issue.originalSubject}
                   canEdit={canEdit}
-                  repoCoords={issue.repoCoords}
+                  repoCoords={repoAllCoords ?? issue.repoCoords}
                   issueAuthorPubkey={issue.pubkey}
                 />
               </div>
@@ -242,7 +250,7 @@ export default function IssuePage() {
               {coverNoteEditing && issue ? (
                 <CoverNoteBox
                   rootEvent={issue.rootEvent}
-                  repoCoords={issue.repoCoords}
+                  repoCoords={repoAllCoords ?? issue.repoCoords}
                   initialContent={issue.coverNotes?.[0]?.content ?? ""}
                   onSubmitted={() => setCoverNoteEditing(false)}
                   onCancel={() => setCoverNoteEditing(false)}
@@ -270,7 +278,7 @@ export default function IssuePage() {
               <EventBodyCard
                 event={issue.rootEvent}
                 content={issue.body}
-                repoCoords={issue.repoCoords}
+                repoCoords={repoAllCoords ?? issue.repoCoords}
               />
 
               {/* Thread: comments + subject renames */}
@@ -301,7 +309,7 @@ export default function IssuePage() {
                             event={node.event}
                             oldSubject={node.oldSubject}
                             newSubject={node.newSubject}
-                            repoCoords={issue.repoCoords}
+                            repoCoords={repoAllCoords ?? issue.repoCoords}
                           />
                         );
                       }
@@ -313,7 +321,7 @@ export default function IssuePage() {
                             status={node.status}
                             authorised={node.authorised}
                             variant="issue"
-                            repoCoords={issue.repoCoords}
+                            repoCoords={repoAllCoords ?? issue.repoCoords}
                           />
                         );
                       }
@@ -324,7 +332,7 @@ export default function IssuePage() {
                             event={node.event}
                             labels={node.labels}
                             authorised={node.authorised}
-                            repoCoords={issue.repoCoords}
+                            repoCoords={repoAllCoords ?? issue.repoCoords}
                           />
                         );
                       }
@@ -337,7 +345,7 @@ export default function IssuePage() {
                             activeAccount && issue
                               ? {
                                   rootEvent: issue.rootEvent,
-                                  repoCoords: issue.repoCoords,
+                                  repoCoords: repoAllCoords ?? issue.repoCoords,
                                   priorityPubkeys: mentionPriorityPubkeys,
                                 }
                               : undefined
@@ -372,7 +380,7 @@ export default function IssuePage() {
                       canEdit={canEdit && !!issue && issue.status !== "deleted"}
                       itemId={issue?.id}
                       itemAuthorPubkey={issue?.pubkey}
-                      repoCoords={issue?.repoCoords}
+                      repoCoords={repoAllCoords ?? issue?.repoCoords}
                       options={[
                         { value: "open", label: "Open" },
                         { value: "resolved", label: "Resolved" },
@@ -438,7 +446,7 @@ export default function IssuePage() {
                       <Separator />
                       <ManageLabels
                         itemId={issue.id}
-                        repoCoords={issue.repoCoords}
+                        repoCoords={repoAllCoords ?? issue.repoCoords}
                         currentLabels={issue.labels}
                         canEdit={canEdit && issue.status !== "deleted"}
                         labelEventMap={labelEventMap}

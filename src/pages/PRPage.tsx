@@ -104,6 +104,15 @@ export default function PRPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const repo = resolved?.repo;
+
+  // All confirmed co-maintainer coordinates — gives the full union of relay
+  // groups for publishing. Falls back to the PR's own `a` tag coords if the
+  // resolved repo isn't available yet (shouldn't happen in practice).
+  // Using allCoordinates instead of pr.repoCoords ensures comments, status
+  // changes, labels etc. reach every co-maintainer's relay set, not just the
+  // single maintainer baked into the PR's `a` tag at creation time.
+  const repoAllCoords = repo?.allCoordinates;
+
   const store = useEventStore();
 
   // Compute the effective maintainer set.
@@ -710,7 +719,7 @@ export default function PRPage() {
                     canEdit={canEdit && pr.status !== "deleted"}
                     itemId={pr.rootEvent.id}
                     itemAuthorPubkey={pr.pubkey}
-                    repoCoords={pr.repoCoords}
+                    repoCoords={repoAllCoords ?? pr.repoCoords}
                     options={[
                       { value: "open", label: "Open" },
                       { value: "resolved", label: "Merged" },
@@ -722,7 +731,7 @@ export default function PRPage() {
                     issueId={pr.rootEvent.id}
                     currentSubject={pr.currentSubject || pr.originalSubject}
                     canEdit={canEdit}
-                    repoCoords={pr.repoCoords}
+                    repoCoords={repoAllCoords ?? pr.repoCoords}
                     issueAuthorPubkey={pr.pubkey}
                   />
                 </div>
@@ -794,7 +803,7 @@ export default function PRPage() {
                 {coverNoteEditing && pr ? (
                   <CoverNoteBox
                     rootEvent={pr.rootEvent}
-                    repoCoords={pr.repoCoords}
+                    repoCoords={repoAllCoords ?? pr.repoCoords}
                     initialContent={pr.coverNotes?.[0]?.content ?? ""}
                     onSubmitted={handleCoverNoteSubmitted}
                     onCancel={handleCoverNoteCancel}
@@ -862,7 +871,7 @@ export default function PRPage() {
                   hasCoverLetter={
                     pr.itemType === "patch" && !!pr.hasCoverLetter
                   }
-                  repoCoords={pr.repoCoords}
+                  repoCoords={repoAllCoords ?? pr.repoCoords}
                 />
 
                 {/* Interleaved timeline */}
@@ -949,7 +958,7 @@ export default function PRPage() {
                                 event={node.event}
                                 oldSubject={node.oldSubject}
                                 newSubject={node.newSubject}
-                                repoCoords={pr.repoCoords}
+                                repoCoords={repoAllCoords ?? pr.repoCoords}
                               />
                             );
                           }
@@ -961,7 +970,7 @@ export default function PRPage() {
                                 status={node.status}
                                 authorised={node.authorised}
                                 variant="pr"
-                                repoCoords={pr.repoCoords}
+                                repoCoords={repoAllCoords ?? pr.repoCoords}
                               />
                             );
                           }
@@ -972,7 +981,7 @@ export default function PRPage() {
                                 event={node.event}
                                 labels={node.labels}
                                 authorised={node.authorised}
-                                repoCoords={pr.repoCoords}
+                                repoCoords={repoAllCoords ?? pr.repoCoords}
                               />
                             );
                           }
@@ -985,7 +994,8 @@ export default function PRPage() {
                                 activeAccount && pr
                                   ? {
                                       rootEvent: pr.rootEvent,
-                                      repoCoords: pr.repoCoords,
+                                      repoCoords:
+                                        repoAllCoords ?? pr.repoCoords,
                                       priorityPubkeys: mentionPriorityPubkeys,
                                     }
                                   : undefined
@@ -1162,7 +1172,7 @@ export default function PRPage() {
                       canEdit={canEdit && !!pr && pr.status !== "deleted"}
                       itemId={pr?.rootEvent.id}
                       itemAuthorPubkey={pr?.pubkey}
-                      repoCoords={pr?.repoCoords}
+                      repoCoords={repoAllCoords ?? pr?.repoCoords}
                       options={[
                         { value: "open", label: "Open" },
                         { value: "resolved", label: "Merged" },
@@ -1265,7 +1275,7 @@ export default function PRPage() {
                       <Separator />
                       <ManageLabels
                         itemId={pr.rootEvent.id}
-                        repoCoords={pr.repoCoords}
+                        repoCoords={repoAllCoords ?? pr.repoCoords}
                         currentLabels={pr.labels}
                         canEdit={canEdit && pr.status !== "deleted"}
                         labelEventMap={labelEventMap}
