@@ -16,16 +16,12 @@ import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
 import { useDnsIdentity } from "@/hooks/useDnsIdentity";
 import { useRepositoryState } from "@/hooks/useRepositoryState";
 import { use$ } from "@/hooks/use$";
-import { useEventStore } from "@/hooks/useEventStore";
 import { useProfile } from "@/hooks/useProfile";
 import { useLoadProfile } from "@/hooks/useLoadProfile";
 import { useUserPath } from "@/hooks/useUserPath";
 import { UserAvatar } from "@/components/UserAvatar";
 import { EventSearchStatus } from "@/components/EventSearchStatus";
-import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
-import { withGapFill } from "@/lib/withGapFill";
-import { pool } from "@/services/nostr";
+import { nip34SupplementalRelayLoader } from "@/services/nostr";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,8 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { RepoContext, type RepoContextValue } from "./RepoContext";
-import { PATCH_KIND, PR_KIND, type RepoQueryOptions } from "@/lib/nip34";
-import type { Filter as NostrFilter } from "applesauce-core/helpers";
+import { type RepoQueryOptions } from "@/lib/nip34";
 import { relayCurationMode } from "@/services/settings";
 import { cn } from "@/lib/utils";
 import { StarButton } from "@/components/StarButton";
@@ -169,7 +164,6 @@ function RepoLayoutResolved({
   splat: string;
   nip05?: string;
 }) {
-  const store = useEventStore();
   const { resolved, repoSearch } = useResolvedRepository(
     pubkey,
     repoId,
@@ -199,7 +193,11 @@ function RepoLayoutResolved({
   const curationMode = use$(relayCurationMode);
 
   // In outbox mode, also subscribe to the extra maintainer mailbox relays so
-  // issues and PRs published only to those relays are discovered.
+  // issues and PRs published only to those relays are discovered. Uses
+  // nip34SupplementalRelayLoader which — unlike a plain subscription — also
+  // calls nip34ListLoader for each newly found item, ensuring status events
+  // (1630-1633) and other essentials on author/maintainer outbox relays are
+  // fetched, not just the root events.
   const coordKey = repo?.allCoordinates?.join(",") ?? "";
   use$(() => {
     if (
@@ -208,19 +206,11 @@ function RepoLayoutResolved({
       !repo?.allCoordinates?.length
     )
       return undefined;
-    const filters = [
-      {
-        kinds: [1621, PATCH_KIND, PR_KIND],
-        "#a": repo.allCoordinates,
-      } as NostrFilter,
-    ];
-    return withGapFill(
-      extraRelaysForMaintainerMailboxCoverage.subscription(filters),
-      pool,
-      () => extraRelaysForMaintainerMailboxCoverage.relays.map((r) => r.url),
-      filters,
-    ).pipe(onlyEvents(), mapEventsToStore(store));
-  }, [curationMode, extraRelaysForMaintainerMailboxCoverage, coordKey, store]);
+    return nip34SupplementalRelayLoader(
+      repo.allCoordinates,
+      extraRelaysForMaintainerMailboxCoverage,
+    );
+  }, [curationMode, extraRelaysForMaintainerMailboxCoverage, coordKey]);
 
   const queryOptions: RepoQueryOptions = useMemo(
     () => ({

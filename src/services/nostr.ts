@@ -633,6 +633,86 @@ export function nip34ListLoader(
 }
 
 /**
+ * Supplemental relay loader for outbox/uncensored mode.
+ *
+ * Mirrors nip34RepoLoader but targets the extra maintainer mailbox relay group
+ * (extraRelaysForMaintainerMailboxCoverage). For each newly discovered root
+ * item it calls nip34ListLoader against those extra relay URLs so that status
+ * events (1630-1633), labels (1985), and comments (1111) published only to
+ * maintainer or author outbox relays are also fetched — not just the root
+ * events.
+ *
+ * Does NOT subscribe to meta events (reactions, follow lists) — those are
+ * covered by nip34RepoLoader against the base relay group.
+ *
+ * @param coords     - Sorted array of repo coordinate strings
+ * @param relayGroup - The supplemental RelayGroup (extra maintainer mailboxes)
+ */
+export function nip34SupplementalRelayLoader(
+  coords: string[],
+  relayGroup: RelayGroup,
+): Observable<NostrEvent> {
+  return new Observable<NostrEvent>((subscriber) => {
+    const seenIds = new Set<string>();
+    const knownRelayUrls = new Set<string>();
+
+    function fireLoaders(id: string, relays: string[]): void {
+      nip34ListLoader(id, relays).subscribe(subscriber);
+    }
+
+    const relays$ = (relayGroup as unknown as { relays$: Observable<IRelay[]> })
+      .relays$;
+
+    // When new relays join the group, re-fire existing items' loaders against
+    // those new relays only (createPaginatedTagValueLoader batches them).
+    const relaySub = relays$
+      .pipe(
+        map((relays) => relays.map((r) => r.url)),
+        distinctUntilChanged(
+          (a, b) =>
+            a.length === b.length && a.every((url) => knownRelayUrls.has(url)),
+        ),
+      )
+      .subscribe((currentUrls) => {
+        const newUrls = currentUrls.filter((url) => !knownRelayUrls.has(url));
+        for (const url of newUrls) knownRelayUrls.add(url);
+        if (newUrls.length === 0) return;
+        for (const id of seenIds) {
+          fireLoaders(id, newUrls);
+        }
+      });
+
+    const filters = [{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter];
+    const itemSub = withGapFill(
+      relayGroup.subscription(filters, {
+        reconnect: BACKOFF_RECONNECT,
+        resubscribe: Infinity,
+      }),
+      pool,
+      () => [...knownRelayUrls],
+      filters,
+    )
+      .pipe(onlyEvents(), mapEventsToStore(eventStore))
+      .subscribe({
+        next: (event) => {
+          const ev = event as NostrEvent;
+          if (!seenIds.has(ev.id)) {
+            seenIds.add(ev.id);
+            fireLoaders(ev.id, [...knownRelayUrls]);
+          }
+        },
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+    return () => {
+      relaySub.unsubscribe();
+      itemSub.unsubscribe();
+    };
+  });
+}
+
+/**
  * Repo-level observable factory.
  *
  * Subscribes to all NIP-34 root items (issues + PR/patch roots) for the given
