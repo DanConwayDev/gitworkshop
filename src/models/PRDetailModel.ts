@@ -442,7 +442,7 @@ export function PRDetailModel(
             repoCoords: core.repoCoords,
             commentCount: mergedComments.length,
             participantCount: participantSet.size,
-            zapCount: core.zapCount,
+            zapTotal: core.zapTotal,
             authorisedUsers: core.authorisedUsers,
             deletedEssentialEventIds: core.deletedEssentialEventIds,
 

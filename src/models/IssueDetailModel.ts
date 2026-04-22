@@ -193,7 +193,7 @@ export function IssueDetailModel(
             repoCoords: core.repoCoords,
             commentCount: allComments.length,
             participantCount: participantSet.size,
-            zapCount: core.zapCount,
+            zapTotal: core.zapTotal,
             authorisedUsers: core.authorisedUsers,
             deletedEssentialEventIds: core.deletedEssentialEventIds,
 

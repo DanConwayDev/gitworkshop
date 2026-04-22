@@ -6,6 +6,7 @@ import type { NostrEvent } from "nostr-tools";
 import {
   getNip10References,
   getCommentRootPointer,
+  getZapAmount,
 } from "applesauce-common/helpers";
 import {
   getReplaceableIdentifier,
@@ -704,10 +705,10 @@ export interface ResolvedIssueLite {
    */
   participantCount: number;
   /**
-   * Number of zap receipts (kind:9735). Zero until nip34ThreadItemLoader
-   * has fetched zap events into the store.
+   * Total sats zapped (sum of zap receipt amounts). Zero until
+   * nip34ThreadItemLoader has fetched zap events into the store.
    */
-  zapCount: number;
+  zapTotal: number;
   /**
    * The set of pubkeys authorised to write status, label, and subject-rename
    * events for this issue. Includes the issue author and all maintainers.
@@ -920,7 +921,8 @@ function buildResolvedList(
   for (const ev of zapEvents) {
     const rootId = getNip10References(ev).root?.e?.id;
     if (!rootId) continue;
-    zapsByRoot.set(rootId, (zapsByRoot.get(rootId) ?? 0) + 1);
+    const msats = getZapAmount(ev) ?? 0;
+    zapsByRoot.set(rootId, (zapsByRoot.get(rootId) ?? 0) + msats);
   }
 
   // ── Index PR Update events (kind:1619) for lastActivityAt ────────────────
@@ -998,7 +1000,7 @@ function buildResolvedList(
           .sort(),
         commentCount: comments.length,
         participantCount: participantPubkeys.size,
-        zapCount: zapsByRoot.get(ev.id) ?? 0,
+        zapTotal: Math.floor((zapsByRoot.get(ev.id) ?? 0) / 1000),
         authorisedUsers,
         // List model doesn't fetch deletion events for individual label events —
         // label deletions are only resolved on detail pages.
@@ -1081,8 +1083,8 @@ export interface ResolvedPRLite {
   commentCount: number;
   /** Number of unique commenter pubkeys */
   participantCount: number;
-  /** Number of zap receipts (kind:9735) */
-  zapCount: number;
+  /** Total sats zapped (sum of zap receipt amounts) */
+  zapTotal: number;
   /** Pubkeys authorised to write status/label/rename events */
   authorisedUsers: Set<string>;
   /**
@@ -1241,10 +1243,14 @@ export function resolveItemEssentials(
   });
   const participantPubkeys = new Set(filteredComments.map((c) => c.pubkey));
 
-  const filteredZapCount = zapEvents.filter((ev) => {
-    const zapRootId = getNip10References(ev).root?.e?.id;
-    return zapRootId === rootId;
-  }).length;
+  const filteredZapTotal = Math.floor(
+    zapEvents
+      .filter((ev) => {
+        const zapRootId = getNip10References(ev).root?.e?.id;
+        return zapRootId === rootId;
+      })
+      .reduce((sum, ev) => sum + (getZapAmount(ev) ?? 0), 0) / 1000,
+  );
 
   // ── PR Update activity ────────────────────────────────────────────────
   let latestPRUpdateAt = 0;
@@ -1288,7 +1294,7 @@ export function resolveItemEssentials(
       .sort(),
     commentCount: filteredComments.length,
     participantCount: participantPubkeys.size,
-    zapCount: filteredZapCount,
+    zapTotal: filteredZapTotal,
     authorisedUsers,
     deletedEssentialEventIds,
     subjectRenames: sortedRenames,

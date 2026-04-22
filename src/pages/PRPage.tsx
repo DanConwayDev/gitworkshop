@@ -1230,13 +1230,15 @@ export default function PRPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-sm">
-                      <Zap className="h-4 w-4 text-amber-500" />
-                      <span className="text-muted-foreground">Zaps</span>
-                      <span className="ml-auto font-medium">
-                        {pr?.zapCount ?? 0}
-                      </span>
-                    </div>
+                    {!!pr?.zapTotal && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Zap className="h-4 w-4 text-amber-500" />
+                        <span className="text-muted-foreground">Zaps</span>
+                        <span className="ml-auto font-medium">
+                          {pr.zapTotal} sats
+                        </span>
+                      </div>
+                    )}
 
                     <div className="flex items-center gap-2 text-sm">
                       <Users className="h-4 w-4 text-muted-foreground" />
