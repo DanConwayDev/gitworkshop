@@ -168,18 +168,40 @@ function isBigBatchError(err: unknown): boolean {
   );
 }
 
+/** Initial deepen value — most PRs fit inside this. */
+const INITIAL_COMMIT_DEPTH = 15;
+
 /**
- * Build a sequence of deepen values to try, halving on each retry until 1.
- * e.g. 100 → [100, 50, 25, 12, 6, 3, 1]
+ * Build an ascending sequence of deepen values starting from INITIAL_COMMIT_DEPTH,
+ * doubling each step, capped at maxCommits.
+ * e.g. maxCommits=100 → [15, 30, 60, 100]
+ *      maxCommits=10   → [10]
  */
-function buildDepthSequence(maxCommits: number): number[] {
+function buildAscendingDepths(maxCommits: number): number[] {
   const depths: number[] = [];
-  let d = maxCommits;
-  while (d > 1) {
+  let d = Math.min(INITIAL_COMMIT_DEPTH, maxCommits);
+  while (d < maxCommits) {
+    depths.push(d);
+    d = Math.min(d * 2, maxCommits);
+  }
+  depths.push(maxCommits);
+  // Deduplicate (e.g. when INITIAL_COMMIT_DEPTH === maxCommits)
+  return [...new Set(depths)];
+}
+
+/**
+ * Build a halving sequence from startDepth down to 1.
+ * Used as a last-resort fallback when a BigBatchError fires on the very first
+ * attempt (i.e. no prior successful fetch to fall back on).
+ * e.g. 7 → [7, 3, 1]
+ */
+function buildHalvingDepths(startDepth: number): number[] {
+  const depths: number[] = [];
+  let d = startDepth;
+  while (d > 0) {
     depths.push(d);
     d = Math.floor(d / 2);
   }
-  depths.push(1);
   return depths;
 }
 
@@ -769,11 +791,15 @@ export class GitHttpClient {
     const serverCaps = await this.getServerCaps(url, signal);
     if (signal.aborted) return null;
 
-    // Try progressively smaller batch sizes if the packfile is too large for
-    // the decompressor (BigBatchError). GitHub returns a big packfile for large
-    // deepen values; halving until it fits is cheaper than failing entirely.
-    const depths = buildDepthSequence(maxCommits);
-    for (const depth of depths) {
+    // Start small (INITIAL_COMMIT_DEPTH) and double up to maxCommits so that
+    // the common case (a PR with ≤15 commits) succeeds on the first attempt.
+    // If a BigBatchError fires (packfile too large for the decompressor) we
+    // fall back to the best result we already have, or — if the very first
+    // attempt fails — we try halving below the failed depth.
+    const ascDepths = buildAscendingDepths(maxCommits);
+    let lastSuccess: Commit[] | null = null;
+
+    for (const depth of ascDepths) {
       try {
         const commits = await fetchCommitsOnly(
           effectiveUrl,
@@ -803,16 +829,65 @@ export class GitHttpClient {
             (a.committer?.timestamp ?? a.author.timestamp),
         );
 
-        this.cache.putCommitHistory(commitHash, maxCommits, sorted);
-        return sorted;
+        lastSuccess = sorted;
+
+        // Stop ascending when we've reached the commit-graph root (fewer
+        // commits returned than requested means no more ancestors exist) or
+        // we've hit the caller's maxCommits cap.
+        const hitNaturalEnd = commits.length < depth;
+        const hitCap = depth === maxCommits;
+        if (hitNaturalEnd || hitCap) {
+          this.cache.putCommitHistory(commitHash, maxCommits, sorted);
+          return sorted;
+        }
+        // else: there are more commits; continue to the next larger depth.
       } catch (err) {
         if (signal.aborted) return null;
-        if (isBigBatchError(err) && depth > 1) continue;
+        if (!isBigBatchError(err)) return null;
+
+        // BigBatchError: packfile too large for the decompressor.
+        if (lastSuccess) {
+          // Return the best result obtained at a smaller depth.
+          this.cache.putCommitHistory(commitHash, maxCommits, lastSuccess);
+          return lastSuccess;
+        }
+
+        // No prior success — try halving below the failed depth as a
+        // last resort (very unlikely at depth=15, but handles edge cases).
+        for (const halvedDepth of buildHalvingDepths(Math.floor(depth / 2))) {
+          try {
+            const commits = await fetchCommitsOnly(
+              effectiveUrl,
+              commitHash,
+              halvedDepth,
+              serverCaps,
+              signal,
+            );
+            if (signal.aborted) return null;
+            if (commits.length === 0) return null;
+            for (const commit of commits) this.cache.putCommit(commit);
+            const sorted = [...commits].sort(
+              (a, b) =>
+                (b.committer?.timestamp ?? b.author.timestamp) -
+                (a.committer?.timestamp ?? a.author.timestamp),
+            );
+            this.cache.putCommitHistory(commitHash, maxCommits, sorted);
+            return sorted;
+          } catch (innerErr) {
+            if (signal.aborted) return null;
+            if (isBigBatchError(innerErr) && halvedDepth > 1) continue;
+            return null;
+          }
+        }
         return null;
       }
     }
 
-    return null;
+    // Should not be reached: maxCommits is always the last entry in ascDepths.
+    if (lastSuccess) {
+      this.cache.putCommitHistory(commitHash, maxCommits, lastSuccess);
+    }
+    return lastSuccess;
   }
 
   // -----------------------------------------------------------------------
