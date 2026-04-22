@@ -747,6 +747,13 @@ export class GitHttpClient {
       );
       if (signal.aborted) return null;
 
+      // Return null (not empty array) when the server returned no commits.
+      // An empty packfile is indistinguishable from "server doesn't have this
+      // commit" (e.g. the commit was only pushed to a different remote).
+      // Returning null lets withFallback try the next URL rather than
+      // short-circuiting on the empty-array result.
+      if (commits.length === 0) return null;
+
       // Cache each individual commit
       for (const commit of commits) {
         this.cache.putCommit(commit);
