@@ -215,6 +215,7 @@ export default function PRPage() {
     pr?.itemType === "pr" ? pr?.tip.commitId : undefined,
     100,
     effectiveCloneUrls,
+    effectiveMergeBase ?? undefined,
   );
   const prCommits = useMemo(() => {
     const trimmed = (() => {

@@ -168,42 +168,8 @@ function isBigBatchError(err: unknown): boolean {
   );
 }
 
-/** Initial deepen value — most PRs fit inside this. */
-const INITIAL_COMMIT_DEPTH = 15;
-
-/**
- * Build an ascending sequence of deepen values starting from INITIAL_COMMIT_DEPTH,
- * doubling each step, capped at maxCommits.
- * e.g. maxCommits=100 → [15, 30, 60, 100]
- *      maxCommits=10   → [10]
- */
-function buildAscendingDepths(maxCommits: number): number[] {
-  const depths: number[] = [];
-  let d = Math.min(INITIAL_COMMIT_DEPTH, maxCommits);
-  while (d < maxCommits) {
-    depths.push(d);
-    d = Math.min(d * 2, maxCommits);
-  }
-  depths.push(maxCommits);
-  // Deduplicate (e.g. when INITIAL_COMMIT_DEPTH === maxCommits)
-  return [...new Set(depths)];
-}
-
-/**
- * Build a halving sequence from startDepth down to 1.
- * Used as a last-resort fallback when a BigBatchError fires on the very first
- * attempt (i.e. no prior successful fetch to fall back on).
- * e.g. 7 → [7, 3, 1]
- */
-function buildHalvingDepths(startDepth: number): number[] {
-  const depths: number[] = [];
-  let d = startDepth;
-  while (d > 0) {
-    depths.push(d);
-    d = Math.floor(d / 2);
-  }
-  return depths;
-}
+/** How many commits to request per batch when fetching commit history. */
+const COMMIT_BATCH_SIZE = 15;
 
 // ---------------------------------------------------------------------------
 // README helpers
@@ -782,6 +748,7 @@ export class GitHttpClient {
     commitHash: string,
     maxCommits: number,
     signal: AbortSignal,
+    untilHash?: string,
   ): Promise<Commit[] | null> {
     // Check cache
     const cached = await this.cache.getCommitHistory(commitHash, maxCommits);
@@ -791,103 +758,78 @@ export class GitHttpClient {
     const serverCaps = await this.getServerCaps(url, signal);
     if (signal.aborted) return null;
 
-    // Start small (INITIAL_COMMIT_DEPTH) and double up to maxCommits so that
-    // the common case (a PR with ≤15 commits) succeeds on the first attempt.
-    // If a BigBatchError fires (packfile too large for the decompressor) we
-    // fall back to the best result we already have, or — if the very first
-    // attempt fails — we try halving below the failed depth.
-    const ascDepths = buildAscendingDepths(maxCommits);
-    let lastSuccess: Commit[] | null = null;
+    // Fetch in small batches starting from the tip. Each subsequent batch
+    // starts from the oldest ancestor's first parent, so no commits are
+    // re-downloaded. Stop as soon as we find the merge base (untilHash),
+    // hit a root commit, or reach maxCommits.
+    // On BigBatchError, halve the batch size and retry the same range.
+    const allCommits: Commit[] = [];
+    let nextWant = commitHash;
+    let batchSize = Math.min(COMMIT_BATCH_SIZE, maxCommits);
 
-    for (const depth of ascDepths) {
+    while (allCommits.length < maxCommits) {
+      const remaining = maxCommits - allCommits.length;
+      const thisDepth = Math.min(batchSize, remaining);
+
       try {
         const commits = await fetchCommitsOnly(
           effectiveUrl,
-          commitHash,
-          depth,
+          nextWant,
+          thisDepth,
           serverCaps,
           signal,
         );
         if (signal.aborted) return null;
 
-        // Return null (not empty array) when the server returned no commits.
-        // An empty packfile is indistinguishable from "server doesn't have this
-        // commit" (e.g. the commit was only pushed to a different remote).
-        // Returning null lets withFallback try the next URL rather than
-        // short-circuiting on the empty-array result.
-        if (commits.length === 0) return null;
-
-        // Cache each individual commit
-        for (const commit of commits) {
-          this.cache.putCommit(commit);
+        // Empty response on the first batch means the server doesn't have
+        // this commit — return null so withFallback tries the next URL.
+        if (commits.length === 0) {
+          if (allCommits.length === 0) return null;
+          break;
         }
 
-        // Sort newest first
-        const sorted = [...commits].sort(
-          (a, b) =>
-            (b.committer?.timestamp ?? b.author.timestamp) -
-            (a.committer?.timestamp ?? a.author.timestamp),
+        for (const commit of commits) this.cache.putCommit(commit);
+        allCommits.push(...commits);
+
+        // Stop if we found the merge base.
+        if (untilHash && commits.some((c) => c.hash === untilHash)) break;
+
+        // Find the oldest commit in this batch.
+        const oldest = commits.reduce((a, b) =>
+          (a.committer?.timestamp ?? a.author.timestamp) <
+          (b.committer?.timestamp ?? b.author.timestamp)
+            ? a
+            : b,
         );
 
-        lastSuccess = sorted;
+        // Stop if we hit a root commit or received fewer than requested
+        // (means there are no more ancestors).
+        if (oldest.parents.length === 0 || commits.length < thisDepth) break;
 
-        // Stop ascending when we've reached the commit-graph root (fewer
-        // commits returned than requested means no more ancestors exist) or
-        // we've hit the caller's maxCommits cap.
-        const hitNaturalEnd = commits.length < depth;
-        const hitCap = depth === maxCommits;
-        if (hitNaturalEnd || hitCap) {
-          this.cache.putCommitHistory(commitHash, maxCommits, sorted);
-          return sorted;
-        }
-        // else: there are more commits; continue to the next larger depth.
+        // Next batch starts from the oldest commit's first parent.
+        nextWant = oldest.parents[0];
       } catch (err) {
         if (signal.aborted) return null;
-        if (!isBigBatchError(err)) return null;
-
-        // BigBatchError: packfile too large for the decompressor.
-        if (lastSuccess) {
-          // Return the best result obtained at a smaller depth.
-          this.cache.putCommitHistory(commitHash, maxCommits, lastSuccess);
-          return lastSuccess;
+        if (!isBigBatchError(err)) {
+          if (allCommits.length === 0) return null;
+          break;
         }
-
-        // No prior success — try halving below the failed depth as a
-        // last resort (very unlikely at depth=15, but handles edge cases).
-        for (const halvedDepth of buildHalvingDepths(Math.floor(depth / 2))) {
-          try {
-            const commits = await fetchCommitsOnly(
-              effectiveUrl,
-              commitHash,
-              halvedDepth,
-              serverCaps,
-              signal,
-            );
-            if (signal.aborted) return null;
-            if (commits.length === 0) return null;
-            for (const commit of commits) this.cache.putCommit(commit);
-            const sorted = [...commits].sort(
-              (a, b) =>
-                (b.committer?.timestamp ?? b.author.timestamp) -
-                (a.committer?.timestamp ?? a.author.timestamp),
-            );
-            this.cache.putCommitHistory(commitHash, maxCommits, sorted);
-            return sorted;
-          } catch (innerErr) {
-            if (signal.aborted) return null;
-            if (isBigBatchError(innerErr) && halvedDepth > 1) continue;
-            return null;
-          }
-        }
-        return null;
+        // BigBatchError: halve the batch size and retry the same range.
+        if (batchSize <= 1) break;
+        batchSize = Math.floor(batchSize / 2);
       }
     }
 
-    // Should not be reached: maxCommits is always the last entry in ascDepths.
-    if (lastSuccess) {
-      this.cache.putCommitHistory(commitHash, maxCommits, lastSuccess);
-    }
-    return lastSuccess;
+    if (allCommits.length === 0) return null;
+
+    const sorted = [...allCommits].sort(
+      (a, b) =>
+        (b.committer?.timestamp ?? b.author.timestamp) -
+        (a.committer?.timestamp ?? a.author.timestamp),
+    );
+
+    this.cache.putCommitHistory(commitHash, maxCommits, sorted);
+    return sorted;
   }
 
   // -----------------------------------------------------------------------

@@ -1242,6 +1242,7 @@ export class GitGraspPool {
     maxCommits: number,
     signal: AbortSignal,
     fallbackUrls?: string[],
+    untilHash?: string,
   ): Promise<Commit[] | null> {
     const cached = this.cache.peekCommitHistory(commitHash, maxCommits);
     if (cached) return cached;
@@ -1258,6 +1259,7 @@ export class GitGraspPool {
           commitHash,
           maxCommits,
           signal,
+          untilHash,
         );
         if (result) {
           const tracker = this.urlManager.get(url);

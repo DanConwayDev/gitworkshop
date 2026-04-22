@@ -908,6 +908,7 @@ export function useCommitHistory(
   ref: string | undefined,
   maxCommits: number = 50,
   fallbackUrls?: string[],
+  untilHash?: string,
 ): CommitHistoryState {
   const [state, setState] = useState<CommitHistoryState>(() => {
     // Fast path: check L1 cache synchronously on first render.
@@ -1038,6 +1039,7 @@ export function useCommitHistory(
         maxCommits,
         signal,
         fallbackUrls,
+        untilHash,
       );
       if (signal.aborted) return;
 
@@ -1052,7 +1054,7 @@ export function useCommitHistory(
     void run();
     return () => abort.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pool, ref, maxCommits, hasInfoRefs, fallbackUrls?.join(",")]);
+  }, [pool, ref, maxCommits, hasInfoRefs, fallbackUrls?.join(","), untilHash]);
 
   return state;
 }
