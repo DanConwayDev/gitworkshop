@@ -152,6 +152,38 @@ export function isNonHttpUrl(url: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// BigBatchError detection
+// ---------------------------------------------------------------------------
+
+/**
+ * The git-natural-api packfile decompressor throws a non-exported BigBatchError
+ * when the packfile is too large to decompress in one pass.
+ * Detect it by class name since it is not exported.
+ */
+function isBigBatchError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err.constructor.name === "BigBatchError" ||
+      err.message.includes("decompress too much data"))
+  );
+}
+
+/**
+ * Build a sequence of deepen values to try, halving on each retry until 1.
+ * e.g. 100 → [100, 50, 25, 12, 6, 3, 1]
+ */
+function buildDepthSequence(maxCommits: number): number[] {
+  const depths: number[] = [];
+  let d = maxCommits;
+  while (d > 1) {
+    depths.push(d);
+    d = Math.floor(d / 2);
+  }
+  depths.push(1);
+  return depths;
+}
+
+// ---------------------------------------------------------------------------
 // README helpers
 // ---------------------------------------------------------------------------
 
@@ -737,41 +769,50 @@ export class GitHttpClient {
     const serverCaps = await this.getServerCaps(url, signal);
     if (signal.aborted) return null;
 
-    try {
-      const commits = await fetchCommitsOnly(
-        effectiveUrl,
-        commitHash,
-        maxCommits,
-        serverCaps,
-        signal,
-      );
-      if (signal.aborted) return null;
+    // Try progressively smaller batch sizes if the packfile is too large for
+    // the decompressor (BigBatchError). GitHub returns a big packfile for large
+    // deepen values; halving until it fits is cheaper than failing entirely.
+    const depths = buildDepthSequence(maxCommits);
+    for (const depth of depths) {
+      try {
+        const commits = await fetchCommitsOnly(
+          effectiveUrl,
+          commitHash,
+          depth,
+          serverCaps,
+          signal,
+        );
+        if (signal.aborted) return null;
 
-      // Return null (not empty array) when the server returned no commits.
-      // An empty packfile is indistinguishable from "server doesn't have this
-      // commit" (e.g. the commit was only pushed to a different remote).
-      // Returning null lets withFallback try the next URL rather than
-      // short-circuiting on the empty-array result.
-      if (commits.length === 0) return null;
+        // Return null (not empty array) when the server returned no commits.
+        // An empty packfile is indistinguishable from "server doesn't have this
+        // commit" (e.g. the commit was only pushed to a different remote).
+        // Returning null lets withFallback try the next URL rather than
+        // short-circuiting on the empty-array result.
+        if (commits.length === 0) return null;
 
-      // Cache each individual commit
-      for (const commit of commits) {
-        this.cache.putCommit(commit);
+        // Cache each individual commit
+        for (const commit of commits) {
+          this.cache.putCommit(commit);
+        }
+
+        // Sort newest first
+        const sorted = [...commits].sort(
+          (a, b) =>
+            (b.committer?.timestamp ?? b.author.timestamp) -
+            (a.committer?.timestamp ?? a.author.timestamp),
+        );
+
+        this.cache.putCommitHistory(commitHash, maxCommits, sorted);
+        return sorted;
+      } catch (err) {
+        if (signal.aborted) return null;
+        if (isBigBatchError(err) && depth > 1) continue;
+        return null;
       }
-
-      // Sort newest first
-      const sorted = [...commits].sort(
-        (a, b) =>
-          (b.committer?.timestamp ?? b.author.timestamp) -
-          (a.committer?.timestamp ?? a.author.timestamp),
-      );
-
-      this.cache.putCommitHistory(commitHash, maxCommits, sorted);
-      return sorted;
-    } catch {
-      if (signal.aborted) return null;
-      return null;
     }
+
+    return null;
   }
 
   // -----------------------------------------------------------------------
