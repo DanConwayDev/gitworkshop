@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { IdentityStatus } from "applesauce-loaders/helpers";
+import type { Identity } from "applesauce-loaders/helpers";
 import { dnsIdentityLoader } from "@/services/nostr";
 
 const RESOLVE_TIMEOUT_MS = 5_000;
@@ -14,22 +15,57 @@ export type DnsIdentityState =
       message: string;
     };
 
+/** Convert a cached Identity to a DnsIdentityState. */
+function cachedIdentityToState(cached: Identity): DnsIdentityState {
+  if (cached.status === IdentityStatus.Found) {
+    return {
+      status: "found",
+      pubkey: cached.pubkey,
+      relays: cached.relays ?? [],
+    };
+  } else if (cached.status === IdentityStatus.Missing) {
+    return { status: "not-found" };
+  } else {
+    return { status: "error", reason: "unknown", message: cached.error };
+  }
+}
+
+/**
+ * Parse a standardised NIP-05 address into (name, domain). Returns null for
+ * invalid input.
+ */
+function parseNip05(nip05: string): { name: string; domain: string } | null {
+  const atIdx = nip05.indexOf("@");
+  if (atIdx === -1) return null;
+  return { name: nip05.slice(0, atIdx), domain: nip05.slice(atIdx + 1) };
+}
+
 /**
  * Resolves a NIP-05 address (user@domain.com or _@domain.com) to a pubkey.
  * Uses the global DnsIdentityLoader which caches results for the session.
  * Fails with a "timeout" reason if the lookup takes longer than RESOLVE_TIMEOUT_MS.
+ *
+ * The in-memory cache is checked synchronously during initialisation so that
+ * identities already resolved this session (e.g. via usePrefetchNip05) are
+ * available on the very first render — no loading flash.
  */
 export function useDnsIdentity(nip05: string | undefined): DnsIdentityState {
-  const [state, setState] = useState<DnsIdentityState>({ status: "loading" });
+  const [state, setState] = useState<DnsIdentityState>(() => {
+    // Check the in-memory cache synchronously so components that arrive from
+    // the repositories list (where usePrefetchNip05 has already run) render
+    // the resolved state immediately without a loading flash.
+    if (!nip05) return { status: "loading" };
+    const parsed = parseNip05(nip05);
+    if (!parsed) return { status: "loading" };
+    const cached = dnsIdentityLoader.getIdentity(parsed.name, parsed.domain);
+    return cached ? cachedIdentityToState(cached) : { status: "loading" };
+  });
 
   useEffect(() => {
     if (!nip05) return;
 
-    setState({ status: "loading" });
-
-    // Split standardised "user@domain.com" into name + domain
-    const atIdx = nip05.indexOf("@");
-    if (atIdx === -1) {
+    const parsed = parseNip05(nip05);
+    if (!parsed) {
       setState({
         status: "error",
         reason: "unknown",
@@ -37,25 +73,17 @@ export function useDnsIdentity(nip05: string | undefined): DnsIdentityState {
       });
       return;
     }
-    const name = nip05.slice(0, atIdx);
-    const domain = nip05.slice(atIdx + 1);
+    const { name, domain } = parsed;
 
-    // Check if already cached synchronously
+    // Check in-memory cache first — avoids a loading flash when nip05 changes
+    // but the new identity is already resolved (e.g. back-navigation).
     const cached = dnsIdentityLoader.getIdentity(name, domain);
     if (cached) {
-      if (cached.status === IdentityStatus.Found) {
-        setState({
-          status: "found",
-          pubkey: cached.pubkey,
-          relays: cached.relays ?? [],
-        });
-      } else if (cached.status === IdentityStatus.Missing) {
-        setState({ status: "not-found" });
-      } else {
-        setState({ status: "error", reason: "unknown", message: cached.error });
-      }
+      setState(cachedIdentityToState(cached));
       return;
     }
+
+    setState({ status: "loading" });
 
     let cancelled = false;
 
@@ -66,21 +94,7 @@ export function useDnsIdentity(nip05: string | undefined): DnsIdentityState {
     Promise.race([dnsIdentityLoader.loadIdentity(name, domain), timeoutPromise])
       .then((identity) => {
         if (cancelled) return;
-        if (identity.status === IdentityStatus.Found) {
-          setState({
-            status: "found",
-            pubkey: identity.pubkey,
-            relays: identity.relays ?? [],
-          });
-        } else if (identity.status === IdentityStatus.Missing) {
-          setState({ status: "not-found" });
-        } else {
-          setState({
-            status: "error",
-            reason: "unknown",
-            message: identity.error,
-          });
-        }
+        setState(cachedIdentityToState(identity));
       })
       .catch((err: unknown) => {
         if (cancelled) return;
