@@ -1,15 +1,20 @@
 import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
+import { useProfile } from "@/hooks/useProfile";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RepoAboutPanel } from "@/components/RepoAboutPanel";
 
 export default function RepoAboutPage() {
-  const { resolved } = useRepoContext();
+  const { resolved, pubkey } = useRepoContext();
   const repo = resolved?.repo;
+  const repoOwnerProfile = useProfile(pubkey);
 
   useSeoMeta({
     title: repo ? `${repo.name} - about - ngit` : "About - ngit",
     description: repo?.description ?? "Repository details",
+    ogImage: repoOwnerProfile?.picture ?? "/og-image.svg",
+    ogImageAlt: repo?.name,
+    twitterCard: repoOwnerProfile?.picture ? "summary" : "summary_large_image",
   });
 
   if (!repo) {

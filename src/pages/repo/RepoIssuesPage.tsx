@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { repoToPath, eventIdToNevent } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
+import { useProfile } from "@/hooks/useProfile";
 import { formatDistanceToNow } from "date-fns";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { useRepoContext } from "./RepoContext";
@@ -39,6 +40,7 @@ export default function RepoIssuesPage() {
   const { pubkey, repoId, resolved, issues, nip05 } = useRepoContext();
   const repo = resolved?.repo;
   const account = useActiveAccount();
+  const repoOwnerProfile = useProfile(pubkey);
 
   // New issue dialog
   const [newIssueOpen, setNewIssueOpen] = useState(false);
@@ -131,6 +133,9 @@ export default function RepoIssuesPage() {
   useSeoMeta({
     title: repo ? `Issues - ${repo.name} - ngit` : "Repository Issues - ngit",
     description: repo?.description ?? "Browse issues for this repository",
+    ogImage: repoOwnerProfile?.picture ?? "/og-image.svg",
+    ogImageAlt: repo?.name ?? repoId,
+    twitterCard: repoOwnerProfile?.picture ? "summary" : "summary_large_image",
   });
 
   return (

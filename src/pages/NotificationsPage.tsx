@@ -38,6 +38,10 @@ export default function NotificationsPage() {
         ? `(${unreadCount}) Notifications - ngit`
         : "Notifications - ngit",
     description: "Your notification inbox",
+    ogImage: "/og-image.svg",
+    ogImageWidth: 1200,
+    ogImageHeight: 630,
+    twitterCard: "summary_large_image",
   });
 
   // Filter items by current view

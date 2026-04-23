@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { repoToPath, eventIdToNevent } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
+import { useProfile } from "@/hooks/useProfile";
 import { formatDistanceToNow } from "date-fns";
 import { useRepoContext } from "./RepoContext";
 import { UserAvatar, UserName } from "@/components/UserAvatar";
@@ -33,6 +34,7 @@ const DEFAULT_STATUS_FILTER: IssueStatus[] = ["open", "draft"];
 export default function RepoPRsPage() {
   const { pubkey, repoId, resolved, prs, nip05 } = useRepoContext();
   const repo = resolved?.repo;
+  const repoOwnerProfile = useProfile(pubkey);
 
   // Filters — all multi-select; status defaults to open+draft
   const [statusFilter, setStatusFilter] = useState<IssueStatus[]>(
@@ -128,6 +130,9 @@ export default function RepoPRsPage() {
     title: repo ? `PRs - ${repo.name} - ngit` : "Pull Requests - ngit",
     description:
       repo?.description ?? "Browse pull requests for this repository",
+    ogImage: repoOwnerProfile?.picture ?? "/og-image.svg",
+    ogImageAlt: repo?.name ?? repoId,
+    twitterCard: repoOwnerProfile?.picture ? "summary" : "summary_large_image",
   });
 
   return (

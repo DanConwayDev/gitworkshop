@@ -170,6 +170,9 @@ export default function UserPage({ pubkey }: UserPageProps) {
   useSeoMeta({
     title: profile ? `${displayName} - ngit` : "User Profile - ngit",
     description: profile?.about ?? "Nostr user profile",
+    ogImage: profile?.picture ?? "/og-image.svg",
+    ogImageAlt: displayName,
+    twitterCard: profile?.picture ? "summary" : "summary_large_image",
   });
 
   return (

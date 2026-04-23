@@ -50,6 +50,10 @@ export default function RepositoriesPage({
     description: relayLabel
       ? `Browse git repositories on ${relayLabel}`
       : "Browse git repositories on Nostr",
+    ogImage: "/og-image.svg",
+    ogImageWidth: 1200,
+    ogImageHeight: 630,
+    twitterCard: "summary_large_image",
   });
 
   // IntersectionObserver sentinel for infinite scroll (browse mode only)

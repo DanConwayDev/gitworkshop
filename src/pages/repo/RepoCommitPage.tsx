@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
+import { useProfile } from "@/hooks/useProfile";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import { useGitPool } from "@/hooks/useGitPool";
@@ -9,14 +10,18 @@ import { isNonHttpUrl } from "@/lib/git-grasp-pool";
 import { IncompatibleProtocolError } from "@/components/IncompatibleProtocolError";
 
 export default function RepoCommitPage() {
-  const { cloneUrls, commitId, resolved } = useRepoContext();
+  const { cloneUrls, commitId, resolved, pubkey } = useRepoContext();
   const repo = resolved?.repo;
+  const repoOwnerProfile = useProfile(pubkey);
 
   useSeoMeta({
     title: repo
       ? `${commitId?.slice(0, 8) ?? "Commit"} - ${repo.name} - ngit`
       : "Commit - ngit",
     description: `View commit details${repo ? ` for ${repo.name}` : ""}`,
+    ogImage: repoOwnerProfile?.picture ?? "/og-image.svg",
+    ogImageAlt: repo?.name,
+    twitterCard: repoOwnerProfile?.picture ? "summary" : "summary_large_image",
   });
 
   const basePath = useMemo(() => {

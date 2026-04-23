@@ -64,6 +64,10 @@ export default function About() {
     title: "About — ngit",
     description:
       "About the ngit ecosystem: NIP-34, GRASP, and decentralized git collaboration over Nostr.",
+    ogImage: "/og-image.svg",
+    ogImageWidth: 1200,
+    ogImageHeight: 630,
+    twitterCard: "summary_large_image",
   });
 
   return (

@@ -3,6 +3,7 @@ import type { NostrEvent } from "nostr-tools";
 import { Link } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
+import { useProfile } from "@/hooks/useProfile";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { formatDistanceToNow } from "date-fns";
 import { EditableSubject } from "@/components/EditSubjectInline";
@@ -33,6 +34,7 @@ import { ArrowLeft, MessageCircle, Zap, Users, Clock, Pin } from "lucide-react";
 export default function IssuePage() {
   const { pubkey, repoId, resolved, issueId, nip05 } = useRepoContext();
   const repo = resolved?.repo;
+  const repoOwnerProfile = useProfile(pubkey);
 
   // All confirmed co-maintainer coordinates — gives the full union of relay
   // groups for publishing. Falls back to the issue's own `a` tag coords if
@@ -133,6 +135,9 @@ export default function IssuePage() {
       ? `${issue.currentSubject || issue.originalSubject} - ngit`
       : "Issue - ngit",
     description: issue?.body.slice(0, 160) ?? "Loading issue...",
+    ogImage: repoOwnerProfile?.picture ?? "/og-image.svg",
+    ogImageAlt: repo?.name ?? repoId,
+    twitterCard: repoOwnerProfile?.picture ? "summary" : "summary_large_image",
   });
 
   // ── Not-found / searching / deleted / vanished state ─────────────────────

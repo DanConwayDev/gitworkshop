@@ -10,6 +10,7 @@ import {
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
+import { useProfile } from "@/hooks/useProfile";
 import { useGitPool } from "@/hooks/useGitPool";
 import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
 import { RefSelector } from "@/components/RefSelector";
@@ -67,6 +68,7 @@ export default function RepoCodePage() {
     treeRefAndPath,
     repoId,
     resolved,
+    pubkey,
   } = useRepoContext();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -221,10 +223,15 @@ export default function RepoCodePage() {
     activeExplorer.resolvedPath,
   ]);
 
+  const repoOwnerProfile = useProfile(pubkey);
+
   useSeoMeta({
     title: seoTitle,
     description:
       repo?.description ?? `Browse the source code of ${repo?.name ?? repoId}`,
+    ogImage: repoOwnerProfile?.picture ?? "/og-image.svg",
+    ogImageAlt: repo?.name ?? repoId,
+    twitterCard: repoOwnerProfile?.picture ? "summary" : "summary_large_image",
   });
 
   // Build the base URL for this repo (without /tree/...)

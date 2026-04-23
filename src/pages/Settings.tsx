@@ -882,6 +882,10 @@ export default function Settings() {
   useSeoMeta({
     title: "Settings - ngit",
     description: "Manage relay configurations and application settings.",
+    ogImage: "/og-image.svg",
+    ogImageWidth: 1200,
+    ogImageHeight: 630,
+    twitterCard: "summary_large_image",
   });
 
   return (

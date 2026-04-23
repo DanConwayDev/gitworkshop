@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useSeoMeta } from "@unhead/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -381,6 +382,16 @@ export default function NgitPage() {
     location.state as { expandQuickStart?: boolean } | null
   )?.expandQuickStart;
   const defaultOpen = expandQuickStart ? ["contributor", "maintainer"] : [];
+
+  useSeoMeta({
+    title: "Install ngit — Decentralized Git CLI",
+    description:
+      "Install the ngit CLI to collaborate on git repositories over Nostr. Works with any Nostr-compatible relay.",
+    ogImage: "/og-image.svg",
+    ogImageWidth: 1200,
+    ogImageHeight: 630,
+    twitterCard: "summary_large_image",
+  });
 
   return (
     <div className="container max-w-screen-md px-4 md:px-8 py-10 space-y-12">

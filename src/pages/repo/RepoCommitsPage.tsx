@@ -2,6 +2,7 @@ import { useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
+import { useProfile } from "@/hooks/useProfile";
 import {
   useInfiniteCommitHistory,
   useGitExplorer,
@@ -27,11 +28,12 @@ import { isNonHttpUrl } from "@/lib/git-grasp-pool";
 import { IncompatibleProtocolError } from "@/components/IncompatibleProtocolError";
 
 export default function RepoCommitsPage() {
-  const { cloneUrls, repoState, repoRelayEose, commitsRef, resolved } =
+  const { cloneUrls, repoState, repoRelayEose, commitsRef, resolved, pubkey } =
     useRepoContext();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const repo = resolved?.repo;
+  const repoOwnerProfile = useProfile(pubkey);
 
   // "source" query param drives which server's commit history is shown.
   const selectedSource = searchParams.get("source") ?? "default";
@@ -168,6 +170,9 @@ export default function RepoCommitsPage() {
         : `Commits - ${repo.name} - ngit`
       : "Commits - ngit",
     description: repo?.description ?? "Browse commit history",
+    ogImage: repoOwnerProfile?.picture ?? "/og-image.svg",
+    ogImageAlt: repo?.name,
+    twitterCard: repoOwnerProfile?.picture ? "summary" : "summary_large_image",
   });
 
   // Build base path for commit links (strip /commits/... suffix)

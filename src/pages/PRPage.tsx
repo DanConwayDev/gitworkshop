@@ -8,6 +8,7 @@ import React, {
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
 import { useSeoMeta } from "@unhead/react";
+import { useProfile } from "@/hooks/useProfile";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { formatDistanceToNow } from "date-fns";
 import { EditableSubject } from "@/components/EditSubjectInline";
@@ -104,6 +105,7 @@ export default function PRPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const repo = resolved?.repo;
+  const repoOwnerProfile = useProfile(pubkey);
 
   // All confirmed co-maintainer coordinates — gives the full union of relay
   // groups for publishing. Falls back to the PR's own `a` tag coords if the
@@ -397,6 +399,9 @@ export default function PRPage() {
       ? `${pr.currentSubject || pr.originalSubject} - ngit`
       : "PR - ngit",
     description: pr?.body.slice(0, 160) || "Loading PR...",
+    ogImage: repoOwnerProfile?.picture ?? "/og-image.svg",
+    ogImageAlt: repo?.name ?? repoId,
+    twitterCard: repoOwnerProfile?.picture ? "summary" : "summary_large_image",
   });
 
   // ── Derived values ────────────────────────────────────────────────────
