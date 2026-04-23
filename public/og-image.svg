@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#16171e"/>
+      <stop offset="100%" style="stop-color:#1e1b2e"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff79c6;stop-opacity:0.15"/>
+      <stop offset="100%" style="stop-color:#9333ea;stop-opacity:0.08"/>
+    </linearGradient>
+    <radialGradient id="center-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#ff79c6;stop-opacity:0.12"/>
+      <stop offset="100%" style="stop-color:#ff79c6;stop-opacity:0"/>
+    </radialGradient>
+    <filter id="blur-glow">
+      <feGaussianBlur stdDeviation="40" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Subtle gradient overlay -->
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- Center radial glow -->
+  <ellipse cx="600" cy="315" rx="500" ry="300" fill="url(#center-glow)"/>
+
+  <!-- Grid lines (subtle) -->
+  <g stroke="#ffffff" stroke-opacity="0.03" stroke-width="1">
+    <line x1="0" y1="105" x2="1200" y2="105"/>
+    <line x1="0" y1="210" x2="1200" y2="210"/>
+    <line x1="0" y1="315" x2="1200" y2="315"/>
+    <line x1="0" y1="420" x2="1200" y2="420"/>
+    <line x1="0" y1="525" x2="1200" y2="525"/>
+    <line x1="200" y1="0" x2="200" y2="630"/>
+    <line x1="400" y1="0" x2="400" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="800" y1="0" x2="800" y2="630"/>
+    <line x1="1000" y1="0" x2="1000" y2="630"/>
+  </g>
+
+  <!-- Border frame -->
+  <rect x="40" y="40" width="1120" height="550" rx="16" fill="none" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1"/>
+
+  <!-- Logo icon (centered, large) -->
+  <g transform="translate(520, 175)">
+    <rect width="160" height="160" rx="32" fill="#9333ea"/>
+    <!-- Y-shape paths from favicon -->
+    <path fill="#fff" fill-rule="evenodd" d="M37.5 87.4V42.5h10v44.9c0 7.93 3.73 15.38 10.04 20.09l13.41 10.01A35.07 35.07 0 0 1 85 145.6V160h-10v-14.4c0-7.93-3.73-15.38-10.04-20.09L51.55 115.5A35.07 35.07 0 0 1 37.5 87.4Z" clip-rule="evenodd"/>
+    <path fill="#fff" fill-rule="evenodd" d="M122.5 87.4V42.5h-10v44.9c0 7.93-3.73 15.38-10.04 20.09L89.05 107.5A35.07 35.07 0 0 0 75 145.6V160h10v-14.4c0-7.93 3.73-15.38 10.04-20.09l13.41-10.01A35.07 35.07 0 0 0 122.5 87.4Z" clip-rule="evenodd"/>
+    <path fill="#fff" fill-rule="evenodd" d="M74.5 160V69.7h11V160h-11Z" clip-rule="evenodd"/>
+    <circle fill="#fff" cx="102.5" cy="45" r="15"/>
+    <circle fill="#fff" cx="27.5" cy="45" r="15"/>
+    <circle fill="#fff" cx="80" cy="75" r="12.5"/>
+  </g>
+
+  <!-- App name -->
+  <text x="600" y="400" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="56" font-weight="700" fill="#ede9f6" text-anchor="middle" letter-spacing="-1">GitWorkshop</text>
+
+  <!-- Tagline -->
+  <text x="600" y="455" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="26" font-weight="400" fill="#7a7490" text-anchor="middle" letter-spacing="0.5">Decentralized Git over Nostr</text>
+
+  <!-- Bottom badges -->
+  <g transform="translate(600, 520)">
+    <!-- Open Source badge -->
+    <g transform="translate(-180, 0)">
+      <rect x="-60" y="-16" width="120" height="32" rx="16" fill="#ffffff" fill-opacity="0.06" stroke="#ffffff" stroke-opacity="0.1" stroke-width="1"/>
+      <text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="13" fill="#9b8fb0" text-anchor="middle" dy="5">Open Source</text>
+    </g>
+    <!-- Nostr badge -->
+    <g transform="translate(0, 0)">
+      <rect x="-45" y="-16" width="90" height="32" rx="16" fill="#ff79c6" fill-opacity="0.12" stroke="#ff79c6" stroke-opacity="0.25" stroke-width="1"/>
+      <text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="13" fill="#ff79c6" text-anchor="middle" dy="5">Nostr</text>
+    </g>
+    <!-- Decentralized badge -->
+    <g transform="translate(180, 0)">
+      <rect x="-70" y="-16" width="140" height="32" rx="16" fill="#ffffff" fill-opacity="0.06" stroke="#ffffff" stroke-opacity="0.1" stroke-width="1"/>
+      <text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="13" fill="#9b8fb0" text-anchor="middle" dy="5">Decentralized</text>
+    </g>
+  </g>
+</svg>
