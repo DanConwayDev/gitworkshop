@@ -8,7 +8,7 @@ import {
 } from "./useEventSearch";
 import type { SearchTarget } from "@/lib/searchForEvent";
 import { includeMailboxes, mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
+import { onlyEvents, completeOnEose } from "applesauce-relay";
 import { RelayGroup } from "applesauce-relay";
 import type { RelayGroup as RelayGroupType } from "applesauce-relay";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
@@ -190,6 +190,33 @@ export function useResolvedRepository(
   }, [pubkey, dTag, alreadyInStore]);
 
   const repoSearch = useEventSearch(searchTarget, searchGroups);
+
+  // Background refresh: when the event is already in the store (e.g. navigated
+  // from the landing page which pre-fetched it), useEventSearch is skipped
+  // entirely — meaning the git index relays are never queried for a fresh copy.
+  // Fire a one-shot background subscription to the git index relays + relay
+  // hints so the store is updated with the latest version of the announcement.
+  // This mirrors what useEventSearch would have done, but without any UI state.
+  use$(() => {
+    if (!pubkey || !dTag || !alreadyInStore) return undefined;
+
+    const filter: Filter = {
+      kinds: [REPO_KIND],
+      authors: [pubkey],
+      "#d": [dTag],
+    } as Filter;
+
+    // Build the relay list: relay hints first, then git index relays.
+    const allHints = new Set([...nip05Relays, ...relayHints]);
+    const gitRelays = gitIndexRelays.getValue().filter((r) => !allHints.has(r));
+    const backgroundRelays = [...allHints, ...gitRelays];
+
+    if (backgroundRelays.length === 0) return undefined;
+
+    return pool
+      .req(backgroundRelays, [filter])
+      .pipe(completeOnEose(), onlyEvents(), mapEventsToStore(store));
+  }, [pubkey, dTag, alreadyInStore, hintsKey, nip05RelaysKey, store]);
 
   // Layer 2: subscribe to the model.
   const repo = use$(() => {
