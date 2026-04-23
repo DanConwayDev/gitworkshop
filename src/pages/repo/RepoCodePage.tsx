@@ -42,6 +42,8 @@ import {
   deriveEffectiveHeadCommit,
   deriveEffectiveSource,
 } from "@/lib/sourceUtils";
+import { isNonHttpUrl } from "@/lib/git-grasp-pool";
+import { IncompatibleProtocolError } from "@/components/IncompatibleProtocolError";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 import { CodeBlock } from "@/components/CodeBlock";
@@ -69,6 +71,11 @@ export default function RepoCodePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const repo = resolved?.repo;
+
+  // Detect incompatible protocol early — before the pool is even created, so
+  // we can skip all loading states and show a helpful message immediately.
+  const allUrlsIncompatible =
+    cloneUrls.length > 0 && cloneUrls.every(isNonHttpUrl);
 
   // "source" query param drives which server's data the explorer shows.
   // No param = "default" (pool-decided). "nostr" or a clone URL are explicit.
@@ -312,7 +319,12 @@ export default function RepoCodePage() {
         </Card>
       )}
 
-      {cloneUrls.length > 0 && (
+      {/* All clone URLs use incompatible protocols (SSH, git://, etc.) */}
+      {allUrlsIncompatible && (
+        <IncompatibleProtocolError cloneUrls={cloneUrls} />
+      )}
+
+      {cloneUrls.length > 0 && !allUrlsIncompatible && (
         <>
           {/* Locator bar: branch selector + breadcrumb + commit info */}
           <LocatorBar

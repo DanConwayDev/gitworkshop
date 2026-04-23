@@ -23,6 +23,8 @@ import {
   deriveEffectiveHeadCommit,
   deriveEffectiveSource,
 } from "@/lib/sourceUtils";
+import { isNonHttpUrl } from "@/lib/git-grasp-pool";
+import { IncompatibleProtocolError } from "@/components/IncompatibleProtocolError";
 
 export default function RepoCommitsPage() {
   const { cloneUrls, repoState, repoRelayEose, commitsRef, resolved } =
@@ -215,6 +217,17 @@ export default function RepoCommitsPage() {
             </p>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  if (cloneUrls.every(isNonHttpUrl)) {
+    return (
+      <div className="container max-w-screen-xl px-4 md:px-8 py-6">
+        <IncompatibleProtocolError
+          cloneUrls={cloneUrls}
+          context="commit history"
+        />
       </div>
     );
   }
