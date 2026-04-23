@@ -178,7 +178,7 @@ export const gitIndexRelaysCustomised$ = isCustomised$(
  */
 export type RelayCurationMode = "repo" | "outbox";
 
-const DEFAULT_RELAY_CURATION_MODE: RelayCurationMode = "repo";
+const DEFAULT_RELAY_CURATION_MODE: RelayCurationMode = "outbox";
 
 export const relayCurationMode = new BehaviorSubject<RelayCurationMode>(
   DEFAULT_RELAY_CURATION_MODE,
