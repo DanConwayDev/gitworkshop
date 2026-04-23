@@ -192,9 +192,19 @@ function stripSubPaths(splat: string): string {
 export function parseRepoRoute(splat: string): ParsedRepoRoute | undefined {
   // Strip sub-paths (issues, about, issue IDs) before parsing
   const stripped = stripSubPaths(splat);
-  // Decode any URL-encoded characters (e.g. %3A%2F%2F → ://)
-  const decoded = decodeURIComponent(stripped);
-  const segments = decoded.split("/").filter(Boolean);
+  // Split BEFORE percent-decoding so that %2F inside a repo identifier (d-tag
+  // containing a slash) is not mistaken for a path separator. Decode each
+  // segment individually so that relay hints with %3A (colons) still work.
+  const segments = stripped
+    .split("/")
+    .filter(Boolean)
+    .map((s) => {
+      try {
+        return decodeURIComponent(s);
+      } catch {
+        return s;
+      }
+    });
 
   if (segments.length < 2 || segments.length > 3) return undefined;
 
@@ -209,14 +219,27 @@ export function parseRepoRoute(splat: string): ParsedRepoRoute | undefined {
       return { type: "npub", pubkey, relayHints: [], repoId: second };
     }
 
-    // /:npub/:relayHint/:repoId
-    // Reconstruct relay URL: add wss:// if no scheme present
-    const relayHint = normalizeRelayHint(second);
+    // 3-segment case: second is either a relay hint (domain-like, contains a
+    // dot) or the first half of a slash-containing d-tag as decoded by React
+    // Router (%2F → /). A 64-char hex pubkey used as the first component of
+    // a gnostr-style d-tag has no dots, so isRelayHint() reliably
+    // distinguishes the two cases.
+    if (isRelayHint(second)) {
+      // /:npub/:relayHint/:repoId
+      const relayHint = normalizeRelayHint(second);
+      return {
+        type: "npub",
+        pubkey,
+        relayHints: relayHint ? [relayHint] : [],
+        repoId: third!,
+      };
+    }
+    // /:npub/:repoId-part-a/:repoId-part-b  (decoded %2F in d-tag)
     return {
       type: "npub",
       pubkey,
-      relayHints: relayHint ? [relayHint] : [],
-      repoId: third!,
+      relayHints: [],
+      repoId: `${second}/${third}`,
     };
   }
 
@@ -229,13 +252,22 @@ export function parseRepoRoute(splat: string): ParsedRepoRoute | undefined {
       return { type: "nip05", nip05, relayHints: [], repoId: second };
     }
 
-    // /:nip05/:relayHint/:repoId
-    const relayHint = normalizeRelayHint(second);
+    if (isRelayHint(second)) {
+      // /:nip05/:relayHint/:repoId
+      const relayHint = normalizeRelayHint(second);
+      return {
+        type: "nip05",
+        nip05,
+        relayHints: relayHint ? [relayHint] : [],
+        repoId: third!,
+      };
+    }
+    // /:nip05/:repoId-part-a/:repoId-part-b  (decoded %2F in d-tag)
     return {
       type: "nip05",
       nip05,
-      relayHints: relayHint ? [relayHint] : [],
-      repoId: third!,
+      relayHints: [],
+      repoId: `${second}/${third}`,
     };
   }
 
