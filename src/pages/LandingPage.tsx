@@ -403,8 +403,70 @@ export function LandingPage() {
           <div className="max-w-2xl mx-auto text-center">
             {/* Logo mark */}
             <div className="flex justify-center mb-6">
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-pink-500/15 to-pink-500/5 border border-pink-500/20 shadow-lg shadow-pink-500/10">
-                <GitBranch className="h-10 w-10 text-pink-500" />
+              <div className="p-2 rounded-2xl bg-gradient-to-br from-pink-500/15 to-pink-500/5 border border-pink-500/20 shadow-lg shadow-pink-500/10">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 64 64"
+                  fill="none"
+                  className="h-16 w-16"
+                  aria-hidden="true"
+                >
+                  <defs>
+                    <linearGradient
+                      id="hero-fork-gradient"
+                      x1="0"
+                      y1="0"
+                      x2="64"
+                      y2="64"
+                      gradientUnits="userSpaceOnUse"
+                    >
+                      <stop offset="0%" stopColor="rgb(236,72,153)" />
+                      <stop offset="100%" stopColor="rgb(244,63,94)" />
+                    </linearGradient>
+                  </defs>
+                  {/* Left tine */}
+                  <path
+                    fill="url(#hero-fork-gradient)"
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M14.999 34.9612L14.999 17.001L18.999 17.001L18.999 34.9612C18.999 38.1329 20.4912 41.1126 23.0143 42.9967L28.377 47.0013C31.9165 49.6443 33.999 53.8145 33.999 58.2417L33.999 64.001L29.999 64.001L29.999 58.2417C29.999 55.0701 28.5068 52.0904 25.9837 50.2063L20.621 46.2017C17.0816 43.5587 14.999 39.3884 14.999 34.9612Z"
+                  />
+                  {/* Right tine */}
+                  <path
+                    fill="url(#hero-fork-gradient)"
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M48.999 34.9612L48.999 17.001L44.999 17.001L44.999 34.9612C44.999 38.1329 43.5069 41.1126 40.9838 42.9967L35.621 47.0013C32.0816 49.6443 29.999 53.8145 29.999 58.2417L29.999 64.001L33.999 64.001L33.999 58.2417C33.999 55.0701 35.4912 52.0904 38.0143 50.2063L43.3771 46.2017C46.9165 43.5587 48.999 39.3884 48.999 34.9612Z"
+                  />
+                  {/* Center stem */}
+                  <path
+                    fill="url(#hero-fork-gradient)"
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M29.799 64.001L29.799 27.8867L34.199 27.8867L34.199 64.001L29.799 64.001Z"
+                  />
+                  {/* Top-right circle */}
+                  <circle
+                    fill="url(#hero-fork-gradient)"
+                    cx="46.999"
+                    cy="18.001"
+                    r="6"
+                  />
+                  {/* Top-left circle */}
+                  <circle
+                    fill="url(#hero-fork-gradient)"
+                    cx="17.0137"
+                    cy="18.001"
+                    r="6"
+                  />
+                  {/* Center merge circle */}
+                  <circle
+                    fill="url(#hero-fork-gradient)"
+                    cx="31.999"
+                    cy="30.001"
+                    r="5"
+                  />
+                </svg>
               </div>
             </div>
 
