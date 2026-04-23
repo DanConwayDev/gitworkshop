@@ -55,6 +55,10 @@ export function useVerifiedNip05(pubkey: string): string | undefined {
       .loadIdentity(name, domain)
       .then((identity) => {
         if (cancelled) return;
+        // Populate the in-memory map so subsequent getIdentity() calls hit
+        // without needing another IDB round-trip (loadIdentity reads IDB but
+        // does not write back to the in-memory map).
+        dnsIdentityLoader.identities.set(`${name}@${domain}`, identity);
         if (
           identity.status === IdentityStatus.Found &&
           identity.pubkey === pubkey

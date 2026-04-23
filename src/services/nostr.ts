@@ -400,12 +400,20 @@ dnsIdentityLoader.expiration = 60 * 60 * 24 * 30; // 30 days in seconds
 // DnsIdentityLoader.loadIdentity() reads IDB but does NOT write back to the
 // in-memory map (this.identities), so getIdentity() would always miss on a
 // fresh page load even when IDB has data. Loading all entries upfront ensures
-// the synchronous getIdentity() check in useRepoPath hits on the first render.
-loadAllNip05FromIdb().then((entries) => {
-  for (const [address, identity] of Object.entries(entries)) {
-    dnsIdentityLoader.identities.set(address, identity);
-  }
-});
+// the synchronous getIdentity() check in useRepoPath / useDnsIdentity hits on
+// the first render without a loading flash.
+//
+// nip05WarmupReady resolves once the IDB warm-up is complete. useDnsIdentity
+// awaits this before deciding whether to show a loading state, so navigating
+// to a NIP-05 repo URL from the landing page never flashes a loading screen
+// when the identity is already cached in IDB.
+export const nip05WarmupReady: Promise<void> = loadAllNip05FromIdb().then(
+  (entries) => {
+    for (const [address, identity] of Object.entries(entries)) {
+      dnsIdentityLoader.identities.set(address, identity);
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // NIP-34 singleton loaders for Issues, Patches, and PRs

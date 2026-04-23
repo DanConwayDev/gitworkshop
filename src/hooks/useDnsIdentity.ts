@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { IdentityStatus } from "applesauce-loaders/helpers";
 import type { Identity } from "applesauce-loaders/helpers";
-import { dnsIdentityLoader } from "@/services/nostr";
+import { dnsIdentityLoader, nip05WarmupReady } from "@/services/nostr";
 
 const RESOLVE_TIMEOUT_MS = 5_000;
 
@@ -75,52 +75,64 @@ export function useDnsIdentity(nip05: string | undefined): DnsIdentityState {
     }
     const { name, domain } = parsed;
 
-    // Check in-memory cache first — avoids a loading flash when nip05 changes
-    // but the new identity is already resolved (e.g. back-navigation).
-    const cached = dnsIdentityLoader.getIdentity(name, domain);
-    if (cached) {
-      setState(cachedIdentityToState(cached));
-      return;
-    }
-
-    setState({ status: "loading" });
-
     let cancelled = false;
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("__timeout__")), RESOLVE_TIMEOUT_MS),
-    );
+    // Await the IDB warmup before checking the in-memory cache. On a fresh
+    // page load the warmup is async; if the user navigates to a NIP-05 repo
+    // URL before it completes, getIdentity() would return undefined even
+    // though IDB has the entry. Awaiting the warmup first ensures the
+    // synchronous cache check always reflects the persisted state.
+    nip05WarmupReady.then(() => {
+      if (cancelled) return;
 
-    Promise.race([dnsIdentityLoader.loadIdentity(name, domain), timeoutPromise])
-      .then((identity) => {
-        if (cancelled) return;
-        setState(cachedIdentityToState(identity));
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        if (err instanceof Error && err.message === "__timeout__") {
-          setState({
-            status: "error",
-            reason: "timeout",
-            message: `Lookup timed out after ${RESOLVE_TIMEOUT_MS / 1000} seconds`,
-          });
-        } else {
-          const msg =
-            err instanceof Error
-              ? err.message
-              : "Failed to resolve NIP-05 identity";
-          // "Failed to fetch" is the browser's generic network error
-          const isNetwork =
-            err instanceof TypeError ||
-            (err instanceof Error &&
-              err.message.toLowerCase().includes("fetch"));
-          setState({
-            status: "error",
-            reason: isNetwork ? "network" : "unknown",
-            message: msg,
-          });
-        }
-      });
+      // Check in-memory cache — avoids a loading flash when the identity is
+      // already resolved (e.g. back-navigation or warm IDB).
+      const cached = dnsIdentityLoader.getIdentity(name, domain);
+      if (cached) {
+        setState(cachedIdentityToState(cached));
+        return;
+      }
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("__timeout__")), RESOLVE_TIMEOUT_MS),
+      );
+
+      Promise.race([
+        dnsIdentityLoader.loadIdentity(name, domain),
+        timeoutPromise,
+      ])
+        .then((identity) => {
+          if (cancelled) return;
+          // Populate the in-memory map so subsequent getIdentity() calls hit.
+          dnsIdentityLoader.identities.set(`${name}@${domain}`, identity);
+          setState(cachedIdentityToState(identity));
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          if (err instanceof Error && err.message === "__timeout__") {
+            setState({
+              status: "error",
+              reason: "timeout",
+              message: `Lookup timed out after ${RESOLVE_TIMEOUT_MS / 1000} seconds`,
+            });
+          } else {
+            const msg =
+              err instanceof Error
+                ? err.message
+                : "Failed to resolve NIP-05 identity";
+            // "Failed to fetch" is the browser's generic network error
+            const isNetwork =
+              err instanceof TypeError ||
+              (err instanceof Error &&
+                err.message.toLowerCase().includes("fetch"));
+            setState({
+              status: "error",
+              reason: isNetwork ? "network" : "unknown",
+              message: msg,
+            });
+          }
+        });
+    });
 
     return () => {
       cancelled = true;
