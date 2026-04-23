@@ -109,9 +109,10 @@ function FeaturedReposSkeleton() {
 function FeaturedRepos() {
   const { repos, isLoading } = useRepositorySearch("");
 
+  const graspRepos = repos?.filter((r) => r.graspCloneUrls.length > 0);
   const showSkeletons =
-    repos === undefined || (isLoading && repos.length === 0);
-  const featured = repos?.slice(0, 6) ?? [];
+    graspRepos === undefined || (isLoading && graspRepos.length === 0);
+  const featured = graspRepos?.slice(0, 6) ?? [];
 
   return (
     <section className="py-16 border-t border-border/40">
