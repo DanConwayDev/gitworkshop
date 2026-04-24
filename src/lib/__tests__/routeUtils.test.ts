@@ -217,9 +217,14 @@ describe("parseRepoRoute — invalid inputs return undefined", () => {
     ).toBeUndefined();
   });
 
-  it("returns undefined when first segment is a raw hex pubkey (not npub-encoded)", () => {
-    // HEX_PUBKEY has no dots and no @, so isNip05 returns false too
-    expect(parseRepoRoute(`${HEX_PUBKEY}/my-repo`)).toBeUndefined();
+  it("accepts a raw hex pubkey as the first segment", () => {
+    const parsed = parseRepoRoute(`${HEX_PUBKEY}/my-repo`);
+    expect(parsed).toBeDefined();
+    expect(parsed?.type).toBe("npub");
+    if (parsed?.type === "npub") {
+      expect(parsed.pubkey).toBe(HEX_PUBKEY);
+    }
+    expect(parsed?.repoId).toBe("my-repo");
   });
 
   it("returns undefined for a bare path with no identity segment", () => {

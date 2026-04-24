@@ -21,6 +21,11 @@ import { nip19 } from "nostr-tools";
 // Segment classifiers
 // ---------------------------------------------------------------------------
 
+/** Returns true if the string looks like a raw 64-char hex pubkey. */
+export function isHexPubkey(s: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(s);
+}
+
 /** Returns true if the string is a valid npub1… bech32 public key. */
 export function isNpub(s: string): boolean {
   try {
@@ -28,6 +33,29 @@ export function isNpub(s: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Returns true if the string is any recognised pubkey form:
+ * npub1… bech32 or raw 64-char hex.
+ */
+export function isPubkeyIdentifier(s: string): boolean {
+  return isNpub(s) || isHexPubkey(s);
+}
+
+/**
+ * Decode any pubkey identifier (npub1… or 64-char hex) to a raw hex pubkey.
+ * Returns undefined if the string is not a recognised pubkey form.
+ */
+export function decodePubkeyIdentifier(s: string): string | undefined {
+  if (isHexPubkey(s)) return s.toLowerCase();
+  try {
+    const decoded = nip19.decode(s);
+    if (decoded.type === "npub") return decoded.data;
+  } catch {
+    // ignore
+  }
+  return undefined;
 }
 
 /**
@@ -213,9 +241,9 @@ export function parseRepoRoute(splat: string): ParsedRepoRoute | undefined {
 
   const [first, second, third] = segments;
 
-  // --- npub routes ---
-  if (isNpub(first)) {
-    const pubkey = nip19.decode(first).data as string;
+  // --- npub / hex-pubkey routes ---
+  if (isPubkeyIdentifier(first)) {
+    const pubkey = decodePubkeyIdentifier(first)!;
 
     if (segments.length === 2) {
       // /:npub/:repoId

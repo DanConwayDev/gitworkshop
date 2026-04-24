@@ -10,7 +10,12 @@ import { useEffect, useMemo, useState } from "react";
 import { of } from "rxjs";
 import { eventStore } from "../services/nostr";
 import { REPO_KIND, ISSUE_KIND, PATCH_KIND, PR_KIND } from "../lib/nip34";
-import { eventIdToNevent, isNip05, standardizeNip05 } from "../lib/routeUtils";
+import {
+  eventIdToNevent,
+  isNip05,
+  isHexPubkey,
+  standardizeNip05,
+} from "../lib/routeUtils";
 import { useRepoPath } from "../hooks/useRepoPath";
 import UserPage from "./UserPage";
 import NotFound from "./NotFound";
@@ -469,6 +474,8 @@ export function NIP19Page() {
     if (!user) return <NotFound />;
 
     return <UserPage pubkey={user.pubkey} />;
+  } else if (isHexPubkey(identifier)) {
+    return <UserPage pubkey={identifier.toLowerCase()} />;
   } else if (pointer) {
     if (!event) return <LoadingState message="Fetching event…" />;
 
