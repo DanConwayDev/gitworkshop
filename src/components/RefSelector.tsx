@@ -61,6 +61,51 @@ import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { graspCloneUrlNpub } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse a tag name into a comparable semver-like tuple.
+ * Strips a leading "v" or "V", then splits on dots.
+ * Returns null if the name doesn't look like a version string.
+ */
+function parseTagVersion(name: string): number[] | null {
+  const stripped = name.replace(/^[vV]/, "");
+  // Must start with a digit to be treated as a version
+  if (!/^\d/.test(stripped)) return null;
+  // Split on dots and parse each segment as an integer (ignore pre-release suffix)
+  const parts = stripped.split(".");
+  const nums = parts.map((p) => {
+    const n = parseInt(p, 10);
+    return isNaN(n) ? 0 : n;
+  });
+  return nums;
+}
+
+/**
+ * Compare two tag names for sorting, newest first.
+ * Semver-like names (e.g. v1.2.3) are compared numerically in descending
+ * order. Non-version names fall back to reverse lexicographic order.
+ */
+function compareTagsNewestFirst(a: string, b: string): number {
+  const av = parseTagVersion(a);
+  const bv = parseTagVersion(b);
+
+  if (av && bv) {
+    const len = Math.max(av.length, bv.length);
+    for (let i = 0; i < len; i++) {
+      const ai = av[i] ?? 0;
+      const bi = bv[i] ?? 0;
+      if (ai !== bi) return bi - ai; // descending
+    }
+    return 0;
+  }
+
+  // One or both are non-version — fall back to reverse lexicographic
+  return b.localeCompare(a);
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -2816,7 +2861,10 @@ export function RefSelector({
     [refsWithStatus],
   );
   const tags = useMemo(
-    () => refsWithStatus.filter((r) => r.isTag),
+    () =>
+      refsWithStatus
+        .filter((r) => r.isTag)
+        .sort((a, b) => compareTagsNewestFirst(a.name, b.name)),
     [refsWithStatus],
   );
 
