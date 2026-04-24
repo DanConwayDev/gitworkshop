@@ -28,6 +28,7 @@ import {
   GitBranch,
   AlertTriangle,
   Users,
+  Tag,
 } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import type { EventTemplate } from "nostr-tools";
@@ -66,6 +67,25 @@ import { DEFAULT_GRASP_SERVERS } from "@/services/settings";
 import { GraspLogo } from "@/components/GraspLogo";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// ---------------------------------------------------------------------------
+// Known tag names — tags that the edit form explicitly manages.
+// Any tag with a name NOT in this set is treated as "unknown" and preserved
+// verbatim so that data from other clients is never silently dropped.
+// ---------------------------------------------------------------------------
+
+const KNOWN_TAG_NAMES = new Set([
+  "d",
+  "name",
+  "description",
+  "clone",
+  "relays",
+  "alt",
+  "r",
+  "maintainers",
+  "web",
+  "t",
+]);
 
 // ---------------------------------------------------------------------------
 // Main page
@@ -245,12 +265,28 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   // Earliest unique commit hash
   const [eucHash, setEucHash] = useState(currentEucHash);
 
+  // Unknown / custom tags — tags not managed by the form fields above.
+  // Stored as string[][] so multi-value tags and repeated tag names are
+  // preserved exactly. Initialised once from the selected announcement.
+  const [unknownTags, setUnknownTags] = useState<string[][]>(() => {
+    if (!selectedAnnouncement) return [];
+    return selectedAnnouncement.tags.filter(
+      ([name]) => name !== undefined && !KNOWN_TAG_NAMES.has(name),
+    );
+  });
+
   // Other-section open state (auto-open if the repo already has entries there)
   const [otherRelaysOpen, setOtherRelaysOpen] = useState(
     () => currentOtherRelays.length > 0,
   );
   const [otherGitServersOpen, setOtherGitServersOpen] = useState(
     () => currentOtherGitServers.length > 0,
+  );
+  const [unknownTagsOpen, setUnknownTagsOpen] = useState(
+    () =>
+      !!selectedAnnouncement?.tags.some(
+        ([name]) => name !== undefined && !KNOWN_TAG_NAMES.has(name),
+      ),
   );
 
   // Submit state
@@ -552,6 +588,8 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
           ...(maintainersTag ? [maintainersTag] : []),
           ...webUrls.map((u) => ["web", u] as string[]),
           ...topics.map((t) => ["t", t] as string[]),
+          // Preserve unknown/custom tags verbatim
+          ...unknownTags.filter((tag) => tag.length > 0 && tag[0]),
         ],
       };
 
@@ -583,6 +621,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
     webUrls,
     topics,
     eucHash,
+    unknownTags,
     basePath,
     navigate,
   ]);
@@ -1123,6 +1162,77 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
             </Collapsible>
           </section>
 
+          <Separator />
+
+          {/* ── Unknown / custom tags ──────────────────────────────────── */}
+          <section className="space-y-3">
+            <Collapsible
+              open={unknownTagsOpen}
+              onOpenChange={setUnknownTagsOpen}
+            >
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-md px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    {unknownTagsOpen ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
+                    <Tag className="h-3 w-3" />
+                    <span className="font-medium">Custom tags</span>
+                    <span className="font-normal opacity-60 ml-0.5">
+                      (advanced)
+                    </span>
+                  </span>
+                  {!unknownTagsOpen && unknownTags.length > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] h-4 px-1.5"
+                    >
+                      {unknownTags.length}
+                    </Badge>
+                  )}
+                </button>
+              </CollapsibleTrigger>
+
+              <CollapsibleContent className="space-y-3 pt-2 pl-1">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Tags not recognised by this client are preserved here. Both
+                  the tag name and values are editable. Use "add value" to
+                  attach additional values to the same tag.
+                </p>
+
+                {unknownTags.length > 0 && (
+                  <div className="space-y-2">
+                    {unknownTags.map((tag, idx) => (
+                      <UnknownTagRow
+                        key={idx}
+                        tag={tag}
+                        onChange={(updated) =>
+                          setUnknownTags((prev) =>
+                            prev.map((t, i) => (i === idx ? updated : t)),
+                          )
+                        }
+                        onRemove={() =>
+                          setUnknownTags((prev) =>
+                            prev.filter((_, i) => i !== idx),
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <AddCustomTagRow
+                  onAdd={(tag) => setUnknownTags((prev) => [...prev, tag])}
+                />
+              </CollapsibleContent>
+            </Collapsible>
+          </section>
+
           {/* ── Error / actions ────────────────────────────────────────── */}
           {saveError && (
             <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
@@ -1156,6 +1266,225 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// UnknownTagRow — editable row for a single unknown/custom tag
+// ---------------------------------------------------------------------------
+
+/**
+ * Two-column layout:
+ *   left  — editable tag name input (fixed width)
+ *   right — stacked value inputs, one per line, with per-value × and an
+ *           "add value" + button below the last one
+ *
+ * The outer × (top-right) removes the entire tag.
+ */
+function UnknownTagRow({
+  tag,
+  onChange,
+  onRemove,
+}: {
+  tag: string[];
+  onChange: (updated: string[]) => void;
+  onRemove: () => void;
+}) {
+  const [name, ...rawValues] = tag;
+  // Always show at least one value input
+  const values = rawValues.length > 0 ? rawValues : [""];
+
+  const handleNameChange = (newName: string) => {
+    onChange([newName, ...values]);
+  };
+
+  const handleValueChange = (valueIdx: number, newVal: string) => {
+    const newValues = values.map((v, i) => (i === valueIdx ? newVal : v));
+    onChange([name, ...newValues]);
+  };
+
+  const handleRemoveValue = (valueIdx: number) => {
+    const newValues = values.filter((_, i) => i !== valueIdx);
+    // Keep at least one empty value so the input is always visible
+    onChange([name, ...(newValues.length > 0 ? newValues : [""])]);
+  };
+
+  const handleAddValue = () => {
+    onChange([name, ...values, ""]);
+  };
+
+  return (
+    <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+      <div className="flex items-start gap-2">
+        {/* Left column — tag name */}
+        <Input
+          value={name}
+          onChange={(e) => handleNameChange(e.target.value)}
+          className="h-7 w-24 shrink-0 text-xs font-mono"
+          placeholder="name"
+          aria-label="Tag name"
+        />
+
+        {/* Right column — value inputs stacked */}
+        <div className="flex-1 space-y-1">
+          {values.map((val, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <Input
+                value={val}
+                onChange={(e) => handleValueChange(i, e.target.value)}
+                className="h-7 text-xs font-mono flex-1"
+                placeholder="value"
+              />
+              {values.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => handleRemoveValue(i)}
+                  className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  aria-label="Remove value"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          ))}
+          {/* Add another value */}
+          <button
+            type="button"
+            onClick={handleAddValue}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors pt-0.5"
+            aria-label="Add value"
+          >
+            <Plus className="h-3 w-3" />
+            <span>add value</span>
+          </button>
+        </div>
+
+        {/* Remove whole tag */}
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-muted-foreground hover:text-destructive transition-colors shrink-0 mt-1"
+          aria-label={`Remove tag ${name}`}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AddCustomTagRow — form for adding a brand-new custom tag
+// ---------------------------------------------------------------------------
+
+/**
+ * Same two-column layout as UnknownTagRow. Manages its own pending name +
+ * values list before committing, so the "add value" button is visible from
+ * the start and makes the multi-value capability obvious.
+ */
+function AddCustomTagRow({ onAdd }: { onAdd: (tag: string[]) => void }) {
+  const [tagName, setTagName] = useState("");
+  const [values, setValues] = useState<string[]>([""]);
+  const [error, setError] = useState<string | undefined>();
+
+  const handleCommit = () => {
+    const name = tagName.trim();
+    if (!name) {
+      setError("Tag name is required");
+      return;
+    }
+    if (KNOWN_TAG_NAMES.has(name)) {
+      setError(`"${name}" is managed by the form above`);
+      return;
+    }
+    onAdd([name, ...values]);
+    setTagName("");
+    setValues([""]);
+    setError(undefined);
+  };
+
+  const handleValueChange = (i: number, val: string) => {
+    setValues((prev) => prev.map((v, idx) => (idx === i ? val : v)));
+  };
+
+  const handleRemoveValue = (i: number) => {
+    setValues((prev) => {
+      const next = prev.filter((_, idx) => idx !== i);
+      return next.length > 0 ? next : [""];
+    });
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-start gap-2">
+        {/* Left — tag name */}
+        <Input
+          placeholder="tag name"
+          value={tagName}
+          onChange={(e) => {
+            setTagName(e.target.value);
+            setError(undefined);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleCommit();
+            }
+          }}
+          className="h-7 w-24 shrink-0 text-xs font-mono"
+        />
+
+        {/* Right — values */}
+        <div className="flex-1 space-y-1">
+          {values.map((val, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <Input
+                placeholder="value"
+                value={val}
+                onChange={(e) => handleValueChange(i, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleCommit();
+                  }
+                }}
+                className="h-7 text-xs font-mono flex-1"
+              />
+              {values.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => handleRemoveValue(i)}
+                  className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  aria-label="Remove value"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setValues((prev) => [...prev, ""])}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors pt-0.5"
+          >
+            <Plus className="h-3 w-3" />
+            <span>add value</span>
+          </button>
+        </div>
+
+        {/* Commit */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleCommit}
+          className="h-7 px-2.5 shrink-0"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      {error && <p className="text-xs text-red-500 px-0.5">{error}</p>}
     </div>
   );
 }
