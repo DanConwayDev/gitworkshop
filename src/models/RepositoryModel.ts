@@ -24,6 +24,12 @@ import type { NostrEvent } from "nostr-tools";
  * store yet when we subscribe to them via store.addressable().
  *
  * Model cache key: (selectedMaintainer, dTag) — one instance per repo page.
+ *
+ * Emit timing: store.addressable() emits synchronously (either the event or
+ * undefined) for events already in the store. When new co-maintainer
+ * subscriptions are opened, all their synchronous callbacks complete before
+ * subscribe() returns — so by the time we call emit() after the loop, all
+ * currently-known co-maintainer states are already in latestByPubkey.
  */
 export function RepositoryModel(
   selectedMaintainer: string,
@@ -60,20 +66,18 @@ export function RepositoryModel(
               latestByPubkey.set(pubkey, ev ?? undefined);
 
               if (ev) {
-                // Read maintainers tag and subscribe to any new pubkeys
-                const listed = getRepoMaintainers(ev);
-                let newDiscoveries = false;
-                for (const mp of listed) {
-                  if (!subscribed.has(mp)) {
-                    newDiscoveries = true;
-                    subscribe(mp);
-                  }
+                // Subscribe to any newly-discovered co-maintainers.
+                // store.addressable() emits synchronously, so all their
+                // initial states are populated in latestByPubkey before
+                // the loop returns — emit() sees the full picture.
+                for (const mp of getRepoMaintainers(ev)) {
+                  if (!subscribed.has(mp)) subscribe(mp);
                 }
-                // Only emit immediately if no new subscriptions were opened
-                // (they will each trigger their own emit on first value)
-                if (!newDiscoveries || prev !== undefined) emit();
+                emit();
               } else {
-                // Announcement removed or not found
+                // Announcement absent or removed — only re-emit if this is
+                // a change (not the initial undefined for a new subscription
+                // that will never have an event).
                 if (prev !== undefined) emit();
               }
             }),
