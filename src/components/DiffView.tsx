@@ -53,6 +53,7 @@ import {
   MessageSquarePlus,
   Copy,
   Check,
+  Link,
 } from "lucide-react";
 import type { FileChange } from "@/lib/git-grasp-pool";
 import { Button } from "@/components/ui/button";
@@ -261,7 +262,13 @@ export interface DiffViewProps {
   relayHint?: string;
 }
 
-import { fileDiffCardId, diffLineAnchorId } from "@/lib/diffCardId";
+import {
+  fileDiffCardId,
+  diffLineAnchorId,
+  diffLineRangeHash,
+  parseDiffLineHash,
+  type ParsedDiffHash,
+} from "@/lib/diffCardId";
 
 // ---------------------------------------------------------------------------
 // Highlighter hook
@@ -543,32 +550,7 @@ export const FileDiffCardLoading = memo(function FileDiffCardLoading({
 // Main component
 // ---------------------------------------------------------------------------
 
-/**
- * Parse a URL hash fragment into a file card ID and optional line anchor.
- *
- * Accepts hashes of the form:
- *   #diff-src_lib_foo_ts_L42   → { cardId: "diff-src_lib_foo_ts", lineId: "diff-src_lib_foo_ts_L42" }
- *   #diff-src_lib_foo_ts_DL42  → { cardId: "diff-src_lib_foo_ts", lineId: "diff-src_lib_foo_ts_DL42" }
- *   #diff-src_lib_foo_ts       → { cardId: "diff-src_lib_foo_ts", lineId: null }
- *
- * Returns null if the hash doesn't match a diff anchor pattern.
- */
-function parseDiffHash(hash: string): {
-  cardId: string;
-  lineId: string | null;
-} | null {
-  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
-  if (!raw.startsWith("diff-")) return null;
-
-  // Try line anchor: diff-{cardId}_(DL|L){n}
-  const lineMatch = raw.match(/^(diff-.+?)_(DL|L)(\d+)$/);
-  if (lineMatch) {
-    return { cardId: lineMatch[1], lineId: raw };
-  }
-
-  // File-only anchor
-  return { cardId: raw, lineId: null };
-}
+// parseDiffHash is now provided by parseDiffLineHash from @/lib/diffCardId
 
 export const DiffView = memo(function DiffView({
   diff,
@@ -591,15 +573,19 @@ export const DiffView = memo(function DiffView({
   // ---------------------------------------------------------------------------
   // hashExpandedFile: the file path extracted from the URL hash (if any)
   // hashScrollTarget: the scroll target derived from the URL hash
+  // hashLineRange: pre-selected line range from the URL hash
   const [hashExpandedFile, setHashExpandedFile] = useState<string | null>(null);
   const [hashScrollTarget, setHashScrollTarget] = useState<{
     id: string | null;
   } | null>(null);
+  const [hashLineRange, setHashLineRange] = useState<ParsedDiffHash | null>(
+    null,
+  );
 
   // Apply a hash string against the current file list.
   const applyHash = useCallback((hash: string, fileList: parseDiff.File[]) => {
     if (!hash) return;
-    const parsed = parseDiffHash(hash);
+    const parsed = parseDiffLineHash(hash);
     if (!parsed) return;
 
     // Find the file whose card ID matches
@@ -618,6 +604,7 @@ export const DiffView = memo(function DiffView({
       "unknown";
 
     setHashExpandedFile(name);
+    setHashLineRange(parsed);
     // Always create a new object so the scroll effect fires even when
     // navigating back to the same line.
     setHashScrollTarget({ id: parsed.lineId });
@@ -736,6 +723,7 @@ export const DiffView = memo(function DiffView({
             isActive={isTargeted}
             collapseSignal={isTargeted ? undefined : collapseSignal}
             scrollTarget={isTargeted ? effectiveScrollTarget : undefined}
+            initialLineRange={isTargeted ? hashLineRange : undefined}
           />
         );
       })}
@@ -772,6 +760,7 @@ const FileDiffCard = memo(function FileDiffCard({
   isActive = false,
   collapseSignal,
   scrollTarget,
+  initialLineRange,
 }: {
   file: parseDiff.File;
   defaultCollapsed: boolean;
@@ -788,6 +777,11 @@ const FileDiffCard = memo(function FileDiffCard({
    * even when the id string hasn't changed.
    */
   scrollTarget?: { id: string | null } | null;
+  /**
+   * When set, pre-select this line range (from the URL hash) once the diff
+   * content is rendered. Allows permalinks to highlight a range on load.
+   */
+  initialLineRange?: ParsedDiffHash | null;
 }) {
   const totalChanges = file.additions + file.deletions;
   const isLarge = totalChanges > LARGE_DIFF_THRESHOLD;
@@ -975,6 +969,36 @@ const FileDiffCard = memo(function FileDiffCard({
     }
     return { lineContents: contents, lineOrder: order };
   }, [file.chunks]);
+
+  // Pre-select lines from the URL hash range (permalink → highlight on load).
+  // Runs once when lineOrder is first populated and an initialLineRange is set.
+  const appliedInitialRange = useRef(false);
+  useEffect(() => {
+    if (appliedInitialRange.current) return;
+    if (!initialLineRange?.startLine || lineOrder.length === 0) return;
+    appliedInitialRange.current = true;
+
+    const { startLine, endLine, side } = initialLineRange;
+    const lineType = side === "del" ? "del" : "add";
+
+    // Find the anchor key for the start line. Try the exact type first, then
+    // fall back to "normal" (context lines share the same number on both sides).
+    const anchorKey =
+      lineOrder.find((k) => k === makeLineKey(lineType, startLine)) ??
+      lineOrder.find((k) => k === makeLineKey("normal", startLine)) ??
+      null;
+
+    const end = endLine ?? startLine;
+    const headKey =
+      lineOrder.find((k) => k === makeLineKey(lineType, end)) ??
+      lineOrder.find((k) => k === makeLineKey("normal", end)) ??
+      null;
+
+    if (anchorKey) {
+      setSelAnchor(anchorKey);
+      setSelHead(headKey ?? anchorKey);
+    }
+  }, [initialLineRange, lineOrder]);
 
   // Ctrl+C — copy selected lines when a selection exists
   useEffect(() => {
@@ -1259,6 +1283,80 @@ function CopyButton({
 }
 
 // ---------------------------------------------------------------------------
+// Permalink copy button — copies the full URL with a line-range hash fragment
+// ---------------------------------------------------------------------------
+
+function PermalinkButton({
+  filename,
+  sel,
+  lineRangeStr,
+}: {
+  filename: string;
+  sel: SelectionCtx | null;
+  lineRangeStr: string | null;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const getPermalinkUrl = useCallback((): string => {
+    if (!sel?.anchor || !lineRangeStr) {
+      return window.location.href;
+    }
+    const anchorType = lineKeyType(sel.anchor);
+    const side: "new" | "del" = anchorType === "del" ? "del" : "new";
+
+    // Parse the range string "42" or "42-48"
+    const parts = lineRangeStr.split("-");
+    const startLine = parseInt(parts[0], 10);
+    const endLine = parts.length > 1 ? parseInt(parts[1], 10) : startLine;
+
+    const hash = diffLineRangeHash(filename, startLine, endLine, side);
+    const url = new URL(window.location.href);
+    url.hash = hash;
+    return url.toString();
+  }, [filename, sel, lineRangeStr]);
+
+  const handleCopy = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const url = getPermalinkUrl();
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      });
+    },
+    [getPermalinkUrl],
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={handleCopy}
+          className={cn(
+            "p-0.5 rounded transition-colors",
+            copied
+              ? "text-green-500"
+              : "text-muted-foreground/60 hover:text-foreground",
+          )}
+          aria-label="Copy permalink"
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Link className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {copied ? "Copied!" : "Copy permalink"}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Single diff line
 // ---------------------------------------------------------------------------
 
@@ -1465,8 +1563,8 @@ function DiffLine({
   // Render
   // ---------------------------------------------------------------------------
 
-  // Column count: gutter (1) + code (1) + [comment action if ctx] (1) = 2 or 3
-  const colCount = ctx ? 3 : 2;
+  // Column count: gutter (1) + code (1) + action column (always present) = 3
+  const colCount = 3;
 
   // Stable anchor ID for this line — used by permalink links from inline comment banners.
   const lineAnchorId =
@@ -1650,14 +1748,19 @@ function DiffLine({
           {text === "" && <span>{"\n"}</span>}
         </td>
 
-        {/* Right action column — copy button appears on the last selected line */}
-        {ctx && (
-          <td className="w-[1%] whitespace-nowrap align-top p-0 pr-1">
+        {/* Right action column — permalink + copy buttons on the last selected line */}
+        <td className="w-[1%] whitespace-nowrap align-top p-0 pr-1">
+          {isRangeEnd && (
             <div className="flex items-center gap-0.5 h-full py-0 pl-1">
-              {isRangeEnd && <CopyButton getText={getCopyText} />}
+              <PermalinkButton
+                filename={filename}
+                sel={sel}
+                lineRangeStr={lineRangeStr}
+              />
+              {ctx && <CopyButton getText={getCopyText} />}
             </div>
-          </td>
-        )}
+          )}
+        </td>
       </tr>
 
       {/* Inline comment thread — rendered as a full-width row below the line */}
