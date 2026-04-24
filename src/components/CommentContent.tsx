@@ -23,6 +23,7 @@ import { remarkNostrMentions } from "applesauce-content/markdown";
 import { decodePointer } from "applesauce-core/helpers";
 import type { Components } from "react-markdown";
 import { remarkBareMediaUrls } from "@/lib/remarkBareMediaUrls";
+import { remarkCommitLinks } from "@/lib/remarkCommitLinks";
 import { useUserPath } from "@/hooks/useUserPath";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -33,6 +34,7 @@ import {
   EmbeddedEventByAddressPreview,
 } from "@/components/EmbeddedEventPreview";
 import { BlossomImage, BlossomVideo } from "@/components/BlossomMedia";
+import { CommitLink } from "@/components/CommitLinkContext";
 
 // ---------------------------------------------------------------------------
 // Inline Nostr profile mention — avatar + @name
@@ -62,7 +64,13 @@ function NostrProfileMention({ pubkey }: { pubkey: string }) {
 const components: Components = {
   // NIP-27: remarkNostrMentions produces link nodes with href="nostr:..." and
   // children:[] (empty). Decode the pointer from the href directly.
+  // remarkCommitLinks produces link nodes with href="commit:<hash>".
   a: ({ href, children }) => {
+    if (href?.startsWith("commit:")) {
+      const hash = href.slice(7);
+      return <CommitLink hash={hash} />;
+    }
+
     if (href?.startsWith("nostr:")) {
       const identifier = href.slice(6);
       try {
@@ -199,6 +207,7 @@ const remarkPlugins = [
   remarkBreaks,
   remarkNostrMentions,
   remarkBareMediaUrls,
+  remarkCommitLinks,
 ];
 
 // ---------------------------------------------------------------------------

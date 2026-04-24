@@ -57,6 +57,10 @@ import {
   decodeEventIdentifier,
   isEventIdentifier,
 } from "@/lib/routeUtils";
+import {
+  GitCommitLinkContext,
+  type GitCommitLinkContextValue,
+} from "@/components/CommitLinkContext";
 
 // ---------------------------------------------------------------------------
 // RepoLayout
@@ -449,6 +453,16 @@ function RepoLayoutResolved({
         }
       : null;
 
+  // Build the git commit link context — provides cloneUrls + basePath to
+  // CommentContent / MarkdownContent for linkifying commit hash mentions.
+  // CommitLink calls peekPool(cloneUrls) lazily so it always gets the current
+  // pool state without triggering any network activity here.
+  const gitCommitLinkCtxValue: GitCommitLinkContextValue = useMemo(
+    () => ({ cloneUrls, basePath }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cloneUrls.join(","), basePath],
+  );
+
   return (
     <div className="min-h-full">
       {/* Repo header */}
@@ -594,31 +608,33 @@ function RepoLayoutResolved({
 
       {/* Page content */}
       {ctxValue ? (
-        <RepoContext.Provider value={ctxValue}>
-          {subPage === "code" ? (
-            <RepoCodePage />
-          ) : subPage === "commits" ? (
-            <RepoCommitsPage />
-          ) : subPage === "commit" ? (
-            <RepoCommitPage />
-          ) : subPage === "issue" ? (
-            <IssuePage />
-          ) : subPage === "issues" ? (
-            <RepoIssuesPage />
-          ) : subPage === "pr" ? (
-            <PRPage />
-          ) : subPage === "pr-commit" ? (
-            <PRPage />
-          ) : subPage === "prs" ? (
-            <RepoPRsPage />
-          ) : subPage === "about" ? (
-            <RepoAboutPage />
-          ) : subPage === "edit" ? (
-            <RepoEditPage />
-          ) : subPage === "settings" ? (
-            <RepoSettingsPage />
-          ) : null}
-        </RepoContext.Provider>
+        <GitCommitLinkContext.Provider value={gitCommitLinkCtxValue}>
+          <RepoContext.Provider value={ctxValue}>
+            {subPage === "code" ? (
+              <RepoCodePage />
+            ) : subPage === "commits" ? (
+              <RepoCommitsPage />
+            ) : subPage === "commit" ? (
+              <RepoCommitPage />
+            ) : subPage === "issue" ? (
+              <IssuePage />
+            ) : subPage === "issues" ? (
+              <RepoIssuesPage />
+            ) : subPage === "pr" ? (
+              <PRPage />
+            ) : subPage === "pr-commit" ? (
+              <PRPage />
+            ) : subPage === "prs" ? (
+              <RepoPRsPage />
+            ) : subPage === "about" ? (
+              <RepoAboutPage />
+            ) : subPage === "edit" ? (
+              <RepoEditPage />
+            ) : subPage === "settings" ? (
+              <RepoSettingsPage />
+            ) : null}
+          </RepoContext.Provider>
+        </GitCommitLinkContext.Provider>
       ) : repoSearch &&
         (repoSearch.concludedNotFound ||
           repoSearch.deleted ||

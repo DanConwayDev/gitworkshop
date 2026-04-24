@@ -22,7 +22,9 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { remarkNostrMentions } from "applesauce-content/markdown";
 import type { Components } from "react-markdown";
 import { remarkBareMediaUrls } from "@/lib/remarkBareMediaUrls";
+import { remarkCommitLinks } from "@/lib/remarkCommitLinks";
 import { decodePointer } from "applesauce-core/helpers";
+import { CommitLink } from "@/components/CommitLinkContext";
 import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import { WrappableCodeBlock } from "@/components/WrappableCodeBlock";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
@@ -100,6 +102,7 @@ const remarkPlugins = [
   remarkBreaks,
   remarkNostrMentions,
   remarkBareMediaUrls,
+  remarkCommitLinks,
 ];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const rehypePluginsBase: any[] = [
@@ -415,7 +418,13 @@ function buildComponents(
     // remarkNostrMentions produces link nodes with children:[] (empty), so we
     // must derive display text from the decoded pointer rather than relying on
     // {children}.
+    // remarkCommitLinks produces link nodes with href="commit:<hash>".
     a: ({ href, children, ...props }) => {
+      if (href?.startsWith("commit:")) {
+        const hash = href.slice(7);
+        return <CommitLink hash={hash} />;
+      }
+
       if (href?.startsWith("nostr:")) {
         const identifier = href.slice(6);
         try {
