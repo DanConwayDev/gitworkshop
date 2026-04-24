@@ -13,6 +13,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { peekPool, getOrCreatePool } from "@/lib/git-grasp-pool";
 import { useGitCommitLinkContext } from "./CommitLinkContext";
+import { CommitHoverCard } from "./CommitHoverCard";
 
 interface CommitLinkProps {
   /** The raw hex commit hash (7–40 chars). */
@@ -66,14 +67,17 @@ export function CommitLink({ hash }: CommitLinkProps) {
   }, [ctx?.cloneUrls.join(","), hash]);
 
   if (exists && ctx) {
+    const pool = getOrCreatePool({ cloneUrls: ctx.cloneUrls });
     return (
-      <Link
-        to={`${ctx.basePath}/commit/${hash}`}
-        className="font-mono text-[0.875em] text-pink-600 dark:text-pink-400 hover:underline"
-        title={`View commit ${hash}`}
-      >
-        {shortHash}
-      </Link>
+      <CommitHoverCard hash={hash} pool={pool} asChild>
+        <Link
+          to={`${ctx.basePath}/commit/${hash}`}
+          className="font-mono text-[0.875em] text-pink-600 dark:text-pink-400 hover:underline"
+          title={`View commit ${hash}`}
+        >
+          {shortHash}
+        </Link>
+      </CommitHoverCard>
     );
   }
 
