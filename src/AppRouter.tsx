@@ -92,8 +92,9 @@ function NaddrSubPathRedirect({
 //   /r/<rest>              → /<rest>          (old repo prefix)
 //   /p/<rest>              → /<rest>          (old pubkey prefix)
 //   /e/<rest>              → /<rest>          (old event prefix)
-//   /repo/<rest>           → /<rest>          (with /proposal(s)/ → /prs/)
+//   /repo/<identifier>     → /search?q=<identifier>
 //   /repos                 → /               (repo listing)
+//   /search/<identifier>   → /search?q=<identifier>
 //   /install[/]            → /ngit
 //   /quick-start[/]        → /ngit
 //   /naddr1.../<subpath>   → /<repoPath>/<subpath>  (naddr with sub-path)
@@ -115,12 +116,16 @@ function LegacyRedirect() {
     }
   }
 
-  // /repo/<rest> — strip "repo/" and replace /proposal(s)/ with /prs/
+  // /repo/<identifier> — redirect to /search?q=<identifier>
   if (raw.startsWith("repo/")) {
-    const rest = raw.slice(5).replace(/\/proposals?\//g, "/prs/");
-    return (
-      <Navigate to={`/${rest}${location.search}${location.hash}`} replace />
-    );
+    const identifier = raw.slice(5);
+    if (identifier) {
+      const params = new URLSearchParams(location.search);
+      params.set("q", identifier);
+      return (
+        <Navigate to={`/search?${params.toString()}${location.hash}`} replace />
+      );
+    }
   }
 
   // /repos — redirect to search (repo listing)
@@ -128,6 +133,18 @@ function LegacyRedirect() {
     return (
       <Navigate to={`/search${location.search}${location.hash}`} replace />
     );
+  }
+
+  // /search/<identifier> — redirect to /search?q=<identifier>
+  if (raw.startsWith("search/")) {
+    const identifier = raw.slice("search/".length);
+    if (identifier) {
+      const params = new URLSearchParams(location.search);
+      params.set("q", identifier);
+      return (
+        <Navigate to={`/search?${params.toString()}${location.hash}`} replace />
+      );
+    }
   }
 
   // /install[/] and /quick-start[/] — redirect to /ngit
