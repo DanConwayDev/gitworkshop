@@ -797,6 +797,28 @@ const FileDiffCard = memo(function FileDiffCard({
     return { lineContents: contents, lineOrder: order };
   }, [file.chunks]);
 
+  // Ctrl+C — copy selected lines when a selection exists
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key !== "c") return;
+      if (selAnchor === null) return;
+      e.preventDefault();
+      const selected = selectedKeys(selAnchor, selHead ?? selAnchor, lineOrder);
+      const lines: string[] = [];
+      for (const k of lineOrder) {
+        if (selected.has(k)) {
+          const content = lineContents.get(k);
+          if (content !== undefined) lines.push(content);
+        }
+      }
+      navigator.clipboard.writeText(lines.join("\n")).catch(() => {});
+    };
+    el.addEventListener("keydown", handler);
+    return () => el.removeEventListener("keydown", handler);
+  }, [selAnchor, selHead, lineContents, lineOrder]);
+
   const openComposer = useCallback(
     (lineOrRange: string, anchorKey: LineKey) => {
       setComposingRange(lineOrRange);
