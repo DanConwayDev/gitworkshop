@@ -69,6 +69,7 @@ import {
   InlineCommentBadge,
 } from "@/components/InlineCommentThread";
 import type { InlineCommentOptions } from "@/blueprints/inline-comment";
+import { getLastLineComments } from "@/hooks/useInlineComments";
 
 // ---------------------------------------------------------------------------
 // Theme hook — detect dark mode (same as CodeBlock)
@@ -1249,8 +1250,20 @@ function DiffLine({
     lineKey !== null &&
     sel.composingKey === lineKey;
 
-  // Look up existing comments for this line
-  const lineComments =
+  // Comments whose range ends on this line — the thread renders here only.
+  const lastLineComments =
+    ctx && lineNumber !== null
+      ? getLastLineComments(
+          ctx.commentMap,
+          filename,
+          lineNumber,
+          change.type as "add" | "del" | "normal",
+        )
+      : [];
+
+  // All comments that cover this line (including multi-line ranges that end
+  // later). Used only for the range indicator badge on intermediate lines.
+  const allCoveringComments =
     ctx && lineNumber !== null
       ? getLineComments(
           ctx.commentMap,
@@ -1260,7 +1273,12 @@ function DiffLine({
         )
       : [];
 
-  const hasComments = lineComments.length > 0;
+  // True when this line is covered by a comment but is NOT the last line
+  // (i.e. the thread will appear on a later line).
+  const hasRangeIndicator =
+    allCoveringComments.length > 0 && lastLineComments.length === 0;
+
+  const hasComments = lastLineComments.length > 0;
   const showThread = hasComments || isComposingRangeEnd;
 
   const commentOptions: InlineCommentOptions | null =
@@ -1345,7 +1363,7 @@ function DiffLine({
               <div className="flex items-center justify-center w-5 shrink-0">
                 {hasComments ? (
                   <InlineCommentBadge
-                    count={lineComments.length}
+                    count={lastLineComments.length}
                     onClick={() => {
                       if (sel && lineNumber !== null && lineKey !== null) {
                         sel.setAnchor(lineKey);
@@ -1353,6 +1371,15 @@ function DiffLine({
                         sel.openComposer(String(lineNumber), lineKey);
                       }
                     }}
+                  />
+                ) : hasRangeIndicator ? (
+                  /* Range indicator — this line is covered by a comment whose
+                     thread appears on a later line. Clicking it is a no-op
+                     visually (the thread is below), but provides a clear signal. */
+                  <div
+                    className="w-1.5 h-full self-stretch rounded-sm bg-blue-500/40 mx-auto cursor-default"
+                    title="Part of a multi-line comment"
+                    aria-label="Covered by inline comment"
                   />
                 ) : (
                   <button
@@ -1481,7 +1508,7 @@ function DiffLine({
         <tr>
           <td colSpan={colCount} className="p-0 pb-1">
             <InlineCommentThread
-              comments={lineComments}
+              comments={lastLineComments}
               rootEvent={ctx.rootEvent}
               parentEvent={ctx.parentEvent}
               commentOptions={commentOptions}
