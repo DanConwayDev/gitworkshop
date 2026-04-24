@@ -13,7 +13,7 @@
  *   - PRCommitPage    (commit vs its first parent)
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FileDiff,
   FilePlus2,
@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
-import { fileDiffCardId, diffLineAnchorId } from "@/lib/diffCardId";
+import { fileDiffCardId } from "@/lib/diffCardId";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   diffTrees,
@@ -292,38 +292,6 @@ type Phase =
   | { kind: "done"; changes: FileChange[]; diff: string }
   | { kind: "error"; message: string };
 
-/**
- * Parse a URL hash fragment into a file path and optional line anchor.
- *
- * Accepts hashes of the form:
- *   #diff-src_lib_foo_ts_L42      → { cardId: "diff-src_lib_foo_ts", line: 42, side: "new" }
- *   #diff-src_lib_foo_ts_DL42     → { cardId: "diff-src_lib_foo_ts", line: 42, side: "del" }
- *   #diff-src_lib_foo_ts          → { cardId: "diff-src_lib_foo_ts", line: null, side: null }
- *
- * Returns null if the hash doesn't match a diff anchor pattern.
- */
-function parseDiffHash(hash: string): {
-  cardId: string;
-  line: number | null;
-  side: "new" | "del" | null;
-} | null {
-  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
-  if (!raw.startsWith("diff-")) return null;
-
-  // Try line anchor: diff-{cardId}_(DL|L){n}
-  const lineMatch = raw.match(/^(diff-.+?)_(DL|L)(\d+)$/);
-  if (lineMatch) {
-    return {
-      cardId: lineMatch[1],
-      line: parseInt(lineMatch[3], 10),
-      side: lineMatch[2] === "DL" ? "del" : "new",
-    };
-  }
-
-  // File-only anchor
-  return { cardId: raw, line: null, side: null };
-}
-
 export function CommitDiffView({
   tipCommitId,
   baseCommitId,
@@ -339,69 +307,13 @@ export function CommitDiffView({
 }: CommitDiffViewProps) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading-trees" });
   const [activeFile, setActiveFile] = useState<string | null>(null);
-  // The specific line anchor ID to scroll to after the active file expands.
-  // scrollToken increments on every new hash navigation so FileDiffCard's
-  // effect re-fires even when the target ID hasn't changed.
-  const [scrollToLineId, setScrollToLineId] = useState<string | null>(null);
-  const [scrollToken, setScrollToken] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
-
-  // Pending hash to apply once the diff finishes loading. Stored in a ref so
-  // it survives re-renders and component remounts caused by parent useMemo
-  // deps changing while the diff is still loading.
-  const pendingHashRef = useRef<string>(window.location.hash);
 
   const handleFileSelect = (path: string) => {
     setActiveFile(path);
-    setScrollToLineId(null); // clear any hash-driven target when user picks manually
-    pendingHashRef.current = ""; // user took over navigation
     const el = document.getElementById(fileDiffCardId(path));
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-
-  // Apply a hash string to the diff state. Requires phase.kind === "done".
-  const applyHashToPhase = useCallback(
-    (hash: string, changes: Array<{ path: string }>) => {
-      if (!hash) return;
-      const parsed = parseDiffHash(hash);
-      if (!parsed) return;
-
-      const matchedFile = changes.find(
-        (c) => fileDiffCardId(c.path) === parsed.cardId,
-      );
-      if (!matchedFile) return;
-
-      setActiveFile(matchedFile.path);
-      if (parsed.line !== null && parsed.side !== null) {
-        setScrollToLineId(
-          diffLineAnchorId(matchedFile.path, parsed.line, parsed.side),
-        );
-      } else {
-        setScrollToLineId(null);
-      }
-      setScrollToken((t) => t + 1);
-    },
-    [],
-  );
-
-  // When the diff finishes loading, apply the pending hash (set on mount or
-  // updated by the hashchange listener below).
-  useEffect(() => {
-    if (phase.kind !== "done") return;
-    applyHashToPhase(pendingHashRef.current, phase.changes);
-  }, [phase, applyHashToPhase]);
-
-  // Track hash changes while the diff is loading or already loaded.
-  useEffect(() => {
-    const onHashChange = () => {
-      pendingHashRef.current = window.location.hash;
-      if (phase.kind === "done") {
-        applyHashToPhase(window.location.hash, phase.changes);
-      }
-    };
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
-  }, [phase, applyHashToPhase]);
 
   // Notify parent when file count is known (phase 1 complete).
   useEffect(() => {
@@ -548,8 +460,6 @@ export function CommitDiffView({
         <DiffView
           diff={phase.diff}
           expandedFile={activeFile}
-          scrollToLineId={scrollToLineId}
-          scrollToken={scrollToken}
           rootEvent={rootEvent}
           parentEvent={parentEvent}
           commentMap={commentMap}

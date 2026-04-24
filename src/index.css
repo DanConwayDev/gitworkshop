@@ -238,3 +238,20 @@
   padding: 0;
   background: transparent;
 }
+
+/* Diff line permalink highlight — fades out after 2s */
+.diff-line-highlight {
+  animation: diff-line-fade 2s ease-out forwards;
+}
+
+@keyframes diff-line-fade {
+  0% {
+    background-color: rgba(234, 179, 8, 0.35);
+  }
+  70% {
+    background-color: rgba(234, 179, 8, 0.25);
+  }
+  100% {
+    background-color: transparent;
+  }
+}

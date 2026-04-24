@@ -24,6 +24,7 @@ import {
   memo,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useMemo,
@@ -228,13 +229,12 @@ export interface DiffViewProps {
    * When set alongside expandedFile, scroll to this specific element ID
    * (a line anchor like "diff-src_lib_foo_ts_L42") instead of the file card.
    * The element must be a child of the expanded file card.
+   *
+   * Changing this value (even to the same string) triggers a new scroll
+   * attempt, so callers should use a wrapper object or a counter to force
+   * re-scrolling to the same target.
    */
-  scrollToLineId?: string | null;
-  /**
-   * Incremented on every new hash navigation. Forces the scroll effect to
-   * re-fire in FileDiffCard even when scrollToLineId hasn't changed.
-   */
-  scrollToken?: number;
+  scrollTarget?: { id: string | null } | null;
   /**
    * Files whose diff content is still loading. A loading card (real header,
    * spinner body) is rendered for each entry, after any already-parsed files.
@@ -544,13 +544,39 @@ export const FileDiffCardLoading = memo(function FileDiffCardLoading({
 // Main component
 // ---------------------------------------------------------------------------
 
+/**
+ * Parse a URL hash fragment into a file card ID and optional line anchor.
+ *
+ * Accepts hashes of the form:
+ *   #diff-src_lib_foo_ts_L42   → { cardId: "diff-src_lib_foo_ts", lineId: "diff-src_lib_foo_ts_L42" }
+ *   #diff-src_lib_foo_ts_DL42  → { cardId: "diff-src_lib_foo_ts", lineId: "diff-src_lib_foo_ts_DL42" }
+ *   #diff-src_lib_foo_ts       → { cardId: "diff-src_lib_foo_ts", lineId: null }
+ *
+ * Returns null if the hash doesn't match a diff anchor pattern.
+ */
+function parseDiffHash(hash: string): {
+  cardId: string;
+  lineId: string | null;
+} | null {
+  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (!raw.startsWith("diff-")) return null;
+
+  // Try line anchor: diff-{cardId}_(DL|L){n}
+  const lineMatch = raw.match(/^(diff-.+?)_(DL|L)(\d+)$/);
+  if (lineMatch) {
+    return { cardId: lineMatch[1], lineId: raw };
+  }
+
+  // File-only anchor
+  return { cardId: raw, lineId: null };
+}
+
 export const DiffView = memo(function DiffView({
   diff,
   className,
   defaultCollapsed = true,
   expandedFile,
-  scrollToLineId,
-  scrollToken,
+  scrollTarget: externalScrollTarget,
   loadingFiles,
   rootEvent,
   parentEvent,
@@ -561,6 +587,63 @@ export const DiffView = memo(function DiffView({
 }: DiffViewProps) {
   const files = useMemo(() => parseDiff(diff), [diff]);
 
+  // ---------------------------------------------------------------------------
+  // Hash-driven expand + scroll — self-contained, works for all callers
+  // ---------------------------------------------------------------------------
+  // hashExpandedFile: the file path extracted from the URL hash (if any)
+  // hashScrollTarget: the scroll target derived from the URL hash
+  const [hashExpandedFile, setHashExpandedFile] = useState<string | null>(null);
+  const [hashScrollTarget, setHashScrollTarget] = useState<{
+    id: string | null;
+  } | null>(null);
+
+  // Apply a hash string against the current file list.
+  const applyHash = useCallback((hash: string, fileList: parseDiff.File[]) => {
+    if (!hash) return;
+    const parsed = parseDiffHash(hash);
+    if (!parsed) return;
+
+    // Find the file whose card ID matches
+    const matched = fileList.find((f) => {
+      const name =
+        (f.to !== "/dev/null" ? f.to : undefined) ??
+        (f.from !== "/dev/null" ? f.from : undefined) ??
+        "unknown";
+      return fileDiffCardId(name) === parsed.cardId;
+    });
+    if (!matched) return;
+
+    const name =
+      (matched.to !== "/dev/null" ? matched.to : undefined) ??
+      (matched.from !== "/dev/null" ? matched.from : undefined) ??
+      "unknown";
+
+    setHashExpandedFile(name);
+    // Always create a new object so the scroll effect fires even when
+    // navigating back to the same line.
+    setHashScrollTarget({ id: parsed.lineId });
+  }, []);
+
+  // On mount (and whenever the file list changes from empty→populated),
+  // apply the current hash.
+  const appliedInitialHash = useRef(false);
+  useEffect(() => {
+    if (files.length === 0) return;
+    if (appliedInitialHash.current) return;
+    appliedInitialHash.current = true;
+    applyHash(window.location.hash, files);
+  }, [files, applyHash]);
+
+  // Re-apply on hashchange (in-page navigation).
+  useEffect(() => {
+    const onHashChange = () => applyHash(window.location.hash, files);
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [files, applyHash]);
+
+  // ---------------------------------------------------------------------------
+  // Sidebar-driven expand + collapse signal
+  // ---------------------------------------------------------------------------
   // Incremented each time a new file is selected from the sidebar — non-active
   // FileDiffCards watch this to know they should collapse.
   const [collapseSignal, setCollapseSignal] = useState(0);
@@ -574,6 +657,11 @@ export const DiffView = memo(function DiffView({
     }
     prevExpandedFile.current = expandedFile;
   }, [expandedFile]);
+
+  // Merge: sidebar selection takes priority over hash selection for expandedFile.
+  // For scrollTarget, external prop takes priority (sidebar clicks clear hash scroll).
+  const effectiveExpandedFile = expandedFile ?? hashExpandedFile;
+  const effectiveScrollTarget = externalScrollTarget ?? hashScrollTarget;
 
   const totalFiles = files.length + (loadingFiles?.length ?? 0);
 
@@ -636,21 +724,19 @@ export const DiffView = memo(function DiffView({
           (file.to !== "/dev/null" ? file.to : undefined) ??
           (file.from !== "/dev/null" ? file.from : undefined) ??
           "unknown";
-        const forceExpand =
-          expandedFile != null &&
-          (filename === expandedFile ||
-            file.from === expandedFile ||
-            file.to === expandedFile);
+        const isTargeted =
+          effectiveExpandedFile != null &&
+          (filename === effectiveExpandedFile ||
+            file.from === effectiveExpandedFile ||
+            file.to === effectiveExpandedFile);
         return (
           <FileDiffCard
             key={`${file.from ?? ""}→${file.to ?? ""}-${i}`}
             file={file}
             defaultCollapsed={defaultCollapsed}
-            forceExpand={forceExpand}
-            isActive={forceExpand}
-            collapseSignal={forceExpand ? undefined : collapseSignal}
-            scrollToLineId={forceExpand ? scrollToLineId : undefined}
-            scrollToken={forceExpand ? scrollToken : undefined}
+            isActive={isTargeted}
+            collapseSignal={isTargeted ? undefined : collapseSignal}
+            scrollTarget={isTargeted ? effectiveScrollTarget : undefined}
           />
         );
       })}
@@ -684,16 +770,12 @@ const LONG_LINE_THRESHOLD = 120;
 const FileDiffCard = memo(function FileDiffCard({
   file,
   defaultCollapsed,
-  forceExpand = false,
   isActive = false,
   collapseSignal,
-  scrollToLineId,
-  scrollToken,
+  scrollTarget,
 }: {
   file: parseDiff.File;
   defaultCollapsed: boolean;
-  /** When true, force the card open and scroll it into view. */
-  forceExpand?: boolean;
   /** When true, render with an accent border to indicate it is selected. */
   isActive?: boolean;
   /**
@@ -702,15 +784,11 @@ const FileDiffCard = memo(function FileDiffCard({
    */
   collapseSignal?: number;
   /**
-   * When set, scroll to this element ID (a line anchor) instead of the card
-   * header after expanding. Only used when forceExpand is true.
+   * When set, expand this card and scroll to the given element ID (or to the
+   * card header if id is null). A new object reference triggers a new scroll
+   * even when the id string hasn't changed.
    */
-  scrollToLineId?: string | null;
-  /**
-   * Incremented on every new hash navigation. Forces the scroll effect to
-   * re-fire even when scrollToLineId hasn't changed.
-   */
-  scrollToken?: number;
+  scrollTarget?: { id: string | null } | null;
 }) {
   const totalChanges = file.additions + file.deletions;
   const isLarge = totalChanges > LARGE_DIFF_THRESHOLD;
@@ -727,39 +805,63 @@ const FileDiffCard = memo(function FileDiffCard({
 
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // When forceExpand is true (or a new hash navigation arrives), open the card.
+  // When a scrollTarget arrives (or changes), expand the card immediately.
+  // We use the object reference as the dep — a new object always triggers this,
+  // even when the id string is the same (re-navigation to the same line).
   useEffect(() => {
-    if (!forceExpand) return;
+    if (!scrollTarget) return;
     setCollapsed(false);
     setHidden(false);
-  }, [forceExpand, scrollToken]);
+  }, [scrollTarget]);
 
-  // Once the card is open (collapsed===false), scroll to the target.
-  // Depends on scrollToken so it re-fires on every new hash navigation,
-  // even when scrollToLineId hasn't changed.
-  useEffect(() => {
-    if (!forceExpand) return;
-    if (collapsed) return; // card not open yet — wait for next render
-    if (scrollToken === undefined) return; // no hash navigation in progress
+  // After the card has expanded and the DOM has been updated, scroll to the
+  // target. useLayoutEffect runs synchronously after DOM mutations so the
+  // <tr> rows are guaranteed to exist when we call getElementById.
+  //
+  // We retry with requestAnimationFrame for the rare case where the element
+  // is still not present (e.g. syntax highlighting triggers an extra render).
+  const scrollTargetRef = useRef<{ id: string | null } | null | undefined>(
+    undefined,
+  );
+  useLayoutEffect(() => {
+    // Only act when scrollTarget has changed to a new value
+    if (scrollTarget === scrollTargetRef.current) return;
+    scrollTargetRef.current = scrollTarget;
 
-    const targetId = scrollToLineId ?? null;
+    if (!scrollTarget) return;
+    if (collapsed) return; // card not open yet — wait for next render cycle
 
-    if (targetId) {
-      const el = document.getElementById(targetId);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("bg-yellow-400/30");
-        setTimeout(() => el.classList.remove("bg-yellow-400/30"), 2000);
+    const targetId = scrollTarget.id;
+
+    function doScroll() {
+      if (targetId) {
+        const el = document.getElementById(targetId);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("diff-line-highlight");
+          setTimeout(() => el.classList.remove("diff-line-highlight"), 2000);
+          return true;
+        }
+        return false;
       } else {
-        // Line element not in DOM yet (e.g. large diff still rendering) —
-        // fall back to scrolling the card header into view.
+        // No specific line — scroll the card header into view.
         cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return true;
       }
-    } else {
-      // No specific line — scroll the card header into view.
-      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [forceExpand, collapsed, scrollToLineId, scrollToken]);
+
+    if (!doScroll()) {
+      // Element not in DOM yet — retry on next animation frames (up to ~600ms)
+      let attempts = 0;
+      const maxAttempts = 36; // ~600ms at 60fps
+      function retry() {
+        attempts++;
+        if (doScroll() || attempts >= maxAttempts) return;
+        requestAnimationFrame(retry);
+      }
+      requestAnimationFrame(retry);
+    }
+  }, [scrollTarget, collapsed]);
 
   // Collapse this card when another file is selected from the sidebar.
   // collapseSignal is undefined for the active card, so it won't self-collapse.
