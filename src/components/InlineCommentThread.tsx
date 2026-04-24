@@ -26,7 +26,7 @@ import { Loader2, MessageSquare, Reply, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { runner } from "@/services/actions";
-import { CreateInlineComment } from "@/actions/nip34";
+import { CreateInlineComment, CreateComment } from "@/actions/nip34";
 import type { InlineCommentOptions } from "@/blueprints/inline-comment";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { useProfile } from "@/hooks/useProfile";
@@ -93,6 +93,12 @@ interface InlineComposerProps {
   onSubmitted: () => void;
   onCancel: () => void;
   autoFocus?: boolean;
+  /**
+   * When set, this is a reply to an existing comment — publish a plain
+   * NIP-22 kind:1111 comment with this event as the parent instead of
+   * a special inline code comment.
+   */
+  replyToComment?: NostrEvent;
 }
 
 function InlineComposer({
@@ -102,6 +108,7 @@ function InlineComposer({
   onSubmitted,
   onCancel,
   autoFocus,
+  replyToComment,
 }: InlineComposerProps) {
   const composerRef = useRef<NostrComposerHandle>(null);
   const [body, setBody] = useState("");
@@ -123,13 +130,19 @@ function InlineComposer({
 
     setIsPending(true);
     try {
-      await runner.run(
-        CreateInlineComment,
-        rootEvent,
-        parentEvent,
-        trimmed,
-        commentOptions,
-      );
+      if (replyToComment) {
+        // Reply to an existing comment — plain NIP-22 kind:1111, no code location tags
+        await runner.run(CreateComment, replyToComment, trimmed, rootEvent);
+      } else {
+        // New inline code comment — includes file/line/commit location tags
+        await runner.run(
+          CreateInlineComment,
+          rootEvent,
+          parentEvent,
+          trimmed,
+          commentOptions,
+        );
+      }
       toast({ title: "Comment posted" });
       setBody("");
       setActiveTab("write");
@@ -143,7 +156,15 @@ function InlineComposer({
     } finally {
       setIsPending(false);
     }
-  }, [body, rootEvent, parentEvent, commentOptions, onSubmitted, toast]);
+  }, [
+    body,
+    rootEvent,
+    parentEvent,
+    commentOptions,
+    replyToComment,
+    onSubmitted,
+    toast,
+  ]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -253,14 +274,23 @@ export function InlineCommentThread({
   className,
 }: InlineCommentThreadProps) {
   const [composerOpen, setComposerOpen] = useState(autoFocus);
+  /**
+   * When the "Reply" button is clicked on an existing thread, this is set to
+   * the last comment in the thread so the reply is a plain NIP-22 comment
+   * (no code location tags) with that comment as the parent.
+   * When null, the composer is for a brand-new inline code comment.
+   */
+  const [replyToComment, setReplyToComment] = useState<NostrEvent | null>(null);
   const effectiveParent = parentEvent ?? rootEvent;
 
   const handleSubmitted = useCallback(() => {
     setComposerOpen(false);
+    setReplyToComment(null);
   }, []);
 
   const handleCancel = useCallback(() => {
     setComposerOpen(false);
+    setReplyToComment(null);
     if (comments.length === 0) {
       onClose?.();
     }
@@ -320,12 +350,19 @@ export function InlineCommentThread({
           onSubmitted={handleSubmitted}
           onCancel={handleCancel}
           autoFocus={autoFocus}
+          replyToComment={replyToComment ?? undefined}
         />
       ) : (
         <div className="px-3 py-2 border-t border-border/40">
           <button
             type="button"
-            onClick={() => setComposerOpen(true)}
+            onClick={() => {
+              // Reply to the last comment in the thread (plain NIP-22, no code tags)
+              const lastComment =
+                comments.length > 0 ? comments[comments.length - 1] : null;
+              setReplyToComment(lastComment);
+              setComposerOpen(true);
+            }}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             <Reply className="h-3.5 w-3.5" />
