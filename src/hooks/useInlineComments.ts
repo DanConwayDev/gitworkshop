@@ -69,14 +69,18 @@ function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
     fileList.push(event);
     byFile.set(loc.filePath, fileList);
 
-    // Index by line — store under all three type variants since the stored
-    // event doesn't encode which side the line number refers to.
+    // Index by line.
+    // "del" side → only appears on deleted lines (old-file number).
+    // No side marker → new-file number, appears on add and normal lines.
     if (loc.lineRange) {
       const [start, end] = loc.lineRange;
       for (let ln = start; ln <= end; ln++) {
-        addToLine(lineMapKey(loc.filePath, "add", ln), event);
-        addToLine(lineMapKey(loc.filePath, "del", ln), event);
-        addToLine(lineMapKey(loc.filePath, "normal", ln), event);
+        if (loc.lineSide === "del") {
+          addToLine(lineMapKey(loc.filePath, "del", ln), event);
+        } else {
+          addToLine(lineMapKey(loc.filePath, "add", ln), event);
+          addToLine(lineMapKey(loc.filePath, "normal", ln), event);
+        }
       }
     }
   }

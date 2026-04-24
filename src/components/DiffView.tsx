@@ -1269,6 +1269,14 @@ function DiffLine({
           filePath: filename,
           commitId: ctx.commitId,
           line: sel?.composingRange ?? String(lineNumber),
+          // If the composer was opened from a deleted line, mark the side so
+          // the line number is understood as an old-file (pre-commit) reference.
+          lineSide:
+            sel?.composingKey !== null &&
+            sel?.composingKey !== undefined &&
+            lineKeyType(sel.composingKey) === "del"
+              ? "del"
+              : undefined,
           repoCoords: ctx.repoCoords,
           relayHint: ctx.relayHint,
         }

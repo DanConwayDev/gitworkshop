@@ -25,6 +25,12 @@ export interface InlineCommentOptions {
   commitId?: string;
   /** Line number or range (e.g. "42" or "42-48") */
   line?: string;
+  /**
+   * Which side of the diff the line number refers to.
+   * "del" means the number is in the pre-commit (old) file — a deleted line.
+   * Omit (or undefined) for added/context lines — the number is in the post-commit (new) file.
+   */
+  lineSide?: "del";
   /** Repo coordinate strings (e.g. "30617:<pubkey>:<d>") for q-tags */
   repoCoords?: string[];
   /** Relay hint for the root event */
@@ -70,7 +76,11 @@ export function buildInlineCommentTemplate(
     tags.push(["c", options.commitId]);
   }
   if (options.line) {
-    tags.push(["line", options.line]);
+    tags.push(
+      options.lineSide === "del"
+        ? ["line", options.line, "del"]
+        : ["line", options.line],
+    );
   }
 
   // NIP-31 alt tag for clients that don't understand inline comments
@@ -94,6 +104,12 @@ export interface InlineCommentLocation {
   line: string | undefined;
   /** Parsed line range: [start, end] (both inclusive). Single-line = [n, n]. */
   lineRange: [number, number] | undefined;
+  /**
+   * Which side of the diff the line number refers to.
+   * "del" = pre-commit (old) file — deleted lines.
+   * undefined = post-commit (new) file — added or context lines.
+   */
+  lineSide: "del" | undefined;
 }
 
 export function parseInlineCommentLocation(
@@ -101,7 +117,9 @@ export function parseInlineCommentLocation(
 ): InlineCommentLocation {
   const filePath = event.tags.find(([t]) => t === "f")?.[1];
   const commitId = event.tags.find(([t]) => t === "c")?.[1];
-  const line = event.tags.find(([t]) => t === "line")?.[1];
+  const lineTag = event.tags.find(([t]) => t === "line");
+  const line = lineTag?.[1];
+  const lineSide = lineTag?.[2] === "del" ? "del" : undefined;
 
   let lineRange: [number, number] | undefined;
   if (line) {
@@ -113,7 +131,7 @@ export function parseInlineCommentLocation(
     }
   }
 
-  return { filePath, commitId, line, lineRange };
+  return { filePath, commitId, line, lineRange, lineSide };
 }
 
 /**

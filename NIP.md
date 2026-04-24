@@ -117,8 +117,12 @@ The NIP-22 root (`E`/`K`/`P`) is always the original PR (kind:1618) or patch (ki
     // the commit for which the comment applies, typically where the lines in question were added/removed
     ["c", "<commit-id>"],
 
-    // line or range within the file at the specified commit (optional), e.g. "42" or "42-48"
-    ["line", "<line-or-range>"],
+    // line or range within the file (optional).
+    // Omitting the third value means the number is in the post-commit (new) file.
+    // Use "del" for deleted lines — the number then refers to the pre-commit (old) file.
+    // Examples: "42", "42-48", "42" with "del"
+    ["line", "<line-or-range>"], // added or context line — new-file number
+    // ["line", "<line-or-range>", "del"], // deleted line — old-file number
   ],
 }
 ```
@@ -155,6 +159,21 @@ To check whether a specific comment thread is resolved without fetching the whol
 ```jsonc
 { "kinds": [1111], "#e": ["<thread-root-comment-id>"], "#l": ["resolved"] }
 ```
+
+### Line Side Semantics
+
+The optional third value on the `line` tag indicates which side of the diff the line number refers to:
+
+| Tag                        | Meaning                                                            |
+| -------------------------- | ------------------------------------------------------------------ |
+| `["line", "42"]`           | Line 42 in the **post-commit** (new) file — added or context line  |
+| `["line", "42-45"]`        | Lines 42–45 in the post-commit file — range of added/context lines |
+| `["line", "42", "del"]`    | Line 42 in the **pre-commit** (old) file — deleted line            |
+| `["line", "42-45", "del"]` | Lines 42–45 in the pre-commit file — range of deleted lines        |
+
+Selections must be single-side: a `line` tag either references the new file or the old file, never both. To discuss a replacement (deleted lines replaced by added lines), comment on the added lines — the deleted lines are visible in the same diff context.
+
+The `["c", "<commit-id>"]` tag always identifies the tip commit whose diff introduced the change, regardless of side. Clients that need to locate a deleted line in the repository history should resolve the parent of that commit.
 
 ### Relay Queries
 
