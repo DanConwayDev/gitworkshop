@@ -1260,18 +1260,18 @@ function CopyButton({
           onMouseDown={(e) => e.stopPropagation()}
           onClick={handleCopy}
           className={cn(
-            "p-0.5 rounded transition-colors",
+            "flex items-center justify-center w-5 h-5 rounded transition-colors",
             copied
               ? "text-green-500"
-              : "text-muted-foreground/60 hover:text-foreground",
+              : "text-muted-foreground/50 hover:text-foreground hover:bg-muted/60",
             className,
           )}
           aria-label="Copy selected lines"
         >
           {copied ? (
-            <Check className="h-3.5 w-3.5" />
+            <Check className="h-3 w-3" />
           ) : (
-            <Copy className="h-3.5 w-3.5" />
+            <Copy className="h-3 w-3" />
           )}
         </button>
       </TooltipTrigger>
@@ -1335,17 +1335,17 @@ function PermalinkButton({
           onMouseDown={(e) => e.stopPropagation()}
           onClick={handleCopy}
           className={cn(
-            "p-0.5 rounded transition-colors",
+            "flex items-center justify-center w-5 h-5 rounded transition-colors",
             copied
               ? "text-green-500"
-              : "text-muted-foreground/60 hover:text-foreground",
+              : "text-muted-foreground/50 hover:text-foreground hover:bg-muted/60",
           )}
           aria-label="Copy permalink"
         >
           {copied ? (
-            <Check className="h-3.5 w-3.5" />
+            <Check className="h-3 w-3" />
           ) : (
-            <Link className="h-3.5 w-3.5" />
+            <Link className="h-3 w-3" />
           )}
         </button>
       </TooltipTrigger>
@@ -1425,6 +1425,17 @@ function DiffLine({
       Math.max(
         sel.lineOrder.indexOf(sel.anchor ?? ""),
         sel.lineOrder.indexOf(sel.head),
+      );
+
+  // Is this the first key in the selection (in document order)?
+  const isRangeStart =
+    lineKey !== null &&
+    sel !== null &&
+    sel.anchor !== null &&
+    sel.lineOrder.indexOf(lineKey) ===
+      Math.min(
+        sel.lineOrder.indexOf(sel.anchor),
+        sel.lineOrder.indexOf(sel.head ?? sel.anchor),
       );
 
   const isSingleSelected =
@@ -1574,6 +1585,13 @@ function DiffLine({
         ? diffLineAnchorId(filename, oldLine, "del")
         : undefined;
 
+  // Shared selection border styles applied to each <td> individually,
+  // since box-shadow on <tr> doesn't paint across cells.
+  const selBorderTop =
+    isSelected && isRangeStart ? "1px solid rgb(59 130 246 / 0.55)" : undefined;
+  const selBorderBottom =
+    isSelected && isRangeEnd ? "1px solid rgb(59 130 246 / 0.55)" : undefined;
+
   return (
     <>
       <tr
@@ -1582,35 +1600,33 @@ function DiffLine({
         data-line-new={newLine}
         className={cn(
           "group",
-          isAdd && !isSelected && "bg-green-500/15 dark:bg-green-400/12",
-          isDel && !isSelected && "bg-red-500/15 dark:bg-red-400/12",
-          isSelected && "bg-blue-500/20 dark:bg-blue-400/18",
+          isAdd && "bg-green-500/15 dark:bg-green-400/12",
+          isDel && "bg-red-500/15 dark:bg-red-400/12",
         )}
       >
         {/* Sticky gutter: comment button (left, GitHub-style) · old line · new line · +/- indicator */}
         <td
           className="sticky left-0 select-none align-top p-0 w-[1%] whitespace-nowrap bg-background"
-          style={
-            isSelected
-              ? {
-                  backgroundImage:
-                    "linear-gradient(rgba(59,130,246,0.32),rgba(59,130,246,0.32))",
-                }
-              : isAdd
-                ? {
-                    backgroundImage:
-                      "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28))",
-                  }
+          style={{
+            // Layer add/del tint (and optional blue selection tint) over bg-background
+            backgroundImage: isSelected
+              ? isAdd
+                ? "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28)), linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14))"
                 : isDel
-                  ? {
-                      backgroundImage:
-                        "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28))",
-                    }
-                  : {
-                      backgroundImage:
-                        "linear-gradient(rgba(0,0,0,0.035),rgba(0,0,0,0.035))",
-                    }
-          }
+                  ? "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28)), linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14))"
+                  : "linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14))"
+              : isAdd
+                ? "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28))"
+                : isDel
+                  ? "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28))"
+                  : "linear-gradient(rgba(0,0,0,0.035),rgba(0,0,0,0.035))",
+            // Left accent bar + top/bottom borders for the selection outline
+            borderLeft: isSelected
+              ? "2px solid rgb(59 130 246 / 0.65)"
+              : undefined,
+            borderTop: selBorderTop,
+            borderBottom: selBorderBottom,
+          }}
         >
           <div className="flex items-stretch border-r border-border/30">
             {/* Left comment button — GitHub-style, shown on hover or when selected */}
@@ -1682,8 +1698,10 @@ function DiffLine({
                 "text-muted-foreground/60 transition-colors duration-75",
                 !isSelected &&
                   "group-hover:text-muted-foreground/90 hover:bg-blue-500/10",
-                isDel && !isSelected && "text-red-700/70 dark:text-red-400/70",
-                isSelected && "text-blue-600 dark:text-blue-400",
+                isDel && "text-red-700/70 dark:text-red-400/70",
+                isSelected &&
+                  !isDel &&
+                  "text-blue-600/70 dark:text-blue-400/70",
               )}
             >
               {oldLine ?? ""}
@@ -1697,10 +1715,10 @@ function DiffLine({
                 "text-muted-foreground/60 transition-colors duration-75",
                 !isSelected &&
                   "group-hover:text-muted-foreground/90 hover:bg-blue-500/10",
-                isAdd &&
-                  !isSelected &&
-                  "text-green-700/70 dark:text-green-400/70",
-                isSelected && "text-blue-600 dark:text-blue-400",
+                isAdd && "text-green-700/70 dark:text-green-400/70",
+                isSelected &&
+                  !isAdd &&
+                  "text-blue-600/70 dark:text-blue-400/70",
               )}
             >
               {newLine ?? ""}
@@ -1709,10 +1727,9 @@ function DiffLine({
             <span
               className={cn(
                 "text-center px-1 py-0 border-l border-border/30",
-                isAdd && !isSelected && "text-green-600 dark:text-green-400",
-                isDel && !isSelected && "text-red-600 dark:text-red-400",
-                isNormal && !isSelected && "text-muted-foreground/40",
-                isSelected && "text-blue-500/70",
+                isAdd && "text-green-600 dark:text-green-400",
+                isDel && "text-red-600 dark:text-red-400",
+                isNormal && "text-muted-foreground/40",
               )}
             >
               {isAdd ? "+" : isDel ? "-" : " "}
@@ -1727,12 +1744,20 @@ function DiffLine({
             wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
           )}
           style={(() => {
-            if (!wordWrap) return undefined;
-            const indent = text.length - text.trimStart().length;
-            if (indent === 0) return undefined;
+            const wrapStyle =
+              wordWrap && text.length - text.trimStart().length > 0
+                ? {
+                    paddingLeft: `calc(0.75rem + ${text.length - text.trimStart().length}ch)`,
+                    textIndent: `-${text.length - text.trimStart().length}ch`,
+                  }
+                : {};
+            if (!isSelected)
+              return Object.keys(wrapStyle).length ? wrapStyle : undefined;
             return {
-              paddingLeft: `calc(0.75rem + ${indent}ch)`,
-              textIndent: `-${indent}ch`,
+              ...wrapStyle,
+              backgroundColor: "rgb(59 130 246 / 0.10)",
+              borderTop: selBorderTop,
+              borderBottom: selBorderBottom,
             };
           })()}
         >
@@ -1749,15 +1774,27 @@ function DiffLine({
         </td>
 
         {/* Right action column — permalink + copy buttons on the last selected line */}
-        <td className="w-[1%] whitespace-nowrap align-top p-0 pr-1">
+        <td
+          className="w-[1%] whitespace-nowrap align-top p-0"
+          style={
+            isSelected
+              ? {
+                  backgroundColor: "rgb(59 130 246 / 0.10)",
+                  borderRight: "1px solid rgb(59 130 246 / 0.45)",
+                  borderTop: selBorderTop,
+                  borderBottom: selBorderBottom,
+                }
+              : undefined
+          }
+        >
           {isRangeEnd && (
-            <div className="flex items-center gap-0.5 h-full py-0 pl-1">
+            <div className="flex items-center gap-px h-full px-1">
               <PermalinkButton
                 filename={filename}
                 sel={sel}
                 lineRangeStr={lineRangeStr}
               />
-              {ctx && <CopyButton getText={getCopyText} />}
+              <CopyButton getText={getCopyText} />
             </div>
           )}
         </td>
