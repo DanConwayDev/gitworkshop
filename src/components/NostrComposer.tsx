@@ -84,6 +84,8 @@ export interface NostrComposerProps {
    * Defaults to "60vh" so the composer never overflows a modal or viewport.
    */
   maxHeight?: string;
+  /** Auto-focus the textarea on mount */
+  autoFocus?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +110,7 @@ export const NostrComposer = forwardRef<
     onFocusChange,
     priorityPubkeys,
     onUploadedTags,
+    autoFocus,
   },
   ref,
 ) {
@@ -271,6 +274,7 @@ export const NostrComposer = forwardRef<
             minHeight={minHeight}
             maxHeight={maxHeight}
             priorityPubkeys={priorityPubkeys}
+            autoFocus={autoFocus}
           />
         </div>
 
@@ -335,6 +339,7 @@ interface WriteAreaProps {
   minHeight?: string;
   maxHeight?: string;
   priorityPubkeys?: string[];
+  autoFocus?: boolean;
 }
 
 function WriteArea({
@@ -351,6 +356,7 @@ function WriteArea({
   minHeight,
   maxHeight = "60vh",
   priorityPubkeys,
+  autoFocus,
 }: WriteAreaProps) {
   // Auto-expand: reset height to "auto" first so scrollHeight reflects the
   // true content height, then clamp to maxHeight.
@@ -373,6 +379,7 @@ function WriteArea({
         placeholder={placeholder}
         disabled={disabled}
         rows={rows}
+        autoFocus={autoFocus}
         className={cn(
           "resize-none text-sm border-0 shadow-none focus-visible:ring-0 bg-transparent overflow-y-auto",
           // Style native scrollbar to match shadcn ScrollBar (bg-border thumb, thin track)

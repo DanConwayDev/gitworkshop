@@ -16,11 +16,15 @@ import { formatDistanceToNow } from "date-fns";
 import type { NostrEvent } from "nostr-tools";
 import { UserLink } from "@/components/UserAvatar";
 import { CommentContent } from "@/components/CommentContent";
+import {
+  NostrComposer,
+  type NostrComposerHandle,
+} from "@/components/NostrComposer";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Loader2, MessageSquare, Reply, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { runner } from "@/services/actions";
 import { CreateInlineComment } from "@/actions/nip34";
 import type { InlineCommentOptions } from "@/blueprints/inline-comment";
@@ -99,9 +103,10 @@ function InlineComposer({
   onCancel,
   autoFocus,
 }: InlineComposerProps) {
+  const composerRef = useRef<NostrComposerHandle>(null);
   const [body, setBody] = useState("");
+  const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
   const [isPending, setIsPending] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
   const { openAuthModal } = useAuthModal();
 
@@ -109,6 +114,8 @@ function InlineComposer({
   const profile = useProfile(account?.pubkey);
   const { name: displayName } = useUserDisplayName(account?.pubkey ?? "");
   const initials = displayName.slice(0, 2).toUpperCase() || "?";
+
+  const showToggle = hasPreviewableContent(body);
 
   const submitComment = useCallback(async () => {
     const trimmed = body.trim();
@@ -125,6 +132,7 @@ function InlineComposer({
       );
       toast({ title: "Comment posted" });
       setBody("");
+      setActiveTab("write");
       onSubmitted();
     } catch (err) {
       toast({
@@ -162,53 +170,68 @@ function InlineComposer({
         </Avatar>
 
         <form onSubmit={handleSubmit} className="flex-1 space-y-2">
-          <Textarea
-            ref={textareaRef}
+          <NostrComposer
+            ref={composerRef}
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={setBody}
             placeholder="Leave a comment..."
             rows={3}
-            className="resize-none text-sm"
+            minRows={3}
+            maxHeight="40vh"
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
             disabled={isPending}
             autoFocus={autoFocus}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.preventDefault();
-                onCancel();
-              }
-              // Ctrl/Cmd+Enter to submit
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                void handleSubmit(e as unknown as React.FormEvent);
-              }
-            }}
           />
-          <div className="flex items-center gap-2 justify-end">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onCancel}
-              disabled={isPending}
-              className="h-7 text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={isPending || !body.trim()}
-              className="h-7 text-xs bg-pink-600 hover:bg-pink-700 text-white"
-            >
-              {isPending ? (
-                <>
-                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                  Posting…
-                </>
-              ) : (
-                "Comment"
-              )}
-            </Button>
+
+          <div className="flex items-center gap-2">
+            {/* Write / Preview toggle — only when there's previewable content */}
+            {showToggle && (
+              <div className="flex items-center gap-0.5">
+                {(["write", "preview"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveTab(tab)}
+                    className={`rounded px-2 py-0.5 text-xs font-medium capitalize transition-colors ${
+                      activeTab === tab
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onCancel}
+                disabled={isPending}
+                className="h-7 text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isPending || !body.trim() || composerHasNsec(body)}
+                className="h-7 text-xs bg-pink-600 hover:bg-pink-700 text-white"
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    Posting…
+                  </>
+                ) : (
+                  "Comment"
+                )}
+              </Button>
+            </div>
           </div>
         </form>
       </div>
