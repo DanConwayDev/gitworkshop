@@ -98,6 +98,11 @@ export interface PatchFilesTabProps {
   parentEvent?: NostrEvent;
   /** Map of inline comments from useInlineComments() */
   commentMap?: InlineCommentMap;
+  /**
+   * Commit ID to attach to new inline comments — the tip commit of the patch
+   * chain (last patch's ["commit", ...] tag). Used for the NIP.md ["c", ...] tag.
+   */
+  commitId?: string;
   /** Repo coordinates for q-tags on new inline comments */
   repoCoords?: string[];
   /** Relay hint for NIP-22 tags */
@@ -348,6 +353,7 @@ export function PatchFilesTab({
   rootEvent,
   parentEvent,
   commentMap,
+  commitId,
   repoCoords,
   relayHint,
 }: PatchFilesTabProps) {
@@ -568,6 +574,7 @@ export function PatchFilesTab({
             rootEvent={rootEvent}
             parentEvent={parentEvent}
             commentMap={commentMap}
+            commitId={commitId}
             repoCoords={repoCoords}
             relayHint={relayHint}
           />
@@ -677,6 +684,7 @@ export function PatchFilesTab({
             rootEvent={rootEvent}
             parentEvent={parentEvent}
             commentMap={commentMap}
+            commitId={commitId}
             repoCoords={repoCoords}
             relayHint={relayHint}
           />

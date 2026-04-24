@@ -1131,6 +1131,7 @@ export default function PRPage() {
                       relayHints={repoRelayHints}
                       rootEvent={pr.rootEvent}
                       commentMap={inlineCommentMap}
+                      commitId={patchChain[patchChain.length - 1]?.commitId}
                       repoCoords={repoAllCoords ?? pr.repoCoords}
                       relayHint={inlineCommentRelays[0]}
                     />
