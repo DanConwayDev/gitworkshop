@@ -254,6 +254,12 @@ export function InlineCommentThread({
         "shadow-sm",
         className,
       )}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onClose?.();
+        }
+      }}
     >
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/5 border-b border-blue-500/20 rounded-t-none">
@@ -261,7 +267,9 @@ export function InlineCommentThread({
         <span className="text-xs text-muted-foreground flex-1">
           {comments.length > 0
             ? `${comments.length} comment${comments.length !== 1 ? "s" : ""}`
-            : "New comment"}
+            : commentOptions.line
+              ? `New comment on ${commentOptions.line.includes("-") ? "lines" : "line"} ${commentOptions.line}`
+              : "New comment"}
         </span>
         {onClose && (
           <button
