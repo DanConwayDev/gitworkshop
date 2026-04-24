@@ -9,7 +9,8 @@
  * Usage:
  *   const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
  */
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Link2, Check } from "lucide-react";
 import { cn, markdownUrlTransform } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
@@ -301,6 +302,99 @@ function NostrProfileMention({ pubkey }: { pubkey: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Heading slug + anchor helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert heading text to a GitHub-compatible anchor slug.
+ * Rules: lowercase, spaces → hyphens, strip everything except alphanumerics,
+ * hyphens, and underscores. Multiple consecutive hyphens are collapsed.
+ */
+export function slugifyHeading(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^\p{L}\p{N}_-]/gu, "")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/**
+ * Extract plain text from react-markdown children (which may be strings,
+ * React elements, or arrays thereof).
+ */
+function childrenToText(children: React.ReactNode): string {
+  if (typeof children === "string") return children;
+  if (typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map(childrenToText).join("");
+  if (React.isValidElement(children)) {
+    const el = children as React.ReactElement<{ children?: React.ReactNode }>;
+    return childrenToText(el.props.children);
+  }
+  return "";
+}
+
+/** Heading with an id attribute and a hoverable copy-link icon. */
+function HeadingWithAnchor({
+  level,
+  children,
+  className,
+  ...props
+}: {
+  level: 1 | 2 | 3 | 4 | 5 | 6;
+  children?: React.ReactNode;
+  className?: string;
+  [key: string]: unknown;
+}) {
+  const text = childrenToText(children);
+  const slug = slugifyHeading(text);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const url = `${window.location.href.split("#")[0]}#${slug}`;
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    },
+    [slug],
+  );
+
+  const Tag = `h${level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+
+  // Icon size scales with heading level
+  const iconSize = level <= 2 ? "h-4 w-4" : "h-3.5 w-3.5";
+
+  return (
+    <Tag
+      id={slug}
+      className={cn(
+        "group/heading flex items-center gap-2 scroll-mt-28",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <a
+        href={`#${slug}`}
+        onClick={handleCopy}
+        aria-label={`Copy link to section: ${text}`}
+        title={copied ? "Link copied!" : "Copy link to section"}
+        className="opacity-0 group-hover/heading:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-foreground"
+      >
+        {copied ? (
+          <Check className={cn(iconSize, "text-green-500")} />
+        ) : (
+          <Link2 className={iconSize} />
+        )}
+      </a>
+    </Tag>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Markdown component factories
 // ---------------------------------------------------------------------------
 
@@ -466,54 +560,60 @@ function buildComponents(
       </td>
     ),
 
-    // Headings
+    // Headings — each gets an id slug and a hoverable copy-link anchor
     h1: ({ children, ...props }) => (
-      <h1
+      <HeadingWithAnchor
+        level={1}
         className="text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border text-foreground break-words"
         {...props}
       >
         {children}
-      </h1>
+      </HeadingWithAnchor>
     ),
     h2: ({ children, ...props }) => (
-      <h2
+      <HeadingWithAnchor
+        level={2}
         className="text-xl font-semibold mt-5 mb-2 pb-1.5 border-b border-border text-foreground break-words"
         {...props}
       >
         {children}
-      </h2>
+      </HeadingWithAnchor>
     ),
     h3: ({ children, ...props }) => (
-      <h3
+      <HeadingWithAnchor
+        level={3}
         className="text-lg font-semibold mt-4 mb-2 text-foreground break-words"
         {...props}
       >
         {children}
-      </h3>
+      </HeadingWithAnchor>
     ),
     h4: ({ children, ...props }) => (
-      <h4
+      <HeadingWithAnchor
+        level={4}
         className="text-base font-semibold mt-3 mb-1.5 text-foreground break-words"
         {...props}
       >
         {children}
-      </h4>
+      </HeadingWithAnchor>
     ),
     h5: ({ children, ...props }) => (
-      <h5
+      <HeadingWithAnchor
+        level={5}
         className="text-sm font-semibold mt-3 mb-1 text-foreground break-words"
         {...props}
       >
         {children}
-      </h5>
+      </HeadingWithAnchor>
     ),
     h6: ({ children, ...props }) => (
-      <h6
+      <HeadingWithAnchor
+        level={6}
         className="text-sm font-semibold mt-3 mb-1 text-muted-foreground break-words"
         {...props}
       >
         {children}
-      </h6>
+      </HeadingWithAnchor>
     ),
 
     // Paragraphs
@@ -603,6 +703,18 @@ export function MarkdownContent({
 }: MarkdownContentProps) {
   const components = buildComponents(cloneUrls, commitHash, filePath);
   const rehypePlugins = allowHtml ? rehypePluginsWithHtml : rehypePluginsBase;
+
+  // After the markdown renders, scroll to the heading referenced by the URL
+  // hash (if any). We use a short rAF delay so the DOM is fully painted.
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    const raf = requestAnimationFrame(() => {
+      const el = document.getElementById(hash);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [content]);
 
   return (
     <div
