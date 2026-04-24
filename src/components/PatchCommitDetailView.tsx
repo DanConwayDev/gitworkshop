@@ -58,6 +58,7 @@ import { cn, safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import { DiffView } from "@/components/DiffView";
 import { UserLink } from "@/components/UserAvatar";
+import { CommitMessageBody } from "@/components/CommitMessageBody";
 import {
   verifyPatchChainCommitHashes,
   readCachedChainResults,
@@ -747,11 +748,7 @@ export function PatchCommitDetailView({
               <h1 className="text-xl font-semibold leading-snug break-words">
                 {subject}
               </h1>
-              {body && (
-                <pre className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed break-words">
-                  {body}
-                </pre>
-              )}
+              {body && <CommitMessageBody body={body} className="mt-3" />}
             </div>
           </div>
         </CardHeader>

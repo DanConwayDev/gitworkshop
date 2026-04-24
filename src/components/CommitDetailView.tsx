@@ -33,6 +33,7 @@ import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import type { Commit } from "@fiatjaf/git-natural-api";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 import { CommitDiffView } from "@/components/CommitDiffView";
+import { CommitMessageBody } from "@/components/CommitMessageBody";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -181,11 +182,7 @@ function CommitDetail({
               <h1 className="text-xl font-semibold leading-snug break-words">
                 {subject}
               </h1>
-              {body && (
-                <pre className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed break-words">
-                  {body}
-                </pre>
-              )}
+              {body && <CommitMessageBody body={body} className="mt-3" />}
             </div>
           </div>
         </CardHeader>
