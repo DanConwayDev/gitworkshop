@@ -451,9 +451,11 @@ export function DeleteRepo(
     // Add to local store immediately so the UI can react
     eventStore.add(signed);
 
-    // Fire-and-forget: publishing to the outbox can continue in the background.
+    // Publish to user outbox + repo relays + git index relay.
+    // The git index (wss://index.ngit.dev) holds repo announcements and must
+    // receive the deletion request so it stops serving the event to other clients.
     outboxStore
-      .publish(signed, buildGroupIds(self, repoCoords))
+      .publish(signed, [...buildGroupIds(self, repoCoords), "git-index"])
       .catch(console.error);
   };
 }
