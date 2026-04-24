@@ -28,6 +28,12 @@ interface UserAvatarProps {
    * impersonators. Defaults to true — set to false to suppress the badge.
    */
   showFollowIndicator?: boolean;
+  /**
+   * Suppresses the ProfileHoverCard wrapper. Use when the parent component
+   * already provides its own ProfileHoverCard (e.g. UserLink) to avoid
+   * nesting HoverCard inside a HoverCardTrigger.
+   */
+  noHoverCard?: boolean;
 }
 
 const sizeClasses = {
@@ -158,6 +164,7 @@ export function UserAvatar({
   size = "md",
   linkToProfile,
   showFollowIndicator = true,
+  noHoverCard = false,
 }: UserAvatarProps) {
   useLoadProfile(pubkey);
   const profile = useProfile(pubkey);
@@ -231,6 +238,10 @@ export function UserAvatar({
         </Link>
       </ProfileHoverCard>
     );
+  }
+
+  if (noHoverCard) {
+    return avatar;
   }
 
   return <ProfileHoverCard pubkey={pubkey}>{avatar}</ProfileHoverCard>;
@@ -308,8 +319,13 @@ export function UserLink({
 
   const inner = (
     <>
-      {/* showFollowIndicator=true is the default — indicator shows for followed users */}
-      <UserAvatar pubkey={pubkey} size={avatarSize} className="shrink-0" />
+      {/* noHoverCard=true — UserLink provides its own ProfileHoverCard wrapper */}
+      <UserAvatar
+        pubkey={pubkey}
+        size={avatarSize}
+        className="shrink-0"
+        noHoverCard
+      />
       <span
         className={cn(
           "font-medium",

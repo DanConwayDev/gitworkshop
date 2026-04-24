@@ -802,13 +802,20 @@ function RepoBreadcrumb({
 
   return (
     <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-      <Link
-        to={userPath}
-        className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors min-w-0 shrink"
-      >
-        <UserAvatar pubkey={pubkey} size="sm" className="flex-shrink-0" />
-        <span className="text-base font-medium truncate">{username}</span>
-      </Link>
+      <div className="flex items-center gap-2 text-muted-foreground min-w-0 shrink">
+        <UserAvatar
+          pubkey={pubkey}
+          size="sm"
+          className="flex-shrink-0"
+          linkToProfile
+        />
+        <Link
+          to={userPath}
+          className="hover:text-foreground transition-colors truncate"
+        >
+          <span className="text-base font-medium truncate">{username}</span>
+        </Link>
+      </div>
       <span className="text-muted-foreground font-normal flex-shrink-0">/</span>
       <Link
         to={basePath}
