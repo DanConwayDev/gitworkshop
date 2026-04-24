@@ -5,18 +5,13 @@
  * Provided by RepoLayout so that CommentContent and MarkdownContent can
  * linkify bare commit-hash strings without prop drilling.
  *
- * CommitLink uses this context to:
- *   1. Call peekPool(cloneUrls) to get the current pool (if any).
- *   2. Check pool.cache.peekCommit(hash) synchronously — no network request.
- *   3. If found, render a React Router <Link> to `${basePath}/commit/${hash}`.
- *   4. If not found, render the hash as plain monospace text.
- *
- * Using cloneUrls (not a pool reference) means CommitLink always gets the
- * current pool state — even if the pool was created after the context value
- * was first computed.
+ * CommitLink renders as plain monospace text initially, then proactively
+ * queries the git pool (cache → IDB → network) to verify the hash exists.
+ * If confirmed it upgrades to a React Router <Link>. This avoids linking
+ * arbitrary hex strings that happen to be 7–40 chars but are not git commits.
  */
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { peekPool } from "@/lib/git-grasp-pool";
 
@@ -25,7 +20,7 @@ import { peekPool } from "@/lib/git-grasp-pool";
 // ---------------------------------------------------------------------------
 
 export interface GitCommitLinkContextValue {
-  /** Clone URLs for the current repository. Empty when outside a repo page. */
+  /** Clone URLs for the current repository. Used to look up the git pool. */
   cloneUrls: string[];
   /** Base path for the repo (e.g. "/npub1.../relay/repo"). */
   basePath: string;
@@ -39,7 +34,7 @@ export function useGitCommitLinkContext(): GitCommitLinkContextValue | null {
 }
 
 // ---------------------------------------------------------------------------
-// CommitLink — renders a commit hash as a link if it exists in the pool cache
+// CommitLink — renders a commit hash, upgrading to a link once verified
 // ---------------------------------------------------------------------------
 
 interface CommitLinkProps {
@@ -48,33 +43,60 @@ interface CommitLinkProps {
 }
 
 /**
- * Renders a git commit hash as a link to the commit detail page when the hash
- * is present in the local git pool cache. Falls back to styled monospace text
- * when no pool context is available or the hash is not cached.
+ * Renders a git commit hash as plain monospace text initially, then
+ * proactively queries the git pool (L1 cache → IDB → network) to verify
+ * the hash is a real commit. Upgrades to a clickable link if confirmed.
  *
- * No network requests are made — only the in-memory cache is consulted.
+ * This avoids linking arbitrary hex strings that are not git commits.
+ * No link is shown outside a repo page context.
  */
 export function CommitLink({ hash }: CommitLinkProps) {
   const ctx = useGitCommitLinkContext();
+  const shortHash = hash.slice(0, 7);
 
-  // Synchronous check: look up the pool from the registry and peek the cache.
-  function checkExists(): boolean {
+  // Check L1 cache synchronously so already-known commits link immediately.
+  const initialExists = (): boolean => {
     if (!ctx || ctx.cloneUrls.length === 0) return false;
     const pool = peekPool(ctx.cloneUrls);
     return !!pool?.cache.peekCommit(hash);
-  }
+  };
 
-  const [exists, setExists] = useState<boolean>(checkExists);
+  const [exists, setExists] = useState<boolean>(initialExists);
+  // Stable ref to abort the async lookup on unmount / hash change.
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    // Re-check after mount — the pool may have been created or populated
-    // by a child page after the initial render.
-    const found = checkExists();
-    if (found !== exists) setExists(found);
+    if (!ctx || ctx.cloneUrls.length === 0) return;
+
+    // Already confirmed — nothing to do.
+    if (exists) return;
+
+    const pool = peekPool(ctx.cloneUrls);
+    if (!pool) return;
+
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    pool
+      .getSingleCommit(hash, abort.signal)
+      .then((commit) => {
+        if (!abort.signal.aborted && commit) {
+          setExists(true);
+        }
+      })
+      .catch(() => {
+        // Not a commit or network error — stay as plain text.
+      });
+
+    return () => {
+      abort.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx?.cloneUrls.join(","), hash]);
 
-  const shortHash = hash.slice(0, 7);
+  const shortHashEl = (
+    <code className="font-mono text-[0.875em]">{shortHash}</code>
+  );
 
   if (exists && ctx) {
     return (
@@ -88,10 +110,6 @@ export function CommitLink({ hash }: CommitLinkProps) {
     );
   }
 
-  // Not in cache — render as plain monospace (no link, no network request)
-  return (
-    <code className="font-mono text-[0.875em] text-muted-foreground">
-      {shortHash}
-    </code>
-  );
+  // Not yet verified or outside a repo page — plain monospace text.
+  return shortHashEl;
 }

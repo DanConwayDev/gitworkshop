@@ -455,8 +455,6 @@ function RepoLayoutResolved({
 
   // Build the git commit link context — provides cloneUrls + basePath to
   // CommentContent / MarkdownContent for linkifying commit hash mentions.
-  // CommitLink calls peekPool(cloneUrls) lazily so it always gets the current
-  // pool state without triggering any network activity here.
   const gitCommitLinkCtxValue: GitCommitLinkContextValue = useMemo(
     () => ({ cloneUrls, basePath }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
