@@ -150,9 +150,14 @@ interface SelectionCtx {
   setHead: (k: LineKey | null) => void;
   setDragging: (v: boolean) => void;
   /** Open the inline comment composer for the current selection */
-  openComposer: (lineOrRange: string) => void;
+  openComposer: (lineOrRange: string, anchorKey: LineKey) => void;
   /** The line/range string currently being composed (if composer is open) */
   composingRange: string | null;
+  /**
+   * The LineKey of the line that opened the composer. Used to pin the thread
+   * row to exactly one line even when two lines share the same number (del/add).
+   */
+  composingKey: LineKey | null;
   closeComposer: () => void;
 }
 
@@ -758,6 +763,7 @@ const FileDiffCard = memo(function FileDiffCard({
   const [selHead, setSelHead] = useState<LineKey | null>(null);
   const [dragging, setDragging] = useState(false);
   const [composingRange, setComposingRange] = useState<string | null>(null);
+  const [composingKey, setComposingKey] = useState<LineKey | null>(null);
 
   // Build a map of LineKey → raw text content for copy support, and an
   // ordered list of all LineKeys in document order for range computation.
@@ -791,12 +797,17 @@ const FileDiffCard = memo(function FileDiffCard({
     return { lineContents: contents, lineOrder: order };
   }, [file.chunks]);
 
-  const openComposer = useCallback((lineOrRange: string) => {
-    setComposingRange(lineOrRange);
-  }, []);
+  const openComposer = useCallback(
+    (lineOrRange: string, anchorKey: LineKey) => {
+      setComposingRange(lineOrRange);
+      setComposingKey(anchorKey);
+    },
+    [],
+  );
 
   const closeComposer = useCallback(() => {
     setComposingRange(null);
+    setComposingKey(null);
     setSelAnchor(null);
     setSelHead(null);
   }, []);
@@ -836,6 +847,7 @@ const FileDiffCard = memo(function FileDiffCard({
       setDragging,
       openComposer,
       composingRange,
+      composingKey,
       closeComposer,
     }),
     [
@@ -846,6 +858,7 @@ const FileDiffCard = memo(function FileDiffCard({
       lineOrder,
       openComposer,
       composingRange,
+      composingKey,
       closeComposer,
     ],
   );
@@ -1167,28 +1180,13 @@ function DiffLine({
   // Inline comment state
   // ---------------------------------------------------------------------------
 
-  // Is the composer open for a range that includes this line's number?
-  const isComposingThisLine =
-    sel !== null &&
-    lineNumber !== null &&
-    sel.composingRange !== null &&
-    (() => {
-      const parts = sel.composingRange.split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts.length > 1 ? parseInt(parts[1], 10) : start;
-      return lineNumber >= start && lineNumber <= end;
-    })();
-
-  // Is this the last line of the composing range? (thread renders here)
+  // The thread row renders on the line that opened the composer (composingKey),
+  // which is type-specific — so del:1 and add:1 never both show a thread.
   const isComposingRangeEnd =
-    isComposingThisLine &&
-    sel?.composingRange !== null &&
-    (() => {
-      const parts = sel!.composingRange!.split("-");
-      const end =
-        parts.length > 1 ? parseInt(parts[1], 10) : parseInt(parts[0], 10);
-      return lineNumber === end;
-    })();
+    sel !== null &&
+    sel.composingKey !== null &&
+    lineKey !== null &&
+    sel.composingKey === lineKey;
 
   // Look up existing comments for this line
   const lineComments =
@@ -1280,10 +1278,10 @@ function DiffLine({
                   <InlineCommentBadge
                     count={lineComments.length}
                     onClick={() => {
-                      if (sel && lineNumber !== null) {
+                      if (sel && lineNumber !== null && lineKey !== null) {
                         sel.setAnchor(lineKey);
                         sel.setHead(lineKey);
-                        sel.openComposer(String(lineNumber));
+                        sel.openComposer(String(lineNumber), lineKey);
                       }
                     }}
                   />
@@ -1293,13 +1291,16 @@ function DiffLine({
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!sel || lineNumber === null) return;
+                      if (!sel || lineNumber === null || lineKey === null)
+                        return;
                       if (isSelected && lineRangeStr) {
-                        sel.openComposer(lineRangeStr);
+                        // For a range, anchor the thread to the last selected key
+                        const lastKey = sel.head ?? sel.anchor ?? lineKey;
+                        sel.openComposer(lineRangeStr, lastKey);
                       } else {
                         sel.setAnchor(lineKey);
                         sel.setHead(lineKey);
-                        sel.openComposer(String(lineNumber));
+                        sel.openComposer(String(lineNumber), lineKey);
                       }
                     }}
                     className={cn(
