@@ -187,6 +187,14 @@ function LegacyRedirect() {
     );
   }
 
+  // /pr/ anywhere in the path (gitworkshop used singular /pr/ for individual PRs)
+  if (raw.includes("/pr/")) {
+    const fixed = raw.replace(/\/pr\//g, "/prs/");
+    return (
+      <Navigate to={`/${fixed}${location.search}${location.hash}`} replace />
+    );
+  }
+
   // Not a legacy path — fall through to RepoLayout
   return <RepoLayout />;
 }

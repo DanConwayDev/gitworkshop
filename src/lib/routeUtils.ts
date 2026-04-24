@@ -141,6 +141,8 @@ export function eventIdToNevent(id: string, relays?: string[]): string {
 const REPO_SUB_PATHS = [
   "issues",
   "prs",
+  "pr", // legacy gitworkshop singular form — redirected to /prs/ by LegacyRedirect
+  "proposals", // legacy gitworkshop name — redirected to /prs/ by LegacyRedirect
   "about",
   "edit",
   "settings",
