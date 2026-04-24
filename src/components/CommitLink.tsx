@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
+import { GitCommit } from "lucide-react";
 import { peekPool, getOrCreatePool } from "@/lib/git-grasp-pool";
 import { useGitCommitLinkContext } from "./CommitLinkContext";
 import { CommitHoverCard } from "./CommitHoverCard";
@@ -72,8 +73,9 @@ export function CommitLink({ hash }: CommitLinkProps) {
       <CommitHoverCard hash={hash} pool={pool} asChild>
         <Link
           to={`${ctx.basePath}/commit/${hash}`}
-          className="font-mono text-[0.875em] text-pink-600 dark:text-pink-400 hover:underline"
+          className="inline-flex items-center gap-1 font-mono text-[0.8em] px-1.5 py-px rounded-md bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-foreground hover:border-foreground/20 transition-colors no-underline"
         >
+          <GitCommit className="h-3 w-3 shrink-0" />
           {shortHash}
         </Link>
       </CommitHoverCard>
