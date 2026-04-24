@@ -73,6 +73,20 @@ function displayRelay(url: string): string {
   return url.replace(/^wss?:\/\//, "").replace(/\/$/, "");
 }
 
+/** Returns true if the URL uses a web-compatible protocol (http/https). */
+function isWebProtocol(url: string): boolean {
+  return url.startsWith("https://") || url.startsWith("http://");
+}
+
+/** Extract the hostname from an http(s) URL for compact display. */
+function displayGitServerDomain(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
 /**
  * Shorten a URL for display: replace any NIP-19 substrings with a condensed
  * form, then truncate the overall string if still long.
@@ -122,6 +136,56 @@ function condenseGraspUrl(url: string): string {
   const npub = graspCloneUrlNpub(url);
   if (!npub) return url;
   return url.replace(npub, condenseNpub(npub));
+}
+
+// ---------------------------------------------------------------------------
+// GitServersSidebarSection — compact "Other Git Servers" block for sidebar
+// ---------------------------------------------------------------------------
+
+function GitServersSidebarSection({ urls }: { urls: string[] }) {
+  const webUrls = urls.filter(isWebProtocol);
+  const unsupportedCount = urls.length - webUrls.length;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+        <Server className="h-3 w-3" />
+        Other Git Servers
+      </p>
+      <div className="flex flex-wrap gap-1">
+        {webUrls.map((url) => (
+          <span
+            key={url}
+            title={url}
+            className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground"
+          >
+            {displayGitServerDomain(url)}
+          </span>
+        ))}
+        {unsupportedCount > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground/60 italic cursor-default">
+                +{unsupportedCount} unsupported protocol
+                {unsupportedCount > 1 ? "s" : ""}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs">
+              <div className="space-y-0.5">
+                {urls
+                  .filter((u) => !isWebProtocol(u))
+                  .map((u) => (
+                    <p key={u} className="font-mono text-xs break-all">
+                      {u}
+                    </p>
+                  ))}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -387,6 +451,11 @@ function SidebarVariant({
                   ))}
               </div>
             </div>
+          )}
+
+          {/* Other git servers */}
+          {repo.additionalGitServerUrls.length > 0 && (
+            <GitServersSidebarSection urls={repo.additionalGitServerUrls} />
           )}
         </div>
 
