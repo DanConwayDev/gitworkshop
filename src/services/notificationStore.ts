@@ -283,14 +283,28 @@ export function acquireNotificationStore(
 
   // ---------------------------------------------------------------------------
   // Once the nsec envelope is decrypted, fetch the state event.
-  // Reactive — re-subscribes when outbox relays change.
+  // Reactive — re-subscribes when outbox relays change OR the envelope arrives.
   // ---------------------------------------------------------------------------
 
-  // addressLoader handles the lookup-relay fetch; we add a reactive outbox
-  // subscription that re-opens whenever the user's outbox relays change.
-  const stateEventSub = outboxRelaysObservable(pubkey)
+  // We combine the nsec envelope observable with outbox relays so that
+  // getOrCreateNotificationSigner is only called once the envelope has
+  // actually landed in the EventStore. Without this guard, the function is
+  // called before the relay fetch completes, finds no envelope, and falls
+  // through to generating (and publishing) a brand-new nsec — prompting the
+  // user's signer unnecessarily on every cold start / origin switch.
+  const stateEventSub = combineLatest([
+    (
+      eventStore.timeline([nsecFilter]) as unknown as Observable<NostrEvent[]>
+    ).pipe(startWith([] as NostrEvent[])),
+    outboxRelaysObservable(pubkey),
+  ])
     .pipe(
-      switchMap(async (outboxes) => {
+      switchMap(async ([envelopes, outboxes]) => {
+        // Don't attempt to resolve the signer until the envelope is present.
+        // getOrCreateNotificationSigner will generate a new nsec (and prompt
+        // the user's signer) if it finds nothing — we must avoid that race.
+        if (envelopes.length === 0) return null;
+
         const notifSigner = await getOrCreateNotificationSigner(pubkey);
         if (!notifSigner) return null;
         return { outboxes, notifPubkey: await notifSigner.getPublicKey() };
