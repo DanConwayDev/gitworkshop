@@ -29,7 +29,10 @@ import {
   IssueSubjectRenameBlueprint,
   IssueLabelBlueprint,
 } from "@/blueprints/label";
-import { DeletionBlueprint } from "@/blueprints/deletion";
+import {
+  DeletionBlueprint,
+  AddressableDeletionBlueprint,
+} from "@/blueprints/deletion";
 import type { IssueStatus } from "@/lib/nip34";
 import { outboxStore } from "@/services/outbox";
 import { eventStore } from "@/services/nostr";
@@ -398,6 +401,59 @@ export function DeleteEvent(
     // Fire-and-forget: publishing to the outbox can continue in the background.
     outboxStore
       .publish(signed, buildGroupIds(self, repoCoords, [...notifyPubkeys]))
+      .catch(console.error);
+  };
+}
+
+/**
+ * Send a NIP-09 deletion request (kind:5) for a repository announcement.
+ *
+ * Two modes:
+ *   - "version": deletes only the specific event version via an `e` tag
+ *   - "repo":    deletes the entire repository (all versions) via an `a` tag
+ *
+ * @param announcement - The current announcement event (kind:30617)
+ * @param mode         - "version" to delete just this event; "repo" to delete all versions
+ * @param repoCoords   - Repo coordinate strings for relay group keying
+ * @param reason       - Optional human-readable reason
+ */
+export function DeleteRepo(
+  announcement: NostrEvent,
+  mode: "version" | "repo",
+  repoCoords?: string[],
+  reason?: string,
+): Action {
+  return async ({ factory, sign, self }) => {
+    if (announcement.pubkey !== self) {
+      throw new Error(
+        `Cannot delete repo announcement ${announcement.id.slice(0, 8)}: not authored by current account`,
+      );
+    }
+
+    let draft;
+    if (mode === "version") {
+      // Delete only this specific event version via `e` tag
+      draft = await factory.create(DeletionBlueprint, [announcement], reason);
+    } else {
+      // Delete the entire repository (all versions) via `a` tag
+      const dTag = announcement.tags.find(([t]) => t === "d")?.[1] ?? "";
+      const aCoord = `${announcement.kind}:${announcement.pubkey}:${dTag}`;
+      draft = await factory.create(
+        AddressableDeletionBlueprint,
+        aCoord,
+        announcement.kind,
+        reason,
+      );
+    }
+
+    const signed = await sign(draft);
+
+    // Add to local store immediately so the UI can react
+    eventStore.add(signed);
+
+    // Fire-and-forget: publishing to the outbox can continue in the background.
+    outboxStore
+      .publish(signed, buildGroupIds(self, repoCoords))
       .catch(console.error);
   };
 }

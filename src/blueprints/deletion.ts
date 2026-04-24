@@ -60,3 +60,28 @@ export function DeletionBlueprint(events: NostrEvent[], reason?: string) {
     ),
   );
 }
+
+/**
+ * Blueprint for a NIP-09 deletion request (kind 5) that targets an
+ * addressable event via its `a` coordinate tag.
+ *
+ * Using an `a` tag instructs relays to delete ALL versions of the replaceable
+ * event up to the `created_at` of the deletion request — i.e. the entire
+ * repository announcement history, not just one version.
+ *
+ * @param aCoord - Addressable coordinate string: "<kind>:<pubkey>:<d-tag>"
+ * @param kind   - The kind number of the event being deleted (for the `k` tag)
+ * @param reason - Optional human-readable reason for the deletion request.
+ */
+export function AddressableDeletionBlueprint(
+  aCoord: string,
+  kind: number,
+  reason?: string,
+) {
+  return blueprint(
+    5,
+    setContent(reason ?? ""),
+    modifyPublicTags((tags) => [...tags, ["a", aCoord], ["k", String(kind)]]),
+    includeAltTag(`Deletion request for ${aCoord}`),
+  );
+}

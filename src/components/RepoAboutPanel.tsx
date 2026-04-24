@@ -21,6 +21,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
   Globe,
   Copy,
   Check,
@@ -37,6 +50,7 @@ import {
   Server,
   Info,
   Pencil,
+  Trash2,
 } from "lucide-react";
 import {
   graspCloneUrlNpub,
@@ -58,6 +72,10 @@ import { relayUrlToSegment, repoToPath } from "@/lib/routeUtils";
 import { format } from "date-fns";
 import { useRepoContext } from "@/pages/repo/RepoContext";
 import { useActiveAccount } from "applesauce-react/hooks";
+import { DeleteRepo } from "@/actions/nip34";
+import { runner } from "@/services/actions";
+import { useToast } from "@/hooks/useToast";
+import { REPO_KIND } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
 // Helpers (shared)
@@ -808,12 +826,13 @@ function FullVariant({
         </section>
       )}
 
-      {/* Bottom action bar: edit + share + raw event */}
+      {/* Bottom action bar: edit + share + raw event + delete */}
       {repo.announcements.length > 0 && (
         <FullVariantActionBar
           announcements={repo.announcements}
           selectedMaintainer={repo.selectedMaintainer}
           editPath={isMaintainer ? editPath : undefined}
+          repoCoords={isMaintainer ? repo.allCoordinates : undefined}
         />
       )}
     </div>
@@ -1113,14 +1132,17 @@ function FullVariantActionBar({
   announcements,
   selectedMaintainer,
   editPath,
+  repoCoords,
 }: {
   announcements: NostrEvent[];
   selectedMaintainer: string;
   editPath?: string;
+  repoCoords?: string[];
 }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
   const [rawSectionOpen, setRawSectionOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const isSingle = announcements.length === 1;
   const selectedAnnouncement =
@@ -1132,7 +1154,7 @@ function FullVariantActionBar({
     <div className="pt-2">
       <Separator className="mb-4" />
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         {/* Edit button — only shown for the maintainer */}
         {editPath && (
           <Link
@@ -1176,6 +1198,18 @@ function FullVariantActionBar({
               <ChevronDown className="h-3.5 w-3.5" />
             )}
             Raw announcement events ({announcements.length})
+          </button>
+        )}
+
+        {/* Delete button — only shown for the maintainer */}
+        {editPath && (
+          <button
+            type="button"
+            onClick={() => setDeleteOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors ml-auto"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
           </button>
         )}
       </div>
@@ -1226,7 +1260,193 @@ function FullVariantActionBar({
           onOpenChange={setJsonOpen}
         />
       )}
+
+      {/* Delete repo modal */}
+      <DeleteRepoModal
+        announcement={selectedAnnouncement}
+        repoCoords={repoCoords}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+      />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DeleteRepoModal — NIP-09 deletion for a repo announcement
+// ---------------------------------------------------------------------------
+
+function DeleteRepoModal({
+  announcement,
+  repoCoords,
+  open,
+  onOpenChange,
+}: {
+  announcement: NostrEvent;
+  repoCoords?: string[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const [mode, setMode] = useState<"version" | "repo">("version");
+  const [reason, setReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const publishedAt = format(
+    new Date(announcement.created_at * 1000),
+    "MMM d, yyyy 'at' h:mm a",
+  );
+
+  const handleDelete = useCallback(async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await runner.run(
+        DeleteRepo,
+        announcement,
+        mode,
+        repoCoords,
+        reason.trim() || undefined,
+      );
+      toast({
+        title:
+          mode === "repo"
+            ? "Repository deleted"
+            : "Announcement version deleted",
+        description:
+          mode === "repo"
+            ? "A deletion request has been published. Relays will remove all versions of this repository announcement."
+            : "A deletion request has been published for this version of the announcement.",
+      });
+      onOpenChange(false);
+    } catch (err) {
+      console.error("[DeleteRepoModal] failed to delete:", err);
+      toast({
+        title: "Delete failed",
+        description:
+          "Could not publish the deletion request. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+      setReason("");
+    }
+  }, [deleting, announcement, mode, repoCoords, reason, toast, onOpenChange]);
+
+  const handleOpenChange = useCallback(
+    (v: boolean) => {
+      if (!v) {
+        setReason("");
+        setMode("version");
+      }
+      onOpenChange(v);
+    },
+    [onOpenChange],
+  );
+
+  return (
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4 text-destructive" />
+            Delete repository announcement
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            This will publish a NIP-09 deletion request. Other clients and
+            relays may honour it, but deletion cannot be guaranteed across all
+            relays.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="space-y-4 py-1">
+          {/* Scope selector */}
+          <RadioGroup
+            value={mode}
+            onValueChange={(v) => setMode(v as "version" | "repo")}
+            className="space-y-2"
+          >
+            <div className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 cursor-pointer has-[[data-state=checked]]:border-destructive/40 has-[[data-state=checked]]:bg-destructive/5 transition-colors">
+              <RadioGroupItem
+                value="version"
+                id="delete-version"
+                className="mt-0.5 shrink-0"
+              />
+              <Label
+                htmlFor="delete-version"
+                className="cursor-pointer space-y-0.5"
+              >
+                <span className="text-sm font-medium">Delete this version</span>
+                <p className="text-xs text-muted-foreground font-normal">
+                  Removes only the announcement published on{" "}
+                  <span className="text-foreground">{publishedAt}</span> (event{" "}
+                  <code className="font-mono text-[11px]">
+                    {announcement.id.slice(0, 8)}…
+                  </code>
+                  ).
+                </p>
+              </Label>
+            </div>
+
+            <div className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 cursor-pointer has-[[data-state=checked]]:border-destructive/40 has-[[data-state=checked]]:bg-destructive/5 transition-colors">
+              <RadioGroupItem
+                value="repo"
+                id="delete-repo"
+                className="mt-0.5 shrink-0"
+              />
+              <Label
+                htmlFor="delete-repo"
+                className="cursor-pointer space-y-0.5"
+              >
+                <span className="text-sm font-medium text-destructive">
+                  Delete entire repository
+                </span>
+                <p className="text-xs text-muted-foreground font-normal">
+                  Requests deletion of{" "}
+                  <span className="text-foreground font-medium">
+                    all versions
+                  </span>{" "}
+                  of this repository announcement (kind:{REPO_KIND} `a` tag).
+                  Relays will remove the entire announcement history.
+                </p>
+              </Label>
+            </div>
+          </RadioGroup>
+
+          {/* Reason */}
+          <div className="space-y-1.5">
+            <Label htmlFor="delete-repo-reason" className="text-sm">
+              Reason{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Textarea
+              id="delete-repo-reason"
+              rows={2}
+              placeholder="e.g. repository moved to a different address"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDelete}
+            disabled={deleting}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {deleting
+              ? "Deleting…"
+              : mode === "repo"
+                ? "Delete entire repository"
+                : "Delete this version"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
