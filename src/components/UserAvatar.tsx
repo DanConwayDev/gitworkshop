@@ -11,6 +11,7 @@ import { useUserPath } from "@/hooks/useUserPath";
 import { useIsFollowing } from "@/hooks/useIsFollowing";
 import { useIsGitAuthorFollowing } from "@/hooks/useIsGitAuthorFollowing";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
+import { ProfileHoverCard } from "@/components/ProfileHoverCard";
 import { cn } from "@/lib/utils";
 import { nip19 } from "nostr-tools";
 import { UserCheck } from "lucide-react";
@@ -186,17 +187,19 @@ export function UserAvatar({
 
   if (linkToProfile && pubkey) {
     return (
-      <Link
-        to={userPath}
-        onClick={(e) => e.stopPropagation()}
-        className="shrink-0 hover:opacity-80 transition-opacity"
-      >
-        {avatar}
-      </Link>
+      <ProfileHoverCard pubkey={pubkey} asChild>
+        <Link
+          to={userPath}
+          onClick={(e) => e.stopPropagation()}
+          className="shrink-0 hover:opacity-80 transition-opacity"
+        >
+          {avatar}
+        </Link>
+      </ProfileHoverCard>
     );
   }
 
-  return avatar;
+  return <ProfileHoverCard pubkey={pubkey}>{avatar}</ProfileHoverCard>;
 }
 
 interface UserNameProps {
@@ -224,17 +227,23 @@ export function UserName({ pubkey, className, linkToProfile }: UserNameProps) {
 
   if (linkToProfile && pubkey) {
     return (
-      <Link
-        to={userPath}
-        onClick={(e) => e.stopPropagation()}
-        className={cn("hover:underline", className)}
-      >
-        {nameEl}
-      </Link>
+      <ProfileHoverCard pubkey={pubkey} asChild>
+        <Link
+          to={userPath}
+          onClick={(e) => e.stopPropagation()}
+          className={cn("hover:underline", className)}
+        >
+          {nameEl}
+        </Link>
+      </ProfileHoverCard>
     );
   }
 
-  return <span className={className}>{nameEl}</span>;
+  return (
+    <ProfileHoverCard pubkey={pubkey}>
+      <span className={className}>{nameEl}</span>
+    </ProfileHoverCard>
+  );
 }
 
 interface UserLinkProps {
@@ -282,22 +291,26 @@ export function UserLink({
 
   if (noLink) {
     return (
-      <span className={cn("flex items-center gap-1.5", className)}>
-        {inner}
-      </span>
+      <ProfileHoverCard pubkey={pubkey}>
+        <span className={cn("flex items-center gap-1.5", className)}>
+          {inner}
+        </span>
+      </ProfileHoverCard>
     );
   }
 
   return (
-    <Link
-      to={userPath}
-      onClick={(e) => e.stopPropagation()}
-      className={cn(
-        "flex items-center gap-1.5 hover:opacity-80 transition-opacity",
-        className,
-      )}
-    >
-      {inner}
-    </Link>
+    <ProfileHoverCard pubkey={pubkey} asChild>
+      <Link
+        to={userPath}
+        onClick={(e) => e.stopPropagation()}
+        className={cn(
+          "flex items-center gap-1.5 hover:opacity-80 transition-opacity",
+          className,
+        )}
+      >
+        {inner}
+      </Link>
+    </ProfileHoverCard>
   );
 }
