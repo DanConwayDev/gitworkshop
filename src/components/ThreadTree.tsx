@@ -67,7 +67,7 @@ import { Label } from "@/components/ui/label";
 // Thread context — passes root info down without prop-drilling
 // ---------------------------------------------------------------------------
 
-const ThreadCtx = createContext<ThreadContext | null>(null);
+export const ThreadCtx = createContext<ThreadContext | null>(null);
 
 // ---------------------------------------------------------------------------
 // Depth-based color palette
@@ -178,7 +178,7 @@ export function ThreadTree({
  * border line provides the visual container; each comment is separated by
  * a subtle top border.
  */
-function ThreadComment({ event }: { event: NostrEvent }) {
+export function ThreadComment({ event }: { event: NostrEvent }) {
   const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
     addSuffix: true,
   });

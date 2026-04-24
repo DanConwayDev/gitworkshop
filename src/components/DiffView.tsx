@@ -70,7 +70,10 @@ import {
   InlineCommentBadge,
 } from "@/components/InlineCommentThread";
 import type { InlineCommentOptions } from "@/blueprints/inline-comment";
-import { getLastLineComments } from "@/hooks/useInlineComments";
+import {
+  getLastLineComments,
+  buildThreadEvents,
+} from "@/hooks/useInlineComments";
 
 // ---------------------------------------------------------------------------
 // Theme hook — detect dark mode (same as CodeBlock)
@@ -1617,7 +1620,7 @@ function DiffLine({
     lineKey !== null &&
     sel.composingKey === lineKey;
 
-  // Comments whose range ends on this line — the thread renders here only.
+  // Root inline comments whose range ends on this line — the thread renders here only.
   const lastLineComments =
     ctx && lineNumber !== null
       ? getLastLineComments(
@@ -1627,6 +1630,15 @@ function DiffLine({
           change.type as "add" | "del" | "normal",
         )
       : [];
+
+  // Full thread: root inline comment(s) + all replies, in chronological order.
+  // Replies are plain NIP-22 kind:1111 events (no "f" tag) stored in
+  // repliesByCommentId. We build the full chain here so the thread UI shows
+  // replies submitted via the "Reply" button without requiring a page reload.
+  const threadEvents =
+    ctx && lastLineComments.length > 0
+      ? buildThreadEvents(lastLineComments, ctx.commentMap)
+      : lastLineComments;
 
   // All comments that cover this line (including multi-line ranges that end
   // later). Used only for the range indicator badge on intermediate lines.
@@ -1769,7 +1781,7 @@ function DiffLine({
                   /* Existing comments: show badge + a "+" button on hover/selection */
                   <div className="relative flex items-center justify-center w-full h-full">
                     <InlineCommentBadge
-                      count={lastLineComments.length}
+                      count={threadEvents.length}
                       onClick={() => {
                         if (sel && lineNumber !== null && lineKey !== null) {
                           sel.setAnchor(lineKey);
@@ -2010,12 +2022,12 @@ function DiffLine({
       {/* Inline comment thread — rendered as a full-width row below the line */}
       {ctx && showThread && commentOptions && (
         <>
-          {/* Existing comments thread */}
+          {/* Existing comments thread — includes root inline comment + all replies */}
           {hasComments && (
             <tr>
               <td colSpan={colCount} className="p-0 pb-1">
                 <InlineCommentThread
-                  comments={lastLineComments}
+                  comments={threadEvents}
                   rootEvent={ctx.rootEvent}
                   parentEvent={ctx.parentEvent}
                   commentOptions={commentOptions}

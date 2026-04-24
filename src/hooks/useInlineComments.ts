@@ -52,6 +52,14 @@ export interface InlineCommentMap {
    * exists and has not been deleted.
    */
   resolvedThreadIds: Set<string>;
+  /**
+   * Reply events (kind:1111 without an "f" tag) keyed by the ID of the
+   * inline comment they reply to (lowercase "e" tag = immediate parent).
+   *
+   * This lets the diff view display the full reply chain beneath each
+   * inline comment thread, not just the root comment.
+   */
+  repliesByCommentId: Map<string, NostrEvent[]>;
   /** Total count of inline comments */
   total: number;
 }
@@ -89,6 +97,7 @@ function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
   const byLine = new Map<string, NostrEvent[]>();
   const byLastLine = new Map<string, NostrEvent[]>();
   const resolvedThreadIds = new Set<string>();
+  const repliesByCommentId = new Map<string, NostrEvent[]>();
 
   const addToMap = (
     map: Map<string, NostrEvent[]>,
@@ -108,35 +117,48 @@ function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
       continue;
     }
 
-    const loc = parseInlineCommentLocation(event);
-    if (!loc.filePath) continue;
+    if (isInlineComment(event)) {
+      const loc = parseInlineCommentLocation(event);
+      if (!loc.filePath) continue;
 
-    // Index by file
-    const fileList = byFile.get(loc.filePath) ?? [];
-    fileList.push(event);
-    byFile.set(loc.filePath, fileList);
+      // Index by file
+      const fileList = byFile.get(loc.filePath) ?? [];
+      fileList.push(event);
+      byFile.set(loc.filePath, fileList);
 
-    // Index by line.
-    // "del" side → only appears on deleted lines (old-file number).
-    // No side marker → new-file number, appears on add and normal lines.
-    if (loc.lineRange) {
-      const [start, end] = loc.lineRange;
-      for (let ln = start; ln <= end; ln++) {
-        if (loc.lineSide === "del") {
-          addToMap(byLine, lineMapKey(loc.filePath, "del", ln), event);
-          // Thread renders only on the last line of the range
-          if (ln === end) {
-            addToMap(byLastLine, lineMapKey(loc.filePath, "del", ln), event);
-          }
-        } else {
-          addToMap(byLine, lineMapKey(loc.filePath, "add", ln), event);
-          addToMap(byLine, lineMapKey(loc.filePath, "normal", ln), event);
-          // Thread renders only on the last line of the range
-          if (ln === end) {
-            addToMap(byLastLine, lineMapKey(loc.filePath, "add", ln), event);
-            addToMap(byLastLine, lineMapKey(loc.filePath, "normal", ln), event);
+      // Index by line.
+      // "del" side → only appears on deleted lines (old-file number).
+      // No side marker → new-file number, appears on add and normal lines.
+      if (loc.lineRange) {
+        const [start, end] = loc.lineRange;
+        for (let ln = start; ln <= end; ln++) {
+          if (loc.lineSide === "del") {
+            addToMap(byLine, lineMapKey(loc.filePath, "del", ln), event);
+            // Thread renders only on the last line of the range
+            if (ln === end) {
+              addToMap(byLastLine, lineMapKey(loc.filePath, "del", ln), event);
+            }
+          } else {
+            addToMap(byLine, lineMapKey(loc.filePath, "add", ln), event);
+            addToMap(byLine, lineMapKey(loc.filePath, "normal", ln), event);
+            // Thread renders only on the last line of the range
+            if (ln === end) {
+              addToMap(byLastLine, lineMapKey(loc.filePath, "add", ln), event);
+              addToMap(
+                byLastLine,
+                lineMapKey(loc.filePath, "normal", ln),
+                event,
+              );
+            }
           }
         }
+      }
+    } else {
+      // Plain NIP-22 reply (no "f" tag) — index by immediate parent comment ID
+      // so the diff view can display the full reply chain beneath each thread.
+      const parentId = event.tags.find(([t]) => t === "e")?.[1];
+      if (parentId) {
+        addToMap(repliesByCommentId, parentId, event);
       }
     }
   }
@@ -146,6 +168,7 @@ function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
     byLine,
     byLastLine,
     resolvedThreadIds,
+    repliesByCommentId,
     total: events.length,
   };
 }
@@ -155,6 +178,7 @@ const EMPTY_MAP: InlineCommentMap = {
   byLine: new Map(),
   byLastLine: new Map(),
   resolvedThreadIds: new Set(),
+  repliesByCommentId: new Map(),
   total: 0,
 };
 
@@ -194,13 +218,7 @@ export function useInlineComments(
     } as Filter;
     return store
       .timeline([filter])
-      .pipe(
-        map((events) =>
-          buildCommentMap(
-            events.filter((e) => isInlineComment(e) || isResolutionEvent(e)),
-          ),
-        ),
-      );
+      .pipe(map((events) => buildCommentMap(events)));
   }, [rootEventId, store]);
 
   // Stable memoised key so we don't rebuild the map on every render
@@ -245,4 +263,38 @@ export function getLastLineComments(
   changeType: "add" | "del" | "normal" = "normal",
 ): NostrEvent[] {
   return map.byLastLine.get(lineMapKey(filePath, changeType, lineNumber)) ?? [];
+}
+
+/**
+ * Build the full ordered thread for a set of root inline comments.
+ *
+ * Given the root inline comment events for a line, recursively collects all
+ * replies (plain NIP-22 kind:1111 without "f" tag) from repliesByCommentId
+ * and returns a flat, chronologically-sorted list of all events in the thread.
+ *
+ * This is what gets passed to InlineCommentThread so replies submitted via
+ * the "Reply" button appear in the diff view immediately after posting.
+ */
+export function buildThreadEvents(
+  rootComments: NostrEvent[],
+  map: InlineCommentMap,
+): NostrEvent[] {
+  const result: NostrEvent[] = [];
+  const visited = new Set<string>();
+
+  function collect(events: NostrEvent[]) {
+    for (const event of events) {
+      if (visited.has(event.id)) continue;
+      visited.add(event.id);
+      result.push(event);
+      // Collect replies to this event, sorted by created_at
+      const replies = (map.repliesByCommentId.get(event.id) ?? [])
+        .slice()
+        .sort((a, b) => a.created_at - b.created_at);
+      collect(replies);
+    }
+  }
+
+  collect(rootComments);
+  return result;
 }

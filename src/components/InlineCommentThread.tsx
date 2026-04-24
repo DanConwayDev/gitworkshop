@@ -11,17 +11,14 @@
  *   - "Add a comment" button at the bottom when no composer is open
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import { formatDistanceToNow } from "date-fns";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type { NostrEvent } from "nostr-tools";
-import { UserLink } from "@/components/UserAvatar";
-import { CommentContent } from "@/components/CommentContent";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   NostrComposer,
   type NostrComposerHandle,
 } from "@/components/NostrComposer";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   ChevronDown,
   ChevronRight,
@@ -40,12 +37,16 @@ import {
   ResolveThread,
 } from "@/actions/nip34";
 import type { InlineCommentOptions } from "@/blueprints/inline-comment";
-import { parseInlineCommentLocation } from "@/blueprints/inline-comment";
+import {
+  isInlineComment,
+  parseInlineCommentLocation,
+} from "@/blueprints/inline-comment";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { useToast } from "@/hooks/useToast";
 import { useAuthModal } from "@/contexts/AuthModalContext";
+import { ThreadComment, ThreadCtx } from "@/components/ThreadTree";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -77,34 +78,6 @@ export interface InlineCommentThreadProps {
   /** Repo coordinates for relay group keying on the resolve event */
   repoCoords?: string[];
   className?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Single comment row
-// ---------------------------------------------------------------------------
-
-function InlineComment({ event }: { event: NostrEvent }) {
-  const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
-    addSuffix: true,
-  });
-
-  return (
-    <div className="flex gap-3 p-3 border-t border-border/40 first:border-t-0">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 mb-1.5">
-          <UserLink
-            pubkey={event.pubkey}
-            avatarSize="sm"
-            nameClassName="text-sm font-medium"
-          />
-          <span className="text-xs text-muted-foreground">{timeAgo}</span>
-        </div>
-        <div className="sm:ml-[calc(1.5rem+0.375rem)]">
-          <CommentContent content={event.content} className="text-sm" />
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -319,8 +292,28 @@ export function InlineCommentThread({
   const { toast } = useToast();
   const activeAccount = useActiveAccount();
 
-  // The thread root is the first comment — used as the parent for the resolve event.
-  const threadRootComment = comments.length > 0 ? comments[0] : null;
+  // Split comments into root inline comments (have "f" tag) and plain replies.
+  // The thread root is always the first inline comment.
+  const { rootComments, replyComments } = useMemo(() => {
+    const roots = comments.filter(isInlineComment);
+    const replies = comments.filter((e) => !isInlineComment(e));
+    return { rootComments: roots, replyComments: replies };
+  }, [comments]);
+
+  // ThreadContext passed to ThreadCtx.Provider so ThreadComment gets
+  // repoCoords, delete support, etc. canReply=false disables the ReplyBox
+  // inside ThreadComment — the diff view has its own reply UI at the bottom.
+  const threadCtxValue = useMemo(
+    () => ({
+      rootEvent,
+      repoCoords,
+      canReply: false as const,
+    }),
+    [rootEvent, repoCoords],
+  );
+
+  // The thread root is the first inline comment — used as the parent for the resolve event.
+  const threadRootComment = rootComments.length > 0 ? rootComments[0] : null;
 
   // Can the current user resolve this thread?
   const canResolve =
@@ -432,12 +425,11 @@ export function InlineCommentThread({
           )}
           <span className="text-xs text-muted-foreground">
             {(() => {
-              // Derive the line range to show in the header.
-              // For existing comments, read the line tag from the first comment.
-              // For new comments, use commentOptions.line.
+              // Derive the line range from the first root inline comment's tag,
+              // falling back to commentOptions.line for new (unsaved) threads.
               const lineStr =
-                comments.length > 0
-                  ? (parseInlineCommentLocation(comments[0]).line ??
+                rootComments.length > 0
+                  ? (parseInlineCommentLocation(rootComments[0]).line ??
                     commentOptions.line)
                   : commentOptions.line;
               const locationLabel = lineStr
@@ -465,11 +457,23 @@ export function InlineCommentThread({
 
       {/* Thread body — hidden when collapsed */}
       {!collapsed && (
-        <>
-          {/* Existing comments */}
-          {comments.map((comment) => (
-            <InlineComment key={comment.id} event={comment} />
+        <ThreadCtx.Provider value={threadCtxValue}>
+          {/* Root inline comments (have "f" tag) */}
+          {rootComments.map((comment) => (
+            <ThreadComment key={comment.id} event={comment} />
           ))}
+
+          {/* Replies (plain NIP-22, no "f" tag) — nested with blue left border */}
+          {replyComments.length > 0 && (
+            <div
+              className="ml-3 border-l pl-2"
+              style={{ borderLeftColor: "rgb(59 130 246 / 0.4)" }}
+            >
+              {replyComments.map((reply) => (
+                <ThreadComment key={reply.id} event={reply} />
+              ))}
+            </div>
+          )}
 
           {/* Footer: composer or reply/resolve actions */}
           {composerOpen ? (
@@ -515,7 +519,7 @@ export function InlineCommentThread({
               )}
             </div>
           )}
-        </>
+        </ThreadCtx.Provider>
       )}
     </div>
   );
