@@ -13,7 +13,7 @@
  *   - PRCommitPage    (commit vs its first parent)
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FileDiff,
   FilePlus2,
@@ -340,46 +340,68 @@ export function CommitDiffView({
   const [phase, setPhase] = useState<Phase>({ kind: "loading-trees" });
   const [activeFile, setActiveFile] = useState<string | null>(null);
   // The specific line anchor ID to scroll to after the active file expands.
-  // Derived from the URL hash on mount; cleared after the first use.
+  // scrollToken increments on every new hash navigation so FileDiffCard's
+  // effect re-fires even when the target ID hasn't changed.
   const [scrollToLineId, setScrollToLineId] = useState<string | null>(null);
+  const [scrollToken, setScrollToken] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Pending hash to apply once the diff finishes loading. Stored in a ref so
+  // it survives re-renders and component remounts caused by parent useMemo
+  // deps changing while the diff is still loading.
+  const pendingHashRef = useRef<string>(window.location.hash);
 
   const handleFileSelect = (path: string) => {
     setActiveFile(path);
     setScrollToLineId(null); // clear any hash-driven target when user picks manually
+    pendingHashRef.current = ""; // user took over navigation
     const el = document.getElementById(fileDiffCardId(path));
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // When the diff finishes loading, check the URL hash and set the active file
-  // + scroll target. FileDiffCard handles the actual scroll via its
-  // forceExpand + scrollToLineId props — no setTimeout guessing needed here.
+  // Apply a hash string to the diff state. Requires phase.kind === "done".
+  const applyHashToPhase = useCallback(
+    (hash: string, changes: Array<{ path: string }>) => {
+      if (!hash) return;
+      const parsed = parseDiffHash(hash);
+      if (!parsed) return;
+
+      const matchedFile = changes.find(
+        (c) => fileDiffCardId(c.path) === parsed.cardId,
+      );
+      if (!matchedFile) return;
+
+      setActiveFile(matchedFile.path);
+      if (parsed.line !== null && parsed.side !== null) {
+        setScrollToLineId(
+          diffLineAnchorId(matchedFile.path, parsed.line, parsed.side),
+        );
+      } else {
+        setScrollToLineId(null);
+      }
+      setScrollToken((t) => t + 1);
+    },
+    [],
+  );
+
+  // When the diff finishes loading, apply the pending hash (set on mount or
+  // updated by the hashchange listener below).
   useEffect(() => {
     if (phase.kind !== "done") return;
+    applyHashToPhase(pendingHashRef.current, phase.changes);
+  }, [phase, applyHashToPhase]);
 
-    const hash = window.location.hash;
-    if (!hash) return;
-
-    const parsed = parseDiffHash(hash);
-    if (!parsed) return;
-
-    // Find the file whose fileDiffCardId matches the cardId in the hash.
-    const matchedFile = phase.changes.find(
-      (c) => fileDiffCardId(c.path) === parsed.cardId,
-    );
-    if (!matchedFile) return;
-
-    // Set the active file (triggers forceExpand on the matching FileDiffCard).
-    setActiveFile(matchedFile.path);
-
-    // Set the line anchor so FileDiffCard scrolls to the exact line.
-    if (parsed.line !== null && parsed.side !== null) {
-      setScrollToLineId(
-        diffLineAnchorId(matchedFile.path, parsed.line, parsed.side),
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase.kind]);
+  // Track hash changes while the diff is loading or already loaded.
+  useEffect(() => {
+    const onHashChange = () => {
+      pendingHashRef.current = window.location.hash;
+      if (phase.kind === "done") {
+        applyHashToPhase(window.location.hash, phase.changes);
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [phase, applyHashToPhase]);
 
   // Notify parent when file count is known (phase 1 complete).
   useEffect(() => {
@@ -527,6 +549,7 @@ export function CommitDiffView({
           diff={phase.diff}
           expandedFile={activeFile}
           scrollToLineId={scrollToLineId}
+          scrollToken={scrollToken}
           rootEvent={rootEvent}
           parentEvent={parentEvent}
           commentMap={commentMap}

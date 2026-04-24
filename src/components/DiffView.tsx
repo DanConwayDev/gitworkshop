@@ -231,6 +231,11 @@ export interface DiffViewProps {
    */
   scrollToLineId?: string | null;
   /**
+   * Incremented on every new hash navigation. Forces the scroll effect to
+   * re-fire in FileDiffCard even when scrollToLineId hasn't changed.
+   */
+  scrollToken?: number;
+  /**
    * Files whose diff content is still loading. A loading card (real header,
    * spinner body) is rendered for each entry, after any already-parsed files.
    */
@@ -545,6 +550,7 @@ export const DiffView = memo(function DiffView({
   defaultCollapsed = true,
   expandedFile,
   scrollToLineId,
+  scrollToken,
   loadingFiles,
   rootEvent,
   parentEvent,
@@ -644,6 +650,7 @@ export const DiffView = memo(function DiffView({
             isActive={forceExpand}
             collapseSignal={forceExpand ? undefined : collapseSignal}
             scrollToLineId={forceExpand ? scrollToLineId : undefined}
+            scrollToken={forceExpand ? scrollToken : undefined}
           />
         );
       })}
@@ -681,6 +688,7 @@ const FileDiffCard = memo(function FileDiffCard({
   isActive = false,
   collapseSignal,
   scrollToLineId,
+  scrollToken,
 }: {
   file: parseDiff.File;
   defaultCollapsed: boolean;
@@ -698,6 +706,11 @@ const FileDiffCard = memo(function FileDiffCard({
    * header after expanding. Only used when forceExpand is true.
    */
   scrollToLineId?: string | null;
+  /**
+   * Incremented on every new hash navigation. Forces the scroll effect to
+   * re-fire even when scrollToLineId hasn't changed.
+   */
+  scrollToken?: number;
 }) {
   const totalChanges = file.additions + file.deletions;
   const isLarge = totalChanges > LARGE_DIFF_THRESHOLD;
@@ -714,47 +727,39 @@ const FileDiffCard = memo(function FileDiffCard({
 
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // When forceExpand flips to true, open the card and scroll to the target.
-  // If scrollToLineId is set, scroll to that specific line element; otherwise
-  // scroll to the card header (original behaviour for sidebar file selection).
+  // When forceExpand is true (or a new hash navigation arrives), open the card.
   useEffect(() => {
     if (!forceExpand) return;
     setCollapsed(false);
     setHidden(false);
+  }, [forceExpand, scrollToken]);
+
+  // Once the card is open (collapsed===false), scroll to the target.
+  // Depends on scrollToken so it re-fires on every new hash navigation,
+  // even when scrollToLineId hasn't changed.
+  useEffect(() => {
+    if (!forceExpand) return;
+    if (collapsed) return; // card not open yet — wait for next render
+    if (scrollToken === undefined) return; // no hash navigation in progress
 
     const targetId = scrollToLineId ?? null;
 
     if (targetId) {
-      // Poll for the line element — it may not exist yet if the card is still
-      // rendering its rows after setCollapsed(false).
-      let attempts = 0;
-      const maxAttempts = 20; // up to ~1 second
-      const poll = () => {
-        const el = document.getElementById(targetId);
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-          el.classList.add("bg-yellow-400/30");
-          setTimeout(() => el.classList.remove("bg-yellow-400/30"), 2000);
-        } else if (attempts < maxAttempts) {
-          attempts++;
-          setTimeout(poll, 50);
-        } else {
-          // Line not found — fall back to scrolling the card into view
-          cardRef.current?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
-        }
-      };
-      setTimeout(poll, 50);
-    } else {
-      // Original behaviour: scroll the card header into view
-      const id = setTimeout(() => {
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("bg-yellow-400/30");
+        setTimeout(() => el.classList.remove("bg-yellow-400/30"), 2000);
+      } else {
+        // Line element not in DOM yet (e.g. large diff still rendering) —
+        // fall back to scrolling the card header into view.
         cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 50);
-      return () => clearTimeout(id);
+      }
+    } else {
+      // No specific line — scroll the card header into view.
+      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [forceExpand, scrollToLineId]);
+  }, [forceExpand, collapsed, scrollToLineId, scrollToken]);
 
   // Collapse this card when another file is selected from the sidebar.
   // collapseSignal is undefined for the active card, so it won't self-collapse.
