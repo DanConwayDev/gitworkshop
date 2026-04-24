@@ -461,6 +461,15 @@ export async function buildPatchChainObjects(
             );
             if (obj?.data) {
               originalContent = new TextDecoder().decode(obj.data);
+            } else {
+              // File not found in the base tree — this is an unresolvable conflict.
+              // The patch modifies a file that doesn't exist in the target repo.
+              conflicts.push({
+                path: file.from,
+                reason: "File does not exist in the target repository",
+                patchIndex: patchIdx,
+              });
+              continue;
             }
           } catch {
             return {
@@ -712,6 +721,15 @@ export async function applyPatchChainToTip(
             );
             if (obj?.data) {
               originalContent = new TextDecoder().decode(obj.data);
+            } else {
+              // File not found in the tip tree — this is an unresolvable conflict.
+              // The patch modifies a file that doesn't exist in the target repository.
+              conflicts.push({
+                path: file.from,
+                reason: "File does not exist in the target repository",
+                patchIndex: patchIdx,
+              });
+              continue;
             }
           } catch {
             return {

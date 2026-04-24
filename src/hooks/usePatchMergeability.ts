@@ -152,7 +152,7 @@ export function usePatchMergeability(
     // and patch-replay work when the merge strategy already succeeds.
     async function run() {
       // ── Strategy 1: merge against original base ──────────────────────
-      const mergeRes: PatchChainBuildResult | PatchChainBuildError | null =
+      let mergeRes: PatchChainBuildResult | PatchChainBuildError | null =
         hasMergeBase
           ? await buildPatchChainObjects(
               chain,
@@ -168,14 +168,42 @@ export function usePatchMergeability(
       const mergeOk = mergeRes !== null && !("reason" in mergeRes);
 
       if (mergeOk) {
-        // Merge strategy succeeded — use it, skip apply-to-tip entirely
-        setStatus("ready");
-        setBuildResult(mergeRes as PatchChainBuildResult);
-        setApplyResult(null);
-        setConflicts([]);
-        setErrorMessage(null);
-        setMergeStrategyError(null);
-        return;
+        // Before declaring "ready", verify the base commit is actually an
+        // ancestor of the default branch. If it isn't (e.g. the patch was
+        // authored against a completely different codebase), the merge result
+        // is meaningless — the patch applied against an unrelated tree.
+        const baseCommitId = chain[0].parentCommitId ?? guessedBaseCommitId;
+        let baseIsOnDefaultBranch = true; // optimistic when we can't check
+
+        if (baseCommitId && defaultBranchHead) {
+          const behind = await gitPool.countCommitsBehind(
+            baseCommitId,
+            abort.signal,
+          );
+          if (abort.signal.aborted) return;
+          // countCommitsBehind returns null when the commit is not found in
+          // the default branch history — i.e. no shared ancestor.
+          baseIsOnDefaultBranch = behind !== null;
+        }
+
+        if (baseIsOnDefaultBranch) {
+          // Merge strategy succeeded and base is on the default branch.
+          setStatus("ready");
+          setBuildResult(mergeRes as PatchChainBuildResult);
+          setApplyResult(null);
+          setConflicts([]);
+          setErrorMessage(null);
+          setMergeStrategyError(null);
+          return;
+        }
+
+        // Base commit is not on the default branch — treat the merge strategy
+        // result as a failure and fall through to apply-to-tip.
+        mergeRes = {
+          reason:
+            "Patch base commit is not on the default branch — the patch was authored against a different codebase",
+          conflicts: [],
+        };
       }
 
       // ── Strategy 2: apply to tip (only if merge failed) ──────────────
@@ -222,9 +250,16 @@ export function usePatchMergeability(
           ? (applyRes as { reason: string; conflicts: MergeConflict[] })
           : null;
 
-      // Prefer merge strategy's conflict details if available
-      const primaryErr = mergeErr ?? applyErr;
-      const primaryConflicts = primaryErr?.conflicts ?? [];
+      // Prefer whichever error has file-level conflict details; fall back to
+      // merge strategy error for the human-readable message.
+      const errWithConflicts =
+        (applyErr?.conflicts?.length ?? 0) > 0
+          ? applyErr
+          : (mergeErr?.conflicts?.length ?? 0) > 0
+            ? mergeErr
+            : null;
+      const primaryErr = errWithConflicts ?? mergeErr ?? applyErr;
+      const primaryConflicts = errWithConflicts?.conflicts ?? [];
 
       if (primaryConflicts.length > 0) {
         setStatus("conflicts");

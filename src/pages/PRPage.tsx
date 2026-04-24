@@ -235,27 +235,37 @@ export default function PRPage() {
     return [...trimmed].reverse();
   }, [prCommitHistory.commits, effectiveMergeBase]);
 
-  // ── Ahead / behind counts ─────────────────────────────────────────────
-  const aheadCount =
-    pr?.itemType === "pr"
-      ? prCommits.length > 0
-        ? prCommits.length
-        : undefined
-      : pr?.revisions.length
-        ? pr.revisions[pr.revisions.length - 1].patches?.filter(
-            (p) => !p.isCoverLetter,
-          ).length
-        : undefined;
-
   const defaultBranchName = gitPoolState.defaultBranch ?? repoState?.headBranch;
-
   const defaultBranchHead = gitPoolState.latestCommit?.hash;
+
   const [behindCount, setBehindCount] = useState<number | undefined>(undefined);
+  // false = merge base is not on the default branch (no shared ancestor)
+  const [baseOnDefaultBranch, setBaseOnDefaultBranch] = useState<
+    boolean | undefined
+  >(undefined);
   const behindAbortRef = useRef<AbortController | null>(null);
+
+  // ── Ahead / behind counts ─────────────────────────────────────────────
+  // Suppress the "ahead" count when we know the base commit has no shared
+  // ancestor with the default branch — "N commits ahead" is meaningless
+  // without a common history.
+  const aheadCount =
+    baseOnDefaultBranch === false
+      ? undefined
+      : pr?.itemType === "pr"
+        ? prCommits.length > 0
+          ? prCommits.length
+          : undefined
+        : pr?.revisions.length
+          ? pr.revisions[pr.revisions.length - 1].patches?.filter(
+              (p) => !p.isCoverLetter,
+            ).length
+          : undefined;
 
   useEffect(() => {
     if (!gitPool || !effectiveMergeBase) {
       setBehindCount(undefined);
+      setBaseOnDefaultBranch(undefined);
       return;
     }
 
@@ -267,10 +277,16 @@ export default function PRPage() {
       .countCommitsBehind(effectiveMergeBase, abort.signal)
       .then((result) => {
         if (abort.signal.aborted) return;
+        // result === null means the merge base was not found in the default
+        // branch history — no shared ancestor with the current codebase.
+        setBaseOnDefaultBranch(result !== null);
         setBehindCount(result ?? undefined);
       })
       .catch(() => {
-        if (!abort.signal.aborted) setBehindCount(undefined);
+        if (!abort.signal.aborted) {
+          setBehindCount(undefined);
+          setBaseOnDefaultBranch(undefined);
+        }
       });
 
     return () => abort.abort();
