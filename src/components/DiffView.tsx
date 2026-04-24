@@ -132,6 +132,26 @@ function makeLineKey(type: "add" | "del" | "normal", n: number): LineKey {
   return `${type}:${n}`;
 }
 
+function lineKeyType(k: LineKey): "add" | "del" | "normal" {
+  return k.split(":")[0] as "add" | "del" | "normal";
+}
+
+/**
+ * Returns true if a candidate line is compatible with the anchor line for
+ * selection purposes:
+ *   - normal lines are always compatible (context lines)
+ *   - add lines are compatible with add or normal anchors
+ *   - del lines are compatible with del or normal anchors
+ */
+function isCompatibleWithAnchor(
+  anchorType: "add" | "del" | "normal",
+  candidateType: "add" | "del" | "normal",
+): boolean {
+  if (candidateType === "normal") return true;
+  if (anchorType === "normal") return true;
+  return anchorType === candidateType;
+}
+
 interface SelectionCtx {
   /** The anchor line key (where the drag/click started) */
   anchor: LineKey | null;
@@ -166,6 +186,11 @@ const SelectionContext = createContext<SelectionCtx | null>(null);
 /**
  * Returns the set of selected LineKeys between anchor and head (inclusive),
  * preserving document order via lineOrder.
+ *
+ * Only lines whose type is compatible with the anchor are included:
+ *   - Starting on a del line → only del + normal lines are selectable
+ *   - Starting on an add line → only add + normal lines are selectable
+ *   - Starting on a normal line → all line types are selectable
  */
 function selectedKeys(
   anchor: LineKey | null,
@@ -178,7 +203,12 @@ function selectedKeys(
   const hi = lineOrder.indexOf(h);
   if (ai === -1 || hi === -1) return new Set();
   const [from, to] = ai <= hi ? [ai, hi] : [hi, ai];
-  return new Set(lineOrder.slice(from, to + 1));
+  const anchorType = lineKeyType(anchor);
+  return new Set(
+    lineOrder
+      .slice(from, to + 1)
+      .filter((k) => isCompatibleWithAnchor(anchorType, lineKeyType(k))),
+  );
 }
 
 export interface DiffViewProps {
@@ -1158,7 +1188,12 @@ function DiffLine({
       if (!sel || lineKey === null) return;
       e.preventDefault(); // prevent browser text selection
       if (e.shiftKey && sel.anchor !== null) {
-        sel.setHead(lineKey);
+        // Only extend if this line is compatible with the anchor type
+        if (
+          isCompatibleWithAnchor(lineKeyType(sel.anchor), lineKeyType(lineKey))
+        ) {
+          sel.setHead(lineKey);
+        }
       } else {
         sel.setAnchor(lineKey);
         sel.setHead(lineKey);
@@ -1170,7 +1205,11 @@ function DiffLine({
   );
 
   const handleLineNumberMouseEnter = useCallback(() => {
-    if (!sel || !sel.dragging || lineKey === null) return;
+    if (!sel || !sel.dragging || lineKey === null || sel.anchor === null)
+      return;
+    // Only extend the selection to lines compatible with the anchor type
+    if (!isCompatibleWithAnchor(lineKeyType(sel.anchor), lineKeyType(lineKey)))
+      return;
     sel.setHead(lineKey);
   }, [sel, lineKey]);
 
