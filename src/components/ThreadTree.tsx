@@ -29,6 +29,7 @@ import {
   Calendar,
   Reply,
   Trash2,
+  FileCode,
 } from "lucide-react";
 import type { NostrEvent } from "nostr-tools";
 import type { ThreadTreeNode } from "@/lib/threadTree";
@@ -43,6 +44,10 @@ import { ReactionsBar } from "@/components/ReactionsBar";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { DeleteEvent } from "@/actions/nip34";
 import { runner } from "@/services/actions";
+import {
+  isInlineComment,
+  parseInlineCommentLocation,
+} from "@/blueprints/inline-comment";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -209,6 +214,10 @@ function ThreadComment({ event }: { event: NostrEvent }) {
     }
   }, [deleting, ctx, event, deleteReason]);
 
+  // Detect inline comment and extract location for the context banner
+  const isInline = isInlineComment(event);
+  const inlineLoc = isInline ? parseInlineCommentLocation(event) : null;
+
   return (
     <div
       id={anchorId}
@@ -221,6 +230,19 @@ function ThreadComment({ event }: { event: NostrEvent }) {
             : ""
       }`}
     >
+      {/* Inline comment context banner */}
+      {isInline && inlineLoc?.filePath && (
+        <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded bg-muted/60 border border-border/40 text-xs text-muted-foreground font-mono">
+          <FileCode className="h-3 w-3 shrink-0 text-blue-500/70" />
+          <span className="truncate">{inlineLoc.filePath}</span>
+          {inlineLoc.line && (
+            <span className="shrink-0 text-muted-foreground/60">
+              :{inlineLoc.line}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Header row */}
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <div className="flex items-center gap-2">

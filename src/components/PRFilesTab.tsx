@@ -14,6 +14,8 @@
 
 import { CommitDiffView } from "@/components/CommitDiffView";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
+import type { NostrEvent } from "nostr-tools";
+import type { InlineCommentMap } from "@/hooks/useInlineComments";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -34,6 +36,19 @@ export interface PRFilesTabProps {
    * latest PR Update's ["clone", ...] tags.
    */
   fallbackUrls?: string[];
+  // ── Inline comment props ──────────────────────────────────────────────────
+  /** Root PR event — enables inline code review comments when set */
+  rootEvent?: NostrEvent;
+  /** Immediate parent event for new comments (defaults to rootEvent) */
+  parentEvent?: NostrEvent;
+  /** Map of inline comments from useInlineComments() */
+  commentMap?: InlineCommentMap;
+  /** Commit ID to attach to new inline comments (tip commit) */
+  commitId?: string;
+  /** Repo coordinates for q-tags on new inline comments */
+  repoCoords?: string[];
+  /** Relay hint for NIP-22 tags */
+  relayHint?: string;
 }
 
 export function PRFilesTab({
@@ -42,6 +57,12 @@ export function PRFilesTab({
   pool,
   onFileCountChange,
   fallbackUrls,
+  rootEvent,
+  parentEvent,
+  commentMap,
+  commitId,
+  repoCoords,
+  relayHint,
 }: PRFilesTabProps) {
   return (
     <CommitDiffView
@@ -50,6 +71,12 @@ export function PRFilesTab({
       pool={pool}
       onFileCountChange={onFileCountChange}
       fallbackUrls={fallbackUrls}
+      rootEvent={rootEvent}
+      parentEvent={parentEvent}
+      commentMap={commentMap}
+      commitId={commitId}
+      repoCoords={repoCoords}
+      relayHint={relayHint}
     />
   );
 }

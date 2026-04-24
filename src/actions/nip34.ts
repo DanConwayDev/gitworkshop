@@ -21,6 +21,10 @@ import type { NostrEvent } from "nostr-tools";
 import { IssueBlueprint, type IssueOptions } from "@/blueprints/issue";
 import { CommentBlueprint, type CommentOptions } from "@/blueprints/comment";
 import {
+  buildInlineCommentTemplate,
+  type InlineCommentOptions,
+} from "@/blueprints/inline-comment";
+import {
   CoverNoteBlueprint,
   type CoverNoteOptions,
 } from "@/blueprints/cover-note";
@@ -401,6 +405,48 @@ export function DeleteEvent(
     // Fire-and-forget: publishing to the outbox can continue in the background.
     outboxStore
       .publish(signed, buildGroupIds(self, repoCoords, [...notifyPubkeys]))
+      .catch(console.error);
+  };
+}
+
+/**
+ * Post an inline code review comment (kind:1111) on a NIP-34 PR or patch.
+ *
+ * Extends the standard NIP-22 comment with file/line/commit location tags as
+ * defined in NIP.md. Publishes to the same relay groups as CreateComment.
+ *
+ * @param rootEvent    - The PR (kind:1618) or patch (kind:1617) being reviewed
+ * @param parentEvent  - Immediate parent (same as rootEvent, or a PR update)
+ * @param content      - Comment body
+ * @param options      - Code location: filePath, commitId, line, repoCoords
+ */
+export function CreateInlineComment(
+  rootEvent: NostrEvent,
+  parentEvent: NostrEvent,
+  content: string,
+  options: InlineCommentOptions,
+): Action {
+  return async ({ sign, self }) => {
+    const draft = buildInlineCommentTemplate(
+      rootEvent,
+      parentEvent,
+      content,
+      options,
+    );
+    const signed = await sign(draft);
+
+    // Add to local store immediately so the comment appears without a relay round-trip.
+    eventStore.add(signed);
+
+    const repoCoords = options.repoCoords;
+    const notifyPubkeys = [
+      ...new Set(
+        [rootEvent.pubkey, parentEvent.pubkey].filter((pk) => pk !== self),
+      ),
+    ];
+
+    outboxStore
+      .publish(signed, buildGroupIds(self, repoCoords, notifyPubkeys))
       .catch(console.error);
   };
 }

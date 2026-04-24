@@ -14,7 +14,16 @@
  * attributes for future line-level commenting.
  */
 
-import { memo, useEffect, useRef, useState, useMemo, useCallback } from "react";
+import {
+  createContext,
+  memo,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  useCallback,
+} from "react";
 import parseDiff from "parse-diff";
 import { SyncedScrollArea } from "@/components/SyncedScrollArea";
 import {
@@ -36,6 +45,7 @@ import {
   Loader2,
   WrapText,
   ArrowRightToLine,
+  MessageSquarePlus,
 } from "lucide-react";
 import type { FileChange } from "@/lib/git-grasp-pool";
 import { Button } from "@/components/ui/button";
@@ -44,6 +54,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { NostrEvent } from "nostr-tools";
+import type { InlineCommentMap } from "@/hooks/useInlineComments";
+import { getLineComments } from "@/hooks/useInlineComments";
+import {
+  InlineCommentThread,
+  InlineCommentBadge,
+} from "@/components/InlineCommentThread";
+import type { InlineCommentOptions } from "@/blueprints/inline-comment";
 
 // ---------------------------------------------------------------------------
 // Theme hook — detect dark mode (same as CodeBlock)
@@ -72,6 +90,24 @@ function useIsDark(): boolean {
 // Types
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Inline comment context — passed down to DiffLine without prop drilling
+// ---------------------------------------------------------------------------
+
+interface InlineCommentCtx {
+  rootEvent: NostrEvent;
+  parentEvent: NostrEvent;
+  commentMap: InlineCommentMap;
+  /** Commit ID to attach to new inline comments */
+  commitId?: string;
+  /** Repo coordinates for q-tags */
+  repoCoords?: string[];
+  /** Relay hint for NIP-22 tags */
+  relayHint?: string;
+}
+
+const InlineCommentContext = createContext<InlineCommentCtx | null>(null);
+
 export interface DiffViewProps {
   /** Raw unified diff string */
   diff: string;
@@ -89,6 +125,26 @@ export interface DiffViewProps {
    * spinner body) is rendered for each entry, after any already-parsed files.
    */
   loadingFiles?: FileChange[];
+  /**
+   * When provided, enables inline code review comments.
+   * The root PR or patch event — used to publish new comments.
+   */
+  rootEvent?: NostrEvent;
+  /**
+   * The immediate parent event for new comments (same as rootEvent for
+   * top-level comments, or a PR update for revision-specific comments).
+   */
+  parentEvent?: NostrEvent;
+  /**
+   * Map of inline comments keyed by file+line, from useInlineComments().
+   */
+  commentMap?: InlineCommentMap;
+  /** Commit ID to attach to new inline comments */
+  commitId?: string;
+  /** Repo coordinates for q-tags on new inline comments */
+  repoCoords?: string[];
+  /** Relay hint for NIP-22 tags */
+  relayHint?: string;
 }
 
 import { fileDiffCardId } from "@/lib/diffCardId";
@@ -379,6 +435,12 @@ export const DiffView = memo(function DiffView({
   defaultCollapsed = true,
   expandedFile,
   loadingFiles,
+  rootEvent,
+  parentEvent,
+  commentMap,
+  commitId,
+  repoCoords,
+  relayHint,
 }: DiffViewProps) {
   const files = useMemo(() => parseDiff(diff), [diff]);
 
@@ -411,7 +473,19 @@ export const DiffView = memo(function DiffView({
   const totalDeletions = files.reduce((s, f) => s + f.deletions, 0);
   const isLoading = (loadingFiles?.length ?? 0) > 0;
 
-  return (
+  const ctxValue: InlineCommentCtx | null =
+    rootEvent && commentMap
+      ? {
+          rootEvent,
+          parentEvent: parentEvent ?? rootEvent,
+          commentMap,
+          commitId,
+          repoCoords,
+          relayHint,
+        }
+      : null;
+
+  const inner = (
     <div className={cn("space-y-3 min-w-0", className)}>
       {/* Summary bar */}
       <div className="flex items-center gap-3 text-xs text-muted-foreground px-1">
@@ -468,6 +542,15 @@ export const DiffView = memo(function DiffView({
       ))}
     </div>
   );
+
+  if (ctxValue) {
+    return (
+      <InlineCommentContext.Provider value={ctxValue}>
+        {inner}
+      </InlineCommentContext.Provider>
+    );
+  }
+  return inner;
 });
 
 // ---------------------------------------------------------------------------
@@ -665,6 +748,7 @@ const FileDiffCard = memo(function FileDiffCard({
                     tokenMap={tokenMap}
                     isFirstChunk={ci === 0}
                     wordWrap={wordWrap}
+                    filename={filename}
                   />
                 ))}
               </tbody>
@@ -696,11 +780,13 @@ function ChunkRows({
   tokenMap,
   isFirstChunk,
   wordWrap,
+  filename,
 }: {
   chunk: parseDiff.Chunk;
   tokenMap: TokenMap;
   isFirstChunk: boolean;
   wordWrap: boolean;
+  filename: string;
 }) {
   return (
     <>
@@ -712,7 +798,7 @@ function ChunkRows({
         )}
       >
         <td
-          colSpan={4}
+          colSpan={5}
           className="px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 font-mono select-none"
         >
           {chunk.content}
@@ -726,6 +812,7 @@ function ChunkRows({
           change={change}
           tokenMap={tokenMap}
           wordWrap={wordWrap}
+          filename={filename}
         />
       ))}
     </>
@@ -740,11 +827,16 @@ function DiffLine({
   change,
   tokenMap,
   wordWrap,
+  filename,
 }: {
   change: parseDiff.Change;
   tokenMap: TokenMap;
   wordWrap: boolean;
+  filename: string;
 }) {
+  const ctx = useContext(InlineCommentContext);
+  const [composerOpen, setComposerOpen] = useState(false);
+
   const text = change.content.slice(1); // strip leading +/-/space
   const tokens = tokenMap.get(text);
 
@@ -763,102 +855,171 @@ function DiffLine({
       ? (change as parseDiff.AddChange).ln
       : null;
 
+  // The "canonical" line number for comment lookup: prefer new line, fall back to old.
+  const lineNumber = newLine ?? oldLine ?? null;
+
+  // Look up existing comments for this line
+  const lineComments =
+    ctx && lineNumber !== null
+      ? getLineComments(ctx.commentMap, filename, lineNumber)
+      : [];
+
+  const hasComments = lineComments.length > 0;
+  const showThread = hasComments || composerOpen;
+
+  const commentOptions: InlineCommentOptions | null =
+    ctx && lineNumber !== null
+      ? {
+          filePath: filename,
+          commitId: ctx.commitId,
+          line: String(lineNumber),
+          repoCoords: ctx.repoCoords,
+          relayHint: ctx.relayHint,
+        }
+      : null;
+
   return (
-    <tr
-      data-line-old={oldLine}
-      data-line-new={newLine}
-      className={cn(
-        "group",
-        isAdd && "bg-green-500/15 dark:bg-green-400/12",
-        isDel && "bg-red-500/15 dark:bg-red-400/12",
-      )}
-    >
-      {/* Sticky gutter: old line · new line · +/- indicator.
-          background-image layers the row tint over the solid bg-background
-          so both are visible without fighting over background-color.
-          The gutter uses a higher-opacity tint than the row so it reads
-          as slightly darker without losing the hue. */}
-      <td
-        className="sticky left-0 select-none align-top p-0 w-[1%] whitespace-nowrap bg-background"
-        style={
-          isAdd
-            ? {
-                backgroundImage:
-                  "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28))",
-              }
-            : isDel
+    <>
+      <tr
+        data-line-old={oldLine}
+        data-line-new={newLine}
+        className={cn(
+          "group",
+          isAdd && "bg-green-500/15 dark:bg-green-400/12",
+          isDel && "bg-red-500/15 dark:bg-red-400/12",
+        )}
+      >
+        {/* Sticky gutter: old line · new line · +/- indicator.
+            background-image layers the row tint over the solid bg-background
+            so both are visible without fighting over background-color.
+            The gutter uses a higher-opacity tint than the row so it reads
+            as slightly darker without losing the hue. */}
+        <td
+          className="sticky left-0 select-none align-top p-0 w-[1%] whitespace-nowrap bg-background"
+          style={
+            isAdd
               ? {
                   backgroundImage:
-                    "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28))",
+                    "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28))",
                 }
-              : {
-                  backgroundImage:
-                    "linear-gradient(rgba(0,0,0,0.035),rgba(0,0,0,0.035))",
-                }
-        }
-      >
-        <div className="flex items-stretch border-r border-border/30">
-          {/* Old line number */}
-          <span
-            className={cn(
-              "text-right px-2 py-0 min-w-[3ch]",
-              "text-muted-foreground/60 group-hover:text-muted-foreground/90 transition-colors duration-75",
-              isDel && "text-red-700/70 dark:text-red-400/70",
-            )}
-          >
-            {oldLine ?? ""}
-          </span>
-          {/* New line number */}
-          <span
-            className={cn(
-              "text-right px-2 py-0 min-w-[3ch] border-l border-border/30",
-              "text-muted-foreground/60 group-hover:text-muted-foreground/90 transition-colors duration-75",
-              isAdd && "text-green-700/70 dark:text-green-400/70",
-            )}
-          >
-            {newLine ?? ""}
-          </span>
-          {/* +/- indicator */}
-          <span
-            className={cn(
-              "text-center px-1 py-0 border-l border-border/30",
-              isAdd && "text-green-600 dark:text-green-400",
-              isDel && "text-red-600 dark:text-red-400",
-              isNormal && "text-muted-foreground/40",
-            )}
-          >
-            {isAdd ? "+" : isDel ? "-" : " "}
-          </span>
-        </div>
-      </td>
-
-      {/* Code content */}
-      <td
-        className={cn(
-          "px-3 py-0",
-          wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
-        )}
-        style={(() => {
-          if (!wordWrap) return undefined;
-          const indent = text.length - text.trimStart().length;
-          if (indent === 0) return undefined;
-          return {
-            paddingLeft: `calc(0.75rem + ${indent}ch)`,
-            textIndent: `-${indent}ch`,
-          };
-        })()}
-      >
-        {tokens ? (
-          tokens.map((token, j) => (
-            <span key={j} style={{ color: token.color }}>
-              {token.content}
+              : isDel
+                ? {
+                    backgroundImage:
+                      "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28))",
+                  }
+                : {
+                    backgroundImage:
+                      "linear-gradient(rgba(0,0,0,0.035),rgba(0,0,0,0.035))",
+                  }
+          }
+        >
+          <div className="flex items-stretch border-r border-border/30">
+            {/* Old line number */}
+            <span
+              className={cn(
+                "text-right px-2 py-0 min-w-[3ch]",
+                "text-muted-foreground/60 group-hover:text-muted-foreground/90 transition-colors duration-75",
+                isDel && "text-red-700/70 dark:text-red-400/70",
+              )}
+            >
+              {oldLine ?? ""}
             </span>
-          ))
-        ) : (
-          <span className="text-foreground/85">{text}</span>
+            {/* New line number */}
+            <span
+              className={cn(
+                "text-right px-2 py-0 min-w-[3ch] border-l border-border/30",
+                "text-muted-foreground/60 group-hover:text-muted-foreground/90 transition-colors duration-75",
+                isAdd && "text-green-700/70 dark:text-green-400/70",
+              )}
+            >
+              {newLine ?? ""}
+            </span>
+            {/* +/- indicator */}
+            <span
+              className={cn(
+                "text-center px-1 py-0 border-l border-border/30",
+                isAdd && "text-green-600 dark:text-green-400",
+                isDel && "text-red-600 dark:text-red-400",
+                isNormal && "text-muted-foreground/40",
+              )}
+            >
+              {isAdd ? "+" : isDel ? "-" : " "}
+            </span>
+          </div>
+        </td>
+
+        {/* Code content */}
+        <td
+          className={cn(
+            "px-3 py-0",
+            wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
+          )}
+          style={(() => {
+            if (!wordWrap) return undefined;
+            const indent = text.length - text.trimStart().length;
+            if (indent === 0) return undefined;
+            return {
+              paddingLeft: `calc(0.75rem + ${indent}ch)`,
+              textIndent: `-${indent}ch`,
+            };
+          })()}
+        >
+          {tokens ? (
+            tokens.map((token, j) => (
+              <span key={j} style={{ color: token.color }}>
+                {token.content}
+              </span>
+            ))
+          ) : (
+            <span className="text-foreground/85">{text}</span>
+          )}
+          {text === "" && <span>{"\n"}</span>}
+        </td>
+
+        {/* Comment action column — only rendered when inline comments are enabled */}
+        {ctx && (
+          <td className="w-[1%] whitespace-nowrap align-top p-0 pr-1">
+            <div className="flex items-center gap-1 h-full py-0 pl-1">
+              {hasComments && (
+                <InlineCommentBadge
+                  count={lineComments.length}
+                  onClick={() => setComposerOpen((v) => !v)}
+                />
+              )}
+              {!hasComments && lineNumber !== null && (
+                <button
+                  type="button"
+                  onClick={() => setComposerOpen(true)}
+                  className={cn(
+                    "opacity-0 group-hover:opacity-100 transition-opacity",
+                    "text-muted-foreground/50 hover:text-blue-500 p-0.5 rounded",
+                  )}
+                  title="Add a comment"
+                  aria-label="Add inline comment"
+                >
+                  <MessageSquarePlus className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </td>
         )}
-        {text === "" && <span>{"\n"}</span>}
-      </td>
-    </tr>
+      </tr>
+
+      {/* Inline comment thread — rendered as a full-width row below the line */}
+      {ctx && showThread && commentOptions && (
+        <tr>
+          <td colSpan={ctx ? 3 : 2} className="p-0 pb-1">
+            <InlineCommentThread
+              comments={lineComments}
+              rootEvent={ctx.rootEvent}
+              parentEvent={ctx.parentEvent}
+              commentOptions={commentOptions}
+              onClose={() => setComposerOpen(false)}
+              autoFocus={composerOpen && !hasComments}
+            />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

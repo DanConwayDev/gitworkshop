@@ -39,6 +39,8 @@ import { eventIdToNevent } from "@/lib/routeUtils";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 import type { FileChange } from "@/lib/git-grasp-pool";
+import type { NostrEvent } from "nostr-tools";
+import type { InlineCommentMap } from "@/hooks/useInlineComments";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -89,6 +91,17 @@ export interface PatchFilesTabProps {
    * Typically the repo relay group URLs.
    */
   relayHints?: string[];
+  // ── Inline comment props ──────────────────────────────────────────────────
+  /** Root patch event — enables inline code review comments when set */
+  rootEvent?: NostrEvent;
+  /** Immediate parent event for new comments (defaults to rootEvent) */
+  parentEvent?: NostrEvent;
+  /** Map of inline comments from useInlineComments() */
+  commentMap?: InlineCommentMap;
+  /** Repo coordinates for q-tags on new inline comments */
+  repoCoords?: string[];
+  /** Relay hint for NIP-22 tags */
+  relayHint?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -332,6 +345,11 @@ export function PatchFilesTab({
   fallbackUrls,
   basePath,
   relayHints,
+  rootEvent,
+  parentEvent,
+  commentMap,
+  repoCoords,
+  relayHint,
 }: PatchFilesTabProps) {
   const [phase, setPhase] = useState<Phase>({ kind: "parsing" });
   const [activeFile, setActiveFile] = useState<string | null>(null);
@@ -544,7 +562,15 @@ export function PatchFilesTab({
           loading
         />
         <div className="flex-1 min-w-0 p-3 overflow-x-clip">
-          <DiffView diff="" loadingFiles={phase.changes} />
+          <DiffView
+            diff=""
+            loadingFiles={phase.changes}
+            rootEvent={rootEvent}
+            parentEvent={parentEvent}
+            commentMap={commentMap}
+            repoCoords={repoCoords}
+            relayHint={relayHint}
+          />
         </div>
       </div>
     );
@@ -645,7 +671,15 @@ export function PatchFilesTab({
           onSelect={handleFileSelect}
         />
         <div className="flex-1 min-w-0 p-3 overflow-x-clip">
-          <DiffView diff={phase.diff} expandedFile={activeFile} />
+          <DiffView
+            diff={phase.diff}
+            expandedFile={activeFile}
+            rootEvent={rootEvent}
+            parentEvent={parentEvent}
+            commentMap={commentMap}
+            repoCoords={repoCoords}
+            relayHint={relayHint}
+          />
         </div>
       </div>
     </div>

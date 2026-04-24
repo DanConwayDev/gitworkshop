@@ -35,6 +35,8 @@ import {
   type FileChange,
 } from "@/lib/git-grasp-pool";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
+import type { NostrEvent } from "nostr-tools";
+import type { InlineCommentMap } from "@/hooks/useInlineComments";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -55,6 +57,19 @@ export interface CommitDiffViewProps {
    * URLs when viewing a PR's file diff.
    */
   fallbackUrls?: string[];
+  // ── Inline comment props ──────────────────────────────────────────────────
+  /** Root PR or patch event — enables inline code review comments when set */
+  rootEvent?: NostrEvent;
+  /** Immediate parent event for new comments (defaults to rootEvent) */
+  parentEvent?: NostrEvent;
+  /** Map of inline comments from useInlineComments() */
+  commentMap?: InlineCommentMap;
+  /** Commit ID to attach to new inline comments */
+  commitId?: string;
+  /** Repo coordinates for q-tags on new inline comments */
+  repoCoords?: string[];
+  /** Relay hint for NIP-22 tags */
+  relayHint?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +298,12 @@ export function CommitDiffView({
   pool,
   onFileCountChange,
   fallbackUrls,
+  rootEvent,
+  parentEvent,
+  commentMap,
+  commitId,
+  repoCoords,
+  relayHint,
 }: CommitDiffViewProps) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading-trees" });
   const [activeFile, setActiveFile] = useState<string | null>(null);
@@ -404,7 +425,16 @@ export function CommitDiffView({
           loading
         />
         <div className="flex-1 min-w-0 p-3 overflow-x-clip">
-          <DiffView diff="" loadingFiles={phase.changes} />
+          <DiffView
+            diff=""
+            loadingFiles={phase.changes}
+            rootEvent={rootEvent}
+            parentEvent={parentEvent}
+            commentMap={commentMap}
+            commitId={commitId}
+            repoCoords={repoCoords}
+            relayHint={relayHint}
+          />
         </div>
       </div>
     );
@@ -427,7 +457,16 @@ export function CommitDiffView({
         onSelect={handleFileSelect}
       />
       <div className="flex-1 min-w-0 p-3 overflow-x-clip">
-        <DiffView diff={phase.diff} expandedFile={activeFile} />
+        <DiffView
+          diff={phase.diff}
+          expandedFile={activeFile}
+          rootEvent={rootEvent}
+          parentEvent={parentEvent}
+          commentMap={commentMap}
+          commitId={commitId}
+          repoCoords={repoCoords}
+          relayHint={relayHint}
+        />
       </div>
     </div>
   );

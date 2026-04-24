@@ -75,6 +75,7 @@ import { PatchCommitDetailView } from "@/components/PatchCommitDetailView";
 import { useEventStore } from "@/hooks/useEventStore";
 import { use$ } from "@/hooks/use$";
 import { usePatchChain } from "@/hooks/usePatchChain";
+import { useInlineComments } from "@/hooks/useInlineComments";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { withGapFill } from "@/lib/withGapFill";
@@ -306,6 +307,19 @@ export default function PRPage() {
   // Resolves the base commit for the patch chain: uses the parent-commit tag
   // when present, otherwise approximates via the timestamp heuristic.
   const patchMergeBase = usePatchMergeBase(patchChain, gitPool, gitPoolState);
+
+  // ── Inline code review comments ───────────────────────────────────────
+  // Fetch and subscribe to inline comments for the PR/patch root event.
+  // The relay list comes from the resolved repo relay group.
+  const inlineCommentRelays = useMemo(
+    () => resolved?.repoRelayGroup?.relays.map((r) => r.url) ?? [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resolved?.repoRelayGroup?.relays.map((r) => r.url).join(",")],
+  );
+  const inlineCommentMap = useInlineComments(
+    pr?.rootEvent.id,
+    inlineCommentRelays,
+  );
 
   // ── File count (eager for tab badge) ──────────────────────────────────
   const [fileCount, setFileCount] = useState<number | undefined>(undefined);
@@ -635,6 +649,9 @@ export default function PRPage() {
           }
           baseCommitId={commitDetailPatchMergeBase.baseCommitId}
           relayHints={repoRelayHints}
+          commentMap={inlineCommentMap}
+          repoCoords={repoAllCoords ?? pr?.repoCoords}
+          relayHint={inlineCommentRelays[0]}
         />
       );
     }
@@ -685,6 +702,10 @@ export default function PRPage() {
     commitDetailPatchMergeBase.isGuessed,
     commitDetailPatchMergeBase.baseCommitId,
     repoRelayHints,
+    inlineCommentMap,
+    inlineCommentRelays,
+    pr?.repoCoords,
+    repoAllCoords,
   ]);
 
   // ── Not-found / searching / deleted / vanished state ─────────────────────
@@ -1108,6 +1129,10 @@ export default function PRPage() {
                       fallbackUrls={effectiveCloneUrls}
                       basePath={prBasePath ?? undefined}
                       relayHints={repoRelayHints}
+                      rootEvent={pr.rootEvent}
+                      commentMap={inlineCommentMap}
+                      repoCoords={repoAllCoords ?? pr.repoCoords}
+                      relayHint={inlineCommentRelays[0]}
                     />
                   ) : !pr?.tip.commitId ? (
                     <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
@@ -1131,6 +1156,11 @@ export default function PRPage() {
                       baseCommitId={effectiveMergeBase}
                       pool={gitPool}
                       fallbackUrls={effectiveCloneUrls}
+                      rootEvent={pr.rootEvent}
+                      commentMap={inlineCommentMap}
+                      commitId={pr.tip.commitId}
+                      repoCoords={repoAllCoords ?? pr.repoCoords}
+                      relayHint={inlineCommentRelays[0]}
                     />
                   )}
                 </TabsContent>

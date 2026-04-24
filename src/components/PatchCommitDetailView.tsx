@@ -58,6 +58,7 @@ import { cn, safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import { DiffView } from "@/components/DiffView";
 import { UserLink } from "@/components/UserAvatar";
+import type { InlineCommentMap } from "@/hooks/useInlineComments";
 import { CommitMessageBody } from "@/components/CommitMessageBody";
 import {
   verifyPatchChainCommitHashes,
@@ -127,6 +128,13 @@ export interface PatchCommitDetailViewProps {
    * and show the applied diff. Falls back to the raw patch diff if apply fails.
    */
   baseCommitId?: string;
+  // ── Inline comment props ──────────────────────────────────────────────────
+  /** Map of inline comments from useInlineComments() */
+  commentMap?: InlineCommentMap;
+  /** Repo coordinates for q-tags on new inline comments */
+  repoCoords?: string[];
+  /** Relay hint for NIP-22 tags */
+  relayHint?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -388,6 +396,9 @@ export function PatchCommitDetailView({
   guessedBaseCommitId,
   baseCommitId,
   relayHints,
+  commentMap,
+  repoCoords,
+  relayHint,
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -987,9 +998,23 @@ export function PatchCommitDetailView({
 
       {/* Diff */}
       {activeDiff ? (
-        <DiffView diff={activeDiff} />
+        <DiffView
+          diff={activeDiff}
+          rootEvent={patch.event}
+          commentMap={commentMap}
+          commitId={patch.commitId}
+          repoCoords={repoCoords}
+          relayHint={relayHint}
+        />
       ) : patchDiff ? (
-        <DiffView diff={patchDiff} />
+        <DiffView
+          diff={patchDiff}
+          rootEvent={patch.event}
+          commentMap={commentMap}
+          commitId={patch.commitId}
+          repoCoords={repoCoords}
+          relayHint={relayHint}
+        />
       ) : (
         <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
           No diff content available for this patch.
