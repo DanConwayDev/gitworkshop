@@ -34,7 +34,7 @@ import {
   EmbeddedEventByAddressPreview,
 } from "@/components/EmbeddedEventPreview";
 import { BlossomImage, BlossomVideo } from "@/components/BlossomMedia";
-import { CommitLink } from "@/components/CommitLinkContext";
+import { CommitLink } from "@/components/CommitLink";
 
 // ---------------------------------------------------------------------------
 // Inline Nostr profile mention — avatar + @name

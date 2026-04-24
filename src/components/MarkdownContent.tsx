@@ -24,7 +24,7 @@ import type { Components } from "react-markdown";
 import { remarkBareMediaUrls } from "@/lib/remarkBareMediaUrls";
 import { remarkCommitLinks } from "@/lib/remarkCommitLinks";
 import { decodePointer } from "applesauce-core/helpers";
-import { CommitLink } from "@/components/CommitLinkContext";
+import { CommitLink } from "@/components/CommitLink";
 import { getOrCreatePool } from "@/lib/git-grasp-pool";
 import { WrappableCodeBlock } from "@/components/WrappableCodeBlock";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
