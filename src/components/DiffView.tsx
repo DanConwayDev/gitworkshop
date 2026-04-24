@@ -1827,8 +1827,10 @@ function DiffLine({
             </span>
             {/* +/- indicator */}
             <span
+              onMouseDown={handleLineNumberMouseDown}
+              onMouseEnter={handleLineNumberMouseEnter}
               className={cn(
-                "text-center px-1 py-0 border-l border-border/30",
+                "text-center px-1 py-0 border-l border-border/30 cursor-pointer",
                 isAdd && "text-green-600 dark:text-green-400",
                 isDel && "text-red-600 dark:text-red-400",
                 isNormal && "text-muted-foreground/40",
