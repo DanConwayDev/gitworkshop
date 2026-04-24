@@ -13,7 +13,7 @@ import { isValidElement, Children, type ReactNode } from "react";
  * (e.g. `![](data:image/png;base64,...)`) render correctly while arbitrary
  * data: URIs (e.g. data:text/html) are blocked to prevent XSS.
  */
-const safeMarkdownProtocol = /^(https?|ircs?|mailto|xmpp|nostr)$/i;
+const safeMarkdownProtocol = /^(https?|ircs?|mailto|xmpp|nostr|commit)$/i;
 const safeDataImageUri = /^data:image\//i;
 export function markdownUrlTransform(url: string): string {
   if (safeDataImageUri.test(url)) {
