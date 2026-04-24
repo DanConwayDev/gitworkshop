@@ -9,6 +9,7 @@ import { nip19 } from "nostr-tools";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { AppHeader } from "./components/AppHeader";
 import { AppFooter } from "./components/AppFooter";
+import { BetaBanner } from "./components/BetaBanner";
 
 import Index from "./pages/Index";
 import RepositoriesPage from "./pages/RepositoriesPage";
@@ -179,6 +180,7 @@ export function AppRouter() {
       <ScrollToTop />
       <div className="flex flex-col min-h-screen">
         <AppHeader />
+        <BetaBanner />
         <main className="flex-1 flex flex-col">
           <Routes>
             <Route path="/" element={<Index />} />
