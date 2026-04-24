@@ -11,7 +11,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { peekPool } from "@/lib/git-grasp-pool";
+import { peekPool, getOrCreatePool } from "@/lib/git-grasp-pool";
 import { useGitCommitLinkContext } from "./CommitLinkContext";
 
 interface CommitLinkProps {
@@ -40,8 +40,10 @@ export function CommitLink({ hash }: CommitLinkProps) {
     // Already confirmed — nothing to do.
     if (exists) return;
 
-    const pool = peekPool(ctx.cloneUrls);
-    if (!pool) return;
+    // getOrCreatePool so the pool is created if it doesn't exist yet —
+    // on issue/comment pages the pool may not have been created by the
+    // code page, so peekPool would always return undefined.
+    const pool = getOrCreatePool({ cloneUrls: ctx.cloneUrls });
 
     const abort = new AbortController();
     abortRef.current = abort;
