@@ -310,7 +310,7 @@ function NostrProfileMention({ pubkey }: { pubkey: string }) {
  * Rules: lowercase, spaces → hyphens, strip everything except alphanumerics,
  * hyphens, and underscores. Multiple consecutive hyphens are collapsed.
  */
-export function slugifyHeading(text: string): string {
+function slugifyHeading(text: string): string {
   return text
     .toLowerCase()
     .replace(/\s+/g, "-")
