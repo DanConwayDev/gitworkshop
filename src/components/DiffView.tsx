@@ -9,9 +9,14 @@
  *   - Syntax-highlighted code
  *   - Collapsible file sections
  *   - Hunk headers
+ *   - Inline code review comments with line-range selection
  *
- * Each line is a discrete DOM element with data-line-old / data-line-new
- * attributes for future line-level commenting.
+ * Line selection:
+ *   - Click a line number to select it (shows comment button + copy button)
+ *   - Drag across line numbers to select a range
+ *   - Shift-click to extend the selection to a range
+ *   - Click the comment button (left gutter, GitHub-style) to open composer
+ *   - Click the copy button to copy selected lines to clipboard
  */
 
 import {
@@ -46,6 +51,8 @@ import {
   WrapText,
   ArrowRightToLine,
   MessageSquarePlus,
+  Copy,
+  Check,
 } from "lucide-react";
 import type { FileChange } from "@/lib/git-grasp-pool";
 import { Button } from "@/components/ui/button";
@@ -107,6 +114,67 @@ interface InlineCommentCtx {
 }
 
 const InlineCommentContext = createContext<InlineCommentCtx | null>(null);
+
+// ---------------------------------------------------------------------------
+// Line selection context — shared across all DiffLine rows in a FileDiffCard
+// ---------------------------------------------------------------------------
+
+/**
+ * A line key uniquely identifies a line in a diff, encoding both the change
+ * type and line number to avoid collisions between deleted and added lines
+ * that share the same number (e.g. del:1 vs add:1).
+ *
+ * Format: "add:<n>" | "del:<n>" | "normal:<n>"
+ */
+type LineKey = string;
+
+function makeLineKey(type: "add" | "del" | "normal", n: number): LineKey {
+  return `${type}:${n}`;
+}
+
+interface SelectionCtx {
+  /** The anchor line key (where the drag/click started) */
+  anchor: LineKey | null;
+  /** The current end of the selection (may differ from anchor) */
+  head: LineKey | null;
+  /** Whether a drag is currently in progress */
+  dragging: boolean;
+  /** All line content strings keyed by LineKey, for copy */
+  lineContents: Map<LineKey, string>;
+  /**
+   * Ordered list of all line keys in document order, used to compute
+   * contiguous ranges between anchor and head.
+   */
+  lineOrder: LineKey[];
+  setAnchor: (k: LineKey | null) => void;
+  setHead: (k: LineKey | null) => void;
+  setDragging: (v: boolean) => void;
+  /** Open the inline comment composer for the current selection */
+  openComposer: (lineOrRange: string) => void;
+  /** The line/range string currently being composed (if composer is open) */
+  composingRange: string | null;
+  closeComposer: () => void;
+}
+
+const SelectionContext = createContext<SelectionCtx | null>(null);
+
+/**
+ * Returns the set of selected LineKeys between anchor and head (inclusive),
+ * preserving document order via lineOrder.
+ */
+function selectedKeys(
+  anchor: LineKey | null,
+  head: LineKey | null,
+  lineOrder: LineKey[],
+): Set<LineKey> {
+  if (anchor === null) return new Set();
+  const h = head ?? anchor;
+  const ai = lineOrder.indexOf(anchor);
+  const hi = lineOrder.indexOf(h);
+  if (ai === -1 || hi === -1) return new Set();
+  const [from, to] = ai <= hi ? [ai, hi] : [hi, ai];
+  return new Set(lineOrder.slice(from, to + 1));
+}
 
 export interface DiffViewProps {
   /** Raw unified diff string */
@@ -682,6 +750,106 @@ const FileDiffCard = memo(function FileDiffCard({
     return () => el.removeEventListener("keydown", handler);
   }, [hasLongLines, toggleWrap]);
 
+  // ---------------------------------------------------------------------------
+  // Line selection state (for range comments and copy)
+  // ---------------------------------------------------------------------------
+
+  const [selAnchor, setSelAnchor] = useState<LineKey | null>(null);
+  const [selHead, setSelHead] = useState<LineKey | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [composingRange, setComposingRange] = useState<string | null>(null);
+
+  // Build a map of LineKey → raw text content for copy support, and an
+  // ordered list of all LineKeys in document order for range computation.
+  const { lineContents, lineOrder } = useMemo(() => {
+    const contents = new Map<LineKey, string>();
+    const order: LineKey[] = [];
+    for (const chunk of file.chunks) {
+      for (const change of chunk.changes) {
+        const type = change.type; // "add" | "del" | "normal"
+        const isAdd = type === "add";
+        const isDel = type === "del";
+        const isNormal = type === "normal";
+        const oldLine = isNormal
+          ? (change as parseDiff.NormalChange).ln1
+          : isDel
+            ? (change as parseDiff.DeleteChange).ln
+            : null;
+        const newLine = isNormal
+          ? (change as parseDiff.NormalChange).ln2
+          : isAdd
+            ? (change as parseDiff.AddChange).ln
+            : null;
+        const n = newLine ?? oldLine;
+        if (n !== undefined && n !== null) {
+          const key = makeLineKey(type as "add" | "del" | "normal", n);
+          contents.set(key, change.content.slice(1));
+          order.push(key);
+        }
+      }
+    }
+    return { lineContents: contents, lineOrder: order };
+  }, [file.chunks]);
+
+  const openComposer = useCallback((lineOrRange: string) => {
+    setComposingRange(lineOrRange);
+  }, []);
+
+  const closeComposer = useCallback(() => {
+    setComposingRange(null);
+    setSelAnchor(null);
+    setSelHead(null);
+  }, []);
+
+  // Clear selection when clicking outside the table
+  useEffect(() => {
+    if (selAnchor === null) return;
+    const handler = (e: MouseEvent) => {
+      const el = cardRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setSelAnchor(null);
+        setSelHead(null);
+        setComposingRange(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [selAnchor]);
+
+  // End drag on mouseup anywhere
+  useEffect(() => {
+    if (!dragging) return;
+    const handler = () => setDragging(false);
+    document.addEventListener("mouseup", handler);
+    return () => document.removeEventListener("mouseup", handler);
+  }, [dragging]);
+
+  const selCtxValue: SelectionCtx = useMemo(
+    () => ({
+      anchor: selAnchor,
+      head: selHead,
+      dragging,
+      lineContents,
+      lineOrder,
+      setAnchor: setSelAnchor,
+      setHead: setSelHead,
+      setDragging,
+      openComposer,
+      composingRange,
+      closeComposer,
+    }),
+    [
+      selAnchor,
+      selHead,
+      dragging,
+      lineContents,
+      lineOrder,
+      openComposer,
+      composingRange,
+      closeComposer,
+    ],
+  );
+
   return (
     <div
       ref={cardRef}
@@ -733,27 +901,29 @@ const FileDiffCard = memo(function FileDiffCard({
 
         {/* Diff content */}
         {!collapsed && !hidden && (
-          <SyncedScrollArea
-            className={cn(
-              "[&::-webkit-scrollbar]:hidden",
-              !wordWrap && "overflow-x-auto",
-            )}
-          >
-            <table className="w-full border-collapse text-[13px] leading-[1.6] font-mono">
-              <tbody>
-                {file.chunks.map((chunk, ci) => (
-                  <ChunkRows
-                    key={ci}
-                    chunk={chunk}
-                    tokenMap={tokenMap}
-                    isFirstChunk={ci === 0}
-                    wordWrap={wordWrap}
-                    filename={filename}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </SyncedScrollArea>
+          <SelectionContext.Provider value={selCtxValue}>
+            <SyncedScrollArea
+              className={cn(
+                "[&::-webkit-scrollbar]:hidden",
+                !wordWrap && "overflow-x-auto",
+              )}
+            >
+              <table className="w-full border-collapse text-[13px] leading-[1.6] font-mono">
+                <tbody>
+                  {file.chunks.map((chunk, ci) => (
+                    <ChunkRows
+                      key={ci}
+                      chunk={chunk}
+                      tokenMap={tokenMap}
+                      isFirstChunk={ci === 0}
+                      wordWrap={wordWrap}
+                      filename={filename}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </SyncedScrollArea>
+          </SelectionContext.Provider>
         )}
 
         {/* Binary / empty diff */}
@@ -798,7 +968,7 @@ function ChunkRows({
         )}
       >
         <td
-          colSpan={5}
+          colSpan={10}
           className="px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 font-mono select-none"
         >
           {chunk.content}
@@ -820,6 +990,61 @@ function ChunkRows({
 }
 
 // ---------------------------------------------------------------------------
+// Copy-to-clipboard button with transient "copied" feedback
+// ---------------------------------------------------------------------------
+
+function CopyButton({
+  getText,
+  className,
+}: {
+  getText: () => string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const text = getText();
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      });
+    },
+    [getText],
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={handleCopy}
+          className={cn(
+            "p-0.5 rounded transition-colors",
+            copied
+              ? "text-green-500"
+              : "text-muted-foreground/60 hover:text-foreground",
+            className,
+          )}
+          aria-label="Copy selected lines"
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {copied ? "Copied!" : "Copy lines"}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Single diff line
 // ---------------------------------------------------------------------------
 
@@ -835,7 +1060,7 @@ function DiffLine({
   filename: string;
 }) {
   const ctx = useContext(InlineCommentContext);
-  const [composerOpen, setComposerOpen] = useState(false);
+  const sel = useContext(SelectionContext);
 
   const text = change.content.slice(1); // strip leading +/-/space
   const tokens = tokenMap.get(text);
@@ -855,28 +1080,160 @@ function DiffLine({
       ? (change as parseDiff.AddChange).ln
       : null;
 
-  // The "canonical" line number for comment lookup: prefer new line, fall back to old.
+  // Canonical line number for comment storage (new preferred, else old)
   const lineNumber = newLine ?? oldLine ?? null;
+
+  // Unique key for this line — encodes type to avoid del:1 / add:1 collisions
+  const lineKey: LineKey | null =
+    lineNumber !== null
+      ? makeLineKey(change.type as "add" | "del" | "normal", lineNumber)
+      : null;
+
+  // ---------------------------------------------------------------------------
+  // Selection logic — all keyed by LineKey, not plain number
+  // ---------------------------------------------------------------------------
+
+  const selectedSet = useMemo(
+    () =>
+      sel
+        ? selectedKeys(sel.anchor, sel.head, sel.lineOrder)
+        : new Set<LineKey>(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sel?.anchor, sel?.head, sel?.lineOrder],
+  );
+
+  const isSelected = lineKey !== null && selectedSet.has(lineKey);
+
+  // Is this the last key in the selection (in document order)?
+  const isRangeEnd =
+    lineKey !== null &&
+    sel !== null &&
+    sel.head !== null &&
+    sel.lineOrder.indexOf(lineKey) ===
+      Math.max(
+        sel.lineOrder.indexOf(sel.anchor ?? ""),
+        sel.lineOrder.indexOf(sel.head),
+      );
+
+  const isSingleSelected =
+    isSelected && selectedSet.size === 1 && selectedSet.has(lineKey!);
+
+  const handleLineNumberMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (!sel || lineKey === null) return;
+      e.preventDefault(); // prevent browser text selection
+      if (e.shiftKey && sel.anchor !== null) {
+        sel.setHead(lineKey);
+      } else {
+        sel.setAnchor(lineKey);
+        sel.setHead(lineKey);
+        sel.setDragging(true);
+        if (sel.composingRange !== null) sel.closeComposer();
+      }
+    },
+    [sel, lineKey],
+  );
+
+  const handleLineNumberMouseEnter = useCallback(() => {
+    if (!sel || !sel.dragging || lineKey === null) return;
+    sel.setHead(lineKey);
+  }, [sel, lineKey]);
+
+  // ---------------------------------------------------------------------------
+  // Build the line/range string for the comment tag from the selected keys
+  // ---------------------------------------------------------------------------
+
+  // Extract the numeric line numbers from the selected keys in order,
+  // then build a range string like "42" or "42-48".
+  const lineRangeStr = useMemo(() => {
+    if (!sel || selectedSet.size === 0 || !isSelected) {
+      return lineNumber !== null ? String(lineNumber) : null;
+    }
+    const nums: number[] = [];
+    for (const k of sel.lineOrder) {
+      if (selectedSet.has(k)) {
+        const n = parseInt(k.split(":")[1], 10);
+        if (!isNaN(n)) nums.push(n);
+      }
+    }
+    if (nums.length === 0)
+      return lineNumber !== null ? String(lineNumber) : null;
+    const min = nums[0];
+    const max = nums[nums.length - 1];
+    return min === max ? String(min) : `${min}-${max}`;
+  }, [sel, selectedSet, isSelected, lineNumber]);
+
+  // ---------------------------------------------------------------------------
+  // Inline comment state
+  // ---------------------------------------------------------------------------
+
+  // Is the composer open for a range that includes this line's number?
+  const isComposingThisLine =
+    sel !== null &&
+    lineNumber !== null &&
+    sel.composingRange !== null &&
+    (() => {
+      const parts = sel.composingRange.split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts.length > 1 ? parseInt(parts[1], 10) : start;
+      return lineNumber >= start && lineNumber <= end;
+    })();
+
+  // Is this the last line of the composing range? (thread renders here)
+  const isComposingRangeEnd =
+    isComposingThisLine &&
+    sel?.composingRange !== null &&
+    (() => {
+      const parts = sel!.composingRange!.split("-");
+      const end =
+        parts.length > 1 ? parseInt(parts[1], 10) : parseInt(parts[0], 10);
+      return lineNumber === end;
+    })();
 
   // Look up existing comments for this line
   const lineComments =
     ctx && lineNumber !== null
-      ? getLineComments(ctx.commentMap, filename, lineNumber)
+      ? getLineComments(
+          ctx.commentMap,
+          filename,
+          lineNumber,
+          change.type as "add" | "del" | "normal",
+        )
       : [];
 
   const hasComments = lineComments.length > 0;
-  const showThread = hasComments || composerOpen;
+  const showThread = hasComments || isComposingRangeEnd;
 
   const commentOptions: InlineCommentOptions | null =
     ctx && lineNumber !== null
       ? {
           filePath: filename,
           commitId: ctx.commitId,
-          line: String(lineNumber),
+          line: sel?.composingRange ?? String(lineNumber),
           repoCoords: ctx.repoCoords,
           relayHint: ctx.relayHint,
         }
       : null;
+
+  // Copy text for the selected range
+  const getCopyText = useCallback(() => {
+    if (!sel || selectedSet.size === 0) return text;
+    const lines: string[] = [];
+    for (const k of sel.lineOrder) {
+      if (selectedSet.has(k)) {
+        const content = sel.lineContents.get(k);
+        if (content !== undefined) lines.push(content);
+      }
+    }
+    return lines.join("\n");
+  }, [sel, selectedSet, text]);
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
+  // Column count: gutter (1) + code (1) + [comment action if ctx] (1) = 2 or 3
+  const colCount = ctx ? 3 : 2;
 
   return (
     <>
@@ -885,51 +1242,113 @@ function DiffLine({
         data-line-new={newLine}
         className={cn(
           "group",
-          isAdd && "bg-green-500/15 dark:bg-green-400/12",
-          isDel && "bg-red-500/15 dark:bg-red-400/12",
+          isAdd && !isSelected && "bg-green-500/15 dark:bg-green-400/12",
+          isDel && !isSelected && "bg-red-500/15 dark:bg-red-400/12",
+          isSelected && "bg-blue-500/20 dark:bg-blue-400/18",
         )}
       >
-        {/* Sticky gutter: old line · new line · +/- indicator.
-            background-image layers the row tint over the solid bg-background
-            so both are visible without fighting over background-color.
-            The gutter uses a higher-opacity tint than the row so it reads
-            as slightly darker without losing the hue. */}
+        {/* Sticky gutter: comment button (left, GitHub-style) · old line · new line · +/- indicator */}
         <td
           className="sticky left-0 select-none align-top p-0 w-[1%] whitespace-nowrap bg-background"
           style={
-            isAdd
+            isSelected
               ? {
                   backgroundImage:
-                    "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28))",
+                    "linear-gradient(rgba(59,130,246,0.32),rgba(59,130,246,0.32))",
                 }
-              : isDel
+              : isAdd
                 ? {
                     backgroundImage:
-                      "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28))",
+                      "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28))",
                   }
-                : {
-                    backgroundImage:
-                      "linear-gradient(rgba(0,0,0,0.035),rgba(0,0,0,0.035))",
-                  }
+                : isDel
+                  ? {
+                      backgroundImage:
+                        "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28))",
+                    }
+                  : {
+                      backgroundImage:
+                        "linear-gradient(rgba(0,0,0,0.035),rgba(0,0,0,0.035))",
+                    }
           }
         >
           <div className="flex items-stretch border-r border-border/30">
+            {/* Left comment button — GitHub-style, shown on hover or when selected */}
+            {ctx && lineKey !== null ? (
+              <div className="flex items-center justify-center w-5 shrink-0">
+                {hasComments ? (
+                  <InlineCommentBadge
+                    count={lineComments.length}
+                    onClick={() => {
+                      if (sel && lineNumber !== null) {
+                        sel.setAnchor(lineKey);
+                        sel.setHead(lineKey);
+                        sel.openComposer(String(lineNumber));
+                      }
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!sel || lineNumber === null) return;
+                      if (isSelected && lineRangeStr) {
+                        sel.openComposer(lineRangeStr);
+                      } else {
+                        sel.setAnchor(lineKey);
+                        sel.setHead(lineKey);
+                        sel.openComposer(String(lineNumber));
+                      }
+                    }}
+                    className={cn(
+                      "transition-opacity p-0.5 rounded",
+                      "text-muted-foreground/50 hover:text-blue-500",
+                      isSelected || isSingleSelected
+                        ? "opacity-100"
+                        : "opacity-0 group-hover:opacity-100",
+                    )}
+                    title="Add a comment"
+                    aria-label="Add inline comment"
+                  >
+                    <MessageSquarePlus className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            ) : (
+              /* Spacer when inline comments are disabled */
+              ctx && <div className="w-5 shrink-0" />
+            )}
+
             {/* Old line number */}
             <span
+              onMouseDown={handleLineNumberMouseDown}
+              onMouseEnter={handleLineNumberMouseEnter}
               className={cn(
-                "text-right px-2 py-0 min-w-[3ch]",
-                "text-muted-foreground/60 group-hover:text-muted-foreground/90 transition-colors duration-75",
-                isDel && "text-red-700/70 dark:text-red-400/70",
+                "text-right px-2 py-0 min-w-[3ch] cursor-pointer",
+                "text-muted-foreground/60 transition-colors duration-75",
+                !isSelected &&
+                  "group-hover:text-muted-foreground/90 hover:bg-blue-500/10",
+                isDel && !isSelected && "text-red-700/70 dark:text-red-400/70",
+                isSelected && "text-blue-600 dark:text-blue-400",
               )}
             >
               {oldLine ?? ""}
             </span>
             {/* New line number */}
             <span
+              onMouseDown={handleLineNumberMouseDown}
+              onMouseEnter={handleLineNumberMouseEnter}
               className={cn(
-                "text-right px-2 py-0 min-w-[3ch] border-l border-border/30",
-                "text-muted-foreground/60 group-hover:text-muted-foreground/90 transition-colors duration-75",
-                isAdd && "text-green-700/70 dark:text-green-400/70",
+                "text-right px-2 py-0 min-w-[3ch] border-l border-border/30 cursor-pointer",
+                "text-muted-foreground/60 transition-colors duration-75",
+                !isSelected &&
+                  "group-hover:text-muted-foreground/90 hover:bg-blue-500/10",
+                isAdd &&
+                  !isSelected &&
+                  "text-green-700/70 dark:text-green-400/70",
+                isSelected && "text-blue-600 dark:text-blue-400",
               )}
             >
               {newLine ?? ""}
@@ -938,9 +1357,10 @@ function DiffLine({
             <span
               className={cn(
                 "text-center px-1 py-0 border-l border-border/30",
-                isAdd && "text-green-600 dark:text-green-400",
-                isDel && "text-red-600 dark:text-red-400",
-                isNormal && "text-muted-foreground/40",
+                isAdd && !isSelected && "text-green-600 dark:text-green-400",
+                isDel && !isSelected && "text-red-600 dark:text-red-400",
+                isNormal && !isSelected && "text-muted-foreground/40",
+                isSelected && "text-blue-500/70",
               )}
             >
               {isAdd ? "+" : isDel ? "-" : " "}
@@ -976,30 +1396,11 @@ function DiffLine({
           {text === "" && <span>{"\n"}</span>}
         </td>
 
-        {/* Comment action column — only rendered when inline comments are enabled */}
+        {/* Right action column — copy button appears on the last selected line */}
         {ctx && (
           <td className="w-[1%] whitespace-nowrap align-top p-0 pr-1">
-            <div className="flex items-center gap-1 h-full py-0 pl-1">
-              {hasComments && (
-                <InlineCommentBadge
-                  count={lineComments.length}
-                  onClick={() => setComposerOpen((v) => !v)}
-                />
-              )}
-              {!hasComments && lineNumber !== null && (
-                <button
-                  type="button"
-                  onClick={() => setComposerOpen(true)}
-                  className={cn(
-                    "opacity-0 group-hover:opacity-100 transition-opacity",
-                    "text-muted-foreground/50 hover:text-blue-500 p-0.5 rounded",
-                  )}
-                  title="Add a comment"
-                  aria-label="Add inline comment"
-                >
-                  <MessageSquarePlus className="h-3.5 w-3.5" />
-                </button>
-              )}
+            <div className="flex items-center gap-0.5 h-full py-0 pl-1">
+              {isRangeEnd && <CopyButton getText={getCopyText} />}
             </div>
           </td>
         )}
@@ -1008,14 +1409,14 @@ function DiffLine({
       {/* Inline comment thread — rendered as a full-width row below the line */}
       {ctx && showThread && commentOptions && (
         <tr>
-          <td colSpan={ctx ? 3 : 2} className="p-0 pb-1">
+          <td colSpan={colCount} className="p-0 pb-1">
             <InlineCommentThread
               comments={lineComments}
               rootEvent={ctx.rootEvent}
               parentEvent={ctx.parentEvent}
               commentOptions={commentOptions}
-              onClose={() => setComposerOpen(false)}
-              autoFocus={composerOpen && !hasComments}
+              onClose={() => sel?.closeComposer()}
+              autoFocus={isComposingRangeEnd && !hasComments}
             />
           </td>
         </tr>

@@ -30,17 +30,35 @@ export interface InlineCommentMap {
   /** All inline comment events indexed by file path */
   byFile: Map<string, NostrEvent[]>;
   /**
-   * All inline comment events indexed by "<filePath>:<newLine>" for add lines
-   * and "<filePath>:old:<oldLine>" for delete lines.
+   * Inline comment events indexed by "<filePath>:<type>:<lineNumber>".
+   * type is "add", "del", or "normal" — matching the diff change type so
+   * that deleted line 1 and added line 1 don't collide.
+   *
+   * A comment stored with a plain line number (no side info) is indexed
+   * under all three variants so it shows up regardless of change type.
    */
   byLine: Map<string, NostrEvent[]>;
   /** Total count of inline comments */
   total: number;
 }
 
+function lineMapKey(
+  filePath: string,
+  type: "add" | "del" | "normal",
+  ln: number,
+): string {
+  return `${filePath}:${type}:${ln}`;
+}
+
 function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
   const byFile = new Map<string, NostrEvent[]>();
   const byLine = new Map<string, NostrEvent[]>();
+
+  const addToLine = (key: string, event: NostrEvent) => {
+    const list = byLine.get(key) ?? [];
+    list.push(event);
+    byLine.set(key, list);
+  };
 
   for (const event of events) {
     const loc = parseInlineCommentLocation(event);
@@ -51,14 +69,14 @@ function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
     fileList.push(event);
     byFile.set(loc.filePath, fileList);
 
-    // Index by line
+    // Index by line — store under all three type variants since the stored
+    // event doesn't encode which side the line number refers to.
     if (loc.lineRange) {
       const [start, end] = loc.lineRange;
       for (let ln = start; ln <= end; ln++) {
-        const key = `${loc.filePath}:${ln}`;
-        const lineList = byLine.get(key) ?? [];
-        lineList.push(event);
-        byLine.set(key, lineList);
+        addToLine(lineMapKey(loc.filePath, "add", ln), event);
+        addToLine(lineMapKey(loc.filePath, "del", ln), event);
+        addToLine(lineMapKey(loc.filePath, "normal", ln), event);
       }
     }
   }
@@ -132,11 +150,13 @@ export function getFileComments(
 /**
  * Get inline comments for a specific line in a file.
  * Line numbers are 1-based (matching git diff output).
+ * The changeType distinguishes deleted lines from added lines with the same number.
  */
 export function getLineComments(
   map: InlineCommentMap,
   filePath: string,
   lineNumber: number,
+  changeType: "add" | "del" | "normal" = "normal",
 ): NostrEvent[] {
-  return map.byLine.get(`${filePath}:${lineNumber}`) ?? [];
+  return map.byLine.get(lineMapKey(filePath, changeType, lineNumber)) ?? [];
 }
