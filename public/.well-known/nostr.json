@@ -12,7 +12,11 @@
   },
   "nip46": {
     "a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d": [
-      "wss://relay.nsec.app"
+      "wss://bucket.coracle.social",
+      "wss://nos.lol",
+      "wss://relay.ditto.pub",
+      "wss://relay.primal.net",
+      "wss://nrs.primal.net"
     ]
   }
 }
