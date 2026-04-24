@@ -186,11 +186,11 @@ interface SelectionCtx {
   composingKey: LineKey | null;
   closeComposer: () => void;
   /**
-   * Set of line keys covered by the current browser text selection (drag
-   * highlight). When non-empty, Ctrl+C defers to the browser's default copy
-   * so the exact selected text is copied rather than the full line content.
+   * True when the current anchor/head were set by a browser text selection
+   * rather than a line-number click. When true, Ctrl+C defers to the browser
+   * so the exact highlighted text is copied.
    */
-  textSelKeys: Set<LineKey>;
+  textSelActive: boolean;
 }
 
 const SelectionContext = createContext<SelectionCtx | null>(null);
@@ -947,7 +947,8 @@ const FileDiffCard = memo(function FileDiffCard({
   const [dragging, setDragging] = useState(false);
   const [composingRange, setComposingRange] = useState<string | null>(null);
   const [composingKey, setComposingKey] = useState<LineKey | null>(null);
-  const [textSelKeys, setTextSelKeys] = useState<Set<LineKey>>(new Set());
+  // True when anchor/head were set by a browser text selection (not a click)
+  const [textSelActive, setTextSelActive] = useState(false);
 
   // Build a map of LineKey → raw text content for copy support, and an
   // ordered list of all LineKeys in document order for range computation.
@@ -1012,17 +1013,16 @@ const FileDiffCard = memo(function FileDiffCard({
   }, [initialLineRange, lineOrder]);
 
   // Ctrl+C — copy selected lines when a line selection exists.
-  // If the browser has a text selection (user dragged to highlight text),
-  // let the default copy behaviour run so the exact highlighted text is copied.
+  // If the selection was driven by a browser text selection, defer to the
+  // browser so the exact highlighted text is copied rather than full lines.
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
     const handler = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.key !== "c") return;
       if (selAnchor === null) return;
-      // If there is a non-collapsed browser text selection, defer to the browser
-      const browserSel = document.getSelection();
-      if (browserSel && !browserSel.isCollapsed) return;
+      // Defer to browser when the selection came from text dragging
+      if (textSelActive) return;
       e.preventDefault();
       const selected = selectedKeys(selAnchor, selHead ?? selAnchor, lineOrder);
       const lines: string[] = [];
@@ -1036,7 +1036,7 @@ const FileDiffCard = memo(function FileDiffCard({
     };
     el.addEventListener("keydown", handler);
     return () => el.removeEventListener("keydown", handler);
-  }, [selAnchor, selHead, lineContents, lineOrder]);
+  }, [selAnchor, selHead, lineContents, lineOrder, textSelActive]);
 
   const openComposer = useCallback(
     (lineOrRange: string, anchorKey: LineKey) => {
@@ -1051,48 +1051,51 @@ const FileDiffCard = memo(function FileDiffCard({
     setComposingKey(null);
     setSelAnchor(null);
     setSelHead(null);
+    setTextSelActive(false);
   }, []);
 
-  // Track browser text selection — highlight covered lines, defer Ctrl+C to browser
+  // Track browser text selection — drive selAnchor/selHead from covered rows
+  // so the full line-selection machinery (permalink, copy button, Ctrl+C) works.
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
     const handler = () => {
-      const sel = document.getSelection();
-      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-        setTextSelKeys((prev) => (prev.size === 0 ? prev : new Set()));
+      const browserSel = document.getSelection();
+      if (
+        !browserSel ||
+        browserSel.isCollapsed ||
+        browserSel.rangeCount === 0
+      ) {
+        // Text selection cleared — if it was driving the line selection, clear that too
+        setTextSelActive((prev) => {
+          if (prev) {
+            setSelAnchor(null);
+            setSelHead(null);
+          }
+          return false;
+        });
         return;
       }
-      const range = sel.getRangeAt(0);
+      const range = browserSel.getRangeAt(0);
       // Walk all <tr data-line-key> rows inside this card and check overlap
       const rows =
         el.querySelectorAll<HTMLTableRowElement>("tr[data-line-key]");
-      const keys = new Set<LineKey>();
+      const coveredKeys: LineKey[] = [];
       rows.forEach((row) => {
         const key = row.getAttribute("data-line-key");
         if (!key) return;
-        // A row is "covered" if the selection range intersects it
-        if (range.intersectsNode(row)) {
-          keys.add(key);
-        }
+        if (range.intersectsNode(row)) coveredKeys.push(key);
       });
-      setTextSelKeys((prev) => {
-        // Avoid re-render if the set contents haven't changed
-        if (prev.size === keys.size && [...keys].every((k) => prev.has(k)))
-          return prev;
-        return keys;
-      });
+      if (coveredKeys.length === 0) return;
+      const first = coveredKeys[0];
+      const last = coveredKeys[coveredKeys.length - 1];
+      setTextSelActive(true);
+      setSelAnchor(first);
+      setSelHead(last);
     };
     document.addEventListener("selectionchange", handler);
     return () => document.removeEventListener("selectionchange", handler);
   }, []);
-
-  // Clear text selection highlight when line selection is set
-  useEffect(() => {
-    if (selAnchor !== null) {
-      setTextSelKeys((prev) => (prev.size === 0 ? prev : new Set()));
-    }
-  }, [selAnchor]);
 
   // Clear selection when clicking outside the table
   useEffect(() => {
@@ -1103,6 +1106,7 @@ const FileDiffCard = memo(function FileDiffCard({
         setSelAnchor(null);
         setSelHead(null);
         setComposingRange(null);
+        setTextSelActive(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -1118,6 +1122,7 @@ const FileDiffCard = memo(function FileDiffCard({
         setSelHead(null);
         setComposingRange(null);
         setComposingKey(null);
+        setTextSelActive(false);
       }
     };
     document.addEventListener("keydown", handler);
@@ -1132,6 +1137,12 @@ const FileDiffCard = memo(function FileDiffCard({
     return () => document.removeEventListener("mouseup", handler);
   }, [dragging]);
 
+  // Wrap setAnchor so any click-driven anchor change clears textSelActive
+  const setAnchorFromClick = useCallback((k: LineKey | null) => {
+    setTextSelActive(false);
+    setSelAnchor(k);
+  }, []);
+
   const selCtxValue: SelectionCtx = useMemo(
     () => ({
       anchor: selAnchor,
@@ -1139,14 +1150,14 @@ const FileDiffCard = memo(function FileDiffCard({
       dragging,
       lineContents,
       lineOrder,
-      setAnchor: setSelAnchor,
+      setAnchor: setAnchorFromClick,
       setHead: setSelHead,
       setDragging,
       openComposer,
       composingRange,
       composingKey,
       closeComposer,
-      textSelKeys,
+      textSelActive,
     }),
     [
       selAnchor,
@@ -1154,11 +1165,12 @@ const FileDiffCard = memo(function FileDiffCard({
       dragging,
       lineContents,
       lineOrder,
+      setAnchorFromClick,
       openComposer,
       composingRange,
       composingKey,
       closeComposer,
-      textSelKeys,
+      textSelActive,
     ],
   );
 
@@ -1681,10 +1693,6 @@ function DiffLine({
   const selBorderBottom =
     isSelected && isRangeEnd ? "1px solid rgb(59 130 246 / 0.55)" : undefined;
 
-  // Is this line covered by the browser text selection?
-  const isTextSelected =
-    lineKey !== null && (sel?.textSelKeys.has(lineKey) ?? false);
-
   return (
     <>
       <tr
@@ -1703,23 +1711,21 @@ function DiffLine({
           className="sticky left-0 select-none align-top p-0 w-[1%] whitespace-nowrap bg-background"
           style={{
             // Layer add/del tint (and optional blue selection tint) over bg-background
-            backgroundImage:
-              isSelected || isTextSelected
-                ? isAdd
-                  ? "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28)), linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14))"
-                  : isDel
-                    ? "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28)), linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14))"
-                    : "linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14))"
-                : isAdd
-                  ? "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28))"
-                  : isDel
-                    ? "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28))"
-                    : "linear-gradient(rgba(0,0,0,0.035),rgba(0,0,0,0.035))",
+            backgroundImage: isSelected
+              ? isAdd
+                ? "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28)), linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14))"
+                : isDel
+                  ? "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28)), linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14))"
+                  : "linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14))"
+              : isAdd
+                ? "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28))"
+                : isDel
+                  ? "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28))"
+                  : "linear-gradient(rgba(0,0,0,0.035),rgba(0,0,0,0.035))",
             // Left accent bar + top/bottom borders for the selection outline
-            borderLeft:
-              isSelected || isTextSelected
-                ? "2px solid rgb(59 130 246 / 0.65)"
-                : undefined,
+            borderLeft: isSelected
+              ? "2px solid rgb(59 130 246 / 0.65)"
+              : undefined,
             borderTop: selBorderTop,
             borderBottom: selBorderBottom,
           }}
@@ -1847,7 +1853,7 @@ function DiffLine({
                     textIndent: `-${text.length - text.trimStart().length}ch`,
                   }
                 : {};
-            if (!isSelected && !isTextSelected)
+            if (!isSelected)
               return Object.keys(wrapStyle).length ? wrapStyle : undefined;
             return {
               ...wrapStyle,
@@ -1873,7 +1879,7 @@ function DiffLine({
         <td
           className="w-[1%] whitespace-nowrap align-top p-0"
           style={
-            isSelected || isTextSelected
+            isSelected
               ? {
                   backgroundColor: "rgb(59 130 246 / 0.10)",
                   borderRight: "1px solid rgb(59 130 246 / 0.45)",
