@@ -175,6 +175,74 @@ To check whether a specific comment thread is resolved without fetching the whol
 
 ---
 
+## Pull Request Reviews (kind:7321)
+
+A PR review groups one or more inline comments (kind:1111) under a single verdict event. Any user can submit a review; the verdict is not authoritative over the PR's open/merged/closed state (that remains with NIP-34 kinds 1630–1633).
+
+### Verdict values (`s` tag)
+
+| Value          | Meaning                                                                               |
+| -------------- | ------------------------------------------------------------------------------------- |
+| `ACK`          | Reviewer has tested or carefully read the code and approves it as-is.                 |
+| `NACK`         | Reviewer objects to the change; the PR should not be merged in its current form.      |
+| `Concept ACK`  | Reviewer agrees with the goal/approach but has not fully reviewed the implementation. |
+| `Concept NACK` | Reviewer disagrees with the goal or approach regardless of implementation quality.    |
+
+### Event Structure
+
+```jsonc
+{
+  "kind": 7321,
+  "content": "<optional overall review summary / prose>",
+  "tags": [
+    // NIP-34 PR or patch being reviewed (required)
+    ["e", "<pr-or-patch-event-id>", "<relay>", "root"],
+    ["p", "<pr-or-patch-author-pubkey>"],
+
+    // verdict (required)
+    ["s", "<ACK|NACK|Concept ACK|Concept NACK>"],
+
+    // inline comments included in this review (zero or more)
+    // each q tag references a kind:1111 comment event published by the same author
+    ["q", "<comment-event-id>", "<relay>"],
+    ["q", "<comment-event-id>", "<relay>"],
+
+    // NIP-31 alt tag for clients that don't understand kind:7321
+    ["alt", "Pull request review: <ACK|NACK|Concept ACK|Concept NACK>"],
+  ],
+}
+```
+
+### Rules
+
+- The review event MUST be authored by the reviewer (not the PR author or a maintainer acting on their behalf).
+- Each `q` tag referencing a comment MUST point to a kind:1111 event authored by the same pubkey as the review event.
+- The `s` tag value MUST be one of the four verdict strings above (case-sensitive).
+- `content` is optional but SHOULD be used for an overall summary when the verdict alone is insufficient.
+- A review is immutable once published. To change a verdict, publish a new kind:7321 event; the most recent event by `created_at` from a given pubkey for a given PR is considered the current verdict.
+
+### Relay Queries
+
+```jsonc
+// all reviews on a PR or patch
+{ "kinds": [7321], "#e": ["<pr-or-patch-event-id>"] }
+
+// all ACK reviews on a PR
+{ "kinds": [7321], "#e": ["<pr-event-id>"], "#s": ["ACK"] }
+
+// all reviews by a specific reviewer
+{ "kinds": [7321], "authors": ["<reviewer-pubkey>"] }
+```
+
+### Design Rationale
+
+- **Regular (not replaceable) kind**: review history is preserved. Clients display the most recent verdict per reviewer by sorting on `created_at`.
+- **`s` tag for verdict**: single-letter tag, relay-indexed, enabling efficient filtering by verdict without fetching event content.
+- **`q` tags for comments**: comments are explicitly enumerated so clients can reconstruct the exact set of comments belonging to a review without scanning all PR comments.
+- **Separate from 1630–1633 status kinds**: those are authoritative state changes by maintainers; a review is a reviewer's opinion and carries no merge authority.
+
+---
+
 ### Notification Events
 
 The following events are considered "notifications" for a user with pubkey `P`:
@@ -184,5 +252,8 @@ The following events are considered "notifications" for a user with pubkey `P`:
 
 2. **New issues/PRs/patches** that tag `P` directly:
    - Filter: `{ kinds: [1621, 1618, 1617, 1, 1622], "#p": [P] }`
+
+3. **PR reviews** (kind 7321) on PRs authored by `P`:
+   - Filter: `{ kinds: [7321], "#p": [P] }`
 
 Events authored by `P` themselves are excluded from the notification list.
