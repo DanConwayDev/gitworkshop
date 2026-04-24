@@ -11,7 +11,7 @@
  *   - "Add a comment" button at the bottom when no composer is open
  */
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
 import type { NostrEvent } from "nostr-tools";
 import { UserLink } from "@/components/UserAvatar";
@@ -22,12 +22,20 @@ import {
 } from "@/components/NostrComposer";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Loader2, MessageSquare, Reply, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  MessageSquare,
+  Reply,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { runner } from "@/services/actions";
 import { CreateInlineComment, CreateComment } from "@/actions/nip34";
 import type { InlineCommentOptions } from "@/blueprints/inline-comment";
+import { parseInlineCommentLocation } from "@/blueprints/inline-comment";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
@@ -275,6 +283,11 @@ export function InlineCommentThread({
 }: InlineCommentThreadProps) {
   const [composerOpen, setComposerOpen] = useState(autoFocus);
   /**
+   * Whether the thread body (comments + composer) is collapsed.
+   * Starts expanded; collapses when the user clicks the chevron in the header.
+   */
+  const [collapsed, setCollapsed] = useState(false);
+  /**
    * When the "Reply" button is clicked on an existing thread, this is set to
    * the last comment in the thread so the reply is a plain NIP-22 comment
    * (no code location tags) with that comment as the parent.
@@ -282,6 +295,17 @@ export function InlineCommentThread({
    */
   const [replyToComment, setReplyToComment] = useState<NostrEvent | null>(null);
   const effectiveParent = parentEvent ?? rootEvent;
+
+  // When autoFocus transitions to true (e.g. user clicks "+" on a line that
+  // already has comments and the thread is already mounted), open the composer
+  // as a new inline code comment (not a reply) and expand if collapsed.
+  useEffect(() => {
+    if (autoFocus) {
+      setReplyToComment(null);
+      setComposerOpen(true);
+      setCollapsed(false);
+    }
+  }, [autoFocus]);
 
   const handleSubmitted = useCallback(() => {
     setComposerOpen(false);
@@ -316,14 +340,38 @@ export function InlineCommentThread({
     >
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/5 border-b border-blue-500/20 rounded-t-none">
-        <MessageSquare className="h-3.5 w-3.5 text-blue-500/70 shrink-0" />
-        <span className="text-xs text-muted-foreground flex-1">
-          {comments.length > 0
-            ? `${comments.length} comment${comments.length !== 1 ? "s" : ""}`
-            : commentOptions.line
-              ? `New comment on ${commentOptions.line.includes("-") ? "lines" : "line"} ${commentOptions.line}`
-              : "New comment"}
-        </span>
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex items-center gap-1.5 min-w-0 flex-1 text-left"
+          aria-label={collapsed ? "Expand thread" : "Collapse thread"}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-3.5 w-3.5 text-blue-500/70 shrink-0" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5 text-blue-500/70 shrink-0" />
+          )}
+          <MessageSquare className="h-3.5 w-3.5 text-blue-500/70 shrink-0" />
+          <span className="text-xs text-muted-foreground">
+            {(() => {
+              // Derive the line range to show in the header.
+              // For existing comments, read the line tag from the first comment.
+              // For new comments, use commentOptions.line.
+              const lineStr =
+                comments.length > 0
+                  ? (parseInlineCommentLocation(comments[0]).line ??
+                    commentOptions.line)
+                  : commentOptions.line;
+              const locationLabel = lineStr
+                ? ` on ${lineStr.includes("-") ? "lines" : "line"} ${lineStr}`
+                : "";
+              const count = comments.length;
+              return count > 0
+                ? `${count} comment${count !== 1 ? "s" : ""}${locationLabel}`
+                : `New comment${locationLabel}`;
+            })()}
+          </span>
+        </button>
         {onClose && (
           <button
             type="button"
@@ -336,39 +384,44 @@ export function InlineCommentThread({
         )}
       </div>
 
-      {/* Existing comments */}
-      {comments.map((comment) => (
-        <InlineComment key={comment.id} event={comment} />
-      ))}
+      {/* Thread body — hidden when collapsed */}
+      {!collapsed && (
+        <>
+          {/* Existing comments */}
+          {comments.map((comment) => (
+            <InlineComment key={comment.id} event={comment} />
+          ))}
 
-      {/* Composer */}
-      {composerOpen ? (
-        <InlineComposer
-          rootEvent={rootEvent}
-          parentEvent={effectiveParent}
-          commentOptions={commentOptions}
-          onSubmitted={handleSubmitted}
-          onCancel={handleCancel}
-          autoFocus={autoFocus}
-          replyToComment={replyToComment ?? undefined}
-        />
-      ) : (
-        <div className="px-3 py-2 border-t border-border/40">
-          <button
-            type="button"
-            onClick={() => {
-              // Reply to the last comment in the thread (plain NIP-22, no code tags)
-              const lastComment =
-                comments.length > 0 ? comments[comments.length - 1] : null;
-              setReplyToComment(lastComment);
-              setComposerOpen(true);
-            }}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Reply className="h-3.5 w-3.5" />
-            Reply
-          </button>
-        </div>
+          {/* Composer */}
+          {composerOpen ? (
+            <InlineComposer
+              rootEvent={rootEvent}
+              parentEvent={effectiveParent}
+              commentOptions={commentOptions}
+              onSubmitted={handleSubmitted}
+              onCancel={handleCancel}
+              autoFocus={autoFocus}
+              replyToComment={replyToComment ?? undefined}
+            />
+          ) : (
+            <div className="px-3 py-2 border-t border-border/40">
+              <button
+                type="button"
+                onClick={() => {
+                  // Reply to the last comment in the thread (plain NIP-22, no code tags)
+                  const lastComment =
+                    comments.length > 0 ? comments[comments.length - 1] : null;
+                  setReplyToComment(lastComment);
+                  setComposerOpen(true);
+                }}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Reply className="h-3.5 w-3.5" />
+                Reply
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -381,9 +434,11 @@ export function InlineCommentThread({
 export function InlineCommentBadge({
   count,
   onClick,
+  className,
 }: {
   count: number;
   onClick?: () => void;
+  className?: string;
 }) {
   if (count === 0) return null;
   return (
@@ -395,6 +450,7 @@ export function InlineCommentBadge({
         "text-[10px] font-medium leading-none",
         "bg-blue-500/15 text-blue-600 dark:text-blue-400",
         "hover:bg-blue-500/25 transition-colors",
+        className,
       )}
       title={`${count} comment${count !== 1 ? "s" : ""}`}
     >

@@ -1655,6 +1655,22 @@ function DiffLine({
         }
       : null;
 
+  // When the user opens a new composer on a line that already has comments,
+  // check whether the new range differs from the existing comments' range.
+  // If it does, we render two separate thread rows so each gets its own header.
+  const existingCommentsLine =
+    lastLineComments.length > 0
+      ? (lastLineComments[0].tags.find(([t]) => t === "line")?.[1] ?? null)
+      : null;
+  const composingRangeMatchesExisting =
+    existingCommentsLine !== null &&
+    sel?.composingRange !== null &&
+    sel?.composingRange !== undefined &&
+    sel.composingRange === existingCommentsLine;
+  // True when we need a separate new-comment thread below the existing one
+  const needsSeparateComposer =
+    isComposingRangeEnd && hasComments && !composingRangeMatchesExisting;
+
   // Copy text for the selected range
   const getCopyText = useCallback(() => {
     if (!sel || selectedSet.size === 0) return text;
@@ -1732,25 +1748,97 @@ function DiffLine({
             {ctx && lineKey !== null ? (
               <div className="flex items-center justify-center w-5 shrink-0">
                 {hasComments ? (
-                  <InlineCommentBadge
-                    count={lastLineComments.length}
-                    onClick={() => {
-                      if (sel && lineNumber !== null && lineKey !== null) {
-                        sel.setAnchor(lineKey);
-                        sel.setHead(lineKey);
-                        sel.openComposer(String(lineNumber), lineKey);
-                      }
-                    }}
-                  />
+                  /* Existing comments: show badge + a "+" button on hover/selection */
+                  <div className="relative flex items-center justify-center w-full h-full">
+                    <InlineCommentBadge
+                      count={lastLineComments.length}
+                      onClick={() => {
+                        if (sel && lineNumber !== null && lineKey !== null) {
+                          sel.setAnchor(lineKey);
+                          sel.setHead(lineKey);
+                          sel.openComposer(String(lineNumber), lineKey);
+                        }
+                      }}
+                      className={cn(
+                        "transition-opacity",
+                        isSelected || isRangeEnd
+                          ? "opacity-0 group-hover:opacity-0"
+                          : "opacity-100 group-hover:opacity-0",
+                      )}
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!sel || lineNumber === null || lineKey === null)
+                          return;
+                        if (isSelected && lineRangeStr) {
+                          const lastKey = sel.head ?? sel.anchor ?? lineKey;
+                          sel.openComposer(lineRangeStr, lastKey);
+                        } else {
+                          sel.setAnchor(lineKey);
+                          sel.setHead(lineKey);
+                          sel.openComposer(String(lineNumber), lineKey);
+                        }
+                      }}
+                      className={cn(
+                        "absolute inset-0 flex items-center justify-center transition-opacity p-0.5 rounded",
+                        "text-muted-foreground/50 hover:text-blue-500",
+                        isSelected || isRangeEnd
+                          ? "opacity-100"
+                          : "opacity-0 group-hover:opacity-100",
+                      )}
+                      title="Add a comment"
+                      aria-label="Add inline comment"
+                    >
+                      <MessageSquarePlus className="h-3 w-3" />
+                    </button>
+                  </div>
                 ) : hasRangeIndicator ? (
                   /* Range indicator — this line is covered by a comment whose
-                     thread appears on a later line. Clicking it is a no-op
-                     visually (the thread is below), but provides a clear signal. */
-                  <div
-                    className="w-1.5 h-full self-stretch rounded-sm bg-blue-500/40 mx-auto cursor-default"
-                    title="Part of a multi-line comment"
-                    aria-label="Covered by inline comment"
-                  />
+                     thread appears on a later line. Show the blue bar at rest,
+                     but reveal the "+" button on hover/selection so the user
+                     can still start a new comment anchored to this line. */
+                  <div className="relative flex items-center justify-center w-full h-full">
+                    <div
+                      className={cn(
+                        "w-1.5 h-full self-stretch rounded-sm bg-blue-500/40 mx-auto transition-opacity",
+                        isSelected
+                          ? "opacity-0"
+                          : "opacity-100 group-hover:opacity-0",
+                      )}
+                      aria-hidden="true"
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!sel || lineNumber === null || lineKey === null)
+                          return;
+                        if (isSelected && lineRangeStr) {
+                          const lastKey = sel.head ?? sel.anchor ?? lineKey;
+                          sel.openComposer(lineRangeStr, lastKey);
+                        } else {
+                          sel.setAnchor(lineKey);
+                          sel.setHead(lineKey);
+                          sel.openComposer(String(lineNumber), lineKey);
+                        }
+                      }}
+                      className={cn(
+                        "absolute inset-0 flex items-center justify-center transition-opacity p-0.5 rounded",
+                        "text-muted-foreground/50 hover:text-blue-500",
+                        isSelected
+                          ? "opacity-100"
+                          : "opacity-0 group-hover:opacity-100",
+                      )}
+                      title="Add a comment"
+                      aria-label="Add inline comment"
+                    >
+                      <MessageSquarePlus className="h-3 w-3" />
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -1903,18 +1991,58 @@ function DiffLine({
 
       {/* Inline comment thread — rendered as a full-width row below the line */}
       {ctx && showThread && commentOptions && (
-        <tr>
-          <td colSpan={colCount} className="p-0 pb-1">
-            <InlineCommentThread
-              comments={lastLineComments}
-              rootEvent={ctx.rootEvent}
-              parentEvent={ctx.parentEvent}
-              commentOptions={commentOptions}
-              onClose={() => sel?.closeComposer()}
-              autoFocus={isComposingRangeEnd && !hasComments}
-            />
-          </td>
-        </tr>
+        <>
+          {/* Existing comments thread */}
+          {hasComments && (
+            <tr>
+              <td colSpan={colCount} className="p-0 pb-1">
+                <InlineCommentThread
+                  comments={lastLineComments}
+                  rootEvent={ctx.rootEvent}
+                  parentEvent={ctx.parentEvent}
+                  commentOptions={commentOptions}
+                  onClose={() => sel?.closeComposer()}
+                  // Only pass autoFocus when the composing range matches the
+                  // existing comments' range (same thread). When they differ,
+                  // a separate composer row is rendered below.
+                  autoFocus={isComposingRangeEnd && !needsSeparateComposer}
+                />
+              </td>
+            </tr>
+          )}
+
+          {/* Separate new-comment composer when the range differs from existing */}
+          {needsSeparateComposer && (
+            <tr>
+              <td colSpan={colCount} className="p-0 pb-1">
+                <InlineCommentThread
+                  comments={[]}
+                  rootEvent={ctx.rootEvent}
+                  parentEvent={ctx.parentEvent}
+                  commentOptions={commentOptions}
+                  onClose={() => sel?.closeComposer()}
+                  autoFocus={true}
+                />
+              </td>
+            </tr>
+          )}
+
+          {/* Plain new-comment composer when there are no existing comments */}
+          {!hasComments && isComposingRangeEnd && (
+            <tr>
+              <td colSpan={colCount} className="p-0 pb-1">
+                <InlineCommentThread
+                  comments={[]}
+                  rootEvent={ctx.rootEvent}
+                  parentEvent={ctx.parentEvent}
+                  commentOptions={commentOptions}
+                  onClose={() => sel?.closeComposer()}
+                  autoFocus={true}
+                />
+              </td>
+            </tr>
+          )}
+        </>
       )}
     </>
   );
