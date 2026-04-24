@@ -24,7 +24,6 @@ import {
   memo,
   useContext,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   useMemo,
@@ -805,35 +804,31 @@ const FileDiffCard = memo(function FileDiffCard({
 
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // When a scrollTarget arrives (or changes), expand the card immediately.
-  // We use the object reference as the dep — a new object always triggers this,
-  // even when the id string is the same (re-navigation to the same line).
+  // When a scrollTarget arrives (or changes), expand the card.
   useEffect(() => {
     if (!scrollTarget) return;
     setCollapsed(false);
     setHidden(false);
   }, [scrollTarget]);
 
-  // After the card has expanded and the DOM has been updated, scroll to the
-  // target. useLayoutEffect runs synchronously after DOM mutations so the
-  // <tr> rows are guaranteed to exist when we call getElementById.
-  //
-  // We retry with requestAnimationFrame for the rare case where the element
-  // is still not present (e.g. syntax highlighting triggers an extra render).
-  const scrollTargetRef = useRef<{ id: string | null } | null | undefined>(
+  // Once the card is open AND a scrollTarget is set, scroll to the target.
+  // We defer with rAF so the browser has painted the newly-expanded rows
+  // before we call scrollIntoView (layout must be complete for it to work).
+  // We retry for up to ~1s to handle slow syntax-highlighting renders.
+  const lastScrolledTarget = useRef<{ id: string | null } | null | undefined>(
     undefined,
   );
-  useLayoutEffect(() => {
-    // Only act when scrollTarget has changed to a new value
-    if (scrollTarget === scrollTargetRef.current) return;
-    scrollTargetRef.current = scrollTarget;
-
+  useEffect(() => {
     if (!scrollTarget) return;
-    if (collapsed) return; // card not open yet — wait for next render cycle
+    if (collapsed) return; // not open yet — wait for next render
+    // Don't re-scroll if we already handled this exact target object
+    if (scrollTarget === lastScrolledTarget.current) return;
+    lastScrolledTarget.current = scrollTarget;
 
     const targetId = scrollTarget.id;
+    let cancelled = false;
 
-    function doScroll() {
+    function doScroll(): boolean {
       if (targetId) {
         const el = document.getElementById(targetId);
         if (el) {
@@ -844,23 +839,25 @@ const FileDiffCard = memo(function FileDiffCard({
         }
         return false;
       } else {
-        // No specific line — scroll the card header into view.
         cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         return true;
       }
     }
 
-    if (!doScroll()) {
-      // Element not in DOM yet — retry on next animation frames (up to ~600ms)
-      let attempts = 0;
-      const maxAttempts = 36; // ~600ms at 60fps
-      function retry() {
-        attempts++;
-        if (doScroll() || attempts >= maxAttempts) return;
-        requestAnimationFrame(retry);
-      }
-      requestAnimationFrame(retry);
+    // Defer to next frame so the browser has laid out the expanded rows
+    let attempts = 0;
+    const maxAttempts = 60; // ~1s at 60fps
+    function attempt() {
+      if (cancelled) return;
+      if (doScroll() || attempts >= maxAttempts) return;
+      attempts++;
+      requestAnimationFrame(attempt);
     }
+    requestAnimationFrame(attempt);
+
+    return () => {
+      cancelled = true;
+    };
   }, [scrollTarget, collapsed]);
 
   // Collapse this card when another file is selected from the sidebar.
