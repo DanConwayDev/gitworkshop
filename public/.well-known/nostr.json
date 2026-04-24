@@ -5,7 +5,7 @@
   },
   "relays": {
     "a008def15796fba9a0d6fab04e8fd57089285d9fd505da5a83fe8aad57a3564d": [
-      "wss://relay.nostr.band",
+      "wss://relay.ditto.pub",
       "wss://nos.lol",
       "wss://relay.damus.io"
     ]
