@@ -13,7 +13,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { GitCommit, User, Clock, GitMerge } from "lucide-react";
+import { GitCommit, User, Clock, GitMerge, Copy, Check } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import type { Commit } from "@fiatjaf/git-natural-api";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
@@ -30,6 +30,7 @@ interface CommitHoverCardBodyProps {
 function CommitHoverCardBody({ hash, pool }: CommitHoverCardBodyProps) {
   const [commit, setCommit] = useState<Commit | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -79,14 +80,33 @@ function CommitHoverCardBody({ hash, pool }: CommitHoverCardBodyProps) {
   const parentHash = commit.parents?.[0] ?? null;
   const authorDateLabel = safeFormat(authorTsSecs, "PPpp") ?? undefined;
 
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await navigator.clipboard.writeText(commit.hash);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="p-4 space-y-3">
-      {/* Hash badge */}
+      {/* Hash badge + copy */}
       <div className="flex items-center gap-1.5">
         <GitCommit className="h-3.5 w-3.5 text-pink-500 shrink-0" />
         <code className="text-xs font-mono text-pink-600 dark:text-pink-400 bg-pink-500/10 px-1.5 py-0.5 rounded">
           {shortHash}
         </code>
+        <button
+          onClick={handleCopy}
+          className="ml-auto p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          title={copied ? "Copied!" : "Copy full hash"}
+        >
+          {copied ? (
+            <Check className="h-3 w-3" />
+          ) : (
+            <Copy className="h-3 w-3" />
+          )}
+        </button>
       </div>
 
       {/* Commit subject */}

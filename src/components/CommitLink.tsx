@@ -73,7 +73,6 @@ export function CommitLink({ hash }: CommitLinkProps) {
         <Link
           to={`${ctx.basePath}/commit/${hash}`}
           className="font-mono text-[0.875em] text-pink-600 dark:text-pink-400 hover:underline"
-          title={`View commit ${hash}`}
         >
           {shortHash}
         </Link>
