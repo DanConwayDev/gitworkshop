@@ -68,8 +68,8 @@ function ProfileHoverCardBody({ pubkey }: { pubkey: string }) {
 
       {/* Profile info */}
       <div className="px-4 pb-4">
-        {/* Avatar + follow buttons row */}
-        <div className="flex items-end justify-between -mt-7 mb-2">
+        {/* Avatar row — overlaps banner */}
+        <div className="-mt-7 mb-2">
           <Link to={userPath} onClick={(e) => e.stopPropagation()}>
             <AvatarWithBadges
               size="lg"
@@ -87,76 +87,6 @@ function ProfileHoverCardBody({ pubkey }: { pubkey: string }) {
               }
             />
           </Link>
-
-          {/* Follow buttons — only when logged in and not own profile */}
-          {account && account.pubkey !== pubkey && (
-            <div className="flex gap-1.5 pb-0.5">
-              {/* Social follow */}
-              {isFollowing ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 text-xs gap-1"
-                  disabled={socialPending}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    unfollow(pubkey);
-                  }}
-                >
-                  <UserCheck className="h-3 w-3" />
-                  Following
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  disabled={socialPending}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    follow(pubkey);
-                  }}
-                >
-                  <UserPlus className="h-3 w-3" />
-                  Follow
-                </Button>
-              )}
-
-              {/* Git author follow */}
-              {isGitFollowing ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 text-xs gap-1"
-                  disabled={gitPending}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    removeGitAuthor(pubkey);
-                  }}
-                >
-                  <GitBranch className="h-3 w-3" />
-                  Git Following
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs gap-1"
-                  disabled={gitPending}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    addGitAuthor(pubkey);
-                  }}
-                >
-                  <GitBranch className="h-3 w-3" />
-                  Follow for Git
-                </Button>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Display name */}
@@ -186,6 +116,76 @@ function ProfileHoverCardBody({ pubkey }: { pubkey: string }) {
           <p className="text-xs text-muted-foreground mt-2 line-clamp-3 whitespace-pre-wrap break-words">
             {profile.about}
           </p>
+        )}
+
+        {/* Follow buttons — only when logged in and not own profile */}
+        {account && account.pubkey !== pubkey && (
+          <div className="flex gap-2 mt-3">
+            {/* Social follow */}
+            {isFollowing ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="flex-1 h-8 text-xs gap-1"
+                disabled={socialPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  unfollow(pubkey);
+                }}
+              >
+                <UserCheck className="h-3 w-3" />
+                Following
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                className="flex-1 h-8 text-xs gap-1"
+                disabled={socialPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  follow(pubkey);
+                }}
+              >
+                <UserPlus className="h-3 w-3" />
+                Follow
+              </Button>
+            )}
+
+            {/* Git author follow */}
+            {isGitFollowing ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="flex-1 h-8 text-xs gap-1"
+                disabled={gitPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  removeGitAuthor(pubkey);
+                }}
+              >
+                <GitBranch className="h-3 w-3" />
+                Git Following
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 h-8 text-xs gap-1"
+                disabled={gitPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  addGitAuthor(pubkey);
+                }}
+              >
+                <GitBranch className="h-3 w-3" />
+                Follow for Git
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </>
