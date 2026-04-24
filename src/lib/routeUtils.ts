@@ -143,6 +143,7 @@ const REPO_SUB_PATHS = [
   "prs",
   "about",
   "edit",
+  "settings",
   "commits",
   "commit",
   "tree",

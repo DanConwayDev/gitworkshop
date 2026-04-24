@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
+import { useActiveAccount } from "applesauce-react/hooks";
 import { useResolvedRepository } from "@/hooks/useResolvedRepository";
 import RepoIssuesPage from "./RepoIssuesPage";
 import RepoPRsPage from "./RepoPRsPage";
 import RepoCodePage from "./RepoCodePage";
 import RepoAboutPage from "./RepoAboutPage";
 import RepoEditPage from "./RepoEditPage";
+import RepoSettingsPage from "./RepoSettingsPage";
 import RepoCommitsPage from "./RepoCommitsPage";
 import RepoCommitPage from "./RepoCommitPage";
 import IssuePage from "@/pages/IssuePage";
@@ -36,6 +38,7 @@ import {
   GitCommit,
   Info,
   MoreHorizontal,
+  Settings,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -243,9 +246,16 @@ function RepoLayoutResolved({
     return prs.filter((p) => p.status === "open").length;
   }, [prs]);
 
+  // Determine if the logged-in user is a confirmed maintainer of this repo.
+  const account = useActiveAccount();
+  const isMaintainer =
+    account?.pubkey && repo
+      ? repo.maintainerSet.includes(account.pubkey)
+      : false;
+
   // Build the base path from the splat so tab links stay consistent with
   // whatever URL format the user arrived with (npub, nip05, relay hint, etc.)
-  // Strip any trailing sub-paths (issues, prs, about, edit, tree, commit, commits)
+  // Strip any trailing sub-paths (issues, prs, about, edit, settings, tree, commit, commits)
   // to get the repo root.
   const basePath = useMemo(() => {
     const full = `/${splat}`;
@@ -255,6 +265,7 @@ function RepoLayoutResolved({
       "/prs",
       "/about",
       "/edit",
+      "/settings",
       "/tree",
       "/commit",
       "/commits",
@@ -275,6 +286,7 @@ function RepoLayoutResolved({
   const isIssuesTab = location.pathname.startsWith(`${basePath}/issues`);
   const isPRsTab = location.pathname.startsWith(`${basePath}/prs`);
   const isAboutTab = location.pathname.startsWith(`${basePath}/about`);
+  const isSettingsTab = location.pathname.startsWith(`${basePath}/settings`);
   // Determine which sub-page to render from the splat segments.
   const {
     subPage,
@@ -295,7 +307,8 @@ function RepoLayoutResolved({
       | "commits"
       | "commit"
       | "about"
-      | "edit";
+      | "edit"
+      | "settings";
     issueId?: string;
     prId?: string;
     /** Everything after /tree/ — ref resolution happens inside useGitExplorer */
@@ -387,6 +400,11 @@ function RepoLayoutResolved({
     const aboutIdx = segments.indexOf("about");
     if (aboutIdx !== -1) {
       return { subPage: "about" };
+    }
+
+    const settingsIdx = segments.indexOf("settings");
+    if (settingsIdx !== -1) {
+      return { subPage: "settings" };
     }
 
     return { subPage: "code" };
@@ -507,6 +525,14 @@ function RepoLayoutResolved({
                 icon={<Info className="h-4 w-4" />}
                 label="About"
               />
+              {isMaintainer && (
+                <TabLink
+                  to={`${basePath}/settings`}
+                  active={isSettingsTab}
+                  icon={<Settings className="h-4 w-4" />}
+                  label="Settings"
+                />
+              )}
             </div>
 
             {/* "More" dropdown — mobile only */}
@@ -516,7 +542,7 @@ function RepoLayoutResolved({
                   <button
                     className={cn(
                       "inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
-                      isCommitsTab || isAboutTab
+                      isCommitsTab || isAboutTab || isSettingsTab
                         ? "border-pink-500 text-foreground"
                         : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
                     )}
@@ -548,6 +574,17 @@ function RepoLayoutResolved({
                       About
                     </Link>
                   </DropdownMenuItem>
+                  {isMaintainer && (
+                    <DropdownMenuItem asChild>
+                      <Link
+                        to={`${basePath}/settings`}
+                        className="flex items-center gap-2"
+                      >
+                        <Settings className="h-4 w-4" />
+                        Settings
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -578,6 +615,8 @@ function RepoLayoutResolved({
             <RepoAboutPage />
           ) : subPage === "edit" ? (
             <RepoEditPage />
+          ) : subPage === "settings" ? (
+            <RepoSettingsPage />
           ) : null}
         </RepoContext.Provider>
       ) : repoSearch &&
