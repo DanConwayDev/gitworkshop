@@ -36,6 +36,7 @@ import {
   Eye,
   Code,
   Download,
+  History,
 } from "lucide-react";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
@@ -960,29 +961,44 @@ function LocatorBar({
 
       {/* Commit summary row */}
       {headCommit ? (
-        <Link
-          to={`${basePath}/commit/${commitHash}`}
-          className="flex items-center gap-3 px-3 py-2.5 bg-background hover:bg-muted/20 transition-colors border-t border-border/40"
-        >
-          <div className="p-1.5 rounded-full bg-muted shrink-0">
-            <GitCommit className="h-3.5 w-3.5 text-muted-foreground" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium truncate leading-snug">
-              {headCommit.message.split("\n")[0]}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {headCommit.author.name} &middot;{" "}
-              {safeFormatDistanceToNow(
-                headCommit.committer?.timestamp ?? headCommit.author.timestamp,
-                { addSuffix: true },
-              )}
-            </p>
-          </div>
-          <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground shrink-0">
-            {commitHash?.slice(0, 8)}
-          </code>
-        </Link>
+        <div className="flex items-center gap-3 px-3 py-2.5 bg-background border-t border-border/40">
+          <Link
+            to={`${basePath}/commit/${commitHash}`}
+            className="flex items-center gap-3 min-w-0 flex-1 hover:bg-muted/20 transition-colors rounded -mx-1 px-1 -my-0.5 py-0.5"
+          >
+            <div className="p-1.5 rounded-full bg-muted shrink-0">
+              <GitCommit className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium truncate leading-snug">
+                {headCommit.message.split("\n")[0]}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {headCommit.author.name} &middot;{" "}
+                {safeFormatDistanceToNow(
+                  headCommit.committer?.timestamp ??
+                    headCommit.author.timestamp,
+                  { addSuffix: true },
+                )}
+              </p>
+            </div>
+            <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground shrink-0">
+              {commitHash?.slice(0, 8)}
+            </code>
+          </Link>
+          <Link
+            to={
+              currentRef
+                ? `${basePath}/commits/${currentRef}`
+                : `${basePath}/commits`
+            }
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0 whitespace-nowrap"
+            title="View commit history"
+          >
+            <History className="h-3.5 w-3.5" />
+            <span>Commits</span>
+          </Link>
+        </div>
       ) : loading || commitHash ? (
         <div className="flex items-center gap-3 px-3 py-2.5 border-t border-border/40">
           <Skeleton className="h-7 w-7 rounded-full" />

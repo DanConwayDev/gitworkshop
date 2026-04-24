@@ -35,7 +35,6 @@ import {
   AlertCircle,
   Loader2,
   Code2,
-  GitCommit,
   Info,
   MoreHorizontal,
   Settings,
@@ -284,9 +283,6 @@ function RepoLayoutResolved({
     location.pathname.startsWith(`${basePath}/tree`) ||
     location.pathname === basePath ||
     location.pathname === `${basePath}/`;
-  const isCommitsTab =
-    location.pathname.startsWith(`${basePath}/commits`) ||
-    location.pathname.startsWith(`${basePath}/commit`);
   const isIssuesTab = location.pathname.startsWith(`${basePath}/issues`);
   const isPRsTab = location.pathname.startsWith(`${basePath}/prs`);
   const isAboutTab = location.pathname.startsWith(`${basePath}/about`);
@@ -522,16 +518,6 @@ function RepoLayoutResolved({
             {/* Secondary tabs — visible on md+ screens */}
             <div className="hidden md:flex gap-1">
               <TabLink
-                to={
-                  commitsRef
-                    ? `${basePath}/commits/${commitsRef}`
-                    : `${basePath}/commits`
-                }
-                active={isCommitsTab}
-                icon={<GitCommit className="h-4 w-4" />}
-                label="Commits"
-              />
-              <TabLink
                 to={`${basePath}/about`}
                 active={isAboutTab}
                 icon={<Info className="h-4 w-4" />}
@@ -554,7 +540,7 @@ function RepoLayoutResolved({
                   <button
                     className={cn(
                       "inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
-                      isCommitsTab || isAboutTab || isSettingsTab
+                      isAboutTab || isSettingsTab
                         ? "border-pink-500 text-foreground"
                         : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
                     )}
@@ -564,19 +550,6 @@ function RepoLayoutResolved({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem asChild>
-                    <Link
-                      to={
-                        commitsRef
-                          ? `${basePath}/commits/${commitsRef}`
-                          : `${basePath}/commits`
-                      }
-                      className="flex items-center gap-2"
-                    >
-                      <GitCommit className="h-4 w-4" />
-                      Commits
-                    </Link>
-                  </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link
                       to={`${basePath}/about`}
