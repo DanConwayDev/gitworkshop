@@ -339,23 +339,23 @@ export function CommitDiffView({
 }: CommitDiffViewProps) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading-trees" });
   const [activeFile, setActiveFile] = useState<string | null>(null);
+  // The specific line anchor ID to scroll to after the active file expands.
+  // Derived from the URL hash on mount; cleared after the first use.
+  const [scrollToLineId, setScrollToLineId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-
-  // Track whether we've already handled the initial URL hash scroll so we
-  // don't re-trigger it on every re-render.
-  const hashScrolledRef = useRef(false);
 
   const handleFileSelect = (path: string) => {
     setActiveFile(path);
+    setScrollToLineId(null); // clear any hash-driven target when user picks manually
     const el = document.getElementById(fileDiffCardId(path));
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // On mount (and when the diff finishes loading), check the URL hash and
-  // scroll to the referenced line if present.
+  // When the diff finishes loading, check the URL hash and set the active file
+  // + scroll target. FileDiffCard handles the actual scroll via its
+  // forceExpand + scrollToLineId props — no setTimeout guessing needed here.
   useEffect(() => {
     if (phase.kind !== "done") return;
-    if (hashScrolledRef.current) return;
 
     const hash = window.location.hash;
     if (!hash) return;
@@ -369,32 +369,17 @@ export function CommitDiffView({
     );
     if (!matchedFile) return;
 
-    hashScrolledRef.current = true;
-
-    // Expand the file card (triggers forceExpand in FileDiffCard).
+    // Set the active file (triggers forceExpand on the matching FileDiffCard).
     setActiveFile(matchedFile.path);
 
-    // Scroll to the specific line after a short delay so the card has time
-    // to expand and render the line rows.
-    const lineId =
-      parsed.line !== null && parsed.side !== null
-        ? diffLineAnchorId(matchedFile.path, parsed.line, parsed.side)
-        : fileDiffCardId(matchedFile.path);
-
-    const scrollToEl = () => {
-      const el = document.getElementById(lineId);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        // Brief highlight flash so the user can spot the line
-        el.classList.add("bg-yellow-400/30");
-        setTimeout(() => el.classList.remove("bg-yellow-400/30"), 2000);
-      }
-    };
-
-    // Try immediately, then retry after expansion animation
-    setTimeout(scrollToEl, 100);
-    setTimeout(scrollToEl, 600);
-  }, [phase]);
+    // Set the line anchor so FileDiffCard scrolls to the exact line.
+    if (parsed.line !== null && parsed.side !== null) {
+      setScrollToLineId(
+        diffLineAnchorId(matchedFile.path, parsed.line, parsed.side),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase.kind]);
 
   // Notify parent when file count is known (phase 1 complete).
   useEffect(() => {
@@ -541,6 +526,7 @@ export function CommitDiffView({
         <DiffView
           diff={phase.diff}
           expandedFile={activeFile}
+          scrollToLineId={scrollToLineId}
           rootEvent={rootEvent}
           parentEvent={parentEvent}
           commentMap={commentMap}

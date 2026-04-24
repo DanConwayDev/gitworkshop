@@ -225,6 +225,12 @@ export interface DiffViewProps {
    */
   expandedFile?: string | null;
   /**
+   * When set alongside expandedFile, scroll to this specific element ID
+   * (a line anchor like "diff-src_lib_foo_ts_L42") instead of the file card.
+   * The element must be a child of the expanded file card.
+   */
+  scrollToLineId?: string | null;
+  /**
    * Files whose diff content is still loading. A loading card (real header,
    * spinner body) is rendered for each entry, after any already-parsed files.
    */
@@ -538,6 +544,7 @@ export const DiffView = memo(function DiffView({
   className,
   defaultCollapsed = true,
   expandedFile,
+  scrollToLineId,
   loadingFiles,
   rootEvent,
   parentEvent,
@@ -636,6 +643,7 @@ export const DiffView = memo(function DiffView({
             forceExpand={forceExpand}
             isActive={forceExpand}
             collapseSignal={forceExpand ? undefined : collapseSignal}
+            scrollToLineId={forceExpand ? scrollToLineId : undefined}
           />
         );
       })}
@@ -672,6 +680,7 @@ const FileDiffCard = memo(function FileDiffCard({
   forceExpand = false,
   isActive = false,
   collapseSignal,
+  scrollToLineId,
 }: {
   file: parseDiff.File;
   defaultCollapsed: boolean;
@@ -684,6 +693,11 @@ const FileDiffCard = memo(function FileDiffCard({
    * sidebar. Non-active cards collapse when this value changes.
    */
   collapseSignal?: number;
+  /**
+   * When set, scroll to this element ID (a line anchor) instead of the card
+   * header after expanding. Only used when forceExpand is true.
+   */
+  scrollToLineId?: string | null;
 }) {
   const totalChanges = file.additions + file.deletions;
   const isLarge = totalChanges > LARGE_DIFF_THRESHOLD;
@@ -700,17 +714,47 @@ const FileDiffCard = memo(function FileDiffCard({
 
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // When forceExpand flips to true, open the card and scroll it into view.
+  // When forceExpand flips to true, open the card and scroll to the target.
+  // If scrollToLineId is set, scroll to that specific line element; otherwise
+  // scroll to the card header (original behaviour for sidebar file selection).
   useEffect(() => {
     if (!forceExpand) return;
     setCollapsed(false);
     setHidden(false);
-    // Small delay so the DOM has expanded before we scroll
-    const id = setTimeout(() => {
-      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
-    return () => clearTimeout(id);
-  }, [forceExpand]);
+
+    const targetId = scrollToLineId ?? null;
+
+    if (targetId) {
+      // Poll for the line element — it may not exist yet if the card is still
+      // rendering its rows after setCollapsed(false).
+      let attempts = 0;
+      const maxAttempts = 20; // up to ~1 second
+      const poll = () => {
+        const el = document.getElementById(targetId);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("bg-yellow-400/30");
+          setTimeout(() => el.classList.remove("bg-yellow-400/30"), 2000);
+        } else if (attempts < maxAttempts) {
+          attempts++;
+          setTimeout(poll, 50);
+        } else {
+          // Line not found — fall back to scrolling the card into view
+          cardRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }
+      };
+      setTimeout(poll, 50);
+    } else {
+      // Original behaviour: scroll the card header into view
+      const id = setTimeout(() => {
+        cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 50);
+      return () => clearTimeout(id);
+    }
+  }, [forceExpand, scrollToLineId]);
 
   // Collapse this card when another file is selected from the sidebar.
   // collapseSignal is undefined for the active card, so it won't self-collapse.
