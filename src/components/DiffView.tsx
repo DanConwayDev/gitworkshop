@@ -1524,9 +1524,6 @@ function DiffLine({
         sel.lineOrder.indexOf(sel.head ?? sel.anchor),
       );
 
-  const isSingleSelected =
-    isSelected && selectedSet.size === 1 && selectedSet.has(lineKey!);
-
   const handleLineNumberMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (!sel || lineKey === null) return;
@@ -1775,7 +1772,7 @@ function DiffLine({
                     className={cn(
                       "transition-opacity p-0.5 rounded",
                       "text-muted-foreground/50 hover:text-blue-500",
-                      isSelected || isSingleSelected
+                      isRangeEnd
                         ? "opacity-100"
                         : "opacity-0 group-hover:opacity-100",
                     )}
