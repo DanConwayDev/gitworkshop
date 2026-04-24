@@ -76,6 +76,8 @@ import { DeleteRepo } from "@/actions/nip34";
 import { runner } from "@/services/actions";
 import { useToast } from "@/hooks/useToast";
 import { REPO_KIND } from "@/lib/nip34";
+import { useNavigate } from "react-router-dom";
+import { useUserPath } from "@/hooks/useUserPath";
 
 // ---------------------------------------------------------------------------
 // Helpers (shared)
@@ -1288,6 +1290,8 @@ function DeleteRepoModal({
   onOpenChange: (open: boolean) => void;
 }) {
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const userPath = useUserPath(announcement.pubkey);
   const [mode, setMode] = useState<"version" | "repo">("version");
   const [reason, setReason] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -1319,6 +1323,7 @@ function DeleteRepoModal({
             : "A deletion request has been published for this version of the announcement.",
       });
       onOpenChange(false);
+      navigate(`${userPath}?tab=repositories`);
     } catch (err) {
       console.error("[DeleteRepoModal] failed to delete:", err);
       toast({
@@ -1331,7 +1336,17 @@ function DeleteRepoModal({
       setDeleting(false);
       setReason("");
     }
-  }, [deleting, announcement, mode, repoCoords, reason, toast, onOpenChange]);
+  }, [
+    deleting,
+    announcement,
+    mode,
+    repoCoords,
+    reason,
+    toast,
+    onOpenChange,
+    navigate,
+    userPath,
+  ]);
 
   const handleOpenChange = useCallback(
     (v: boolean) => {
