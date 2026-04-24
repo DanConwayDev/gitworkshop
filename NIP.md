@@ -125,6 +125,37 @@ The NIP-22 root (`E`/`K`/`P`) is always the original PR (kind:1618) or patch (ki
 
 Replies to an inline comment are standard NIP-22 replies: `E`/`K`/`P` remain the original PR/patch; `e`/`k`/`p` point to the inline comment (kind:1111).
 
+### Resolving a Thread
+
+Any sub-thread (an inline comment or any NIP-22 comment thread) can be resolved by posting a kind:1111 reply with a `l` tag of `"resolved"`. Clients that don't support resolution see it as a normal comment. The thread is considered resolved if such an event exists and has not been deleted.
+
+```jsonc
+{
+  "kind": 1111,
+  "content": "marked as resolved",
+  "tags": [
+    // NIP-22 root — unchanged from the rest of the thread
+    ["E", "<pr-or-patch-event-id>", "<relay>", "<author-pubkey>"],
+    ["K", "<1618-or-1617>"],
+    ["P", "<author-pubkey>", "<relay>"],
+
+    // NIP-22 parent — the sub-thread root being resolved
+    ["e", "<thread-root-comment-id>", "<relay>", "<author-pubkey>"],
+    ["k", "1111"],
+    ["p", "<author-pubkey>"],
+
+    // resolution state
+    ["l", "resolved"],
+  ],
+}
+```
+
+To check whether a specific comment thread is resolved without fetching the whole PR thread:
+
+```jsonc
+{ "kinds": [1111], "#e": ["<thread-root-comment-id>"], "#l": ["resolved"] }
+```
+
 ### Relay Queries
 
 ```jsonc
