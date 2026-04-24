@@ -274,7 +274,7 @@ export function InlineCommentThread({
     <div
       className={cn(
         "rounded-b-md border border-t-0 border-blue-500/30 bg-background",
-        "shadow-sm",
+        "shadow-sm font-sans",
         className,
       )}
       onKeyDown={(e) => {
