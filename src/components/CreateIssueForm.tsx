@@ -180,11 +180,16 @@ export function CreateIssueForm({
       const activeRunner =
         !isLoggedIn && useAnonMode ? createAnonRunner() : runner;
 
-      // Build imeta tags from all uploads in this compose session
-      const extraTags = uploadedTagGroups.map((group) => {
-        const fields = group.map(([k, v]) => `${k} ${v}`);
-        return ["imeta", ...fields];
-      });
+      // Build imeta tags — only include uploads whose URL is still in the content
+      const extraTags = uploadedTagGroups
+        .filter((group) => {
+          const url = group[0][1];
+          return trimmedContent.includes(url);
+        })
+        .map((group) => {
+          const fields = group.map(([k, v]) => `${k} ${v}`);
+          return ["imeta", ...fields];
+        });
 
       setIsPending(true);
       try {
