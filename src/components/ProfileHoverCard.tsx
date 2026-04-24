@@ -5,17 +5,20 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AvatarWithBadges } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { useProfile } from "@/hooks/useProfile";
 import { useLoadProfile } from "@/hooks/useLoadProfile";
 import { useUserPath } from "@/hooks/useUserPath";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { useIsFollowing } from "@/hooks/useIsFollowing";
+import { useIsGitAuthorFollowing } from "@/hooks/useIsGitAuthorFollowing";
 import { useRobustFollowActions } from "@/hooks/useRobustFollowActions";
+import { useRobustGitAuthorFollowActions } from "@/hooks/useRobustGitAuthorFollowActions";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { nip19 } from "nostr-tools";
 import { cn } from "@/lib/utils";
-import { UserCheck, UserPlus } from "lucide-react";
+import { GitBranch, UserCheck, UserPlus } from "lucide-react";
 
 interface ProfileHoverCardProps {
   pubkey: string;
@@ -35,7 +38,13 @@ function ProfileHoverCardBody({ pubkey }: { pubkey: string }) {
   const userPath = useUserPath(pubkey);
   const account = useActiveAccount();
   const isFollowing = useIsFollowing(pubkey);
-  const { follow, unfollow, pending } = useRobustFollowActions();
+  const isGitFollowing = useIsGitAuthorFollowing(pubkey);
+  const { follow, unfollow, pending: socialPending } = useRobustFollowActions();
+  const {
+    addGitAuthor,
+    removeGitAuthor,
+    pending: gitPending,
+  } = useRobustGitAuthorFollowActions();
 
   const npub = nip19.npubEncode(pubkey);
   const initials =
@@ -46,7 +55,7 @@ function ProfileHoverCardBody({ pubkey }: { pubkey: string }) {
   return (
     <>
       {/* Mini banner */}
-      <div className="h-14 bg-muted relative overflow-hidden rounded-t-2xl">
+      <div className="h-14 bg-muted overflow-hidden rounded-t-2xl">
         {profile?.banner && (
           <img
             src={profile.banner}
@@ -55,58 +64,99 @@ function ProfileHoverCardBody({ pubkey }: { pubkey: string }) {
             loading="lazy"
           />
         )}
-
-        {/* Follow / Unfollow button — only when logged in and not own profile */}
-        {account && account.pubkey !== pubkey && (
-          <div className="absolute top-2 right-2">
-            {isFollowing ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                className="h-7 text-xs gap-1"
-                disabled={pending}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  unfollow(pubkey);
-                }}
-              >
-                <UserCheck className="h-3 w-3" />
-                Following
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                className="h-7 text-xs gap-1"
-                disabled={pending}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  follow(pubkey);
-                }}
-              >
-                <UserPlus className="h-3 w-3" />
-                Follow
-              </Button>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Profile info */}
       <div className="px-4 pb-4">
-        {/* Avatar overlapping the banner */}
-        <div className="-mt-7 mb-2">
+        {/* Avatar + follow buttons row */}
+        <div className="flex items-end justify-between -mt-7 mb-2">
           <Link to={userPath} onClick={(e) => e.stopPropagation()}>
-            <Avatar className="size-14 border-2 border-background ring-1 ring-border">
-              {profile?.picture && (
-                <AvatarImage src={profile.picture} alt={displayName} />
-              )}
-              <AvatarFallback className="bg-gradient-to-br from-pink-500/20 to-pink-500/20 text-foreground font-medium text-lg">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            <AvatarWithBadges
+              size="lg"
+              showSocial={!!isFollowing}
+              showGit={!!isGitFollowing}
+              avatarEl={
+                <Avatar className="size-14 border-2 border-background ring-1 ring-border">
+                  {profile?.picture && (
+                    <AvatarImage src={profile.picture} alt={displayName} />
+                  )}
+                  <AvatarFallback className="bg-gradient-to-br from-pink-500/20 to-pink-500/20 text-foreground font-medium text-lg">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+              }
+            />
           </Link>
+
+          {/* Follow buttons — only when logged in and not own profile */}
+          {account && account.pubkey !== pubkey && (
+            <div className="flex gap-1.5 pb-0.5">
+              {/* Social follow */}
+              {isFollowing ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-7 text-xs gap-1"
+                  disabled={socialPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    unfollow(pubkey);
+                  }}
+                >
+                  <UserCheck className="h-3 w-3" />
+                  Following
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  disabled={socialPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    follow(pubkey);
+                  }}
+                >
+                  <UserPlus className="h-3 w-3" />
+                  Follow
+                </Button>
+              )}
+
+              {/* Git author follow */}
+              {isGitFollowing ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-7 text-xs gap-1"
+                  disabled={gitPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    removeGitAuthor(pubkey);
+                  }}
+                >
+                  <GitBranch className="h-3 w-3" />
+                  Git Following
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  disabled={gitPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    addGitAuthor(pubkey);
+                  }}
+                >
+                  <GitBranch className="h-3 w-3" />
+                  Follow for Git
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Display name */}

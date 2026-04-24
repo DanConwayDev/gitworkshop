@@ -80,6 +80,78 @@ const socialBadgeDualPosClasses = {
   xl: "-bottom-1 right-2",
 };
 
+/**
+ * Renders an Avatar with the follow-indicator badge dots overlaid.
+ * Extracted so ProfileHoverCard can reuse the same badge rendering.
+ */
+export function AvatarWithBadges({
+  avatarEl,
+  size,
+  showSocial,
+  showGit,
+}: {
+  avatarEl: React.ReactNode;
+  size: keyof typeof badgeSizeClasses;
+  showSocial: boolean;
+  showGit: boolean;
+}) {
+  const showBoth = showSocial && showGit;
+
+  if (!showSocial && !showGit) return <>{avatarEl}</>;
+
+  return (
+    <span className="relative inline-flex shrink-0">
+      {avatarEl}
+
+      {/* Social badge — green, behind git badge when both shown */}
+      {showSocial && (
+        <span
+          className={cn(
+            "absolute flex items-center justify-center rounded-full",
+            "bg-emerald-500 ring-1 ring-background",
+            badgeSizeClasses[size],
+            showBoth
+              ? socialBadgeDualPosClasses[size]
+              : socialBadgeSoloPosClasses[size],
+            showBoth && "z-10",
+          )}
+          aria-label="Social follow"
+        >
+          {size !== "xs" && size !== "sm" && (
+            <UserCheck
+              className="text-white"
+              style={{ width: "65%", height: "65%" }}
+              strokeWidth={size === "xl" ? 2 : 2.5}
+            />
+          )}
+        </span>
+      )}
+
+      {/* Git badge — pink, always in front at bottom-right */}
+      {showGit && (
+        <span
+          className={cn(
+            "absolute flex items-center justify-center rounded-full",
+            "bg-pink-500 ring-1 ring-background",
+            badgeSizeClasses[size],
+            gitBadgePosClasses[size],
+            "z-20",
+          )}
+          aria-label="Git author follow"
+        >
+          {size !== "xs" && size !== "sm" && (
+            <UserCheck
+              className="text-white"
+              style={{ width: "65%", height: "65%" }}
+              strokeWidth={size === "xl" ? 2 : 2.5}
+            />
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function UserAvatar({
   pubkey,
   className,
@@ -124,65 +196,27 @@ export function UserAvatar({
         ? "You follow for Social"
         : null;
 
+  const badgedAvatar = (
+    <AvatarWithBadges
+      avatarEl={avatarEl}
+      size={size}
+      showSocial={!!showSocial}
+      showGit={!!showGit}
+    />
+  );
+
   const avatar = tooltipLabel ? (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="relative inline-flex shrink-0">
-          {avatarEl}
-
-          {/* Social badge — green, behind git badge when both shown */}
-          {showSocial && (
-            <span
-              className={cn(
-                "absolute flex items-center justify-center rounded-full",
-                "bg-emerald-500 ring-1 ring-background",
-                badgeSizeClasses[size],
-                showBoth
-                  ? socialBadgeDualPosClasses[size]
-                  : socialBadgeSoloPosClasses[size],
-                showBoth && "z-10",
-              )}
-              aria-label="Social follow"
-            >
-              {size !== "xs" && size !== "sm" && (
-                <UserCheck
-                  className="text-white"
-                  style={{ width: "65%", height: "65%" }}
-                  strokeWidth={size === "xl" ? 2 : 2.5}
-                />
-              )}
-            </span>
-          )}
-
-          {/* Git badge — violet, always in front at bottom-right */}
-          {showGit && (
-            <span
-              className={cn(
-                "absolute flex items-center justify-center rounded-full",
-                "bg-pink-500 ring-1 ring-background",
-                badgeSizeClasses[size],
-                gitBadgePosClasses[size],
-                "z-20",
-              )}
-              aria-label="Git author follow"
-            >
-              {size !== "xs" && size !== "sm" && (
-                <UserCheck
-                  className="text-white"
-                  style={{ width: "65%", height: "65%" }}
-                  strokeWidth={size === "xl" ? 2 : 2.5}
-                />
-              )}
-            </span>
-          )}
-        </span>
+        {/* TooltipTrigger needs a single DOM element child */}
+        <span className="inline-flex shrink-0">{badgedAvatar}</span>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="text-xs">
         {tooltipLabel}
       </TooltipContent>
     </Tooltip>
   ) : (
-    avatarEl
+    badgedAvatar
   );
 
   if (linkToProfile && pubkey) {
