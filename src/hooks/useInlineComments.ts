@@ -46,6 +46,12 @@ export interface InlineCommentMap {
    * line of a range so multi-line comments don't repeat on every covered line.
    */
   byLastLine: Map<string, NostrEvent[]>;
+  /**
+   * Set of thread-root comment event IDs that have been resolved.
+   * A thread is resolved when a kind:1111 reply with `["l", "resolved"]`
+   * exists and has not been deleted.
+   */
+  resolvedThreadIds: Set<string>;
   /** Total count of inline comments */
   total: number;
 }
@@ -58,10 +64,31 @@ function lineMapKey(
   return `${filePath}:${type}:${ln}`;
 }
 
+/**
+ * Check whether a kind:1111 event is a thread resolution marker.
+ * A resolution event has an `["l", "resolved"]` tag and no `["f", ...]` tag
+ * (it's a reply, not a new inline comment).
+ */
+export function isResolutionEvent(event: NostrEvent): boolean {
+  return (
+    event.kind === 1111 &&
+    event.tags.some(([t, v]) => t === "l" && v === "resolved")
+  );
+}
+
+/**
+ * Get the thread-root comment ID that a resolution event resolves.
+ * This is the lowercase `e` tag (immediate parent).
+ */
+export function getResolutionTargetId(event: NostrEvent): string | undefined {
+  return event.tags.find(([t]) => t === "e")?.[1];
+}
+
 function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
   const byFile = new Map<string, NostrEvent[]>();
   const byLine = new Map<string, NostrEvent[]>();
   const byLastLine = new Map<string, NostrEvent[]>();
+  const resolvedThreadIds = new Set<string>();
 
   const addToMap = (
     map: Map<string, NostrEvent[]>,
@@ -74,6 +101,13 @@ function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
   };
 
   for (const event of events) {
+    // Track resolution events separately — they don't have file/line tags
+    if (isResolutionEvent(event)) {
+      const targetId = getResolutionTargetId(event);
+      if (targetId) resolvedThreadIds.add(targetId);
+      continue;
+    }
+
     const loc = parseInlineCommentLocation(event);
     if (!loc.filePath) continue;
 
@@ -107,13 +141,20 @@ function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
     }
   }
 
-  return { byFile, byLine, byLastLine, total: events.length };
+  return {
+    byFile,
+    byLine,
+    byLastLine,
+    resolvedThreadIds,
+    total: events.length,
+  };
 }
 
 const EMPTY_MAP: InlineCommentMap = {
   byFile: new Map(),
   byLine: new Map(),
   byLastLine: new Map(),
+  resolvedThreadIds: new Set(),
   total: 0,
 };
 
@@ -143,6 +184,8 @@ export function useInlineComments(
   }, [rootEventId, relayKey, store]);
 
   // Subscribe reactively from the store
+  // Pass all kind:1111 events (inline comments + resolution events) to
+  // buildCommentMap — it handles both internally.
   const commentMap = use$(() => {
     if (!rootEventId) return undefined;
     const filter = {
@@ -153,7 +196,9 @@ export function useInlineComments(
       .timeline([filter])
       .pipe(
         map((events) =>
-          buildCommentMap(events.filter((e) => isInlineComment(e))),
+          buildCommentMap(
+            events.filter((e) => isInlineComment(e) || isResolutionEvent(e)),
+          ),
         ),
       );
   }, [rootEventId, store]);

@@ -113,6 +113,11 @@ interface InlineCommentCtx {
   repoCoords?: string[];
   /** Relay hint for NIP-22 tags */
   relayHint?: string;
+  /**
+   * Pubkeys authorized to resolve threads (maintainers + PR/patch author).
+   * When set, a "Resolve" button is shown to users in this set.
+   */
+  authorizedPubkeys?: Set<string>;
 }
 
 const InlineCommentContext = createContext<InlineCommentCtx | null>(null);
@@ -270,6 +275,11 @@ export interface DiffViewProps {
   repoCoords?: string[];
   /** Relay hint for NIP-22 tags */
   relayHint?: string;
+  /**
+   * Pubkeys authorized to resolve threads (maintainers + PR/patch author).
+   * When set, a "Resolve" button is shown to users in this set.
+   */
+  authorizedPubkeys?: Set<string>;
 }
 
 import {
@@ -575,6 +585,7 @@ export const DiffView = memo(function DiffView({
   commitId,
   repoCoords,
   relayHint,
+  authorizedPubkeys,
 }: DiffViewProps) {
   const files = useMemo(() => parseDiff(diff), [diff]);
 
@@ -683,6 +694,7 @@ export const DiffView = memo(function DiffView({
           commitId,
           repoCoords,
           relayHint,
+          authorizedPubkeys,
         }
       : null;
 
@@ -1636,6 +1648,12 @@ function DiffLine({
   const hasComments = lastLineComments.length > 0;
   const showThread = hasComments || isComposingRangeEnd;
 
+  // Whether the existing thread is resolved (thread root ID in resolvedThreadIds)
+  const isThreadResolved =
+    hasComments &&
+    ctx !== null &&
+    ctx.commentMap.resolvedThreadIds.has(lastLineComments[0].id);
+
   const commentOptions: InlineCommentOptions | null =
     ctx && lineNumber !== null
       ? {
@@ -2006,6 +2024,9 @@ function DiffLine({
                   // existing comments' range (same thread). When they differ,
                   // a separate composer row is rendered below.
                   autoFocus={isComposingRangeEnd && !needsSeparateComposer}
+                  isResolved={isThreadResolved}
+                  authorizedPubkeys={ctx.authorizedPubkeys}
+                  repoCoords={ctx.repoCoords}
                 />
               </td>
             </tr>

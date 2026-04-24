@@ -25,6 +25,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   ChevronDown,
   ChevronRight,
+  CheckCircle2,
   Loader2,
   MessageSquare,
   Reply,
@@ -33,7 +34,11 @@ import {
 import { cn } from "@/lib/utils";
 import { composerHasNsec, hasPreviewableContent } from "@/lib/composerUtils";
 import { runner } from "@/services/actions";
-import { CreateInlineComment, CreateComment } from "@/actions/nip34";
+import {
+  CreateInlineComment,
+  CreateComment,
+  ResolveThread,
+} from "@/actions/nip34";
 import type { InlineCommentOptions } from "@/blueprints/inline-comment";
 import { parseInlineCommentLocation } from "@/blueprints/inline-comment";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -59,6 +64,18 @@ export interface InlineCommentThreadProps {
   onClose?: () => void;
   /** When true, show the composer immediately (e.g. user just clicked a line) */
   autoFocus?: boolean;
+  /**
+   * Whether this thread has been resolved.
+   * Derived from InlineCommentMap.resolvedThreadIds for the first comment's ID.
+   */
+  isResolved?: boolean;
+  /**
+   * Pubkeys authorized to resolve this thread (maintainers + PR/patch author).
+   * When provided and the current user is in this set, a "Resolve" button is shown.
+   */
+  authorizedPubkeys?: Set<string>;
+  /** Repo coordinates for relay group keying on the resolve event */
+  repoCoords?: string[];
   className?: string;
 }
 
@@ -279,14 +296,18 @@ export function InlineCommentThread({
   commentOptions,
   onClose,
   autoFocus = false,
+  isResolved = false,
+  authorizedPubkeys,
+  repoCoords,
   className,
 }: InlineCommentThreadProps) {
   const [composerOpen, setComposerOpen] = useState(autoFocus);
   /**
    * Whether the thread body (comments + composer) is collapsed.
-   * Starts expanded; collapses when the user clicks the chevron in the header.
+   * Resolved threads start collapsed; unresolved threads start expanded.
    */
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(isResolved);
+  const [resolving, setResolving] = useState(false);
   /**
    * When the "Reply" button is clicked on an existing thread, this is set to
    * the last comment in the thread so the reply is a plain NIP-22 comment
@@ -295,6 +316,19 @@ export function InlineCommentThread({
    */
   const [replyToComment, setReplyToComment] = useState<NostrEvent | null>(null);
   const effectiveParent = parentEvent ?? rootEvent;
+  const { toast } = useToast();
+  const activeAccount = useActiveAccount();
+
+  // The thread root is the first comment — used as the parent for the resolve event.
+  const threadRootComment = comments.length > 0 ? comments[0] : null;
+
+  // Can the current user resolve this thread?
+  const canResolve =
+    !isResolved &&
+    !!activeAccount &&
+    !!authorizedPubkeys &&
+    authorizedPubkeys.has(activeAccount.pubkey) &&
+    !!threadRootComment;
 
   // When autoFocus transitions to true (e.g. user clicks "+" on a line that
   // already has comments and the thread is already mounted), open the composer
@@ -306,6 +340,12 @@ export function InlineCommentThread({
       setCollapsed(false);
     }
   }, [autoFocus]);
+
+  // When isResolved changes (e.g. resolution event arrives from relay),
+  // collapse the thread automatically.
+  useEffect(() => {
+    if (isResolved) setCollapsed(true);
+  }, [isResolved]);
 
   const handleSubmitted = useCallback(() => {
     setComposerOpen(false);
@@ -320,6 +360,23 @@ export function InlineCommentThread({
     }
   }, [comments.length, onClose]);
 
+  const handleResolve = useCallback(async () => {
+    if (!threadRootComment || resolving) return;
+    setResolving(true);
+    try {
+      await runner.run(ResolveThread, rootEvent, threadRootComment, repoCoords);
+      toast({ title: "Thread resolved" });
+    } catch (err) {
+      toast({
+        title: "Failed to resolve thread",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setResolving(false);
+    }
+  }, [threadRootComment, resolving, rootEvent, repoCoords, toast]);
+
   if (comments.length === 0 && !composerOpen && !autoFocus) {
     return null;
   }
@@ -327,8 +384,8 @@ export function InlineCommentThread({
   return (
     <div
       className={cn(
-        "rounded-b-md border border-t-0 border-blue-500/30 bg-background",
-        "shadow-sm font-sans",
+        "rounded-b-md border border-t-0 bg-background shadow-sm font-sans",
+        isResolved ? "border-green-500/30" : "border-blue-500/30",
         className,
       )}
       onKeyDown={(e) => {
@@ -339,7 +396,14 @@ export function InlineCommentThread({
       }}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/5 border-b border-blue-500/20 rounded-t-none">
+      <div
+        className={cn(
+          "flex items-center gap-2 px-3 py-1.5 border-b rounded-t-none",
+          isResolved
+            ? "bg-green-500/5 border-green-500/20"
+            : "bg-blue-500/5 border-blue-500/20",
+        )}
+      >
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}
@@ -347,11 +411,25 @@ export function InlineCommentThread({
           aria-label={collapsed ? "Expand thread" : "Collapse thread"}
         >
           {collapsed ? (
-            <ChevronRight className="h-3.5 w-3.5 text-blue-500/70 shrink-0" />
+            <ChevronRight
+              className={cn(
+                "h-3.5 w-3.5 shrink-0",
+                isResolved ? "text-green-500/70" : "text-blue-500/70",
+              )}
+            />
           ) : (
-            <ChevronDown className="h-3.5 w-3.5 text-blue-500/70 shrink-0" />
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 shrink-0",
+                isResolved ? "text-green-500/70" : "text-blue-500/70",
+              )}
+            />
           )}
-          <MessageSquare className="h-3.5 w-3.5 text-blue-500/70 shrink-0" />
+          {isResolved ? (
+            <CheckCircle2 className="h-3.5 w-3.5 text-green-500/70 shrink-0" />
+          ) : (
+            <MessageSquare className="h-3.5 w-3.5 text-blue-500/70 shrink-0" />
+          )}
           <span className="text-xs text-muted-foreground">
             {(() => {
               // Derive the line range to show in the header.
@@ -366,8 +444,9 @@ export function InlineCommentThread({
                 ? ` on ${lineStr.includes("-") ? "lines" : "line"} ${lineStr}`
                 : "";
               const count = comments.length;
+              const resolvedLabel = isResolved ? " · resolved" : "";
               return count > 0
-                ? `${count} comment${count !== 1 ? "s" : ""}${locationLabel}`
+                ? `${count} comment${count !== 1 ? "s" : ""}${locationLabel}${resolvedLabel}`
                 : `New comment${locationLabel}`;
             })()}
           </span>
@@ -392,7 +471,7 @@ export function InlineCommentThread({
             <InlineComment key={comment.id} event={comment} />
           ))}
 
-          {/* Composer */}
+          {/* Footer: composer or reply/resolve actions */}
           {composerOpen ? (
             <InlineComposer
               rootEvent={rootEvent}
@@ -404,7 +483,7 @@ export function InlineCommentThread({
               replyToComment={replyToComment ?? undefined}
             />
           ) : (
-            <div className="px-3 py-2 border-t border-border/40">
+            <div className="px-3 py-2 border-t border-border/40 flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => {
@@ -419,6 +498,21 @@ export function InlineCommentThread({
                 <Reply className="h-3.5 w-3.5" />
                 Reply
               </button>
+              {canResolve && (
+                <button
+                  type="button"
+                  onClick={handleResolve}
+                  disabled={resolving}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-green-600 dark:hover:text-green-400 transition-colors ml-auto disabled:opacity-50"
+                >
+                  {resolving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  )}
+                  Resolve
+                </button>
+              )}
             </div>
           )}
         </>

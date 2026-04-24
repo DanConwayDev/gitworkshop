@@ -652,6 +652,7 @@ export default function PRPage() {
           commentMap={inlineCommentMap}
           repoCoords={repoAllCoords ?? pr?.repoCoords}
           relayHint={inlineCommentRelays[0]}
+          authorizedPubkeys={pr?.authorisedUsers}
         />
       );
     }
@@ -705,6 +706,7 @@ export default function PRPage() {
     inlineCommentMap,
     inlineCommentRelays,
     pr?.repoCoords,
+    pr?.authorisedUsers,
     repoAllCoords,
   ]);
 
@@ -1139,6 +1141,7 @@ export default function PRPage() {
                       commitId={patchChain[patchChain.length - 1]?.commitId}
                       repoCoords={repoAllCoords ?? pr.repoCoords}
                       relayHint={inlineCommentRelays[0]}
+                      authorizedPubkeys={pr.authorisedUsers}
                     />
                   ) : !pr?.tip.commitId ? (
                     <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
@@ -1167,6 +1170,7 @@ export default function PRPage() {
                       commitId={pr.tip.commitId}
                       repoCoords={repoAllCoords ?? pr.repoCoords}
                       relayHint={inlineCommentRelays[0]}
+                      authorizedPubkeys={pr.authorisedUsers}
                     />
                   )}
                 </TabsContent>

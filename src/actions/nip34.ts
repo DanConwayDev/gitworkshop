@@ -410,6 +410,69 @@ export function DeleteEvent(
 }
 
 /**
+ * Resolve a comment thread by posting a kind:1111 reply with `["l", "resolved"]`.
+ *
+ * The thread root is the first inline comment (or any NIP-22 comment) that
+ * started the sub-thread. The resolution event uses the same NIP-22 root
+ * (E/K/P) as the rest of the thread, with the thread root as the parent.
+ *
+ * Gating (maintainer or PR/patch author) is enforced in the UI; this action
+ * does not re-check — callers are responsible for the gate.
+ *
+ * @param prOrPatchEvent  - The root PR (kind:1618) or patch (kind:1617)
+ * @param threadRootEvent - The first comment in the sub-thread being resolved
+ * @param repoCoords      - Repo coordinate strings for relay group keying
+ */
+export function ResolveThread(
+  prOrPatchEvent: NostrEvent,
+  threadRootEvent: NostrEvent,
+  repoCoords?: string[],
+): Action {
+  return async ({ sign, self }) => {
+    const relay = "";
+    const tags: string[][] = [
+      // NIP-22 root — always the PR or patch
+      ["E", prOrPatchEvent.id, relay, prOrPatchEvent.pubkey],
+      ["K", String(prOrPatchEvent.kind)],
+      ["P", prOrPatchEvent.pubkey, relay],
+
+      // NIP-22 parent — the sub-thread root being resolved
+      ["e", threadRootEvent.id, relay, threadRootEvent.pubkey],
+      ["k", String(threadRootEvent.kind)],
+      ["p", threadRootEvent.pubkey],
+
+      // Resolution state
+      ["l", "resolved"],
+
+      // NIP-31 alt tag
+      ["alt", "Marked thread as resolved"],
+    ];
+
+    const draft = {
+      kind: 1111 as const,
+      content: "marked as resolved",
+      tags,
+      created_at: Math.floor(Date.now() / 1000),
+    };
+
+    const signed = await sign(draft);
+    eventStore.add(signed);
+
+    const notifyPubkeys = [
+      ...new Set(
+        [prOrPatchEvent.pubkey, threadRootEvent.pubkey].filter(
+          (pk) => pk !== self,
+        ),
+      ),
+    ];
+
+    outboxStore
+      .publish(signed, buildGroupIds(self, repoCoords, notifyPubkeys))
+      .catch(console.error);
+  };
+}
+
+/**
  * Post an inline code review comment (kind:1111) on a NIP-34 PR or patch.
  *
  * Extends the standard NIP-22 comment with file/line/commit location tags as

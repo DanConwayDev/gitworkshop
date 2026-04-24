@@ -70,6 +70,11 @@ export interface CommitDiffViewProps {
   repoCoords?: string[];
   /** Relay hint for NIP-22 tags */
   relayHint?: string;
+  /**
+   * Pubkeys authorized to resolve threads (maintainers + PR/patch author).
+   * When set, a "Resolve" button is shown to users in this set.
+   */
+  authorizedPubkeys?: Set<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -304,6 +309,7 @@ export function CommitDiffView({
   commitId,
   repoCoords,
   relayHint,
+  authorizedPubkeys,
 }: CommitDiffViewProps) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading-trees" });
   const [activeFile, setActiveFile] = useState<string | null>(null);
@@ -434,6 +440,7 @@ export function CommitDiffView({
             commitId={commitId}
             repoCoords={repoCoords}
             relayHint={relayHint}
+            authorizedPubkeys={authorizedPubkeys}
           />
         </div>
       </div>
@@ -466,6 +473,7 @@ export function CommitDiffView({
           commitId={commitId}
           repoCoords={repoCoords}
           relayHint={relayHint}
+          authorizedPubkeys={authorizedPubkeys}
         />
       </div>
     </div>

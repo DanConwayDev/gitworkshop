@@ -49,6 +49,11 @@ export interface PRFilesTabProps {
   repoCoords?: string[];
   /** Relay hint for NIP-22 tags */
   relayHint?: string;
+  /**
+   * Pubkeys authorized to resolve threads (maintainers + PR/patch author).
+   * When set, a "Resolve" button is shown to users in this set.
+   */
+  authorizedPubkeys?: Set<string>;
 }
 
 export function PRFilesTab({
@@ -63,6 +68,7 @@ export function PRFilesTab({
   commitId,
   repoCoords,
   relayHint,
+  authorizedPubkeys,
 }: PRFilesTabProps) {
   return (
     <CommitDiffView
@@ -77,6 +83,7 @@ export function PRFilesTab({
       commitId={commitId}
       repoCoords={repoCoords}
       relayHint={relayHint}
+      authorizedPubkeys={authorizedPubkeys}
     />
   );
 }

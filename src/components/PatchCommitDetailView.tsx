@@ -135,6 +135,11 @@ export interface PatchCommitDetailViewProps {
   repoCoords?: string[];
   /** Relay hint for NIP-22 tags */
   relayHint?: string;
+  /**
+   * Pubkeys authorized to resolve threads (maintainers + PR/patch author).
+   * When set, a "Resolve" button is shown to users in this set.
+   */
+  authorizedPubkeys?: Set<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -399,6 +404,7 @@ export function PatchCommitDetailView({
   commentMap,
   repoCoords,
   relayHint,
+  authorizedPubkeys,
 }: PatchCommitDetailViewProps) {
   const [copied, setCopied] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -1005,6 +1011,7 @@ export function PatchCommitDetailView({
           commitId={patch.commitId}
           repoCoords={repoCoords}
           relayHint={relayHint}
+          authorizedPubkeys={authorizedPubkeys}
         />
       ) : patchDiff ? (
         <DiffView
@@ -1014,6 +1021,7 @@ export function PatchCommitDetailView({
           commitId={patch.commitId}
           repoCoords={repoCoords}
           relayHint={relayHint}
+          authorizedPubkeys={authorizedPubkeys}
         />
       ) : (
         <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
