@@ -48,6 +48,8 @@ import {
   isInlineComment,
   parseInlineCommentLocation,
 } from "@/blueprints/inline-comment";
+import { diffLineHash, fileDiffCardId } from "@/lib/diffCardId";
+import { Link } from "react-router-dom";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -191,7 +193,10 @@ function ThreadComment({ event }: { event: NostrEvent }) {
   const [deleting, setDeleting] = useState(false);
 
   const ctx = useContext(ThreadCtx);
-  const canReply = !!ctx;
+  // canReply defaults to true when ctx is present (backward compat), but can
+  // be explicitly disabled via ctx.canReply = false (e.g. for logged-out users
+  // where we still want the context for inline comment links).
+  const canReply = !!ctx && ctx.canReply !== false;
   const activeAccount = useActiveAccount();
   const isOwn = !!activeAccount && activeAccount.pubkey === event.pubkey;
 
@@ -218,6 +223,28 @@ function ThreadComment({ event }: { event: NostrEvent }) {
   const isInline = isInlineComment(event);
   const inlineLoc = isInline ? parseInlineCommentLocation(event) : null;
 
+  // Build a permalink to the Files Changed / commit diff view for this inline comment.
+  const inlinePermalink = (() => {
+    if (!ctx?.prBasePath || !inlineLoc?.filePath) return null;
+    // Build the hash fragment: anchor to the specific line if we have one.
+    const lineNum =
+      inlineLoc.lineRange?.[1] ?? inlineLoc.lineRange?.[0] ?? null;
+    const hash =
+      lineNum !== null
+        ? diffLineHash(
+            inlineLoc.filePath,
+            lineNum,
+            inlineLoc.lineSide === "del" ? "del" : "new",
+          )
+        : "#" + fileDiffCardId(inlineLoc.filePath);
+
+    // Prefer the commit-specific view when a commitId is available.
+    if (inlineLoc.commitId) {
+      return `${ctx.prBasePath}/commit/${inlineLoc.commitId}${hash}`;
+    }
+    return `${ctx.prBasePath}/files${hash}`;
+  })();
+
   return (
     <div
       id={anchorId}
@@ -234,7 +261,17 @@ function ThreadComment({ event }: { event: NostrEvent }) {
       {isInline && inlineLoc?.filePath && (
         <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded bg-muted/60 border border-border/40 text-xs text-muted-foreground font-mono">
           <FileCode className="h-3 w-3 shrink-0 text-blue-500/70" />
-          <span className="truncate">{inlineLoc.filePath}</span>
+          {inlinePermalink ? (
+            <Link
+              to={inlinePermalink}
+              className="truncate hover:text-foreground hover:underline underline-offset-2 transition-colors"
+              title="View in Files Changed"
+            >
+              {inlineLoc.filePath}
+            </Link>
+          ) : (
+            <span className="truncate">{inlineLoc.filePath}</span>
+          )}
           {inlineLoc.line && (
             <span className="shrink-0 text-muted-foreground/60">
               :{inlineLoc.line}

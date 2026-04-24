@@ -1034,12 +1034,17 @@ export default function PRPage() {
                               key={`thread-${node.node.event.id}-${idx}`}
                               node={node.node}
                               threadContext={
-                                activeAccount && pr
+                                pr
                                   ? {
                                       rootEvent: pr.rootEvent,
                                       repoCoords:
                                         repoAllCoords ?? pr.repoCoords,
                                       priorityPubkeys: mentionPriorityPubkeys,
+                                      // prBasePath is always included so inline comment
+                                      // banners can link to the diff view regardless of
+                                      // login state. canReply gates the reply UI.
+                                      prBasePath: prBasePath ?? undefined,
+                                      canReply: !!activeAccount,
                                     }
                                   : undefined
                               }

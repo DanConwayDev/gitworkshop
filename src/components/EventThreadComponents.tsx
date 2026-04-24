@@ -740,6 +740,19 @@ export interface ThreadContext {
    * parent author → thread participants → repo maintainers.
    */
   priorityPubkeys?: string[];
+  /**
+   * Base path for the PR/patch (e.g. "/<npub>/<relay>/<repoId>/prs/<prId>").
+   * When provided, inline comment banners become links to the Files Changed
+   * tab or commit diff view anchored to the relevant file and line.
+   */
+  prBasePath?: string;
+  /**
+   * Whether the current user can reply to comments in this thread.
+   * Defaults to true when the context is provided (for backward compatibility).
+   * Set to false to show the context (e.g. for inline comment links) without
+   * enabling the reply UI.
+   */
+  canReply?: boolean;
 }
 
 // ---------------------------------------------------------------------------

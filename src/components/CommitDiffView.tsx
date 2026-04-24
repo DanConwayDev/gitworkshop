@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DiffView } from "@/components/DiffView";
-import { fileDiffCardId } from "@/lib/diffCardId";
+import { fileDiffCardId, diffLineAnchorId } from "@/lib/diffCardId";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   diffTrees,
@@ -292,6 +292,38 @@ type Phase =
   | { kind: "done"; changes: FileChange[]; diff: string }
   | { kind: "error"; message: string };
 
+/**
+ * Parse a URL hash fragment into a file path and optional line anchor.
+ *
+ * Accepts hashes of the form:
+ *   #diff-src_lib_foo_ts_L42      → { cardId: "diff-src_lib_foo_ts", line: 42, side: "new" }
+ *   #diff-src_lib_foo_ts_DL42     → { cardId: "diff-src_lib_foo_ts", line: 42, side: "del" }
+ *   #diff-src_lib_foo_ts          → { cardId: "diff-src_lib_foo_ts", line: null, side: null }
+ *
+ * Returns null if the hash doesn't match a diff anchor pattern.
+ */
+function parseDiffHash(hash: string): {
+  cardId: string;
+  line: number | null;
+  side: "new" | "del" | null;
+} | null {
+  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (!raw.startsWith("diff-")) return null;
+
+  // Try line anchor: diff-{cardId}_(DL|L){n}
+  const lineMatch = raw.match(/^(diff-.+?)_(DL|L)(\d+)$/);
+  if (lineMatch) {
+    return {
+      cardId: lineMatch[1],
+      line: parseInt(lineMatch[3], 10),
+      side: lineMatch[2] === "DL" ? "del" : "new",
+    };
+  }
+
+  // File-only anchor
+  return { cardId: raw, line: null, side: null };
+}
+
 export function CommitDiffView({
   tipCommitId,
   baseCommitId,
@@ -309,11 +341,60 @@ export function CommitDiffView({
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Track whether we've already handled the initial URL hash scroll so we
+  // don't re-trigger it on every re-render.
+  const hashScrolledRef = useRef(false);
+
   const handleFileSelect = (path: string) => {
     setActiveFile(path);
     const el = document.getElementById(fileDiffCardId(path));
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  // On mount (and when the diff finishes loading), check the URL hash and
+  // scroll to the referenced line if present.
+  useEffect(() => {
+    if (phase.kind !== "done") return;
+    if (hashScrolledRef.current) return;
+
+    const hash = window.location.hash;
+    if (!hash) return;
+
+    const parsed = parseDiffHash(hash);
+    if (!parsed) return;
+
+    // Find the file whose fileDiffCardId matches the cardId in the hash.
+    const matchedFile = phase.changes.find(
+      (c) => fileDiffCardId(c.path) === parsed.cardId,
+    );
+    if (!matchedFile) return;
+
+    hashScrolledRef.current = true;
+
+    // Expand the file card (triggers forceExpand in FileDiffCard).
+    setActiveFile(matchedFile.path);
+
+    // Scroll to the specific line after a short delay so the card has time
+    // to expand and render the line rows.
+    const lineId =
+      parsed.line !== null && parsed.side !== null
+        ? diffLineAnchorId(matchedFile.path, parsed.line, parsed.side)
+        : fileDiffCardId(matchedFile.path);
+
+    const scrollToEl = () => {
+      const el = document.getElementById(lineId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Brief highlight flash so the user can spot the line
+        el.classList.add("bg-yellow-400/30");
+        setTimeout(() => el.classList.remove("bg-yellow-400/30"), 2000);
+      }
+    };
+
+    // Try immediately, then retry after expansion animation
+    setTimeout(scrollToEl, 100);
+    setTimeout(scrollToEl, 600);
+  }, [phase]);
 
   // Notify parent when file count is known (phase 1 complete).
   useEffect(() => {

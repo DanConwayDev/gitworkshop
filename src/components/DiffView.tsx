@@ -251,7 +251,7 @@ export interface DiffViewProps {
   relayHint?: string;
 }
 
-import { fileDiffCardId } from "@/lib/diffCardId";
+import { fileDiffCardId, diffLineAnchorId } from "@/lib/diffCardId";
 
 // ---------------------------------------------------------------------------
 // Highlighter hook
@@ -1320,9 +1320,18 @@ function DiffLine({
   // Column count: gutter (1) + code (1) + [comment action if ctx] (1) = 2 or 3
   const colCount = ctx ? 3 : 2;
 
+  // Stable anchor ID for this line — used by permalink links from inline comment banners.
+  const lineAnchorId =
+    newLine !== null
+      ? diffLineAnchorId(filename, newLine, "new")
+      : oldLine !== null
+        ? diffLineAnchorId(filename, oldLine, "del")
+        : undefined;
+
   return (
     <>
       <tr
+        id={lineAnchorId}
         data-line-old={oldLine}
         data-line-new={newLine}
         className={cn(
