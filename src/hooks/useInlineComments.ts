@@ -53,6 +53,12 @@ export interface InlineCommentMap {
    */
   resolvedThreadIds: Set<string>;
   /**
+   * The resolution event (kind:1111 with `["l", "resolved"]`) keyed by the
+   * thread-root comment ID it resolves. Used to display the resolver's
+   * identity and timestamp in the diff view panel.
+   */
+  resolveEventByThreadId: Map<string, NostrEvent>;
+  /**
    * Reply events (kind:1111 without an "f" tag) keyed by the ID of the
    * inline comment they reply to (lowercase "e" tag = immediate parent).
    *
@@ -97,6 +103,7 @@ function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
   const byLine = new Map<string, NostrEvent[]>();
   const byLastLine = new Map<string, NostrEvent[]>();
   const resolvedThreadIds = new Set<string>();
+  const resolveEventByThreadId = new Map<string, NostrEvent>();
   const repliesByCommentId = new Map<string, NostrEvent[]>();
 
   const addToMap = (
@@ -113,7 +120,14 @@ function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
     // Track resolution events separately — they don't have file/line tags
     if (isResolutionEvent(event)) {
       const targetId = getResolutionTargetId(event);
-      if (targetId) resolvedThreadIds.add(targetId);
+      if (targetId) {
+        resolvedThreadIds.add(targetId);
+        // Keep the most recent resolution event per thread
+        const existing = resolveEventByThreadId.get(targetId);
+        if (!existing || event.created_at > existing.created_at) {
+          resolveEventByThreadId.set(targetId, event);
+        }
+      }
       continue;
     }
 
@@ -168,6 +182,7 @@ function buildCommentMap(events: NostrEvent[]): InlineCommentMap {
     byLine,
     byLastLine,
     resolvedThreadIds,
+    resolveEventByThreadId,
     repliesByCommentId,
     total: events.length,
   };
@@ -178,6 +193,7 @@ const EMPTY_MAP: InlineCommentMap = {
   byLine: new Map(),
   byLastLine: new Map(),
   resolvedThreadIds: new Set(),
+  resolveEventByThreadId: new Map(),
   repliesByCommentId: new Map(),
   total: 0,
 };

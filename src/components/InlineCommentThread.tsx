@@ -26,6 +26,7 @@ import {
   Loader2,
   MessageSquare,
   Reply,
+  Trash2,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ import {
   CreateComment,
   ResolveThread,
 } from "@/actions/nip34";
+import { DeleteEvent } from "@/actions/nip34";
 import type { InlineCommentOptions } from "@/blueprints/inline-comment";
 import {
   isInlineComment,
@@ -47,6 +49,20 @@ import { useUserDisplayName } from "@/hooks/useUserDisplayName";
 import { useToast } from "@/hooks/useToast";
 import { useAuthModal } from "@/contexts/AuthModalContext";
 import { ThreadComment, ThreadCtx } from "@/components/ThreadTree";
+import { formatDistanceToNow } from "date-fns";
+import { UserLink } from "@/components/UserAvatar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -70,6 +86,11 @@ export interface InlineCommentThreadProps {
    * Derived from InlineCommentMap.resolvedThreadIds for the first comment's ID.
    */
   isResolved?: boolean;
+  /**
+   * The resolution event (kind:1111 with `["l", "resolved"]`) for this thread.
+   * When provided, a compact resolved footer is shown at the bottom of the panel.
+   */
+  resolveEvent?: NostrEvent;
   /**
    * Pubkeys authorized to resolve this thread (maintainers + PR/patch author).
    * When provided and the current user is in this set, a "Resolve" button is shown.
@@ -259,6 +280,140 @@ function InlineComposer({
 }
 
 // ---------------------------------------------------------------------------
+// Resolved footer — compact "marked as resolved" row for the diff panel
+// ---------------------------------------------------------------------------
+
+function ResolvedFooter({
+  resolveEvent,
+  authorizedPubkeys,
+  repoCoords,
+}: {
+  resolveEvent: NostrEvent;
+  authorizedPubkeys?: Set<string>;
+  repoCoords?: string[];
+}) {
+  const activeAccount = useActiveAccount();
+  const isOwn = !!activeAccount && activeAccount.pubkey === resolveEvent.pubkey;
+
+  const authorised =
+    authorizedPubkeys === undefined ||
+    authorizedPubkeys.size === 0 ||
+    authorizedPubkeys.has(resolveEvent.pubkey);
+
+  const timeAgo = formatDistanceToNow(
+    new Date(resolveEvent.created_at * 1000),
+    { addSuffix: true },
+  );
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const reasonId = `delete-resolve-${resolveEvent.id.slice(0, 8)}-reason`;
+
+  const confirmDelete = useCallback(async () => {
+    if (deleting || !repoCoords) return;
+    setDeleting(true);
+    try {
+      await runner.run(
+        DeleteEvent,
+        [resolveEvent],
+        repoCoords,
+        deleteReason.trim() || undefined,
+      );
+    } catch (err) {
+      console.error("[ResolvedFooter] failed to delete:", err);
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+      setDeleteReason("");
+    }
+  }, [deleting, resolveEvent, repoCoords, deleteReason]);
+
+  return (
+    <>
+      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/40 text-xs text-muted-foreground">
+        <CheckCircle2 className="h-3 w-3 text-green-500/70 shrink-0" />
+        <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
+          <UserLink
+            pubkey={resolveEvent.pubkey}
+            avatarSize="sm"
+            nameClassName="text-xs font-medium text-foreground/80"
+          />
+          <span className="text-green-600/80 dark:text-green-400/80 shrink-0">
+            {authorised ? "marked as resolved" : "proposed resolving"}
+          </span>
+          {!authorised && (
+            <span className="text-muted-foreground/50 shrink-0">
+              (not a maintainer)
+            </span>
+          )}
+          <span className="text-muted-foreground/50 shrink-0">{timeAgo}</span>
+        </div>
+
+        {/* Delete — only for own events */}
+        {isOwn && repoCoords && (
+          <button
+            type="button"
+            onClick={() => setDeleteOpen(true)}
+            className="text-muted-foreground/40 hover:text-destructive transition-colors px-1 py-0.5 rounded"
+            aria-label="Delete resolution"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog
+        open={deleteOpen}
+        onOpenChange={(v) => !v && setDeleteOpen(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this resolution?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will send a deletion request (NIP-09). Not all relays honour
+              deletion requests — the event may remain visible on some clients.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5 py-1">
+            <Label htmlFor={reasonId} className="text-sm">
+              Reason{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Textarea
+              id={reasonId}
+              placeholder="Why are you deleting this resolution?"
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              rows={2}
+              className="resize-none text-sm"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setDeleteOpen(false);
+                setDeleteReason("");
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "Sending…" : "Send deletion request"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -270,6 +425,7 @@ export function InlineCommentThread({
   onClose,
   autoFocus = false,
   isResolved = false,
+  resolveEvent,
   authorizedPubkeys,
   repoCoords,
   className,
@@ -495,8 +651,14 @@ export function InlineCommentThread({
             </div>
           )}
 
-          {/* Footer: composer or reply/resolve actions */}
-          {composerOpen ? (
+          {/* Footer: resolved indicator, composer, or reply/resolve actions */}
+          {isResolved && resolveEvent ? (
+            <ResolvedFooter
+              resolveEvent={resolveEvent}
+              authorizedPubkeys={authorizedPubkeys}
+              repoCoords={repoCoords}
+            />
+          ) : composerOpen ? (
             <InlineComposer
               key={composerKey}
               rootEvent={rootEvent}

@@ -1666,6 +1666,12 @@ function DiffLine({
     ctx !== null &&
     ctx.commentMap.resolvedThreadIds.has(lastLineComments[0].id);
 
+  // The resolution event for this thread (if resolved), for display in the panel
+  const threadResolveEvent =
+    hasComments && ctx !== null
+      ? ctx.commentMap.resolveEventByThreadId.get(lastLineComments[0].id)
+      : undefined;
+
   const commentOptions: InlineCommentOptions | null =
     ctx && lineNumber !== null
       ? {
@@ -2037,6 +2043,7 @@ function DiffLine({
                   // a separate composer row is rendered below.
                   autoFocus={isComposingRangeEnd && !needsSeparateComposer}
                   isResolved={isThreadResolved}
+                  resolveEvent={threadResolveEvent}
                   authorizedPubkeys={ctx.authorizedPubkeys}
                   repoCoords={ctx.repoCoords}
                 />
