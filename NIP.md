@@ -126,6 +126,27 @@ The NIP-22 root (`E`/`K`/`P`) is always the original PR (kind:1618) or patch (ki
 
 Replies to an inline comment are standard NIP-22 replies: `E`/`K`/`P` remain the original PR/patch; `e`/`k`/`p` point to the inline comment (kind:1111).
 
+### Inline Suggestions
+
+A reviewer can propose a specific replacement for the lines referenced by the `line` tag by including a fenced code block with the language identifier `suggestion` in the comment `content`. The fence contains the exact replacement lines (without indentation changes relative to the original). The `line` tag on the same event defines the range being replaced.
+
+````markdown
+```suggestion
+    let result = compute(x, y);
+    result
+```
+````
+
+Clients that understand suggestions SHOULD render an "Apply suggestion" button that constructs a patch replacing the referenced lines with the suggestion content and presents it to the PR author. Clients that do not understand suggestions display the fenced block as a normal code block, so the suggestion remains human-readable.
+
+Rules:
+
+- A suggestion MUST have a `line` tag specifying the range to replace.
+- A suggestion MUST have an `f` tag specifying the file.
+- A suggestion MUST have a `c` tag specifying the commit the suggestion applies to.
+- The suggestion content replaces the referenced lines verbatim; reviewers SHOULD preserve surrounding indentation.
+- A comment MAY contain prose outside the suggestion fence.
+
 ### Resolving a Thread
 
 Any sub-thread (an inline comment or any NIP-22 comment thread) can be resolved by posting a kind:1111 reply with a `l` tag of `"resolved"`. Clients that don't support resolution see it as a normal comment. The thread is considered resolved if such an event exists and has not been deleted.
@@ -181,12 +202,13 @@ A PR review groups one or more inline comments (kind:1111) under a single verdic
 
 ### Verdict values (`s` tag)
 
-| Value          | Meaning                                                                               |
-| -------------- | ------------------------------------------------------------------------------------- |
-| `ACK`          | Reviewer has tested or carefully read the code and approves it as-is.                 |
-| `NACK`         | Reviewer objects to the change; the PR should not be merged in its current form.      |
-| `Concept ACK`  | Reviewer agrees with the goal/approach but has not fully reviewed the implementation. |
-| `Concept NACK` | Reviewer disagrees with the goal or approach regardless of implementation quality.    |
+| Value              | Meaning                                                                                                                                                          |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ACK`              | Reviewer has tested or carefully read the code and approves it as-is.                                                                                            |
+| `NACK`             | Reviewer objects to the change; the PR should not be merged in its current form.                                                                                 |
+| `Concept ACK`      | Reviewer agrees with the goal/approach but has not fully reviewed the implementation.                                                                            |
+| `Concept NACK`     | Reviewer disagrees with the goal or approach regardless of implementation quality.                                                                               |
+| `Changes Required` | Reviewer has identified specific changes that must be made before the PR can be merged; typically accompanied by inline comments detailing what needs to change. |
 
 ### Event Structure
 
@@ -200,7 +222,7 @@ A PR review groups one or more inline comments (kind:1111) under a single verdic
     ["p", "<pr-or-patch-author-pubkey>"],
 
     // verdict (required)
-    ["s", "<ACK|NACK|Concept ACK|Concept NACK>"],
+    ["s", "<ACK|NACK|Concept ACK|Concept NACK|Changes Required>"],
 
     // inline comments included in this review (zero or more)
     // each q tag references a kind:1111 comment event published by the same author
@@ -208,7 +230,10 @@ A PR review groups one or more inline comments (kind:1111) under a single verdic
     ["q", "<comment-event-id>", "<relay>"],
 
     // NIP-31 alt tag for clients that don't understand kind:7321
-    ["alt", "Pull request review: <ACK|NACK|Concept ACK|Concept NACK>"],
+    [
+      "alt",
+      "Pull request review: <ACK|NACK|Concept ACK|Concept NACK|Changes Required>",
+    ],
   ],
 }
 ```
@@ -217,7 +242,7 @@ A PR review groups one or more inline comments (kind:1111) under a single verdic
 
 - The review event MUST be authored by the reviewer (not the PR author or a maintainer acting on their behalf).
 - Each `q` tag referencing a comment MUST point to a kind:1111 event authored by the same pubkey as the review event.
-- The `s` tag value MUST be one of the four verdict strings above (case-sensitive).
+- The `s` tag value MUST be one of the five verdict strings above (case-sensitive).
 - `content` is optional but SHOULD be used for an overall summary when the verdict alone is insufficient.
 - A review is immutable once published. To change a verdict, publish a new kind:7321 event; the most recent event by `created_at` from a given pubkey for a given PR is considered the current verdict.
 
