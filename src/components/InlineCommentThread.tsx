@@ -109,7 +109,7 @@ interface InlineComposerProps {
   rootEvent: NostrEvent;
   parentEvent: NostrEvent;
   commentOptions: InlineCommentOptions;
-  onSubmitted: () => void;
+  onSubmitted: (wasReply: boolean) => void;
   onCancel: () => void;
   autoFocus?: boolean;
   /**
@@ -165,7 +165,7 @@ function InlineComposer({
       toast({ title: "Comment posted" });
       setBody("");
       setActiveTab("write");
-      onSubmitted();
+      onSubmitted(!!replyToComment);
     } catch (err) {
       toast({
         title: "Failed to post comment",
@@ -516,10 +516,20 @@ export function InlineCommentThread({
     if (isResolved) setCollapsed(true);
   }, [isResolved]);
 
-  const handleSubmitted = useCallback(() => {
-    setComposerOpen(false);
-    setReplyToComment(null);
-  }, []);
+  const handleSubmitted = useCallback(
+    (wasReply: boolean) => {
+      setComposerOpen(false);
+      setReplyToComment(null);
+      // When a brand-new inline code comment is submitted (not a reply to an
+      // existing comment), close the whole thread panel so DiffView clears
+      // composingRange/composingKey. Without this the composer would re-open
+      // automatically once the new comment arrives in the commentMap.
+      if (!wasReply) {
+        onClose?.();
+      }
+    },
+    [onClose],
+  );
 
   const handleCancel = useCallback(() => {
     setComposerOpen(false);
