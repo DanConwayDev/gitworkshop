@@ -99,10 +99,11 @@ export function IncompatibleProtocolError({
 
             <div className="space-y-2">
               <h3 className="font-semibold text-base">
-                Browser can&apos;t access {label}
+                Repository uses hashtree protocol
               </h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                This repository uses the{" "}
+                This app cannot access{" "}
+                {context ? `the ${context}` : "repositories"} served over the{" "}
                 <a
                   href="https://hashtree.cc/#/dev"
                   target="_blank"
@@ -112,7 +113,7 @@ export function IncompatibleProtocolError({
                   hashtree
                   <ExternalLink className="h-3 w-3" />
                 </a>{" "}
-                protocol, which browsers cannot access directly.
+                protocol directly, but you can view it in a supporting client.
               </p>
             </div>
 
