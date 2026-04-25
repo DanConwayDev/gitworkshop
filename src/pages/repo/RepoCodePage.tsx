@@ -329,7 +329,11 @@ export default function RepoCodePage() {
 
       {/* All clone URLs use incompatible protocols (SSH, git://, etc.) */}
       {allUrlsIncompatible && (
-        <IncompatibleProtocolError cloneUrls={cloneUrls} />
+        <IncompatibleProtocolError
+          cloneUrls={cloneUrls}
+          pubkey={pubkey}
+          repoId={repoId}
+        />
       )}
 
       {cloneUrls.length > 0 && !allUrlsIncompatible && (

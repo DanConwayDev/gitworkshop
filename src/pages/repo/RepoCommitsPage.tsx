@@ -28,8 +28,15 @@ import { isNonHttpUrl } from "@/lib/git-grasp-pool";
 import { IncompatibleProtocolError } from "@/components/IncompatibleProtocolError";
 
 export default function RepoCommitsPage() {
-  const { cloneUrls, repoState, repoRelayEose, commitsRef, resolved, pubkey } =
-    useRepoContext();
+  const {
+    cloneUrls,
+    repoState,
+    repoRelayEose,
+    commitsRef,
+    resolved,
+    pubkey,
+    repoId,
+  } = useRepoContext();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const repo = resolved?.repo;
@@ -232,6 +239,8 @@ export default function RepoCommitsPage() {
         <IncompatibleProtocolError
           cloneUrls={cloneUrls}
           context="commit history"
+          pubkey={pubkey}
+          repoId={repoId}
         />
       </div>
     );

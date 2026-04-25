@@ -10,7 +10,7 @@ import { isNonHttpUrl } from "@/lib/git-grasp-pool";
 import { IncompatibleProtocolError } from "@/components/IncompatibleProtocolError";
 
 export default function RepoCommitPage() {
-  const { cloneUrls, commitId, resolved, pubkey } = useRepoContext();
+  const { cloneUrls, commitId, resolved, pubkey, repoId } = useRepoContext();
   const repo = resolved?.repo;
   const repoOwnerProfile = useProfile(pubkey);
 
@@ -50,7 +50,12 @@ export default function RepoCommitPage() {
   if (cloneUrls.length > 0 && cloneUrls.every(isNonHttpUrl)) {
     return (
       <div className="container max-w-screen-xl px-4 md:px-8 py-6">
-        <IncompatibleProtocolError cloneUrls={cloneUrls} context="commit" />
+        <IncompatibleProtocolError
+          cloneUrls={cloneUrls}
+          context="commit"
+          pubkey={pubkey}
+          repoId={repoId}
+        />
       </div>
     );
   }
