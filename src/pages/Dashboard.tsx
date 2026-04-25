@@ -22,13 +22,15 @@ import {
   ChevronDown,
   ChevronUp,
   Pin,
+  Search,
 } from "lucide-react";
 import { CreateRepoDialog } from "@/components/CreateRepoDialog";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { RepoBadge } from "@/components/RepoBadge";
+import { Input } from "@/components/ui/input";
+import { UserAvatar, UserName } from "@/components/UserAvatar";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { useUserActivity } from "@/hooks/useUserActivity";
 import { useUserRepositories } from "@/hooks/useUserRepositories";
@@ -73,47 +75,57 @@ function GreetingHeader({ pubkey }: { pubkey: string }) {
 // Repo rows
 // ---------------------------------------------------------------------------
 
-/** Plain name link — used in "My repositories" where the author is implicit. */
-function RepoNameLink({
+/**
+ * Single-line row: [avatar] username / repo-name.
+ * Used in both "My repositories" and "Followed repositories" panels.
+ */
+function RepoListItem({
   repo,
   isPinned,
+  hideAuthor,
 }: {
   repo: ResolvedRepo;
   isPinned?: boolean;
+  hideAuthor?: boolean;
 }) {
   const npub = nip19.npubEncode(repo.selectedMaintainer);
   const repoPath = `/${npub}/${repo.dTag}`;
+  const name = repo.name || repo.dTag;
 
   return (
-    <div className="flex items-center gap-1.5 py-0.5">
+    <Link
+      to={repoPath}
+      className="group flex items-center gap-1.5 px-1.5 py-1 -mx-1.5 rounded-md hover:bg-muted/50 transition-colors min-w-0"
+    >
       {isPinned && (
         <Pin className="h-3 w-3 text-muted-foreground/50 shrink-0 -rotate-45" />
       )}
-      <Link
-        to={repoPath}
-        className="text-sm hover:text-pink-600 dark:hover:text-pink-400 transition-colors truncate"
-      >
-        {repo.name || repo.dTag}
-      </Link>
-    </div>
-  );
-}
-
-/** Badge row with author — used in "Followed repositories". */
-function RepoBadgeRow({ repo }: { repo: ResolvedRepo }) {
-  const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
-
-  return (
-    <div className="py-0.5">
-      <RepoBadge coord={coord} repoName={repo.name} />
-    </div>
+      {!hideAuthor && (
+        <>
+          <UserAvatar
+            pubkey={repo.selectedMaintainer}
+            size="xs"
+            className="h-3.5 w-3.5 shrink-0"
+          />
+          <UserName
+            pubkey={repo.selectedMaintainer}
+            className="text-xs text-muted-foreground shrink-0"
+          />
+          <span className="text-xs text-muted-foreground/40 shrink-0">/</span>
+        </>
+      )}
+      <span className="text-sm font-medium truncate min-w-0 flex-1 group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
+        {name}
+      </span>
+    </Link>
   );
 }
 
 function RepoRowSkeleton() {
   return (
-    <div className="py-0.5">
-      <Skeleton className="h-5 w-40 rounded-full" />
+    <div className="flex items-center gap-1.5 px-1.5 py-1">
+      <Skeleton className="h-3.5 w-3.5 rounded-full shrink-0" />
+      <Skeleton className="h-3.5 w-32" />
     </div>
   );
 }
@@ -130,24 +142,43 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
   const userPath = useUserPath(pubkey);
   const [expanded, setExpanded] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const pinnedSet = useMemo(() => new Set(pinnedCoords ?? []), [pinnedCoords]);
 
-  const sorted = repos
-    ? [...repos].sort((a, b) => {
-        const aCoord = `30617:${a.selectedMaintainer}:${a.dTag}`;
-        const bCoord = `30617:${b.selectedMaintainer}:${b.dTag}`;
-        const aPin = pinnedCoords?.indexOf(aCoord) ?? -1;
-        const bPin = pinnedCoords?.indexOf(bCoord) ?? -1;
-        if (aPin !== -1 && bPin !== -1) return aPin - bPin;
-        if (aPin !== -1) return -1;
-        if (bPin !== -1) return 1;
-        return b.updatedAt - a.updatedAt;
-      })
-    : undefined;
+  const sorted = useMemo(
+    () =>
+      repos
+        ? [...repos].sort((a, b) => {
+            const aCoord = `30617:${a.selectedMaintainer}:${a.dTag}`;
+            const bCoord = `30617:${b.selectedMaintainer}:${b.dTag}`;
+            const aPin = pinnedCoords?.indexOf(aCoord) ?? -1;
+            const bPin = pinnedCoords?.indexOf(bCoord) ?? -1;
+            if (aPin !== -1 && bPin !== -1) return aPin - bPin;
+            if (aPin !== -1) return -1;
+            if (bPin !== -1) return 1;
+            return b.updatedAt - a.updatedAt;
+          })
+        : undefined,
+    [repos, pinnedCoords],
+  );
 
-  const displayRepos = expanded ? sorted : sorted?.slice(0, INITIAL_VISIBLE);
-  const hasMore = (sorted?.length ?? 0) > INITIAL_VISIBLE;
+  const trimmed = search.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!sorted) return undefined;
+    if (!trimmed) return sorted;
+    return sorted.filter(
+      (r) =>
+        r.name.toLowerCase().includes(trimmed) ||
+        r.dTag.toLowerCase().includes(trimmed) ||
+        r.description.toLowerCase().includes(trimmed),
+    );
+  }, [sorted, trimmed]);
+
+  const isFiltering = trimmed.length > 0;
+  const displayRepos =
+    isFiltering || expanded ? filtered : filtered?.slice(0, INITIAL_VISIBLE);
+  const hasMore = !isFiltering && (filtered?.length ?? 0) > INITIAL_VISIBLE;
 
   return (
     <div className="h-fit">
@@ -172,23 +203,37 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
           </Button>
         </div>
       </div>
+
+      {sorted && sorted.length > 0 && (
+        <div className="relative mb-3">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Filter repositories..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 pl-8 text-sm bg-background/60 focus-visible:ring-pink-500/30"
+          />
+        </div>
+      )}
+
       <div>
         {repos === undefined ? (
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             {Array.from({ length: 5 }).map((_, i) => (
               <RepoRowSkeleton key={i} />
             ))}
           </div>
         ) : displayRepos && displayRepos.length > 0 ? (
           <>
-            <div className="space-y-0">
+            <div className="space-y-0.5">
               {displayRepos.map((repo) => {
                 const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
                 return (
-                  <RepoNameLink
+                  <RepoListItem
                     key={coord}
                     repo={repo}
                     isPinned={pinnedSet.has(coord)}
+                    hideAuthor
                   />
                 );
               })}
@@ -208,7 +253,7 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
                     </>
                   ) : (
                     <>
-                      Show all {sorted?.length} repositories
+                      Show all {filtered?.length} repositories
                       <ChevronDown className="h-3 w-3 ml-1.5" />
                     </>
                   )}
@@ -216,6 +261,12 @@ function MyRepositoriesPanel({ pubkey }: { pubkey: string }) {
               </div>
             )}
           </>
+        ) : isFiltering ? (
+          <div className="py-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              No repositories match "{search}"
+            </p>
+          </div>
         ) : (
           <div className="py-8 text-center">
             <p className="text-sm text-muted-foreground mb-3">
@@ -247,13 +298,30 @@ function FollowedReposPanel({ pubkey }: { pubkey: string }) {
   const repos = useUserFollowedRepos(pubkey);
   const userPath = useUserPath(pubkey);
   const [expanded, setExpanded] = useState(false);
+  const [search, setSearch] = useState("");
 
-  const sorted = repos
-    ? [...repos].sort((a, b) => b.updatedAt - a.updatedAt)
-    : undefined;
+  const sorted = useMemo(
+    () =>
+      repos ? [...repos].sort((a, b) => b.updatedAt - a.updatedAt) : undefined,
+    [repos],
+  );
 
-  const displayRepos = expanded ? sorted : sorted?.slice(0, INITIAL_VISIBLE);
-  const hasMore = (sorted?.length ?? 0) > INITIAL_VISIBLE;
+  const trimmed = search.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!sorted) return undefined;
+    if (!trimmed) return sorted;
+    return sorted.filter(
+      (r) =>
+        r.name.toLowerCase().includes(trimmed) ||
+        r.dTag.toLowerCase().includes(trimmed) ||
+        r.description.toLowerCase().includes(trimmed),
+    );
+  }, [sorted, trimmed]);
+
+  const isFiltering = trimmed.length > 0;
+  const displayRepos =
+    isFiltering || expanded ? filtered : filtered?.slice(0, INITIAL_VISIBLE);
+  const hasMore = !isFiltering && (filtered?.length ?? 0) > INITIAL_VISIBLE;
 
   return (
     <div className="h-fit">
@@ -268,19 +336,32 @@ function FollowedReposPanel({ pubkey }: { pubkey: string }) {
           </Link>
         </h3>
       </div>
+
+      {sorted && sorted.length > 0 && (
+        <div className="relative mb-3">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Filter repositories..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 pl-8 text-sm bg-background/60 focus-visible:ring-pink-500/30"
+          />
+        </div>
+      )}
+
       <div>
         {repos === undefined ? (
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             {Array.from({ length: 5 }).map((_, i) => (
               <RepoRowSkeleton key={i} />
             ))}
           </div>
         ) : displayRepos && displayRepos.length > 0 ? (
           <>
-            <div className="space-y-0">
+            <div className="space-y-0.5">
               {displayRepos.map((repo) => {
                 const coord = `30617:${repo.selectedMaintainer}:${repo.dTag}`;
-                return <RepoBadgeRow key={coord} repo={repo} />;
+                return <RepoListItem key={coord} repo={repo} />;
               })}
             </div>
             {hasMore && (
@@ -298,7 +379,7 @@ function FollowedReposPanel({ pubkey }: { pubkey: string }) {
                     </>
                   ) : (
                     <>
-                      Show all {sorted?.length} repositories
+                      Show all {filtered?.length} repositories
                       <ChevronDown className="h-3 w-3 ml-1.5" />
                     </>
                   )}
@@ -306,6 +387,12 @@ function FollowedReposPanel({ pubkey }: { pubkey: string }) {
               </div>
             )}
           </>
+        ) : isFiltering ? (
+          <div className="py-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              No repositories match "{search}"
+            </p>
+          </div>
         ) : (
           <div className="py-8 text-center">
             <Eye className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
