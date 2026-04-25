@@ -69,6 +69,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { DeleteEvent } from "@/actions/nip34";
 import { runner } from "@/services/actions";
+import { parseInlineCommentLocation } from "@/blueprints/inline-comment";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -746,11 +747,17 @@ export function LabelChangeCard({
  */
 export function ResolvedThreadCard({
   event,
+  rootCommentEvent,
   authorised,
   repoCoords,
   children,
 }: {
   event: NostrEvent;
+  /**
+   * The root inline comment event (the one being resolved). Used to extract
+   * the file path and line range for display (e.g. "README.md:2-3").
+   */
+  rootCommentEvent?: NostrEvent;
   /** True when the resolver is the PR/patch author or a maintainer. */
   authorised: boolean;
   repoCoords?: string[];
@@ -763,6 +770,21 @@ export function ResolvedThreadCard({
   const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
     addSuffix: true,
   });
+
+  // Build a compact code-location label from the root comment, e.g. "README.md:2-3"
+  const codeLocationLabel = React.useMemo(() => {
+    if (!rootCommentEvent) return null;
+    const loc = parseInlineCommentLocation(rootCommentEvent);
+    if (!loc.filePath) return null;
+    const fileName = loc.filePath.split("/").pop() ?? loc.filePath;
+    if (loc.lineRange) {
+      const [start, end] = loc.lineRange;
+      return start === end
+        ? `${fileName}:${start}`
+        : `${fileName}:${start}-${end}`;
+    }
+    return fileName;
+  }, [rootCommentEvent]);
 
   const activeAccount = useActiveAccount();
   const isOwn = !!activeAccount && activeAccount.pubkey === event.pubkey;
@@ -816,10 +838,13 @@ export function ResolvedThreadCard({
               nameClassName="text-sm font-medium text-foreground"
             />
             <span className="text-green-600 dark:text-green-400 font-medium">
-              {authorised
-                ? "resolved this thread"
-                : "proposed resolving this thread"}
+              {authorised ? "resolved" : "proposed resolving"}
             </span>
+            {codeLocationLabel && (
+              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono text-foreground/80">
+                {codeLocationLabel}
+              </code>
+            )}
             <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
               <Clock className="h-3 w-3" />
               {timeAgo}
@@ -833,36 +858,21 @@ export function ResolvedThreadCard({
         </div>
 
         <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
-          {/* Expand/collapse toggle — only shown when there's thread content */}
-          {children && (
+          {/* Raw JSON viewer — only when expanded */}
+          {expanded && (
             <button
               type="button"
-              onClick={() => setExpanded((v) => !v)}
-              className="flex items-center text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded"
-              aria-label={expanded ? "Collapse thread" : "Expand thread"}
-              title={expanded ? "Collapse thread" : "Expand thread"}
+              onClick={() => setJsonOpen(true)}
+              className="flex items-center text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded font-mono font-bold"
+              aria-label="View raw event JSON"
+              title="View raw event JSON"
             >
-              {expanded ? (
-                <ChevronDown className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
-              )}
+              {"{}"}
             </button>
           )}
 
-          {/* Raw JSON viewer */}
-          <button
-            type="button"
-            onClick={() => setJsonOpen(true)}
-            className="flex items-center text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded font-mono font-bold"
-            aria-label="View raw event JSON"
-            title="View raw event JSON"
-          >
-            {"{}"}
-          </button>
-
-          {/* Delete — only for own events */}
-          {isOwn && repoCoords && (
+          {/* Delete — only for own events, only when expanded */}
+          {expanded && isOwn && repoCoords && (
             <button
               type="button"
               onClick={() => setDeleteOpen(true)}
@@ -870,6 +880,24 @@ export function ResolvedThreadCard({
               aria-label="Delete resolution"
             >
               <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          {/* Expand/collapse toggle — only shown when there's thread content */}
+          {children && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded"
+              aria-label={expanded ? "Hide thread" : "Show thread"}
+              title={expanded ? "Hide thread" : "Show thread"}
+            >
+              {expanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+              <span>{expanded ? "Hide" : "Show"}</span>
             </button>
           )}
         </div>

@@ -180,6 +180,7 @@ export function ThreadTree({
     <div>
       <ResolvedThreadCard
         event={resolutionChild.event}
+        rootCommentEvent={node.event}
         authorised={authorised}
         repoCoords={effectiveCtx?.repoCoords}
       >
