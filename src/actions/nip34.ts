@@ -443,9 +443,6 @@ export function ResolveThread(
 
       // Resolution state
       ["l", "resolved"],
-
-      // NIP-31 alt tag
-      ["alt", "Marked thread as resolved"],
     ];
 
     const draft = {
