@@ -6,9 +6,17 @@
  * text is shown in a plain <pre> with line numbers so there's no layout
  * shift.
  *
- * Designed for future line-level commenting: each line is a discrete DOM
- * element with a data-line attribute that can be targeted for click handlers
- * and comment anchors.
+ * Line selection (mirrors DiffView behaviour):
+ *   - Click a line number to select it (shows copy + permalink buttons)
+ *   - Drag across line numbers to select a range
+ *   - Shift-click to extend the selection to a range
+ *   - Click the copy button to copy selected lines to clipboard (Ctrl+C also works)
+ *   - Click the permalink button to copy a URL with a #L{n} or #L{n}-L{m} hash
+ *   - Esc / click outside clears the selection
+ *
+ * Hash-driven highlighting:
+ *   - On mount, if the URL hash matches a code anchor for this file, the
+ *     relevant lines are pre-selected and scrolled into view.
  */
 
 import { memo, useEffect, useState, useMemo, useRef, useCallback } from "react";
@@ -20,13 +28,18 @@ import {
 import type { Highlighter, BundledLanguage } from "shiki";
 import { cn } from "@/lib/utils";
 import { SyncedScrollArea } from "@/components/SyncedScrollArea";
-import { WrapText, ArrowRightToLine } from "lucide-react";
+import { WrapText, ArrowRightToLine, Copy, Check, Link } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  codeLineAnchorId,
+  codeLineRangeHash,
+  parseCodeLineHash,
+} from "@/lib/diffCardId";
 
 // ---------------------------------------------------------------------------
 // Theme hook — detect dark mode
@@ -60,6 +73,11 @@ export interface CodeBlockProps {
   code: string;
   /** Filename — used to infer the language */
   filename?: string;
+  /**
+   * Repo-root-relative file path (e.g. "src/lib/foo.ts").
+   * When provided, enables line-anchor IDs and permalink support.
+   */
+  filePath?: string;
   /** Explicit language override (shiki BundledLanguage id) */
   language?: string;
   /** Starting line number (default 1). Useful for showing a slice of a file. */
@@ -70,6 +88,139 @@ export interface CodeBlockProps {
   showLineNumbers?: boolean;
   /** Lines to highlight (1-indexed). Renders with a subtle background. */
   highlightLines?: Set<number>;
+  /**
+   * When provided, the component will pre-select this line range on mount
+   * (driven by the parent parsing the URL hash). Overrides hash-driven
+   * selection when both are present.
+   */
+  initialLineRange?: { startLine: number; endLine: number } | null;
+  /**
+   * When provided, scroll to this line on mount (after selection is applied).
+   * A new object reference triggers a new scroll even when the line number
+   * hasn't changed.
+   */
+  scrollToLine?: { line: number } | null;
+}
+
+// ---------------------------------------------------------------------------
+// Copy button
+// ---------------------------------------------------------------------------
+
+function CopyButton({
+  getText,
+  className,
+}: {
+  getText: () => string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const text = getText();
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      });
+    },
+    [getText],
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={handleCopy}
+          className={cn(
+            "flex items-center justify-center w-5 h-5 rounded transition-colors",
+            copied
+              ? "text-green-500"
+              : "text-muted-foreground/50 hover:text-foreground hover:bg-muted/60",
+            className,
+          )}
+          aria-label="Copy selected lines"
+        >
+          {copied ? (
+            <Check className="h-3 w-3" />
+          ) : (
+            <Copy className="h-3 w-3" />
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {copied ? "Copied!" : "Copy lines"}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Permalink button
+// ---------------------------------------------------------------------------
+
+function PermalinkButton({
+  filePath,
+  startLine,
+  endLine,
+  className,
+}: {
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const getUrl = useCallback((): string => {
+    const hash = codeLineRangeHash(filePath, startLine, endLine);
+    const url = new URL(window.location.href);
+    url.hash = hash;
+    return url.toString();
+  }, [filePath, startLine, endLine]);
+
+  const handleCopy = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const url = getUrl();
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      });
+    },
+    [getUrl],
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={handleCopy}
+          className={cn(
+            "flex items-center justify-center w-5 h-5 rounded transition-colors",
+            copied
+              ? "text-green-500"
+              : "text-muted-foreground/50 hover:text-foreground hover:bg-muted/60",
+            className,
+          )}
+          aria-label="Copy permalink"
+        >
+          {copied ? (
+            <Check className="h-3 w-3" />
+          ) : (
+            <Link className="h-3 w-3" />
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {copied ? "Copied!" : "Copy permalink"}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -82,11 +233,14 @@ const LONG_LINE_THRESHOLD = 120;
 export const CodeBlock = memo(function CodeBlock({
   code,
   filename,
+  filePath,
   language,
   startLine = 1,
   className,
   showLineNumbers = true,
   highlightLines,
+  initialLineRange: externalLineRange,
+  scrollToLine: externalScrollToLine,
 }: CodeBlockProps) {
   const isDark = useIsDark();
   const theme = isDark ? "github-dark" : "github-light";
@@ -186,6 +340,173 @@ export const CodeBlock = memo(function CodeBlock({
     return () => el.removeEventListener("keydown", handler);
   }, [hasLongLines, toggleWrap]);
 
+  // ---------------------------------------------------------------------------
+  // Line selection state
+  // ---------------------------------------------------------------------------
+
+  // null = no selection; number = 1-indexed line number
+  const [selAnchor, setSelAnchor] = useState<number | null>(null);
+  const [selHead, setSelHead] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const selStart =
+    selAnchor !== null && selHead !== null
+      ? Math.min(selAnchor, selHead)
+      : selAnchor;
+  const selEnd =
+    selAnchor !== null && selHead !== null
+      ? Math.max(selAnchor, selHead)
+      : selAnchor;
+
+  const isLineSelected = useCallback(
+    (lineNum: number): boolean => {
+      if (selStart === null || selEnd === null) return false;
+      return lineNum >= selStart && lineNum <= selEnd;
+    },
+    [selStart, selEnd],
+  );
+
+  // Apply initial line range from external prop (parent parsed URL hash)
+  const appliedExternalRange = useRef(false);
+  useEffect(() => {
+    if (appliedExternalRange.current) return;
+    if (!externalLineRange) return;
+    appliedExternalRange.current = true;
+    setSelAnchor(externalLineRange.startLine);
+    setSelHead(externalLineRange.endLine);
+  }, [externalLineRange]);
+
+  // Apply hash-driven selection — self-contained, no parent needed.
+  // Runs on mount and on every hashchange so in-page navigation works.
+  const applyHash = useCallback(
+    (hash: string) => {
+      if (!filePath || !hash) return;
+      const parsed = parseCodeLineHash(hash);
+      if (!parsed || parsed.startLine === null) return;
+      const expectedSanitised = filePath.replace(/[^a-zA-Z0-9_-]/g, "_");
+      if (parsed.sanitisedPath !== expectedSanitised) return;
+      setSelAnchor(parsed.startLine);
+      setSelHead(parsed.endLine ?? parsed.startLine);
+    },
+    [filePath],
+  );
+
+  // Mount: apply current hash once
+  const appliedHashRange = useRef(false);
+  useEffect(() => {
+    if (appliedHashRange.current) return;
+    if (!filePath) return;
+    appliedHashRange.current = true;
+    applyHash(window.location.hash);
+  }, [filePath, applyHash]);
+
+  // Re-apply on hashchange (in-page navigation)
+  useEffect(() => {
+    const handler = () => applyHash(window.location.hash);
+    window.addEventListener("hashchange", handler);
+    return () => window.removeEventListener("hashchange", handler);
+  }, [applyHash]);
+
+  // Scroll to the anchor line once selection is applied.
+  // externalScrollToLine uses object identity so the parent can force a
+  // re-scroll to the same line by passing a new object reference.
+  useEffect(() => {
+    const targetLine = externalScrollToLine?.line ?? selAnchor;
+    if (targetLine === null || targetLine === undefined) return;
+    if (!filePath) return;
+
+    const id = codeLineAnchorId(filePath, targetLine);
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 60;
+
+    function attempt() {
+      if (cancelled) return;
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+      if (attempts < maxAttempts) {
+        attempts++;
+        requestAnimationFrame(attempt);
+      }
+    }
+    requestAnimationFrame(attempt);
+    return () => {
+      cancelled = true;
+    };
+  }, [selAnchor, externalScrollToLine, filePath]);
+
+  // Ctrl+C — copy selected lines
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key !== "c") return;
+      if (selStart === null || selEnd === null) return;
+      e.preventDefault();
+      const lines = plainLines.slice(
+        selStart - startLine,
+        selEnd - startLine + 1,
+      );
+      navigator.clipboard.writeText(lines.join("\n")).catch(() => {});
+    };
+    el.addEventListener("keydown", handler);
+    return () => el.removeEventListener("keydown", handler);
+  }, [selStart, selEnd, plainLines, startLine]);
+
+  // Clear selection when clicking outside
+  useEffect(() => {
+    if (selAnchor === null) return;
+    const handler = (e: MouseEvent) => {
+      const el = containerRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setSelAnchor(null);
+        setSelHead(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [selAnchor]);
+
+  // Esc — clear selection
+  useEffect(() => {
+    if (selAnchor === null) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelAnchor(null);
+        setSelHead(null);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [selAnchor]);
+
+  // End drag on mouseup anywhere
+  useEffect(() => {
+    if (!dragging) return;
+    const handler = () => setDragging(false);
+    document.addEventListener("mouseup", handler);
+    return () => document.removeEventListener("mouseup", handler);
+  }, [dragging]);
+
+  // ---------------------------------------------------------------------------
+  // Action button helpers
+  // ---------------------------------------------------------------------------
+
+  const getSelectedText = useCallback((): string => {
+    if (selStart === null || selEnd === null) return "";
+    return plainLines
+      .slice(selStart - startLine, selEnd - startLine + 1)
+      .join("\n");
+  }, [selStart, selEnd, plainLines, startLine]);
+
+  // The last line in the selection (in document order) — action buttons are
+  // rendered after this row, matching DiffView's pattern.
+  const actionRowLine =
+    selStart !== null && selEnd !== null ? selEnd : selAnchor;
+
   return (
     <div
       ref={containerRef}
@@ -229,71 +550,124 @@ export const CodeBlock = memo(function CodeBlock({
             {(tokens ?? plainLines).map((line, i) => {
               const lineNum = startLine + i;
               const isHighlighted = highlightLines?.has(lineNum);
+              const isSelected = isLineSelected(lineNum);
+              const isLastSelected = lineNum === actionRowLine;
+              const anchorId = filePath
+                ? codeLineAnchorId(filePath, lineNum)
+                : undefined;
 
               return (
-                <tr
-                  key={lineNum}
-                  data-line={lineNum}
-                  className={cn(
-                    "group",
-                    isHighlighted && "bg-yellow-500/10 dark:bg-yellow-400/10",
-                  )}
-                >
-                  {/* Line number gutter */}
-                  {showLineNumbers && (
+                <>
+                  <tr
+                    key={lineNum}
+                    id={anchorId}
+                    data-line={lineNum}
+                    className={cn(
+                      "group/line",
+                      isHighlighted && "bg-yellow-500/10 dark:bg-yellow-400/10",
+                      isSelected && "bg-blue-500/10 dark:bg-blue-400/10",
+                    )}
+                    onMouseEnter={() => {
+                      if (dragging) setSelHead(lineNum);
+                    }}
+                  >
+                    {/* Line number gutter */}
+                    {showLineNumbers && (
+                      <td
+                        className={cn(
+                          "select-none text-right align-top px-3 py-0",
+                          "transition-colors duration-75",
+                          "sticky left-0",
+                          isSelected
+                            ? "bg-blue-500/10 dark:bg-blue-400/10 text-blue-600/70 dark:text-blue-400/70 cursor-pointer"
+                            : isHighlighted
+                              ? "bg-yellow-500/10 dark:bg-yellow-400/10 text-muted-foreground/40 group-hover/line:text-muted-foreground/70"
+                              : "bg-background text-muted-foreground/40 group-hover/line:text-muted-foreground/70 cursor-pointer",
+                        )}
+                        style={{ width: `${gutterWidth + 2}ch` }}
+                        onMouseDown={(e) => {
+                          if (!showLineNumbers) return;
+                          e.preventDefault(); // prevent browser text selection
+                          if (e.shiftKey && selAnchor !== null) {
+                            setSelHead(lineNum);
+                          } else {
+                            // Toggle off if clicking the only selected line
+                            if (selStart === lineNum && selEnd === lineNum) {
+                              setSelAnchor(null);
+                              setSelHead(null);
+                              return;
+                            }
+                            setSelAnchor(lineNum);
+                            setSelHead(lineNum);
+                            setDragging(true);
+                          }
+                        }}
+                      >
+                        {lineNum}
+                      </td>
+                    )}
+
+                    {/* Code content */}
                     <td
                       className={cn(
-                        "select-none text-right align-top px-3 py-0",
-                        "text-muted-foreground/40 group-hover:text-muted-foreground/70",
-                        "transition-colors duration-75",
-                        "sticky left-0 bg-background",
-                        isHighlighted &&
-                          "bg-yellow-500/10 dark:bg-yellow-400/10",
+                        "px-4 py-0",
+                        wordWrap
+                          ? "whitespace-pre-wrap break-words"
+                          : "whitespace-pre",
                       )}
-                      style={{ width: `${gutterWidth + 2}ch` }}
+                      style={
+                        wordWrap && indentWidths[i] > 0
+                          ? {
+                              paddingLeft: `calc(1rem + ${indentWidths[i]}ch)`,
+                              textIndent: `-${indentWidths[i]}ch`,
+                            }
+                          : undefined
+                      }
                     >
-                      {lineNum}
-                    </td>
-                  )}
-
-                  {/* Code content */}
-                  <td
-                    className={cn(
-                      "px-4 py-0",
-                      wordWrap
-                        ? "whitespace-pre-wrap break-words"
-                        : "whitespace-pre",
-                    )}
-                    style={
-                      wordWrap && indentWidths[i] > 0
-                        ? {
-                            paddingLeft: `calc(1rem + ${indentWidths[i]}ch)`,
-                            textIndent: `-${indentWidths[i]}ch`,
-                          }
-                        : undefined
-                    }
-                  >
-                    {Array.isArray(line) ? (
-                      // Highlighted tokens
-                      (line as ThemedToken[]).map((token, j) => (
-                        <span key={j} style={{ color: token.color }}>
-                          {token.content}
+                      {Array.isArray(line) ? (
+                        // Highlighted tokens
+                        (line as ThemedToken[]).map((token, j) => (
+                          <span key={j} style={{ color: token.color }}>
+                            {token.content}
+                          </span>
+                        ))
+                      ) : (
+                        // Plain text fallback
+                        <span className="text-foreground/85">
+                          {line as string}
                         </span>
-                      ))
-                    ) : (
-                      // Plain text fallback
-                      <span className="text-foreground/85">
-                        {line as string}
-                      </span>
+                      )}
+                      {/* Ensure empty lines still have height */}
+                      {((Array.isArray(line) &&
+                        (line as ThemedToken[]).length === 0) ||
+                        (!Array.isArray(line) && (line as string) === "")) && (
+                        <span>{"\n"}</span>
+                      )}
+                    </td>
+                  </tr>
+
+                  {/* Action buttons row — rendered after the last selected line */}
+                  {isLastSelected &&
+                    selStart !== null &&
+                    selEnd !== null &&
+                    filePath && (
+                      <tr key={`${lineNum}-actions`} className="h-0">
+                        <td
+                          colSpan={showLineNumbers ? 2 : 1}
+                          className="p-0 relative"
+                        >
+                          <div className="absolute right-2 -top-3 z-20 flex items-center gap-0.5 bg-background border border-border/60 rounded shadow-sm px-1 py-0.5">
+                            <CopyButton getText={getSelectedText} />
+                            <PermalinkButton
+                              filePath={filePath}
+                              startLine={selStart}
+                              endLine={selEnd}
+                            />
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                    {/* Ensure empty lines still have height */}
-                    {((Array.isArray(line) &&
-                      (line as ThemedToken[]).length === 0) ||
-                      (!Array.isArray(line) && (line as string) === "")) && (
-                      <span>{"\n"}</span>
-                    )}
-                  </td>
-                </tr>
+                </>
               );
             })}
           </tbody>

@@ -1538,7 +1538,7 @@ function FileContentBody({
 
   // Plain text / source view — syntax highlighted with line numbers
   if (content !== null) {
-    return <CodeBlock code={content} filename={filename} />;
+    return <CodeBlock code={content} filename={filename} filePath={filePath} />;
   }
 
   return null;

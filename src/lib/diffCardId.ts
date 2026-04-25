@@ -1,3 +1,91 @@
+// ---------------------------------------------------------------------------
+// File viewer (CodeBlock) line anchor helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Stable DOM id for a specific line in a file content viewer (CodeBlock).
+ *
+ * Format: `code-{sanitised_path}_L{lineNumber}`
+ *
+ * The `filePath` should be the repo-root-relative path (e.g. "src/lib/foo.ts").
+ */
+export function codeLineAnchorId(filePath: string, lineNumber: number): string {
+  const sanitised = filePath.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return `code-${sanitised}_L${lineNumber}`;
+}
+
+/**
+ * Build a URL hash fragment for a file-viewer line range.
+ *
+ * Single line:  "#code-src_lib_foo_ts_L42"
+ * Range:        "#code-src_lib_foo_ts_L42-L48"
+ */
+export function codeLineRangeHash(
+  filePath: string,
+  startLine: number,
+  endLine: number,
+): string {
+  const sanitised = filePath.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const base = `code-${sanitised}`;
+  if (startLine === endLine) {
+    return `#${base}_L${startLine}`;
+  }
+  return `#${base}_L${startLine}-L${endLine}`;
+}
+
+/**
+ * Parsed result of a code-viewer hash fragment.
+ */
+export interface ParsedCodeHash {
+  /** The sanitised file path segment (without "code-" prefix). */
+  sanitisedPath: string;
+  /** DOM element ID of the first line in the range (for scrolling). */
+  lineId: string | null;
+  startLine: number | null;
+  endLine: number | null;
+}
+
+/**
+ * Parse a URL hash fragment into a file path and optional line range.
+ *
+ * Accepts hashes of the form:
+ *   #code-src_lib_foo_ts_L42        → single line
+ *   #code-src_lib_foo_ts_L42-L48    → range
+ *   #code-src_lib_foo_ts            → file only (no line)
+ *
+ * Returns null if the hash doesn't match a code anchor pattern.
+ */
+export function parseCodeLineHash(hash: string): ParsedCodeHash | null {
+  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (!raw.startsWith("code-")) return null;
+
+  // Range anchor: code-{path}_L{start}-L{end}
+  const rangeMatch = raw.match(/^(code-.+?)_L(\d+)-L(\d+)$/);
+  if (rangeMatch) {
+    const sanitisedPath = rangeMatch[1].slice("code-".length);
+    const startLine = parseInt(rangeMatch[2], 10);
+    const endLine = parseInt(rangeMatch[3], 10);
+    const lineId = `code-${sanitisedPath}_L${startLine}`;
+    return { sanitisedPath, lineId, startLine, endLine };
+  }
+
+  // Single line anchor: code-{path}_L{n}
+  const lineMatch = raw.match(/^(code-.+?)_L(\d+)$/);
+  if (lineMatch) {
+    const sanitisedPath = lineMatch[1].slice("code-".length);
+    const lineNum = parseInt(lineMatch[2], 10);
+    return { sanitisedPath, lineId: raw, startLine: lineNum, endLine: lineNum };
+  }
+
+  // File-only anchor
+  const sanitisedPath = raw.slice("code-".length);
+  return { sanitisedPath, lineId: null, startLine: null, endLine: null };
+}
+
+// ---------------------------------------------------------------------------
+// Diff card helpers
+// ---------------------------------------------------------------------------
+
 /** Stable DOM id for a file's diff card — used for scroll targeting. */
 export function fileDiffCardId(filename: string): string {
   return "diff-" + filename.replace(/[^a-zA-Z0-9_-]/g, "_");
