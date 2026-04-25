@@ -819,89 +819,98 @@ export function ResolvedThreadCard({
 
   return (
     <>
-      {/* Collapsible thread content — shown above the resolution marker */}
-      {children && expanded && <div className="mb-1">{children}</div>}
+      {expanded ? (
+        <>
+          {/* Thread content */}
+          {children && <div className="mb-0">{children}</div>}
 
-      {/* Resolution 1-liner */}
-      <div className="relative flex gap-3 py-1.5 pl-1">
-        <div className="flex items-start pt-0.5">
-          <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-green-500/10 border-green-500/20 shrink-0">
-            <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-          </div>
-        </div>
-
-        <div className="flex-1 min-w-0 pt-1">
-          <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
-            <UserLink
-              pubkey={event.pubkey}
-              avatarSize="sm"
-              nameClassName="text-sm font-medium text-foreground"
-            />
-            <span className="text-green-600 dark:text-green-400 font-medium">
-              {authorised ? "resolved" : "proposed resolving"}
+          {/* "Marked as resolved" footer — sits at the bottom of the thread */}
+          <div className="flex items-center gap-2 px-3 py-1.5 border-t border-green-500/20 bg-green-500/5 text-xs text-muted-foreground">
+            <CheckCircle2 className="h-3 w-3 text-green-500/70 shrink-0" />
+            <span className="flex-1">
+              <UserLink
+                pubkey={event.pubkey}
+                avatarSize="sm"
+                nameClassName="text-xs font-medium text-foreground/80"
+              />{" "}
+              <span className="text-green-600/80 dark:text-green-400/80">
+                {authorised ? "marked as resolved" : "proposed resolving"}
+              </span>
+              {!authorised && (
+                <span className="ml-1 text-muted-foreground/50">
+                  (not a maintainer — not applied)
+                </span>
+              )}
+              <span className="ml-1.5 text-muted-foreground/50">{timeAgo}</span>
             </span>
-            {codeLocationLabel && (
-              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono text-foreground/80">
-                {codeLocationLabel}
-              </code>
-            )}
-            <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {timeAgo}
-            </span>
-          </div>
-          {!authorised && (
-            <p className="mt-0.5 text-xs text-muted-foreground/50">
-              User is not a maintainer — resolution not applied
-            </p>
-          )}
-        </div>
 
-        <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
-          {/* Raw JSON viewer — only when expanded */}
-          {expanded && (
+            {/* Raw JSON viewer */}
             <button
               type="button"
               onClick={() => setJsonOpen(true)}
-              className="flex items-center text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded font-mono font-bold"
+              className="text-muted-foreground/40 hover:text-muted-foreground transition-colors px-1 py-0.5 rounded font-mono font-bold"
               aria-label="View raw event JSON"
               title="View raw event JSON"
             >
               {"{}"}
             </button>
-          )}
 
-          {/* Delete — only for own events, only when expanded */}
-          {expanded && isOwn && repoCoords && (
-            <button
-              type="button"
-              onClick={() => setDeleteOpen(true)}
-              className="flex items-center text-xs text-muted-foreground/60 hover:text-destructive transition-colors px-1.5 py-0.5 rounded"
-              aria-label="Delete resolution"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
+            {/* Delete — only for own events */}
+            {isOwn && repoCoords && (
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(true)}
+                className="text-muted-foreground/40 hover:text-destructive transition-colors px-1 py-0.5 rounded"
+                aria-label="Delete resolution"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            )}
 
-          {/* Expand/collapse toggle — only shown when there's thread content */}
+            {/* Collapse toggle */}
+            {children && (
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                className="flex items-center gap-0.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors px-1 py-0.5 rounded"
+                aria-label="Hide thread"
+                title="Hide thread"
+              >
+                <ChevronDown className="h-3 w-3" />
+                <span>Hide</span>
+              </button>
+            )}
+          </div>
+        </>
+      ) : (
+        /* Collapsed: minimal 1-liner, no avatar/timestamp */
+        <div className="flex items-center gap-2 py-1 pl-2 text-xs text-muted-foreground/60">
+          <CheckCircle2 className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+          <span>
+            {authorised ? "Resolved" : "Proposed resolving"} discussion
+            {codeLocationLabel && (
+              <>
+                {" on "}
+                <code className="bg-muted px-1 py-0.5 rounded font-mono text-foreground/60">
+                  {codeLocationLabel}
+                </code>
+              </>
+            )}
+          </span>
           {children && (
             <button
               type="button"
-              onClick={() => setExpanded((v) => !v)}
-              className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded"
-              aria-label={expanded ? "Hide thread" : "Show thread"}
-              title={expanded ? "Hide thread" : "Show thread"}
+              onClick={() => setExpanded(true)}
+              className="flex items-center gap-0.5 ml-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors px-1 py-0.5 rounded"
+              aria-label="Show thread"
+              title="Show thread"
             >
-              {expanded ? (
-                <ChevronDown className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
-              )}
-              <span>{expanded ? "Hide" : "Show"}</span>
+              <ChevronRight className="h-3 w-3" />
+              <span>Show</span>
             </button>
           )}
         </div>
-      </div>
+      )}
 
       {/* Raw JSON modal */}
       <Dialog open={jsonOpen} onOpenChange={setJsonOpen}>
