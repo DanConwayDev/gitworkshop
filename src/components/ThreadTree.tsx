@@ -13,13 +13,7 @@
  * comments don't get their own Card border. Each comment is separated by a
  * subtle top border. This keeps deep threads compact (matching gitworkshop).
  */
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useState,
-  type RefObject,
-} from "react";
+import { useCallback, useContext, useState, type RefObject } from "react";
 import { useUnreadHighlight } from "@/hooks/useUnreadHighlight";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -67,7 +61,9 @@ import { Label } from "@/components/ui/label";
 // Thread context — passes root info down without prop-drilling
 // ---------------------------------------------------------------------------
 
-export const ThreadCtx = createContext<ThreadContext | null>(null);
+// Re-exported for consumers that import ThreadCtx from this module.
+export { ThreadCtx } from "@/contexts/ThreadContext";
+import { ThreadCtx } from "@/contexts/ThreadContext";
 
 // ---------------------------------------------------------------------------
 // Depth-based color palette
@@ -197,6 +193,9 @@ export function ThreadComment({ event }: { event: NostrEvent }) {
   // be explicitly disabled via ctx.canReply = false (e.g. for logged-out users
   // where we still want the context for inline comment links).
   const canReply = !!ctx && ctx.canReply !== false;
+  // onReply callback: when provided by the context, show a Reply button in the
+  // header even if canReply is false (e.g. diff view uses its own reply UI).
+  const onReplyCallback = ctx?.onReply;
   const activeAccount = useActiveAccount();
   const isOwn = !!activeAccount && activeAccount.pubkey === event.pubkey;
 
@@ -257,8 +256,8 @@ export function ThreadComment({ event }: { event: NostrEvent }) {
             : ""
       }`}
     >
-      {/* Inline comment context banner */}
-      {isInline && inlineLoc?.filePath && (
+      {/* Inline comment context banner — hidden when already inside the diff view */}
+      {isInline && inlineLoc?.filePath && !ctx?.hideInlineCommentBanner && (
         <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded bg-muted/60 border border-border/40 text-xs text-muted-foreground font-mono">
           <FileCode className="h-3 w-3 shrink-0 text-blue-500/70" />
           {inlinePermalink ? (
@@ -297,10 +296,16 @@ export function ThreadComment({ event }: { event: NostrEvent }) {
           </span>
         </div>
         <div className="flex items-center gap-1">
-          {canReply && (
+          {(canReply || onReplyCallback) && (
             <button
               type="button"
-              onClick={() => setReplying((r) => !r)}
+              onClick={() => {
+                if (onReplyCallback) {
+                  onReplyCallback(event);
+                } else {
+                  setReplying((r) => !r);
+                }
+              }}
               className="flex items-center text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded"
               aria-label="Reply to comment"
             >

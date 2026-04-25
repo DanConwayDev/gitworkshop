@@ -753,6 +753,20 @@ export interface ThreadContext {
    * enabling the reply UI.
    */
   canReply?: boolean;
+  /**
+   * When true, suppress the inline comment context banner (file path / line
+   * reference) inside ThreadComment. Used when the comment is already rendered
+   * inside the diff view where the location is obvious from context.
+   */
+  hideInlineCommentBanner?: boolean;
+  /**
+   * Callback invoked when the user clicks the Reply button on an individual
+   * comment inside a ThreadComment. Receives the comment event so the caller
+   * can open its own reply composer targeting that specific comment.
+   * When provided, a Reply button is shown in the comment header regardless
+   * of the canReply flag.
+   */
+  onReply?: (event: NostrEvent) => void;
 }
 
 // ---------------------------------------------------------------------------

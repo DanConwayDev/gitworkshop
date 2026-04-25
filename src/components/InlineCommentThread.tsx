@@ -288,6 +288,12 @@ export function InlineCommentThread({
    * When null, the composer is for a brand-new inline code comment.
    */
   const [replyToComment, setReplyToComment] = useState<NostrEvent | null>(null);
+  /**
+   * Incremented each time we want to force-remount the InlineComposer so that
+   * autoFocus fires again (e.g. when switching which comment we're replying to
+   * while the composer is already open).
+   */
+  const [composerKey, setComposerKey] = useState(0);
   const effectiveParent = parentEvent ?? rootEvent;
   const { toast } = useToast();
   const activeAccount = useActiveAccount();
@@ -303,13 +309,27 @@ export function InlineCommentThread({
   // ThreadContext passed to ThreadCtx.Provider so ThreadComment gets
   // repoCoords, delete support, etc. canReply=false disables the ReplyBox
   // inside ThreadComment — the diff view has its own reply UI at the bottom.
+  // onReply wires the per-comment Reply button to the diff view's composer.
+  // hideInlineCommentBanner suppresses the file/line banner since we're
+  // already embedded inside the diff view where location is obvious.
+  const handleReplyFromComment = useCallback((commentEvent: NostrEvent) => {
+    setReplyToComment(commentEvent);
+    setComposerOpen(true);
+    setCollapsed(false);
+    // Remount the composer so autoFocus fires even if it was already open
+    // (e.g. switching which comment to reply to).
+    setComposerKey((k) => k + 1);
+  }, []);
+
   const threadCtxValue = useMemo(
     () => ({
       rootEvent,
       repoCoords,
       canReply: false as const,
+      hideInlineCommentBanner: true,
+      onReply: handleReplyFromComment,
     }),
-    [rootEvent, repoCoords],
+    [rootEvent, repoCoords, handleReplyFromComment],
   );
 
   // The thread root is the first inline comment — used as the parent for the resolve event.
@@ -478,12 +498,13 @@ export function InlineCommentThread({
           {/* Footer: composer or reply/resolve actions */}
           {composerOpen ? (
             <InlineComposer
+              key={composerKey}
               rootEvent={rootEvent}
               parentEvent={effectiveParent}
               commentOptions={commentOptions}
               onSubmitted={handleSubmitted}
               onCancel={handleCancel}
-              autoFocus={autoFocus}
+              autoFocus={composerKey > 0 || autoFocus}
               replyToComment={replyToComment ?? undefined}
             />
           ) : (
@@ -496,6 +517,7 @@ export function InlineCommentThread({
                     comments.length > 0 ? comments[comments.length - 1] : null;
                   setReplyToComment(lastComment);
                   setComposerOpen(true);
+                  setComposerKey((k) => k + 1);
                 }}
                 className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
