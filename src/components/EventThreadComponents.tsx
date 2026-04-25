@@ -825,24 +825,26 @@ export function ResolvedThreadCard({
           {children && <div className="mb-0">{children}</div>}
 
           {/* "Marked as resolved" footer — sits at the bottom of the thread */}
-          <div className="flex items-center gap-2 px-3 py-1.5 border-t border-green-500/20 bg-green-500/5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/40 text-xs text-muted-foreground">
             <CheckCircle2 className="h-3 w-3 text-green-500/70 shrink-0" />
-            <span className="flex-1">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
               <UserLink
                 pubkey={event.pubkey}
                 avatarSize="sm"
                 nameClassName="text-xs font-medium text-foreground/80"
-              />{" "}
-              <span className="text-green-600/80 dark:text-green-400/80">
+              />
+              <span className="text-green-600/80 dark:text-green-400/80 shrink-0">
                 {authorised ? "marked as resolved" : "proposed resolving"}
               </span>
               {!authorised && (
-                <span className="ml-1 text-muted-foreground/50">
-                  (not a maintainer — not applied)
+                <span className="text-muted-foreground/50 shrink-0">
+                  (not a maintainer)
                 </span>
               )}
-              <span className="ml-1.5 text-muted-foreground/50">{timeAgo}</span>
-            </span>
+              <span className="text-muted-foreground/50 shrink-0">
+                {timeAgo}
+              </span>
+            </div>
 
             {/* Raw JSON viewer */}
             <button
