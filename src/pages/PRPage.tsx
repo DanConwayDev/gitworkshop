@@ -1047,6 +1047,7 @@ export default function PRPage() {
                                       // login state. canReply gates the reply UI.
                                       prBasePath: prBasePath ?? undefined,
                                       canReply: !!activeAccount,
+                                      authorizedPubkeys: pr.authorisedUsers,
                                     }
                                   : undefined
                               }

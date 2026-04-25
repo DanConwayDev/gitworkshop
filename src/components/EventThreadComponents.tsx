@@ -1,7 +1,13 @@
 /**
  * Shared components used in both IssuePage and PRPage thread views.
  */
-import { lazy, Suspense, useState, useCallback, type RefObject } from "react";
+import React, {
+  lazy,
+  Suspense,
+  useState,
+  useCallback,
+  type RefObject,
+} from "react";
 import { formatDistanceToNow, format } from "date-fns";
 import type { NostrEvent } from "nostr-tools";
 import { Link } from "react-router-dom";
@@ -12,6 +18,9 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Calendar,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Clock,
   History,
   Mail,
@@ -722,6 +731,216 @@ export function LabelChangeCard({
 }
 
 // ---------------------------------------------------------------------------
+// ResolvedThreadCard — compact 1-liner for a thread resolution event
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders a thread resolution event (kind:1111 with `["l", "resolved"]`) as a
+ * compact, collapsible 1-liner in the conversation timeline — similar to
+ * StatusChangeCard / LabelChangeCard.
+ *
+ * When the resolver is authorised (PR/patch author or maintainer), the card
+ * also collapses the parent thread by default. The thread is expandable.
+ *
+ * Includes JSON view and delete buttons.
+ */
+export function ResolvedThreadCard({
+  event,
+  authorised,
+  repoCoords,
+  children,
+}: {
+  event: NostrEvent;
+  /** True when the resolver is the PR/patch author or a maintainer. */
+  authorised: boolean;
+  repoCoords?: string[];
+  /**
+   * The thread content to collapse/expand. When provided and authorised,
+   * the thread starts collapsed.
+   */
+  children?: React.ReactNode;
+}) {
+  const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
+    addSuffix: true,
+  });
+
+  const activeAccount = useActiveAccount();
+  const isOwn = !!activeAccount && activeAccount.pubkey === event.pubkey;
+
+  // Authorised resolvers collapse the thread by default
+  const [expanded, setExpanded] = useState(!authorised);
+  const [jsonOpen, setJsonOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = useCallback(async () => {
+    if (deleting || !repoCoords) return;
+    setDeleting(true);
+    try {
+      await runner.run(
+        DeleteEvent,
+        [event],
+        repoCoords,
+        deleteReason.trim() || undefined,
+      );
+    } catch (err) {
+      console.error("[ResolvedThreadCard] failed to delete:", err);
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+      setDeleteReason("");
+    }
+  }, [deleting, event, repoCoords, deleteReason]);
+
+  const reasonId = `delete-resolve-${event.id.slice(0, 8)}-reason`;
+
+  return (
+    <>
+      {/* Collapsible thread content — shown above the resolution marker */}
+      {children && expanded && <div className="mb-1">{children}</div>}
+
+      {/* Resolution 1-liner */}
+      <div className="relative flex gap-3 py-1.5 pl-1">
+        <div className="flex items-start pt-0.5">
+          <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-green-500/10 border-green-500/20 shrink-0">
+            <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0 pt-1">
+          <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+            <UserLink
+              pubkey={event.pubkey}
+              avatarSize="sm"
+              nameClassName="text-sm font-medium text-foreground"
+            />
+            <span className="text-green-600 dark:text-green-400 font-medium">
+              {authorised
+                ? "resolved this thread"
+                : "proposed resolving this thread"}
+            </span>
+            <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {timeAgo}
+            </span>
+          </div>
+          {!authorised && (
+            <p className="mt-0.5 text-xs text-muted-foreground/50">
+              User is not a maintainer — resolution not applied
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
+          {/* Expand/collapse toggle — only shown when there's thread content */}
+          {children && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="flex items-center text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded"
+              aria-label={expanded ? "Collapse thread" : "Expand thread"}
+              title={expanded ? "Collapse thread" : "Expand thread"}
+            >
+              {expanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
+
+          {/* Raw JSON viewer */}
+          <button
+            type="button"
+            onClick={() => setJsonOpen(true)}
+            className="flex items-center text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded font-mono font-bold"
+            aria-label="View raw event JSON"
+            title="View raw event JSON"
+          >
+            {"{}"}
+          </button>
+
+          {/* Delete — only for own events */}
+          {isOwn && repoCoords && (
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(true)}
+              className="flex items-center text-xs text-muted-foreground/60 hover:text-destructive transition-colors px-1.5 py-0.5 rounded"
+              aria-label="Delete resolution"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Raw JSON modal */}
+      <Dialog open={jsonOpen} onOpenChange={setJsonOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-sm">
+              Raw event · kind:{event.kind}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            <pre className="text-xs font-mono bg-muted rounded-md p-4 whitespace-pre-wrap break-all">
+              {JSON.stringify(event, null, 2)}
+            </pre>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog
+        open={deleteOpen}
+        onOpenChange={(v) => !v && setDeleteOpen(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this resolution?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will send a deletion request (NIP-09). Not all relays honour
+              deletion requests — the event may remain visible on some clients.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5 py-1">
+            <Label htmlFor={reasonId} className="text-sm">
+              Reason{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Textarea
+              id={reasonId}
+              placeholder="Why are you deleting this resolution?"
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              rows={2}
+              className="resize-none text-sm"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setDeleteOpen(false);
+                setDeleteReason("");
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "Sending…" : "Send deletion request"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // ThreadedComments — interleaves a thread tree with subject-rename events
 // ---------------------------------------------------------------------------
 
@@ -767,6 +986,12 @@ export interface ThreadContext {
    * of the canReply flag.
    */
   onReply?: (event: NostrEvent) => void;
+  /**
+   * Pubkeys authorised to perform privileged actions (PR/patch author +
+   * maintainers). Used to determine whether a resolution event is authorised
+   * so the ResolvedThreadCard can collapse the thread by default.
+   */
+  authorizedPubkeys?: Set<string>;
 }
 
 // ---------------------------------------------------------------------------

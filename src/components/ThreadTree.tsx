@@ -64,6 +64,8 @@ import { Label } from "@/components/ui/label";
 // Re-exported for consumers that import ThreadCtx from this module.
 export { ThreadCtx } from "@/contexts/ThreadContext";
 import { ThreadCtx } from "@/contexts/ThreadContext";
+import { isResolutionEvent } from "@/hooks/useInlineComments";
+import { ResolvedThreadCard } from "@/components/EventThreadComponents";
 
 // ---------------------------------------------------------------------------
 // Depth-based color palette
@@ -120,13 +122,33 @@ export function ThreadTree({
   depth = 0,
   threadContext,
 }: ThreadTreeProps) {
+  const ctx = useContext(ThreadCtx);
+  const effectiveCtx = threadContext ?? ctx;
+
   const visibleChildren = filterChildren
     ? node.children.filter(filterChildren)
     : node.children;
 
-  const inner = (
-    <div>
-      {/* Render this node's event (unless it's the root — caller handles that) */}
+  // Detect whether any direct child is a resolution event.
+  // When found, the resolution event is rendered as a ResolvedThreadCard that
+  // wraps the node body (event + non-resolution children) as collapsible content.
+  const resolutionChild = visibleChildren.find((c) =>
+    isResolutionEvent(c.event),
+  );
+  const nonResolutionChildren = resolutionChild
+    ? visibleChildren.filter((c) => !isResolutionEvent(c.event))
+    : visibleChildren;
+
+  const authorised =
+    !!resolutionChild &&
+    (effectiveCtx?.authorizedPubkeys === undefined ||
+      effectiveCtx.authorizedPubkeys.size === 0 ||
+      effectiveCtx.authorizedPubkeys.has(resolutionChild.event.pubkey));
+
+  // The node body: the event itself (unless isRoot) + non-resolution children.
+  // This is what gets wrapped inside ResolvedThreadCard when resolved.
+  const nodeBody = (
+    <>
       {!isRoot && (
         <>
           {node.missingParent && (
@@ -142,18 +164,30 @@ export function ThreadTree({
           )}
         </>
       )}
-
-      {/* Render children with nesting */}
-      {visibleChildren.length > 0 && (
+      {nonResolutionChildren.length > 0 && (
         <ThreadChildren
-          nodes={visibleChildren}
+          nodes={nonResolutionChildren}
           renderEvent={renderEvent}
           filterChildren={filterChildren}
           isMissingParentContext={node.missingParent}
           depth={depth + 1}
         />
       )}
+    </>
+  );
+
+  const inner = resolutionChild ? (
+    <div>
+      <ResolvedThreadCard
+        event={resolutionChild.event}
+        authorised={authorised}
+        repoCoords={effectiveCtx?.repoCoords}
+      >
+        {nodeBody}
+      </ResolvedThreadCard>
     </div>
+  ) : (
+    <div>{nodeBody}</div>
   );
 
   // Provide context at the top level; nested nodes inherit it automatically.

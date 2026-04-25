@@ -352,6 +352,7 @@ export default function IssuePage() {
                                   rootEvent: issue.rootEvent,
                                   repoCoords: repoAllCoords ?? issue.repoCoords,
                                   priorityPubkeys: mentionPriorityPubkeys,
+                                  authorizedPubkeys: issue.authorisedUsers,
                                 }
                               : undefined
                           }
