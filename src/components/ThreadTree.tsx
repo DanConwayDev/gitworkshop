@@ -177,7 +177,12 @@ export function ThreadTree({
   );
 
   const inner = resolutionChild ? (
-    <div>
+    // Wrap the resolved thread in the same blue left border used by the outer
+    // conversation timeline so the expanded content reads as part of the thread.
+    <div
+      className="min-w-0 border-l pl-1"
+      style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
+    >
       <ResolvedThreadCard
         event={resolutionChild.event}
         rootCommentEvent={node.event}
