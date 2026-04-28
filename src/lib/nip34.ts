@@ -860,9 +860,10 @@ function buildResolvedList(
       const statusRootId = getNip10References(ev).root?.e?.id;
       if (!statusRootId || !authorById.has(statusRootId)) continue;
 
-      const isMergeStatus =
-        ev.kind === STATUS_RESOLVED || ev.kind === STATUS_CLOSED;
-      if (mergeStatusRequiresMaintainer && isMergeStatus) {
+      // NIP-34: only a maintainer can mark a PR as merged (1631). Closing
+      // (1632) is permitted from either the original author or a maintainer
+      // — an author may close their own PR without maintainer rights.
+      if (mergeStatusRequiresMaintainer && ev.kind === STATUS_RESOLVED) {
         if (!isMaintainer) continue;
       } else {
         if (!isAuthor && !isMaintainer) continue;
@@ -1169,9 +1170,10 @@ export function resolveItemEssentials(
     if ((STATUS_KINDS as readonly number[]).includes(ev.kind)) {
       // Skip status events that have been deleted by their author.
       if (deletedEssentialEventIds.has(ev.id)) continue;
-      const isMergeStatus =
-        ev.kind === STATUS_RESOLVED || ev.kind === STATUS_CLOSED;
-      if (mergeStatusRequiresMaintainer && isMergeStatus) {
+      // NIP-34: only a maintainer can mark a PR as merged (1631). Closing
+      // (1632) is permitted from either the original author or a maintainer
+      // — an author may close their own PR without maintainer rights.
+      if (mergeStatusRequiresMaintainer && ev.kind === STATUS_RESOLVED) {
         if (!isMaintainer) continue;
       } else {
         if (!isAuthor && !isMaintainer) continue;
