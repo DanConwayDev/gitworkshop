@@ -188,6 +188,7 @@ function EventRedirect({
   authorPubkey,
   commentId,
   stargazerPubkey,
+  originalEvent,
 }: {
   eventId: string;
   hintRelays: string[];
@@ -197,6 +198,13 @@ function EventRedirect({
   commentId?: string;
   /** If set, this is a star reaction permalink — open the stargazers popover. */
   stargazerPubkey?: string;
+  /**
+   * The first event in a NIP-10 root-following chain. When we follow e-tags
+   * and the chain terminates at an unsupported (non-git) event, we show an
+   * UnsupportedEventPage for this original event rather than the final root,
+   * because that is what the user actually navigated to.
+   */
+  originalEvent?: NostrEvent;
 }) {
   // Build relay groups: hint relays first, then git index, then extra relays
   const hintsKey = hintRelays.join(",");
@@ -362,6 +370,11 @@ function EventRedirect({
   // with this event's ID as a fragment anchor (permalink to the comment).
   // Preserve commentId if already set (we may be resolving an intermediate
   // event in a chain — the original linked event is what we want to anchor to).
+  //
+  // We also carry the first event in the chain as `originalEvent` so that if
+  // the chain terminates at a non-git (unsupported) event we can show an
+  // UnsupportedEventPage for the event the user actually linked to, not the
+  // unrelated social-media root.
   const nip10RootId = getNip10RootId(event);
   if (nip10RootId && nip10RootId !== eventId) {
     return (
@@ -369,12 +382,17 @@ function EventRedirect({
         eventId={nip10RootId}
         hintRelays={hintRelays}
         commentId={commentId ?? event.id}
+        originalEvent={originalEvent ?? event}
       />
     );
   }
 
-  // No thread root found or this IS the root — show a preview with njump link
-  return <UnsupportedEventPage event={event} relayHints={hintRelays} />;
+  // No thread root found or this IS the root.
+  // If we got here by following a NIP-10 chain from an unsupported event,
+  // show UnsupportedEventPage for the original event (the one the user linked
+  // to), not the final root.  Otherwise show the current event.
+  const pageEvent = originalEvent ?? event;
+  return <UnsupportedEventPage event={pageEvent} relayHints={hintRelays} />;
 }
 
 // ---------------------------------------------------------------------------
