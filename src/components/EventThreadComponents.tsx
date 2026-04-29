@@ -1031,6 +1031,28 @@ export interface ThreadContext {
    * so the ResolvedThreadCard can collapse the thread by default.
    */
   authorizedPubkeys?: Set<string>;
+  /**
+   * Fetch the diff lines for a specific file + line range so the inline
+   * comment banner can show the actual code context instead of just
+   * "filepath:line".
+   *
+   * `commitId` is the specific commit the comment targets — required to look
+   * up the right diff source (the correct patch in a multi-commit patch set,
+   * or the right commit diff for a PR-type item).
+   *
+   * Returns an array of diff lines (each prefixed with "+", "-", or " ")
+   * covering the requested range plus a few lines of context, or undefined
+   * if the data is not available (e.g. git server unreachable).
+   *
+   * The implementation is responsible for caching — callers invoke this
+   * once per banner when it enters the viewport.
+   */
+  getDiffSnippet?: (
+    filePath: string,
+    lineRange: [number, number],
+    lineSide: "del" | undefined,
+    commitId: string | undefined,
+  ) => Promise<string[] | undefined>;
 }
 
 // ---------------------------------------------------------------------------

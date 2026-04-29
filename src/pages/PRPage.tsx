@@ -57,8 +57,9 @@ import {
 import { cn } from "@/lib/utils";
 import { PRFilesTab } from "@/components/PRFilesTab";
 import { PatchFilesTab } from "@/components/PatchFilesTab";
-import { diffTrees } from "@/lib/git-grasp-pool";
+import { diffTrees, generateUnifiedDiff } from "@/lib/git-grasp-pool";
 import { computePatchFileChanges } from "@/lib/patch-diff-merge";
+import parseDiff from "parse-diff";
 import {
   CommitList,
   CommitListLoading,
@@ -90,6 +91,108 @@ import {
 } from "@/lib/patch-commits";
 import type { Filter } from "applesauce-core/helpers";
 import type { Patch } from "@/casts/Patch";
+
+// ---------------------------------------------------------------------------
+// extractSnippetFromDiff — pull the relevant lines out of a unified diff
+// ---------------------------------------------------------------------------
+
+/**
+ * Given a unified diff string, find the hunk(s) that cover `lineRange` in
+ * `filePath` and return the diff lines ("+"/"-"/" " prefixed) for that range
+ * plus up to CONTEXT_LINES of surrounding context.
+ *
+ * `lineSide === "del"` means the line numbers refer to the old (pre-commit)
+ * file; otherwise they refer to the new (post-commit) file.
+ *
+ * Returns undefined when the file or range is not found in the diff.
+ */
+const SNIPPET_CONTEXT = 3;
+
+function extractSnippetFromDiff(
+  diff: string,
+  filePath: string,
+  lineRange: [number, number],
+  lineSide: "del" | undefined,
+): string[] | undefined {
+  const files = parseDiff(diff);
+
+  // parse-diff strips the "a/" / "b/" prefix — match on the bare path
+  const file = files.find(
+    (f) =>
+      f.to === filePath ||
+      f.from === filePath ||
+      f.to === `b/${filePath}` ||
+      f.from === `a/${filePath}`,
+  );
+  if (!file) return undefined;
+
+  const [rangeStart, rangeEnd] = lineRange;
+
+  // Collect all diff lines from all hunks, annotated with their line numbers
+  type AnnotatedLine = {
+    prefix: string;
+    content: string;
+    newNum: number;
+    oldNum: number;
+  };
+  const annotated: AnnotatedLine[] = [];
+
+  for (const chunk of file.chunks) {
+    let newNum = chunk.newStart;
+    let oldNum = chunk.oldStart;
+
+    for (const change of chunk.changes) {
+      if (change.type === "add") {
+        annotated.push({
+          prefix: "+",
+          content: change.content.slice(1),
+          newNum,
+          oldNum,
+        });
+        newNum++;
+      } else if (change.type === "del") {
+        annotated.push({
+          prefix: "-",
+          content: change.content.slice(1),
+          newNum,
+          oldNum,
+        });
+        oldNum++;
+      } else {
+        // normal / context
+        annotated.push({
+          prefix: " ",
+          content: change.content.slice(1),
+          newNum,
+          oldNum,
+        });
+        newNum++;
+        oldNum++;
+      }
+    }
+  }
+
+  if (annotated.length === 0) return undefined;
+
+  // Find the indices of lines that fall within the requested range
+  const inRange = (line: AnnotatedLine) => {
+    const num = lineSide === "del" ? line.oldNum : line.newNum;
+    return num >= rangeStart && num <= rangeEnd;
+  };
+
+  const firstIdx = annotated.findIndex(inRange);
+  if (firstIdx === -1) return undefined;
+
+  let lastIdx = firstIdx;
+  for (let i = firstIdx + 1; i < annotated.length; i++) {
+    if (inRange(annotated[i])) lastIdx = i;
+  }
+
+  const from = Math.max(0, firstIdx - SNIPPET_CONTEXT);
+  const to = Math.min(annotated.length - 1, lastIdx + SNIPPET_CONTEXT);
+
+  return annotated.slice(from, to + 1).map((l) => l.prefix + l.content);
+}
 
 export default function PRPage() {
   const {
@@ -373,6 +476,11 @@ export default function PRPage() {
 
   // ── File count (eager for tab badge) ──────────────────────────────────
   const [fileCount, setFileCount] = useState<number | undefined>(undefined);
+  // FileChange[] retained so getDiffSnippet can look up blob hashes per file
+  // without re-fetching the tree. Trees are cached in IDB so this is free.
+  const [prFileChanges, setPrFileChanges] = useState<
+    import("@/lib/git-grasp-pool").FileChange[] | undefined
+  >(undefined);
   const fileCountAbortRef = useRef<AbortController | null>(null);
 
   // ── Patch apply result (from PatchFilesTab, shared with commits tab) ──
@@ -408,7 +516,9 @@ export default function PRPage() {
       )
       .then((range) => {
         if (abort.signal.aborted || !range) return;
-        setFileCount(diffTrees(range.tipTree, range.baseTree).length);
+        const changes = diffTrees(range.tipTree, range.baseTree);
+        setFileCount(changes.length);
+        setPrFileChanges(changes);
       })
       .catch(() => {
         /* ignore errors — count just won't show */
@@ -428,6 +538,99 @@ export default function PRPage() {
   // Effective file count: use patch-derived count for patches, git-derived for PRs
   const effectiveFileCount =
     pr?.itemType === "patch" ? patchFileCount : fileCount;
+
+  // ── Diff snippet fetcher (for inline comment banners in conversation tab) ──
+  // Returns the diff lines ("+"/"-"/" " prefixed) around the commented range.
+  // Deferred until the banner enters the viewport — never called for all
+  // comments at once. Results are cached via the pool's IDB blob cache so
+  // repeated calls for the same file are instant.
+  const getDiffSnippet = useCallback(
+    async (
+      filePath: string,
+      lineRange: [number, number],
+      lineSide: "del" | undefined,
+      commitId: string | undefined,
+    ): Promise<string[] | undefined> => {
+      if (!pr) return undefined;
+
+      // ── Patch-type: diff is embedded in each patch event ───────────────
+      // Find the patch whose commitId matches the comment's commitId tag,
+      // falling back to the root patch diff for single-commit patch sets.
+      if (pr.itemType === "patch") {
+        let diff: string | undefined;
+        if (commitId && patchChain) {
+          const match = patchChain.find((p) => p.commitId === commitId);
+          diff = match?.patchDiff || undefined;
+        }
+        // Fall back to root patch diff (covers single-commit patch sets and
+        // comments that pre-date the commitId tag)
+        if (!diff) diff = pr.patchDiff || undefined;
+        if (!diff) return undefined;
+        return extractSnippetFromDiff(diff, filePath, lineRange, lineSide);
+      }
+
+      // ── PR-type: fetch blobs for the specific commit on demand ──────────
+      // Each inline comment targets a specific commit via its `c` tag.
+      // We fetch that commit to get its first parent, then use getCommitRange
+      // to get the before/after trees for just that commit's diff.
+      // Falls back to the whole-PR diff (prFileChanges) when no commitId.
+      if (pr.itemType === "pr" && gitPool) {
+        const abort = new AbortController();
+        try {
+          let fileChanges = prFileChanges;
+
+          if (commitId) {
+            // Get the commit object to find its parent hash
+            const commit = await gitPool.getSingleCommit(
+              commitId,
+              abort.signal,
+              effectiveCloneUrls,
+            );
+            if (abort.signal.aborted || !commit) return undefined;
+
+            const parentHash = commit.parents[0] ?? effectiveMergeBase;
+            if (!parentHash) return undefined;
+
+            const range = await gitPool.getCommitRange(
+              commitId,
+              parentHash,
+              abort.signal,
+              effectiveCloneUrls,
+            );
+            if (abort.signal.aborted || !range) return undefined;
+
+            fileChanges = diffTrees(range.tipTree, range.baseTree);
+          }
+
+          if (!fileChanges) return undefined;
+          const change = fileChanges.find((c) => c.path === filePath);
+          if (!change) return undefined;
+
+          const diff = await generateUnifiedDiff(
+            [change],
+            gitPool,
+            abort.signal,
+            effectiveCloneUrls,
+            `${change.tipHash ?? "null"}:${change.baseHash ?? "null"}`,
+          );
+          if (!diff) return undefined;
+          return extractSnippetFromDiff(diff, filePath, lineRange, lineSide);
+        } catch {
+          return undefined;
+        }
+      }
+
+      return undefined;
+    },
+    [
+      pr,
+      patchChain,
+      gitPool,
+      prFileChanges,
+      effectiveCloneUrls,
+      effectiveMergeBase,
+    ],
+  );
 
   // ── Auth ──────────────────────────────────────────────────────────────
   const activeAccount = useActiveAccount();
@@ -1144,6 +1347,7 @@ export default function PRPage() {
                                       prBasePath: prBasePath ?? undefined,
                                       canReply: !!activeAccount,
                                       authorizedPubkeys: pr.authorisedUsers,
+                                      getDiffSnippet,
                                     }
                                   : undefined
                               }

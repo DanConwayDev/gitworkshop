@@ -13,7 +13,14 @@
  * comments don't get their own Card border. Each comment is separated by a
  * subtle top border. This keeps deep threads compact (matching gitworkshop).
  */
-import { useCallback, useContext, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useUnreadHighlight } from "@/hooks/useUnreadHighlight";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -284,6 +291,55 @@ export function ThreadComment({ event }: { event: NostrEvent }) {
     return `${ctx.prBasePath}/files${hash}`;
   })();
 
+  // Diff snippet — fetched lazily when the banner enters the viewport
+  const [snippet, setSnippet] = useState<string[] | null | "loading">(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (
+      !isInline ||
+      !inlineLoc?.filePath ||
+      !inlineLoc.lineRange ||
+      !ctx?.getDiffSnippet
+    )
+      return;
+    if (snippet !== null) return; // already fetched or loading
+
+    const el = bannerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        observer.disconnect();
+        setSnippet("loading");
+        ctx.getDiffSnippet!(
+          inlineLoc.filePath!,
+          inlineLoc.lineRange!,
+          inlineLoc.lineSide,
+          inlineLoc.commitId,
+        )
+          .then((lines) => {
+            setSnippet(lines ?? null);
+          })
+          .catch(() => {
+            setSnippet(null);
+          });
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isInline,
+    inlineLoc?.filePath,
+    inlineLoc?.lineRange,
+    inlineLoc?.lineSide,
+    inlineLoc?.commitId,
+    ctx?.getDiffSnippet,
+  ]);
+
   return (
     <div
       id={anchorId}
@@ -298,23 +354,65 @@ export function ThreadComment({ event }: { event: NostrEvent }) {
     >
       {/* Inline comment context banner — hidden when already inside the diff view */}
       {isInline && inlineLoc?.filePath && !ctx?.hideInlineCommentBanner && (
-        <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded bg-muted/60 border border-border/40 text-xs text-muted-foreground font-mono">
-          <FileCode className="h-3 w-3 shrink-0 text-blue-500/70" />
-          {inlinePermalink ? (
-            <Link
-              to={inlinePermalink}
-              className="truncate hover:text-foreground hover:underline underline-offset-2 transition-colors"
-              title="View in Files Changed"
-            >
-              {inlineLoc.filePath}
-            </Link>
-          ) : (
-            <span className="truncate">{inlineLoc.filePath}</span>
+        <div
+          ref={bannerRef}
+          className="mb-2 rounded border border-border/40 bg-muted/40 overflow-hidden text-xs font-mono"
+        >
+          {/* File path header row */}
+          <div className="flex items-center gap-1.5 px-2 py-1 border-b border-border/30">
+            <FileCode className="h-3 w-3 shrink-0 text-blue-500/70" />
+            {inlinePermalink ? (
+              <Link
+                to={inlinePermalink}
+                className="truncate text-muted-foreground hover:text-foreground hover:underline underline-offset-2 transition-colors"
+                title="View in Files Changed"
+              >
+                {inlineLoc.filePath}
+              </Link>
+            ) : (
+              <span className="truncate text-muted-foreground">
+                {inlineLoc.filePath}
+              </span>
+            )}
+            {inlineLoc.line && (
+              <span className="shrink-0 text-muted-foreground/50">
+                :{inlineLoc.line}
+              </span>
+            )}
+          </div>
+
+          {/* Diff snippet — shown once fetched */}
+          {snippet === "loading" && (
+            <div className="px-3 py-1.5 text-muted-foreground/50 italic text-[11px]">
+              Loading…
+            </div>
           )}
-          {inlineLoc.line && (
-            <span className="shrink-0 text-muted-foreground/60">
-              :{inlineLoc.line}
-            </span>
+          {Array.isArray(snippet) && snippet.length > 0 && (
+            <div>
+              {snippet.map((line, i) => {
+                const prefix = line[0];
+                const content = line.slice(1);
+                const bg =
+                  prefix === "+"
+                    ? "bg-green-500/10 text-green-700 dark:text-green-400"
+                    : prefix === "-"
+                      ? "bg-red-500/10 text-red-700 dark:text-red-400"
+                      : "text-muted-foreground";
+                return (
+                  <div
+                    key={i}
+                    className={`flex gap-2 px-2 py-0.5 leading-5 min-h-[1.25rem] ${bg}`}
+                  >
+                    <span className="select-none w-3 shrink-0 opacity-60">
+                      {prefix}
+                    </span>
+                    <span className="whitespace-pre-wrap break-all">
+                      {content}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
