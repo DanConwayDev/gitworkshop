@@ -191,7 +191,6 @@ export function ThreadTree({
   const inner = resolutionChild ? (
     // Wrap the resolved thread in the same blue left border used by the outer
     // conversation timeline so the expanded content reads as part of the thread.
-    // The border already provides the visual grouping for inline comments here.
     <div
       className="min-w-0 border-l pl-1"
       style={{ borderLeftColor: "rgb(59 130 246 / 0.5)" }}
@@ -202,6 +201,11 @@ export function ThreadTree({
         authorised={authorised}
         repoCoords={effectiveCtx?.repoCoords}
       >
+        {nodeIsInline && (
+          <div className="px-2 pt-2 pb-0">
+            <InlineCommentBanner event={node.event} />
+          </div>
+        )}
         {commentAndChildren}
       </ResolvedThreadCard>
     </div>
