@@ -20,7 +20,7 @@ const NAV_SECTIONS = [
     heading: "Navigate",
     links: [
       { label: "Dashboard", to: "/" },
-      { label: "Explore", to: "/explore" },
+      { label: "Landing page", to: "/landing" },
       { label: "Browse repos", to: "/search" },
     ],
   },

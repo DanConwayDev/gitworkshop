@@ -210,7 +210,7 @@ export function AppRouter() {
         <main className="flex-1 flex flex-col">
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/explore" element={<LandingPage />} />
+            <Route path="/landing" element={<LandingPage />} />
             <Route path="/search" element={<RepositoriesPage />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/outbox" element={<OutboxPage />} />
