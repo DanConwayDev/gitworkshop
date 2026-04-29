@@ -282,6 +282,20 @@ export function CreateComment(
     if (extraTags && extraTags.length > 0) {
       draft.tags = [...draft.tags, ...extraTags];
     }
+
+    // Strip trailing slashes from relay hints on pointer tags. The URL
+    // constructor used by applesauce's normalizeURL appends a trailing slash
+    // to bare-host URLs (e.g. "wss://relay.ngit.dev/"), and root E tags
+    // propagated from existing comments carry whatever hint was stored there.
+    // Some relays reject events whose relay hints don't match their own URL.
+    const POINTER_TAGS = new Set(["E", "e", "A", "a"]);
+    draft.tags = draft.tags.map((tag) => {
+      if (POINTER_TAGS.has(tag[0]) && tag[2]) {
+        return [tag[0], tag[1], tag[2].replace(/\/$/, ""), ...tag.slice(3)];
+      }
+      return tag;
+    });
+
     const signed = await sign(draft);
 
     // Add to local store immediately so the comment appears in the thread
