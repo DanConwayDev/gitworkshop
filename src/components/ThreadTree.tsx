@@ -13,7 +13,7 @@
  * comments don't get their own Card border. Each comment is separated by a
  * subtle top border. This keeps deep threads compact (matching gitworkshop).
  */
-import {
+import React, {
   useCallback,
   useContext,
   useEffect,
@@ -51,6 +51,7 @@ import {
 } from "@/blueprints/inline-comment";
 import { diffLineHash, fileDiffCardId } from "@/lib/diffCardId";
 import { Link } from "react-router-dom";
+import type { SnippetLine } from "@/pages/PRPage";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -292,7 +293,9 @@ export function ThreadComment({ event }: { event: NostrEvent }) {
   })();
 
   // Diff snippet — fetched lazily when the banner enters the viewport
-  const [snippet, setSnippet] = useState<string[] | null | "loading">(null);
+  const [snippet, setSnippet] = useState<SnippetLine[] | null | "loading">(
+    null,
+  );
   const bannerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -358,7 +361,7 @@ export function ThreadComment({ event }: { event: NostrEvent }) {
           ref={bannerRef}
           className="mb-2 rounded border border-border/40 bg-muted/40 overflow-hidden text-xs font-mono"
         >
-          {/* File path header row */}
+          {/* File path header — always a link when permalink is available */}
           <div className="flex items-center gap-1.5 px-2 py-1 border-b border-border/30">
             <FileCode className="h-3 w-3 shrink-0 text-blue-500/70" />
             {inlinePermalink ? (
@@ -387,33 +390,140 @@ export function ThreadComment({ event }: { event: NostrEvent }) {
               Loading…
             </div>
           )}
-          {Array.isArray(snippet) && snippet.length > 0 && (
-            <div>
-              {snippet.map((line, i) => {
-                const prefix = line[0];
-                const content = line.slice(1);
-                const bg =
-                  prefix === "+"
-                    ? "bg-green-500/10 text-green-700 dark:text-green-400"
-                    : prefix === "-"
-                      ? "bg-red-500/10 text-red-700 dark:text-red-400"
-                      : "text-muted-foreground";
-                return (
-                  <div
-                    key={i}
-                    className={`flex gap-2 px-2 py-0.5 leading-5 min-h-[1.25rem] ${bg}`}
-                  >
-                    <span className="select-none w-3 shrink-0 opacity-60">
-                      {prefix}
-                    </span>
-                    <span className="whitespace-pre-wrap break-all">
-                      {content}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {Array.isArray(snippet) &&
+            snippet.length > 0 &&
+            (() => {
+              const firstInRange = snippet.findIndex((l) => l.isInRange);
+              const lastInRange = snippet.reduce(
+                (acc, l, i) => (l.isInRange ? i : acc),
+                -1,
+              );
+              const table = (
+                <table className="w-full border-collapse leading-5">
+                  <tbody>
+                    {snippet.map((line, i) => {
+                      const isAdd = line.prefix === "+";
+                      const isDel = line.prefix === "-";
+                      const isContext = !line.isInRange;
+                      const isRangeStart = i === firstInRange;
+                      const isRangeEnd = i === lastInRange;
+
+                      // Row background — context lines use standard add/del tint
+                      const rowClass = isContext
+                        ? isAdd
+                          ? "bg-green-500/15 dark:bg-green-400/12"
+                          : isDel
+                            ? "bg-red-500/15 dark:bg-red-400/12"
+                            : ""
+                        : "";
+
+                      // Selection borders on the first/last in-range row
+                      const borderTop = isRangeStart
+                        ? "1px solid rgb(59 130 246 / 0.55)"
+                        : undefined;
+                      const borderBottom = isRangeEnd
+                        ? "1px solid rgb(59 130 246 / 0.55)"
+                        : undefined;
+
+                      // Gutter background: darker base (matching DiffView's
+                      // bg-background + gradient approach) with blue tint on
+                      // in-range lines, standard add/del tint on context lines
+                      const gutterBg = line.isInRange
+                        ? isAdd
+                          ? "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28)), linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14)), linear-gradient(rgba(0,0,0,0.06),rgba(0,0,0,0.06))"
+                          : isDel
+                            ? "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28)), linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14)), linear-gradient(rgba(0,0,0,0.06),rgba(0,0,0,0.06))"
+                            : "linear-gradient(rgba(59,130,246,0.14),rgba(59,130,246,0.14)), linear-gradient(rgba(0,0,0,0.06),rgba(0,0,0,0.06))"
+                        : isAdd
+                          ? "linear-gradient(rgba(34,197,94,0.28),rgba(34,197,94,0.28)), linear-gradient(rgba(0,0,0,0.06),rgba(0,0,0,0.06))"
+                          : isDel
+                            ? "linear-gradient(rgba(239,68,68,0.28),rgba(239,68,68,0.28)), linear-gradient(rgba(0,0,0,0.06),rgba(0,0,0,0.06))"
+                            : "linear-gradient(rgba(0,0,0,0.06),rgba(0,0,0,0.06))";
+
+                      // Line number colour — blue when in-range (matching DiffView)
+                      const lineNumColor = line.isInRange
+                        ? "text-blue-600/70 dark:text-blue-400/70"
+                        : isAdd
+                          ? "text-green-700/70 dark:text-green-400/70"
+                          : isDel
+                            ? "text-red-700/70 dark:text-red-400/70"
+                            : "text-muted-foreground/60";
+
+                      const textColor = isAdd
+                        ? "text-green-700 dark:text-green-400"
+                        : isDel
+                          ? "text-red-700 dark:text-red-400"
+                          : "text-muted-foreground";
+
+                      // Context rows blurred to push focus onto the selection
+                      const contextFilter: React.CSSProperties = isContext
+                        ? { filter: "blur(0.8px)", opacity: 0.45 }
+                        : {};
+
+                      return (
+                        <tr key={i} className={rowClass}>
+                          {/* Gutter — darker background + blue left accent bar on in-range */}
+                          <td
+                            className={`select-none text-right px-2 w-8 shrink-0 border-r border-border/30 bg-background ${lineNumColor}`}
+                            style={{
+                              backgroundImage: gutterBg,
+                              borderLeft: line.isInRange
+                                ? "2px solid rgb(59 130 246 / 0.65)"
+                                : undefined,
+                              borderTop,
+                              borderBottom,
+                              ...contextFilter,
+                            }}
+                          >
+                            {line.lineNum}
+                          </td>
+                          {/* +/- indicator */}
+                          <td
+                            className={`select-none text-center w-4 shrink-0 border-l border-border/30 ${textColor}`}
+                            style={{
+                              borderTop,
+                              borderBottom,
+                              backgroundColor: line.isInRange
+                                ? "rgb(59 130 246 / 0.10)"
+                                : undefined,
+                              ...contextFilter,
+                            }}
+                          >
+                            {line.prefix === " " ? "" : line.prefix}
+                          </td>
+                          {/* Code content */}
+                          <td
+                            className={`pl-1 pr-2 whitespace-pre-wrap break-all ${textColor}`}
+                            style={{
+                              borderTop,
+                              borderBottom,
+                              backgroundColor: line.isInRange
+                                ? "rgb(59 130 246 / 0.10)"
+                                : undefined,
+                              ...contextFilter,
+                            }}
+                          >
+                            {line.content}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              );
+              return inlinePermalink ? (
+                <Link
+                  to={inlinePermalink}
+                  className="block hover:bg-muted/60 transition-colors"
+                  title="View in Files Changed"
+                  tabIndex={-1}
+                >
+                  {table}
+                </Link>
+              ) : (
+                table
+              );
+            })()}
         </div>
       )}
 

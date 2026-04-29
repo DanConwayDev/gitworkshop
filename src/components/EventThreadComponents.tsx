@@ -1040,9 +1040,8 @@ export interface ThreadContext {
    * up the right diff source (the correct patch in a multi-commit patch set,
    * or the right commit diff for a PR-type item).
    *
-   * Returns an array of diff lines (each prefixed with "+", "-", or " ")
-   * covering the requested range plus a few lines of context, or undefined
-   * if the data is not available (e.g. git server unreachable).
+   * Returns structured snippet lines covering the requested range plus 1 line
+   * of surrounding context, or undefined if the data is not available.
    *
    * The implementation is responsible for caching — callers invoke this
    * once per banner when it enters the viewport.
@@ -1052,7 +1051,7 @@ export interface ThreadContext {
     lineRange: [number, number],
     lineSide: "del" | undefined,
     commitId: string | undefined,
-  ) => Promise<string[] | undefined>;
+  ) => Promise<import("@/pages/PRPage").SnippetLine[] | undefined>;
 }
 
 // ---------------------------------------------------------------------------

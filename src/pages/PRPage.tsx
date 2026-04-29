@@ -97,23 +97,38 @@ import type { Patch } from "@/casts/Patch";
 // ---------------------------------------------------------------------------
 
 /**
+ * A single line in a diff snippet returned by extractSnippetFromDiff.
+ *
+ * - `prefix`: "+", "-", or " " (add / del / context)
+ * - `content`: the line text (without the leading prefix character)
+ * - `lineNum`: the display line number (new-file number for add/normal, old-file for del)
+ * - `isInRange`: true when this line falls within the commented range (vs surrounding context)
+ */
+export interface SnippetLine {
+  prefix: "+" | "-" | " ";
+  content: string;
+  lineNum: number;
+  isInRange: boolean;
+}
+
+/**
  * Given a unified diff string, find the hunk(s) that cover `lineRange` in
- * `filePath` and return the diff lines ("+"/"-"/" " prefixed) for that range
- * plus up to CONTEXT_LINES of surrounding context.
+ * `filePath` and return the diff lines for that range plus 1 line of
+ * surrounding context on each side.
  *
  * `lineSide === "del"` means the line numbers refer to the old (pre-commit)
  * file; otherwise they refer to the new (post-commit) file.
  *
  * Returns undefined when the file or range is not found in the diff.
  */
-const SNIPPET_CONTEXT = 3;
+const SNIPPET_CONTEXT = 1;
 
 function extractSnippetFromDiff(
   diff: string,
   filePath: string,
   lineRange: [number, number],
   lineSide: "del" | undefined,
-): string[] | undefined {
+): SnippetLine[] | undefined {
   const files = parseDiff(diff);
 
   // parse-diff strips the "a/" / "b/" prefix — match on the bare path
@@ -130,7 +145,7 @@ function extractSnippetFromDiff(
 
   // Collect all diff lines from all hunks, annotated with their line numbers
   type AnnotatedLine = {
-    prefix: string;
+    prefix: "+" | "-" | " ";
     content: string;
     newNum: number;
     oldNum: number;
@@ -175,23 +190,28 @@ function extractSnippetFromDiff(
   if (annotated.length === 0) return undefined;
 
   // Find the indices of lines that fall within the requested range
-  const inRange = (line: AnnotatedLine) => {
+  const isInRange = (line: AnnotatedLine) => {
     const num = lineSide === "del" ? line.oldNum : line.newNum;
     return num >= rangeStart && num <= rangeEnd;
   };
 
-  const firstIdx = annotated.findIndex(inRange);
+  const firstIdx = annotated.findIndex(isInRange);
   if (firstIdx === -1) return undefined;
 
   let lastIdx = firstIdx;
   for (let i = firstIdx + 1; i < annotated.length; i++) {
-    if (inRange(annotated[i])) lastIdx = i;
+    if (isInRange(annotated[i])) lastIdx = i;
   }
 
   const from = Math.max(0, firstIdx - SNIPPET_CONTEXT);
   const to = Math.min(annotated.length - 1, lastIdx + SNIPPET_CONTEXT);
 
-  return annotated.slice(from, to + 1).map((l) => l.prefix + l.content);
+  return annotated.slice(from, to + 1).map((l) => ({
+    prefix: l.prefix,
+    content: l.content,
+    lineNum: lineSide === "del" ? l.oldNum : l.newNum,
+    isInRange: isInRange(l),
+  }));
 }
 
 export default function PRPage() {
@@ -540,17 +560,17 @@ export default function PRPage() {
     pr?.itemType === "patch" ? patchFileCount : fileCount;
 
   // ── Diff snippet fetcher (for inline comment banners in conversation tab) ──
-  // Returns the diff lines ("+"/"-"/" " prefixed) around the commented range.
-  // Deferred until the banner enters the viewport — never called for all
-  // comments at once. Results are cached via the pool's IDB blob cache so
-  // repeated calls for the same file are instant.
+  // Returns structured snippet lines around the commented range (1 line of
+  // context each side). Deferred until the banner enters the viewport — never
+  // called for all comments at once. Results are cached via the pool's IDB
+  // blob cache so repeated calls for the same file are instant.
   const getDiffSnippet = useCallback(
     async (
       filePath: string,
       lineRange: [number, number],
       lineSide: "del" | undefined,
       commitId: string | undefined,
-    ): Promise<string[] | undefined> => {
+    ): Promise<SnippetLine[] | undefined> => {
       if (!pr) return undefined;
 
       // ── Patch-type: diff is embedded in each patch event ───────────────
