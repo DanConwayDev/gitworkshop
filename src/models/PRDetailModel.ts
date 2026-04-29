@@ -82,10 +82,14 @@ export function PRDetailModel(
       { kinds: [...LEGACY_REPLY_KINDS], "#e": [rootId] } as Filter,
     ]);
 
-    // PR Updates (kind:1619) and patch chain patches (kind:1617 #e)
-    // Both use lowercase #e tag referencing the root
-    const updates$ = store.timeline([
-      { kinds: [PR_UPDATE_KIND, PATCH_KIND], "#e": [rootId] } as Filter,
+    // Patch chain patches (kind:1617) use lowercase #e tag referencing the root
+    const patchUpdates$ = store.timeline([
+      { kinds: [PATCH_KIND], "#e": [rootId] } as Filter,
+    ]);
+
+    // PR Updates (kind:1619) use uppercase #E tag (NIP-22 root reference)
+    const prUpdates$ = store.timeline([
+      { kinds: [PR_UPDATE_KIND], "#E": [rootId] } as Filter,
     ]);
 
     // Cover notes (kind:1624) referencing this PR/patch via lowercase #e tag
@@ -122,7 +126,8 @@ export function PRDetailModel(
       essentials$,
       comments$,
       legacyReplies$,
-      updates$,
+      patchUpdates$,
+      prUpdates$,
       coverNotes$,
       zaps$,
       essentialDeletions$,
@@ -134,7 +139,8 @@ export function PRDetailModel(
           essentialEvents,
           commentEvents,
           legacyReplyEvents,
-          updateEvents,
+          patchUpdateEvents,
+          rawPrUpdateEvents,
           coverNoteEvents,
           zapEvents,
           essentialDeletionEvents,
@@ -149,7 +155,11 @@ export function PRDetailModel(
             ...(commentEvents as NostrEvent[]),
             ...(legacyReplyEvents as NostrEvent[]),
           ];
-          const updates = updateEvents as NostrEvent[];
+          // Merge patch chain patches (#e) and PR Updates (#E) into one list
+          const updates = [
+            ...(patchUpdateEvents as NostrEvent[]),
+            ...(rawPrUpdateEvents as NostrEvent[]),
+          ];
           const coverNotes = coverNoteEvents as NostrEvent[];
           const zaps = zapEvents as NostrEvent[];
 
@@ -160,7 +170,7 @@ export function PRDetailModel(
           // Effective maintainer set (use provided or empty while loading)
           const effectiveMaintainers = maintainers ?? new Set<string>();
 
-          // Split updates into PR Updates (kind:1619) and patches (kind:1617)
+          // Split merged updates into PR Updates (kind:1619) and patches (kind:1617)
           const prUpdateEvents = updates.filter(
             (ev) => ev.kind === PR_UPDATE_KIND,
           );
