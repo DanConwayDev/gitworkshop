@@ -1,5 +1,6 @@
 import { ActionRunner, Actions } from "applesauce-actions";
 import { EventFactory } from "applesauce-core";
+import { getSeenRelays } from "applesauce-core/helpers/relays";
 import type { NostrEvent } from "nostr-tools";
 import { eventStore, publish } from "./nostr";
 import { accounts } from "./accounts";
@@ -27,6 +28,18 @@ const INDEX_RELAY_KINDS = new Set<number>([
  */
 export const factory = new EventFactory({
   signer: accounts.signer,
+  /**
+   * Provide relay hints for event tags (E/e) by looking up which relay the
+   * event was received from in the EventStore. This ensures NIP-22 comment
+   * events include valid relay hints on their E/e tags, which is required by
+   * some relays and improves event discoverability.
+   */
+  getEventRelayHint: (id: string): string | undefined => {
+    const event = eventStore.getEvent(id);
+    if (!event) return undefined;
+    const seen = getSeenRelays(event);
+    return seen ? [...seen][0] : undefined;
+  },
 });
 
 /**

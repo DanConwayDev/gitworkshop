@@ -300,8 +300,21 @@ export function CreateComment(
     // author. rootEvent.pubkey is the PR/patch/issue author; when parent IS
     // the root they're the same person.
     const rootPubkey = rootEvent?.pubkey ?? parent.pubkey;
+
+    // Also notify any pubkeys @mentioned in the comment content. The
+    // CommentBlueprint adds lowercase "p" tags for nostr: mentions via
+    // setShortTextContent — collect those so their inboxes receive the event.
+    const mentionedPubkeys = signed.tags
+      .filter(([t]) => t === "p")
+      .map(([, pk]) => pk)
+      .filter((pk): pk is string => !!pk);
+
     const notifyPubkeys = [
-      ...new Set([rootPubkey, parent.pubkey].filter((pk) => pk !== self)),
+      ...new Set(
+        [rootPubkey, parent.pubkey, ...mentionedPubkeys].filter(
+          (pk) => pk !== self,
+        ),
+      ),
     ];
 
     // Fire-and-forget: publishing to the outbox can continue in the background.
