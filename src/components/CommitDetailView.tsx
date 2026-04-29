@@ -34,6 +34,8 @@ import type { Commit } from "@fiatjaf/git-natural-api";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 import { CommitDiffView } from "@/components/CommitDiffView";
 import { CommitMessageBody } from "@/components/CommitMessageBody";
+import type { NostrEvent } from "nostr-tools";
+import type { InlineCommentMap } from "@/hooks/useInlineComments";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -54,6 +56,22 @@ export interface CommitDetailViewProps {
    * URLs when viewing a commit scoped to a PR.
    */
   fallbackUrls?: string[];
+  // ── Inline comment props ──────────────────────────────────────────────────
+  /** Root PR event — enables inline code review comments when set */
+  rootEvent?: NostrEvent;
+  /** Immediate parent event for new comments (defaults to rootEvent) */
+  parentEvent?: NostrEvent;
+  /** Map of inline comments from useInlineComments() */
+  commentMap?: InlineCommentMap;
+  /** Repo coordinates for q-tags on new inline comments */
+  repoCoords?: string[];
+  /** Relay hint for NIP-22 tags */
+  relayHint?: string;
+  /**
+   * Pubkeys authorized to resolve threads (maintainers + PR/patch author).
+   * When set, a "Resolve" button is shown to users in this set.
+   */
+  authorizedPubkeys?: Set<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +85,12 @@ export function CommitDetailView({
   backTo,
   backLabel = "All commits",
   fallbackUrls,
+  rootEvent,
+  parentEvent,
+  commentMap,
+  repoCoords,
+  relayHint,
+  authorizedPubkeys,
 }: CommitDetailViewProps) {
   const [commit, setCommit] = useState<Commit | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,6 +157,12 @@ export function CommitDetailView({
           basePath={basePath}
           pool={pool}
           fallbackUrls={fallbackUrls}
+          rootEvent={rootEvent}
+          parentEvent={parentEvent}
+          commentMap={commentMap}
+          repoCoords={repoCoords}
+          relayHint={relayHint}
+          authorizedPubkeys={authorizedPubkeys}
         />
       )}
     </div>
@@ -148,11 +178,23 @@ function CommitDetail({
   basePath,
   pool,
   fallbackUrls,
+  rootEvent,
+  parentEvent,
+  commentMap,
+  repoCoords,
+  relayHint,
+  authorizedPubkeys,
 }: {
   commit: Commit;
   basePath: string;
   pool: GitGraspPool;
   fallbackUrls?: string[];
+  rootEvent?: NostrEvent;
+  parentEvent?: NostrEvent;
+  commentMap?: InlineCommentMap;
+  repoCoords?: string[];
+  relayHint?: string;
+  authorizedPubkeys?: Set<string>;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -285,6 +327,13 @@ function CommitDetail({
           baseCommitId={parentHash}
           pool={pool}
           fallbackUrls={fallbackUrls}
+          rootEvent={rootEvent}
+          parentEvent={parentEvent}
+          commentMap={commentMap}
+          commitId={commit.hash}
+          repoCoords={repoCoords}
+          relayHint={relayHint}
+          authorizedPubkeys={authorizedPubkeys}
         />
       ) : (
         <div className="rounded-lg border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">

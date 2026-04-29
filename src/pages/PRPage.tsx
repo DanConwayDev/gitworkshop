@@ -734,6 +734,11 @@ export default function PRPage() {
         backTo={prBasePath ? `${prBasePath}/commits` : ".."}
         backLabel="PR commits"
         fallbackUrls={prCloneUrls}
+        rootEvent={pr?.rootEvent}
+        commentMap={inlineCommentMap}
+        repoCoords={repoAllCoords ?? pr?.repoCoords}
+        relayHint={inlineCommentRelays[0]}
+        authorizedPubkeys={pr?.authorisedUsers}
       />
     );
   }, [
@@ -755,6 +760,7 @@ export default function PRPage() {
     repoRelayHints,
     inlineCommentMap,
     inlineCommentRelays,
+    pr?.rootEvent,
     pr?.repoCoords,
     pr?.authorisedUsers,
     repoAllCoords,
