@@ -12,6 +12,7 @@ import { AppFooter } from "./components/AppFooter";
 import { BetaBanner } from "./components/BetaBanner";
 
 import Index from "./pages/Index";
+import { LandingPage } from "./pages/LandingPage";
 import RepositoriesPage from "./pages/RepositoriesPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import RelayPage from "./pages/RelayPage";
@@ -209,6 +210,7 @@ export function AppRouter() {
         <main className="flex-1 flex flex-col">
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/explore" element={<LandingPage />} />
             <Route path="/search" element={<RepositoriesPage />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/outbox" element={<OutboxPage />} />
