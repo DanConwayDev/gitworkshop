@@ -35,6 +35,7 @@ import { useCommitHistory } from "@/hooks/useGitExplorer";
 import { usePRMergeBase } from "@/hooks/usePRMergeBase";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { EventCardActions } from "@/components/EventCardActions";
+import { useUnreadHighlight } from "@/hooks/useUnreadHighlight";
 import { DeleteEvent } from "@/actions/nip34";
 import { runner } from "@/services/actions";
 import {
@@ -420,6 +421,12 @@ export function PRUpdatePushEvent({
     { addSuffix: true },
   );
 
+  // Permalink anchor — first 15 chars of the event ID, matching the convention
+  // used by CommentCard and ThreadTree.
+  const anchorId = update.event.id.slice(0, 15);
+  const { ref: highlightRef, highlight } = useUnreadHighlight(anchorId);
+  const divRef = highlightRef as React.RefObject<HTMLDivElement>;
+
   const activeAccount = useActiveAccount();
   const isOwn = !!activeAccount && activeAccount.pubkey === update.event.pubkey;
 
@@ -531,7 +538,16 @@ export function PRUpdatePushEvent({
 
   return (
     <>
-      <div className="relative flex gap-3 py-2 pl-1">
+      <div
+        id={anchorId}
+        ref={divRef}
+        className={cn(
+          "relative flex gap-3 py-2 pl-1 rounded-md scroll-mt-20 transition-all duration-700",
+          highlight === "strong" &&
+            "ring-2 ring-pink-500/60 bg-pink-500/5 shadow-sm shadow-pink-500/15",
+          highlight === "subtle" && "ring-1 ring-pink-500/25 bg-pink-500/5",
+        )}
+      >
         {/* Icon column */}
         <div className="flex items-start pt-0.5 shrink-0">
           <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-muted/40">

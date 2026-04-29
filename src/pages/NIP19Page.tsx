@@ -9,7 +9,13 @@ import { nip19 } from "nostr-tools";
 import { useEffect, useMemo, useState } from "react";
 import { of } from "rxjs";
 import { eventStore } from "../services/nostr";
-import { REPO_KIND, ISSUE_KIND, PATCH_KIND, PR_KIND } from "../lib/nip34";
+import {
+  REPO_KIND,
+  ISSUE_KIND,
+  PATCH_KIND,
+  PR_KIND,
+  PR_UPDATE_KIND,
+} from "../lib/nip34";
 import {
   eventIdToNevent,
   isNip05,
@@ -310,6 +316,20 @@ function EventRedirect({
         coord={coord}
         hintRelays={hintRelays}
         subPath={`/prs/${nevent}${fragment}`}
+      />
+    );
+  }
+
+  // PR Update (kind 1619) — resolve the PR it belongs to and anchor to the
+  // update event in the conversation tab, just like a NIP-22 comment.
+  if (kind === PR_UPDATE_KIND) {
+    const prRootId = event.tags.find(([t]) => t === "E")?.[1];
+    if (!prRootId) return <NotFound />;
+    return (
+      <EventRedirect
+        eventId={prRootId}
+        hintRelays={hintRelays}
+        commentId={event.id}
       />
     );
   }
