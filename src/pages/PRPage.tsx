@@ -236,6 +236,56 @@ export default function PRPage() {
     return [...trimmed].reverse();
   }, [prCommitHistory.commits, effectiveMergeBase]);
 
+  // ── Original PR tip commit history (for the body card) ────────────────
+  // When there are PR updates the body card should show the *original* tip
+  // commits (from the root event's `c` tag), not the latest tip.
+  const originalPRTipCommitId = useMemo(() => {
+    if (pr?.itemType !== "pr") return undefined;
+    return (pr.rootEvent as NostrEvent).tags.find(([t]) => t === "c")?.[1];
+  }, [pr?.itemType, pr?.rootEvent]);
+
+  // The original merge base comes from the root event's merge-base tag.
+  const originalPRMergeBase = useMemo(() => {
+    if (pr?.itemType !== "pr") return undefined;
+    return (pr.rootEvent as NostrEvent).tags.find(
+      ([t]) => t === "merge-base",
+    )?.[1];
+  }, [pr?.itemType, pr?.rootEvent]);
+
+  // Only fetch original tip history when there are PR updates (otherwise the
+  // body card already shows the latest commits via prCommits).
+  const hasRevisions = pr?.itemType === "pr" && pr.revisions.length > 0;
+
+  const originalPRCommitHistory = useCommitHistory(
+    gitPool,
+    gitPoolState,
+    hasRevisions ? originalPRTipCommitId : undefined,
+    100,
+    effectiveCloneUrls,
+    originalPRMergeBase ?? effectiveMergeBase ?? undefined,
+  );
+
+  const originalPRCommits = useMemo(() => {
+    if (!hasRevisions) return [];
+    const base = originalPRMergeBase ?? effectiveMergeBase;
+    const trimmed = (() => {
+      if (!base || !originalPRCommitHistory.commits.length)
+        return originalPRCommitHistory.commits;
+      const idx = originalPRCommitHistory.commits.findIndex(
+        (c) => c.hash === base,
+      );
+      return idx === -1
+        ? originalPRCommitHistory.commits
+        : originalPRCommitHistory.commits.slice(0, idx);
+    })();
+    return [...trimmed].reverse();
+  }, [
+    hasRevisions,
+    originalPRCommitHistory.commits,
+    originalPRMergeBase,
+    effectiveMergeBase,
+  ]);
+
   const defaultBranchName = gitPoolState.defaultBranch ?? repoState?.headBranch;
   const defaultBranchHead = gitPoolState.latestCommit?.hash;
 
@@ -879,14 +929,39 @@ export default function PRPage() {
                   event={pr.rootEvent}
                   content={pr.body}
                   commits={
-                    pr.itemType === "pr" && prCommits.length > 0
-                      ? prCommits.map((c) => ({
-                          hash: c.hash,
-                          subject: c.message.split("\n")[0],
-                          href: prBasePath
-                            ? `${prBasePath}/commit/${c.hash}`
-                            : undefined,
-                        }))
+                    pr.itemType === "pr"
+                      ? // When there are PR updates, show the original tip commits
+                        // (from the root event). Fall back to latest commits when
+                        // there are no updates.
+                        hasRevisions
+                        ? originalPRCommits.length > 0
+                          ? originalPRCommits.map((c) => ({
+                              hash: c.hash,
+                              subject: c.message.split("\n")[0],
+                              // Don't link to commit pages for superseded commits
+                              // since those commits may not be on the current branch.
+                              href: undefined,
+                            }))
+                          : originalPRTipCommitId
+                            ? [
+                                {
+                                  hash: originalPRTipCommitId,
+                                  subject: originalPRCommitHistory.loading
+                                    ? "Loading commits…"
+                                    : "(commits not available)",
+                                  href: undefined,
+                                },
+                              ]
+                            : undefined
+                        : prCommits.length > 0
+                          ? prCommits.map((c) => ({
+                              hash: c.hash,
+                              subject: c.message.split("\n")[0],
+                              href: prBasePath
+                                ? `${prBasePath}/commit/${c.hash}`
+                                : undefined,
+                            }))
+                          : undefined
                       : pr.itemType === "patch" &&
                           pr.initialPatchCommits &&
                           pr.initialPatchCommits.length > 0
@@ -901,17 +976,23 @@ export default function PRPage() {
                         : undefined
                   }
                   commitsSuperseded={
-                    pr.itemType === "patch" &&
-                    pr.firstRevisionInlined === true &&
-                    pr.revisions.length > 1
+                    // PR: superseded when there are PR updates
+                    (pr.itemType === "pr" && hasRevisions) ||
+                    // Patch: superseded when first revision was inlined and there are more
+                    (pr.itemType === "patch" &&
+                      pr.firstRevisionInlined === true &&
+                      pr.revisions.length > 1)
                   }
                   commitsLatestHref={
-                    pr.itemType === "patch" &&
+                    (pr.itemType === "pr" && hasRevisions && prBasePath
+                      ? `${prBasePath}/commits`
+                      : undefined) ??
+                    (pr.itemType === "patch" &&
                     pr.firstRevisionInlined === true &&
                     pr.revisions.length > 1 &&
                     prBasePath
                       ? `${prBasePath}/commits`
-                      : undefined
+                      : undefined)
                   }
                   hasCoverLetter={
                     pr.itemType === "patch" && !!pr.hasCoverLetter
@@ -991,6 +1072,15 @@ export default function PRPage() {
                                   superseded={node.revision.superseded}
                                   basePath={prBasePath ?? undefined}
                                   revisionNumber={currentRevNum}
+                                  gitPool={gitPool}
+                                  gitPoolState={gitPoolState}
+                                  fallbackUrls={effectiveCloneUrls}
+                                  mergeBase={
+                                    node.revision.mergeBase ??
+                                    effectiveMergeBase ??
+                                    undefined
+                                  }
+                                  repoCoords={repoAllCoords ?? pr.repoCoords}
                                 />
                               );
                             }
