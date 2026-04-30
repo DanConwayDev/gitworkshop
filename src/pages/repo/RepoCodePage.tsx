@@ -29,6 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Popover,
   PopoverContent,
@@ -861,14 +862,8 @@ function CollapsibleBreadcrumb({
 const MAX_RESULTS = 20;
 
 /**
- * Renders a file path with:
- * - The query substring bolded wherever it appears in the path
- * - Start-truncation via a CSS trick so the tail (filename + ext) is always
- *   visible when the path is too long to fit.
- *
- * We achieve start-truncation by rendering the text in a flex container with
- * `direction: rtl` on the outer span and `direction: ltr` on the inner span.
- * This makes the browser clip from the left rather than the right.
+ * Renders a file path with the query substring bolded wherever it appears.
+ * Long paths wrap onto multiple lines so the full path is always readable.
  */
 function HighlightedPath({ path, query }: { path: string; query: string }) {
   const lower = query.toLowerCase();
@@ -891,30 +886,18 @@ function HighlightedPath({ path, query }: { path: string; query: string }) {
   }
 
   return (
-    // Outer span: rtl so overflow clips from the left (start-truncation).
-    // Inner span: ltr so the text itself reads left-to-right.
-    <span
-      className="flex-1 min-w-0 overflow-hidden block"
-      style={{
-        direction: "rtl",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
-        textAlign: "left",
-      }}
-    >
-      <span style={{ direction: "ltr", unicodeBidi: "bidi-override" }}>
-        {parts.map((p, i) =>
-          p.match ? (
-            <strong key={i} className="font-semibold text-foreground">
-              {p.text}
-            </strong>
-          ) : (
-            <span key={i} className="text-muted-foreground">
-              {p.text}
-            </span>
-          ),
-        )}
-      </span>
+    <span className="flex-1 min-w-0 break-all">
+      {parts.map((p, i) =>
+        p.match ? (
+          <strong key={i} className="font-semibold text-foreground">
+            {p.text}
+          </strong>
+        ) : (
+          <span key={i} className="text-muted-foreground">
+            {p.text}
+          </span>
+        ),
+      )}
     </span>
   );
 }
@@ -1029,8 +1012,9 @@ function GoToFileSearch({
             onChange={(e) => setQuery(e.target.value)}
             onFocus={handleFocus}
             onBlur={() => {
-              setOpen(false);
-              setQuery("");
+              // Closing is handled entirely by onInteractOutside on the
+              // PopoverContent. Closing here would fire when the user clicks
+              // the scrollbar (which blurs the input) and dismiss the dropdown.
             }}
             onKeyDown={handleKeyDown}
             placeholder="Go to file…"
@@ -1059,52 +1043,62 @@ function GoToFileSearch({
         sideOffset={4}
         avoidCollisions
         onOpenAutoFocus={(e) => e.preventDefault()}
-        onInteractOutside={() => {
-          setOpen(false);
-          setQuery("");
+        onInteractOutside={(e) => {
+          // Prevent Radix's built-in close — we manage open state ourselves.
+          // Only close when the interaction is outside the trigger too (Radix
+          // fires this for the trigger element as well, but the Popover's own
+          // open={showDropdown} already handles that case).
+          e.preventDefault();
+          // Close if the click target is not the input or its wrapper.
+          const target = e.target as Node | null;
+          if (!inputRef.current?.contains(target)) {
+            setOpen(false);
+            setQuery("");
+          }
         }}
       >
         {results.length > 0 ? (
-          <ul
-            role="listbox"
-            className="py-1 overflow-y-auto"
+          <ScrollArea
+            type="always"
             style={{
               maxHeight:
                 "calc(var(--radix-popover-content-available-height) - 1rem)",
             }}
           >
-            {results.map((entry, i) => (
-              <li
-                key={entry.path}
-                role="option"
-                aria-selected={i === activeIndex}
-                onMouseEnter={() => setActiveIndex(i)}
-                onMouseDown={(e) => {
-                  e.preventDefault(); // prevent input blur before click
-                  navigateTo(entry);
-                }}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 cursor-pointer text-sm",
-                  i === activeIndex ? "bg-accent" : "hover:bg-accent/50",
-                )}
-              >
-                {entry.type === "directory" ? (
-                  <Folder className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                ) : (
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                )}
-                {/* Full path with start-truncation so the filename is always visible */}
-                <HighlightedPath path={entry.path} query={query} />
-              </li>
-            ))}
-            {/* Loading indicator at the bottom when full tree is still loading */}
-            {!fullFileTree.complete && (
-              <li className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground border-t border-border/40">
-                <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                Loading full file tree…
-              </li>
-            )}
-          </ul>
+            <ul role="listbox" className="py-1">
+              {results.map((entry, i) => (
+                <li
+                  key={entry.path}
+                  role="option"
+                  aria-selected={i === activeIndex}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // prevent input blur before click
+                    navigateTo(entry);
+                  }}
+                  className={cn(
+                    "flex items-start gap-2 px-3 py-2 cursor-pointer text-sm",
+                    i === activeIndex ? "bg-accent" : "hover:bg-accent/50",
+                  )}
+                >
+                  {entry.type === "directory" ? (
+                    <Folder className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  )}
+                  {/* Full path — wraps onto multiple lines for long paths */}
+                  <HighlightedPath path={entry.path} query={query} />
+                </li>
+              ))}
+              {/* Loading indicator at the bottom when full tree is still loading */}
+              {!fullFileTree.complete && (
+                <li className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground border-t border-border/40">
+                  <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                  Loading full file tree…
+                </li>
+              )}
+            </ul>
+          </ScrollArea>
         ) : fullFileTree.entries.length === 0 ? (
           <div className="flex items-center gap-1.5 px-3 py-3 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin shrink-0" />
