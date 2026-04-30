@@ -1062,7 +1062,7 @@ function GoToFileSearch({
               ? "gap-1.5 px-2 border-border bg-background w-48"
               : compact
                 ? "justify-center px-1.5 border-border/40 bg-muted/20 w-7 hover:border-border/70 hover:bg-muted/40"
-                : "gap-1.5 px-2 border-border/40 bg-muted/20 w-32 hover:border-border/70 hover:bg-muted/40",
+                : "gap-1.5 px-2 border-border bg-background w-32 hover:border-border/70",
             disabled && "opacity-40 pointer-events-none",
           )}
           onClick={() => inputRef.current?.focus()}
@@ -1080,7 +1080,7 @@ function GoToFileSearch({
             onKeyDown={handleKeyDown}
             placeholder="Go to file…"
             className={cn(
-              "bg-transparent outline-none text-xs placeholder:text-muted-foreground/50 min-w-0 transition-all duration-150",
+              "bg-transparent outline-none text-xs placeholder:text-muted-foreground/70 min-w-0 transition-all duration-150",
               open || !compact
                 ? "flex-1 w-auto opacity-100"
                 : "w-0 opacity-0 pointer-events-none",
