@@ -29,6 +29,11 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Folder,
   FileText,
   ChevronRight,
@@ -835,7 +840,6 @@ function GoToFileSearch({
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
   // Filter entries against the query.
@@ -851,22 +855,6 @@ function GoToFileSearch({
   useEffect(() => {
     setActiveIndex(0);
   }, [results.length]);
-
-  // Close on outside click.
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-        setQuery("");
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
 
   // Close on Escape.
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -912,94 +900,128 @@ function GoToFileSearch({
   const disabled =
     !currentRef || (pulling && fullFileTree.entries.length === 0);
 
-  return (
-    <div ref={containerRef} className="relative">
-      <div
-        className={cn(
-          "flex items-center gap-1.5 h-7 px-2 rounded border text-xs transition-colors",
-          open
-            ? "border-border bg-background w-48"
-            : "border-border/40 bg-muted/20 w-32 hover:border-border/70 hover:bg-muted/40",
-          disabled && "opacity-40 pointer-events-none",
-        )}
-      >
-        <Search className="h-3 w-3 text-muted-foreground shrink-0" />
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={handleFocus}
-          onKeyDown={handleKeyDown}
-          placeholder="Go to file…"
-          className="flex-1 bg-transparent outline-none text-xs placeholder:text-muted-foreground/50 min-w-0"
-          disabled={disabled}
-          aria-label="Go to file"
-          aria-autocomplete="list"
-          aria-expanded={open && results.length > 0}
-        />
-        {open && query && fullFileTree.entries.length === 0 && (
-          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
-        )}
-      </div>
+  // Whether the popover content should be shown (open + has a query).
+  const showDropdown = open && query.trim().length > 0;
 
-      {/* Dropdown results */}
-      {open && query.trim() && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-80 rounded-lg border border-border bg-popover shadow-lg overflow-hidden">
-          {results.length > 0 ? (
-            <ul role="listbox" className="py-1 max-h-64 overflow-y-auto">
-              {results.map((entry, i) => (
-                <li
-                  key={entry.path}
-                  role="option"
-                  aria-selected={i === activeIndex}
-                  onMouseEnter={() => setActiveIndex(i)}
-                  onMouseDown={(e) => {
-                    e.preventDefault(); // prevent input blur before click
-                    navigateTo(entry);
-                  }}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 cursor-pointer text-sm",
-                    i === activeIndex ? "bg-accent" : "hover:bg-accent/50",
-                  )}
-                >
-                  {entry.type === "directory" ? (
-                    <Folder className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                  ) : (
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  )}
-                  <span className="font-medium truncate">{entry.name}</span>
-                  <span className="text-xs text-muted-foreground truncate ml-auto pl-2 shrink-0 max-w-[40%]">
-                    {entry.path.includes("/")
-                      ? entry.path.slice(0, entry.path.lastIndexOf("/"))
-                      : ""}
-                  </span>
-                </li>
-              ))}
-              {/* Loading indicator at the bottom when full tree is still loading */}
-              {!fullFileTree.complete && (
-                <li className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground border-t border-border/40">
-                  <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                  Loading full file tree…
-                </li>
-              )}
-            </ul>
-          ) : fullFileTree.entries.length === 0 ? (
-            <div className="flex items-center gap-1.5 px-3 py-3 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-              Loading…
-            </div>
-          ) : (
-            <div className="px-3 py-3 text-xs text-muted-foreground">
-              No files matching{" "}
-              <span className="font-medium text-foreground">
-                &ldquo;{query}&rdquo;
-              </span>
-            </div>
+  return (
+    <Popover
+      open={showDropdown}
+      onOpenChange={(v) => {
+        if (!v) {
+          setOpen(false);
+          setQuery("");
+        }
+      }}
+    >
+      <PopoverTrigger asChild>
+        <div
+          className={cn(
+            "flex items-center gap-1.5 h-7 px-2 rounded border text-xs transition-colors cursor-text",
+            open
+              ? "border-border bg-background w-48"
+              : "border-border/40 bg-muted/20 w-32 hover:border-border/70 hover:bg-muted/40",
+            disabled && "opacity-40 pointer-events-none",
+          )}
+          onClick={() => inputRef.current?.focus()}
+        >
+          <Search className="h-3 w-3 text-muted-foreground shrink-0" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={handleFocus}
+            onBlur={() => {
+              setOpen(false);
+              setQuery("");
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="Go to file…"
+            className="flex-1 bg-transparent outline-none text-xs placeholder:text-muted-foreground/50 min-w-0"
+            disabled={disabled}
+            aria-label="Go to file"
+            aria-autocomplete="list"
+            aria-expanded={showDropdown}
+          />
+          {open && query && fullFileTree.entries.length === 0 && (
+            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
           )}
         </div>
-      )}
-    </div>
+      </PopoverTrigger>
+
+      {/* Dropdown results — rendered via portal so it escapes overflow:hidden */}
+      <PopoverContent
+        className="p-0 w-80 overflow-hidden"
+        align="end"
+        side="bottom"
+        sideOffset={4}
+        avoidCollisions
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onInteractOutside={() => {
+          setOpen(false);
+          setQuery("");
+        }}
+      >
+        {results.length > 0 ? (
+          <ul
+            role="listbox"
+            className="py-1 overflow-y-auto"
+            style={{
+              maxHeight:
+                "calc(var(--radix-popover-content-available-height) - 1rem)",
+            }}
+          >
+            {results.map((entry, i) => (
+              <li
+                key={entry.path}
+                role="option"
+                aria-selected={i === activeIndex}
+                onMouseEnter={() => setActiveIndex(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault(); // prevent input blur before click
+                  navigateTo(entry);
+                }}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 cursor-pointer text-sm",
+                  i === activeIndex ? "bg-accent" : "hover:bg-accent/50",
+                )}
+              >
+                {entry.type === "directory" ? (
+                  <Folder className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                ) : (
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                )}
+                <span className="font-medium truncate">{entry.name}</span>
+                <span className="text-xs text-muted-foreground truncate ml-auto pl-2 shrink-0 max-w-[40%]">
+                  {entry.path.includes("/")
+                    ? entry.path.slice(0, entry.path.lastIndexOf("/"))
+                    : ""}
+                </span>
+              </li>
+            ))}
+            {/* Loading indicator at the bottom when full tree is still loading */}
+            {!fullFileTree.complete && (
+              <li className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground border-t border-border/40">
+                <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                Loading full file tree…
+              </li>
+            )}
+          </ul>
+        ) : fullFileTree.entries.length === 0 ? (
+          <div className="flex items-center gap-1.5 px-3 py-3 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+            Loading…
+          </div>
+        ) : (
+          <div className="px-3 py-3 text-xs text-muted-foreground">
+            No files matching{" "}
+            <span className="font-medium text-foreground">
+              &ldquo;{query}&rdquo;
+            </span>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
