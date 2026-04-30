@@ -687,15 +687,35 @@ function GitServerAheadBanner({
 // Collapsible path breadcrumb
 // ---------------------------------------------------------------------------
 
-// Approximate px width of a single character at 14px (0.875rem) font size.
-const CHAR_PX = 7.5;
 // Fixed overhead per segment: chevron (14px) + gap (4px) + gap (4px) = ~22px
 const SEG_OVERHEAD_PX = 22;
 // Width of the "…" button
 const ELLIPSIS_PX = 28;
 
-function estimateTextPx(text: string) {
-  return text.length * CHAR_PX;
+// One shared canvas context reused across all measurements (cheap to create,
+// expensive to recreate). Falls back to a character-count estimate in
+// environments where Canvas 2D is unavailable (SSR, some test runners).
+let _canvasCtx: CanvasRenderingContext2D | null | undefined;
+function getCanvasCtx(): CanvasRenderingContext2D | null {
+  if (_canvasCtx !== undefined) return _canvasCtx;
+  try {
+    _canvasCtx = document.createElement("canvas").getContext("2d");
+  } catch {
+    _canvasCtx = null;
+  }
+  return _canvasCtx;
+}
+
+/**
+ * Returns the rendered width of `text` in CSS pixels using the browser's own
+ * font metrics. Accurate at any zoom level and with any font/weight combo.
+ * `font` should be the CSS font shorthand, e.g. "14px Inter Variable, sans-serif".
+ */
+function measureTextPx(text: string, font: string): number {
+  const ctx = getCanvasCtx();
+  if (!ctx) return text.length * 7.5; // fallback: ~7.5px per char
+  ctx.font = font;
+  return ctx.measureText(text).width;
 }
 
 function CollapsibleBreadcrumb({
@@ -715,6 +735,10 @@ function CollapsibleBreadcrumb({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
+  // Computed CSS font string read from the container at mount so measureTextPx
+  // uses the actual font (family, size, weight) the browser renders, which
+  // stays accurate at any zoom level.
+  const [font, setFont] = useState("14px sans-serif");
   // When the user explicitly expands, show everything regardless of width.
   const [forceExpanded, setForceExpanded] = useState(false);
 
@@ -730,6 +754,10 @@ function CollapsibleBreadcrumb({
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    // Read the computed font once at mount. Font family/size/weight don't
+    // change at runtime for this element, so a one-time read is sufficient.
+    const computedFont = window.getComputedStyle(el).font;
+    if (computedFont) setFont(computedFont);
     const ro = new ResizeObserver((entries) => {
       setContainerWidth(entries[0].contentRect.width);
     });
@@ -744,9 +772,11 @@ function CollapsibleBreadcrumb({
   const middleSegments = pathSegments.slice(0, -1);
 
   // Budget: total width minus root, last segment, their separators.
-  const rootPx = estimateTextPx(repoId) + SEG_OVERHEAD_PX;
+  const rootPx = measureTextPx(repoId, font) + SEG_OVERHEAD_PX;
   const lastPx =
-    pathSegments.length > 0 ? estimateTextPx(lastSegment) + SEG_OVERHEAD_PX : 0;
+    pathSegments.length > 0
+      ? measureTextPx(lastSegment, font) + SEG_OVERHEAD_PX
+      : 0;
   // Extra budget consumed by the "…" button + its separator when shown.
   const ellipsisPx = ELLIPSIS_PX + SEG_OVERHEAD_PX;
 
@@ -755,7 +785,7 @@ function CollapsibleBreadcrumb({
   if (!forceExpanded && containerWidth > 0 && middleSegments.length > 0) {
     let budget = containerWidth - rootPx - lastPx - ellipsisPx;
     for (const seg of middleSegments) {
-      const needed = estimateTextPx(seg) + SEG_OVERHEAD_PX;
+      const needed = measureTextPx(seg, font) + SEG_OVERHEAD_PX;
       if (budget >= needed) {
         visibleMiddleCount++;
         budget -= needed;
