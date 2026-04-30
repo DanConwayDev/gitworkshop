@@ -713,7 +713,6 @@ function CollapsibleBreadcrumb({
   onTruncatedChange?: (truncated: boolean) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const lastSegRef = useRef<HTMLSpanElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
   // When the user explicitly expands, show everything regardless of width.
   const [forceExpanded, setForceExpanded] = useState(false);
@@ -727,7 +726,7 @@ function CollapsibleBreadcrumb({
     if (forceExpanded) setForceExpanded(false);
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
@@ -774,19 +773,31 @@ function CollapsibleBreadcrumb({
     ? []
     : middleSegments.slice(visibleMiddleCount);
 
-  // Report truncation to parent after layout so DOM dimensions reflect the
-  // current path. useLayoutEffect fires synchronously after DOM mutations,
-  // ensuring scrollWidth/clientWidth are always fresh.
-  // Only report when the search is expanded — when compact the search bar is
-  // already shrunk so measuring would just confirm "still truncated" and
-  // never allow expanding again.
-  useLayoutEffect(() => {
-    if (searchCompact) return;
-    const lastSeg = lastSegRef.current;
-    const lastSegTruncated =
-      !!lastSeg && lastSeg.scrollWidth > lastSeg.clientWidth;
-    onTruncatedChange?.(showEllipsis || lastSegTruncated);
-  }, [containerWidth, showEllipsis, pathKey, searchCompact, onTruncatedChange]);
+  // Report truncation to parent using the same character-width estimates used
+  // for middle-segment budgeting — no DOM reads needed, no timing issues.
+  // We're truncated if the container isn't wide enough to show root + last
+  // segment comfortably, or if middle segments are hidden behind the ellipsis.
+  //
+  // Only report when the search is expanded (searchCompact=false). When compact
+  // the search bar is w-7 so the breadcrumb is artificially wide — measuring
+  // then would report "not truncated", expand the search, squeeze the breadcrumb
+  // again, and loop. The LocatorBar resets searchCompact=false on path change,
+  // which triggers a fresh evaluation with the expanded search width.
+  const minNeededPx = rootPx + lastPx;
+  const isTruncated =
+    containerWidth > 0 && (showEllipsis || containerWidth < minNeededPx);
+  const prevTruncatedRef = useRef<boolean | null>(null);
+  const prevSearchCompactRef = useRef(searchCompact);
+  // Invalidate cached value when searchCompact resets to false (path change)
+  // so the next evaluation always fires onTruncatedChange with the fresh reading.
+  if (prevSearchCompactRef.current !== searchCompact) {
+    prevSearchCompactRef.current = searchCompact;
+    if (!searchCompact) prevTruncatedRef.current = null;
+  }
+  if (!searchCompact && prevTruncatedRef.current !== isTruncated) {
+    prevTruncatedRef.current = isTruncated;
+    onTruncatedChange?.(isTruncated);
+  }
 
   return (
     <div
@@ -836,9 +847,7 @@ function CollapsibleBreadcrumb({
       {pathSegments.length > 0 && (
         <span className="flex items-center gap-1 min-w-0">
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span ref={lastSegRef} className="font-medium truncate min-w-0">
-            {lastSegment}
-          </span>
+          <span className="font-medium truncate min-w-0">{lastSegment}</span>
         </span>
       )}
     </div>
