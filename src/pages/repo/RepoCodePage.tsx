@@ -12,7 +12,13 @@ import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
 import { useProfile } from "@/hooks/useProfile";
 import { useGitPool } from "@/hooks/useGitPool";
-import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
+import {
+  useGitExplorer,
+  useFullFileTree,
+  type FileEntry,
+  type FlatFileEntry,
+  type FullFileTreeState,
+} from "@/hooks/useGitExplorer";
 import { RefSelector } from "@/components/RefSelector";
 import { GitServerStatus } from "@/components/GitServerStatus";
 import { RepoAboutPanel } from "@/components/RepoAboutPanel";
@@ -37,6 +43,7 @@ import {
   Code,
   Download,
   History,
+  Search,
 } from "lucide-react";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
@@ -209,6 +216,10 @@ export default function RepoCodePage() {
     effectiveSource !== "nostr" && effectiveHeadCommit !== bootstrapHeadCommit;
   const activeExplorer = useSourceExplorer ? explorerForSource : explorer;
 
+  // Full file tree for go-to-file search. Uses the same commitHash the active
+  // explorer is displaying so the search results stay consistent with the view.
+  const fullFileTree = useFullFileTree(pool, activeExplorer.commitHash);
+
   // Page title: "<repo>/<path> at <ref> - ngit" or "<repo> - ngit" at root
   const seoTitle = useMemo(() => {
     const name = repo?.name ?? repoId;
@@ -354,7 +365,6 @@ export default function RepoCodePage() {
             commitHash={displayCommitHash}
             repoId={repoId}
             pulling={pulling}
-            lastCheckedAt={poolState.lastCheckedAt}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
             relayStateMap={relayStateMap}
@@ -368,6 +378,7 @@ export default function RepoCodePage() {
             poolWarning={poolState.warning}
             pool={pool}
             winnerUrl={poolState.winnerUrl}
+            fullFileTree={fullFileTree}
           />
 
           {/* State sync warning banner — hidden when user explicitly chose nostr */}
@@ -804,6 +815,194 @@ function CollapsibleBreadcrumb({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Go-to-file search
+// ---------------------------------------------------------------------------
+
+const MAX_RESULTS = 20;
+
+function GoToFileSearch({
+  fullFileTree,
+  currentRef,
+  treeUrl,
+  pulling,
+}: {
+  fullFileTree: FullFileTreeState & { triggerFetch: () => void };
+  currentRef: string;
+  treeUrl: (ref: string, path?: string) => string;
+  pulling: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  // Filter entries against the query.
+  const results = useMemo<FlatFileEntry[]>(() => {
+    if (!query.trim()) return [];
+    const lower = query.toLowerCase();
+    return fullFileTree.entries
+      .filter((e) => e.name.toLowerCase().includes(lower))
+      .slice(0, MAX_RESULTS);
+  }, [query, fullFileTree.entries]);
+
+  // Reset active index when results change.
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [results.length]);
+
+  // Close on outside click.
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  // Close on Escape.
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape") {
+      setOpen(false);
+      setQuery("");
+      inputRef.current?.blur();
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.min(i + 1, results.length - 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
+      return;
+    }
+    if (e.key === "Enter" && results[activeIndex]) {
+      e.preventDefault();
+      navigateTo(results[activeIndex]);
+      return;
+    }
+  }
+
+  const navigate = useNavigate();
+
+  function navigateTo(entry: FlatFileEntry) {
+    setOpen(false);
+    setQuery("");
+    navigate(treeUrl(currentRef, entry.path));
+  }
+
+  function handleFocus() {
+    setOpen(true);
+    // Kick off the background full-tree fetch (no-op if already done).
+    fullFileTree.triggerFetch();
+  }
+
+  // Disable the input while the ref is still being resolved (no currentRef yet)
+  // or while the pool is still pulling and we have no entries at all.
+  const disabled =
+    !currentRef || (pulling && fullFileTree.entries.length === 0);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        className={cn(
+          "flex items-center gap-1.5 h-7 px-2 rounded border text-xs transition-colors",
+          open
+            ? "border-border bg-background w-48"
+            : "border-border/40 bg-muted/20 w-32 hover:border-border/70 hover:bg-muted/40",
+          disabled && "opacity-40 pointer-events-none",
+        )}
+      >
+        <Search className="h-3 w-3 text-muted-foreground shrink-0" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={handleFocus}
+          onKeyDown={handleKeyDown}
+          placeholder="Go to file…"
+          className="flex-1 bg-transparent outline-none text-xs placeholder:text-muted-foreground/50 min-w-0"
+          disabled={disabled}
+          aria-label="Go to file"
+          aria-autocomplete="list"
+          aria-expanded={open && results.length > 0}
+        />
+        {open && query && fullFileTree.entries.length === 0 && (
+          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+        )}
+      </div>
+
+      {/* Dropdown results */}
+      {open && query.trim() && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-80 rounded-lg border border-border bg-popover shadow-lg overflow-hidden">
+          {results.length > 0 ? (
+            <ul role="listbox" className="py-1 max-h-64 overflow-y-auto">
+              {results.map((entry, i) => (
+                <li
+                  key={entry.path}
+                  role="option"
+                  aria-selected={i === activeIndex}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // prevent input blur before click
+                    navigateTo(entry);
+                  }}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 cursor-pointer text-sm",
+                    i === activeIndex ? "bg-accent" : "hover:bg-accent/50",
+                  )}
+                >
+                  {entry.type === "directory" ? (
+                    <Folder className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  )}
+                  <span className="font-medium truncate">{entry.name}</span>
+                  <span className="text-xs text-muted-foreground truncate ml-auto pl-2 shrink-0 max-w-[40%]">
+                    {entry.path.includes("/")
+                      ? entry.path.slice(0, entry.path.lastIndexOf("/"))
+                      : ""}
+                  </span>
+                </li>
+              ))}
+              {/* Loading indicator at the bottom when full tree is still loading */}
+              {!fullFileTree.complete && (
+                <li className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground border-t border-border/40">
+                  <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                  Loading full file tree…
+                </li>
+              )}
+            </ul>
+          ) : fullFileTree.entries.length === 0 ? (
+            <div className="flex items-center gap-1.5 px-3 py-3 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+              Loading…
+            </div>
+          ) : (
+            <div className="px-3 py-3 text-xs text-muted-foreground">
+              No files matching{" "}
+              <span className="font-medium text-foreground">
+                &ldquo;{query}&rdquo;
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Locator bar
 // ---------------------------------------------------------------------------
 
@@ -822,7 +1021,6 @@ function LocatorBar({
   commitHash,
   repoId,
   pulling,
-  lastCheckedAt,
   repoState,
   repoRelayEose,
   relayStateMap,
@@ -836,6 +1034,7 @@ function LocatorBar({
   poolWarning,
   pool,
   winnerUrl,
+  fullFileTree,
 }: {
   loading: boolean;
   refs: ReturnType<typeof useGitExplorer>["refs"];
@@ -851,7 +1050,6 @@ function LocatorBar({
   commitHash: string | null;
   repoId: string;
   pulling: boolean;
-  lastCheckedAt: number | null;
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
   relayStateMap: Map<string, import("nostr-tools").NostrEvent>;
@@ -865,6 +1063,7 @@ function LocatorBar({
   poolWarning: PoolWarning | null;
   pool: import("@/lib/git-grasp-pool").GitGraspPool | null;
   winnerUrl: string | null;
+  fullFileTree: FullFileTreeState & { triggerFetch: () => void };
 }) {
   // Compute the full ref name for the pool's refStatus lookup
   const currentRefObj = refs.find((r) => r.name === currentRef);
@@ -877,10 +1076,10 @@ function LocatorBar({
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
       {/* Single flex-wrap row.
-          Order: [RefSelector] [Breadcrumb] [checked hidden@narrow] [GitServerStatus hidden@narrow]
+          Order: [RefSelector] [Breadcrumb] [GoToFile hidden@mobile] [GitServerStatus hidden@narrow]
           The breadcrumb has flex-[1_1_12rem]: it fills available space and
           only wraps to a full-width second line when it can't fit at 12rem.
-          checked + GitServerStatus are hidden below the sm breakpoint so
+          GoToFile + GitServerStatus are hidden below the sm breakpoint so
           they disappear before the breadcrumb is forced to wrap. */}
       <div
         className={cn(
@@ -928,21 +1127,15 @@ function LocatorBar({
 
         {/* Right-side items — hidden below sm breakpoint */}
         <div className="hidden sm:flex items-center gap-2 shrink-0">
-          {pulling ? (
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Checking…
-            </span>
-          ) : repoState ? (
-            <span className="text-xs text-muted-foreground/60 whitespace-nowrap">
-              checked just now
-            </span>
-          ) : lastCheckedAt ? (
-            <span className="text-xs text-muted-foreground/60 whitespace-nowrap">
-              checked{" "}
-              {safeFormatDistanceToNow(lastCheckedAt, { addSuffix: true })}
-            </span>
-          ) : null}
+          {/* Go-to-file search — replaces "checked just now" text */}
+          {cloneUrls.length > 0 && (
+            <GoToFileSearch
+              fullFileTree={fullFileTree}
+              currentRef={currentRef}
+              treeUrl={treeUrl}
+              pulling={pulling}
+            />
+          )}
 
           {cloneUrls.length > 0 && (
             <GitServerStatus

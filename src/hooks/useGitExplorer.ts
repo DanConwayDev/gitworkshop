@@ -18,6 +18,7 @@ import type {
   InfoRefsUploadPackResponse,
 } from "@fiatjaf/git-natural-api";
 import type { GitGraspPool, PoolState } from "@/lib/git-grasp-pool";
+import { FULL_NEST_LIMIT } from "@/lib/git-grasp-pool/cache";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -1283,4 +1284,142 @@ export function useInfiniteCommitHistory(
   }, [pool, batchSize, loadingMore, loading, fallbackUrls?.join(",")]);
 
   return { loading, loadingMore, error, commits, hasMore, loadMore };
+}
+
+// ---------------------------------------------------------------------------
+// Full file tree (for go-to-file search)
+// ---------------------------------------------------------------------------
+
+/** A single entry in the flattened file tree used for search. */
+export interface FlatFileEntry {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  /** Lowercase file extension including the dot, e.g. ".ts". Empty string for directories. */
+  extension: string;
+}
+
+/**
+ * Recursively flatten a Tree into a flat array of FlatFileEntry.
+ * Directories are included so users can navigate to them directly.
+ */
+export function flattenTree(
+  tree: Tree,
+  basePath: string = "",
+): FlatFileEntry[] {
+  const entries: FlatFileEntry[] = [];
+
+  for (const dir of tree.directories) {
+    const fullPath = basePath ? `${basePath}/${dir.name}` : dir.name;
+    entries.push({
+      name: dir.name,
+      path: fullPath,
+      type: "directory",
+      extension: "",
+    });
+    if (dir.content) {
+      const children = flattenTree(dir.content, fullPath);
+      for (const child of children) entries.push(child);
+    }
+  }
+
+  for (const file of tree.files) {
+    const fullPath = basePath ? `${basePath}/${file.name}` : file.name;
+    const dotIdx = file.name.lastIndexOf(".");
+    const extension = dotIdx > 0 ? file.name.slice(dotIdx).toLowerCase() : "";
+    entries.push({ name: file.name, path: fullPath, type: "file", extension });
+  }
+
+  return entries;
+}
+
+export interface FullFileTreeState {
+  /** Flat entries — populated immediately from whatever shallow tree is cached,
+   *  then replaced with the full recursive set once the background parse completes. */
+  entries: FlatFileEntry[];
+  /** True once the full recursive tree (FULL_NEST_LIMIT) has been loaded. */
+  complete: boolean;
+}
+
+/**
+ * Provides a flat, searchable file list for the go-to-file feature.
+ *
+ * On focus (call `triggerFetch`) the hook:
+ *  1. Returns any entries already available from the shallow tree cache immediately.
+ *  2. Calls pool.getTree(commitHash, FULL_NEST_LIMIT) which re-parses from the
+ *     already-in-memory raw packfile objects — no extra network request.
+ *     This also brings forward the background idle parse so it completes now.
+ *  3. Updates `entries` and sets `complete = true` once the full tree is ready.
+ *
+ * Pass `null` for pool or `undefined` for commitHash when not yet available.
+ */
+export function useFullFileTree(
+  pool: GitGraspPool | null,
+  commitHash: string | null,
+): FullFileTreeState & { triggerFetch: () => void } {
+  const [state, setState] = useState<FullFileTreeState>({
+    entries: [],
+    complete: false,
+  });
+
+  // Track which commitHash we last fetched for so we can reset on change.
+  const fetchedForRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const fetchTriggeredRef = useRef(false);
+
+  // When commitHash changes, reset so we re-fetch for the new commit.
+  useEffect(() => {
+    if (commitHash !== fetchedForRef.current) {
+      fetchedForRef.current = null;
+      fetchTriggeredRef.current = false;
+      abortRef.current?.abort();
+      setState({ entries: [], complete: false });
+    }
+  }, [commitHash]);
+
+  const triggerFetch = useCallback(() => {
+    if (!pool || !commitHash) return;
+    // Already fetched or in-flight for this commit — nothing to do.
+    if (fetchTriggeredRef.current && fetchedForRef.current === commitHash)
+      return;
+
+    fetchTriggeredRef.current = true;
+    fetchedForRef.current = commitHash;
+
+    // --- Synchronous fast path ---
+    // Check if the full tree is already in the L1 memory cache.
+    const fullCached = pool.cache.peekTree(commitHash, FULL_NEST_LIMIT);
+    if (fullCached) {
+      setState({ entries: flattenTree(fullCached), complete: true });
+      return;
+    }
+
+    // Partial fast path: show root-level entries immediately while the full
+    // tree is being parsed, so the search box is usable right away.
+    const shallowCached = pool.cache.peekTree(commitHash, 1);
+    if (shallowCached) {
+      setState({ entries: flattenTree(shallowCached), complete: false });
+    }
+
+    // --- Async path: bring forward the background parse ---
+    // pool.getTree re-parses from memRawObjects (no network if the code page
+    // already loaded), which also pre-empts the requestIdleCallback.
+    abortRef.current?.abort();
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    pool.getTree(commitHash, FULL_NEST_LIMIT, abort.signal).then((tree) => {
+      if (abort.signal.aborted || !tree) return;
+      setState({ entries: flattenTree(tree), complete: true });
+    });
+  }, [pool, commitHash]);
+
+  // Cleanup on unmount.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  return { ...state, triggerFetch };
 }
