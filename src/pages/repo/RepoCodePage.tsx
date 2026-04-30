@@ -4,6 +4,7 @@ import {
   useMemo,
   useState,
   useEffect,
+  useLayoutEffect,
   useRef,
   useCallback,
 } from "react";
@@ -12,7 +13,13 @@ import { useSeoMeta } from "@unhead/react";
 import { useRepoContext } from "./RepoContext";
 import { useProfile } from "@/hooks/useProfile";
 import { useGitPool } from "@/hooks/useGitPool";
-import { useGitExplorer, type FileEntry } from "@/hooks/useGitExplorer";
+import {
+  useGitExplorer,
+  useFullFileTree,
+  type FileEntry,
+  type FlatFileEntry,
+  type FullFileTreeState,
+} from "@/hooks/useGitExplorer";
 import { RefSelector } from "@/components/RefSelector";
 import { GitServerStatus } from "@/components/GitServerStatus";
 import { RepoAboutPanel } from "@/components/RepoAboutPanel";
@@ -22,6 +29,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Folder,
   FileText,
@@ -37,6 +50,7 @@ import {
   Code,
   Download,
   History,
+  Search,
 } from "lucide-react";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
@@ -209,6 +223,10 @@ export default function RepoCodePage() {
     effectiveSource !== "nostr" && effectiveHeadCommit !== bootstrapHeadCommit;
   const activeExplorer = useSourceExplorer ? explorerForSource : explorer;
 
+  // Full file tree for go-to-file search. Uses the same commitHash the active
+  // explorer is displaying so the search results stay consistent with the view.
+  const fullFileTree = useFullFileTree(pool, activeExplorer.commitHash);
+
   // Page title: "<repo>/<path> at <ref> - ngit" or "<repo> - ngit" at root
   const seoTitle = useMemo(() => {
     const name = repo?.name ?? repoId;
@@ -354,7 +372,6 @@ export default function RepoCodePage() {
             commitHash={displayCommitHash}
             repoId={repoId}
             pulling={pulling}
-            lastCheckedAt={poolState.lastCheckedAt}
             repoState={repoState}
             repoRelayEose={repoRelayEose}
             relayStateMap={relayStateMap}
@@ -368,6 +385,7 @@ export default function RepoCodePage() {
             poolWarning={poolState.warning}
             pool={pool}
             winnerUrl={poolState.winnerUrl}
+            fullFileTree={fullFileTree}
           />
 
           {/* State sync warning banner — hidden when user explicitly chose nostr */}
@@ -669,15 +687,31 @@ function GitServerAheadBanner({
 // Collapsible path breadcrumb
 // ---------------------------------------------------------------------------
 
-// Approximate px width of a single character at 14px (0.875rem) font size.
-const CHAR_PX = 7.5;
 // Fixed overhead per segment: chevron (14px) + gap (4px) + gap (4px) = ~22px
 const SEG_OVERHEAD_PX = 22;
 // Width of the "…" button
 const ELLIPSIS_PX = 28;
 
-function estimateTextPx(text: string) {
-  return text.length * CHAR_PX;
+/**
+ * Returns the rendered width of `text` in CSS pixels using the browser's own
+ * font metrics. Accurate at any zoom level and with any font/weight combo.
+ * `font` should be the CSS font shorthand, e.g. "14px Inter Variable, sans-serif".
+ *
+ * Each call gets its own CanvasRenderingContext2D so concurrent callers with
+ * different fonts never clobber each other's ctx.font. Canvas elements are
+ * never attached to the DOM, so creation is cheap (a heap allocation only).
+ * Falls back to a character-count estimate where Canvas 2D is unavailable
+ * (SSR, some test runners).
+ */
+function measureTextPx(text: string, font: string): number {
+  try {
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return text.length * 7.5;
+    ctx.font = font;
+    return ctx.measureText(text).width;
+  } catch {
+    return text.length * 7.5; // fallback: ~7.5px per char
+  }
 }
 
 function CollapsibleBreadcrumb({
@@ -685,26 +719,46 @@ function CollapsibleBreadcrumb({
   pathSegments,
   currentRef,
   treeUrl,
+  searchCompact,
+  onTruncatedChange,
 }: {
   repoId: string;
   pathSegments: string[];
   currentRef: string;
   treeUrl: (ref: string, path?: string) => string;
+  searchCompact: boolean;
+  onTruncatedChange?: (truncated: boolean) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
+  // Font string used by measureTextPx. Initialised to a reasonable fallback;
+  // the useLayoutEffect below reads the actual computed font from the DOM after
+  // mount and updates this state. This means the very first render uses the
+  // fallback font for truncation calculations, which may be slightly off —
+  // the layout effect fires synchronously before paint and corrects it, so
+  // the user never sees the intermediate state. Accepted trade-off: reading
+  // getComputedStyle before mount (e.g. in a ref callback) is not possible
+  // because the element doesn't exist in the DOM yet.
+  const [font, setFont] = useState("14px sans-serif");
   // When the user explicitly expands, show everything regardless of width.
   const [forceExpanded, setForceExpanded] = useState(false);
 
-  // Reset forceExpanded when the path changes.
+  // Reset forceExpanded when the path changes — tracked as a ref so we can
+  // derive the reset inline without a separate effect causing an extra render.
   const pathKey = pathSegments.join("/");
-  useEffect(() => {
-    setForceExpanded(false);
-  }, [pathKey]);
+  const prevPathKeyRef = useRef(pathKey);
+  if (prevPathKeyRef.current !== pathKey) {
+    prevPathKeyRef.current = pathKey;
+    if (forceExpanded) setForceExpanded(false);
+  }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    // Read the computed font once at mount. Font family/size/weight don't
+    // change at runtime for this element, so a one-time read is sufficient.
+    const computedFont = window.getComputedStyle(el).font;
+    if (computedFont) setFont(computedFont);
     const ro = new ResizeObserver((entries) => {
       setContainerWidth(entries[0].contentRect.width);
     });
@@ -719,9 +773,11 @@ function CollapsibleBreadcrumb({
   const middleSegments = pathSegments.slice(0, -1);
 
   // Budget: total width minus root, last segment, their separators.
-  const rootPx = estimateTextPx(repoId) + SEG_OVERHEAD_PX;
+  const rootPx = measureTextPx(repoId, font) + SEG_OVERHEAD_PX;
   const lastPx =
-    pathSegments.length > 0 ? estimateTextPx(lastSegment) + SEG_OVERHEAD_PX : 0;
+    pathSegments.length > 0
+      ? measureTextPx(lastSegment, font) + SEG_OVERHEAD_PX
+      : 0;
   // Extra budget consumed by the "…" button + its separator when shown.
   const ellipsisPx = ELLIPSIS_PX + SEG_OVERHEAD_PX;
 
@@ -730,7 +786,7 @@ function CollapsibleBreadcrumb({
   if (!forceExpanded && containerWidth > 0 && middleSegments.length > 0) {
     let budget = containerWidth - rootPx - lastPx - ellipsisPx;
     for (const seg of middleSegments) {
-      const needed = estimateTextPx(seg) + SEG_OVERHEAD_PX;
+      const needed = measureTextPx(seg, font) + SEG_OVERHEAD_PX;
       if (budget >= needed) {
         visibleMiddleCount++;
         budget -= needed;
@@ -748,6 +804,34 @@ function CollapsibleBreadcrumb({
   const hiddenMiddle = forceExpanded
     ? []
     : middleSegments.slice(visibleMiddleCount);
+
+  // Report truncation to parent using the same character-width estimates used
+  // for middle-segment budgeting — no DOM reads needed, no timing issues.
+  // We're truncated if the container isn't wide enough to show root + last
+  // segment comfortably, or if middle segments are hidden behind the ellipsis.
+  //
+  // Only report when the search is expanded (searchCompact=false). When compact
+  // the search bar is w-7 so the breadcrumb is artificially wide — measuring
+  // then would report "not truncated", expand the search, squeeze the breadcrumb
+  // again, and loop. The LocatorBar resets searchCompact=false on path change,
+  // which triggers a fresh evaluation with the expanded search width.
+  const minNeededPx = rootPx + lastPx;
+  const isTruncated =
+    containerWidth > 0 && (showEllipsis || containerWidth < minNeededPx);
+  const prevTruncatedRef = useRef<boolean | null>(null);
+  // useLayoutEffect runs synchronously after DOM mutations, before paint —
+  // same timing guarantee as the previous inline call, but through a supported
+  // React mechanism that avoids calling a parent setState during a child render.
+  useLayoutEffect(() => {
+    // When searchCompact resets to false (path change), invalidate the cached
+    // value so the next evaluation always fires onTruncatedChange with the
+    // fresh reading.
+    if (!searchCompact) prevTruncatedRef.current = null;
+    if (!searchCompact && prevTruncatedRef.current !== isTruncated) {
+      prevTruncatedRef.current = isTruncated;
+      onTruncatedChange?.(isTruncated);
+    }
+  }, [searchCompact, isTruncated, onTruncatedChange]);
 
   return (
     <div
@@ -804,6 +888,306 @@ function CollapsibleBreadcrumb({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Go-to-file search
+// ---------------------------------------------------------------------------
+
+const MAX_RESULTS = 100;
+
+/**
+ * Renders a file path with the query substring bolded wherever it appears.
+ * Long paths wrap onto multiple lines so the full path is always readable.
+ */
+function HighlightedPath({ path, query }: { path: string; query: string }) {
+  const lower = query.toLowerCase();
+  const lowerPath = path.toLowerCase();
+
+  // Guard: an empty query string causes indexOf("", n) to always return n,
+  // advancing cursor by 0 and looping forever.
+  if (!lower) {
+    return (
+      <span className="flex-1 min-w-0 break-all text-muted-foreground">
+        {path}
+      </span>
+    );
+  }
+
+  // Split the path into alternating non-match / match segments.
+  const parts: { text: string; match: boolean }[] = [];
+  let cursor = 0;
+  while (cursor < path.length) {
+    const idx = lowerPath.indexOf(lower, cursor);
+    if (idx === -1) {
+      parts.push({ text: path.slice(cursor), match: false });
+      break;
+    }
+    if (idx > cursor) {
+      parts.push({ text: path.slice(cursor, idx), match: false });
+    }
+    parts.push({ text: path.slice(idx, idx + lower.length), match: true });
+    cursor = idx + lower.length;
+  }
+
+  return (
+    <span className="flex-1 min-w-0 break-all">
+      {parts.map((p, i) =>
+        p.match ? (
+          <strong key={i} className="font-semibold text-foreground">
+            {p.text}
+          </strong>
+        ) : (
+          <span key={i} className="text-muted-foreground">
+            {p.text}
+          </span>
+        ),
+      )}
+    </span>
+  );
+}
+
+function GoToFileSearch({
+  fullFileTree,
+  currentRef,
+  treeUrl,
+  pulling,
+  compact = false,
+}: {
+  fullFileTree: FullFileTreeState & { triggerFetch: () => void };
+  currentRef: string;
+  treeUrl: (ref: string, path?: string) => string;
+  pulling: boolean;
+  compact?: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  // Reset query and open state when the user switches branches/tags so the
+  // input doesn't show a stale query string typed against a different ref.
+  const prevRefRef = useRef(currentRef);
+  if (prevRefRef.current !== currentRef) {
+    prevRefRef.current = currentRef;
+    if (query) setQuery("");
+    if (open) setOpen(false);
+  }
+
+  // Filter entries against the query — search the full path, not just the filename.
+  const { results, totalMatches } = useMemo<{
+    results: FlatFileEntry[];
+    totalMatches: number;
+  }>(() => {
+    if (!query.trim()) return { results: [], totalMatches: 0 };
+    const lower = query.toLowerCase();
+    const matched = fullFileTree.entries.filter((e) =>
+      e.path.toLowerCase().includes(lower),
+    );
+    return {
+      results: matched.slice(0, MAX_RESULTS),
+      totalMatches: matched.length,
+    };
+  }, [query, fullFileTree.entries]);
+
+  // Reset active index when results change. Depend on the array reference
+  // (not results.length) so a same-count but different result set also resets.
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [results]);
+
+  // Close on Escape.
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape") {
+      setOpen(false);
+      setQuery("");
+      inputRef.current?.blur();
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (results.length > 0)
+        setActiveIndex((i) => Math.min(i + 1, results.length - 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (results.length > 0) setActiveIndex((i) => Math.max(i - 1, 0));
+      return;
+    }
+    if (e.key === "Enter" && results[activeIndex]) {
+      e.preventDefault();
+      navigateTo(results[activeIndex]);
+      return;
+    }
+  }
+
+  const navigate = useNavigate();
+
+  function navigateTo(entry: FlatFileEntry) {
+    setOpen(false);
+    setQuery("");
+    navigate(treeUrl(currentRef, entry.path));
+  }
+
+  function handleFocus() {
+    setOpen(true);
+    // Kick off the background full-tree fetch (no-op if already done).
+    fullFileTree.triggerFetch();
+  }
+
+  // Disable the input while the ref is still being resolved (no currentRef yet)
+  // or while the pool is still pulling and we have no entries at all.
+  const disabled =
+    !currentRef || (pulling && fullFileTree.entries.length === 0);
+
+  // Whether the popover content should be shown (open + has a query).
+  const showDropdown = open && query.trim().length > 0;
+
+  return (
+    <Popover
+      open={showDropdown}
+      onOpenChange={(v) => {
+        if (!v) {
+          setOpen(false);
+          setQuery("");
+        }
+      }}
+    >
+      <PopoverTrigger asChild>
+        <div
+          ref={triggerRef}
+          className={cn(
+            "flex items-center h-7 rounded border text-xs transition-all duration-150 cursor-text",
+            open
+              ? "gap-1.5 px-2 border-border bg-background w-48"
+              : compact
+                ? "justify-center px-1.5 border-border/40 bg-muted/20 w-7 hover:border-border/70 hover:bg-muted/40"
+                : "gap-1.5 px-2 border-border bg-background w-32 hover:border-border/70",
+            disabled && "opacity-40 pointer-events-none",
+          )}
+          onClick={() => inputRef.current?.focus()}
+        >
+          <Search className="h-3 w-3 text-muted-foreground shrink-0" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={handleFocus}
+            // No onBlur: closing is handled by onInteractOutside on the
+            // PopoverContent. Closing on blur would fire when the user clicks
+            // the scrollbar (which blurs the input) and dismiss the dropdown.
+            onKeyDown={handleKeyDown}
+            placeholder="Go to file…"
+            className={cn(
+              "bg-transparent outline-none text-xs placeholder:text-muted-foreground/70 min-w-0 transition-all duration-150",
+              open || !compact
+                ? "flex-1 w-auto opacity-100"
+                : "w-0 opacity-0 pointer-events-none",
+            )}
+            disabled={disabled}
+            // Remove from tab order when visually hidden (compact + closed),
+            // otherwise keyboard users land on an invisible input.
+            tabIndex={!open && compact ? -1 : undefined}
+            aria-label="Go to file"
+            aria-autocomplete="list"
+            aria-expanded={showDropdown}
+          />
+          {open && query && fullFileTree.entries.length === 0 && (
+            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+          )}
+        </div>
+      </PopoverTrigger>
+
+      {/* Dropdown results — rendered via portal so it escapes overflow:hidden */}
+      <PopoverContent
+        className="p-0 w-[36rem] max-w-[90vw] overflow-hidden"
+        align="start"
+        side="bottom"
+        sideOffset={4}
+        avoidCollisions
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onInteractOutside={(e) => {
+          // Prevent Radix's built-in close — we manage open state ourselves.
+          // Only close when the interaction is outside the trigger too (Radix
+          // fires this for the trigger element as well, but the Popover's own
+          // open={showDropdown} already handles that case).
+          e.preventDefault();
+          // Close if the click target is outside the trigger wrapper (which
+          // includes the search icon, padding, and the input itself).
+          const target = e.target as Node | null;
+          if (!triggerRef.current?.contains(target)) {
+            setOpen(false);
+            setQuery("");
+          }
+        }}
+      >
+        {results.length > 0 ? (
+          <ScrollArea
+            type="always"
+            style={{
+              maxHeight:
+                "calc(var(--radix-popover-content-available-height) - 1rem)",
+            }}
+          >
+            <ul role="listbox" className="py-1">
+              {results.map((entry, i) => (
+                <li
+                  key={entry.path}
+                  role="option"
+                  aria-selected={i === activeIndex}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // prevent input blur before click
+                    navigateTo(entry);
+                  }}
+                  className={cn(
+                    "flex items-start gap-2 px-3 py-2 cursor-pointer text-sm",
+                    i === activeIndex ? "bg-accent" : "hover:bg-accent/50",
+                  )}
+                >
+                  {entry.type === "directory" ? (
+                    <Folder className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  )}
+                  {/* Full path — wraps onto multiple lines for long paths */}
+                  <HighlightedPath path={entry.path} query={query} />
+                </li>
+              ))}
+              {/* Truncation hint */}
+              {totalMatches > MAX_RESULTS && (
+                <li className="px-3 py-2 text-xs text-muted-foreground border-t border-border/40">
+                  Showing {MAX_RESULTS} of {totalMatches} — type more to narrow
+                </li>
+              )}
+              {/* Loading indicator at the bottom when full tree is still loading */}
+              {!fullFileTree.complete && (
+                <li className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground border-t border-border/40">
+                  <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                  Loading full file tree…
+                </li>
+              )}
+            </ul>
+          </ScrollArea>
+        ) : fullFileTree.entries.length === 0 ? (
+          <div className="flex items-center gap-1.5 px-3 py-3 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+            Loading…
+          </div>
+        ) : (
+          <div className="px-3 py-3 text-xs text-muted-foreground">
+            No files matching{" "}
+            <span className="font-medium text-foreground">
+              &ldquo;{query}&rdquo;
+            </span>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // Locator bar
 // ---------------------------------------------------------------------------
 
@@ -822,7 +1206,6 @@ function LocatorBar({
   commitHash,
   repoId,
   pulling,
-  lastCheckedAt,
   repoState,
   repoRelayEose,
   relayStateMap,
@@ -836,6 +1219,7 @@ function LocatorBar({
   poolWarning,
   pool,
   winnerUrl,
+  fullFileTree,
 }: {
   loading: boolean;
   refs: ReturnType<typeof useGitExplorer>["refs"];
@@ -851,7 +1235,6 @@ function LocatorBar({
   commitHash: string | null;
   repoId: string;
   pulling: boolean;
-  lastCheckedAt: number | null;
   repoState: RepositoryState | null | undefined;
   repoRelayEose: boolean;
   relayStateMap: Map<string, import("nostr-tools").NostrEvent>;
@@ -865,6 +1248,7 @@ function LocatorBar({
   poolWarning: PoolWarning | null;
   pool: import("@/lib/git-grasp-pool").GitGraspPool | null;
   winnerUrl: string | null;
+  fullFileTree: FullFileTreeState & { triggerFetch: () => void };
 }) {
   // Compute the full ref name for the pool's refStatus lookup
   const currentRefObj = refs.find((r) => r.name === currentRef);
@@ -874,13 +1258,29 @@ function LocatorBar({
       : `refs/tags/${currentRef}`
     : "";
 
+  // Collapse the go-to-file label when the breadcrumb is truncated.
+  // Since compact mode only changes opacity (not width), there is no layout
+  // feedback loop — no debounce needed.
+  const [compactSearch, setCompactSearch] = useState(false);
+  const pathKey = pathSegments.join("/");
+  const prevPathKeyRef = useRef(pathKey);
+  if (prevPathKeyRef.current !== pathKey) {
+    prevPathKeyRef.current = pathKey;
+    // Reset eagerly so the label is visible while the breadcrumb re-measures.
+    // The breadcrumb's useLayoutEffect will set it back to true if still truncated.
+    if (compactSearch) setCompactSearch(false);
+  }
+  const handleBreadcrumbTruncated = useCallback((truncated: boolean) => {
+    setCompactSearch(truncated);
+  }, []);
+
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
       {/* Single flex-wrap row.
-          Order: [RefSelector] [Breadcrumb] [checked hidden@narrow] [GitServerStatus hidden@narrow]
+          Order: [RefSelector] [Breadcrumb] [GoToFile hidden@mobile] [GitServerStatus hidden@narrow]
           The breadcrumb has flex-[1_1_12rem]: it fills available space and
           only wraps to a full-width second line when it can't fit at 12rem.
-          checked + GitServerStatus are hidden below the sm breakpoint so
+          GoToFile + GitServerStatus are hidden below the sm breakpoint so
           they disappear before the breadcrumb is forced to wrap. */}
       <div
         className={cn(
@@ -923,26 +1323,23 @@ function LocatorBar({
             pathSegments={pathSegments}
             currentRef={currentRef}
             treeUrl={treeUrl}
+            searchCompact={compactSearch}
+            onTruncatedChange={handleBreadcrumbTruncated}
           />
         </div>
 
         {/* Right-side items — hidden below sm breakpoint */}
         <div className="hidden sm:flex items-center gap-2 shrink-0">
-          {pulling ? (
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Checking…
-            </span>
-          ) : repoState ? (
-            <span className="text-xs text-muted-foreground/60 whitespace-nowrap">
-              checked just now
-            </span>
-          ) : lastCheckedAt ? (
-            <span className="text-xs text-muted-foreground/60 whitespace-nowrap">
-              checked{" "}
-              {safeFormatDistanceToNow(lastCheckedAt, { addSuffix: true })}
-            </span>
-          ) : null}
+          {/* Go-to-file search — replaces "checked just now" text */}
+          {cloneUrls.length > 0 && (
+            <GoToFileSearch
+              fullFileTree={fullFileTree}
+              currentRef={currentRef}
+              treeUrl={treeUrl}
+              pulling={pulling}
+              compact={compactSearch}
+            />
+          )}
 
           {cloneUrls.length > 0 && (
             <GitServerStatus
