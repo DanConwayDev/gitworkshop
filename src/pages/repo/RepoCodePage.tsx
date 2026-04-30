@@ -788,17 +788,19 @@ function CollapsibleBreadcrumb({
   const isTruncated =
     containerWidth > 0 && (showEllipsis || containerWidth < minNeededPx);
   const prevTruncatedRef = useRef<boolean | null>(null);
-  const prevSearchCompactRef = useRef(searchCompact);
-  // Invalidate cached value when searchCompact resets to false (path change)
-  // so the next evaluation always fires onTruncatedChange with the fresh reading.
-  if (prevSearchCompactRef.current !== searchCompact) {
-    prevSearchCompactRef.current = searchCompact;
+  // useLayoutEffect runs synchronously after DOM mutations, before paint —
+  // same timing guarantee as the previous inline call, but through a supported
+  // React mechanism that avoids calling a parent setState during a child render.
+  useLayoutEffect(() => {
+    // When searchCompact resets to false (path change), invalidate the cached
+    // value so the next evaluation always fires onTruncatedChange with the
+    // fresh reading.
     if (!searchCompact) prevTruncatedRef.current = null;
-  }
-  if (!searchCompact && prevTruncatedRef.current !== isTruncated) {
-    prevTruncatedRef.current = isTruncated;
-    onTruncatedChange?.(isTruncated);
-  }
+    if (!searchCompact && prevTruncatedRef.current !== isTruncated) {
+      prevTruncatedRef.current = isTruncated;
+      onTruncatedChange?.(isTruncated);
+    }
+  }, [searchCompact, isTruncated, onTruncatedChange]);
 
   return (
     <div
