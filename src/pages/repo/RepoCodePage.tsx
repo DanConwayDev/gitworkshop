@@ -859,7 +859,7 @@ function CollapsibleBreadcrumb({
 // Go-to-file search
 // ---------------------------------------------------------------------------
 
-const MAX_RESULTS = 20;
+const MAX_RESULTS = 100;
 
 /**
  * Renders a file path with the query substring bolded wherever it appears.
@@ -921,12 +921,19 @@ function GoToFileSearch({
   const [activeIndex, setActiveIndex] = useState(0);
 
   // Filter entries against the query — search the full path, not just the filename.
-  const results = useMemo<FlatFileEntry[]>(() => {
-    if (!query.trim()) return [];
+  const { results, totalMatches } = useMemo<{
+    results: FlatFileEntry[];
+    totalMatches: number;
+  }>(() => {
+    if (!query.trim()) return { results: [], totalMatches: 0 };
     const lower = query.toLowerCase();
-    return fullFileTree.entries
-      .filter((e) => e.path.toLowerCase().includes(lower))
-      .slice(0, MAX_RESULTS);
+    const matched = fullFileTree.entries.filter((e) =>
+      e.path.toLowerCase().includes(lower),
+    );
+    return {
+      results: matched.slice(0, MAX_RESULTS),
+      totalMatches: matched.length,
+    };
   }, [query, fullFileTree.entries]);
 
   // Reset active index when results change.
@@ -1090,6 +1097,12 @@ function GoToFileSearch({
                   <HighlightedPath path={entry.path} query={query} />
                 </li>
               ))}
+              {/* Truncation hint */}
+              {totalMatches > MAX_RESULTS && (
+                <li className="px-3 py-2 text-xs text-muted-foreground border-t border-border/40">
+                  Showing {MAX_RESULTS} of {totalMatches} — type more to narrow
+                </li>
+              )}
               {/* Loading indicator at the bottom when full tree is still loading */}
               {!fullFileTree.complete && (
                 <li className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground border-t border-border/40">
