@@ -1,7 +1,6 @@
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 import typography from "@tailwindcss/typography";
-import containerQueries from "@tailwindcss/container-queries";
 
 export default {
   darkMode: ["class"],
@@ -100,5 +99,5 @@ export default {
       },
     },
   },
-  plugins: [tailwindcssAnimate, typography, containerQueries],
+  plugins: [tailwindcssAnimate, typography],
 } satisfies Config;

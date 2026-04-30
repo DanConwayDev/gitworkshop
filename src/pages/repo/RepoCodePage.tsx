@@ -4,6 +4,7 @@ import {
   useMemo,
   useState,
   useEffect,
+  useLayoutEffect,
   useRef,
   useCallback,
 } from "react";
@@ -701,12 +702,14 @@ function CollapsibleBreadcrumb({
   pathSegments,
   currentRef,
   treeUrl,
+  searchCompact,
   onTruncatedChange,
 }: {
   repoId: string;
   pathSegments: string[];
   currentRef: string;
   treeUrl: (ref: string, path?: string) => string;
+  searchCompact: boolean;
   onTruncatedChange?: (truncated: boolean) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -715,11 +718,14 @@ function CollapsibleBreadcrumb({
   // When the user explicitly expands, show everything regardless of width.
   const [forceExpanded, setForceExpanded] = useState(false);
 
-  // Reset forceExpanded when the path changes.
+  // Reset forceExpanded when the path changes — tracked as a ref so we can
+  // derive the reset inline without a separate effect causing an extra render.
   const pathKey = pathSegments.join("/");
-  useEffect(() => {
-    setForceExpanded(false);
-  }, [pathKey]);
+  const prevPathKeyRef = useRef(pathKey);
+  if (prevPathKeyRef.current !== pathKey) {
+    prevPathKeyRef.current = pathKey;
+    if (forceExpanded) setForceExpanded(false);
+  }
 
   useEffect(() => {
     const el = containerRef.current;
@@ -768,16 +774,19 @@ function CollapsibleBreadcrumb({
     ? []
     : middleSegments.slice(visibleMiddleCount);
 
-  // Report truncation to parent only when containerWidth or showEllipsis
-  // actually changes — i.e. on real layout events, not every render.
-  // This prevents the expand/collapse loop.
-  useEffect(() => {
+  // Report truncation to parent after layout so DOM dimensions reflect the
+  // current path. useLayoutEffect fires synchronously after DOM mutations,
+  // ensuring scrollWidth/clientWidth are always fresh.
+  // Only report when the search is expanded — when compact the search bar is
+  // already shrunk so measuring would just confirm "still truncated" and
+  // never allow expanding again.
+  useLayoutEffect(() => {
+    if (searchCompact) return;
     const lastSeg = lastSegRef.current;
     const lastSegTruncated =
       !!lastSeg && lastSeg.scrollWidth > lastSeg.clientWidth;
     onTruncatedChange?.(showEllipsis || lastSegTruncated);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [containerWidth, showEllipsis]);
+  }, [containerWidth, showEllipsis, pathKey, searchCompact, onTruncatedChange]);
 
   return (
     <div
@@ -1004,7 +1013,6 @@ function GoToFileSearch({
           onClick={() => inputRef.current?.focus()}
         >
           <Search className="h-3 w-3 text-muted-foreground shrink-0" />
-          {/* Input is always mounted so focus() works; hidden in compact-collapsed state */}
           <input
             ref={inputRef}
             type="text"
@@ -1176,27 +1184,20 @@ function LocatorBar({
       : `refs/tags/${currentRef}`
     : "";
 
-  // Collapse the go-to-file search to icon-only whenever the breadcrumb is
-  // truncated. To avoid an expand/collapse loop (expanding the search bar
-  // immediately re-squeezes the breadcrumb), we require two consecutive
-  // not-truncated readings before expanding: the first sets pendingExpand,
-  // the second (after the layout has settled) actually expands.
+  // Collapse the go-to-file label when the breadcrumb is truncated.
+  // Since compact mode only changes opacity (not width), there is no layout
+  // feedback loop — no debounce needed.
   const [compactSearch, setCompactSearch] = useState(false);
-  const pendingExpand = useRef(false);
+  const pathKey = pathSegments.join("/");
+  const prevPathKeyRef = useRef(pathKey);
+  if (prevPathKeyRef.current !== pathKey) {
+    prevPathKeyRef.current = pathKey;
+    // Reset eagerly so the label is visible while the breadcrumb re-measures.
+    // The breadcrumb's useLayoutEffect will set it back to true if still truncated.
+    if (compactSearch) setCompactSearch(false);
+  }
   const handleBreadcrumbTruncated = useCallback((truncated: boolean) => {
-    if (truncated) {
-      pendingExpand.current = false;
-      setCompactSearch(true);
-    } else {
-      if (pendingExpand.current) {
-        // Second consecutive not-truncated reading — safe to expand.
-        pendingExpand.current = false;
-        setCompactSearch(false);
-      } else {
-        // First not-truncated reading — wait one more render to confirm.
-        pendingExpand.current = true;
-      }
-    }
+    setCompactSearch(truncated);
   }, []);
 
   return (
@@ -1248,6 +1249,7 @@ function LocatorBar({
             pathSegments={pathSegments}
             currentRef={currentRef}
             treeUrl={treeUrl}
+            searchCompact={compactSearch}
             onTruncatedChange={handleBreadcrumbTruncated}
           />
         </div>
