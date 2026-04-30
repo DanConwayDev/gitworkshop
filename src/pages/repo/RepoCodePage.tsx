@@ -871,6 +871,16 @@ function HighlightedPath({ path, query }: { path: string; query: string }) {
   const lower = query.toLowerCase();
   const lowerPath = path.toLowerCase();
 
+  // Guard: an empty query string causes indexOf("", n) to always return n,
+  // advancing cursor by 0 and looping forever.
+  if (!lower) {
+    return (
+      <span className="flex-1 min-w-0 break-all text-muted-foreground">
+        {path}
+      </span>
+    );
+  }
+
   // Split the path into alternating non-match / match segments.
   const parts: { text: string; match: boolean }[] = [];
   let cursor = 0;
@@ -920,6 +930,7 @@ function GoToFileSearch({
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
   // Filter entries against the query — search the full path, not just the filename.
@@ -938,10 +949,11 @@ function GoToFileSearch({
     };
   }, [query, fullFileTree.entries]);
 
-  // Reset active index when results change.
+  // Reset active index when results change. Depend on the array reference
+  // (not results.length) so a same-count but different result set also resets.
   useEffect(() => {
     setActiveIndex(0);
-  }, [results.length]);
+  }, [results]);
 
   // Close on Escape.
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -1002,6 +1014,7 @@ function GoToFileSearch({
     >
       <PopoverTrigger asChild>
         <div
+          ref={triggerRef}
           className={cn(
             "flex items-center h-7 rounded border text-xs transition-all duration-150 cursor-text",
             open
@@ -1058,9 +1071,10 @@ function GoToFileSearch({
           // fires this for the trigger element as well, but the Popover's own
           // open={showDropdown} already handles that case).
           e.preventDefault();
-          // Close if the click target is not the input or its wrapper.
+          // Close if the click target is outside the trigger wrapper (which
+          // includes the search icon, padding, and the input itself).
           const target = e.target as Node | null;
-          if (!inputRef.current?.contains(target)) {
+          if (!triggerRef.current?.contains(target)) {
             setOpen(false);
             setQuery("");
           }
