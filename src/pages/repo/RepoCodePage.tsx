@@ -933,6 +933,15 @@ function GoToFileSearch({
   const triggerRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
+  // Reset query and open state when the user switches branches/tags so the
+  // input doesn't show a stale query string typed against a different ref.
+  const prevRefRef = useRef(currentRef);
+  if (prevRefRef.current !== currentRef) {
+    prevRefRef.current = currentRef;
+    if (query) setQuery("");
+    if (open) setOpen(false);
+  }
+
   // Filter entries against the query — search the full path, not just the filename.
   const { results, totalMatches } = useMemo<{
     results: FlatFileEntry[];
