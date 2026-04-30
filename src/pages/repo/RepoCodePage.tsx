@@ -701,13 +701,16 @@ function CollapsibleBreadcrumb({
   pathSegments,
   currentRef,
   treeUrl,
+  onTruncatedChange,
 }: {
   repoId: string;
   pathSegments: string[];
   currentRef: string;
   treeUrl: (ref: string, path?: string) => string;
+  onTruncatedChange?: (truncated: boolean) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastSegRef = useRef<HTMLSpanElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
   // When the user explicitly expands, show everything regardless of width.
   const [forceExpanded, setForceExpanded] = useState(false);
@@ -765,6 +768,17 @@ function CollapsibleBreadcrumb({
     ? []
     : middleSegments.slice(visibleMiddleCount);
 
+  // Report truncation to parent only when containerWidth or showEllipsis
+  // actually changes — i.e. on real layout events, not every render.
+  // This prevents the expand/collapse loop.
+  useEffect(() => {
+    const lastSeg = lastSegRef.current;
+    const lastSegTruncated =
+      !!lastSeg && lastSeg.scrollWidth > lastSeg.clientWidth;
+    onTruncatedChange?.(showEllipsis || lastSegTruncated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [containerWidth, showEllipsis]);
+
   return (
     <div
       ref={containerRef}
@@ -813,7 +827,9 @@ function CollapsibleBreadcrumb({
       {pathSegments.length > 0 && (
         <span className="flex items-center gap-1 min-w-0">
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span className="font-medium truncate min-w-0">{lastSegment}</span>
+          <span ref={lastSegRef} className="font-medium truncate min-w-0">
+            {lastSegment}
+          </span>
         </span>
       )}
     </div>
@@ -826,28 +842,89 @@ function CollapsibleBreadcrumb({
 
 const MAX_RESULTS = 20;
 
+/**
+ * Renders a file path with:
+ * - The query substring bolded wherever it appears in the path
+ * - Start-truncation via a CSS trick so the tail (filename + ext) is always
+ *   visible when the path is too long to fit.
+ *
+ * We achieve start-truncation by rendering the text in a flex container with
+ * `direction: rtl` on the outer span and `direction: ltr` on the inner span.
+ * This makes the browser clip from the left rather than the right.
+ */
+function HighlightedPath({ path, query }: { path: string; query: string }) {
+  const lower = query.toLowerCase();
+  const lowerPath = path.toLowerCase();
+
+  // Split the path into alternating non-match / match segments.
+  const parts: { text: string; match: boolean }[] = [];
+  let cursor = 0;
+  while (cursor < path.length) {
+    const idx = lowerPath.indexOf(lower, cursor);
+    if (idx === -1) {
+      parts.push({ text: path.slice(cursor), match: false });
+      break;
+    }
+    if (idx > cursor) {
+      parts.push({ text: path.slice(cursor, idx), match: false });
+    }
+    parts.push({ text: path.slice(idx, idx + lower.length), match: true });
+    cursor = idx + lower.length;
+  }
+
+  return (
+    // Outer span: rtl so overflow clips from the left (start-truncation).
+    // Inner span: ltr so the text itself reads left-to-right.
+    <span
+      className="flex-1 min-w-0 overflow-hidden block"
+      style={{
+        direction: "rtl",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        textAlign: "left",
+      }}
+    >
+      <span style={{ direction: "ltr", unicodeBidi: "bidi-override" }}>
+        {parts.map((p, i) =>
+          p.match ? (
+            <strong key={i} className="font-semibold text-foreground">
+              {p.text}
+            </strong>
+          ) : (
+            <span key={i} className="text-muted-foreground">
+              {p.text}
+            </span>
+          ),
+        )}
+      </span>
+    </span>
+  );
+}
+
 function GoToFileSearch({
   fullFileTree,
   currentRef,
   treeUrl,
   pulling,
+  compact = false,
 }: {
   fullFileTree: FullFileTreeState & { triggerFetch: () => void };
   currentRef: string;
   treeUrl: (ref: string, path?: string) => string;
   pulling: boolean;
+  compact?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // Filter entries against the query.
+  // Filter entries against the query — search the full path, not just the filename.
   const results = useMemo<FlatFileEntry[]>(() => {
     if (!query.trim()) return [];
     const lower = query.toLowerCase();
     return fullFileTree.entries
-      .filter((e) => e.name.toLowerCase().includes(lower))
+      .filter((e) => e.path.toLowerCase().includes(lower))
       .slice(0, MAX_RESULTS);
   }, [query, fullFileTree.entries]);
 
@@ -916,15 +993,18 @@ function GoToFileSearch({
       <PopoverTrigger asChild>
         <div
           className={cn(
-            "flex items-center gap-1.5 h-7 px-2 rounded border text-xs transition-colors cursor-text",
+            "flex items-center h-7 rounded border text-xs transition-all duration-150 cursor-text",
             open
-              ? "border-border bg-background w-48"
-              : "border-border/40 bg-muted/20 w-32 hover:border-border/70 hover:bg-muted/40",
+              ? "gap-1.5 px-2 border-border bg-background w-48"
+              : compact
+                ? "justify-center px-1.5 border-border/40 bg-muted/20 w-7 hover:border-border/70 hover:bg-muted/40"
+                : "gap-1.5 px-2 border-border/40 bg-muted/20 w-32 hover:border-border/70 hover:bg-muted/40",
             disabled && "opacity-40 pointer-events-none",
           )}
           onClick={() => inputRef.current?.focus()}
         >
           <Search className="h-3 w-3 text-muted-foreground shrink-0" />
+          {/* Input is always mounted so focus() works; hidden in compact-collapsed state */}
           <input
             ref={inputRef}
             type="text"
@@ -937,7 +1017,12 @@ function GoToFileSearch({
             }}
             onKeyDown={handleKeyDown}
             placeholder="Go to file…"
-            className="flex-1 bg-transparent outline-none text-xs placeholder:text-muted-foreground/50 min-w-0"
+            className={cn(
+              "bg-transparent outline-none text-xs placeholder:text-muted-foreground/50 min-w-0 transition-all duration-150",
+              open || !compact
+                ? "flex-1 w-auto opacity-100"
+                : "w-0 opacity-0 pointer-events-none",
+            )}
             disabled={disabled}
             aria-label="Go to file"
             aria-autocomplete="list"
@@ -951,8 +1036,8 @@ function GoToFileSearch({
 
       {/* Dropdown results — rendered via portal so it escapes overflow:hidden */}
       <PopoverContent
-        className="p-0 w-80 overflow-hidden"
-        align="end"
+        className="p-0 w-[36rem] max-w-[90vw] overflow-hidden"
+        align="start"
         side="bottom"
         sideOffset={4}
         avoidCollisions
@@ -991,12 +1076,8 @@ function GoToFileSearch({
                 ) : (
                   <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 )}
-                <span className="font-medium truncate">{entry.name}</span>
-                <span className="text-xs text-muted-foreground truncate ml-auto pl-2 shrink-0 max-w-[40%]">
-                  {entry.path.includes("/")
-                    ? entry.path.slice(0, entry.path.lastIndexOf("/"))
-                    : ""}
-                </span>
+                {/* Full path with start-truncation so the filename is always visible */}
+                <HighlightedPath path={entry.path} query={query} />
               </li>
             ))}
             {/* Loading indicator at the bottom when full tree is still loading */}
@@ -1095,6 +1176,29 @@ function LocatorBar({
       : `refs/tags/${currentRef}`
     : "";
 
+  // Collapse the go-to-file search to icon-only whenever the breadcrumb is
+  // truncated. To avoid an expand/collapse loop (expanding the search bar
+  // immediately re-squeezes the breadcrumb), we require two consecutive
+  // not-truncated readings before expanding: the first sets pendingExpand,
+  // the second (after the layout has settled) actually expands.
+  const [compactSearch, setCompactSearch] = useState(false);
+  const pendingExpand = useRef(false);
+  const handleBreadcrumbTruncated = useCallback((truncated: boolean) => {
+    if (truncated) {
+      pendingExpand.current = false;
+      setCompactSearch(true);
+    } else {
+      if (pendingExpand.current) {
+        // Second consecutive not-truncated reading — safe to expand.
+        pendingExpand.current = false;
+        setCompactSearch(false);
+      } else {
+        // First not-truncated reading — wait one more render to confirm.
+        pendingExpand.current = true;
+      }
+    }
+  }, []);
+
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
       {/* Single flex-wrap row.
@@ -1144,6 +1248,7 @@ function LocatorBar({
             pathSegments={pathSegments}
             currentRef={currentRef}
             treeUrl={treeUrl}
+            onTruncatedChange={handleBreadcrumbTruncated}
           />
         </div>
 
@@ -1156,6 +1261,7 @@ function LocatorBar({
               currentRef={currentRef}
               treeUrl={treeUrl}
               pulling={pulling}
+              compact={compactSearch}
             />
           )}
 
