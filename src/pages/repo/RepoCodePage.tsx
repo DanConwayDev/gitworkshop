@@ -1004,12 +1004,13 @@ function GoToFileSearch({
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, results.length - 1));
+      if (results.length > 0)
+        setActiveIndex((i) => Math.min(i + 1, results.length - 1));
       return;
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex((i) => Math.max(i - 1, 0));
+      if (results.length > 0) setActiveIndex((i) => Math.max(i - 1, 0));
       return;
     }
     if (e.key === "Enter" && results[activeIndex]) {
@@ -1072,11 +1073,9 @@ function GoToFileSearch({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={handleFocus}
-            onBlur={() => {
-              // Closing is handled entirely by onInteractOutside on the
-              // PopoverContent. Closing here would fire when the user clicks
-              // the scrollbar (which blurs the input) and dismiss the dropdown.
-            }}
+            // No onBlur: closing is handled by onInteractOutside on the
+            // PopoverContent. Closing on blur would fire when the user clicks
+            // the scrollbar (which blurs the input) and dismiss the dropdown.
             onKeyDown={handleKeyDown}
             placeholder="Go to file…"
             className={cn(
@@ -1086,6 +1085,9 @@ function GoToFileSearch({
                 : "w-0 opacity-0 pointer-events-none",
             )}
             disabled={disabled}
+            // Remove from tab order when visually hidden (compact + closed),
+            // otherwise keyboard users land on an invisible input.
+            tabIndex={!open && compact ? -1 : undefined}
             aria-label="Go to file"
             aria-autocomplete="list"
             aria-expanded={showDropdown}
