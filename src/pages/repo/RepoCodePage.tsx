@@ -692,30 +692,26 @@ const SEG_OVERHEAD_PX = 22;
 // Width of the "…" button
 const ELLIPSIS_PX = 28;
 
-// One shared canvas context reused across all measurements (cheap to create,
-// expensive to recreate). Falls back to a character-count estimate in
-// environments where Canvas 2D is unavailable (SSR, some test runners).
-let _canvasCtx: CanvasRenderingContext2D | null | undefined;
-function getCanvasCtx(): CanvasRenderingContext2D | null {
-  if (_canvasCtx !== undefined) return _canvasCtx;
-  try {
-    _canvasCtx = document.createElement("canvas").getContext("2d");
-  } catch {
-    _canvasCtx = null;
-  }
-  return _canvasCtx;
-}
-
 /**
  * Returns the rendered width of `text` in CSS pixels using the browser's own
  * font metrics. Accurate at any zoom level and with any font/weight combo.
  * `font` should be the CSS font shorthand, e.g. "14px Inter Variable, sans-serif".
+ *
+ * Each call gets its own CanvasRenderingContext2D so concurrent callers with
+ * different fonts never clobber each other's ctx.font. Canvas elements are
+ * never attached to the DOM, so creation is cheap (a heap allocation only).
+ * Falls back to a character-count estimate where Canvas 2D is unavailable
+ * (SSR, some test runners).
  */
 function measureTextPx(text: string, font: string): number {
-  const ctx = getCanvasCtx();
-  if (!ctx) return text.length * 7.5; // fallback: ~7.5px per char
-  ctx.font = font;
-  return ctx.measureText(text).width;
+  try {
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return text.length * 7.5;
+    ctx.font = font;
+    return ctx.measureText(text).width;
+  } catch {
+    return text.length * 7.5; // fallback: ~7.5px per char
+  }
 }
 
 function CollapsibleBreadcrumb({
@@ -735,9 +731,14 @@ function CollapsibleBreadcrumb({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
-  // Computed CSS font string read from the container at mount so measureTextPx
-  // uses the actual font (family, size, weight) the browser renders, which
-  // stays accurate at any zoom level.
+  // Font string used by measureTextPx. Initialised to a reasonable fallback;
+  // the useLayoutEffect below reads the actual computed font from the DOM after
+  // mount and updates this state. This means the very first render uses the
+  // fallback font for truncation calculations, which may be slightly off —
+  // the layout effect fires synchronously before paint and corrects it, so
+  // the user never sees the intermediate state. Accepted trade-off: reading
+  // getComputedStyle before mount (e.g. in a ref callback) is not possible
+  // because the element doesn't exist in the DOM yet.
   const [font, setFont] = useState("14px sans-serif");
   // When the user explicitly expands, show everything regardless of width.
   const [forceExpanded, setForceExpanded] = useState(false);
