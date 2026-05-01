@@ -86,7 +86,9 @@ import { StatusChangeBlueprint, STATUS_KIND_MAP } from "@/blueprints/status";
 import type { CommitPerson } from "@/lib/git-objects";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
+import type { PoolState } from "@/lib/git-grasp-pool/types";
 import type { ResolvedRepo, ResolvedPR } from "@/lib/nip34";
+import type { ParsedObject } from "@fiatjaf/git-natural-api";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -123,17 +125,54 @@ interface MergePanelProps {
    * Required for PR-type items (used in the merge commit message).
    */
   prNevent?: string;
+  /**
+   * The merge base commit hash for PR-type items.
+   * Used as a fallback "have" when fetching push objects from a source that
+   * doesn't have the current defaultBranchHead. Optional — when absent we use
+   * defaultBranchHead alone.
+   */
+  prMergeBase?: string;
+  /**
+   * Current pool state snapshot. Used to determine which Grasp servers are
+   * eligible push targets — only servers whose default branch matches
+   * defaultBranchHead can accept the push.
+   */
+  poolState?: PoolState;
 }
 
 type MergeStep =
   | "idle"
   | "building"
   | "publishing-state"
+  | "fetching-objects"
   | "pushing"
   | "publishing-status"
   | "broadcasting-state"
   | "done"
   | "failed";
+
+/**
+ * Per-server push outcome tracked during the parallel push phase.
+ * Surfaced in the progress UI so users see partial success clearly.
+ */
+type PushOutcome = "pushed" | "failed" | "skipped";
+
+interface PushProgress {
+  total: number;
+  pushed: number;
+  failed: number;
+  skipped: number;
+  /** Optional per-server status, keyed by clone URL — for future drill-down UI */
+  perUrl: Record<string, PushOutcome>;
+}
+
+const ZERO_PROGRESS: PushProgress = {
+  total: 0,
+  pushed: 0,
+  failed: 0,
+  skipped: 0,
+  perUrl: {},
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -177,12 +216,28 @@ const STEP_LABELS: Record<MergeStep, string> = {
   idle: "",
   building: "Building merge commit...",
   "publishing-state": "Publishing state to Grasp...",
-  pushing: "Pushing to git server...",
+  "fetching-objects": "Fetching PR git data...",
+  pushing: "Pushing to git servers...",
   "publishing-status": "Publishing merged status...",
   "broadcasting-state": "Broadcasting state event...",
   done: "Complete!",
   failed: "Failed",
 };
+
+/**
+ * Format the push step label with running counts when available.
+ * During push: "Pushing to git servers (2/4 done, 1 skipped)..."
+ * Before push: "Pushing to git servers..."
+ */
+function formatStepLabel(step: MergeStep, progress: PushProgress): string {
+  if (step === "pushing" && progress.total > 0) {
+    const done = progress.pushed + progress.failed;
+    const parts = [`${done}/${progress.total} done`];
+    if (progress.skipped > 0) parts.push(`${progress.skipped} skipped`);
+    return `Pushing to git servers (${parts.join(", ")})...`;
+  }
+  return STEP_LABELS[step];
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -199,6 +254,8 @@ export function MergePanel({
   defaultBranchHead,
   guessedBaseCommitId,
   prNevent,
+  prMergeBase,
+  poolState,
 }: MergePanelProps) {
   const account = useActiveAccount();
   const profile = useMyProfile();
@@ -207,6 +264,7 @@ export function MergePanel({
   // Merge step tracking
   const [mergeStep, setMergeStep] = useState<MergeStep>("idle");
   const [mergeError, setMergeError] = useState<string | null>(null);
+  const [pushProgress, setPushProgress] = useState<PushProgress>(ZERO_PROGRESS);
 
   // Build the maintainer CommitPerson for the apply-to-tip path
   const maintainerCommitter: CommitPerson | undefined = useMemo(() => {
@@ -281,10 +339,37 @@ export function MergePanel({
     [repo.relays, repo.graspServerDomains],
   );
 
+  /**
+   * Grasp clone URLs eligible as push targets: servers whose default-branch
+   * commit matches `defaultBranchHead`. Servers that are behind would reject
+   * the push with a non-fast-forward error, and servers with a different
+   * commit have diverged — neither is safe to push to.
+   *
+   * When `poolState` is not yet available or the server hasn't reported refs
+   * yet, we include the URL optimistically so the push attempt can still
+   * surface a real error. Permanently-failed URLs are always excluded.
+   */
+  const eligibleGraspCloneUrls = useMemo(() => {
+    if (!poolState) return repo.graspCloneUrls;
+    return repo.graspCloneUrls.filter((url) => {
+      const urlState = poolState.urls[url];
+      if (!urlState) return true; // not yet probed — include optimistically
+      if (urlState.status === "permanent-failure") return false;
+      if (!defaultBranchHead) return true; // can't compare — include
+      const serverCommit = urlState.refCommits?.[defaultBranchRef];
+      // Not yet in refCommits (still loading) — include optimistically.
+      if (!serverCommit) return true;
+      return serverCommit === defaultBranchHead;
+    });
+  }, [poolState, defaultBranchHead, defaultBranchRef, repo.graspCloneUrls]);
+
+  const hasEligibleServers = eligibleGraspCloneUrls.length > 0;
+
   // Can we show the merge button?
   const canMerge =
     mergeability.status === "ready" &&
     defaultBranchHead &&
+    hasEligibleServers &&
     mergeStep === "idle";
 
   // Can we show the apply-to-tip button? (patch-type only)
@@ -292,51 +377,108 @@ export function MergePanel({
     !isPRType &&
     mergeability.status === "ready-apply-only" &&
     defaultBranchHead &&
+    hasEligibleServers &&
     mergeStep === "idle";
 
   // ── Push helper ──────────────────────────────────────────────────────────
 
+  /**
+   * Push a packfile + ref update to every eligible grasp server in parallel.
+   *
+   * Servers are attempted concurrently because there's no information to
+   * share between them — each gets the same packfile and the first to accept
+   * doesn't help the others. `pushProgress` is updated as each server
+   * completes so the UI can show "Pushed to 2/4 servers" style feedback.
+   *
+   * The operation succeeds if at least one server accepts the push. If every
+   * server rejects or fails, the most recent error is surfaced to the user.
+   *
+   * Servers not in `eligibleGraspCloneUrls` are counted as "skipped" in the
+   * progress total so the UI message accurately reflects how many grasp
+   * servers were considered.
+   */
   const pushObjects = useCallback(
     async (
       allObjects: PackableObject[],
       refUpdate: RefUpdate,
     ): Promise<void> => {
       const packfile = await createPackfile(allObjects);
-      let pushSucceeded = false;
-      let lastPushError = "";
 
-      for (const cloneUrl of repo.graspCloneUrls) {
-        try {
-          const result = await pushToGitServer(cloneUrl, [refUpdate], packfile);
-          if (result.unpackOk) {
-            const refOk = result.refResults.every((r) => r.ok);
-            if (refOk) {
-              pushSucceeded = true;
-              break;
-            } else {
-              const failures = result.refResults
-                .filter((r) => !r.ok)
-                .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
-                .join("; ");
-              lastPushError = `Ref update rejected: ${failures}`;
-            }
-          } else {
-            lastPushError = `Unpack failed on ${cloneUrl}`;
-          }
-        } catch (err) {
-          lastPushError =
-            err instanceof Error ? err.message : `Push failed to ${cloneUrl}`;
-        }
+      const eligible = eligibleGraspCloneUrls;
+      const skippedCount = repo.graspCloneUrls.length - eligible.length;
+      const total = repo.graspCloneUrls.length;
+
+      // Seed progress: all eligible as "in-flight", skipped accounted for.
+      const perUrl: Record<string, PushOutcome> = {};
+      for (const url of repo.graspCloneUrls) {
+        if (!eligible.includes(url)) perUrl[url] = "skipped";
+      }
+      setPushProgress({
+        total,
+        pushed: 0,
+        failed: 0,
+        skipped: skippedCount,
+        perUrl: { ...perUrl },
+      });
+
+      if (eligible.length === 0) {
+        throw new Error("No eligible grasp servers to push to.");
       }
 
-      if (!pushSucceeded) {
+      let lastPushError = "";
+
+      const results = await Promise.all(
+        eligible.map(async (cloneUrl): Promise<PushOutcome> => {
+          try {
+            const result = await pushToGitServer(
+              cloneUrl,
+              [refUpdate],
+              packfile,
+            );
+            if (result.unpackOk && result.refResults.every((r) => r.ok)) {
+              return "pushed";
+            }
+            const failures = result.refResults
+              .filter((r) => !r.ok)
+              .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
+              .join("; ");
+            lastPushError = result.unpackOk
+              ? `Ref update rejected on ${cloneUrl}: ${failures}`
+              : `Unpack failed on ${cloneUrl}`;
+            return "failed";
+          } catch (err) {
+            lastPushError =
+              err instanceof Error ? err.message : `Push failed to ${cloneUrl}`;
+            return "failed";
+          }
+        }),
+      );
+
+      // Fold results back into progress state.
+      let pushed = 0;
+      let failed = 0;
+      eligible.forEach((url, i) => {
+        perUrl[url] = results[i];
+        if (results[i] === "pushed") pushed++;
+        else if (results[i] === "failed") failed++;
+      });
+      setPushProgress({
+        total,
+        pushed,
+        failed,
+        skipped: skippedCount,
+        perUrl,
+      });
+
+      if (pushed === 0) {
         throw new Error(
-          `Push failed to all Grasp servers. ${lastPushError}. ` +
+          `Push failed to all ${eligible.length} eligible Grasp server` +
+            `${eligible.length !== 1 ? "s" : ""}. ${lastPushError}. ` +
             "The state event will expire from purgatory in 30 minutes.",
         );
       }
     },
-    [repo.graspCloneUrls],
+    [repo.graspCloneUrls, eligibleGraspCloneUrls],
   );
 
   // ── Merge orchestration (merge strategy) ─────────────────────────────────
@@ -353,6 +495,7 @@ export function MergePanel({
 
     setMergeStep("building");
     setMergeError(null);
+    setPushProgress(ZERO_PROGRESS);
 
     try {
       // ── Step 1: Build merge commit ────────────────────────────────────
@@ -516,6 +659,7 @@ export function MergePanel({
 
     setMergeStep("building");
     setMergeError(null);
+    setPushProgress(ZERO_PROGRESS);
 
     try {
       const { objects, newTipCommitHash } = mergeability.applyResult;
@@ -623,15 +767,89 @@ export function MergePanel({
   // ── PR merge orchestration ────────────────────────────────────────────────
 
   const handlePRMerge = useCallback(async () => {
-    if (!account || !prMergeability.result || !defaultBranchHead) {
+    if (
+      !account ||
+      !prMergeability.result ||
+      !defaultBranchHead ||
+      !gitPool ||
+      !pr.tip.commitId
+    ) {
       return;
     }
 
     setMergeStep("building");
     setMergeError(null);
+    setPushProgress(ZERO_PROGRESS);
 
     try {
       const { mergeCommitObj } = prMergeability.result;
+      const prTipCommitId = pr.tip.commitId;
+
+      // ── Fetch delta objects for the push ─────────────────────────────
+      //
+      // A merge commit references [defaultBranchHead, prTip] as parents.
+      // Every eligible grasp server has defaultBranchHead (that's what
+      // "eligible" means). But if the PR branch was only pushed to GitHub/
+      // Codeberg or to a different grasp server, the target may not have
+      // prTip or its ancestors — the push would fail the connectivity
+      // check.
+      //
+      // We ask a source that has prTip for `want <prTip>` `have
+      // <defaultBranchHead>`. The source responds with only the objects
+      // reachable from prTip that aren't reachable from defaultBranchHead
+      // — exactly the delta every eligible target needs.
+      //
+      // When the source is the PR author's own fork, it may not have
+      // defaultBranchHead (that commit belongs to the maintainer's repo).
+      // In that case we add prMergeBase as a secondary have; it's always
+      // an ancestor of defaultBranchHead, so targets have it too.
+      //
+      // A 50-commit cap bounds the fetch size; if exceeded we abort the
+      // merge rather than silently pulling an expensive history.
+      setMergeStep("fetching-objects");
+      const haves = prMergeBase
+        ? [defaultBranchHead, prMergeBase]
+        : [defaultBranchHead];
+
+      const deltaResult = await gitPool.fetchPRPushObjects(
+        prTipCommitId,
+        haves,
+        // AbortController is owned by this handler; if the user reloads
+        // the component we lose the push anyway, which is fine.
+        new AbortController().signal,
+        effectiveCloneUrls,
+      );
+
+      if (deltaResult === "too-large") {
+        throw new Error(
+          "PR has too many commits missing from Grasp servers to merge from " +
+            "the web. Please merge locally via git and push.",
+        );
+      }
+
+      // `null` = no source reachable. We still try to push — if all eligible
+      // grasp servers already have prTip (rare but possible) the push will
+      // succeed with just the merge commit. If they don't, the receive-pack
+      // will report "unpack failed" and we'll surface that.
+      const TYPE_MAP: Record<number, "commit" | "tree" | "blob"> = {
+        1: "commit",
+        2: "tree",
+        3: "blob",
+      };
+      const prPackableObjects: PackableObject[] = deltaResult
+        ? Array.from(deltaResult.objects.values())
+            .filter((o: ParsedObject) => o.type in TYPE_MAP)
+            .map((o: ParsedObject) => ({
+              type: TYPE_MAP[o.type],
+              data: o.data,
+              hash: o.hash,
+            }))
+        : [];
+
+      const allObjects: PackableObject[] = [
+        ...prPackableObjects,
+        mergeCommitObj,
+      ];
 
       // ── Step 2+3: Publish state + push ────────────────────────────────
       const stateTemplate = await factory.create(
@@ -650,7 +868,7 @@ export function MergePanel({
       eventStore.add(signedState);
 
       setMergeStep("pushing");
-      await pushObjects([mergeCommitObj], {
+      await pushObjects(allObjects, {
         oldHash: defaultBranchHead,
         newHash: mergeCommitObj.hash,
         refName: defaultBranchRef,
@@ -720,6 +938,9 @@ export function MergePanel({
     defaultBranchRef,
     pr,
     pushObjects,
+    gitPool,
+    effectiveCloneUrls,
+    prMergeBase,
     repo,
     graspRelayUrls,
     toast,
@@ -755,6 +976,8 @@ export function MergePanel({
                   }
                   isBaseGuessed={!!guessedBaseCommitId}
                   isPRType={isPRType}
+                  hasEligibleServers={hasEligibleServers}
+                  pushProgress={pushProgress}
                 />
               </div>
 
@@ -904,7 +1127,9 @@ export function MergePanel({
                 {isMerging && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span className="text-xs">{STEP_LABELS[mergeStep]}</span>
+                    <span className="text-xs">
+                      {formatStepLabel(mergeStep, pushProgress)}
+                    </span>
                   </div>
                 )}
 
@@ -1019,6 +1244,8 @@ function StatusHeadline({
   allHashesVerified,
   isBaseGuessed,
   isPRType,
+  hasEligibleServers,
+  pushProgress,
 }: {
   status: MergeabilityStatus | PRMergeabilityStatus;
   mergeStep: MergeStep;
@@ -1028,14 +1255,30 @@ function StatusHeadline({
   allHashesVerified: boolean;
   isBaseGuessed: boolean;
   isPRType: boolean;
+  hasEligibleServers: boolean;
+  pushProgress: PushProgress;
 }) {
   if (mergeStep === "done") {
+    const total = pushProgress.total;
+    const pushed = pushProgress.pushed;
+    const extra: string[] = [];
+    if (pushProgress.failed > 0) extra.push(`${pushProgress.failed} failed`);
+    if (pushProgress.skipped > 0) extra.push(`${pushProgress.skipped} skipped`);
+    const serverSummary =
+      total > 0
+        ? ` \u2014 pushed to ${pushed}/${total} grasp server${total !== 1 ? "s" : ""}${
+            extra.length ? ` (${extra.join(", ")})` : ""
+          }`
+        : "";
     return (
       <p className="text-sm font-medium text-green-600">
         {isPRType ? "PR" : "Patch"} merged into{" "}
         <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
           {defaultBranchName}
         </code>
+        <span className="font-normal text-muted-foreground">
+          {serverSummary}
+        </span>
       </p>
     );
   }
@@ -1046,7 +1289,23 @@ function StatusHeadline({
 
   if (mergeStep !== "idle") {
     return (
-      <p className="text-sm text-muted-foreground">{STEP_LABELS[mergeStep]}</p>
+      <p className="text-sm text-muted-foreground">
+        {formatStepLabel(mergeStep, pushProgress)}
+      </p>
+    );
+  }
+
+  // No eligible push targets — show a helpful message instead of the
+  // usual "ready to merge" headline. Merge buttons are hidden above.
+  if (
+    (status === "ready" || status === "ready-apply-only") &&
+    !hasEligibleServers
+  ) {
+    return (
+      <p className="text-sm font-medium text-amber-600 dark:text-amber-500">
+        Grasp servers are out of sync with the current state event — no eligible
+        push target.
+      </p>
     );
   }
 

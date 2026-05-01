@@ -570,7 +570,12 @@ export async function buildPatchChainObjects(
     });
     if (!match) allHashesVerified = false;
 
-    currentParentCommitId = claimedHash;
+    // Use the re-built commit hash as the parent for the next commit in
+    // the chain. If we used `claimedHash` here and the hashes differ (GPG
+    // signatures, whitespace, timezone encoding), the merge commit's second
+    // parent would reference a hash that isn't in the packfile, and the
+    // grasp server would reject the push with "unpack failed".
+    currentParentCommitId = commitObj.hash;
   }
 
   return {

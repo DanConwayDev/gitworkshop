@@ -1313,6 +1313,81 @@ export class GitGraspPool {
   }
 
   /**
+   * Fetch the git objects needed to push a PR merge to target grasp servers.
+   *
+   * Asks a single source server for the delta between `prTip` and commits
+   * the target servers already have (`haveShas`, typically
+   * `[defaultBranchHead]`). Source selection uses `withFallback` — winner
+   * first, then other `ok` pool URLs by latency, then extra `fallbackUrls`
+   * (e.g. the PR author's GitHub fork). CORS proxy routing is handled
+   * transparently by the http client.
+   *
+   * A `maxCommits` hard cap guards against runaway fetches: if the source
+   * doesn't recognise any have, it would otherwise send the full history.
+   * We count commit objects in the response and return a distinguishable
+   * `"too-large"` sentinel if the count exceeds `maxCommits`, so the caller
+   * can abort the merge with a clear message.
+   *
+   * Returns:
+   *   - `{ objects, commitCount }` when a source successfully returned a
+   *     delta within the cap.
+   *   - `"too-large"` when the response exceeded `maxCommits`.
+   *   - `null` when no source could be reached.
+   *
+   * @param prTip       - PR tip commit hash (the want).
+   * @param haveShas    - Commits the target push servers already have.
+   * @param fallbackUrls - PR author's clone URLs (tried after pool URLs).
+   * @param maxCommits  - Hard cap on commits in the response (default 50).
+   */
+  async fetchPRPushObjects(
+    prTip: string,
+    haveShas: string[],
+    signal: AbortSignal,
+    fallbackUrls?: string[],
+    maxCommits = 50,
+  ): Promise<
+    | {
+        objects: Map<string, import("@fiatjaf/git-natural-api").ParsedObject>;
+        commitCount: number;
+      }
+    | "too-large"
+    | null
+  > {
+    let exceeded = false;
+    const result = await this.withFallback(
+      signal,
+      async (url) => {
+        // deepen acts as a safety bound — if no have matches the server would
+        // otherwise return the whole history. maxCommits+1 so we can detect
+        // the "too many commits" case without clamping silently.
+        const objects = await this.http.fetchDeltaForPush(
+          url,
+          prTip,
+          haveShas,
+          maxCommits + 1,
+          signal,
+        );
+        if (!objects) return null;
+        // ParsedObject.type: 1=commit, 2=tree, 3=blob.
+        let commitCount = 0;
+        for (const o of objects.values()) {
+          if (o.type === 1) commitCount++;
+        }
+        if (commitCount > maxCommits) {
+          exceeded = true;
+          // Returning non-null stops withFallback from retrying; the
+          // top-level `exceeded` flag converts this to "too-large" below.
+          return { objects, commitCount };
+        }
+        return { objects, commitCount };
+      },
+      fallbackUrls,
+    );
+    if (exceeded) return "too-large";
+    return result;
+  }
+
+  /**
    * Find the merge base between a PR tip commit and the default branch.
    *
    * Strategy:

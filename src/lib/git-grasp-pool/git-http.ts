@@ -57,6 +57,48 @@ function createWantRequest(
   pkts.push("done\n");
   return pkts.map(pktEncode).join("");
 }
+
+/**
+ * Build a want+have upload-pack request body.
+ *
+ * Tells the server: "I want <wantSha>, and I already have <haveShas>, so
+ * only send me the objects reachable from wantSha that aren't reachable
+ * from any of the haveShas."
+ *
+ * An optional `deepen` bound caps how many commits back from `wantSha` the
+ * server will include. It doubles as a safety net: if the server doesn't
+ * recognise any of our haves, at least the response size is bounded.
+ *
+ * Every have in `haveShas` must already exist on the server — otherwise the
+ * server will ignore them and include their reachable history in the pack.
+ * Callers should derive haves from the server's infoRefs ref tips.
+ *
+ * The response is parsed by the patched `fetchPackfile` (see patches/) which
+ * handles both the `NAK\n` and `ACK <sha>\n` negotiation terminators.
+ */
+function createWantHaveRequest(
+  wantSha: string,
+  haveShas: string[],
+  capabilities: string[],
+  deepen?: number,
+): string {
+  if (wantSha.length !== 40)
+    throw new Error(`invalid commit '${wantSha}', must be 40 char hex`);
+  for (const have of haveShas) {
+    if (have.length !== 40)
+      throw new Error(`invalid have '${have}', must be 40 char hex`);
+  }
+  const pkts: string[] = [];
+  pkts.push(`want ${wantSha} ${capabilities.join(" ")} agent=nsa/1.0.0\n`);
+  if (typeof deepen !== "undefined") pkts.push(`deepen ${deepen}\n`);
+  // Flush after wants (required before haves).
+  pkts.push("");
+  for (const have of haveShas) {
+    pkts.push(`have ${have}\n`);
+  }
+  pkts.push("done\n");
+  return pkts.map(pktEncode).join("");
+}
 import type { CorsProxyManager } from "./cors-proxy";
 import type { GitObjectCache, RawObjectsEntry } from "./cache";
 import { FULL_NEST_LIMIT } from "./cache";
@@ -1067,6 +1109,48 @@ export class GitHttpClient {
       const commit = commits[0];
       this.cache.putCommit(commit);
       return commit;
+    } catch {
+      if (signal.aborted) return null;
+      return null;
+    }
+  }
+
+  /**
+   * Fetch the delta objects between a wanted commit and commits the caller
+   * knows are already on the target push server.
+   *
+   * Asks the source `url` for `want <wantSha>` `have <haveShas>` with a
+   * `deepen` bound as a hard safety cap. Returns the raw ParsedObject map of
+   * everything the server sent — commits, trees and blobs needed for a
+   * receive-pack connectivity check.
+   *
+   * Intended use: prepare the packfile for pushing a PR merge. `wantSha` is
+   * the PR tip; `haveShas` is what the target grasp server already has —
+   * normally `[defaultBranchHead]` since every eligible target has it, or
+   * `[mergeBase]` as a fallback when the source does not know
+   * defaultBranchHead. `deepen` bounds the fetch so a mis-specified have
+   * cannot silently pull the full history.
+   *
+   * Returns `null` on error. The caller should count commits in the returned
+   * map and decide whether the delta is small enough to push.
+   */
+  async fetchDeltaForPush(
+    url: string,
+    wantSha: string,
+    haveShas: string[],
+    deepen: number,
+    signal: AbortSignal,
+  ): Promise<Map<string, ParsedObject> | null> {
+    if (signal.aborted) return null;
+    const effectiveUrl = this.cors.resolveUrl(url);
+    const serverCaps = await this.getServerCaps(url, signal);
+    if (signal.aborted) return null;
+    try {
+      const caps = selectCapabilities(serverCaps);
+      const request = createWantHaveRequest(wantSha, haveShas, caps, deepen);
+      const result = await fetchPackfile(effectiveUrl, request);
+      if (signal.aborted) return null;
+      return result.objects;
     } catch {
       if (signal.aborted) return null;
       return null;

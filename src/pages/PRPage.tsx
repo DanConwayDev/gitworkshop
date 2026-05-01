@@ -1415,6 +1415,12 @@ export default function PRPage() {
                             })
                           : undefined
                       }
+                      prMergeBase={
+                        pr.itemType === "pr"
+                          ? (effectiveMergeBase ?? undefined)
+                          : undefined
+                      }
+                      poolState={gitPoolState}
                     />
                   )}
 

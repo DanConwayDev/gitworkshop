@@ -93,6 +93,138 @@ index 247030b375c11172168a1076dadbe0789877aaaf..95aa2b3875e87abc11db0ce19727f30c
 +
 +  return { name, email, timestamp, timezone };
  }
+diff --git a/packs.js b/packs.js
+index 73c4afdbb17200ba2a0d198ea91be5bee55dcdc5..a7c56929df05cd265811fd405dba4a2eda09fbbe 100755
+--- a/packs.js
++++ b/packs.js
+@@ -44,21 +44,47 @@ export class InvalidCommit extends Error {
+   if (data.length === 0) {
+     throw new Error("empty response");
+   }
+-  let prev = 0;
++  // Parse pkt-lines until we reach the end of negotiation.
++  // With done+multi_ack_detailed the server sends 0+ intermediate
++  // "ACK <sha> common/ready\n" lines then terminates the negotiation
++  // with exactly one of:
++  //   - "NAK\n"             (no common base found)
++  //   - "ACK <sha>\n"       (final ack — common base found)
++  // followed by the side-band-wrapped packfile.
+   let offset = 0;
+   while(offset < data.length){
+-    prev = offset;
+-    const idx = data.subarray(prev + 1).indexOf(10);
+-    if (idx === -1) {
++    const lenHex = String.fromCharCode(...data.subarray(offset, offset + 4));
++    const len = parseInt(lenHex, 16);
++    if (isNaN(len)) {
+       if (String.fromCharCode(...data.subarray(4, 32)) === "ERR upload-pack: not our ref") {
+         throw new MissingRef();
+       }
+-      throw new Error(`unexpected '${String.fromCharCode(...data.subarray(0, 63))}'`);
++      throw new Error(`unexpected pkt-line length '${lenHex}' at offset ${offset}: '${String.fromCharCode(...data.subarray(0, Math.min(63, data.length)))}'`);
+     }
+-    offset = prev + idx + 1;
+-    if (String.fromCharCode(...data.subarray(offset - 3, offset)) === "NAK") break;
++    if (len === 0) {
++      // flush-pkt — advance past and keep scanning
++      offset += 4;
++      continue;
++    }
++    // Extract pkt-line content (after the 4-byte length prefix)
++    const content = String.fromCharCode(...data.subarray(offset + 4, offset + len));
++    const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
++    if (trimmed.startsWith("ERR ")) {
++      if (trimmed === "ERR upload-pack: not our ref") throw new MissingRef();
++      throw new Error(trimmed);
++    }
++    // Intermediate multi-ack: "ACK <sha> common" / "ACK <sha> ready"
++    if (/^ACK [0-9a-f]{40} (common|ready)$/.test(trimmed)) {
++      offset += len;
++      continue;
++    }
++    // End of negotiation: NAK or final ACK (no common/ready suffix)
++    if (trimmed === "NAK" || /^ACK [0-9a-f]{40}$/.test(trimmed)) {
++      offset += len;
++      break;
++    }
++    throw new Error(`unexpected negotiation line '${trimmed}' at offset ${offset}`);
+   }
+-  offset++;
+   const packfileData = [];
+   while(offset < data.length){
+     const len = parseInt(String.fromCharCode(...data.subarray(offset, offset + 4)), 16);
+diff --git a/packs.ts b/packs.ts
+index 2a3098be944488f94a99cc25b504d13d578eb791..fc4c2a031cb9ccb63d47f4b07c63bdac23e8e289 100755
+--- a/packs.ts
++++ b/packs.ts
+@@ -58,29 +58,56 @@ export async function fetchPackfile(
+     throw new Error("empty response");
+   }
+ 
+-  let prev = 0;
++  // Parse pkt-lines until we reach the end of negotiation.
++  // With done+multi_ack_detailed the server sends 0+ intermediate
++  // "ACK <sha> common/ready\n" lines then terminates the negotiation
++  // with exactly one of:
++  //   - "NAK\n"             (no common base found)
++  //   - "ACK <sha>\n"       (final ack — common base found)
++  // followed by the side-band-wrapped packfile.
+   let offset = 0;
+   while (offset < data.length) {
+-    prev = offset;
+-    const idx = data.subarray(prev + 1).indexOf(10);
+-    if (idx === -1) {
++    const lenHex = String.fromCharCode(...data.subarray(offset, offset + 4));
++    const len = parseInt(lenHex, 16);
++    if (isNaN(len)) {
+       if (
+         String.fromCharCode(...data.subarray(4, 32)) ===
+           "ERR upload-pack: not our ref"
+       ) {
+         throw new MissingRef();
+       }
+-
+       throw new Error(
+-        `unexpected '${String.fromCharCode(...data.subarray(0, 63))}'`,
++        `unexpected pkt-line length '${lenHex}' at offset ${offset}: '${String.fromCharCode(...data.subarray(0, Math.min(63, data.length)))}'`,
+       );
+     }
+-    offset = prev + idx + 1;
+-    if (
+-      String.fromCharCode(...data.subarray(offset - 3, offset)) === "NAK"
+-    ) break;
++    if (len === 0) {
++      // flush-pkt — advance past and keep scanning
++      offset += 4;
++      continue;
++    }
++    // Extract pkt-line content (after the 4-byte length prefix)
++    const content = String.fromCharCode(
++      ...data.subarray(offset + 4, offset + len),
++    );
++    const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
++    if (trimmed.startsWith("ERR ")) {
++      if (trimmed === "ERR upload-pack: not our ref") throw new MissingRef();
++      throw new Error(trimmed);
++    }
++    // Intermediate multi-ack: "ACK <sha> common" / "ACK <sha> ready"
++    if (/^ACK [0-9a-f]{40} (common|ready)$/.test(trimmed)) {
++      offset += len;
++      continue;
++    }
++    // End of negotiation: NAK or final ACK (no common/ready suffix)
++    if (trimmed === "NAK" || /^ACK [0-9a-f]{40}$/.test(trimmed)) {
++      offset += len;
++      break;
++    }
++    throw new Error(
++      `unexpected negotiation line '${trimmed}' at offset ${offset}`,
++    );
+   }
+-  offset++;
+ 
+   const packfileData = [];
+   while (offset < data.length) {
 diff --git a/tree.js b/tree.js
 index c3a1fb77c5e1fd3c7e5ae28674c24ed01aef50a6..dac0e2dd0a5ea17c9f1d57a586513cee18f47b9c 100755
 --- a/tree.js
