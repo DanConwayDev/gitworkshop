@@ -294,6 +294,22 @@ export function getRepoDescription(ev: NostrEvent): string {
 }
 
 /**
+ * Normalize a URL to a canonical key for deduplication.
+ * Lowercases the scheme and host, strips a trailing slash from the path.
+ * Falls back to the original string if the URL cannot be parsed.
+ */
+function normalizeUrlKey(url: string): string {
+  try {
+    const u = new URL(url);
+    // Lowercase scheme + host; strip trailing slash from pathname
+    const path = u.pathname.replace(/\/$/, "") || "/";
+    return `${u.protocol.toLowerCase()}//${u.host.toLowerCase()}${path}${u.search}${u.hash}`;
+  } catch {
+    return url.toLowerCase().replace(/\/$/, "");
+  }
+}
+
+/**
  * Extract all clone URLs from a kind:30617 event.
  * NIP-34 packs multiple URLs as extra elements of a single tag:
  *   ["clone", "url1", "url2", ...]
@@ -2147,8 +2163,9 @@ export function resolveChain(
 
   for (const ev of announcements) {
     for (const v of getRepoCloneUrls(ev)) {
-      if (!seenClone.has(v)) {
-        seenClone.add(v);
+      const key = normalizeUrlKey(v);
+      if (!seenClone.has(key)) {
+        seenClone.add(key);
         cloneUrlProvenance.push({
           pubkey: ev.pubkey,
           createdAt: ev.created_at,
@@ -2157,8 +2174,9 @@ export function resolveChain(
       }
     }
     for (const v of getRepoRelays(ev)) {
-      if (!seenRelay.has(v)) {
-        seenRelay.add(v);
+      const key = normalizeUrlKey(v);
+      if (!seenRelay.has(key)) {
+        seenRelay.add(key);
         relayProvenance.push({
           pubkey: ev.pubkey,
           createdAt: ev.created_at,
