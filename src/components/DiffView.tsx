@@ -435,16 +435,23 @@ function FileDiffCardHeader({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={onToggle}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
       className={cn(
         "flex items-center gap-2 w-full px-3 py-2",
         "bg-muted/80 hover:bg-muted/90 backdrop-blur-sm transition-colors",
-        "text-sm sticky top-14 z-10 rounded-t-lg",
+        "text-sm sticky top-14 z-10 cursor-pointer",
+        collapsed ? "rounded-lg" : "rounded-t-lg",
       )}
     >
-      <button
-        onClick={onToggle}
-        className="flex items-center gap-2 min-w-0 flex-1 text-left"
-      >
+      <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
         {collapsed ? (
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         ) : (
@@ -471,7 +478,7 @@ function FileDiffCardHeader({
             <span className="text-foreground">{filename}</span>
           )}
         </span>
-      </button>
+      </div>
 
       {/* Stats — omitted while loading */}
       {additions !== undefined || deletions !== undefined ? (
@@ -500,32 +507,37 @@ function FileDiffCardHeader({
         </span>
       )}
 
-      {/* Wrap toggle — only shown when there are long lines and card is open */}
-      {!collapsed && hasLongLines && onToggleWrap !== undefined && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleWrap();
-              }}
-              aria-label={wordWrap ? "Disable word wrap" : "Enable word wrap"}
-            >
-              {wordWrap ? (
-                <WrapText className="h-3.5 w-3.5" />
-              ) : (
-                <ArrowRightToLine className="h-3.5 w-3.5" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="left" className="text-xs">
-            {wordWrap ? "Disable" : "Enable"} word wrap (Alt+Z)
-          </TooltipContent>
-        </Tooltip>
-      )}
+      {/* Wrap toggle — always reserve the space to keep header height stable */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            className={cn(
+              "h-5 w-5 p-0 shrink-0 text-muted-foreground hover:text-foreground",
+              !collapsed && hasLongLines && onToggleWrap !== undefined
+                ? "opacity-100"
+                : "invisible pointer-events-none",
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleWrap?.();
+            }}
+            aria-label={wordWrap ? "Disable word wrap" : "Enable word wrap"}
+            tabIndex={
+              !collapsed && hasLongLines && onToggleWrap !== undefined ? 0 : -1
+            }
+          >
+            {wordWrap ? (
+              <WrapText className="h-3.5 w-3.5" />
+            ) : (
+              <ArrowRightToLine className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="text-xs">
+          {wordWrap ? "Disable" : "Enable"} word wrap (Alt+Z)
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }
