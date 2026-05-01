@@ -102,6 +102,11 @@ interface ServerStatus {
   usesProxy: boolean;
   /** Structured error reason from the pool — drives specific UI messages */
   errorKind?: UrlErrorKind | null;
+  /**
+   * True when the server is reachable (status ok) but advertises no HEAD
+   * symref — it cannot be used as an authority for the default branch.
+   */
+  missingHead?: boolean;
 }
 
 function shortLabel(url: string): string {
@@ -149,8 +154,11 @@ function buildServerStatuses(
     const status: UrlRefStatus =
       urlState.refStatus[currentRefFull] ?? "connected";
     const serverCommit = urlState.refCommits[currentRefFull];
+    // Server is reachable but has no HEAD symref — it's a partial mirror
+    // that cannot be used as an authority for the default branch.
+    const missingHead = urlState.infoRefs !== null && urlState.headRef === null;
 
-    return { url, label, status, serverCommit, usesProxy };
+    return { url, label, status, serverCommit, usesProxy, missingHead };
   });
 }
 
@@ -402,6 +410,7 @@ function ServerRow({
   gitCommitterDate?: number;
   pool?: GitGraspPool | null;
 }) {
+  const missingHead = serverStatus.missingHead ?? false;
   const [copied, setCopied] = useState(false);
 
   // Lazily fetch the server's commit timestamp when it differs from the signed
@@ -651,6 +660,11 @@ function ServerRow({
         )}
         {serverStatus.status === "unknown" && (
           <p className="text-[11px] text-muted-foreground mt-0.5">fetching…</p>
+        )}
+        {missingHead && serverStatus.status !== "error" && (
+          <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+            no HEAD — partial mirror, excluded from default branch comparison
+          </p>
         )}
       </div>
 

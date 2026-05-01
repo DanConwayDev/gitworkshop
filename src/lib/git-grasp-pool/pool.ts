@@ -572,9 +572,10 @@ export class GitGraspPool {
         }
         if (!cachedInfo) continue;
         const headRef = cachedInfo.symrefs["HEAD"];
-        const headCommit = headRef
-          ? cachedInfo.refs[headRef]
-          : Object.values(cachedInfo.refs)[0];
+        // Only compare against the HEAD commit when the server advertises a
+        // HEAD symref. A server missing HEAD (e.g. a partial mirror) should
+        // not drive the "git is ahead" fast-path.
+        const headCommit = headRef ? cachedInfo.refs[headRef] : undefined;
         if (!headCommit) continue;
         const matchesState =
           headCommit.startsWith(knownHeadCommit) ||
@@ -735,9 +736,12 @@ export class GitGraspPool {
         tracker.recordInfoRefsSuccess(info, latency);
 
         const headRef = info.symrefs["HEAD"];
-        const headCommit = headRef
-          ? info.refs[headRef]
-          : Object.values(info.refs)[0];
+        // Only use the HEAD commit for "ahead of Nostr" comparison when the
+        // server advertises a HEAD symref. A server missing HEAD (e.g. a
+        // mirror that only has non-default branches) cannot be used as an
+        // authority for what the default branch points to — using its first
+        // arbitrary ref would produce false "git is ahead" warnings.
+        const headCommit = headRef ? info.refs[headRef] : undefined;
 
         // Extract default branch
         if (headRef?.startsWith("refs/heads/") && !defaultBranch) {
@@ -1031,13 +1035,14 @@ export class GitGraspPool {
         stateEvent !== null &&
         !this.stateManager.refsMatchLastFetched(lastFetchedRefs)
       ) {
-        // Check if git is ahead (server has different commit than state)
+        // Check if git is ahead (server has different commit than state).
+        // Only consider servers that advertise a HEAD symref — servers
+        // missing HEAD cannot be used as an authority for the default branch.
         const gitIsAhead = this.urlManager.getAll().some((t) => {
           if (t.status !== "ok" || !t.state.infoRefs) return false;
           const headRef = t.state.infoRefs.symrefs["HEAD"];
-          const headCommit = headRef
-            ? t.state.infoRefs.refs[headRef]
-            : Object.values(t.state.infoRefs.refs)[0];
+          if (!headRef) return false;
+          const headCommit = t.state.infoRefs.refs[headRef];
           if (!headCommit) return false;
           return (
             !headCommit.startsWith(stateEvent.headCommitId) &&
