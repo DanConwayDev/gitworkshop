@@ -761,8 +761,16 @@ export default function PRPage() {
   );
 
   // Resolve the merge base for the commit detail patch chain.
+  // usePatchMergeBase reads `chain[0].parentCommitId`, so cover letters (which
+  // never carry a parent-commit tag) must be excluded — otherwise the hook
+  // falls through to the timestamp-heuristic path and wrongly reports the
+  // base as "guessed" for patch sets that start with a cover letter.
+  const commitDetailPatchChainNoCover = useMemo(
+    () => commitDetailPatchChain.chain.filter((p) => !p.isCoverLetter),
+    [commitDetailPatchChain.chain],
+  );
   const commitDetailPatchMergeBase = usePatchMergeBase(
-    prCommitId && isPatch ? commitDetailPatchChain.chain : undefined,
+    prCommitId && isPatch ? commitDetailPatchChainNoCover : undefined,
     gitPool,
     gitPoolState,
   );
