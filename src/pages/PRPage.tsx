@@ -913,7 +913,7 @@ export default function PRPage() {
           patch={patchMatch.patch}
           pool={gitPool}
           poolWinnerUrl={gitPoolState.winnerUrl}
-          fallbackUrls={[...cloneUrls, ...prCloneUrls]}
+          fallbackUrls={effectiveCloneUrls}
           basePath={prBasePath ?? ""}
           repoBasePath={repoBasePath}
           backTo={prBasePath ? `${prBasePath}/commits` : ".."}
@@ -982,7 +982,7 @@ export default function PRPage() {
     gitPool,
     gitPoolState.winnerUrl,
     gitPoolState.latestCommit?.hash,
-    cloneUrls,
+    effectiveCloneUrls,
     prCloneUrls,
     prBasePath,
     repoBasePath,
