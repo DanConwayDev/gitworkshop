@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   deriveEffectiveHeadCommit,
   deriveEffectiveSource,
@@ -958,6 +959,10 @@ function GoToFileSearch({
   pulling: boolean;
   compact?: boolean;
 }) {
+  const isMobile = useIsMobile();
+  // On mobile always show icon-only; on desktop respect the compact prop.
+  const isCompact = compact || isMobile;
+
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1060,7 +1065,7 @@ function GoToFileSearch({
             "flex items-center h-7 rounded border text-xs transition-all duration-150 cursor-text",
             open
               ? "gap-1.5 px-2 border-border bg-background w-48"
-              : compact
+              : isCompact
                 ? "justify-center px-1.5 border-border/40 bg-muted/20 w-7 hover:border-border/70 hover:bg-muted/40"
                 : "gap-1.5 px-2 border-border bg-background w-32 hover:border-border/70",
             disabled && "opacity-40 pointer-events-none",
@@ -1081,14 +1086,14 @@ function GoToFileSearch({
             placeholder="Go to file…"
             className={cn(
               "bg-transparent outline-none text-xs placeholder:text-muted-foreground/70 min-w-0 transition-all duration-150",
-              open || !compact
+              open || !isCompact
                 ? "flex-1 w-auto opacity-100"
                 : "w-0 opacity-0 pointer-events-none",
             )}
             disabled={disabled}
             // Remove from tab order when visually hidden (compact + closed),
             // otherwise keyboard users land on an invisible input.
-            tabIndex={!open && compact ? -1 : undefined}
+            tabIndex={!open && isCompact ? -1 : undefined}
             aria-label="Go to file"
             aria-autocomplete="list"
             aria-expanded={showDropdown}
@@ -1277,11 +1282,11 @@ function LocatorBar({
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
       {/* Single flex-wrap row.
-          Order: [RefSelector] [Breadcrumb] [GoToFile hidden@mobile] [GitServerStatus hidden@narrow]
+          Order: [RefSelector] [Breadcrumb] [GoToFile] [GitServerStatus hidden@mobile]
           The breadcrumb has flex-[1_1_12rem]: it fills available space and
           only wraps to a full-width second line when it can't fit at 12rem.
-          GoToFile + GitServerStatus are hidden below the sm breakpoint so
-          they disappear before the breadcrumb is forced to wrap. */}
+          GoToFile shows as an icon-only button on mobile (compact mode).
+          GitServerStatus is hidden below the sm breakpoint. */}
       <div
         className={cn(
           "flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 relative",
@@ -1328,19 +1333,19 @@ function LocatorBar({
           />
         </div>
 
-        {/* Right-side items — hidden below sm breakpoint */}
-        <div className="hidden sm:flex items-center gap-2 shrink-0">
-          {/* Go-to-file search — replaces "checked just now" text */}
-          {cloneUrls.length > 0 && (
-            <GoToFileSearch
-              fullFileTree={fullFileTree}
-              currentRef={currentRef}
-              treeUrl={treeUrl}
-              pulling={pulling}
-              compact={compactSearch}
-            />
-          )}
+        {/* Go-to-file search — visible on all screen sizes (icon-only when compact) */}
+        {cloneUrls.length > 0 && (
+          <GoToFileSearch
+            fullFileTree={fullFileTree}
+            currentRef={currentRef}
+            treeUrl={treeUrl}
+            pulling={pulling}
+            compact={compactSearch}
+          />
+        )}
 
+        {/* Git server status — hidden below sm breakpoint */}
+        <div className="hidden sm:flex items-center gap-2 shrink-0">
           {cloneUrls.length > 0 && (
             <GitServerStatus
               currentRefFull={currentRefFull}
