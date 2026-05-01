@@ -40,7 +40,6 @@ import {
   SUBJECT_LABEL_NAMESPACE,
   kindToStatus,
   extractSubject,
-  extractPatchSubject,
   type IssueStatus,
 } from "@/lib/nip34";
 import { useRepoPath } from "@/hooks/useRepoPath";
@@ -265,7 +264,7 @@ function PatchPreviewContent({
   isPR: boolean;
   relayHints?: string[];
 }) {
-  const originalSubject = extractPatchSubject(event);
+  const originalSubject = extractSubject(event);
   const variant = isPR ? "pr" : "patch";
   const { status, currentSubject } = useEmbeddedItemEssentials(
     event.id,
