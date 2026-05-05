@@ -45,6 +45,7 @@ import {
 import { withGapFill } from "@/lib/withGapFill";
 import { BACKOFF_RECONNECT } from "@/lib/relay";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
+import { normalizeUrl } from "@/lib/url";
 
 /**
  * Global EventStore instance for all Nostr events.
@@ -701,6 +702,7 @@ export function nip34SupplementalRelayLoader(
         .subscribe((mailboxes) => {
           const newRelays = mailboxes.inboxes
             .slice(0, MAX_AUTHOR_INBOX_RELAYS)
+            .map(normalizeUrl)
             .filter((r) => !perItemQueried.has(r));
           if (newRelays.length === 0) return;
           for (const r of newRelays) perItemQueried.add(r);
@@ -716,7 +718,7 @@ export function nip34SupplementalRelayLoader(
     // those new relays only (createPaginatedTagValueLoader batches them).
     const relaySub = relays$
       .pipe(
-        map((relays) => relays.map((r) => r.url)),
+        map((relays) => relays.map((r) => normalizeUrl(r.url))),
         distinctUntilChanged(
           (a, b) =>
             a.length === b.length && a.every((url) => knownRelayUrls.has(url)),
@@ -820,6 +822,7 @@ export function nip34RepoLoader(
         .subscribe((mailboxes) => {
           const newRelays = mailboxes.inboxes
             .slice(0, MAX_AUTHOR_INBOX_RELAYS)
+            .map(normalizeUrl)
             .filter((r) => !perItemQueried.has(r));
           if (newRelays.length === 0) return;
           for (const r of newRelays) perItemQueried.add(r);
@@ -836,8 +839,8 @@ export function nip34RepoLoader(
 
     const relaySub = relays$
       .pipe(
-        // Map to URL strings for stable comparison
-        map((relays) => relays.map((r) => r.url)),
+        // Map to normalized URL strings for stable comparison
+        map((relays) => relays.map((r) => normalizeUrl(r.url))),
         // Only proceed when the URL set actually changes
         distinctUntilChanged(
           (a, b) =>
@@ -997,7 +1000,7 @@ export function nip34ThreadItemLoader(
 
     const relaySub = relays$
       .pipe(
-        map((urls) => urls),
+        map((urls) => urls.map(normalizeUrl)),
         distinctUntilChanged(
           (a, b) =>
             a.length === b.length && a.every((url) => knownRelayUrls.has(url)),

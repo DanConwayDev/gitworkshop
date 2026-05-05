@@ -78,6 +78,7 @@ import { useToast } from "@/hooks/useToast";
 import { REPO_KIND } from "@/lib/nip34";
 import { useNavigate } from "react-router-dom";
 import { useUserPath } from "@/hooks/useUserPath";
+import { normalizeUrl } from "@/lib/url";
 
 // ---------------------------------------------------------------------------
 // Helpers (shared)
@@ -565,8 +566,10 @@ function FullVariant({
   // Relays in other maintainers' announcements but NOT in the selected maintainer's
   const unionOnlyRelayUrls = useMemo((): Set<string> => {
     if (!isMultiMaintainer || !selectedAnnouncement) return new Set();
-    const myRelays = new Set(getRepoRelays(selectedAnnouncement));
-    return new Set(repo.relays.filter((r) => !myRelays.has(r)));
+    const myRelays = new Set(
+      getRepoRelays(selectedAnnouncement).map(normalizeUrl),
+    );
+    return new Set(repo.relays.filter((r) => !myRelays.has(normalizeUrl(r))));
   }, [isMultiMaintainer, selectedAnnouncement, repo.relays]);
 
   // Helper: get the contributor pubkey for a union relay/clone

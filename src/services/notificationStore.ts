@@ -80,6 +80,7 @@ import {
   evictNotificationSigner,
 } from "./notificationSync";
 import { BACKOFF_RECONNECT } from "@/lib/relay";
+import { normalizeUrl } from "@/lib/url";
 
 // ---------------------------------------------------------------------------
 // localStorage helpers
@@ -168,7 +169,7 @@ function inboxRelaysObservable(pubkey: string) {
   ]).pipe(
     map(([mailboxes, extra]) => {
       const inboxes = mailboxes?.inboxes ?? [];
-      return [...new Set([...inboxes, ...extra])];
+      return [...new Set([...inboxes, ...extra].map(normalizeUrl))];
     }),
     distinctUntilChanged(
       (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
@@ -187,7 +188,7 @@ function outboxRelaysObservable(pubkey: string) {
   ]).pipe(
     map(([mailboxes, lookup]) => {
       const outboxes = mailboxes?.outboxes ?? [];
-      return [...new Set([...outboxes, ...lookup])];
+      return [...new Set([...outboxes, ...lookup].map(normalizeUrl))];
     }),
     distinctUntilChanged(
       (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
@@ -385,12 +386,12 @@ export function acquireNotificationStore(
     eventStore.timeline([ownRepoFilter]) as unknown as Observable<NostrEvent[]>,
   ]).pipe(
     map(([indexRelays, events]) => {
-      const urlSet = new Set<string>(indexRelays);
+      const urlSet = new Set<string>(indexRelays.map(normalizeUrl));
       for (const ev of events) {
         for (const tag of ev.tags) {
           if (tag[0] === "relays") {
             for (let i = 1; i < tag.length; i++) {
-              if (tag[i]) urlSet.add(tag[i]);
+              if (tag[i]) urlSet.add(normalizeUrl(tag[i]));
             }
           }
         }

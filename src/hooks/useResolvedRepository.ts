@@ -26,6 +26,7 @@ import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
 import { combineLatest, of } from "rxjs";
 import { switchMap, map } from "rxjs/operators";
+import { normalizeUrl } from "@/lib/url";
 
 /** Max healthy mailbox relays to take per maintainer when querying NIP-65 relays. */
 const MAX_MAILBOX_RELAYS_PER_USER = 3;
@@ -160,11 +161,13 @@ export function useResolvedRepository(
     }
 
     // Third: git index relays (excluding hints already covered above).
-    const allHints = new Set([...nip05Relays, ...relayHints]);
+    const allHints = new Set([...nip05Relays, ...relayHints].map(normalizeUrl));
     groups.push({
       label: "git index",
       relays$: gitIndexRelays.pipe(
-        map((gitRelays) => gitRelays.filter((r) => !allHints.has(r))),
+        map((gitRelays) =>
+          gitRelays.filter((r) => !allHints.has(normalizeUrl(r))),
+        ),
       ),
     });
 
@@ -207,8 +210,10 @@ export function useResolvedRepository(
     } as Filter;
 
     // Build the relay list: relay hints first, then git index relays.
-    const allHints = new Set([...nip05Relays, ...relayHints]);
-    const gitRelays = gitIndexRelays.getValue().filter((r) => !allHints.has(r));
+    const allHints = new Set([...nip05Relays, ...relayHints].map(normalizeUrl));
+    const gitRelays = gitIndexRelays
+      .getValue()
+      .filter((r) => !allHints.has(normalizeUrl(r)));
     const backgroundRelays = [...allHints, ...gitRelays];
 
     if (backgroundRelays.length === 0) return undefined;

@@ -67,6 +67,7 @@ import { DEFAULT_GRASP_SERVERS } from "@/services/settings";
 import { GraspLogo } from "@/components/GraspLogo";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { normalizeUrl } from "@/lib/url";
 
 // ---------------------------------------------------------------------------
 // Known tag names — tags that the edit form explicitly manages.
@@ -326,9 +327,11 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
     contributorPubkey: string;
   }> => {
     if (!isMultiMaintainer || !selectedAnnouncement) return [];
-    const myRelays = new Set(getRepoRelays(selectedAnnouncement));
+    const myRelays = new Set(
+      getRepoRelays(selectedAnnouncement).map(normalizeUrl),
+    );
     return repo.relays
-      .filter((r) => !myRelays.has(r))
+      .filter((r) => !myRelays.has(normalizeUrl(r)))
       .map((url) => ({
         url,
         contributorPubkey:
@@ -346,9 +349,11 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
     contributorPubkey: string;
   }> => {
     if (!isMultiMaintainer || !selectedAnnouncement) return [];
-    const myCloneUrls = new Set(getRepoCloneUrls(selectedAnnouncement));
+    const myCloneUrls = new Set(
+      getRepoCloneUrls(selectedAnnouncement).map(normalizeUrl),
+    );
     return repo.cloneUrls
-      .filter((u) => !myCloneUrls.has(u) && !isGraspCloneUrl(u))
+      .filter((u) => !myCloneUrls.has(normalizeUrl(u)) && !isGraspCloneUrl(u))
       .map((url) => ({
         url,
         contributorPubkey:

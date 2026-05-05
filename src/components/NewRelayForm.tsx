@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ensureWebSocketURL } from "applesauce-core/helpers";
+import { normalizeUrl } from "@/lib/url";
 
 export function NewRelayForm({
   onAdd,
@@ -21,7 +22,7 @@ export function NewRelayForm({
   const handleAdd = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
     setAdding(true);
-    await onAdd(ensureWebSocketURL(newRelay.trim()));
+    await onAdd(normalizeUrl(ensureWebSocketURL(newRelay.trim())));
     setNewRelay("");
     setAdding(false);
   };

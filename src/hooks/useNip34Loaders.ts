@@ -24,6 +24,7 @@ import {
   fallbackRelays,
   relayCurationMode,
 } from "@/services/settings";
+import { normalizeUrl } from "@/lib/url";
 
 /** Max healthy inbox relays to take for the item author. */
 const MAX_INBOX_RELAYS = 3;
@@ -95,7 +96,9 @@ function useAuthorInboxDeltaRelays(
 ): string[] {
   const store = useEventStore();
 
-  const groupRelaySet = new Set(repoRelayGroup?.relays.map((r) => r.url) ?? []);
+  const groupRelaySet = new Set(
+    repoRelayGroup?.relays.map((r) => normalizeUrl(r.url)) ?? [],
+  );
   const groupRelayKey = [...groupRelaySet].sort().join(",");
 
   const inboxDeltaRelays = use$(() => {
@@ -106,6 +109,7 @@ function useAuthorInboxDeltaRelays(
       map((enriched) => {
         const online = new Set(liveness.online);
         const authorInboxRelays = (enriched[0]?.relays ?? [])
+          .map(normalizeUrl)
           .slice()
           .sort((a, b) => (online.has(a) ? 0 : 1) - (online.has(b) ? 0 : 1));
 
