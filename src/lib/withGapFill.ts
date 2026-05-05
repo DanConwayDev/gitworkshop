@@ -18,8 +18,8 @@ import type { RelayPool } from "applesauce-relay";
 import { completeOnEose, onlyEvents } from "applesauce-relay";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
-import { Observable, merge } from "rxjs";
-import { tap } from "rxjs/operators";
+import { Observable, merge, EMPTY } from "rxjs";
+import { tap, catchError } from "rxjs/operators";
 import { foregroundResume$ } from "./foregroundResume";
 
 export type ResilientSubscriptionResponse = NostrEvent | "EOSE";
@@ -62,6 +62,10 @@ export function withGapFill(
             }
           }
         }),
+        // Relay connection errors (e.g. WebSocket CloseEvent) are non-fatal —
+        // we simply miss events from that relay. Swallow to prevent the error
+        // from propagating to React's render cycle via use$/useObservableState.
+        catchError(() => EMPTY),
       )
       .subscribe({
         next: (msg) => subscriber.next(msg),

@@ -124,32 +124,32 @@ importers:
         specifier: ^2.1.12
         version: 2.1.12(react@18.3.1)
       applesauce-accounts:
-        specifier: ^5
-        version: 5.1.0(typescript@5.9.3)
+        specifier: ^6
+        version: 6.0.0(@capacitor/core@7.6.2)(typescript@5.9.3)
       applesauce-actions:
-        specifier: ^5
-        version: 5.1.1(typescript@5.9.3)
+        specifier: ^6
+        version: 6.0.0(typescript@5.9.3)
       applesauce-common:
-        specifier: ^5
-        version: 5.1.0(typescript@5.9.3)
+        specifier: ^6
+        version: 6.0.1(typescript@5.9.3)
       applesauce-content:
-        specifier: ^5
-        version: 5.0.0(typescript@5.9.3)
+        specifier: ^6
+        version: 6.0.0(typescript@5.9.3)
       applesauce-core:
-        specifier: ^5
-        version: 5.1.0(typescript@5.9.3)
+        specifier: ^6
+        version: 6.0.0(typescript@5.9.3)
       applesauce-loaders:
-        specifier: ^5
-        version: 5.1.0(typescript@5.9.3)
+        specifier: ^6
+        version: 6.0.0(typescript@5.9.3)
       applesauce-react:
-        specifier: ^5
-        version: 5.1.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+        specifier: ^6
+        version: 6.0.0(@capacitor/core@7.6.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       applesauce-relay:
-        specifier: ^5
-        version: 5.1.0(typescript@5.9.3)
+        specifier: ^6
+        version: 6.0.0(typescript@5.9.3)
       applesauce-signers:
-        specifier: ^5
-        version: 5.1.0(typescript@5.9.3)
+        specifier: ^6
+        version: 6.0.1(@capacitor/core@7.6.2)(typescript@5.9.3)
       blurhash:
         specifier: ^2.0.5
         version: 2.0.5
@@ -417,6 +417,12 @@ packages:
         integrity: sha512-91gAaWRznDwSX4E2tZ1YjBuIfnQVOFDCQ2r0Toby0gu4XEbyF623kXLMA8d4ZbCu+fINcrudkmEcwSUHgDDkNw==,
       }
     engines: { node: ^20.19.0 || >=22.12.0 }
+
+  "@capacitor/core@7.6.2":
+    resolution:
+      {
+        integrity: sha512-8HRKEUlYpCOeRec8bCHZwEA4o/E2q5dhHSd0v/Cr6+ume08fZY/gniF+ZCKF+6DO0T/nRaBeNRQn6Up+45J1mg==,
+      }
 
   "@cashu/cashu-ts@3.5.0":
     resolution:
@@ -2826,28 +2832,28 @@ packages:
       }
     engines: { node: ">= 8" }
 
-  applesauce-accounts@5.1.0:
+  applesauce-accounts@6.0.0:
     resolution:
       {
-        integrity: sha512-xFNqofcQx+GjLbJKqkhEGWPMKPA0Y523ZiLuPwiLxwxiQRN053Rsq+uOTV0qmg/Hspylg3EGR49wwCIE8WnNGg==,
+        integrity: sha512-Z1KeW/yZiOU1p0SBElt9BFzpZmpnrqiJ8fNsDr/pIDP734+Sid3ovbfZp6yu+Oj+n0Bs9vlLiH6hOhMxSAXATQ==,
       }
 
-  applesauce-actions@5.1.1:
+  applesauce-actions@6.0.0:
     resolution:
       {
-        integrity: sha512-nz7N0lFdcaHCAiL26eCFwehU4Z7Gud9LzIuA84NeLnDQHTupcL54xObjJlZPf+hUS6bD0Gp4uBThs/XfKjnwFQ==,
+        integrity: sha512-S+/ibqC6oyTYbAtgXeNanBt/iCyokaJFpW9MVmvCRrc1ij1FvUtwkIATmCYpH2ikWznEYU5hIKp2qUcGMocPAw==,
       }
 
-  applesauce-common@5.1.0:
+  applesauce-common@6.0.1:
     resolution:
       {
-        integrity: sha512-qUEJibEtawkCgrxoyj0u+ECk3C/PKwGSmOq9kCupGjHVG21BU6Nh29BxU4vcmmBXH2ByiA6VuZgyJZb3t2JJuA==,
+        integrity: sha512-eACXtr/m5WvmnA2gUOQ+phvA6t5CtB0oSRmBNaMqi+BN9siLMjkG3lER8LliFD9I7PmK7hB5xBSqiVSezk6sJw==,
       }
 
-  applesauce-content@5.0.0:
+  applesauce-content@6.0.0:
     resolution:
       {
-        integrity: sha512-k8D+jl6XKUhAgnfDv0loeisCCsW8gGVFqLT4MQQKkQaR77vJM/zJ8O+ulq3lZraWOboTjCRzxVxpniButqW3ZA==,
+        integrity: sha512-1zHN9i0glSwUlXAPFZOUGFqeoS6S2QmQak/EZ5LKhZR/2LPjt00Buwged/If7/tVLNUqouvKfR9zLzap2H9Ixg==,
       }
 
   applesauce-core@4.4.2:
@@ -2856,10 +2862,10 @@ packages:
         integrity: sha512-zuZB74Pp28UGM4e8DWbN1atR95xL7ODENvjkaGGnvAjIKvfdgMznU7m9gLxr/Hu+IHOmVbbd4YxwNmKBzCWhHQ==,
       }
 
-  applesauce-core@5.1.0:
+  applesauce-core@6.0.0:
     resolution:
       {
-        integrity: sha512-kk4nHndK4zjS8Sa6mC8LGtQ0LDSP4hlCGPJ9lpyIln7MkZaNFWD9eFd+fsEhfE9kyrne9IyYuVfJNp+EqY1b9w==,
+        integrity: sha512-uibHa8AAaWf1MlgqRzDd4/DNptmKE/kcOue0ivO051HmBFHanSbuTNBLC21Yp7SymSLdhA4F4jl8rFppaNO6wg==,
       }
 
   applesauce-extra@4.1.0:
@@ -2874,16 +2880,16 @@ packages:
         integrity: sha512-FA5JH3qTcxylciN9SfWPF9DjNyCX6ZLj8iBQo6K+sNQfFBLVqcHjSXDT+whJyJ/T/Obk2yF3HxB2hqFzv8nKzA==,
       }
 
-  applesauce-loaders@5.1.0:
+  applesauce-loaders@6.0.0:
     resolution:
       {
-        integrity: sha512-xllWYl7KxG0oaJqKVdZNzxN8OZQoDMaMmaTAO9Ao1Son+mmJyR9Q4UVicSwSlzzHarf59WCfvJeSdrSHIitkHg==,
+        integrity: sha512-1GQ1EXxHJKqNUW87D/NSnsVcjNRETsRwUXptqu+bZFV+UOPkAEBo7qkgJTtmkkGs0efkyJAcFu94ZOtVQMwo3A==,
       }
 
-  applesauce-react@5.1.0:
+  applesauce-react@6.0.0:
     resolution:
       {
-        integrity: sha512-/ehFFZBPo1MAP850QQH/11HQtt2KvXDZH8MqkgUsgQvav1rE6JQj52bCJlxfKsc2M3ayTr+lJUn5mwHlID01PQ==,
+        integrity: sha512-E2X82lYgO1CBt2h7+imV5QAAsNwzkoFXn3wPA881IQ9tz0UZAxtxC3l3ZbCc+mOuRBDsdbrWvosNA1/nHd1jjA==,
       }
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
@@ -2894,10 +2900,10 @@ packages:
         integrity: sha512-JAmUvIQ0jFrBWHU5SxAFx1xEG9D8xL7aiinSNX05qcULVMcFv1t9llLJivRLNERpbfS4AGYfy2tipYzc/YtyIQ==,
       }
 
-  applesauce-relay@5.1.0:
+  applesauce-relay@6.0.0:
     resolution:
       {
-        integrity: sha512-d0LTJmQmr5gsYFm9A6efPEo2Bx/ewoL7LNsIdieMx34QohZBpPb137RvU9KQ1lFIXTm0tudd8VYfAPncqti2OQ==,
+        integrity: sha512-vemGZd62mPZbnvGqfUhFYhO4z2FpzicNNHZ3chyMy6btBWo0kt3qjOeSVO6N1wVzurlahE6xKfwVlQJGwQCZ3A==,
       }
 
   applesauce-signers@4.2.0:
@@ -2906,10 +2912,10 @@ packages:
         integrity: sha512-celexNd+aLt6/vhf72XXw2oAk8ohjna+aWEg/Z2liqPwP+kbVjnqq4Z1RXvt79QQbTIQbXYGWqervXWLE8HmHg==,
       }
 
-  applesauce-signers@5.1.0:
+  applesauce-signers@6.0.1:
     resolution:
       {
-        integrity: sha512-sdQe6J1txYV1GVX8/zSGZDyyXuuZomePHSfUDozZmNAnXhCXE0wqVfhLK0yegVMnomSgoeDUCsGmJiTE2BHqoQ==,
+        integrity: sha512-SV60zT7+kMdASEOUfOvNGSFQFjfXdGbhyAQvCMaN3S5JIMzbO8YMmf9BzyGJF+HoWZRi888xscXCgkAea6mUJw==,
       }
 
   arg@5.0.2:
@@ -5011,6 +5017,14 @@ packages:
         integrity: sha512-FBEk5jLjLMMHcD0w09e0DK5YG3nwkYPtp+O4XbZTXdiThR/uiJMaLfe0HxiBq8UHKMs38+ci/vs4c+rvUmPX+g==,
       }
 
+  nostr-signer-capacitor-plugin@0.0.5:
+    resolution:
+      {
+        integrity: sha512-/EvqWz71HZ5cWmzvfXWTm48AWZtbeZDbOg3vLwXyXPjnIp1DR7Wurww/Mo41ORNu1DNPlqH20l7kIXKO6vR5og==,
+      }
+    peerDependencies:
+      "@capacitor/core": ^7.0.0
+
   nostr-tools@2.15.0:
     resolution:
       {
@@ -6778,6 +6792,11 @@ snapshots:
       "@babel/helper-string-parser": 8.0.0-rc.2
       "@babel/helper-validator-identifier": 8.0.0-rc.2
 
+  "@capacitor/core@7.6.2":
+    dependencies:
+      tslib: 2.8.1
+    optional: true
+
   "@cashu/cashu-ts@3.5.0":
     dependencies:
       "@noble/curves": 2.0.1
@@ -8359,44 +8378,48 @@ snapshots:
       normalize-path: 3.0.0
       picomatch: 2.3.1
 
-  applesauce-accounts@5.1.0(typescript@5.9.3):
+  applesauce-accounts@6.0.0(@capacitor/core@7.6.2)(typescript@5.9.3):
     dependencies:
-      applesauce-core: 5.1.0(typescript@5.9.3)
-      applesauce-signers: 5.1.0(typescript@5.9.3)
+      applesauce-core: 6.0.0(typescript@5.9.3)
+      applesauce-signers: 6.0.1(@capacitor/core@7.6.2)(typescript@5.9.3)
+      nanoid: 5.1.6
+      rxjs: 7.8.2
+    optionalDependencies:
+      nostr-signer-capacitor-plugin: 0.0.5(@capacitor/core@7.6.2)
+    transitivePeerDependencies:
+      - "@capacitor/core"
+      - supports-color
+      - typescript
+
+  applesauce-actions@6.0.0(typescript@5.9.3):
+    dependencies:
+      applesauce-common: 6.0.1(typescript@5.9.3)
+      applesauce-core: 6.0.0(typescript@5.9.3)
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
+
+  applesauce-common@6.0.1(typescript@5.9.3):
+    dependencies:
+      "@scure/base": 1.2.6
+      applesauce-core: 6.0.0(typescript@5.9.3)
+      hash-sum: 2.0.0
+      light-bolt11-decoder: 3.2.0
       nanoid: 5.1.6
       rxjs: 7.8.2
     transitivePeerDependencies:
       - supports-color
       - typescript
 
-  applesauce-actions@5.1.1(typescript@5.9.3):
-    dependencies:
-      applesauce-common: 5.1.0(typescript@5.9.3)
-      applesauce-core: 5.1.0(typescript@5.9.3)
-      rxjs: 7.8.2
-    transitivePeerDependencies:
-      - supports-color
-      - typescript
-
-  applesauce-common@5.1.0(typescript@5.9.3):
-    dependencies:
-      "@scure/base": 1.2.6
-      applesauce-core: 5.1.0(typescript@5.9.3)
-      hash-sum: 2.0.0
-      light-bolt11-decoder: 3.2.0
-      rxjs: 7.8.2
-    transitivePeerDependencies:
-      - supports-color
-      - typescript
-
-  applesauce-content@5.0.0(typescript@5.9.3):
+  applesauce-content@6.0.0(typescript@5.9.3):
     dependencies:
       "@cashu/cashu-ts": 3.5.0
       "@types/hast": 3.0.4
       "@types/mdast": 4.0.4
       "@types/unist": 3.0.3
-      applesauce-common: 5.1.0(typescript@5.9.3)
-      applesauce-core: 5.1.0(typescript@5.9.3)
+      applesauce-common: 6.0.1(typescript@5.9.3)
+      applesauce-core: 6.0.0(typescript@5.9.3)
       mdast-util-find-and-replace: 3.0.2
       remark: 15.0.1
       remark-parse: 11.0.0
@@ -8421,7 +8444,7 @@ snapshots:
       - supports-color
       - typescript
 
-  applesauce-core@5.1.0(typescript@5.9.3):
+  applesauce-core@6.0.0(typescript@5.9.3):
     dependencies:
       debug: 4.4.3
       fast-deep-equal: 3.1.3
@@ -8453,27 +8476,28 @@ snapshots:
       - supports-color
       - typescript
 
-  applesauce-loaders@5.1.0(typescript@5.9.3):
+  applesauce-loaders@6.0.0(typescript@5.9.3):
     dependencies:
-      applesauce-core: 5.1.0(typescript@5.9.3)
+      applesauce-core: 6.0.0(typescript@5.9.3)
       nanoid: 5.1.6
       rxjs: 7.8.2
     transitivePeerDependencies:
       - supports-color
       - typescript
 
-  applesauce-react@5.1.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3):
+  applesauce-react@6.0.0(@capacitor/core@7.6.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3):
     dependencies:
       hash-sum: 2.0.0
       observable-hooks: 4.2.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
       react: 18.3.1
       rxjs: 7.8.2
     optionalDependencies:
-      applesauce-accounts: 5.1.0(typescript@5.9.3)
-      applesauce-actions: 5.1.1(typescript@5.9.3)
-      applesauce-content: 5.0.0(typescript@5.9.3)
-      applesauce-core: 5.1.0(typescript@5.9.3)
+      applesauce-accounts: 6.0.0(@capacitor/core@7.6.2)(typescript@5.9.3)
+      applesauce-actions: 6.0.0(typescript@5.9.3)
+      applesauce-content: 6.0.0(typescript@5.9.3)
+      applesauce-core: 6.0.0(typescript@5.9.3)
     transitivePeerDependencies:
+      - "@capacitor/core"
       - react-dom
       - supports-color
       - typescript
@@ -8489,10 +8513,10 @@ snapshots:
       - supports-color
       - typescript
 
-  applesauce-relay@5.1.0(typescript@5.9.3):
+  applesauce-relay@6.0.0(typescript@5.9.3):
     dependencies:
       "@noble/hashes": 1.8.0
-      applesauce-core: 5.1.0(typescript@5.9.3)
+      applesauce-core: 6.0.0(typescript@5.9.3)
       nanoid: 5.1.6
       nostr-tools: 2.19.4(typescript@5.9.3)
       rxjs: 7.8.2
@@ -8514,14 +8538,17 @@ snapshots:
       - supports-color
       - typescript
 
-  applesauce-signers@5.1.0(typescript@5.9.3):
+  applesauce-signers@6.0.1(@capacitor/core@7.6.2)(typescript@5.9.3):
     dependencies:
       "@noble/secp256k1": 1.7.2
-      applesauce-core: 5.1.0(typescript@5.9.3)
+      applesauce-core: 6.0.0(typescript@5.9.3)
       debug: 4.4.3
       nanoid: 5.1.6
       rxjs: 7.8.2
+    optionalDependencies:
+      nostr-signer-capacitor-plugin: 0.0.5(@capacitor/core@7.6.2)
     transitivePeerDependencies:
+      - "@capacitor/core"
       - supports-color
       - typescript
 
@@ -9916,6 +9943,11 @@ snapshots:
       idb: 8.0.3
     transitivePeerDependencies:
       - supports-color
+
+  nostr-signer-capacitor-plugin@0.0.5(@capacitor/core@7.6.2):
+    dependencies:
+      "@capacitor/core": 7.6.2
+    optional: true
 
   nostr-tools@2.15.0(typescript@5.9.3):
     dependencies:

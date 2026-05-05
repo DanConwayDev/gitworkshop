@@ -44,6 +44,7 @@ import {
   merge,
   retry,
   tap,
+  catchError,
 } from "rxjs";
 import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
 import { foregroundResume$ } from "./foregroundResume";
@@ -158,7 +159,10 @@ function processRelay(
           ? { since: lastReceivedAt - opts.gapFillBuffer }
           : {}),
       }));
-      return pool.subscription([relay], filtersWithSince, {
+      // Use the single-relay API so the stream still emits NostrEvent | "EOSE"
+      // — the group-level pool.subscription() strips EOSE in v6, but we need it
+      // here to drive the settle signal.
+      return pool.relay(relay).subscription(filtersWithSince, {
         reconnect: false,
       });
     };
@@ -173,6 +177,7 @@ function processRelay(
           }
         }),
         retry({ count: 3, delay: 1000, resetOnSuccess: true }),
+        catchError(() => EMPTY),
       )
       .subscribe({
         next: (msg) => {

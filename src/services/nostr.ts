@@ -9,7 +9,7 @@ import {
   DnsIdentityLoader,
 } from "applesauce-loaders/loaders";
 import { RelayLiveness, RelayPool, onlyEvents } from "applesauce-relay";
-import type { RelayGroup, IRelay } from "applesauce-relay";
+import type { RelayGroup, Relay } from "applesauce-relay";
 import { NostrConnectSigner } from "applesauce-signers";
 import type { NostrEvent } from "nostr-tools";
 import { verifyEvent } from "nostr-tools";
@@ -632,7 +632,10 @@ export function nip34ListLoader(
           }
         }
       },
-      error: (err) => subscriber.error(err),
+      error: () => {
+        /* relay connection errors are non-fatal — swallow to prevent
+         * DOM CloseEvent/ErrorEvent from reaching use$/useObservableState */
+      },
     });
 
     const commentsSub = nip34CommentsLoader({
@@ -711,7 +714,7 @@ export function nip34SupplementalRelayLoader(
       inboxSubs.add(s);
     }
 
-    const relays$ = (relayGroup as unknown as { relays$: Observable<IRelay[]> })
+    const relays$ = (relayGroup as unknown as { relays$: Observable<Relay[]> })
       .relays$;
 
     // When new relays join the group, re-fire existing items' loaders against
@@ -753,7 +756,9 @@ export function nip34SupplementalRelayLoader(
             if (resolveAuthorInbox) fireAuthorInboxLoaders(ev);
           }
         },
-        error: (err) => subscriber.error(err),
+        error: () => {
+          /* relay connection errors are non-fatal */
+        },
         complete: () => subscriber.complete(),
       });
 
@@ -834,7 +839,7 @@ export function nip34RepoLoader(
     // Subscribe to RelayGroup relay list changes. relays$ is protected in TS
     // but public at runtime — cast to access it so we can react to new relays
     // being added without polling.
-    const relays$ = (relayGroup as unknown as { relays$: Observable<IRelay[]> })
+    const relays$ = (relayGroup as unknown as { relays$: Observable<Relay[]> })
       .relays$;
 
     const relaySub = relays$
@@ -892,7 +897,9 @@ export function nip34RepoLoader(
             if (resolveAuthorInbox) fireAuthorInboxLoaders(ev);
           }
         },
-        error: (err) => subscriber.error(err),
+        error: () => {
+          /* relay connection errors are non-fatal */
+        },
         complete: () => subscriber.complete(),
       });
 
@@ -919,7 +926,9 @@ export function nip34RepoLoader(
     )
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
       .subscribe({
-        error: (err) => subscriber.error(err),
+        error: () => {
+          /* relay connection errors are non-fatal */
+        },
       });
 
     return () => {
@@ -1037,7 +1046,9 @@ export function nip34ThreadItemLoader(
           fireThreadLoaders(event.id, [...knownRelayUrls]);
         }
       },
-      error: (err) => subscriber.error(err),
+      error: () => {
+        /* relay connection errors are non-fatal */
+      },
     });
 
     return () => {

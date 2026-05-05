@@ -35,7 +35,8 @@ import { castTimelineStream } from "applesauce-common/observable";
 import { Patch } from "@/casts/Patch";
 import { PATCH_KIND } from "@/lib/nip34";
 import type { Filter } from "applesauce-core/helpers";
-import type { Observable } from "rxjs";
+import { EMPTY, type Observable } from "rxjs";
+import { catchError } from "rxjs/operators";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
 import type { RelayGroup } from "applesauce-relay";
 
@@ -190,12 +191,17 @@ export function usePatchChain(
         pool,
         () => repoRelayGroup.relays.map((r) => r.url),
         [filter],
-      ).pipe(onlyEvents(), mapEventsToStore(store));
+      ).pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+        catchError(() => EMPTY),
+      );
     }
     if (fallbackRelays.length > 0) {
       return resilientSubscription(pool, fallbackRelays, [filter]).pipe(
         onlyEvents(),
         mapEventsToStore(store),
+        catchError(() => EMPTY),
       );
     }
     return undefined;
@@ -211,12 +217,17 @@ export function usePatchChain(
         pool,
         () => repoRelayGroup.relays.map((r) => r.url),
         [filter],
-      ).pipe(onlyEvents(), mapEventsToStore(store));
+      ).pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+        catchError(() => EMPTY),
+      );
     }
     if (fallbackRelays.length > 0) {
       return resilientSubscription(pool, fallbackRelays, [filter]).pipe(
         onlyEvents(),
         mapEventsToStore(store),
+        catchError(() => EMPTY),
       );
     }
     return undefined;

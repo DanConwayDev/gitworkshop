@@ -60,7 +60,8 @@ import {
   GitCommitLinkContext,
   type GitCommitLinkContextValue,
 } from "@/components/CommitLinkContext";
-
+import { EMPTY } from "rxjs";
+import { catchError } from "rxjs/operators";
 // ---------------------------------------------------------------------------
 // RepoLayout
 // ---------------------------------------------------------------------------
@@ -215,7 +216,7 @@ function RepoLayoutResolved({
     return nip34SupplementalRelayLoader(
       repo.allCoordinates,
       extraRelaysForMaintainerMailboxCoverage,
-    );
+    ).pipe(catchError(() => EMPTY));
   }, [curationMode, extraRelaysForMaintainerMailboxCoverage, coordKey]);
 
   const queryOptions: RepoQueryOptions = useMemo(

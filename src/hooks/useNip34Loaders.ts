@@ -7,7 +7,7 @@ import {
   type RelayGroupSpec,
 } from "./useEventSearch";
 import type { SearchTarget } from "@/lib/searchForEvent";
-import type { RelayGroup, IRelay } from "applesauce-relay";
+import type { RelayGroup, Relay } from "applesauce-relay";
 import type { NostrEvent } from "nostr-tools";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { includeMailboxes } from "applesauce-core";
@@ -40,7 +40,7 @@ const MAX_INBOX_RELAYS = 3;
 function useRelayGroupUrls(group: RelayGroup | undefined): string[] {
   const urls = use$(() => {
     if (!group) return of([] as string[]);
-    return (group as unknown as { relays$: Observable<IRelay[]> }).relays$.pipe(
+    return (group as unknown as { relays$: Observable<Relay[]> }).relays$.pipe(
       map((relays) => relays.map((r) => r.url)),
     );
   }, [group]);
@@ -55,7 +55,7 @@ function useRelayGroupUrls(group: RelayGroup | undefined): string[] {
  */
 function relayGroupUrls$(group: RelayGroup | undefined): Observable<string[]> {
   if (!group) return of([] as string[]);
-  return (group as unknown as { relays$: Observable<IRelay[]> }).relays$.pipe(
+  return (group as unknown as { relays$: Observable<Relay[]> }).relays$.pipe(
     map((relays) => relays.map((r) => r.url)),
   );
 }

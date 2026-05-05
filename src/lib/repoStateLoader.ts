@@ -27,7 +27,7 @@
  *   matches the settle semantics of createPaginatedTagValueLoader exactly.
  *
  * EventStore + relay provenance:
- *   The Relay class applies markFromRelay() internally on every req, so each
+ *   The Relay class applies `addSeenRelay` internally on every req, so each
  *   event is already stamped with its source relay URL before it reaches this
  *   loader. mapEventsToStore() then writes those stamped events into the store,
  *   meaning getSeenRelays(event) works on any event retrieved from the store.
@@ -35,7 +35,7 @@
  *   without any side-channel state.
  */
 
-import type { RelayGroup, IRelay, RelayPool } from "applesauce-relay";
+import type { RelayGroup, Relay, RelayPool } from "applesauce-relay";
 import type { IEventStore } from "applesauce-core/event-store";
 import { mapEventsToStore } from "applesauce-core";
 import type { Filter } from "applesauce-core/helpers";
@@ -59,7 +59,7 @@ export interface RepoStateLoaderOptions {
  * Pushes to settled$ on EOSE, error, or clean close so the settle signal
  * is never blocked by a misbehaving relay.
  *
- * The Relay class applies markFromRelay() internally, so emitted events are
+ * The Relay class applies `addSeenRelay` internally, so emitted events are
  * already stamped with the relay URL before reaching this function.
  *
  * Returns an Observable<NostrEvent> that completes when the relay closes
@@ -72,14 +72,19 @@ function queryRelay(
   settled$: Subject<void>,
 ): Observable<NostrEvent> {
   return new Observable<NostrEvent>((subscriber) => {
+    // Use the single-relay subscription API (which still emits
+    // NostrEvent | "EOSE") rather than pool.subscription() — the group-level
+    // API now strips EOSE from the stream, and we need it here to drive the
+    // settled$ signal.
     const sub = pool
-      .subscription([relayUrl], [stateFilter], { reconnect: false })
+      .relay(relayUrl)
+      .subscription([stateFilter], { reconnect: false })
       .subscribe({
         next: (msg) => {
           if (msg === "EOSE") {
             settled$.next();
           } else {
-            subscriber.next(msg as NostrEvent);
+            subscriber.next(msg);
           }
         },
         error: () => {
@@ -105,7 +110,7 @@ function queryRelay(
  * The observable reacts to new relays being added to the group: each newly
  * discovered relay gets its own subscription without disturbing existing ones.
  *
- * The Relay class applies markFromRelay() internally, so events arrive
+ * The Relay class applies `addSeenRelay` internally, so events arrive
  * already stamped with their source relay URL. getSeenRelays(event) is
  * therefore available on any event retrieved from the store later.
  *
@@ -171,7 +176,7 @@ export function loadRepoStateFromRelays(
     // but public at runtime — cast to access it so we can react to new relays
     // being added without polling.
     const relays$ = (
-      repoRelayGroup as unknown as { relays$: Observable<IRelay[]> }
+      repoRelayGroup as unknown as { relays$: Observable<Relay[]> }
     ).relays$;
 
     const relaySub = relays$

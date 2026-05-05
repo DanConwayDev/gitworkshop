@@ -27,7 +27,8 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { lastValueFrom, toArray } from "rxjs";
-import { onlyEvents, completeOnEose } from "applesauce-relay";
+import { filter, takeWhile } from "rxjs/operators";
+import { onlyEvents } from "applesauce-relay";
 import { isFromRelay } from "applesauce-core/helpers";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
@@ -115,7 +116,7 @@ export function useRepositorySearch(
 
   const fetchPage = useCallback(
     async (until: number | undefined) => {
-      const filter: Filter = {
+      const pageFilter: Filter = {
         kinds: [REPO_KIND],
         limit: PAGE_SIZE,
         ...(until !== undefined ? { until } : {}),
@@ -127,9 +128,15 @@ export function useRepositorySearch(
         // relay-sent count — pool.request() deduplicates against the store,
         // which would cause premature termination.
         batch = await lastValueFrom(
-          pool
-            .req(relays, filter)
-            .pipe(completeOnEose(), onlyEvents(), toArray()),
+          pool.req(relays, pageFilter).pipe(
+            takeWhile((m) => m.type !== "EOSE"),
+            filter(
+              (m): m is Extract<typeof m, { type: "EVENT" }> =>
+                m.type === "EVENT",
+            ),
+            map((m) => m.event),
+            toArray(),
+          ),
           { defaultValue: [] },
         );
       } catch {

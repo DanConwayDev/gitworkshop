@@ -10,21 +10,23 @@
  * found — we simply build a fresh one.
  */
 
-import { modifyPublicTags } from "applesauce-core/operations";
-import {
-  addAddressPointerTag,
-  removeAddressPointerTag,
-} from "applesauce-core/operations/tag/common";
 import type { Action } from "applesauce-actions";
 import { firstValueFrom, of, timeout } from "rxjs";
+import {
+  PinnedReposFactory,
+  PINNED_REPOS_KIND,
+} from "@/factories/PinnedReposFactory";
 
-/** kind:10617 — pinned git repositories list */
-export const PINNED_REPOS_KIND = 10617;
+export { PINNED_REPOS_KIND };
 
-function ModifyPinnedReposEvent(
-  operations: ReturnType<typeof addAddressPointerTag>[],
-): Action {
-  return async ({ events, factory, user, publish, sign }) => {
+/**
+ * Add a repository announcement coordinate to the user's pinned repos list
+ * (kind:10617). Appended to the end of the list (lowest priority / newest pin).
+ *
+ * @param coord - "30617:<pubkey>:<dtag>" coordinate string
+ */
+export function PinGitRepo(coord: string): Action {
+  return async ({ events, user, publish, signer }) => {
     const [event, outboxes] = await Promise.all([
       firstValueFrom(
         events
@@ -34,25 +36,13 @@ function ModifyPinnedReposEvent(
       user.outboxes$.$first(1000, undefined),
     ]);
 
-    const operation = modifyPublicTags(...operations);
+    const factory = event
+      ? PinnedReposFactory.modify(event)
+      : PinnedReposFactory.create();
 
-    // Modify existing event or build a fresh one — no throw for missing list
-    const signed = event
-      ? await factory.modify(event, operation).then(sign)
-      : await factory.build({ kind: PINNED_REPOS_KIND }, operation).then(sign);
-
+    const signed = await factory.addAddressItem(coord).sign(signer);
     await publish(signed, outboxes);
   };
-}
-
-/**
- * Add a repository announcement coordinate to the user's pinned repos list
- * (kind:10617). Appended to the end of the list (lowest priority / newest pin).
- *
- * @param coord - "30617:<pubkey>:<dtag>" coordinate string
- */
-export function PinGitRepo(coord: string): Action {
-  return ModifyPinnedReposEvent([addAddressPointerTag(coord)]);
 }
 
 /**
@@ -62,17 +52,7 @@ export function PinGitRepo(coord: string): Action {
  * @param coord - "30617:<pubkey>:<dtag>" coordinate string
  */
 export function UnpinGitRepo(coord: string): Action {
-  return ModifyPinnedReposEvent([removeAddressPointerTag(coord)]);
-}
-
-/**
- * Replace the entire ordered list of pinned repo coordinates.
- * Used when the user drags to reorder pinned repos.
- *
- * @param coords - ordered array of "30617:<pubkey>:<dtag>" coordinate strings
- */
-export function ReorderPinnedRepos(coords: string[]): Action {
-  return async ({ events, factory, user, publish, sign }) => {
+  return async ({ events, user, publish, signer }) => {
     const [event, outboxes] = await Promise.all([
       firstValueFrom(
         events
@@ -82,25 +62,37 @@ export function ReorderPinnedRepos(coords: string[]): Action {
       user.outboxes$.$first(1000, undefined),
     ]);
 
-    // Operation: replace all `a` tags with the new ordered set, preserving
-    // any relay hints from the original tags.
-    const reorderOperation = modifyPublicTags((tags) => {
-      const existingATags = tags.filter(([t]) => t === "a");
-      const otherTags = tags.filter(([t]) => t !== "a");
-      const newATags = coords.map((coord) => {
-        // Preserve any relay hint that was on the original tag
-        const original = existingATags.find(([, v]) => v === coord);
-        return original ?? ["a", coord];
-      });
-      return [...otherTags, ...newATags];
-    });
+    const factory = event
+      ? PinnedReposFactory.modify(event)
+      : PinnedReposFactory.create();
 
-    const signed = event
-      ? await factory.modify(event, reorderOperation).then(sign)
-      : await factory
-          .build({ kind: PINNED_REPOS_KIND }, reorderOperation)
-          .then(sign);
+    const signed = await factory.removeAddressItem(coord).sign(signer);
+    await publish(signed, outboxes);
+  };
+}
 
+/**
+ * Replace the entire ordered list of pinned repo coordinates.
+ * Used when the user drags to reorder pinned repos.
+ *
+ * @param coords - ordered array of "30617:<pubkey>:<dtag>" coordinate strings
+ */
+export function ReorderPinnedRepos(coords: string[]): Action {
+  return async ({ events, user, publish, signer }) => {
+    const [event, outboxes] = await Promise.all([
+      firstValueFrom(
+        events
+          .replaceable(PINNED_REPOS_KIND, user.pubkey)
+          .pipe(timeout({ first: 1000, with: () => of(undefined) })),
+      ),
+      user.outboxes$.$first(1000, undefined),
+    ]);
+
+    const factory = event
+      ? PinnedReposFactory.modify(event)
+      : PinnedReposFactory.create();
+
+    const signed = await factory.reorder(coords).sign(signer);
     await publish(signed, outboxes);
   };
 }

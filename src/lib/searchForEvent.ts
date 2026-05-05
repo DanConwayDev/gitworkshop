@@ -379,7 +379,11 @@ export function searchForEvent(
             next: (msg) => {
               if (found) return;
 
-              if (msg === "EOSE") {
+              // In v6 `relay.req()` emits structured messages: switch on type.
+              // OPEN/CLOSED are ignored here — the connection observable above
+              // already tracks connection state, and CLOSED with auth-required
+              // is surfaced as an error by the Relay class.
+              if (msg.type === "EOSE") {
                 eoseRelays.add(relayUrl);
                 activeRelays.delete(relayUrl);
                 subscriber.next({
@@ -397,8 +401,8 @@ export function searchForEvent(
                 ) {
                   checkGroupExhausted();
                 }
-              } else {
-                const event = msg as NostrEvent;
+              } else if (msg.type === "EVENT") {
+                const event = msg.event;
                 if (!found) {
                   found = true;
                   subscriber.next({
@@ -533,7 +537,7 @@ export function searchForEvent(
       const relays = [...new Set(allRelaysSearched.map(normalizeUrl))];
 
       const sub = pool
-        .req(relays, allFilters)
+        .subscription(relays, allFilters)
         .pipe(completeOnEose(), onlyEvents(), takeUntil(found$))
         .subscribe({
           next: (event) => {

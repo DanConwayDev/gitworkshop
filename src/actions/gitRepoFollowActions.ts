@@ -13,40 +13,14 @@
  * no existing event is found — we simply build a fresh one.
  */
 
-import { modifyPublicTags } from "applesauce-core/operations";
-import {
-  addAddressPointerTag,
-  removeAddressPointerTag,
-} from "applesauce-core/operations/tag/common";
 import type { Action } from "applesauce-actions";
 import { firstValueFrom, of, timeout } from "rxjs";
+import {
+  GitRepoListFactory,
+  GIT_REPOS_KIND,
+} from "@/factories/GitRepoListFactory";
 
-/** kind:10018 — NIP-51 Git repositories follow list */
-export const GIT_REPOS_KIND = 10018;
-
-function ModifyGitReposEvent(
-  operations: ReturnType<typeof addAddressPointerTag>[],
-): Action {
-  return async ({ events, factory, user, publish, sign }) => {
-    const [event, outboxes] = await Promise.all([
-      firstValueFrom(
-        events
-          .replaceable(GIT_REPOS_KIND, user.pubkey)
-          .pipe(timeout({ first: 1000, with: () => of(undefined) })),
-      ),
-      user.outboxes$.$first(1000, undefined),
-    ]);
-
-    const operation = modifyPublicTags(...operations);
-
-    // Modify existing event or build a fresh one — no throw for missing list
-    const signed = event
-      ? await factory.modify(event, operation).then(sign)
-      : await factory.build({ kind: GIT_REPOS_KIND }, operation).then(sign);
-
-    await publish(signed, outboxes);
-  };
-}
+export { GIT_REPOS_KIND };
 
 /**
  * Add one or more repository announcement coordinates to the user's NIP-51
@@ -58,7 +32,24 @@ function ModifyGitReposEvent(
  * @param coords - One or more "30617:<pubkey>:<dtag>" coordinate strings
  */
 export function AddGitRepo(...coords: string[]): Action {
-  return ModifyGitReposEvent(coords.map((c) => addAddressPointerTag(c)));
+  return async ({ events, user, publish, signer }) => {
+    const [event, outboxes] = await Promise.all([
+      firstValueFrom(
+        events
+          .replaceable(GIT_REPOS_KIND, user.pubkey)
+          .pipe(timeout({ first: 1000, with: () => of(undefined) })),
+      ),
+      user.outboxes$.$first(1000, undefined),
+    ]);
+
+    let factory = event
+      ? GitRepoListFactory.modify(event)
+      : GitRepoListFactory.create();
+    for (const coord of coords) factory = factory.addAddressItem(coord);
+
+    const signed = await factory.sign(signer);
+    await publish(signed, outboxes);
+  };
 }
 
 /**
@@ -68,5 +59,22 @@ export function AddGitRepo(...coords: string[]): Action {
  * @param coords - One or more "30617:<pubkey>:<dtag>" coordinate strings
  */
 export function RemoveGitRepo(...coords: string[]): Action {
-  return ModifyGitReposEvent(coords.map((c) => removeAddressPointerTag(c)));
+  return async ({ events, user, publish, signer }) => {
+    const [event, outboxes] = await Promise.all([
+      firstValueFrom(
+        events
+          .replaceable(GIT_REPOS_KIND, user.pubkey)
+          .pipe(timeout({ first: 1000, with: () => of(undefined) })),
+      ),
+      user.outboxes$.$first(1000, undefined),
+    ]);
+
+    let factory = event
+      ? GitRepoListFactory.modify(event)
+      : GitRepoListFactory.create();
+    for (const coord of coords) factory = factory.removeAddressItem(coord);
+
+    const signed = await factory.sign(signer);
+    await publish(signed, outboxes);
+  };
 }

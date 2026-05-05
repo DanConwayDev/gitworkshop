@@ -34,7 +34,8 @@ import { PATCH_KIND, type ResolvedPR } from "@/lib/nip34";
 import { relayCurationMode } from "@/services/settings";
 import type { RelayGroup } from "applesauce-relay";
 import type { Filter } from "applesauce-core/helpers";
-import type { Observable } from "rxjs";
+import { EMPTY, type Observable } from "rxjs";
+import { catchError } from "rxjs/operators";
 
 export interface UseResolvedPROptions {
   /** Extra clone URLs for fallback relay queries (from the repo). */
@@ -96,7 +97,11 @@ export function useResolvedPR(
         pool,
         () => repoRelayGroup.relays.map((r) => r.url),
         [filter],
-      ).pipe(onlyEvents(), mapEventsToStore(store));
+      ).pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+        catchError(() => EMPTY),
+      );
     }
     return undefined;
   }, [prId, repoRelayGroup, store]);
@@ -114,7 +119,11 @@ export function useResolvedPR(
         pool,
         () => repoRelayGroup.relays.map((r) => r.url),
         [filter],
-      ).pipe(onlyEvents(), mapEventsToStore(store));
+      ).pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+        catchError(() => EMPTY),
+      );
     }
     return undefined;
   }, [prId, repoRelayGroup, store]);

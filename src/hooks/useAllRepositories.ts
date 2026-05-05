@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { lastValueFrom, toArray } from "rxjs";
+import { filter, map, takeWhile } from "rxjs/operators";
 import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents, completeOnEose } from "applesauce-relay";
+import { onlyEvents } from "applesauce-relay";
 import { pool, eventStore } from "@/services/nostr";
 import { gitIndexRelays } from "@/services/settings";
 import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
@@ -101,9 +102,18 @@ export function useAllRepositories(
                 if (cancelled) break;
                 const chunk = need.slice(i, i + ID_CHUNK);
                 const events = await lastValueFrom(
-                  pool
-                    .req(relays, { ids: chunk } as Filter)
-                    .pipe(completeOnEose(), onlyEvents(), toArray()),
+                  // Use pool.req() + structured-message mapping so we get the
+                  // raw relay response without the group's deduplication
+                  // interfering with the negentropy flow.
+                  pool.req(relays, { ids: chunk } as Filter).pipe(
+                    takeWhile((m) => m.type !== "EOSE"),
+                    filter(
+                      (m): m is Extract<typeof m, { type: "EVENT" }> =>
+                        m.type === "EVENT",
+                    ),
+                    map((m) => m.event),
+                    toArray(),
+                  ),
                   { defaultValue: [] },
                 );
                 for (const ev of events) eventStore.add(ev);
@@ -124,16 +134,22 @@ export function useAllRepositories(
           let until: number | undefined = undefined;
 
           while (!cancelled) {
-            const filter: Filter = {
+            const pageFilter: Filter = {
               kinds: [REPO_KIND],
               limit: BATCH_LIMIT,
               ...(until !== undefined ? { until } : {}),
             };
 
             const batch = await lastValueFrom(
-              pool
-                .req(relays, filter)
-                .pipe(completeOnEose(), onlyEvents(), toArray()),
+              pool.req(relays, pageFilter).pipe(
+                takeWhile((m) => m.type !== "EOSE"),
+                filter(
+                  (m): m is Extract<typeof m, { type: "EVENT" }> =>
+                    m.type === "EVENT",
+                ),
+                map((m) => m.event),
+                toArray(),
+              ),
               { defaultValue: [] },
             );
 

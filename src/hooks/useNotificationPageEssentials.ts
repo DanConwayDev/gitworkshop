@@ -22,8 +22,9 @@ import {
   of,
   Observable,
   distinctUntilChanged,
+  EMPTY,
 } from "rxjs";
-import { map, switchMap, auditTime } from "rxjs/operators";
+import { map, switchMap, auditTime, catchError } from "rxjs/operators";
 import { onlyEvents } from "applesauce-relay";
 import { mapEventsToStore } from "applesauce-core";
 import type { RelayGroup } from "applesauce-relay";
@@ -220,6 +221,7 @@ export function useNotificationPageEssentials(
           .pipe(
             onlyEvents(),
             mapEventsToStore(store),
+            catchError(() => EMPTY),
           ) as unknown as Observable<NostrEvent>,
       );
     }

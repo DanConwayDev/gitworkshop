@@ -18,13 +18,14 @@ import { useEventStore } from "@/hooks/useEventStore";
 import { pool } from "@/services/nostr";
 import { onlyEvents } from "applesauce-relay";
 import { mapEventsToStore } from "applesauce-core";
-import { map } from "rxjs/operators";
+import { map, catchError } from "rxjs/operators";
+import { EMPTY } from "rxjs";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import {
   isInlineComment,
   parseInlineCommentLocation,
-} from "@/blueprints/inline-comment";
+} from "@/lib/inlineComment";
 
 export interface InlineCommentMap {
   /** All inline comment events indexed by file path */
@@ -218,9 +219,11 @@ export function useInlineComments(
       kinds: [1111],
       "#E": [rootEventId],
     } as Filter;
-    return pool
-      .subscription(relays, [filter])
-      .pipe(onlyEvents(), mapEventsToStore(store));
+    return pool.subscription(relays, [filter]).pipe(
+      onlyEvents(),
+      mapEventsToStore(store),
+      catchError(() => EMPTY),
+    );
   }, [rootEventId, relayKey, store]);
 
   // Subscribe reactively from the store

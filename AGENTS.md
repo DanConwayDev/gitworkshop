@@ -36,8 +36,7 @@ This project is a Nostr client application built with React 18.x, TailwindCSS 3.
   - `useLoginActions`: Authentication actions (extension, nsec, bunker)
   - `useIsFollowing`: Check if the logged-in user follows a given pubkey (reactive, updates on follow/unfollow)
   - `useIsMobile`: Responsive design helper
-- `/src/blueprints/`: Custom event blueprints for standardized event creation
-- `/src/operations/`: Custom event operations for composable event building
+- `/src/factories/`: Custom typed `EventFactory` subclasses for project-specific kinds (NIP-34 issues, PRs, statuses, etc.)
 - `/src/pages/`: Page components used by React Router (Index, NotFound)
 - `/src/lib/`: Utility functions and shared logic
 - `/src/types/`: TypeScript type definitions (NostrMetadata, window.nostr)
@@ -1154,93 +1153,140 @@ function CustomPublish() {
 
 ### Custom Event Kinds — The Full Applesauce Pattern
 
-When working with a custom or domain-specific Nostr event kind, follow this four-layer pattern. **Do not** manually parse raw `NostrEvent` objects in hooks or components — use the cast system instead.
+When working with a custom or domain-specific Nostr event kind, follow this three-layer pattern. **Do not** manually parse raw `NostrEvent` objects in hooks or components — use the cast system instead.
 
-The four layers are:
+The three layers are:
 
-1. **Operations** (`src/operations/`) — composable tag/content setters
-2. **Blueprint** (`src/blueprints/`) — combines operations into a reusable event template
-3. **Cast class** — typed wrapper around a raw event with reactive observables
-4. **Hook** — subscribes to the EventStore and returns cast instances
+1. **Factory class** (`src/factories/`) — a typed `EventFactory` subclass that builds and signs events for a specific kind. Fluent instance methods apply operations; static `create`/`modify` entry points return an already-configured factory.
+2. **Cast class** (`src/casts/`) — typed wrapper around a raw event with reactive observables and memoised computed properties.
+3. **Hook** (`src/hooks/`) — subscribes to the EventStore and returns cast instances.
 
-#### Layer 1: Custom Operations (`src/operations/`)
+> **v6 note**: Applesauce v5's separate `src/operations/` + `src/blueprints/` directories are gone. The global `EventFactory` singleton is also gone. Each factory class is instantiated per-call (e.g. `IssueFactory.create(...).as(signer).sign()`) and actions receive `signer` in their context (not `factory`).
 
-Operations are pure functions that transform an `EventTemplate`. Put domain-specific ones in `src/operations/`.
+#### Layer 1: Factory class (`src/factories/`)
 
-```typescript
-// src/operations/issue.ts
-import type { EventOperation } from "applesauce-core/event-factory";
-import { modifyPublicTags } from "applesauce-core/operations";
-import { setSingletonTag } from "applesauce-core/operations";
-
-/** Set the subject/title of an issue */
-export function setSubject(subject: string): EventOperation {
-  return modifyPublicTags(setSingletonTag(["subject", subject]));
-}
-
-/** Tag this issue as belonging to a repository coordinate */
-export function addRepositoryTag(repoCoord: string): EventOperation {
-  return modifyPublicTags((tags) => [...tags, ["a", repoCoord]]);
-}
-
-/** Add a label tag */
-export function addLabel(label: string): EventOperation {
-  return modifyPublicTags((tags) => [...tags, ["t", label]]);
-}
-```
-
-#### Layer 2: Blueprint (`src/blueprints/`)
-
-A blueprint is a function that returns a call to `blueprint()` from `applesauce-core/event-factory`. It wires up the kind number and operations.
+A factory class subclasses `EventFactory<K>` from `applesauce-core/factories`. Use `blankEventTemplate(K)` for new events, `toEventTemplate(event)` for edits. Fluent methods call `this.chain(...)` or the inherited helpers (`.content(...)`, `.modifyPublicTags(...)`, `.alt(...)`).
 
 ```typescript
-// src/blueprints/issue.ts
-import { blueprint } from "applesauce-core/event-factory";
-import { setContent, includeAltTag } from "applesauce-core/operations";
-import { setSubject, addRepositoryTag, addLabel } from "@/operations/issue";
-
-export const ISSUE_KIND = 1621; // NIP-34
+// src/factories/IssueFactory.ts
+import { blankEventTemplate, EventFactory } from "applesauce-core/factories";
+import { includeContentHashtags } from "applesauce-core/operations/content";
+import {
+  addAddressPointerTag,
+  addNameValueTag,
+  addProfilePointerTag,
+} from "applesauce-core/operations/tag/common";
+import { ISSUE_KIND } from "@/lib/nip34";
+import { getPubkeyRelayHint } from "./hints";
+import type { KnownEventTemplate } from "applesauce-core/helpers/event";
 
 export interface IssueOptions {
   labels?: string[];
 }
 
-/** Blueprint for creating a NIP-34 git issue (kind 1621) */
-export function IssueBlueprint(
-  repoCoord: string,
-  subject: string,
-  content: string,
-  options?: IssueOptions,
-) {
-  return blueprint(
-    ISSUE_KIND,
-    setSubject(subject),
-    setContent(content),
-    addRepositoryTag(repoCoord),
-    includeAltTag(`Git issue: ${subject}`),
-    ...(options?.labels ?? []).map(addLabel),
-  );
+type IssueTemplate = KnownEventTemplate<typeof ISSUE_KIND>;
+
+export class IssueFactory extends EventFactory<
+  typeof ISSUE_KIND,
+  IssueTemplate
+> {
+  static create(
+    repoCoord: string,
+    ownerPubkey: string,
+    subject: string,
+    content: string,
+    options?: IssueOptions,
+  ): IssueFactory {
+    let factory = new IssueFactory((resolve) =>
+      resolve(blankEventTemplate(ISSUE_KIND)),
+    )
+      .content(content)
+      .modifyPublicTags(
+        // Relay-hint resolvers are passed per-call in v6 (the factory
+        // constructor no longer accepts a global getEventRelayHint callback).
+        addAddressPointerTag(repoCoord, getPubkeyRelayHint),
+        addProfilePointerTag(ownerPubkey, getPubkeyRelayHint),
+      )
+      .modifyPublicTags((tags) => [...tags, ["subject", subject]])
+      .chain(includeContentHashtags())
+      .alt(`Git issue: ${subject}`);
+
+    const labels = options?.labels ?? [];
+    if (labels.length > 0) {
+      factory = factory.modifyPublicTags(
+        ...labels.map((label) => addNameValueTag(["t", label])),
+      );
+    }
+
+    return factory;
+  }
+
+  /** Example fluent instance method. */
+  label(label: string): this {
+    return this.modifyPublicTags(addNameValueTag(["t", label]));
+  }
 }
 ```
 
-**Using the blueprint to publish:**
+**Using the factory to publish (inside an action):**
 
 ```typescript
-import { factory } from "@/services/actions";
-import { publish } from "@/services/nostr";
-import { IssueBlueprint } from "@/blueprints/issue";
+// src/actions/nip34.ts
+import type { Action } from "applesauce-actions";
+import { IssueFactory, type IssueOptions } from "@/factories/IssueFactory";
+import { outboxStore } from "@/services/outbox";
+import { eventStore } from "@/services/nostr";
 
-// In a React component or hook:
-const event = await factory.create(IssueBlueprint, repoCoord, subject, content);
-const signed = await factory.sign(event);
-await publish(signed);
+export function CreateIssue(
+  repoCoord: string,
+  ownerPubkey: string,
+  subject: string,
+  content: string,
+  options?: IssueOptions,
+): Action {
+  // `signer` and `sign` now live on the action context; there is no `factory`
+  // field. Typed factories are instantiated per-call.
+  return async ({ signer, self }) => {
+    const signed = await IssueFactory.create(
+      repoCoord,
+      ownerPubkey,
+      subject,
+      content,
+      options,
+    ).sign(signer);
 
-// Or with the usePublish hook for simple cases:
-const { publishEvent } = usePublish();
-// usePublish doesn't use blueprints — use factory.create + publish for custom kinds
+    eventStore.add(signed); // optimistic UI
+    outboxStore
+      .publish(signed, [`outbox:${self}`, repoCoord])
+      .catch(console.error);
+  };
+}
 ```
 
-#### Layer 3: Cast Class
+**Using the factory outside an action (component / hook):**
+
+```typescript
+import { useActiveAccount } from "applesauce-react/hooks";
+import { IssueFactory } from "@/factories/IssueFactory";
+
+function MyComponent() {
+  const account = useActiveAccount();
+  const handleSubmit = async () => {
+    if (!account) return;
+    const signed = await IssueFactory.create(
+      repoCoord,
+      ownerPubkey,
+      subject,
+      content,
+    ).sign(account.signer);
+    await publish(signed);
+  };
+}
+```
+
+**Relay hint helpers** (`src/factories/hints.ts`) expose async `getEventRelayHint` and `getPubkeyRelayHint` functions that tag operations like `addAddressPointerTag(addr, getPubkeyRelayHint)` can call to resolve a relay hint from the EventStore / NIP-65 mailbox data. Always pass a hint resolver when adding `e`/`p`/`a` pointer tags to new events — it improves cross-client discoverability with no extra cost.
+
+#### Layer 2: Cast Class
 
 A cast class extends `EventCast` and provides typed, memoized access to event data. Use `getOrComputeCachedValue` with a `Symbol` key to avoid re-parsing on every render.
 
@@ -1304,7 +1350,7 @@ export class Issue extends EventCast<IssueEvent> {
 }
 ```
 
-#### Layer 4: Hook
+#### Layer 3: Hook
 
 Use `castTimelineStream` in the observable pipeline so events are automatically cast and invalid events are silently dropped.
 
@@ -1391,14 +1437,13 @@ function IssueRow({ issue }: { issue: Issue }) {
 
 #### Where Files Live
 
-| Layer        | Directory         | Example file              |
-| ------------ | ----------------- | ------------------------- |
-| Operations   | `src/operations/` | `src/operations/issue.ts` |
-| Blueprints   | `src/blueprints/` | `src/blueprints/issue.ts` |
-| Cast classes | `src/casts/`      | `src/casts/Issue.ts`      |
-| Hooks        | `src/hooks/`      | `src/hooks/useIssues.ts`  |
+| Layer           | Directory        | Example file                    |
+| --------------- | ---------------- | ------------------------------- |
+| Factory classes | `src/factories/` | `src/factories/IssueFactory.ts` |
+| Cast classes    | `src/casts/`     | `src/casts/Issue.ts`            |
+| Hooks           | `src/hooks/`     | `src/hooks/useIssues.ts`        |
 
-> **Note**: The `src/casts/` directory does not exist by default — create it when you add your first custom cast class.
+Relay-hint resolvers shared by all factories live in `src/factories/hints.ts`.
 
 ### Loaders and Infinite Scroll
 

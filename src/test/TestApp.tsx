@@ -5,9 +5,8 @@ import {
   EventStoreProvider,
   AccountsProvider,
   ActionsProvider,
-  FactoryProvider,
 } from "applesauce-react/providers";
-import { EventStore, EventFactory } from "applesauce-core";
+import { EventStore } from "applesauce-core";
 import { AccountManager, Accounts } from "applesauce-accounts";
 import { ActionRunner } from "applesauce-actions";
 
@@ -26,25 +25,14 @@ export function TestApp({ children }: TestAppProps) {
     return manager;
   }, []);
 
-  const factory = useMemo(
-    () =>
-      new EventFactory({
-        // @ts-expect-error - Signer type compatibility
-        signer: () => {
-          const account = accountManager.getActive();
-          if (!account) throw new Error("No active account");
-          return account.signer;
-        },
-      }),
-    [accountManager],
-  );
-
+  // In v6 the ActionRunner takes a signer directly — use the account
+  // manager's proxy signer so tests can switch accounts at will.
   const runner = useMemo(
     () =>
-      new ActionRunner(eventStore, factory, async (event) => {
+      new ActionRunner(eventStore, accountManager.signer, async (event) => {
         eventStore.add(event);
       }),
-    [eventStore, factory],
+    [eventStore, accountManager],
   );
 
   return (
@@ -52,9 +40,7 @@ export function TestApp({ children }: TestAppProps) {
       <EventStoreProvider eventStore={eventStore}>
         <AccountsProvider manager={accountManager}>
           <ActionsProvider runner={runner}>
-            <FactoryProvider factory={factory}>
-              <BrowserRouter>{children}</BrowserRouter>
-            </FactoryProvider>
+            <BrowserRouter>{children}</BrowserRouter>
           </ActionsProvider>
         </AccountsProvider>
       </EventStoreProvider>

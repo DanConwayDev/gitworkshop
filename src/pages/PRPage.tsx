@@ -91,6 +91,8 @@ import {
 } from "@/lib/patch-commits";
 import type { Filter } from "applesauce-core/helpers";
 import type { Patch } from "@/casts/Patch";
+import { EMPTY } from "rxjs";
+import { catchError } from "rxjs/operators";
 
 // ---------------------------------------------------------------------------
 // extractSnippetFromDiff — pull the relevant lines out of a unified diff
@@ -738,7 +740,11 @@ export default function PRPage() {
         pool,
         () => resolved.repoRelayGroup.relays.map((r) => r.url),
         [filter],
-      ).pipe(onlyEvents(), mapEventsToStore(store));
+      ).pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+        catchError(() => EMPTY),
+      );
     }
     return undefined;
   }, [prCommitId, prId, resolved?.repoRelayGroup, store]);

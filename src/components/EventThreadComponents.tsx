@@ -69,7 +69,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { DeleteEvent } from "@/actions/nip34";
 import { runner } from "@/services/actions";
-import { parseInlineCommentLocation } from "@/blueprints/inline-comment";
+import { parseInlineCommentLocation } from "@/lib/inlineComment";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 

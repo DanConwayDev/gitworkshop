@@ -11,7 +11,6 @@
  */
 
 import { ActionRunner } from "applesauce-actions";
-import { EventFactory } from "applesauce-core";
 import { PrivateKeySigner } from "applesauce-signers";
 import { eventStore, publish } from "@/services/nostr";
 
@@ -20,9 +19,11 @@ import { eventStore, publish } from "@/services/nostr";
  *
  * Each call generates a new random private key so successive anonymous
  * posts are not linkable to each other.
+ *
+ * In Applesauce v6 the ActionRunner takes the signer directly — the old
+ * `EventFactory` intermediary is gone.
  */
 export function createAnonRunner(): ActionRunner {
   const signer = new PrivateKeySigner(); // no key arg → random key generated
-  const anonFactory = new EventFactory({ signer });
-  return new ActionRunner(eventStore, anonFactory, publish);
+  return new ActionRunner(eventStore, signer, publish);
 }

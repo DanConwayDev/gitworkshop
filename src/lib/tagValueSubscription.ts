@@ -33,7 +33,10 @@ import {
   switchMap,
   take,
 } from "rxjs";
-import type { RelayPool, SubscriptionOptions } from "applesauce-relay";
+import type {
+  RelayPool,
+  RelaySubscriptionOptions as SubscriptionOptions,
+} from "applesauce-relay";
 import { onlyEvents } from "applesauce-relay";
 import { mapEventsToStore } from "applesauce-core";
 import type { EventStore } from "applesauce-core";

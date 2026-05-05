@@ -36,7 +36,7 @@ import { BehaviorSubject } from "rxjs";
 import { generateSecretKey } from "nostr-tools";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { PrivateKeySigner } from "applesauce-signers/signers";
-import { EventFactory } from "applesauce-core/event-factory";
+import { AppDataFactory } from "applesauce-common/factories";
 import { eventStore } from "@/services/nostr";
 import {
   parseReadState,
@@ -209,17 +209,14 @@ export async function getOrCreateNotificationSigner(
   const hexKey = bytesToHex(secretKey);
 
   try {
-    const { factory } = await import("@/services/actions");
     const { outboxStore } = await import("@/services/outbox");
-    const { AppDataBlueprint } = await import("applesauce-common/blueprints");
 
-    const draft = await factory.create(
-      AppDataBlueprint<{ nsec: string }>,
+    // Encrypted (NIP-44) envelope signed by the user's own signer.
+    const signed = await AppDataFactory.create<{ nsec: string }>(
       NOTIFICATION_NSEC_D_TAG,
       { nsec: hexKey },
-      "nip44" as const,
-    );
-    const signed = await factory.sign(draft);
+      "nip44",
+    ).sign(userSigner);
 
     // Add to local store immediately
     eventStore.add(signed);
@@ -287,19 +284,15 @@ export async function publishReadState(
     const notifSigner = await getOrCreateNotificationSigner(pubkey);
     if (!notifSigner) return;
 
-    const { AppDataBlueprint } = await import("applesauce-common/blueprints");
     const { outboxStore } = await import("@/services/outbox");
 
-    // Use a temporary EventFactory backed by the dedicated notification signer
-    const notifFactory = new EventFactory({ signer: notifSigner });
-
-    const draft = await notifFactory.create(
-      AppDataBlueprint<NotificationReadState>,
+    // Encrypt + sign with the dedicated notification keypair (self-encrypt:
+    // pubkey == author so decryption works symmetrically).
+    const signed = await AppDataFactory.create<NotificationReadState>(
       NOTIFICATION_STATE_D_TAG,
       state,
-      "nip44" as const,
-    );
-    const signed = await notifFactory.sign(draft);
+      "nip44",
+    ).sign(notifSigner);
 
     // Add to local store immediately for optimistic updates
     eventStore.add(signed);

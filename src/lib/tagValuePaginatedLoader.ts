@@ -188,7 +188,9 @@ function processRelayStream(
   if (exhausted.has(key)) {
     settled$.next();
     return defer(() =>
-      pool.subscription([relay], [liveFilter], { reconnect: false }),
+      // Single-relay API so the stream still emits NostrEvent | "EOSE" —
+      // onlyEvents() needs the EOSE to strip.
+      pool.relay(relay).subscription([liveFilter], { reconnect: false }),
     ).pipe(
       onlyEvents(),
       retry({ count: 3, delay: 1000, resetOnSuccess: true }),
@@ -272,8 +274,10 @@ function processRelayStream(
     // over lastReceivedAt by reference and reads the current value on each
     // reconnect attempt, not the value at subscription creation time.
     const liveSub = defer(() =>
-      pool.subscription(
-        [relay],
+      // Single-relay API so the stream still emits NostrEvent | "EOSE" —
+      // the group-level pool.subscription() drops EOSE in v6, but we need it
+      // here to drive settled$ and pagination.
+      pool.relay(relay).subscription(
         [
           {
             ...liveFilter,
@@ -354,7 +358,8 @@ function processRelayStream(
         since: lastReceivedAt - 600,
       };
       gapFillSub = pool
-        .subscription([relay], [gapFilter], { reconnect: false })
+        .relay(relay)
+        .subscription([gapFilter], { reconnect: false })
         .pipe(completeOnEose(), onlyEvents())
         .subscribe({
           next: (event) => subscriber.next(event),

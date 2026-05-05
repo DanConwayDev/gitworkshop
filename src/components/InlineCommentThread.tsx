@@ -38,11 +38,11 @@ import {
   ResolveThread,
 } from "@/actions/nip34";
 import { DeleteEvent } from "@/actions/nip34";
-import type { InlineCommentOptions } from "@/blueprints/inline-comment";
+import type { InlineCommentLocation as InlineCommentOptions } from "@/factories/InlineCommentFactory";
 import {
   isInlineComment,
   parseInlineCommentLocation,
-} from "@/blueprints/inline-comment";
+} from "@/lib/inlineComment";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserDisplayName } from "@/hooks/useUserDisplayName";

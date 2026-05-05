@@ -24,8 +24,8 @@ import { RepositoryModel } from "@/models/RepositoryModel";
 import { RepositoryRelayGroup } from "@/models/RepositoryRelayGroup";
 import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
-import { combineLatest, of } from "rxjs";
-import { switchMap, map } from "rxjs/operators";
+import { combineLatest, of, EMPTY } from "rxjs";
+import { switchMap, map, catchError } from "rxjs/operators";
 import { normalizeUrl } from "@/lib/url";
 
 /** Max healthy mailbox relays to take per maintainer when querying NIP-65 relays. */
@@ -218,9 +218,12 @@ export function useResolvedRepository(
 
     if (backgroundRelays.length === 0) return undefined;
 
-    return pool
-      .req(backgroundRelays, [filter])
-      .pipe(completeOnEose(), onlyEvents(), mapEventsToStore(store));
+    return pool.subscription(backgroundRelays, [filter]).pipe(
+      completeOnEose(),
+      onlyEvents(),
+      mapEventsToStore(store),
+      catchError(() => EMPTY),
+    );
   }, [pubkey, dTag, alreadyInStore, hintsKey, nip05RelaysKey, store]);
 
   // Layer 2: subscribe to the model.
@@ -295,7 +298,11 @@ export function useResolvedRepository(
       pool,
       () => repoRelayGroup.relays.map((r) => r.url),
       filter,
-    ).pipe(onlyEvents(), mapEventsToStore(store));
+    ).pipe(
+      onlyEvents(),
+      mapEventsToStore(store),
+      catchError(() => EMPTY),
+    );
   }, [dTag, repoRelayKey, maintainerKey, store, repoRelayGroup]);
 
   // Layer 4: resolve maintainer outbox + inbox relays. Only relays not already
@@ -353,7 +360,11 @@ export function useResolvedRepository(
           () =>
             extraRelaysForMaintainerMailboxCoverage.relays.map((r) => r.url),
           filter,
-        ).pipe(onlyEvents(), mapEventsToStore(store));
+        ).pipe(
+          onlyEvents(),
+          mapEventsToStore(store),
+          catchError(() => EMPTY),
+        );
       }),
     ) as unknown as Observable<null>;
   }, [
