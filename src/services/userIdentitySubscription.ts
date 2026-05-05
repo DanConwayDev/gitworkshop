@@ -39,6 +39,7 @@ import { eventStore, pool } from "./nostr";
 import { lookupRelays } from "./settings";
 import type { Filter } from "applesauce-core/helpers";
 import { resilientSubscription } from "@/lib/resilientSubscription";
+import { normalizeUrl } from "@/lib/url";
 
 /**
  * All replaceable event kinds that define the user's identity, relay
@@ -72,8 +73,10 @@ export function startUserIdentitySubscription(
   pubkey: string,
   outboxRelays: string[],
 ): () => void {
-  // Union of outbox relays and lookup/index relays, deduplicated
-  const relays = [...new Set([...outboxRelays, ...lookupRelays.getValue()])];
+  // Union of outbox relays and lookup/index relays, normalized and deduplicated
+  const relays = [
+    ...new Set([...outboxRelays, ...lookupRelays.getValue()].map(normalizeUrl)),
+  ];
 
   if (relays.length === 0) return () => {};
 

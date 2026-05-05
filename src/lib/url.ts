@@ -23,7 +23,15 @@ export function normalizeUrl(url: string): string {
   try {
     return normalizeURL(url).replace(/\/+$/, "");
   } catch {
-    // Not a valid URL — best-effort: lowercase and strip trailing slash.
-    return url.toLowerCase().replace(/\/+$/, "");
+    // Not a valid URL — best-effort: lowercase only the scheme and host
+    // (path is case-sensitive), strip trailing slash.
+    try {
+      const u = new URL(url);
+      u.protocol = u.protocol.toLowerCase();
+      u.hostname = u.hostname.toLowerCase();
+      return u.toString().replace(/\/+$/, "");
+    } catch {
+      return url.replace(/\/+$/, "");
+    }
   }
 }

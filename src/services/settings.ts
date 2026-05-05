@@ -1,6 +1,11 @@
-import { relaySet } from "applesauce-core/helpers";
 import { BehaviorSubject, Observable, Subject, Subscription } from "rxjs";
 import { map, distinctUntilChanged } from "rxjs/operators";
+import { normalizeUrl } from "@/lib/url";
+
+/** Normalize and deduplicate a list of relay URLs. */
+function normalizeRelayList(urls: readonly string[]): string[] {
+  return [...new Set(urls.map(normalizeUrl))];
+}
 
 /**
  * Persists a BehaviorSubject or Subject to localStorage.
@@ -82,7 +87,7 @@ export function persist<T>(
  * Fallback relay list used when no other relay source is available.
  * Users can customize this in settings.
  */
-export const DEFAULT_FALLBACK_RELAYS = relaySet([
+export const DEFAULT_FALLBACK_RELAYS = normalizeRelayList([
   "wss://relay.ditto.pub",
   "wss://relay.damus.io",
   "wss://nos.lol",
@@ -95,6 +100,7 @@ export const fallbackRelays = new BehaviorSubject<string[]>(
 
 // Persist the fallback relays to localStorage
 persist(fallbackRelays, "extraRelays", {
+  deserialize: (v) => normalizeRelayList(JSON.parse(v) as string[]),
   defaultValue: DEFAULT_FALLBACK_RELAYS,
 });
 
@@ -124,10 +130,10 @@ export const fallbackRelaysCustomised$ = isCustomised$(
  * Lookup relays for finding user relay hints (NIP-65, profile relays, etc.)
  * These are used by the event loaders to find events more efficiently.
  */
-export const DEFAULT_LOOKUP_RELAYS = relaySet([
-  "wss://purplepag.es/",
-  "wss://index.hzrd149.com/",
-  "wss://indexer.coracle.social/",
+export const DEFAULT_LOOKUP_RELAYS = normalizeRelayList([
+  "wss://purplepag.es",
+  "wss://index.hzrd149.com",
+  "wss://indexer.coracle.social",
 ]);
 
 export const lookupRelays = new BehaviorSubject<string[]>(
@@ -135,7 +141,10 @@ export const lookupRelays = new BehaviorSubject<string[]>(
 );
 
 // Persist the lookup relays to localStorage
-persist(lookupRelays, "lookupRelays", { defaultValue: DEFAULT_LOOKUP_RELAYS });
+persist(lookupRelays, "lookupRelays", {
+  deserialize: (v) => normalizeRelayList(JSON.parse(v) as string[]),
+  defaultValue: DEFAULT_LOOKUP_RELAYS,
+});
 
 /** True when the user has customised the lookup relay list. */
 export const lookupRelaysCustomised$ = isCustomised$(
@@ -147,7 +156,9 @@ export const lookupRelaysCustomised$ = isCustomised$(
  * Git index relays — store repository announcements (kind 30617) across the
  * network. Used for discovering repositories published via ngit.
  */
-export const DEFAULT_GIT_INDEX_RELAYS = relaySet(["wss://index.ngit.dev"]);
+export const DEFAULT_GIT_INDEX_RELAYS = normalizeRelayList([
+  "wss://index.ngit.dev",
+]);
 
 export const gitIndexRelays = new BehaviorSubject<string[]>(
   DEFAULT_GIT_INDEX_RELAYS,
@@ -155,6 +166,7 @@ export const gitIndexRelays = new BehaviorSubject<string[]>(
 
 // Persist the git index relays to localStorage
 persist(gitIndexRelays, "gitIndexRelays", {
+  deserialize: (v) => normalizeRelayList(JSON.parse(v) as string[]),
   defaultValue: DEFAULT_GIT_INDEX_RELAYS,
 });
 
@@ -212,20 +224,21 @@ export const DEFAULT_NOSTR_CONNECT_RELAYS: readonly string[] = [
   "wss://nrs.primal.net",
 ];
 
-export const defaultNostrConnectRelays = new BehaviorSubject<string[]>([
-  ...DEFAULT_NOSTR_CONNECT_RELAYS,
-]);
+export const defaultNostrConnectRelays = new BehaviorSubject<string[]>(
+  normalizeRelayList(DEFAULT_NOSTR_CONNECT_RELAYS),
+);
 
 // Persist user overrides; delete the key when the value matches the default so
 // code-level default changes are picked up by users who haven't customised it.
 persist(defaultNostrConnectRelays, "defaultNostrConnectRelays", {
-  defaultValue: [...DEFAULT_NOSTR_CONNECT_RELAYS],
+  deserialize: (v) => normalizeRelayList(JSON.parse(v) as string[]),
+  defaultValue: normalizeRelayList(DEFAULT_NOSTR_CONNECT_RELAYS),
 });
 
 /** True when the user has customised the default remote signer relay list. */
 export const nostrConnectRelaysCustomised$ = isCustomised$(
   defaultNostrConnectRelays,
-  [...DEFAULT_NOSTR_CONNECT_RELAYS],
+  normalizeRelayList(DEFAULT_NOSTR_CONNECT_RELAYS),
 );
 
 // ---------------------------------------------------------------------------

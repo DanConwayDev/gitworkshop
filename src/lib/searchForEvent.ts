@@ -33,6 +33,7 @@ import type { RelayPool } from "applesauce-relay";
 import { completeOnEose, onlyEvents } from "applesauce-relay";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
+import { normalizeUrl } from "@/lib/url";
 import {
   Observable,
   Subject,
@@ -464,7 +465,7 @@ export function searchForEvent(
       // Subscribe to the reactive relay list
       const relaySub = group.relays$
         .pipe(
-          map((urls) => [...new Set(urls)]),
+          map((urls) => [...new Set(urls.map(normalizeUrl))]),
           distinctUntilChanged(
             (a, b) =>
               a.length === b.length && a.every((url, i) => url === b[i]),
@@ -529,7 +530,7 @@ export function searchForEvent(
         return;
       }
 
-      const relays = [...new Set(allRelaysSearched)];
+      const relays = [...new Set(allRelaysSearched.map(normalizeUrl))];
 
       const sub = pool
         .req(relays, allFilters)

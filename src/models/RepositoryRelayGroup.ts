@@ -3,6 +3,7 @@ import type { Model } from "applesauce-core/event-store";
 import { RelayGroup } from "applesauce-relay";
 import { REPO_KIND, getRepoRelays, getRepoMaintainers } from "@/lib/nip34";
 import { pool } from "@/services/nostr";
+import { normalizeUrl } from "@/lib/url";
 
 /**
  * RepositoryRelayGroup — a long-lived RelayGroup for a repository, cached by
@@ -49,9 +50,9 @@ export function RepositoryRelayGroup(
             .subscribe((ev) => {
               if (!ev) return;
 
-              // Add any relay URLs declared in this announcement
+              // Add any relay URLs declared in this announcement (normalized)
               for (const url of getRepoRelays(ev)) {
-                const relay = pool.relay(url);
+                const relay = pool.relay(normalizeUrl(url));
                 if (!group.has(relay)) group.add(relay);
               }
 

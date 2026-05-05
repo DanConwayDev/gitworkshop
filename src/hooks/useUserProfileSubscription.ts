@@ -35,6 +35,7 @@ import { resilientSubscription } from "@/lib/resilientSubscription";
 import { switchMap, of } from "rxjs";
 import { map } from "rxjs/operators";
 import type { Filter } from "applesauce-core/helpers";
+import { normalizeUrl } from "@/lib/url";
 
 /** Replaceable event kinds that define a user's identity and follow lists. */
 const USER_REPLACEABLE_KINDS = [
@@ -67,7 +68,11 @@ export function useUserProfileSubscription(pubkey: string | undefined): void {
     if (!pubkey || isOwnProfile) return undefined;
 
     const relays = [
-      ...new Set([...gitIndexRelays.getValue(), ...lookupRelays.getValue()]),
+      ...new Set(
+        [...gitIndexRelays.getValue(), ...lookupRelays.getValue()].map(
+          normalizeUrl,
+        ),
+      ),
     ];
 
     const filter: Filter = {

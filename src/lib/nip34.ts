@@ -381,16 +381,22 @@ export function getRepoWebUrls(ev: NostrEvent): string[] {
 }
 
 /**
- * Extract all relay URLs from a kind:30617 event.
+ * Extract all relay URLs from a kind:30617 event, normalized and deduplicated.
  * NIP-34 packs multiple relay URLs as extra elements of a single tag:
  *   ["relays", "wss://relay1", "wss://relay2", ...]
+ *
+ * Returns normalized URLs so callers can safely compare and deduplicate
+ * across sources without additional normalization.
  */
 export function getRepoRelays(ev: NostrEvent): string[] {
-  return getOrComputeCachedValue(ev, RepoRelaysSymbol, () =>
-    ev.tags
-      .filter(([t]) => t === "relays")
-      .flatMap(([, ...urls]) => urls.filter(Boolean)),
-  );
+  return getOrComputeCachedValue(ev, RepoRelaysSymbol, () => [
+    ...new Set(
+      ev.tags
+        .filter(([t]) => t === "relays")
+        .flatMap(([, ...urls]) => urls.filter(Boolean))
+        .map(normalizeUrl),
+    ),
+  ]);
 }
 
 /**

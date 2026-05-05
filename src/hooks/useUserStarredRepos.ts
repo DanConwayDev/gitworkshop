@@ -29,6 +29,7 @@ import { gitIndexRelays, lookupRelays } from "@/services/settings";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { resilientSubscription } from "@/lib/resilientSubscription";
+import { normalizeUrl } from "@/lib/url";
 
 import {
   REPO_KIND,
@@ -70,7 +71,11 @@ export function useUserStarredRepos(
     if (!pubkey) return undefined;
 
     const relays = [
-      ...new Set([...gitIndexRelays.getValue(), ...lookupRelays.getValue()]),
+      ...new Set(
+        [...gitIndexRelays.getValue(), ...lookupRelays.getValue()].map(
+          normalizeUrl,
+        ),
+      ),
     ];
 
     return resilientSubscription(pool, relays, [
