@@ -14,6 +14,7 @@ import {
 } from "applesauce-core/helpers";
 import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
 import { getThreadTree } from "@/lib/threadTree";
+import { normalizeUrl } from "@/lib/url";
 
 // ---------------------------------------------------------------------------
 // Patch-chain identification tags — excluded from user-visible labels
@@ -291,22 +292,6 @@ export function getRepoDescription(ev: NostrEvent): string {
     RepoDescriptionSymbol,
     () => ev.tags.find(([t]) => t === "description")?.[1] ?? ev.content ?? "",
   );
-}
-
-/**
- * Normalize a URL to a canonical key for deduplication.
- * Lowercases the scheme and host, strips a trailing slash from the path.
- * Falls back to the original string if the URL cannot be parsed.
- */
-function normalizeUrlKey(url: string): string {
-  try {
-    const u = new URL(url);
-    // Lowercase scheme + host; strip trailing slash from pathname
-    const path = u.pathname.replace(/\/$/, "") || "/";
-    return `${u.protocol.toLowerCase()}//${u.host.toLowerCase()}${path}${u.search}${u.hash}`;
-  } catch {
-    return url.toLowerCase().replace(/\/$/, "");
-  }
 }
 
 /**
@@ -2163,7 +2148,7 @@ export function resolveChain(
 
   for (const ev of announcements) {
     for (const v of getRepoCloneUrls(ev)) {
-      const key = normalizeUrlKey(v);
+      const key = normalizeUrl(v);
       if (!seenClone.has(key)) {
         seenClone.add(key);
         cloneUrlProvenance.push({
@@ -2174,7 +2159,7 @@ export function resolveChain(
       }
     }
     for (const v of getRepoRelays(ev)) {
-      const key = normalizeUrlKey(v);
+      const key = normalizeUrl(v);
       if (!seenRelay.has(key)) {
         seenRelay.add(key);
         relayProvenance.push({

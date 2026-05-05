@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
 import { ensureWebSocketURL } from "applesauce-core/helpers";
+import { normalizeUrl } from "@/lib/url";
 
 interface RelayListInputProps {
   relays: string[];
@@ -24,24 +25,10 @@ export function RelayListInput({
 }: RelayListInputProps) {
   const [newRelay, setNewRelay] = useState("");
 
-  const normalizeRelayUrl = (url: string): string => {
-    const trimmed = url.trim();
-    if (!trimmed) return trimmed;
-
-    // Use ensureWebSocketURL to normalize the URL
-    try {
-      return ensureWebSocketURL(trimmed);
-    } catch {
-      // If it fails, try to prepend wss://
-      if (!trimmed.startsWith("wss://") && !trimmed.startsWith("ws://")) {
-        return `wss://${trimmed}`;
-      }
-      return trimmed;
-    }
-  };
-
   const handleAddRelay = () => {
-    const normalized = normalizeRelayUrl(newRelay);
+    const trimmed = newRelay.trim();
+    if (!trimmed) return;
+    const normalized = normalizeUrl(ensureWebSocketURL(trimmed));
     if (normalized && !relays.includes(normalized)) {
       onRelaysChange([...relays, normalized]);
       setNewRelay("");

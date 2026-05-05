@@ -16,6 +16,8 @@
  */
 
 import { nip19 } from "nostr-tools";
+import { ensureWebSocketURL } from "applesauce-core/helpers";
+import { normalizeUrl } from "@/lib/url";
 
 // ---------------------------------------------------------------------------
 // Segment classifiers
@@ -325,11 +327,10 @@ export function parseRelayUrl(raw: string): string | undefined {
  * ws:// is kept as-is (URL-encoded) so the scheme is preserved on decode.
  */
 export function relayUrlToSegment(url: string): string {
-  // Strip trailing slashes before encoding
-  const stripped = url.replace(/\/+$/, "");
-  if (stripped.startsWith("wss://")) return stripped.slice(6);
+  const normalized = normalizeUrl(url);
+  if (normalized.startsWith("wss://")) return normalized.slice(6);
   // ws:// — keep the scheme but URL-encode the colons/slashes
-  return encodeURIComponent(stripped);
+  return encodeURIComponent(normalized);
 }
 
 /**
@@ -337,19 +338,13 @@ export function relayUrlToSegment(url: string): string {
  * The hint is stored without the scheme (wss:// stripped when generating).
  */
 function normalizeRelayHint(hint: string): string | undefined {
-  let url = decodeURIComponent(hint);
-  if (!url.includes("://")) url = "wss://" + url;
-  // Basic sanity check — return the parsed (normalized) form so it matches
-  // the URL the RelayPool stores via its own normalizeURL call (which uses
-  // new URL().toString() and therefore adds a trailing slash for bare domains).
   try {
-    const parsed = new URL(url);
-    if (parsed.protocol === "wss:" || parsed.protocol === "ws:")
-      return parsed.toString();
+    let url = decodeURIComponent(hint);
+    if (!url.includes("://")) url = "wss://" + url;
+    return normalizeUrl(ensureWebSocketURL(url));
   } catch {
-    // ignore
+    return undefined;
   }
-  return undefined;
 }
 
 // ---------------------------------------------------------------------------

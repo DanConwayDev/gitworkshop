@@ -32,31 +32,17 @@ import { BehaviorSubject, Subscription } from "rxjs";
 import { ignoreElements } from "rxjs/operators";
 import type { NostrEvent } from "nostr-tools";
 import type { RelayPool, PublishResponse } from "applesauce-relay";
-import { normalizeURL } from "applesauce-core/helpers";
+import { normalizeUrl } from "@/lib/url";
 
 // ---------------------------------------------------------------------------
 // URL normalization
 // ---------------------------------------------------------------------------
 
 /**
- * Normalize a relay URL and strip trailing slashes for deduplication.
- *
- * Wraps Applesauce's `normalizeURL` (which lowercases the scheme/host and
- * removes default ports) then additionally strips trailing slashes.
- * Applesauce intentionally preserves trailing slashes, but different sources
- * (repo announcements, NIP-65 mailboxes, user input) are inconsistent about
- * them, so `wss://relay.damus.io` and `wss://relay.damus.io/` must be
- * treated as the same relay for deduplication.
- */
-function normalizeAndStripTrailingSlash(url: string): string {
-  return normalizeURL(url).replace(/\/+$/, "");
-}
-
-/**
  * Normalize an array of relay URLs, deduplicating after normalization.
  */
 function normalizeRelayUrls(urls: string[]): string[] {
-  return [...new Set(urls.map(normalizeAndStripTrailingSlash))];
+  return [...new Set(urls.map(normalizeUrl))];
 }
 
 // ---------------------------------------------------------------------------
@@ -716,7 +702,7 @@ class OutboxStore {
     const item = current.find((i) => i.id === itemId);
     if (!item) return;
 
-    const fromUrl = normalizeAndStripTrailingSlash(response.from);
+    const fromUrl = normalizeUrl(response.from);
     const now = Math.floor(Date.now() / 1000);
 
     const updatedRelays = item.relays.map((relay) => {

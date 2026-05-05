@@ -39,7 +39,7 @@ describe("parseRepoRoute — baseline formats", () => {
     expect(parsed?.type).toBe("npub");
     expect(parsed?.repoId).toBe("my-repo");
     if (parsed?.type === "npub") {
-      expect(parsed.relayHints).toEqual(["wss://relay.damus.io/"]);
+      expect(parsed.relayHints).toEqual(["wss://relay.damus.io"]);
     }
   });
 
@@ -68,7 +68,7 @@ describe("parseRepoRoute — baseline formats", () => {
     expect(parsed?.repoId).toBe("my-repo");
     if (parsed?.type === "nip05") {
       expect(parsed.nip05).toBe("user@domain.com");
-      expect(parsed.relayHints).toEqual(["wss://relay.damus.io/"]);
+      expect(parsed.relayHints).toEqual(["wss://relay.damus.io"]);
     }
   });
 });
@@ -106,7 +106,7 @@ describe("parseRepoRoute — d-tag with encoded slash (%2F)", () => {
     expect(parsed).toBeDefined();
     expect(parsed?.repoId).toBe(`${HEX_PUBKEY}/vortex-sidecar`);
     if (parsed?.type === "npub") {
-      expect(parsed.relayHints).toEqual(["wss://relay.damus.io/"]);
+      expect(parsed.relayHints).toEqual(["wss://relay.damus.io"]);
     }
   });
 });
@@ -169,7 +169,7 @@ describe("parseRepoRoute — relay hints with special encoding", () => {
     const parsed = parseRepoRoute(`${NPUB}/relay.damus.io/my-repo`);
     expect(parsed?.type).toBe("npub");
     if (parsed?.type === "npub") {
-      expect(parsed.relayHints).toEqual(["wss://relay.damus.io/"]);
+      expect(parsed.relayHints).toEqual(["wss://relay.damus.io"]);
     }
   });
 
@@ -178,7 +178,7 @@ describe("parseRepoRoute — relay hints with special encoding", () => {
     expect(parsed).toBeDefined();
     expect(parsed?.repoId).toBe("my-repo");
     if (parsed?.type === "npub") {
-      // Port 443 is the wss:// default; URL normalisation may strip it.
+      // Port 443 is the wss:// default; URL normalisation strips it.
       // We only assert that a relay hint is present and uses wss://.
       expect(parsed.relayHints).toHaveLength(1);
       expect(parsed.relayHints[0]).toMatch(/^wss:\/\/relay\.damus\.io/);
@@ -192,7 +192,7 @@ describe("parseRepoRoute — relay hints with special encoding", () => {
     expect(parsed).toBeDefined();
     expect(parsed?.repoId).toBe("my-repo");
     if (parsed?.type === "npub") {
-      expect(parsed.relayHints).toEqual(["ws://relay.example.com/"]);
+      expect(parsed.relayHints).toEqual(["ws://relay.example.com"]);
     }
   });
 });
@@ -391,17 +391,17 @@ describe("relayUrlToSegment", () => {
 // ---------------------------------------------------------------------------
 
 describe("parseRelayUrl", () => {
-  it("normalises a bare domain to a wss:// URL", () => {
-    expect(parseRelayUrl("relay.damus.io")).toBe("wss://relay.damus.io/");
+  it("normalises a bare domain to a wss:// URL (no trailing slash)", () => {
+    expect(parseRelayUrl("relay.damus.io")).toBe("wss://relay.damus.io");
   });
 
-  it("normalises a full wss:// URL (adds trailing slash)", () => {
-    expect(parseRelayUrl("wss://relay.damus.io")).toBe("wss://relay.damus.io/");
+  it("normalises a full wss:// URL (strips trailing slash)", () => {
+    expect(parseRelayUrl("wss://relay.damus.io")).toBe("wss://relay.damus.io");
   });
 
   it("decodes and normalises a ws%3A%2F%2F-encoded URL to ws://", () => {
     expect(parseRelayUrl("ws%3A%2F%2Frelay.example.com")).toBe(
-      "ws://relay.example.com/",
+      "ws://relay.example.com",
     );
   });
 });
@@ -413,16 +413,16 @@ describe("parseRelayUrl", () => {
 describe("relayUrlToSegment → parseRelayUrl round-trip", () => {
   it("round-trips wss://relay.damus.io", () => {
     const seg = relayUrlToSegment("wss://relay.damus.io");
-    expect(parseRelayUrl(seg)).toBe("wss://relay.damus.io/");
+    expect(parseRelayUrl(seg)).toBe("wss://relay.damus.io");
   });
 
-  it("round-trips wss://relay.damus.io/ (trailing slash stripped then restored)", () => {
+  it("round-trips wss://relay.damus.io/ (trailing slash stripped)", () => {
     const seg = relayUrlToSegment("wss://relay.damus.io/");
-    expect(parseRelayUrl(seg)).toBe("wss://relay.damus.io/");
+    expect(parseRelayUrl(seg)).toBe("wss://relay.damus.io");
   });
 
   it("round-trips ws://relay.example.com preserving the ws:// scheme", () => {
     const seg = relayUrlToSegment("ws://relay.example.com");
-    expect(parseRelayUrl(seg)).toBe("ws://relay.example.com/");
+    expect(parseRelayUrl(seg)).toBe("ws://relay.example.com");
   });
 });
