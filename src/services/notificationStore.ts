@@ -38,7 +38,7 @@
  * Action implementations (markAsRead, etc.) live in notificationActions.ts.
  */
 
-import { BehaviorSubject, combineLatest, of } from "rxjs";
+import { BehaviorSubject, combineLatest, merge, of } from "rxjs";
 import {
   map,
   switchMap,
@@ -54,6 +54,7 @@ import {
   lookupRelays,
   gitIndexRelays,
 } from "@/services/settings";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import {
   buildNotificationFilters,
   buildNotificationBadgeFilters,
@@ -79,7 +80,6 @@ import {
   getOrCreateNotificationSigner,
   evictNotificationSigner,
 } from "./notificationSync";
-import { BACKOFF_RECONNECT } from "@/lib/relay";
 import { normalizeUrl } from "@/lib/url";
 
 // ---------------------------------------------------------------------------
@@ -233,12 +233,9 @@ export function acquireNotificationStore(
   const badgeSub = inboxRelays$
     .pipe(
       switchMap((relays) =>
-        pool
-          .subscription(relays, badgeFilters, {
-            reconnect: BACKOFF_RECONNECT,
-            resubscribe: Infinity,
-          })
-          .pipe(onlyEvents(), mapEventsToStore(eventStore)),
+        resilientSubscription(pool, relays, badgeFilters, {
+          retryCount: Infinity,
+        }).pipe(onlyEvents(), mapEventsToStore(eventStore)),
       ),
     )
     .subscribe();
@@ -352,12 +349,9 @@ export function acquireNotificationStore(
         (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
       ),
       switchMap((relays) =>
-        pool
-          .subscription(relays, [ownRepoFilter], {
-            reconnect: BACKOFF_RECONNECT,
-            resubscribe: Infinity,
-          })
-          .pipe(onlyEvents(), mapEventsToStore(eventStore)),
+        resilientSubscription(pool, relays, [ownRepoFilter], {
+          retryCount: Infinity,
+        }).pipe(onlyEvents(), mapEventsToStore(eventStore)),
       ),
     )
     .subscribe();
@@ -432,29 +426,23 @@ export function acquireNotificationStore(
         const inboxSet = new Set(inboxRelays);
         const extraRepoRelays = repoRelays.filter((r) => !inboxSet.has(r));
 
-        const subs = [
-          pool
-            .subscription(repoRelays, [starFilter], {
-              reconnect: BACKOFF_RECONNECT,
-              resubscribe: Infinity,
-            })
-            .pipe(onlyEvents(), mapEventsToStore(eventStore)),
+        const streams = [
+          resilientSubscription(pool, repoRelays, [starFilter], {
+            retryCount: Infinity,
+          }).pipe(onlyEvents(), mapEventsToStore(eventStore)),
         ];
 
         if (extraRepoRelays.length > 0) {
           // Badge filters on extra repo relays so we don't miss thread activity
           // on repos whose relays aren't in the user's inbox
-          subs.push(
-            pool
-              .subscription(extraRepoRelays, badgeFilters, {
-                reconnect: BACKOFF_RECONNECT,
-                resubscribe: Infinity,
-              })
-              .pipe(onlyEvents(), mapEventsToStore(eventStore)),
+          streams.push(
+            resilientSubscription(pool, extraRepoRelays, badgeFilters, {
+              retryCount: Infinity,
+            }).pipe(onlyEvents(), mapEventsToStore(eventStore)),
           );
         }
 
-        return combineLatest(subs);
+        return merge(...streams);
       }),
     )
     .subscribe();

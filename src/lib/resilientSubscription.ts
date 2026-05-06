@@ -44,6 +44,7 @@ import {
   merge,
   retry,
   tap,
+  timer,
   catchError,
 } from "rxjs";
 import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
@@ -67,6 +68,28 @@ export interface ResilientSubscriptionOptions {
   manualPaginate$?: Observable<void>;
   /** Pagination block size / threshold. Default: 500 */
   limit?: number;
+  /**
+   * Number of reconnect retries per relay before giving up. Default: 3.
+   * Pass Infinity for always-on subscriptions that should never stop retrying.
+   */
+  retryCount?: number;
+  /**
+   * Delay between retries. Accepts a number (ms) or a function matching
+   * RxJS retry's delay signature: (error, retryCount) => ObservableInput.
+   * Default: exponential backoff capped at 5 minutes
+   * (1s, 2s, 4s, 8s … up to 300s).
+   */
+  retryDelay?:
+    | number
+    | ((error: unknown, retryCount: number) => ReturnType<typeof timer>);
+}
+
+/**
+ * Default exponential backoff: 1s × 2^(n-1), capped at 5 minutes.
+ * Matches the behaviour of the old BACKOFF_RECONNECT constant.
+ */
+export function defaultRetryDelay(_err: unknown, retryCount: number) {
+  return timer(Math.min(1000 * Math.pow(2, retryCount - 1), 5 * 60_000));
 }
 
 export type ResilientSubscriptionResponse = NostrEvent | "EOSE";
@@ -84,7 +107,13 @@ function processRelay(
   opts: Required<
     Pick<
       ResilientSubscriptionOptions,
-      "reconnect" | "gapFill" | "gapFillBuffer" | "paginate" | "limit"
+      | "reconnect"
+      | "gapFill"
+      | "gapFillBuffer"
+      | "paginate"
+      | "limit"
+      | "retryCount"
+      | "retryDelay"
     >
   > & { manualPaginate$: Observable<void> | undefined },
   signal: SettleSignal,
@@ -190,7 +219,11 @@ function processRelay(
               lastReceivedAt = t;
           }
         }),
-        retry({ count: 3, delay: 1000, resetOnSuccess: true }),
+        retry({
+          count: opts.retryCount,
+          delay: opts.retryDelay,
+          resetOnSuccess: true,
+        }),
         catchError(() => EMPTY),
       )
       .subscribe({
@@ -284,6 +317,8 @@ export function resilientSubscription(
   const settleTime = opts.settleTime ?? DEFAULT_SETTLE_TIME;
   const paginate = opts.paginate ?? false;
   const limit = opts.limit ?? 500;
+  const retryCount = opts.retryCount ?? 3;
+  const retryDelay = opts.retryDelay ?? defaultRetryDelay;
   const manualPaginate$ = opts.manualPaginate$;
 
   if (relays.length === 0) return EMPTY;
@@ -294,6 +329,8 @@ export function resilientSubscription(
     gapFillBuffer,
     paginate,
     limit,
+    retryCount,
+    retryDelay,
     manualPaginate$,
   };
 
