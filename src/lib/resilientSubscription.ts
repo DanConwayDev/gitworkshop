@@ -47,6 +47,7 @@ import {
   catchError,
 } from "rxjs";
 import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
+import type { SettleSignal, SettleSignalOptions } from "./settleSignal";
 import { foregroundResume$ } from "./foregroundResume";
 
 export interface ResilientSubscriptionOptions {
@@ -86,7 +87,7 @@ function processRelay(
       "reconnect" | "gapFill" | "gapFillBuffer" | "paginate" | "limit"
     >
   > & { manualPaginate$: Observable<void> | undefined },
-  settled$: Subject<void>,
+  signal: SettleSignal,
 ): Observable<NostrEvent> {
   const limit = opts.limit;
 
@@ -119,6 +120,14 @@ function processRelay(
     let window$: Subject<{ since?: number; until?: number }> | undefined;
 
     const startPagination = () => {
+      // Wrap pool so signal.extend() is called at the start of every internal
+      // page request, not just the first — loadBlocksFromRelay drives
+      // subsequent pages internally without pushing to window$ again.
+      const extendingPool = (relays: string[], filters: Filter[]) => {
+        signal.extend(relay);
+        return pool.request(relays, filters);
+      };
+
       if (opts.manualPaginate$) {
         const manualWindow$ = new Subject<{ since?: number; until?: number }>();
         window$ = manualWindow$;
@@ -134,9 +143,11 @@ function processRelay(
 
       paginateSub = window$
         .pipe(
-          loadBlocksFromRelay(pool, relay, paginationFilters, { limit }),
+          loadBlocksFromRelay(extendingPool, relay, paginationFilters, {
+            limit,
+          }),
           finalize(() => {
-            settled$.next();
+            signal.settle(relay);
           }),
         )
         .subscribe({
@@ -146,7 +157,10 @@ function processRelay(
             }
             subscriber.next(event);
           },
-          error: (err) => subscriber.error(err),
+          error: (err) => {
+            signal.error(relay);
+            subscriber.error(err);
+          },
         });
     };
 
@@ -186,18 +200,18 @@ function processRelay(
             if (opts.paginate || opts.manualPaginate$) {
               if (opts.manualPaginate$) {
                 // Manual mode: signal settled at EOSE; start pagination if needed
-                settled$.next();
+                signal.settle(relay);
                 if (countBeforeEose >= limit) startPagination();
               } else {
                 // Auto mode: paginate if relay was truncated
                 if (countBeforeEose < limit) {
-                  settled$.next();
+                  signal.settle(relay);
                 } else {
                   startPagination();
                 }
               }
             } else {
-              settled$.next();
+              signal.settle(relay);
             }
           } else {
             const event = msg as NostrEvent;
@@ -210,7 +224,10 @@ function processRelay(
             subscriber.next(event);
           }
         },
-        error: (err) => subscriber.error(err),
+        error: (err) => {
+          signal.error(relay);
+          subscriber.error(err);
+        },
         complete: () => subscriber.complete(),
       });
 
@@ -282,19 +299,28 @@ export function resilientSubscription(
 
   if (!settle) {
     // No settle signal — just merge per-relay streams
-    const perRelayStreams = relays.map((relay) => {
-      const dummySettled$ = new Subject<void>();
-      return processRelay(pool, relay, filters, resolvedOpts, dummySettled$);
-    });
+    const dummySignal: SettleSignal = {
+      extend: () => {},
+      settle: () => {},
+      error: () => {},
+      eose$: EMPTY as Observable<"EOSE">,
+    };
+    const perRelayStreams = relays.map((relay) =>
+      processRelay(pool, relay, filters, resolvedOpts, dummySignal),
+    );
     return merge(...perRelayStreams);
   }
 
-  // With settle signal: share a single settled$ across all relays
-  const { settled$, eose$ } = makeSettleSignal(settleTime);
+  // With settle signal: share a single signal across all relays
+  const settleOpts: SettleSignalOptions = {
+    settleTime,
+    relayIds: relays,
+  };
+  const signal = makeSettleSignal(settleOpts);
 
   const perRelayStreams = relays.map((relay) =>
-    processRelay(pool, relay, filters, resolvedOpts, settled$),
+    processRelay(pool, relay, filters, resolvedOpts, signal),
   );
 
-  return merge(merge(...perRelayStreams), eose$);
+  return merge(merge(...perRelayStreams), signal.eose$);
 }

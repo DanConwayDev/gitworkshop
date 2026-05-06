@@ -78,6 +78,7 @@ import {
   tap,
 } from "rxjs";
 import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
+import type { SettleSignal, SettleSignalOptions } from "./settleSignal";
 import { foregroundResume$ } from "./foregroundResume";
 
 export type { TagValuePointer };
@@ -162,8 +163,8 @@ function exhaustionKey(relay: string, tagName: string, f: Filter): string {
  * Process one batch window: for each relay in the filter map, open a live
  * subscription and (if needed) paginate backward until exhausted.
  *
- * @param settled$       - push to this when a relay finishes its current work;
- *                         the caller debounces it to emit "EOSE" into the stream.
+ * @param signal          - settle signal; call extend/settle/error as relay
+ *                          work progresses.
  * @param manualPaginate$ - if provided, disables auto-pagination; each emission
  *                         requests the next backward block from this relay.
  */
@@ -175,7 +176,7 @@ function processRelayStream(
   key: string,
   limit: number,
   exhausted: Set<string>,
-  settled$: Subject<void>,
+  signal: SettleSignal,
   manualPaginate$: Observable<void> | undefined,
 ): Observable<NostrEvent> {
   // No limit on the live filter — we want all future events.
@@ -186,7 +187,7 @@ function processRelayStream(
   // immediately since there is no history work to do. No lastReceivedAt on
   // this path since it's a fresh subscription with no prior state.
   if (exhausted.has(key)) {
-    settled$.next();
+    signal.settle(relay);
     return defer(() =>
       // Single-relay API so the stream still emits NostrEvent | "EOSE" —
       // onlyEvents() needs the EOSE to strip.
@@ -221,6 +222,14 @@ function processRelayStream(
     let window$: Subject<{ since?: number; until?: number }> | undefined;
 
     const startPagination = () => {
+      // Wrap pool so signal.extend() is called at the start of every internal
+      // page request, not just the first — loadBlocksFromRelay drives
+      // subsequent pages internally without pushing to window$ again.
+      const extendingPool = (relays: string[], filters: Filter[]) => {
+        signal.extend(relay);
+        return pool.request(relays, filters);
+      };
+
       if (manualPaginate$) {
         // Manual mode: create a plain Subject; each manualPaginate$ emission
         // pushes a new window value to request the next block.
@@ -244,13 +253,15 @@ function processRelayStream(
 
       paginateSub = window$
         .pipe(
-          loadBlocksFromRelay(pool, relay, [paginationFilter], { limit }),
+          loadBlocksFromRelay(extendingPool, relay, [paginationFilter], {
+            limit,
+          }),
           finalize(() => {
             if (!manualPaginate$) {
               // Auto: fully exhausted when loadBlocksFromRelay completes
               exhausted.add(key);
             }
-            settled$.next();
+            signal.settle(relay);
           }),
         )
         .subscribe({
@@ -261,7 +272,10 @@ function processRelayStream(
             }
             subscriber.next(event);
           },
-          error: (err) => subscriber.error(err),
+          error: (err) => {
+            signal.error(relay);
+            subscriber.error(err);
+          },
           // Completing does not complete the outer observable —
           // the live subscription keeps it alive
         });
@@ -316,7 +330,7 @@ function processRelayStream(
             if (manualPaginate$) {
               // Manual mode: signal settled at EOSE regardless of count —
               // the user decides when to request more
-              settled$.next();
+              signal.settle(relay);
               // Only start pagination machinery if there may be more history
               if (countBeforeEose >= limit) startPagination();
               else exhausted.add(key);
@@ -324,7 +338,7 @@ function processRelayStream(
               // Auto mode: paginate if relay was truncated, otherwise done
               if (countBeforeEose < limit) {
                 exhausted.add(key);
-                settled$.next();
+                signal.settle(relay);
               } else {
                 startPagination();
               }
@@ -340,7 +354,10 @@ function processRelayStream(
             subscriber.next(event);
           }
         },
-        error: (err) => subscriber.error(err),
+        error: (err) => {
+          signal.error(relay);
+          subscriber.error(err);
+        },
         complete: () => subscriber.complete(),
       });
 
@@ -385,34 +402,39 @@ function processBatch(
   pointers: TagValuePointer[],
   opts: PaginatedTagValueLoaderOptions,
   exhausted: Set<string>,
-  settled$: Subject<void>,
-): Observable<NostrEvent> {
+  settleOpts: SettleSignalOptions,
+): { events$: Observable<NostrEvent>; eose$: Observable<"EOSE"> } {
   const limit = opts.limit ?? 500;
   const relayFilterMap = buildRelayFilterMap(tagName, pointers, opts);
+  const relayIds = Object.keys(relayFilterMap);
 
-  const perRelayStreams = Object.entries(relayFilterMap).map(
-    ([relay, relayFilter]) => {
-      const key = exhaustionKey(relay, tagName, relayFilter);
-      const paginationFilter: TimelessFilter = { ...relayFilter };
-      delete (paginationFilter as Filter).limit;
+  const signal = makeSettleSignal({
+    ...settleOpts,
+    relayIds,
+  });
 
-      return processRelayStream(
-        pool,
-        relay,
-        relayFilter,
-        paginationFilter,
-        key,
-        limit,
-        exhausted,
-        settled$,
-        opts.manualPaginate$,
-      );
-    },
-  );
+  const perRelayStreams = relayIds.map((relay) => {
+    const relayFilter = relayFilterMap[relay];
+    const key = exhaustionKey(relay, tagName, relayFilter);
+    const paginationFilter: TimelessFilter = { ...relayFilter };
+    delete (paginationFilter as Filter).limit;
+
+    return processRelayStream(
+      pool,
+      relay,
+      relayFilter,
+      paginationFilter,
+      key,
+      limit,
+      exhausted,
+      signal,
+      opts.manualPaginate$,
+    );
+  });
 
   if (perRelayStreams.length === 0) {
-    settled$.next();
-    return EMPTY;
+    // relayIds is empty — makeSettleSignal fires eose$ immediately
+    return { events$: EMPTY, eose$: signal.eose$ };
   }
 
   let combined: Observable<NostrEvent> = merge(...perRelayStreams);
@@ -436,7 +458,7 @@ function processBatch(
     ) as Observable<NostrEvent>;
   }
 
-  return combined;
+  return { events$: combined, eose$: signal.eose$ };
 }
 
 /**
@@ -476,16 +498,16 @@ export function createPaginatedTagValueLoader(
     .subscribe((pointers) => {
       if (pointers.length === 0) return;
 
-      // Per-batch settle signal — any relay finishing its work pushes here
-      const { settled$, eose$ } = makeSettleSignal(settleMs);
+      // Per-batch settle signal — created inside processBatch with relay count
+      const settleOpts: SettleSignalOptions = { settleTime: settleMs };
 
-      const events$ = processBatch(
+      const { events$, eose$ } = processBatch(
         pool,
         tagName,
         pointers,
         opts,
         exhausted,
-        settled$,
+        settleOpts,
       );
 
       const upstream: Observable<PaginatedTagValueResponse> = merge(

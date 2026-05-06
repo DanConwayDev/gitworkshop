@@ -43,6 +43,7 @@ import type { NostrEvent } from "nostr-tools";
 import { Observable, Subject } from "rxjs";
 import { distinctUntilChanged, map } from "rxjs/operators";
 import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
+import type { SettleSignal } from "./settleSignal";
 
 export type RepoStateResponse = NostrEvent | "EOSE";
 
@@ -56,8 +57,8 @@ export interface RepoStateLoaderOptions {
 
 /**
  * Open a single-relay subscription for kind:30618 state events.
- * Pushes to settled$ on EOSE, error, or clean close so the settle signal
- * is never blocked by a misbehaving relay.
+ * Calls signal.settle() on EOSE, signal.error() on error, so the settle
+ * signal is never blocked by a misbehaving relay.
  *
  * The Relay class applies `addSeenRelay` internally, so emitted events are
  * already stamped with the relay URL before reaching this function.
@@ -69,32 +70,32 @@ function queryRelay(
   pool: RelayPool,
   relayUrl: string,
   stateFilter: Filter,
-  settled$: Subject<void>,
+  signal: SettleSignal,
 ): Observable<NostrEvent> {
   return new Observable<NostrEvent>((subscriber) => {
     // Use the single-relay subscription API (which still emits
     // NostrEvent | "EOSE") rather than pool.subscription() — the group-level
     // API now strips EOSE from the stream, and we need it here to drive the
-    // settled$ signal.
+    // settle signal.
     const sub = pool
       .relay(relayUrl)
       .subscription([stateFilter], { reconnect: false })
       .subscribe({
         next: (msg) => {
           if (msg === "EOSE") {
-            settled$.next();
+            signal.settle(relayUrl);
           } else {
             subscriber.next(msg);
           }
         },
         error: () => {
-          settled$.next();
+          signal.error(relayUrl);
           subscriber.complete();
         },
         complete: () => {
           // Some relays close cleanly after EOSE without a separate EOSE
           // message — treat completion as settled too.
-          settled$.next();
+          signal.settle(relayUrl);
           subscriber.complete();
         },
       });
@@ -146,9 +147,9 @@ export function loadRepoStateFromRelays(
     } as Filter;
 
     // Single settle signal shared across all relay subscriptions for this
-    // observable lifetime. New relays push to the same settled$ so their
-    // EOSE resets the debounce window rather than being lost.
-    const { settled$, eose$ } = makeSettleSignal(settleMs);
+    // observable lifetime. Relay count is dynamic (relays$ can grow), so we
+    // use debounce + hard cap only (no relayIds).
+    const signal = makeSettleSignal({ settleTime: settleMs });
 
     // Track relay URLs that already have a subscription so new relays don't
     // re-trigger existing ones.
@@ -167,7 +168,7 @@ export function loadRepoStateFromRelays(
     });
 
     // Forward EOSE sentinel to subscriber.
-    const eoseSub = eose$.subscribe({
+    const eoseSub = signal.eose$.subscribe({
       next: () => subscriber.next("EOSE"),
       error: (err) => subscriber.error(err),
     });
@@ -195,7 +196,7 @@ export function loadRepoStateFromRelays(
             // relays$ emitted but no new relays — if we have never seen any
             // relays at all (group started empty), settle immediately so the
             // consumer doesn't wait forever.
-            if (knownRelayUrls.size === 0) settled$.next();
+            if (knownRelayUrls.size === 0) signal.settle("(empty)");
             return;
           }
 
@@ -203,7 +204,7 @@ export function loadRepoStateFromRelays(
             knownRelayUrls.add(url);
             // Each new relay gets its own subscription. Events flow into
             // relayEvents$ which is already piped through the EventStore.
-            queryRelay(pool, url, stateFilter, settled$).subscribe({
+            queryRelay(pool, url, stateFilter, signal).subscribe({
               next: (event) => relayEvents$.next(event),
               error: () => {
                 /* queryRelay handles errors internally */
