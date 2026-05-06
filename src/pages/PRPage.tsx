@@ -484,17 +484,9 @@ export default function PRPage() {
   const patchMergeBase = usePatchMergeBase(patchChain, gitPool, gitPoolState);
 
   // ── Inline code review comments ───────────────────────────────────────
-  // Fetch and subscribe to inline comments for the PR/patch root event.
-  // The relay list comes from the resolved repo relay group.
-  const inlineCommentRelays = useMemo(
-    () => resolved?.repoRelayGroup?.relays.map((r) => r.url) ?? [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [resolved?.repoRelayGroup?.relays.map((r) => r.url).join(",")],
-  );
-  const inlineCommentMap = useInlineComments(
-    pr?.rootEvent.id,
-    inlineCommentRelays,
-  );
+  // Relay fetching is handled by nip34CommentsLoader (via useNip34ItemDetailLoader).
+  // This hook only reads from the EventStore.
+  const inlineCommentMap = useInlineComments(pr?.rootEvent.id);
 
   // ── File count (eager for tab badge) ──────────────────────────────────
   const [fileCount, setFileCount] = useState<number | undefined>(undefined);
@@ -930,7 +922,7 @@ export default function PRPage() {
           relayHints={repoRelayHints}
           commentMap={inlineCommentMap}
           repoCoords={repoAllCoords ?? pr?.repoCoords}
-          relayHint={inlineCommentRelays[0]}
+          relayHint={repoRelayHints[0]}
           authorizedPubkeys={pr?.authorisedUsers}
         />
       );
@@ -966,7 +958,7 @@ export default function PRPage() {
         rootEvent={pr?.rootEvent}
         commentMap={inlineCommentMap}
         repoCoords={repoAllCoords ?? pr?.repoCoords}
-        relayHint={inlineCommentRelays[0]}
+        relayHint={repoRelayHints[0]}
         authorizedPubkeys={pr?.authorisedUsers}
       />
     );
@@ -988,7 +980,6 @@ export default function PRPage() {
     commitDetailPatchMergeBase.baseCommitId,
     repoRelayHints,
     inlineCommentMap,
-    inlineCommentRelays,
     pr?.rootEvent,
     pr?.repoCoords,
     pr?.authorisedUsers,
@@ -1467,7 +1458,7 @@ export default function PRPage() {
                       commentMap={inlineCommentMap}
                       commitId={patchChain[patchChain.length - 1]?.commitId}
                       repoCoords={repoAllCoords ?? pr.repoCoords}
-                      relayHint={inlineCommentRelays[0]}
+                      relayHint={repoRelayHints[0]}
                       authorizedPubkeys={pr.authorisedUsers}
                     />
                   ) : !pr?.tip.commitId ? (
@@ -1496,7 +1487,7 @@ export default function PRPage() {
                       commentMap={inlineCommentMap}
                       commitId={pr.tip.commitId}
                       repoCoords={repoAllCoords ?? pr.repoCoords}
-                      relayHint={inlineCommentRelays[0]}
+                      relayHint={repoRelayHints[0]}
                       authorizedPubkeys={pr.authorisedUsers}
                     />
                   )}

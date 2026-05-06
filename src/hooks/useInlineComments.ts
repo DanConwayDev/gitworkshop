@@ -1,25 +1,20 @@
 /**
  * useInlineComments — subscribe to inline code review comments for a PR or patch.
  *
- * Fetches kind:1111 events that have an "E" tag pointing to the root event ID
- * AND an "f" file-path tag (which distinguishes inline comments from regular
- * NIP-22 thread comments).
+ * Reads kind:1111 events from the EventStore that have an "E" tag pointing to
+ * the root event ID. Relay fetching is handled upstream by nip34CommentsLoader
+ * (via useNip34ItemDetailLoader / nip34ListLoader), which already fetches
+ * kind:1111 #E:[rootEventId] as part of the standard PR/issue loading pipeline.
+ * This hook only needs to read reactively from the store.
  *
  * Returns a Map keyed by "<filePath>:<lineNumber>" → NostrEvent[] so the
  * DiffView can look up comments for any given line efficiently.
- *
- * The hook also subscribes to the EventStore so the map updates reactively
- * when new comments arrive.
  */
 
 import { useMemo } from "react";
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
-import { pool } from "@/services/nostr";
-import { onlyEvents } from "applesauce-relay";
-import { mapEventsToStore } from "applesauce-core";
-import { map, catchError } from "rxjs/operators";
-import { EMPTY } from "rxjs";
+import { map } from "rxjs/operators";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import {
@@ -202,31 +197,17 @@ const EMPTY_MAP: InlineCommentMap = {
 /**
  * Subscribe to inline code review comments for a root PR or patch event.
  *
+ * Relay fetching is handled upstream by nip34CommentsLoader (triggered via
+ * useNip34ItemDetailLoader). This hook only reads reactively from the store.
+ *
  * @param rootEventId - The PR (kind:1618) or patch (kind:1617) event ID
- * @param relays      - Relay URLs to query
  */
 export function useInlineComments(
   rootEventId: string | undefined,
-  relays: string[],
 ): InlineCommentMap {
   const store = useEventStore();
-  const relayKey = relays.join(",");
 
-  // Fetch from relays and add to store
-  use$(() => {
-    if (!rootEventId || relays.length === 0) return undefined;
-    const filter = {
-      kinds: [1111],
-      "#E": [rootEventId],
-    } as Filter;
-    return pool.subscription(relays, [filter]).pipe(
-      onlyEvents(),
-      mapEventsToStore(store),
-      catchError(() => EMPTY),
-    );
-  }, [rootEventId, relayKey, store]);
-
-  // Subscribe reactively from the store
+  // Subscribe reactively from the store.
   // Pass all kind:1111 events (inline comments + resolution events) to
   // buildCommentMap — it handles both internally.
   const commentMap = use$(() => {
