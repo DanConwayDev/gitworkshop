@@ -67,6 +67,7 @@ import {
   Observable,
   Subject,
   bufferTime,
+  catchError,
   defer,
   filter,
   finalize,
@@ -195,6 +196,10 @@ function processRelayStream(
     ).pipe(
       onlyEvents(),
       retry({ count: 3, delay: 1000, resetOnSuccess: true }),
+      // Relay connection errors (WebSocket close/error after retry) are
+      // non-fatal: swallow so they never reach use$/useObservableState and
+      // crash the React tree. The relay just stops contributing events.
+      catchError(() => EMPTY),
     ) as Observable<NostrEvent>;
   }
 
@@ -256,6 +261,10 @@ function processRelayStream(
           loadBlocksFromRelay(extendingPool, relay, [paginationFilter], {
             limit,
           }),
+          // Relay errors during backward pagination are non-fatal — finalize
+          // below still runs (on both completion and error) so signal.settle
+          // is called and the relay is marked exhausted in auto mode.
+          catchError(() => EMPTY),
           finalize(() => {
             if (!manualPaginate$) {
               // Auto: fully exhausted when loadBlocksFromRelay completes
@@ -271,10 +280,6 @@ function processRelayStream(
               oldestSeen = event.created_at;
             }
             subscriber.next(event);
-          },
-          error: (err) => {
-            signal.error(relay);
-            subscriber.error(err);
           },
           // Completing does not complete the outer observable —
           // the live subscription keeps it alive
@@ -322,6 +327,16 @@ function processRelayStream(
         // We must replicate rather than use reconnect: Infinity because
         // defer() needs to re-run on each attempt to pick up lastReceivedAt.
         retry({ count: 3, delay: 1000, resetOnSuccess: true }),
+        // After retries are exhausted, the relay is unreachable. Notify the
+        // settle signal so consumers don't wait forever, then complete the
+        // per-relay stream silently. The merge() of all per-relay streams
+        // continues — other relays carry on producing events. This MUST be
+        // after retry() so transient errors get retried first; only post-
+        // retry errors land here.
+        catchError(() => {
+          signal.error(relay);
+          return EMPTY;
+        }),
       )
       .subscribe({
         next: (msg) => {
@@ -353,10 +368,6 @@ function processRelayStream(
             }
             subscriber.next(event);
           }
-        },
-        error: (err) => {
-          signal.error(relay);
-          subscriber.error(err);
         },
         complete: () => subscriber.complete(),
       });

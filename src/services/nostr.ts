@@ -632,10 +632,6 @@ export function nip34ListLoader(
           }
         }
       },
-      error: () => {
-        /* relay connection errors are non-fatal — swallow to prevent
-         * DOM CloseEvent/ErrorEvent from reaching use$/useObservableState */
-      },
     });
 
     const commentsSub = nip34CommentsLoader({
@@ -643,10 +639,6 @@ export function nip34ListLoader(
       relays,
     }).subscribe({
       next: (msg) => subscriber.next(msg),
-      error: () => {
-        /* relay connection errors are non-fatal — swallow to prevent
-         * DOM CloseEvent/ErrorEvent from reaching use$/useObservableState */
-      },
     });
 
     return () => {
@@ -696,9 +688,6 @@ export function nip34SupplementalRelayLoader(
         next: (msg) => {
           if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
         },
-        error: () => {
-          /* relay connection errors are non-fatal */
-        },
       });
     }
 
@@ -725,9 +714,6 @@ export function nip34SupplementalRelayLoader(
           nip34ListLoader(ev.id, newRelays).subscribe({
             next: (msg) => {
               if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
-            },
-            error: () => {
-              /* relay connection errors are non-fatal */
             },
           });
         });
@@ -775,9 +761,6 @@ export function nip34SupplementalRelayLoader(
             fireLoaders(ev.id, [...knownRelayUrls]);
             if (resolveAuthorInbox) fireAuthorInboxLoaders(ev);
           }
-        },
-        error: () => {
-          /* relay connection errors are non-fatal */
         },
         complete: () => subscriber.complete(),
       });
@@ -832,9 +815,6 @@ export function nip34RepoLoader(
         next: (msg) => {
           if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
         },
-        error: () => {
-          /* relay connection errors are non-fatal */
-        },
       });
     }
 
@@ -861,9 +841,6 @@ export function nip34RepoLoader(
           nip34ListLoader(ev.id, newRelays).subscribe({
             next: (msg) => {
               if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
-            },
-            error: () => {
-              /* relay connection errors are non-fatal */
             },
           });
         });
@@ -931,9 +908,6 @@ export function nip34RepoLoader(
             if (resolveAuthorInbox) fireAuthorInboxLoaders(ev);
           }
         },
-        error: () => {
-          /* relay connection errors are non-fatal */
-        },
         complete: () => subscriber.complete(),
       });
 
@@ -959,11 +933,7 @@ export function nip34RepoLoader(
       repoMetaFilters,
     )
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
-      .subscribe({
-        error: () => {
-          /* relay connection errors are non-fatal */
-        },
-      });
+      .subscribe();
 
     return () => {
       relaySub.unsubscribe();
@@ -1031,9 +1001,6 @@ export function nip34ThreadItemLoader(
     function fireThreadLoaders(id: string, relayList: string[]): void {
       nip34ThreadLoadAll(id, relayList).subscribe({
         next: (msg) => subscriber.next(msg),
-        error: () => {
-          /* relay connection errors are non-fatal */
-        },
       });
     }
 
@@ -1084,9 +1051,6 @@ export function nip34ThreadItemLoader(
           seenIds.add(event.id);
           fireThreadLoaders(event.id, [...knownRelayUrls]);
         }
-      },
-      error: () => {
-        /* relay connection errors are non-fatal */
       },
     });
 

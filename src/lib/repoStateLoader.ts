@@ -40,8 +40,8 @@ import type { IEventStore } from "applesauce-core/event-store";
 import { mapEventsToStore } from "applesauce-core";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
-import { Observable, Subject } from "rxjs";
-import { distinctUntilChanged, map } from "rxjs/operators";
+import { Observable, Subject, EMPTY } from "rxjs";
+import { catchError, distinctUntilChanged, map } from "rxjs/operators";
 import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
 import type { SettleSignal } from "./settleSignal";
 
@@ -162,15 +162,20 @@ export function loadRepoStateFromRelays(
     // Pipe all relay events through the EventStore and forward to subscriber.
     // Events are already stamped with their source relay by the Relay class
     // internally, so getSeenRelays() works on stored events.
-    const storeSub = relayEvents$.pipe(mapEventsToStore(eventStore)).subscribe({
-      next: (event) => subscriber.next(event as NostrEvent),
-      error: (err) => subscriber.error(err),
-    });
+    // catchError defends against any downstream pipeline error reaching
+    // use$/useObservableState (which would crash the React tree).
+    const storeSub = relayEvents$
+      .pipe(
+        mapEventsToStore(eventStore),
+        catchError(() => EMPTY),
+      )
+      .subscribe({
+        next: (event) => subscriber.next(event as NostrEvent),
+      });
 
     // Forward EOSE sentinel to subscriber.
     const eoseSub = signal.eose$.subscribe({
       next: () => subscriber.next("EOSE"),
-      error: (err) => subscriber.error(err),
     });
 
     // Subscribe to RelayGroup relay list changes. relays$ is protected in TS
@@ -187,6 +192,8 @@ export function loadRepoStateFromRelays(
           (a, b) =>
             a.length === b.length && a.every((url) => knownRelayUrls.has(url)),
         ),
+        // Defensive: never let an upstream error reach the subscriber.
+        catchError(() => EMPTY),
       )
       .subscribe({
         next: (currentUrls) => {
@@ -204,15 +211,13 @@ export function loadRepoStateFromRelays(
             knownRelayUrls.add(url);
             // Each new relay gets its own subscription. Events flow into
             // relayEvents$ which is already piped through the EventStore.
+            // queryRelay handles errors internally (signal.error + complete),
+            // so no error handler is needed on this subscribe.
             queryRelay(pool, url, stateFilter, signal).subscribe({
               next: (event) => relayEvents$.next(event),
-              error: () => {
-                /* queryRelay handles errors internally */
-              },
             });
           }
         },
-        error: (err) => subscriber.error(err),
       });
 
     return () => {

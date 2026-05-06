@@ -175,6 +175,9 @@ function processRelay(
           loadBlocksFromRelay(extendingPool, relay, paginationFilters, {
             limit,
           }),
+          // Pagination errors are non-fatal — finalize still runs and settles
+          // the relay. The merge of all per-relay streams continues.
+          catchError(() => EMPTY),
           finalize(() => {
             signal.settle(relay);
           }),
@@ -185,10 +188,6 @@ function processRelay(
               oldestSeen = event.created_at;
             }
             subscriber.next(event);
-          },
-          error: (err) => {
-            signal.error(relay);
-            subscriber.error(err);
           },
         });
     };
@@ -224,7 +223,15 @@ function processRelay(
           delay: opts.retryDelay,
           resetOnSuccess: true,
         }),
-        catchError(() => EMPTY),
+        // After retries are exhausted, the relay is unreachable. Notify the
+        // settle signal so consumers don't wait forever, then complete this
+        // per-relay stream silently. The outer merge() of all per-relay
+        // streams continues — other relays carry on producing events.
+        // MUST be after retry() so transient errors get retried first.
+        catchError(() => {
+          signal.error(relay);
+          return EMPTY;
+        }),
       )
       .subscribe({
         next: (msg) => {
@@ -256,10 +263,6 @@ function processRelay(
             }
             subscriber.next(event);
           }
-        },
-        error: (err) => {
-          signal.error(relay);
-          subscriber.error(err);
         },
         complete: () => subscriber.complete(),
       });

@@ -69,7 +69,6 @@ export function withGapFill(
       )
       .subscribe({
         next: (msg) => subscriber.next(msg),
-        error: (err) => subscriber.error(err),
         complete: () => subscriber.complete(),
       });
 
