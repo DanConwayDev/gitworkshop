@@ -277,3 +277,13 @@ persist(theme, "theme", {
 export function toggleTheme() {
   theme.next(theme.getValue() === "dark" ? "light" : "dark");
 }
+
+// ---------------------------------------------------------------------------
+// Beta banner dismissal
+// ---------------------------------------------------------------------------
+
+export const betaBannerDismissed = new BehaviorSubject<boolean>(false);
+
+persist(betaBannerDismissed, "betaBannerDismissed", {
+  defaultValue: false,
+});
