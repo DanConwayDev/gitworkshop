@@ -641,7 +641,13 @@ export function nip34ListLoader(
     const commentsSub = nip34CommentsLoader({
       value: itemId,
       relays,
-    }).subscribe(subscriber);
+    }).subscribe({
+      next: (msg) => subscriber.next(msg),
+      error: () => {
+        /* relay connection errors are non-fatal — swallow to prevent
+         * DOM CloseEvent/ErrorEvent from reaching use$/useObservableState */
+      },
+    });
 
     return () => {
       essentialsSub.unsubscribe();
@@ -686,7 +692,14 @@ export function nip34SupplementalRelayLoader(
     const inboxSubs = new Subscription();
 
     function fireLoaders(id: string, relays: string[]): void {
-      nip34ListLoader(id, relays).subscribe(subscriber);
+      nip34ListLoader(id, relays).subscribe({
+        next: (msg) => {
+          if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
+        },
+        error: () => {
+          /* relay connection errors are non-fatal */
+        },
+      });
     }
 
     // When in outbox mode, reactively fetch the root event author's NIP-65
@@ -709,7 +722,14 @@ export function nip34SupplementalRelayLoader(
             .filter((r) => !perItemQueried.has(r));
           if (newRelays.length === 0) return;
           for (const r of newRelays) perItemQueried.add(r);
-          nip34ListLoader(ev.id, newRelays).subscribe(subscriber);
+          nip34ListLoader(ev.id, newRelays).subscribe({
+            next: (msg) => {
+              if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
+            },
+            error: () => {
+              /* relay connection errors are non-fatal */
+            },
+          });
         });
       inboxSubs.add(s);
     }
@@ -808,7 +828,14 @@ export function nip34RepoLoader(
     // Fire nip34ListLoader for a single item against a specific set of relays.
     // Inline so it can close over subscriber and seenIds.
     function fireLoaders(id: string, relays: string[]): void {
-      nip34ListLoader(id, relays).subscribe(subscriber);
+      nip34ListLoader(id, relays).subscribe({
+        next: (msg) => {
+          if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
+        },
+        error: () => {
+          /* relay connection errors are non-fatal */
+        },
+      });
     }
 
     // When in outbox mode, reactively fetch the root event author's NIP-65
@@ -831,7 +858,14 @@ export function nip34RepoLoader(
             .filter((r) => !perItemQueried.has(r));
           if (newRelays.length === 0) return;
           for (const r of newRelays) perItemQueried.add(r);
-          nip34ListLoader(ev.id, newRelays).subscribe(subscriber);
+          nip34ListLoader(ev.id, newRelays).subscribe({
+            next: (msg) => {
+              if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
+            },
+            error: () => {
+              /* relay connection errors are non-fatal */
+            },
+          });
         });
       inboxSubs.add(s);
     }
@@ -995,7 +1029,12 @@ export function nip34ThreadItemLoader(
 
     // Fire all three thread loaders for an item against a specific relay list
     function fireThreadLoaders(id: string, relayList: string[]): void {
-      nip34ThreadLoadAll(id, relayList).subscribe(subscriber);
+      nip34ThreadLoadAll(id, relayList).subscribe({
+        next: (msg) => subscriber.next(msg),
+        error: () => {
+          /* relay connection errors are non-fatal */
+        },
+      });
     }
 
     // Subscribe to relay list changes. When new relay URLs appear, re-fire
