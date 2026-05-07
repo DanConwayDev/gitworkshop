@@ -149,6 +149,10 @@ function processRelay(
     let oldestSeen: number | undefined;
     let lastReceivedAt: number | undefined;
     let eoseSeen = false;
+    // Persists across retry/repeat cycles. Once true, any subsequent drop is
+    // treated as transient and retried indefinitely (with backoff) rather than
+    // consuming the fixed retryCount budget.
+    let everReceivedEose = false;
     let paginateSub: { unsubscribe(): void } | undefined;
     let manualSub: { unsubscribe(): void } | undefined;
     let gapFillSub: { unsubscribe(): void } | undefined;
@@ -246,30 +250,46 @@ function processRelay(
           }
         }),
         retry({
-          count: opts.retryCount,
-          delay: (err, retryCount) => {
+          // count is managed manually inside delay so we can apply different
+          // limits before vs after first EOSE. Set to Infinity here and throw
+          // from delay when we want to give up.
+          count: Infinity,
+          delay: (err, attemptCount) => {
             // Auth-required errors must not consume retries — the relay needs
             // NIP-42 authentication which is handled asynchronously by the
             // pool-level auth policy in nostr.ts.  Propagate immediately so
             // the catchError below can settle the relay without delay.
             if (err instanceof AuthRequiredError) throw err;
+            // After the first successful EOSE any subsequent drop is treated as
+            // transient (network blip, relay restart, keepalive timeout) and
+            // retried indefinitely with backoff. Before EOSE we apply the
+            // configured retryCount budget so a permanently unreachable relay
+            // doesn't block the settle signal forever.
+            if (!everReceivedEose && attemptCount > opts.retryCount) throw err;
             return typeof opts.retryDelay === "function"
-              ? opts.retryDelay(err, retryCount)
+              ? opts.retryDelay(err, attemptCount)
               : timer(opts.retryDelay ?? 0);
           },
-          resetOnSuccess: true,
         }),
         // Graceful relay close (CLOSED without an error prefix) completes the
         // stream rather than erroring it, so retry() above won't catch it.
         // repeat() resubscribes after a graceful close, re-executing defer() so
         // lastReceivedAt is read fresh and the reconnect REQ uses
         // since: lastReceivedAt - gapFillBuffer.
+        // Same logic: unlimited repeats after first EOSE, capped before it.
+        // Throwing from the delay function propagates to catchError below which
+        // calls signal.error(relay) and completes the stream silently.
         repeat({
-          count: opts.retryCount,
-          delay: (repeatCount) =>
-            typeof opts.retryDelay === "function"
+          count: Infinity,
+          delay: (repeatCount) => {
+            if (!everReceivedEose && repeatCount > opts.retryCount)
+              throw new Error(
+                `relay ${relay} gave up after ${repeatCount} graceful closes`,
+              );
+            return typeof opts.retryDelay === "function"
               ? opts.retryDelay(undefined, repeatCount)
-              : timer(opts.retryDelay ?? 0),
+              : timer(opts.retryDelay ?? 0);
+          },
         }),
         // After retries are exhausted (or an auth-required error surfaces),
         // notify the settle signal so consumers don't wait forever, then
@@ -294,6 +314,7 @@ function processRelay(
         next: (msg) => {
           if (msg === "EOSE") {
             eoseSeen = true;
+            everReceivedEose = true;
             if (opts.paginate || opts.manualPaginate$) {
               if (opts.manualPaginate$) {
                 // Manual mode: signal settled at EOSE; start pagination if needed
@@ -322,9 +343,6 @@ function processRelay(
           }
         },
         complete: () => {
-          // repeat() exhausted without EOSE (relay kept closing gracefully).
-          // Settle so the EOSE signal isn't held up indefinitely.
-          if (!eoseSeen) signal.settle(relay);
           subscriber.complete();
         },
       });
