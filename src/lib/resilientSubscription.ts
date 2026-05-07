@@ -3,10 +3,11 @@
  *
  * A wrapper around pool.subscription() that provides:
  *
- *   A. lastReceivedAt-aware reconnect — uses defer() + retry() so that on
- *      reconnect we inject since: lastReceivedAt - gapFillBuffer instead of
- *      replaying the full relay history. Same pattern as processRelayStream
- *      in tagValuePaginatedLoader.ts.
+ *   A. lastReceivedAt-aware reconnect — uses defer() + retry() + repeat() so
+ *      that on reconnect (whether from an error or a graceful relay close) we
+ *      inject since: lastReceivedAt - gapFillBuffer instead of replaying the
+ *      full relay history. Same pattern as processRelayStream in
+ *      tagValuePaginatedLoader.ts.
  *
  *   B. Foreground resume gap-fill — subscribes to foregroundResume$. On
  *      resume, fires a one-shot REQ with since: lastReceivedAt - gapFillBuffer
@@ -46,6 +47,7 @@ import {
   defer,
   finalize,
   merge,
+  repeat,
   retry,
   tap,
   timer,
@@ -73,15 +75,17 @@ export interface ResilientSubscriptionOptions {
   /** Pagination block size / threshold. Default: 500 */
   limit?: number;
   /**
-   * Number of reconnect retries per relay before giving up. Default: 3.
+   * Number of reconnect attempts per relay before giving up. Default: 3.
+   * Applies to both error retries and graceful-close repeats.
    * Pass Infinity for always-on subscriptions that should never stop retrying.
    */
   retryCount?: number;
   /**
-   * Delay between retries. Accepts a number (ms) or a function matching
-   * RxJS retry's delay signature: (error, retryCount) => ObservableInput.
-   * Default: exponential backoff capped at 5 minutes
-   * (1s, 2s, 4s, 8s … up to 300s).
+   * Delay between reconnect attempts. Accepts a number (ms) or a function.
+   * Used for both error retries (retry operator) and graceful-close repeats
+   * (repeat operator). The function receives (error, attemptCount) for errors
+   * and (repeatCount) for graceful closes — both are 1-based.
+   * Default: exponential backoff capped at 5 minutes (1s, 2s, 4s, 8s … 300s).
    */
   retryDelay?:
     | number
@@ -197,8 +201,27 @@ function processRelay(
     };
 
     // Build the live subscription factory. defer() re-executes on each retry
-    // so lastReceivedAt is read fresh on each reconnect attempt.
+    // (error) and repeat (graceful close) so lastReceivedAt is read fresh on
+    // every reconnect attempt, injecting since: lastReceivedAt - gapFillBuffer
+    // to avoid replaying the full relay history.
+    //
+    // We pass reconnect: false to disable applesauce's internal repeat() logic.
+    // applesauce's "reconnect" option maps to a repeat() operator that
+    // resubscribes after a graceful relay CLOSED (up to 3× with linear backoff
+    // by default). We disable it here because:
+    //   1. We own the reconnect lifecycle via our own retry() + repeat() below.
+    //   2. Internal resubscriptions would bypass our lastReceivedAt tracking,
+    //      causing the reconnect REQ to replay the full relay history instead
+    //      of using since: lastReceivedAt - gapFillBuffer.
+    //   3. Internal resubscriptions would not update the settle signal, so EOSE
+    //      could fire before the relay has finished resending missed events.
     const buildLiveSub = () => {
+      // Reset per-subscription-cycle state so that countBeforeEose and
+      // oldestSeen are tracked correctly after a retry or graceful-close repeat.
+      // lastReceivedAt is intentionally NOT reset — it persists across cycles
+      // so the reconnect REQ uses since: lastReceivedAt - gapFillBuffer.
+      eoseSeen = false;
+      countBeforeEose = 0;
       const filtersWithSince: Filter[] = liveFilters.map((f) => ({
         ...f,
         ...(opts.reconnect && lastReceivedAt !== undefined
@@ -235,6 +258,18 @@ function processRelay(
               : timer(opts.retryDelay ?? 0);
           },
           resetOnSuccess: true,
+        }),
+        // Graceful relay close (CLOSED without an error prefix) completes the
+        // stream rather than erroring it, so retry() above won't catch it.
+        // repeat() resubscribes after a graceful close, re-executing defer() so
+        // lastReceivedAt is read fresh and the reconnect REQ uses
+        // since: lastReceivedAt - gapFillBuffer.
+        repeat({
+          count: opts.retryCount,
+          delay: (repeatCount) =>
+            typeof opts.retryDelay === "function"
+              ? opts.retryDelay(undefined, repeatCount)
+              : timer(opts.retryDelay ?? 0),
         }),
         // After retries are exhausted (or an auth-required error surfaces),
         // notify the settle signal so consumers don't wait forever, then
@@ -286,7 +321,12 @@ function processRelay(
             subscriber.next(event);
           }
         },
-        complete: () => subscriber.complete(),
+        complete: () => {
+          // repeat() exhausted without EOSE (relay kept closing gracefully).
+          // Settle so the EOSE signal isn't held up indefinitely.
+          if (!eoseSeen) signal.settle(relay);
+          subscriber.complete();
+        },
       });
 
     // Foreground resume gap-fill
