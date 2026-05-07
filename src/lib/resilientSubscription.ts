@@ -153,6 +153,10 @@ function processRelay(
     // treated as transient and retried indefinitely (with backoff) rather than
     // consuming the fixed retryCount budget.
     let everReceivedEose = false;
+    // Reconnect attempt counter for backoff calculation. Reset to 0 each time
+    // EOSE is received so that a relay that has been healthy for a long time
+    // starts its next reconnect from 1s rather than the capped maximum.
+    let reconnectAttempts = 0;
     let paginateSub: { unsubscribe(): void } | undefined;
     let manualSub: { unsubscribe(): void } | undefined;
     let gapFillSub: { unsubscribe(): void } | undefined;
@@ -254,7 +258,7 @@ function processRelay(
           // limits before vs after first EOSE. Set to Infinity here and throw
           // from delay when we want to give up.
           count: Infinity,
-          delay: (err, attemptCount) => {
+          delay: (err) => {
             // Auth-required errors must not consume retries — the relay needs
             // NIP-42 authentication which is handled asynchronously by the
             // pool-level auth policy in nostr.ts.  Propagate immediately so
@@ -265,9 +269,32 @@ function processRelay(
             // retried indefinitely with backoff. Before EOSE we apply the
             // configured retryCount budget so a permanently unreachable relay
             // doesn't block the settle signal forever.
-            if (!everReceivedEose && attemptCount > opts.retryCount) throw err;
+            reconnectAttempts++;
+            if (!everReceivedEose && reconnectAttempts > opts.retryCount)
+              throw err;
             return typeof opts.retryDelay === "function"
-              ? opts.retryDelay(err, attemptCount)
+              ? opts.retryDelay(err, reconnectAttempts)
+              : timer(opts.retryDelay ?? 0);
+          },
+        }),
+        // Graceful relay close (CLOSED without an error prefix) completes the
+        // stream rather than erroring it, so retry() above won't catch it.
+        // repeat() resubscribes after a graceful close, re-executing defer() so
+        // lastReceivedAt is read fresh and the reconnect REQ uses
+        // since: lastReceivedAt - gapFillBuffer.
+        // Same logic: unlimited repeats after first EOSE, capped before it.
+        // Throwing from the delay function propagates to catchError below which
+        // calls signal.error(relay) and completes the stream silently.
+        repeat({
+          count: Infinity,
+          delay: () => {
+            reconnectAttempts++;
+            if (!everReceivedEose && reconnectAttempts > opts.retryCount)
+              throw new Error(
+                `relay ${relay} gave up after ${reconnectAttempts} graceful closes`,
+              );
+            return typeof opts.retryDelay === "function"
+              ? opts.retryDelay(undefined, reconnectAttempts)
               : timer(opts.retryDelay ?? 0);
           },
         }),
@@ -315,6 +342,7 @@ function processRelay(
           if (msg === "EOSE") {
             eoseSeen = true;
             everReceivedEose = true;
+            reconnectAttempts = 0;
             if (opts.paginate || opts.manualPaginate$) {
               if (opts.manualPaginate$) {
                 // Manual mode: signal settled at EOSE; start pagination if needed
