@@ -1,7 +1,7 @@
 /**
- * resilientSubscription
+ * resilientSubscription / resilientRequest
  *
- * A wrapper around pool.subscription() that provides:
+ * resilientSubscription — a wrapper around pool.subscription() that provides:
  *
  *   A. lastReceivedAt-aware reconnect — uses defer() + retry() + repeat() so
  *      that on reconnect (whether from an error or a graceful relay close) we
@@ -20,13 +20,18 @@
  *      kicks off loadBlocksFromRelay backward pagination per relay. Supports
  *      auto mode and manual mode (via manualPaginate$).
  *
+ * resilientRequest — same as resilientSubscription but with autoClose: true.
+ * Each per-relay stream completes once the relay has finished its work (EOSE,
+ * plus all pagination pages if paginate is enabled). The merged stream
+ * therefore completes naturally when every relay is done. Reconnect and
+ * gap-fill are disabled by default (pass reconnect/gapFill: true to override).
+ *
  * The function opens a per-relay pipeline for each relay URL (like
  * processRelayStream does), merges them, and shares the settle signal.
  *
- * IMPORTANT: resilientSubscription does NOT add mapEventsToStore or
- * filterDuplicateEvents. Callers pipe those themselves. The function returns
- * raw NostrEvent | "EOSE" and callers use onlyEvents() to strip EOSE if not
- * needed.
+ * IMPORTANT: neither function adds mapEventsToStore or filterDuplicateEvents.
+ * Callers pipe those themselves. The functions return raw NostrEvent | "EOSE"
+ * and callers use onlyEvents() to strip EOSE if not needed.
  */
 
 import type { RelayPool } from "applesauce-relay";
@@ -47,6 +52,7 @@ import {
   Subject,
   defer,
   finalize,
+  identity,
   merge,
   repeat,
   retry,
@@ -76,6 +82,20 @@ export interface ResilientSubscriptionOptions {
   manualPaginate$?: Observable<void>;
   /** Pagination block size / threshold. Default: 500 */
   limit?: number;
+  /**
+   * Auto-close each per-relay stream once it has finished its work (EOSE,
+   * plus all pagination pages when paginate is enabled). When true the merged
+   * stream completes naturally once every relay is done — making this behave
+   * like a one-shot request rather than a long-lived subscription.
+   *
+   * When autoClose is true:
+   *   - reconnect defaults to false (no point reconnecting after we're done)
+   *   - gapFill defaults to false (no foreground resume needed)
+   *   - repeat() is skipped (graceful relay close = done, not reconnect)
+   *
+   * Default: false
+   */
+  autoClose?: boolean;
   /**
    * Number of reconnect attempts per relay before giving up. Default: 3.
    * Applies to both error retries and graceful-close repeats.
@@ -220,6 +240,7 @@ function processRelay(
       | "limit"
       | "retryCount"
       | "retryDelay"
+      | "autoClose"
     >
   > & { manualPaginate$: Observable<void> | undefined },
   signal: SettleSignal,
@@ -294,6 +315,9 @@ function processRelay(
           catchError(() => EMPTY),
           finalize(() => {
             signal.settle(relay);
+            // autoClose: pagination is the last work for this relay — complete
+            // the per-relay stream so the merged stream can finish naturally.
+            if (opts.autoClose) subscriber.complete();
           }),
         )
         .subscribe({
@@ -407,39 +431,25 @@ function processRelay(
         // Same logic: unlimited repeats after first EOSE, capped before it.
         // Throwing from the delay function propagates to catchError below which
         // calls signal.error(relay) and completes the stream silently.
-        repeat({
-          count: Infinity,
-          delay: () => {
-            reconnectAttempts++;
-            if (!everReceivedEose && reconnectAttempts > opts.retryCount)
-              throw new Error(
-                `relay ${relay} gave up after ${reconnectAttempts} graceful closes`,
-              );
-            return typeof opts.retryDelay === "function"
-              ? opts.retryDelay(undefined, reconnectAttempts)
-              : timer(opts.retryDelay ?? 0);
-          },
-        }),
-        // Graceful relay close (CLOSED without an error prefix) completes the
-        // stream rather than erroring it, so retry() above won't catch it.
-        // repeat() resubscribes after a graceful close, re-executing defer() so
-        // lastReceivedAt is read fresh and the reconnect REQ uses
-        // since: lastReceivedAt - gapFillBuffer.
-        // Same logic: unlimited repeats after first EOSE, capped before it.
-        // Throwing from the delay function propagates to catchError below which
-        // calls signal.error(relay) and completes the stream silently.
-        repeat({
-          count: Infinity,
-          delay: (repeatCount) => {
-            if (!everReceivedEose && repeatCount > opts.retryCount)
-              throw new Error(
-                `relay ${relay} gave up after ${repeatCount} graceful closes`,
-              );
-            return typeof opts.retryDelay === "function"
-              ? opts.retryDelay(undefined, repeatCount)
-              : timer(opts.retryDelay ?? 0);
-          },
-        }),
+        //
+        // autoClose: skip repeat() entirely — a graceful relay close means the
+        // relay is done. The complete handler in the subscriber below settles
+        // the signal and completes the per-relay stream.
+        opts.autoClose
+          ? identity
+          : repeat({
+              count: Infinity,
+              delay: () => {
+                reconnectAttempts++;
+                if (!everReceivedEose && reconnectAttempts > opts.retryCount)
+                  throw new Error(
+                    `relay ${relay} gave up after ${reconnectAttempts} graceful closes`,
+                  );
+                return typeof opts.retryDelay === "function"
+                  ? opts.retryDelay(undefined, reconnectAttempts)
+                  : timer(opts.retryDelay ?? 0);
+              },
+            }),
         // After retries are exhausted (or a fast-fail error surfaces),
         // notify the settle signal so consumers don't wait forever, then
         // complete this per-relay stream silently. The outer merge() of all
@@ -474,17 +484,27 @@ function processRelay(
               if (opts.manualPaginate$) {
                 // Manual mode: signal settled at EOSE; start pagination if needed
                 signal.settle(relay);
-                if (countBeforeEose >= limit) startPagination();
+                if (countBeforeEose >= limit) {
+                  startPagination();
+                } else if (opts.autoClose) {
+                  // No pagination needed — we're done with this relay
+                  subscriber.complete();
+                }
               } else {
                 // Auto mode: paginate if relay was truncated
                 if (countBeforeEose < limit) {
                   signal.settle(relay);
+                  // autoClose: no pagination needed — complete the per-relay stream
+                  if (opts.autoClose) subscriber.complete();
                 } else {
                   startPagination();
                 }
               }
             } else {
               signal.settle(relay);
+              // autoClose: no pagination — complete the per-relay stream so the
+              // merged stream finishes naturally once all relays are done.
+              if (opts.autoClose) subscriber.complete();
             }
           } else {
             const event = msg as NostrEvent;
@@ -498,6 +518,13 @@ function processRelay(
           }
         },
         complete: () => {
+          // autoClose: a graceful relay close (CLOSED without error prefix)
+          // means the relay is done — treat it as settled rather than
+          // reconnecting. Without autoClose the repeat() operator above would
+          // resubscribe; with autoClose repeat() is skipped so this fires.
+          if (opts.autoClose) {
+            signal.settle(relay);
+          }
           subscriber.complete();
         },
       });
@@ -548,8 +575,11 @@ export function resilientSubscription(
   filters: Filter[],
   opts: ResilientSubscriptionOptions = {},
 ): Observable<ResilientSubscriptionResponse> {
-  const reconnect = opts.reconnect ?? true;
-  const gapFill = opts.gapFill ?? true;
+  const autoClose = opts.autoClose ?? false;
+  // autoClose implies one-shot semantics: reconnect and gap-fill are
+  // meaningless once the relay has finished its work.
+  const reconnect = opts.reconnect ?? (autoClose ? false : true);
+  const gapFill = opts.gapFill ?? (autoClose ? false : true);
   const gapFillBuffer = opts.gapFillBuffer ?? 600;
   const settle = opts.settle ?? true;
   const settleTime = opts.settleTime ?? DEFAULT_SETTLE_TIME;
@@ -562,6 +592,7 @@ export function resilientSubscription(
   if (relays.length === 0) return EMPTY;
 
   const resolvedOpts = {
+    autoClose,
     reconnect,
     gapFill,
     gapFillBuffer,
@@ -598,4 +629,36 @@ export function resilientSubscription(
   );
 
   return merge(merge(...perRelayStreams), signal.eose$);
+}
+
+/**
+ * One-shot variant of resilientSubscription.
+ *
+ * Behaves identically to resilientSubscription but automatically closes each
+ * per-relay stream once the relay has finished its work:
+ *   - No pagination: closes after EOSE
+ *   - With pagination: closes after the last pagination page completes
+ *
+ * The merged stream therefore completes naturally once every relay is done,
+ * making this suitable for fetch-once use cases (e.g. loading a list of
+ * events on mount) without needing to manually unsubscribe.
+ *
+ * Reconnect and gap-fill are disabled by default (pass reconnect/gapFill: true
+ * to override — though this is rarely useful for one-shot requests).
+ *
+ * Returns Observable<NostrEvent | "EOSE">. Pipe through onlyEvents() if the
+ * EOSE signal is not needed.
+ *
+ * Does NOT add mapEventsToStore or filterDuplicateEvents — callers handle that.
+ */
+export function resilientRequest(
+  pool: RelayPool,
+  relays: string[],
+  filters: Filter[],
+  opts: ResilientSubscriptionOptions = {},
+): Observable<ResilientSubscriptionResponse> {
+  return resilientSubscription(pool, relays, filters, {
+    ...opts,
+    autoClose: true,
+  });
 }
