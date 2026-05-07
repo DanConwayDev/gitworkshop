@@ -29,7 +29,11 @@
  */
 
 import type { RelayPool } from "applesauce-relay";
-import { completeOnEose, onlyEvents } from "applesauce-relay";
+import {
+  completeOnEose,
+  onlyEvents,
+  AuthRequiredError,
+} from "applesauce-relay";
 import type { Filter } from "applesauce-core/helpers";
 import { loadBlocksFromRelay } from "applesauce-loaders/loaders";
 import type { TimelessFilter } from "applesauce-loaders";
@@ -220,15 +224,33 @@ function processRelay(
         }),
         retry({
           count: opts.retryCount,
-          delay: opts.retryDelay,
+          delay: (err, retryCount) => {
+            // Auth-required errors must not consume retries — the relay needs
+            // NIP-42 authentication which is handled asynchronously by the
+            // pool-level auth policy in nostr.ts.  Propagate immediately so
+            // the catchError below can settle the relay without delay.
+            if (err instanceof AuthRequiredError) throw err;
+            return typeof opts.retryDelay === "function"
+              ? opts.retryDelay(err, retryCount)
+              : timer(opts.retryDelay ?? 0);
+          },
           resetOnSuccess: true,
         }),
-        // After retries are exhausted, the relay is unreachable. Notify the
-        // settle signal so consumers don't wait forever, then complete this
-        // per-relay stream silently. The outer merge() of all per-relay
-        // streams continues — other relays carry on producing events.
+        // After retries are exhausted (or an auth-required error surfaces),
+        // notify the settle signal so consumers don't wait forever, then
+        // complete this per-relay stream silently. The outer merge() of all
+        // per-relay streams continues — other relays carry on producing events.
         // MUST be after retry() so transient errors get retried first.
-        catchError(() => {
+        catchError((err) => {
+          if (err instanceof AuthRequiredError) {
+            // Relay requires NIP-42 auth. The pool-level policy in nostr.ts
+            // will authenticate if this is a trusted relay and retry the
+            // subscription naturally on reconnect. Settle immediately so the
+            // EOSE signal isn't held up waiting for a relay we can't read.
+            console.debug(
+              `[resilientSubscription] auth-required on ${relay} — settling`,
+            );
+          }
           signal.error(relay);
           return EMPTY;
         }),

@@ -92,6 +92,66 @@ NostrConnectSigner.pool = pool;
 // This is done here (after pool is created) to avoid a circular dependency.
 outboxStore.pool = pool;
 
+/**
+ * NIP-42 auto-auth policy — wired once at the pool level.
+ *
+ * When a relay sends an AUTH challenge we check (synchronously from the
+ * EventStore cache) whether the relay URL appears in the active account's
+ * NIP-65 inbox or outbox list.  If it does, we authenticate immediately.
+ * Unknown relays are silently skipped — authenticating to arbitrary relays
+ * would leak the user's identity to any relay that asks.
+ *
+ * The active account is read lazily at challenge time so this works correctly
+ * after account switches without needing to re-wire.  accounts.ts imports
+ * nostr.ts (not the other way around) so we import accounts lazily here to
+ * avoid a circular dependency.
+ */
+pool.add$.subscribe((relay) => {
+  relay.challenge$
+    .pipe(
+      // Only act when a real challenge string arrives
+      filter(Boolean),
+      // Don't re-auth if the challenge string hasn't changed
+      distinctUntilChanged(),
+    )
+    .subscribe(async () => {
+      // Lazy import to avoid circular dependency (accounts → nostr → accounts)
+      const { accounts } = await import("./accounts");
+      const account = accounts.active$.getValue();
+      if (!account) return;
+
+      // Synchronous cache check — kind:10002 is kept live by
+      // userIdentitySubscription so this will almost always be populated.
+      // We use getByFilters() directly rather than eventStore.model() because
+      // model() returns an Observable backed by a ReplaySubject(1), which has
+      // no synchronous .getValue() accessor.  getByFilters() hits the in-memory
+      // database directly and is the correct synchronous read path here.
+      const [mailboxEvent] = eventStore.getByFilters([
+        { kinds: [10002], authors: [account.pubkey], limit: 1 },
+      ]);
+      const inboxes: string[] = mailboxEvent
+        ? mailboxEvent.tags
+            .filter((t) => t[0] === "r" && t[2] === "read")
+            .map((t) => t[1])
+        : [];
+      const outboxes: string[] = mailboxEvent
+        ? mailboxEvent.tags
+            .filter((t) => t[0] === "r" && (!t[2] || t[2] === "write"))
+            .map((t) => t[1])
+        : [];
+      const trusted = new Set([...inboxes, ...outboxes]);
+
+      if (!trusted.has(relay.url)) return;
+
+      try {
+        await relay.authenticate(account.signer);
+      } catch (err) {
+        // Non-fatal — relay may reject auth or signer may be unavailable
+        console.warn(`[auth] NIP-42 auth failed for ${relay.url}:`, err);
+      }
+    });
+});
+
 /** Max relays to use per group when resolving */
 const MAX_RESOLVED_RELAYS = 5;
 
