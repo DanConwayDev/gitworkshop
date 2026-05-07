@@ -1064,10 +1064,15 @@ export function nip34ThreadItemLoader(
     // knownRelayUrls: relay URLs we have already fired loaders against
     const knownRelayUrls = new Set<string>();
 
-    // Fire all three thread loaders for an item against a specific relay list
+    // Fire all three thread loaders for an item against a specific relay list.
+    // Results are forwarded to the outer subscriber and also inspected by
+    // handleRevisionRootEvent so revision root patches trigger recursion.
     function fireThreadLoaders(id: string, relayList: string[]): void {
       nip34ThreadLoadAll(id, relayList).subscribe({
-        next: (msg) => subscriber.next(msg),
+        next: (msg) => {
+          subscriber.next(msg);
+          handleRevisionRootEvent(msg);
+        },
       });
     }
 
@@ -1079,6 +1084,46 @@ export function nip34ThreadItemLoader(
           sub.complete();
         }) as Observable<string[]>)
       : relays;
+
+    // Shared handler: when a comment (kind:1111/1619) is discovered, fire
+    // thread loaders for it recursively so its own children are fetched.
+    function handleCommentEvent(msg: PaginatedTagValueResponse): void {
+      if (msg === "EOSE") return;
+      const event = msg as NostrEvent;
+      if (!seenIds.has(event.id)) {
+        seenIds.add(event.id);
+        fireThreadLoaders(event.id, [...knownRelayUrls]);
+      }
+    }
+
+    // Shared handler: when a revision root patch (kind:1617 with
+    // t:root-revision / t:revision-root) is discovered via #e, fire thread
+    // loaders for it so its child commit patches are fetched.
+    function handleRevisionRootEvent(msg: PaginatedTagValueResponse): void {
+      if (msg === "EOSE") return;
+      const event = msg as NostrEvent;
+      if (event.kind !== PATCH_KIND) return;
+      const isRevisionRoot = event.tags.some(
+        ([name, val]) =>
+          name === "t" && (val === "root-revision" || val === "revision-root"),
+      );
+      if (!isRevisionRoot) return;
+      if (!seenIds.has(event.id)) {
+        seenIds.add(event.id);
+        fireThreadLoaders(event.id, [...knownRelayUrls]);
+      }
+    }
+
+    // Fire recursive loaders (comments only) for a given item ID against a
+    // specific relay list. nip34ThreadReplyLoader is NOT called here — it is
+    // already called inside fireThreadLoaders (via nip34ThreadLoadAll) and its
+    // results are piped through handleRevisionRootEvent there. Calling it again
+    // here would duplicate relay requests.
+    function fireRecursiveLoaders(id: string, relayList: string[]): void {
+      nip34CommentsLoader({ value: id, relays: relayList }).subscribe({
+        next: handleCommentEvent,
+      });
+    }
 
     const relaySub = relays$
       .pipe(
@@ -1093,10 +1138,12 @@ export function nip34ThreadItemLoader(
         for (const url of newUrls) knownRelayUrls.add(url);
         if (newUrls.length === 0) return;
 
-        // Re-fire for all already-seen IDs (root + comments) on new relays only.
+        // Re-fire thread loaders and recursive loaders for all already-seen
+        // IDs against only the new relays.
         // createPaginatedTagValueLoader batches these into one REQ per relay.
         for (const id of seenIds) {
           fireThreadLoaders(id, newUrls);
+          fireRecursiveLoaders(id, newUrls);
         }
       });
 
@@ -1105,63 +1152,12 @@ export function nip34ThreadItemLoader(
     seenIds.add(itemId);
     fireThreadLoaders(itemId, [...knownRelayUrls]);
 
-    // Recursively fetch child events for each comment (kind:1111/1619 via #E).
-    // New comments use all currently known relays at discovery time.
-    const commentsSub = nip34CommentsLoader({
-      value: itemId,
-      relays: [...knownRelayUrls],
-    }).subscribe({
-      next: (msg) => {
-        if (msg === "EOSE") return;
-        const event = msg as NostrEvent;
-        if (!seenIds.has(event.id)) {
-          seenIds.add(event.id);
-          fireThreadLoaders(event.id, [...knownRelayUrls]);
-        }
-      },
-    });
-
-    // Recursively fetch child events for each revision root (kind:1617 with
-    // t:root-revision or t:revision-root, discovered via #e on the root item).
-    //
-    // nip34ThreadReplyLoader (no-kind, #e) already fires for the root item
-    // inside fireThreadLoaders above, but it only delivers events to the
-    // subscriber — it does not recurse. Revision root patches are kind:1617
-    // events that reference the original root via #e; their own children
-    // (the individual commit patches in the revision) reference the revision
-    // root via #e, not the original root, so they are never fetched unless
-    // we explicitly fire loaders for each revision root ID.
-    //
-    // We subscribe to nip34ThreadReplyLoader for the root item a second time
-    // here solely to inspect results and trigger recursion. The EventStore
-    // deduplicates events on receipt, so the double subscription is harmless.
-    // seenIds prevents duplicate fireThreadLoaders calls.
-    const revisionRootSub = nip34ThreadReplyLoader({
-      value: itemId,
-      relays: [...knownRelayUrls],
-    }).subscribe({
-      next: (msg) => {
-        if (msg === "EOSE") return;
-        const event = msg as NostrEvent;
-        if (event.kind !== PATCH_KIND) return;
-        // Only recurse for revision roots (t:root-revision or t:revision-root).
-        const isRevisionRoot = event.tags.some(
-          ([name, val]) =>
-            name === "t" &&
-            (val === "root-revision" || val === "revision-root"),
-        );
-        if (!isRevisionRoot) return;
-        if (!seenIds.has(event.id)) {
-          seenIds.add(event.id);
-          fireThreadLoaders(event.id, [...knownRelayUrls]);
-        }
-      },
-    });
+    // Fire recursive loaders for the root item against the initial relay set.
+    // New relays arriving later are handled in relaySub above.
+    fireRecursiveLoaders(itemId, [...knownRelayUrls]);
 
     return () => {
       relaySub.unsubscribe();
-      commentsSub.unsubscribe();
-      revisionRootSub.unsubscribe();
     };
   });
 }
