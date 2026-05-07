@@ -146,21 +146,6 @@ function markRateLimited(relayUrl: string, until: number): void {
 }
 
 /**
- * Returns a timer Observable that resolves when the relay's rate-limit
- * cooldown has expired, or immediately if the relay is not rate-limited.
- * Cleans up the map entry once the cooldown has passed.
- */
-function waitForRateLimitCooldown(relayUrl: string): ReturnType<typeof timer> {
-  const until = relayRateLimitCooldown.get(relayUrl) ?? 0;
-  const remaining = until - Date.now();
-  if (remaining <= 0) {
-    relayRateLimitCooldown.delete(relayUrl);
-    return timer(0);
-  }
-  return timer(remaining);
-}
-
-/**
  * NIP-01 CLOSED prefixes that are permanent policy decisions — the relay will
  * not accept this subscription regardless of how many times we retry.
  * Fast-fail these immediately rather than burning retries.
@@ -357,16 +342,21 @@ function processRelay(
       // opening the subscription. This prevents other concurrent subscriptions
       // from hammering the relay while it is cooling down, which would reset
       // the relay's rate-limit window and delay recovery further.
+      //
+      // Settle the relay immediately when a cooldown is active so the EOSE
+      // signal is not blocked waiting for a relay we know won't respond yet.
+      // The subscription will still open after the cooldown and deliver live
+      // events — it just won't contribute to the initial EOSE settle window.
       const sub$ = pool.relay(relay).subscription(filtersWithSince, {
         reconnect: false,
       });
-      const cooldown = waitForRateLimitCooldown(relay);
-      // timer(0) completes synchronously in RxJS — avoid the switchMap overhead
-      // in the common case where there is no cooldown.
-      const remaining = relayRateLimitCooldown.get(relay) ?? 0;
-      return remaining > Date.now()
-        ? cooldown.pipe(switchMap(() => sub$))
-        : sub$;
+      const remaining = (relayRateLimitCooldown.get(relay) ?? 0) - Date.now();
+      if (remaining > 0) {
+        signal.settle(relay);
+        return timer(remaining).pipe(switchMap(() => sub$));
+      }
+      relayRateLimitCooldown.delete(relay);
+      return sub$;
     };
 
     const liveSub = defer(buildLiveSub)
