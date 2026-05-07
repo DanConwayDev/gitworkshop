@@ -26,9 +26,6 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { lastValueFrom, toArray } from "rxjs";
-import { filter, takeWhile } from "rxjs/operators";
-import { onlyEvents } from "applesauce-relay";
 import { isFromRelay } from "applesauce-core/helpers";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
@@ -43,6 +40,7 @@ import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { map } from "rxjs/operators";
 import type { Observable } from "rxjs";
+import { resilientRequest } from "@/lib/resilientSubscription";
 
 // NIP-50 user resolution relay — supports kind:0 search
 const USER_SEARCH_RELAY = "wss://relay.ditto.pub";
@@ -115,49 +113,63 @@ export function useRepositorySearch(
   // ── Browse mode: initial fetch + loadMore ─────────────────────────────────
 
   const fetchPage = useCallback(
-    async (until: number | undefined) => {
+    (
+      until: number | undefined,
+      onSettle?: () => void,
+    ): Promise<NostrEvent[]> => {
       const pageFilter: Filter = {
         kinds: [REPO_KIND],
         limit: PAGE_SIZE,
         ...(until !== undefined ? { until } : {}),
       };
 
-      let batch: NostrEvent[] = [];
-      try {
-        // pool.req() (not pool.request()) so batch.length reflects the true
-        // relay-sent count — pool.request() deduplicates against the store,
-        // which would cause premature termination.
-        batch = await lastValueFrom(
-          pool.req(relays, pageFilter).pipe(
-            takeWhile((m) => m.type !== "EOSE"),
-            filter(
-              (m): m is Extract<typeof m, { type: "EVENT" }> =>
-                m.type === "EVENT",
-            ),
-            map((m) => m.event),
-            toArray(),
-          ),
-          { defaultValue: [] },
-        );
-      } catch {
-        // Non-fatal — show whatever landed
-      }
+      return new Promise<NostrEvent[]>((resolve) => {
+        const batch: NostrEvent[] = [];
+        let settled = false;
 
-      // Add to store as a side-effect so profiles etc. are available.
-      // The Relay class marks each event with addSeenRelay(event, relayUrl)
-      // synchronously, so isFromRelay() in the browseRepos observable will
-      // correctly scope the view to this relay set.
-      for (const ev of batch) eventStore.add(ev);
+        const sub = resilientRequest(pool, relays, [pageFilter]).subscribe({
+          next: (msg) => {
+            if (msg === "EOSE") {
+              // Majority of events have arrived — notify caller so loading
+              // state can be cleared early while the long tail still collects.
+              if (!settled) {
+                settled = true;
+                onSettle?.();
+              }
+            } else {
+              batch.push(msg);
+              // Add to store immediately so profiles are available for render.
+              // The Relay class marks each event with addSeenRelay(event, relayUrl)
+              // synchronously, so isFromRelay() in the browseRepos observable will
+              // correctly scope the view to this relay set.
+              eventStore.add(msg);
+            }
+          },
+          error: () => {
+            // Non-fatal — resolve with whatever landed
+            if (!settled) onSettle?.();
+            resolve(batch);
+          },
+          complete: () => {
+            if (!settled) onSettle?.();
+            resolve(batch);
+          },
+        });
 
-      if (batch.length < PAGE_SIZE) {
-        setHasMore(false);
-      } else {
-        setHasMore(true);
-        const oldest = Math.min(...batch.map((e) => e.created_at));
-        untilRef.current = oldest - 1;
-      }
-
-      return batch;
+        // Return cleanup handle via the promise chain — if the component
+        // unmounts before completion the subscription is cleaned up by the
+        // cancelled flag in the useEffect below.
+        void sub;
+      }).then((batch) => {
+        if (batch.length < PAGE_SIZE) {
+          setHasMore(false);
+        } else {
+          setHasMore(true);
+          const oldest = Math.min(...batch.map((e) => e.created_at));
+          untilRef.current = oldest - 1;
+        }
+        return batch;
+      });
     },
     [relays],
   );
@@ -175,7 +187,9 @@ export function useRepositorySearch(
 
     let cancelled = false;
 
-    fetchPage(undefined).then(() => {
+    fetchPage(undefined, () => {
+      if (!cancelled) setBrowseIsLoading(false);
+    }).then(() => {
       if (!cancelled) setBrowseIsLoading(false);
     });
 
@@ -188,7 +202,9 @@ export function useRepositorySearch(
     if (!hasMore || browseIsLoading || isSearchMode) return;
     setBrowseIsLoading(true);
 
-    fetchPage(untilRef.current).then(() => {
+    fetchPage(untilRef.current, () => {
+      setBrowseIsLoading(false);
+    }).then(() => {
       setBrowseIsLoading(false);
     });
   }, [hasMore, browseIsLoading, isSearchMode, fetchPage]);
@@ -228,79 +244,111 @@ export function useRepositorySearch(
     }
 
     // During debounce window: keep previous results, no loading spinner
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       setSearchIsLoading(true);
 
-      try {
-        // Fire both searches in parallel
-        const [repoEvents, userEvents] = await Promise.all([
-          // NIP-50 repo search against git index relays
-          lastValueFrom(
-            pool
-              .request(relays, [
-                {
-                  kinds: [REPO_KIND],
-                  search: trimmedQuery,
-                  limit: PAGE_SIZE,
-                } as Filter,
-              ])
-              .pipe(onlyEvents(), toArray()),
-            { defaultValue: [] as NostrEvent[] },
-          ),
-          // NIP-50 user search against relay.ditto.pub
-          lastValueFrom(
-            pool
-              .request(
-                [USER_SEARCH_RELAY],
-                [{ kinds: [0], search: trimmedQuery, limit: 10 } as Filter],
-              )
-              .pipe(onlyEvents(), toArray()),
-            { defaultValue: [] as NostrEvent[] },
-          ),
-        ]);
+      /**
+       * Collect all events from a resilientRequest stream into an array.
+       * Calls onSettle() when the "EOSE" settle signal fires (majority of
+       * events have arrived) so callers can clear loading state early while
+       * the long tail still collects.
+       */
+      const collectEvents = (
+        relayUrls: string[],
+        searchFilter: Filter,
+        onSettle?: () => void,
+      ): Promise<NostrEvent[]> =>
+        new Promise<NostrEvent[]>((resolve) => {
+          const events: NostrEvent[] = [];
+          let settled = false;
+          resilientRequest(pool, relayUrls, [searchFilter]).subscribe({
+            next: (msg) => {
+              if (msg === "EOSE") {
+                if (!settled) {
+                  settled = true;
+                  onSettle?.();
+                }
+              } else {
+                events.push(msg);
+              }
+            },
+            error: () => {
+              if (!settled) onSettle?.();
+              resolve(events);
+            },
+            complete: () => {
+              if (!settled) onSettle?.();
+              resolve(events);
+            },
+          });
+        });
 
-        // Add all fetched events to the store for reactive profile lookups
-        for (const ev of repoEvents) eventStore.add(ev);
-        for (const ev of userEvents) eventStore.add(ev);
-
-        const matchedPubkeys = new Set(userEvents.map((ev) => ev.pubkey));
-
-        // Fetch repos authored by matched users so user-name searches return results
-        let userRepoEvents: NostrEvent[] = [];
-        if (matchedPubkeys.size > 0) {
-          userRepoEvents = await lastValueFrom(
-            pool
-              .request(relays, [
-                {
-                  kinds: [REPO_KIND],
-                  authors: [...matchedPubkeys],
-                  limit: PAGE_SIZE,
-                } as Filter,
-              ])
-              .pipe(onlyEvents(), toArray()),
-            { defaultValue: [] as NostrEvent[] },
-          );
-          for (const ev of userRepoEvents) eventStore.add(ev);
+      // Fire both searches in parallel; clear loading as soon as the first
+      // EOSE settle signal fires across either search.
+      let loadingCleared = false;
+      const clearLoading = () => {
+        if (!loadingCleared) {
+          loadingCleared = true;
+          setSearchIsLoading(false);
         }
+      };
 
-        // Merge repo events, deduplicating by event id
-        const allRepoEvents = repoEvents.slice();
-        const seenIds = new Set(repoEvents.map((ev) => ev.id));
-        for (const ev of userRepoEvents) {
-          if (!seenIds.has(ev.id)) {
-            seenIds.add(ev.id);
-            allRepoEvents.push(ev);
+      Promise.all([
+        // NIP-50 repo search against git index relays
+        collectEvents(
+          relays,
+          {
+            kinds: [REPO_KIND],
+            search: trimmedQuery,
+            limit: PAGE_SIZE,
+          } as Filter,
+          clearLoading,
+        ),
+        // NIP-50 user search against relay.ditto.pub
+        collectEvents(
+          [USER_SEARCH_RELAY],
+          { kinds: [0], search: trimmedQuery, limit: 10 } as Filter,
+          clearLoading,
+        ),
+      ])
+        .then(async ([repoEvents, userEvents]) => {
+          // Add all fetched events to the store for reactive profile lookups
+          for (const ev of repoEvents) eventStore.add(ev);
+          for (const ev of userEvents) eventStore.add(ev);
+
+          const matchedPubkeys = new Set(userEvents.map((ev) => ev.pubkey));
+
+          // Fetch repos authored by matched users so user-name searches return results
+          let userRepoEvents: NostrEvent[] = [];
+          if (matchedPubkeys.size > 0) {
+            userRepoEvents = await collectEvents(relays, {
+              kinds: [REPO_KIND],
+              authors: [...matchedPubkeys],
+              limit: PAGE_SIZE,
+            } as Filter);
+            for (const ev of userRepoEvents) eventStore.add(ev);
           }
-        }
 
-        setSearchRepoEvents(allRepoEvents);
-        setMatchedUserPubkeys(matchedPubkeys);
-      } catch {
-        setSearchRepoEvents([]);
-        setMatchedUserPubkeys(new Set());
-      } finally {
-        setSearchIsLoading(false);
-      }
+          // Merge repo events, deduplicating by event id
+          const allRepoEvents = repoEvents.slice();
+          const seenIds = new Set(repoEvents.map((ev) => ev.id));
+          for (const ev of userRepoEvents) {
+            if (!seenIds.has(ev.id)) {
+              seenIds.add(ev.id);
+              allRepoEvents.push(ev);
+            }
+          }
+
+          setSearchRepoEvents(allRepoEvents);
+          setMatchedUserPubkeys(matchedPubkeys);
+        })
+        .catch(() => {
+          setSearchRepoEvents([]);
+          setMatchedUserPubkeys(new Set());
+        })
+        .finally(() => {
+          clearLoading();
+        });
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);

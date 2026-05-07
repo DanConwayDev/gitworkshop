@@ -21,8 +21,7 @@ const repoFilter: Filter[] = [{ kinds: [REPO_KIND] }];
  *   When omitted, all connected components are resolved.
  *
  * This model does NOT fetch from relays — pair it with a relay fetch in the
- * hook layer (useAllRepositories / useUserRepositories) that populates the
- * store first.
+ * hook layer (e.g. useUserRepositories) that populates the store first.
  *
  * Model cache key: (forPubkey) — one shared instance per pubkey
  * (or one global instance when called with no args).
