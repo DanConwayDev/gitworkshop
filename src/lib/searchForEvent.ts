@@ -49,6 +49,7 @@ import {
   debounceTime,
   distinctUntilChanged,
   timeout,
+  catchError,
 } from "rxjs/operators";
 
 // ---------------------------------------------------------------------------
@@ -538,7 +539,12 @@ export function searchForEvent(
 
       const sub = pool
         .subscription(relays, allFilters)
-        .pipe(completeOnEose(), onlyEvents(), takeUntil(found$))
+        .pipe(
+          completeOnEose(),
+          onlyEvents(),
+          takeUntil(found$),
+          catchError(() => EMPTY),
+        )
         .subscribe({
           next: (event) => {
             if (found) return;

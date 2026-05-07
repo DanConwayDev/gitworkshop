@@ -24,6 +24,7 @@ import { mergeRelaySets } from "applesauce-core/helpers/relays";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import {
+  EMPTY,
   Observable,
   Subject,
   bufferTime,
@@ -33,6 +34,7 @@ import {
   switchMap,
   take,
 } from "rxjs";
+import { catchError } from "rxjs/operators";
 import type {
   RelayPool,
   RelaySubscriptionOptions as SubscriptionOptions,
@@ -96,9 +98,10 @@ function buildBatchSubscription(
 
   const perRelaySubscriptions = Object.entries(requestMap).map(
     ([relay, f]) =>
-      pool
-        .subscription([relay], [f], subOpts)
-        .pipe(onlyEvents()) as Observable<NostrEvent>,
+      pool.subscription([relay], [f], subOpts).pipe(
+        onlyEvents(),
+        catchError(() => EMPTY),
+      ) as Observable<NostrEvent>,
   );
 
   if (perRelaySubscriptions.length === 0) return new Observable<NostrEvent>();
