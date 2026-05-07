@@ -77,10 +77,6 @@ import { useEventStore } from "@/hooks/useEventStore";
 import { use$ } from "@/hooks/use$";
 import { usePatchChain } from "@/hooks/usePatchChain";
 import { useInlineComments } from "@/hooks/useInlineComments";
-import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
-import { resilientSubscription } from "@/lib/resilientSubscription";
-import { pool } from "@/services/nostr";
 import { PATCH_KIND, PR_KIND, extractPatchDiff } from "@/lib/nip34";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import { nip19 } from "nostr-tools";
@@ -760,20 +756,9 @@ export default function PRPage() {
   );
 
   // ── Commit detail logic (inlined from PRCommitPage) ───────────────────
-  // Subscribe to fetch the root event from relays when viewing a commit.
-  // Ensures the page works on direct URL navigation.
-  use$(() => {
-    if (!prCommitId || !prId) return undefined;
-    const filter: Filter = { kinds: [PATCH_KIND, PR_KIND], ids: [prId] };
-    if (resolved?.repoRelayGroup) {
-      return resilientSubscription(
-        pool,
-        resolved.repoRelayGroup.relays.map((r) => r.url),
-        [filter],
-      ).pipe(onlyEvents(), mapEventsToStore(store));
-    }
-    return undefined;
-  }, [prCommitId, prId, resolved?.repoRelayGroup, store]);
+  // The root event (prId) is already in the store — useResolvedPR calls
+  // useNip34ItemDetailLoader which searches for and loads it via useEventSearch.
+  // No additional relay subscription is needed here.
 
   // Reactively determine if the root event is a patch or PR.
   const rootEvent = use$(() => {

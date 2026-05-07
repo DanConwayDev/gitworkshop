@@ -12,7 +12,12 @@
  *     original root patch.
  *
  * This hook:
- *   1. Fetches all kind:1617 patches that reference the root patch via `#e`.
+ *   1. Reads all kind:1617 patches that reference the root patch via `#e`
+ *      from the EventStore. No relay subscriptions are opened here — patch
+ *      chain events are already fetched by nip34ThreadItemLoader (called via
+ *      useNip34ItemDetailLoader with includeThread:true on the PR/patch detail
+ *      page). nip34ThreadReplyLoader has no kind restriction on its #e query,
+ *      so it fetches PATCH_KIND events alongside reactions and zaps.
  *   2. Finds the latest revision root (most recent patch with `root-revision`
  *      tag that replies to the original root).
  *   3. Walks the reply chain from that revision root to collect the ordered
@@ -26,10 +31,6 @@
 import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
-import { pool } from "@/services/nostr";
-import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
-import { resilientSubscription } from "@/lib/resilientSubscription";
 import { castTimelineStream } from "applesauce-common/observable";
 import { Patch } from "@/casts/Patch";
 import { PATCH_KIND } from "@/lib/nip34";
@@ -167,57 +168,24 @@ export interface PatchChainResult {
  * Fetches and resolves the latest patch revision chain for a root patch.
  *
  * @param rootPatchId    - The event ID of the root patch (kind:1617 with `t:root`)
- * @param repoRelayGroup - Relay group from useResolvedRepository (preferred)
- * @param fallbackRelays - Extra relay URLs to query when repoRelayGroup is unavailable
+ * @param repoRelayGroup - Accepted but unused — patch chain events are already
+ *                         fetched by nip34ThreadItemLoader on the detail page.
+ *                         Kept for API compatibility.
  */
 export function usePatchChain(
   rootPatchId: string | undefined,
-  repoRelayGroup: RelayGroup | undefined,
-  fallbackRelays: string[] = [],
+  _repoRelayGroup: RelayGroup | undefined,
 ): PatchChainResult {
   const store = useEventStore();
   const castStore = store as unknown as CastRefEventStore;
 
-  // Fetch all kind:1617 patches that reference the root patch via #e tag.
-  // This covers both additional patches in the original set and revision roots.
-  use$(() => {
-    if (!rootPatchId) return undefined;
-    const filter = { kinds: [PATCH_KIND], "#e": [rootPatchId] } as Filter;
-    if (repoRelayGroup) {
-      return resilientSubscription(
-        pool,
-        repoRelayGroup.relays.map((r) => r.url),
-        [filter],
-      ).pipe(onlyEvents(), mapEventsToStore(store));
-    }
-    if (fallbackRelays.length > 0) {
-      return resilientSubscription(pool, fallbackRelays, [filter]).pipe(
-        onlyEvents(),
-        mapEventsToStore(store),
-      );
-    }
-    return undefined;
-  }, [rootPatchId, repoRelayGroup, fallbackRelays.join(","), store]);
-
-  // Also fetch the root patch itself so it's in the store.
-  use$(() => {
-    if (!rootPatchId) return undefined;
-    const filter: Filter = { kinds: [PATCH_KIND], ids: [rootPatchId] };
-    if (repoRelayGroup) {
-      return resilientSubscription(
-        pool,
-        repoRelayGroup.relays.map((r) => r.url),
-        [filter],
-      ).pipe(onlyEvents(), mapEventsToStore(store));
-    }
-    if (fallbackRelays.length > 0) {
-      return resilientSubscription(pool, fallbackRelays, [filter]).pipe(
-        onlyEvents(),
-        mapEventsToStore(store),
-      );
-    }
-    return undefined;
-  }, [rootPatchId, repoRelayGroup, fallbackRelays.join(","), store]);
+  // Patch chain events (PATCH_KIND with #e referencing the root) are already
+  // in the store — nip34ThreadItemLoader (called via useNip34ItemDetailLoader
+  // with includeThread:true on the PR/patch detail page) uses
+  // nip34ThreadReplyLoader which has no kind restriction on its #e query and
+  // therefore fetches PATCH_KIND events alongside reactions and zaps.
+  // The root patch itself is fetched by useEventSearch in the same loader.
+  // No additional relay subscriptions are needed here.
 
   // Subscribe to all patches in the store that reference the root patch
   // (via #e) plus the root patch itself.
