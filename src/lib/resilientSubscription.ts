@@ -113,15 +113,21 @@ export function rateLimitedRetryDelay(_err: unknown, retryCount: number) {
  * NIP-01 CLOSED prefixes that are permanent policy decisions — the relay will
  * not accept this subscription regardless of how many times we retry.
  * Fast-fail these immediately rather than burning retries.
+ *
+ * Note: these are filtered by subscription ID inside applesauce's req(), so
+ * they are specific to our REQ — not bleed-through from concurrent publishes.
+ *
+ * "duplicate" is intentionally excluded: it means our REQ ID collided with an
+ * existing subscription, which defer()+retry() resolves automatically because
+ * req() generates a fresh nanoid() on each re-execution.
  */
 const PERMANENT_CLOSED_PREFIXES = new Set([
-  "restricted", // paid relay, invite-only, etc.
-  "blocked", // pubkey or IP blocked
-  "pow", // proof-of-work required (we don't support PoW)
-  "mute", // author muted by relay policy
-  "unsupported", // filter feature not supported
-  "invalid", // malformed filter (our bug — retrying won't help)
-  "duplicate", // duplicate subscription ID (shouldn't happen, but unrecoverable)
+  "restricted", // paid relay, invite-only, etc. — will never let us read
+  "blocked", // our pubkey or IP is blocked from reading
+  "pow", // proof-of-work required on REQ (we don't support PoW)
+  "mute", // relay policy mute on the queried content
+  "unsupported", // filter uses a feature the relay doesn't support (e.g. search)
+  "invalid", // malformed filter — our bug, retrying the same filter won't help
 ]);
 
 /**
