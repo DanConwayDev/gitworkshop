@@ -34,6 +34,7 @@ import {
   completeOnEose,
   onlyEvents,
   AuthRequiredError,
+  RelayClosedError,
 } from "applesauce-relay";
 import type { Filter } from "applesauce-core/helpers";
 import { loadBlocksFromRelay } from "applesauce-loaders/loaders";
@@ -98,6 +99,61 @@ export interface ResilientSubscriptionOptions {
  */
 export function defaultRetryDelay(_err: unknown, retryCount: number) {
   return timer(Math.min(1000 * Math.pow(2, retryCount - 1), 5 * 60_000));
+}
+
+/**
+ * Rate-limit backoff: 30s × 2^(n-1), capped at 30 minutes.
+ * Used when a relay closes a subscription with a "rate-limited:" prefix.
+ */
+export function rateLimitedRetryDelay(_err: unknown, retryCount: number) {
+  return timer(Math.min(30_000 * Math.pow(2, retryCount - 1), 30 * 60_000));
+}
+
+/**
+ * NIP-01 CLOSED prefixes that are permanent policy decisions — the relay will
+ * not accept this subscription regardless of how many times we retry.
+ * Fast-fail these immediately rather than burning retries.
+ */
+const PERMANENT_CLOSED_PREFIXES = new Set([
+  "restricted", // paid relay, invite-only, etc.
+  "blocked", // pubkey or IP blocked
+  "pow", // proof-of-work required (we don't support PoW)
+  "mute", // author muted by relay policy
+  "unsupported", // filter feature not supported
+  "invalid", // malformed filter (our bug — retrying won't help)
+  "duplicate", // duplicate subscription ID (shouldn't happen, but unrecoverable)
+]);
+
+/**
+ * Extract the NIP-01 machine-readable prefix from a RelayClosedError reason,
+ * e.g. "rate-limited: too many requests" → "rate-limited".
+ */
+function closedPrefix(err: RelayClosedError): string {
+  return err.reason.split(":")[0].trim();
+}
+
+/**
+ * Returns true for CLOSED errors that are permanent relay policy decisions
+ * and should not be retried.
+ */
+function isPermanentError(err: unknown): boolean {
+  return (
+    err instanceof RelayClosedError &&
+    !(err instanceof AuthRequiredError) &&
+    PERMANENT_CLOSED_PREFIXES.has(closedPrefix(err))
+  );
+}
+
+/**
+ * Returns true for CLOSED errors that indicate rate-limiting and need a
+ * prolonged backoff before retrying.
+ */
+function isRateLimited(err: unknown): boolean {
+  return (
+    err instanceof RelayClosedError &&
+    !(err instanceof AuthRequiredError) &&
+    closedPrefix(err) === "rate-limited"
+  );
 }
 
 export type ResilientSubscriptionResponse = NostrEvent | "EOSE";
@@ -259,19 +315,19 @@ function processRelay(
           // from delay when we want to give up.
           count: Infinity,
           delay: (err) => {
-            // Auth-required errors must not consume retries — the relay needs
-            // NIP-42 authentication which is handled asynchronously by the
-            // pool-level auth policy in nostr.ts.  Propagate immediately so
-            // the catchError below can settle the relay without delay.
+            // Auth-required: fast-fail — handled asynchronously by the
+            // pool-level auth policy in nostr.ts.
             if (err instanceof AuthRequiredError) throw err;
-            // After the first successful EOSE any subsequent drop is treated as
-            // transient (network blip, relay restart, keepalive timeout) and
-            // retried indefinitely with backoff. Before EOSE we apply the
-            // configured retryCount budget so a permanently unreachable relay
-            // doesn't block the settle signal forever.
+            // Permanent policy errors: the relay will never accept this
+            // subscription regardless of retries. Fast-fail immediately.
+            if (isPermanentError(err)) throw err;
+            // Rate-limited: relay is overloaded. Use a prolonged backoff
+            // (30s base) to avoid hammering it further.
             reconnectAttempts++;
             if (!everReceivedEose && reconnectAttempts > opts.retryCount)
               throw err;
+            if (isRateLimited(err))
+              return rateLimitedRetryDelay(err, reconnectAttempts);
             return typeof opts.retryDelay === "function"
               ? opts.retryDelay(err, reconnectAttempts)
               : timer(opts.retryDelay ?? 0);
@@ -318,7 +374,7 @@ function processRelay(
               : timer(opts.retryDelay ?? 0);
           },
         }),
-        // After retries are exhausted (or an auth-required error surfaces),
+        // After retries are exhausted (or a fast-fail error surfaces),
         // notify the settle signal so consumers don't wait forever, then
         // complete this per-relay stream silently. The outer merge() of all
         // per-relay streams continues — other relays carry on producing events.
@@ -331,6 +387,11 @@ function processRelay(
             // EOSE signal isn't held up waiting for a relay we can't read.
             console.debug(
               `[resilientSubscription] auth-required on ${relay} — settling`,
+            );
+          } else if (isPermanentError(err)) {
+            // Permanent relay policy — no point retrying.
+            console.debug(
+              `[resilientSubscription] permanent error on ${relay} (${closedPrefix(err as RelayClosedError)}) — settling`,
             );
           }
           signal.error(relay);
