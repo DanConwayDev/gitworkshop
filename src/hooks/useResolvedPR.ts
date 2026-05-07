@@ -21,9 +21,8 @@ import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
-import { withGapFill } from "@/lib/withGapFill";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import { pool } from "@/services/nostr";
-import { BACKOFF_RECONNECT } from "@/lib/relay";
 import {
   useNip34ItemDetailLoader,
   useNip34ItemLoaderBatch,
@@ -34,8 +33,7 @@ import { PATCH_KIND, type ResolvedPR } from "@/lib/nip34";
 import { relayCurationMode } from "@/services/settings";
 import type { RelayGroup } from "applesauce-relay";
 import type { Filter } from "applesauce-core/helpers";
-import { EMPTY, type Observable } from "rxjs";
-import { catchError } from "rxjs/operators";
+import { type Observable } from "rxjs";
 
 export interface UseResolvedPROptions {
   /** Extra clone URLs for fallback relay queries (from the repo). */
@@ -89,19 +87,11 @@ export function useResolvedPR(
     if (!prId) return undefined;
     const filter = { kinds: [PATCH_KIND], "#e": [prId] } as Filter;
     if (repoRelayGroup) {
-      return withGapFill(
-        repoRelayGroup.subscription([filter], {
-          reconnect: BACKOFF_RECONNECT,
-          resubscribe: Infinity,
-        }),
+      return resilientSubscription(
         pool,
-        () => repoRelayGroup.relays.map((r) => r.url),
+        repoRelayGroup.relays.map((r) => r.url),
         [filter],
-      ).pipe(
-        onlyEvents(),
-        mapEventsToStore(store),
-        catchError(() => EMPTY),
-      );
+      ).pipe(onlyEvents(), mapEventsToStore(store));
     }
     return undefined;
   }, [prId, repoRelayGroup, store]);
@@ -111,19 +101,11 @@ export function useResolvedPR(
     if (!prId) return undefined;
     const filter: Filter = { kinds: [PATCH_KIND], ids: [prId] };
     if (repoRelayGroup) {
-      return withGapFill(
-        repoRelayGroup.subscription([filter], {
-          reconnect: BACKOFF_RECONNECT,
-          resubscribe: Infinity,
-        }),
+      return resilientSubscription(
         pool,
-        () => repoRelayGroup.relays.map((r) => r.url),
+        repoRelayGroup.relays.map((r) => r.url),
         [filter],
-      ).pipe(
-        onlyEvents(),
-        mapEventsToStore(store),
-        catchError(() => EMPTY),
-      );
+      ).pipe(onlyEvents(), mapEventsToStore(store));
     }
     return undefined;
   }, [prId, repoRelayGroup, store]);

@@ -8,7 +8,7 @@ import {
 } from "./useEventSearch";
 import type { SearchTarget } from "@/lib/searchForEvent";
 import { includeMailboxes, mapEventsToStore } from "applesauce-core";
-import { onlyEvents, completeOnEose } from "applesauce-relay";
+import { onlyEvents } from "applesauce-relay";
 import { RelayGroup } from "applesauce-relay";
 import type { RelayGroup as RelayGroupType } from "applesauce-relay";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
@@ -17,15 +17,18 @@ import {
   liveness,
   eventStore as globalEventStore,
 } from "@/services/nostr";
-import { withGapFill } from "@/lib/withGapFill";
+import {
+  resilientSubscription,
+  resilientRequest,
+} from "@/lib/resilientSubscription";
 import { REPO_KIND, type ResolvedRepo } from "@/lib/nip34";
 import { gitIndexRelays, fallbackRelays } from "@/services/settings";
 import { RepositoryModel } from "@/models/RepositoryModel";
 import { RepositoryRelayGroup } from "@/models/RepositoryRelayGroup";
 import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
-import { combineLatest, of, EMPTY } from "rxjs";
-import { switchMap, map, catchError } from "rxjs/operators";
+import { combineLatest, of } from "rxjs";
+import { switchMap, map } from "rxjs/operators";
 import { normalizeUrl } from "@/lib/url";
 
 /** Max healthy mailbox relays to take per maintainer when querying NIP-65 relays. */
@@ -218,11 +221,9 @@ export function useResolvedRepository(
 
     if (backgroundRelays.length === 0) return undefined;
 
-    return pool.subscription(backgroundRelays, [filter]).pipe(
-      completeOnEose(),
+    return resilientRequest(pool, backgroundRelays, [filter]).pipe(
       onlyEvents(),
       mapEventsToStore(store),
-      catchError(() => EMPTY),
     );
   }, [pubkey, dTag, alreadyInStore, hintsKey, nip05RelaysKey, store]);
 
@@ -293,16 +294,11 @@ export function useResolvedRepository(
         "#d": [dTag],
       } as Filter,
     ];
-    return withGapFill(
-      repoRelayGroup.subscription(filter),
+    return resilientSubscription(
       pool,
-      () => repoRelayGroup.relays.map((r) => r.url),
+      repoRelayGroup.relays.map((r) => r.url),
       filter,
-    ).pipe(
-      onlyEvents(),
-      mapEventsToStore(store),
-      catchError(() => EMPTY),
-    );
+    ).pipe(onlyEvents(), mapEventsToStore(store));
   }, [dTag, repoRelayKey, maintainerKey, store, repoRelayGroup]);
 
   // Layer 4: resolve maintainer outbox + inbox relays. Only relays not already
@@ -354,17 +350,11 @@ export function useResolvedRepository(
             "#d": [dTag],
           } as Filter,
         ];
-        return withGapFill(
-          extraRelaysForMaintainerMailboxCoverage.subscription(filter),
+        return resilientSubscription(
           pool,
-          () =>
-            extraRelaysForMaintainerMailboxCoverage.relays.map((r) => r.url),
+          extraRelaysForMaintainerMailboxCoverage.relays.map((r) => r.url),
           filter,
-        ).pipe(
-          onlyEvents(),
-          mapEventsToStore(store),
-          catchError(() => EMPTY),
-        );
+        ).pipe(onlyEvents(), mapEventsToStore(store));
       }),
     ) as unknown as Observable<null>;
   }, [

@@ -38,13 +38,12 @@
  * Action implementations (markAsRead, etc.) live in notificationActions.ts.
  */
 
-import { BehaviorSubject, combineLatest, merge, of, EMPTY } from "rxjs";
+import { BehaviorSubject, combineLatest, merge, of } from "rxjs";
 import {
   map,
   switchMap,
   distinctUntilChanged,
   startWith,
-  catchError,
 } from "rxjs/operators";
 import { mapEventsToStore } from "applesauce-core";
 import { MailboxesModel } from "applesauce-core/models";
@@ -273,11 +272,9 @@ export function acquireNotificationStore(
       switchMap((relays) =>
         relays.length === 0
           ? of(undefined)
-          : pool.subscription(relays, [nsecFilter]).pipe(
-              onlyEvents(),
-              mapEventsToStore(eventStore),
-              catchError(() => EMPTY),
-            ),
+          : resilientSubscription(pool, relays, [nsecFilter], {
+              retryCount: Infinity,
+            }).pipe(onlyEvents(), mapEventsToStore(eventStore)),
       ),
     )
     .subscribe();
@@ -330,11 +327,9 @@ export function acquireNotificationStore(
           "#d": [NOTIFICATION_STATE_D_TAG],
         } as Filter;
 
-        return pool.subscription(outboxes, [stateFilter]).pipe(
-          onlyEvents(),
-          mapEventsToStore(eventStore),
-          catchError(() => EMPTY),
-        );
+        return resilientSubscription(pool, outboxes, [stateFilter], {
+          retryCount: Infinity,
+        }).pipe(onlyEvents(), mapEventsToStore(eventStore));
       }),
     )
     .subscribe();

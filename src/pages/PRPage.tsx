@@ -79,7 +79,7 @@ import { usePatchChain } from "@/hooks/usePatchChain";
 import { useInlineComments } from "@/hooks/useInlineComments";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
-import { withGapFill } from "@/lib/withGapFill";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import { pool } from "@/services/nostr";
 import { PATCH_KIND, PR_KIND, extractPatchDiff } from "@/lib/nip34";
 import { eventIdToNevent } from "@/lib/routeUtils";
@@ -91,8 +91,6 @@ import {
 } from "@/lib/patch-commits";
 import type { Filter } from "applesauce-core/helpers";
 import type { Patch } from "@/casts/Patch";
-import { EMPTY } from "rxjs";
-import { catchError } from "rxjs/operators";
 
 // ---------------------------------------------------------------------------
 // extractSnippetFromDiff — pull the relevant lines out of a unified diff
@@ -768,16 +766,11 @@ export default function PRPage() {
     if (!prCommitId || !prId) return undefined;
     const filter: Filter = { kinds: [PATCH_KIND, PR_KIND], ids: [prId] };
     if (resolved?.repoRelayGroup) {
-      return withGapFill(
-        resolved.repoRelayGroup.subscription([filter]),
+      return resilientSubscription(
         pool,
-        () => resolved.repoRelayGroup.relays.map((r) => r.url),
+        resolved.repoRelayGroup.relays.map((r) => r.url),
         [filter],
-      ).pipe(
-        onlyEvents(),
-        mapEventsToStore(store),
-        catchError(() => EMPTY),
-      );
+      ).pipe(onlyEvents(), mapEventsToStore(store));
     }
     return undefined;
   }, [prCommitId, prId, resolved?.repoRelayGroup, store]);

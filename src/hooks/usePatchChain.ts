@@ -30,13 +30,11 @@ import { pool } from "@/services/nostr";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { resilientSubscription } from "@/lib/resilientSubscription";
-import { withGapFill } from "@/lib/withGapFill";
 import { castTimelineStream } from "applesauce-common/observable";
 import { Patch } from "@/casts/Patch";
 import { PATCH_KIND } from "@/lib/nip34";
 import type { Filter } from "applesauce-core/helpers";
-import { EMPTY, type Observable } from "rxjs";
-import { catchError } from "rxjs/operators";
+import { type Observable } from "rxjs";
 import type { CastRefEventStore } from "applesauce-common/casts/cast";
 import type { RelayGroup } from "applesauce-relay";
 
@@ -186,22 +184,16 @@ export function usePatchChain(
     if (!rootPatchId) return undefined;
     const filter = { kinds: [PATCH_KIND], "#e": [rootPatchId] } as Filter;
     if (repoRelayGroup) {
-      return withGapFill(
-        repoRelayGroup.subscription([filter]),
+      return resilientSubscription(
         pool,
-        () => repoRelayGroup.relays.map((r) => r.url),
+        repoRelayGroup.relays.map((r) => r.url),
         [filter],
-      ).pipe(
-        onlyEvents(),
-        mapEventsToStore(store),
-        catchError(() => EMPTY),
-      );
+      ).pipe(onlyEvents(), mapEventsToStore(store));
     }
     if (fallbackRelays.length > 0) {
       return resilientSubscription(pool, fallbackRelays, [filter]).pipe(
         onlyEvents(),
         mapEventsToStore(store),
-        catchError(() => EMPTY),
       );
     }
     return undefined;
@@ -212,22 +204,16 @@ export function usePatchChain(
     if (!rootPatchId) return undefined;
     const filter: Filter = { kinds: [PATCH_KIND], ids: [rootPatchId] };
     if (repoRelayGroup) {
-      return withGapFill(
-        repoRelayGroup.subscription([filter]),
+      return resilientSubscription(
         pool,
-        () => repoRelayGroup.relays.map((r) => r.url),
+        repoRelayGroup.relays.map((r) => r.url),
         [filter],
-      ).pipe(
-        onlyEvents(),
-        mapEventsToStore(store),
-        catchError(() => EMPTY),
-      );
+      ).pipe(onlyEvents(), mapEventsToStore(store));
     }
     if (fallbackRelays.length > 0) {
       return resilientSubscription(pool, fallbackRelays, [filter]).pipe(
         onlyEvents(),
         mapEventsToStore(store),
-        catchError(() => EMPTY),
       );
     }
     return undefined;
