@@ -50,6 +50,7 @@ import {
   merge,
   repeat,
   retry,
+  switchMap,
   tap,
   timer,
   catchError,
@@ -102,11 +103,61 @@ export function defaultRetryDelay(_err: unknown, retryCount: number) {
 }
 
 /**
- * Rate-limit backoff: 30s × 2^(n-1), capped at 30 minutes.
- * Used when a relay closes a subscription with a "rate-limited:" prefix.
+ * Rate-limit backoff: 60–90s × 2^(n-1), capped at 30 minutes.
+ * The jitter (random 0–30s added to the 60s base) prevents a stampeding
+ * herd when multiple subscriptions to the same relay all back off and
+ * retry at the same moment.
+ *
+ * Returns both the delay in ms and the RxJS timer so callers can record
+ * the cooldown end time without recomputing the jitter independently.
  */
-export function rateLimitedRetryDelay(_err: unknown, retryCount: number) {
-  return timer(Math.min(30_000 * Math.pow(2, retryCount - 1), 30 * 60_000));
+export function rateLimitedRetryDelay(
+  _err: unknown,
+  retryCount: number,
+): { ms: number; timer$: ReturnType<typeof timer> } {
+  const jitter = Math.random() * 30_000;
+  const ms = Math.min(
+    (60_000 + jitter) * Math.pow(2, retryCount - 1),
+    30 * 60_000,
+  );
+  return { ms, timer$: timer(ms) };
+}
+
+/**
+ * Shared per-relay rate-limit cooldown registry.
+ *
+ * Maps relay URL → timestamp (ms) until which new subscriptions should not
+ * be opened. Set when a rate-limited CLOSED is received; checked at the start
+ * of every buildLiveSub execution (i.e. on every retry/repeat cycle for every
+ * concurrent subscription to that relay). This prevents other subscriptions
+ * from immediately hammering a relay that just told us to back off, which
+ * would reset the relay's rate-limit window and push out the time we are
+ * allowed to reconnect.
+ */
+const relayRateLimitCooldown = new Map<string, number>();
+
+/**
+ * Mark a relay as rate-limited until `until` (epoch ms).
+ * Only extends the cooldown — never shortens an existing one.
+ */
+function markRateLimited(relayUrl: string, until: number): void {
+  const existing = relayRateLimitCooldown.get(relayUrl) ?? 0;
+  if (until > existing) relayRateLimitCooldown.set(relayUrl, until);
+}
+
+/**
+ * Returns a timer Observable that resolves when the relay's rate-limit
+ * cooldown has expired, or immediately if the relay is not rate-limited.
+ * Cleans up the map entry once the cooldown has passed.
+ */
+function waitForRateLimitCooldown(relayUrl: string): ReturnType<typeof timer> {
+  const until = relayRateLimitCooldown.get(relayUrl) ?? 0;
+  const remaining = until - Date.now();
+  if (remaining <= 0) {
+    relayRateLimitCooldown.delete(relayUrl);
+    return timer(0);
+  }
+  return timer(remaining);
 }
 
 /**
@@ -301,9 +352,21 @@ function processRelay(
       // Use the single-relay API so the stream still emits NostrEvent | "EOSE"
       // — the group-level pool.subscription() strips EOSE in v6, but we need it
       // here to drive the settle signal.
-      return pool.relay(relay).subscription(filtersWithSince, {
+      //
+      // If this relay is currently rate-limited, wait out the cooldown before
+      // opening the subscription. This prevents other concurrent subscriptions
+      // from hammering the relay while it is cooling down, which would reset
+      // the relay's rate-limit window and delay recovery further.
+      const sub$ = pool.relay(relay).subscription(filtersWithSince, {
         reconnect: false,
       });
+      const cooldown = waitForRateLimitCooldown(relay);
+      // timer(0) completes synchronously in RxJS — avoid the switchMap overhead
+      // in the common case where there is no cooldown.
+      const remaining = relayRateLimitCooldown.get(relay) ?? 0;
+      return remaining > Date.now()
+        ? cooldown.pipe(switchMap(() => sub$))
+        : sub$;
     };
 
     const liveSub = defer(buildLiveSub)
@@ -327,13 +390,20 @@ function processRelay(
             // Permanent policy errors: the relay will never accept this
             // subscription regardless of retries. Fast-fail immediately.
             if (isPermanentError(err)) throw err;
-            // Rate-limited: relay is overloaded. Use a prolonged backoff
-            // (30s base) to avoid hammering it further.
             reconnectAttempts++;
             if (!everReceivedEose && reconnectAttempts > opts.retryCount)
               throw err;
-            if (isRateLimited(err))
-              return rateLimitedRetryDelay(err, reconnectAttempts);
+            // Rate-limited: relay is overloaded. Record the cooldown so all
+            // other concurrent subscriptions to this relay also hold off,
+            // preventing a stampede that would reset the relay's window.
+            if (isRateLimited(err)) {
+              const { ms, timer$ } = rateLimitedRetryDelay(
+                err,
+                reconnectAttempts,
+              );
+              markRateLimited(relay, Date.now() + ms);
+              return timer$;
+            }
             return typeof opts.retryDelay === "function"
               ? opts.retryDelay(err, reconnectAttempts)
               : timer(opts.retryDelay ?? 0);
