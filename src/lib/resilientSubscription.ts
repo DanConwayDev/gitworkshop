@@ -42,7 +42,7 @@ import {
   RelayClosedError,
 } from "applesauce-relay";
 import type { Filter } from "applesauce-core/helpers";
-import { loadBlocksFromRelay } from "applesauce-loaders/loaders";
+import { loadBackwardBlocks } from "applesauce-loaders/loaders";
 import type { TimelessFilter } from "applesauce-loaders";
 import type { NostrEvent } from "nostr-tools";
 import {
@@ -319,25 +319,26 @@ function processRelay(
     let window$: Subject<{ since?: number; until?: number }> | undefined;
 
     const startPagination = () => {
-      // loadBlocksFromRelay is used here purely as a pagination cursor state
-      // machine: it tracks the backward cursor, prevents parallel page loads,
-      // and detects exhaustion (zero events returned). It does NOT perform the
-      // actual relay request — that is handled by extendingPool below, which
-      // replaces applesauce's internal request with resilientSingleRelayRequest
-      // so every page gets our own exponential backoff and rate-limit handling
-      // instead of applesauce's built-in retry logic.
+      // loadBackwardBlocks is used here as a backward-only pagination cursor
+      // state machine: it tracks the backward cursor, prevents parallel page
+      // loads, and detects exhaustion (zero events returned). Using
+      // loadBackwardBlocks (rather than loadBlocksFromRelay / loadBlocksForTimelineWindow)
+      // avoids the bug where loadForwardBlocks also fires on the first window
+      // emission (when its cursor is undefined), sending a spurious REQ without
+      // an `until` filter that re-fetches the most-recent events.
       //
-      // extendingPool also calls signal.extend() on every page request (not
-      // just the first) to keep the signal alive while pagination is in flight.
-      // The relay is fixed in the outer scope so _relays is always [relay] and
-      // can be ignored.
-      const extendingPool = (_relays: string[], mergedFilters: Filter[]) => {
+      // signal.extend() is called on every page request to keep the settle
+      // signal alive while pagination is in flight.
+      const backwardRequest = (until: number | undefined) => {
         signal.extend(relay);
-        // mergeFilters (called by loadBlocksFromRelay) drops scalar fields like
-        // `search` — restore them from the original paginationFilters.
-        const restoredFilters = mergedFilters.map((f, i) => ({
+        // Build filters: start from paginationFilters (already stripped of
+        // since/until/limit), restore scalar extras (e.g. search) that
+        // mergeFilters would drop, then apply limit and until.
+        const restoredFilters: Filter[] = paginationFilters.map((f, i) => ({
           ...(scalarExtras[i] ?? {}),
           ...f,
+          limit,
+          ...(until !== undefined ? { until } : {}),
         }));
         return resilientSingleRelayRequest(pool, relay, restoredFilters, {
           retryCount: opts.retryCount,
@@ -360,9 +361,7 @@ function processRelay(
 
       paginateSub = window$
         .pipe(
-          loadBlocksFromRelay(extendingPool, relay, paginationFilters, {
-            limit,
-          }),
+          loadBackwardBlocks(backwardRequest, { limit }),
           // Pagination errors are non-fatal — finalize still runs and settles
           // the relay. The merge of all per-relay streams continues.
           catchError(() => EMPTY),
