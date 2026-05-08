@@ -502,14 +502,6 @@ const NIP34_COMMENTS_BUFFER = 500;
 const NIP34_THREAD_BUFFER = 500;
 /** Longer buffer for deletion-of-essentials loader — less time-critical. */
 const NIP34_ESSENTIAL_DELETIONS_BUFFER = 2000;
-/**
- * Buffer for repo-level meta events (reactions + follow lists).
- *
- * A 500ms window is long enough to absorb the near-simultaneous calls from
- * useIssues and usePRs (both call nip34RepoLoader with the same coords) so
- * they collapse into a single relay subscription rather than two.
- */
-const NIP34_REPO_META_BUFFER = 500;
 
 /**
  * Essentials loader (#e tag).
@@ -651,31 +643,6 @@ const REACTION_KIND = 7;
 
 /** Kind 10018 — NIP-51 Git repositories follow list; used for repo follower counts. */
 const GIT_REPOS_FOLLOW_KIND = 10018 as const;
-
-/**
- * Repo-level meta loader (#a tag).
- *
- * Fetches kind:7 reactions and kind:10018 git-repo follow lists that reference
- * a repository coordinate via the `#a` tag. Called once per repo coordinate
- * string from nip34RepoLoader.
- *
- * Using a singleton createPaginatedTagValueLoader here instead of a raw
- * resilientSubscription means that near-simultaneous calls from useIssues and
- * usePRs (both call nip34RepoLoader with the same coords) are batched into a
- * single relay subscription within the buffer window rather than firing two
- * identical subscriptions.
- *
- * The #k filter (kind of the tagged event) is NOT included here because
- * createPaginatedTagValueLoader builds the filter from the tag value alone;
- * relays that support #k can still narrow the result, but omitting it keeps
- * the filter compatible with all relays.
- */
-export const nip34RepoMetaLoader = createPaginatedTagValueLoader(pool, "a", {
-  cacheRequest,
-  eventStore,
-  kinds: [REACTION_KIND, GIT_REPOS_FOLLOW_KIND],
-  bufferTime: NIP34_REPO_META_BUFFER,
-});
 
 /**
  * List-level loader for a single item.
@@ -924,21 +891,9 @@ export function nip34RepoLoader(
       inboxSubs.add(s);
     }
 
-    // Fire repo meta loader (reactions + follow lists) for all coords against
-    // a specific relay list. Uses the singleton nip34RepoMetaLoader so that
-    // near-simultaneous calls from useIssues and usePRs (both invoke
-    // nip34RepoLoader with the same coords) are batched into one relay
-    // subscription within the buffer window rather than two.
-    function fireMetaLoaders(relays: string[]): void {
-      for (const coord of coords) {
-        nip34RepoMetaLoader({ value: coord, relays }).subscribe();
-      }
-    }
-
-    // When new relays join the group, re-fire existing items' loaders AND the
-    // meta loader against those new relays only.
-    // createPaginatedTagValueLoader batches all these calls within its buffer
-    // window into a single REQ per relay.
+    // When new relays join the group, re-fire existing items' loaders against
+    // those new relays only. createPaginatedTagValueLoader batches all these
+    // calls within its buffer window into a single REQ per relay.
     const relaySub = relayGroupUrls$(relayGroup)
       .pipe(
         distinctUntilChanged(
@@ -953,9 +908,6 @@ export function nip34RepoLoader(
         for (const id of seenIds) {
           fireLoaders(id, newUrls);
         }
-        // Re-fire meta loader for new relays so reactions/follow-lists
-        // published only to those relays are also fetched.
-        fireMetaLoaders(newUrls);
       });
 
     const itemFilters = [
@@ -983,13 +935,25 @@ export function nip34RepoLoader(
         complete: () => subscriber.complete(),
       });
 
-    // Fire meta loader for the initial relay set (knownRelayUrls is already
-    // populated by relaySub above since relayGroupUrls$ emits synchronously).
-    fireMetaLoaders([...knownRelayUrls]);
+    const repoMetaFilters = [
+      {
+        kinds: [REACTION_KIND, GIT_REPOS_FOLLOW_KIND],
+        "#a": coords,
+      } as Filter,
+    ];
+    const repoMetaSub = resilientSubscription(
+      pool,
+      relayGroupUrls$(relayGroup),
+      repoMetaFilters,
+      { reconnect: true, gapFill: true, settle: false },
+    )
+      .pipe(onlyEvents(), mapEventsToStore(eventStore))
+      .subscribe();
 
     return () => {
       relaySub.unsubscribe();
       itemSub.unsubscribe();
+      repoMetaSub.unsubscribe();
       inboxSubs.unsubscribe();
     };
   });
