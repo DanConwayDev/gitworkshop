@@ -9,8 +9,7 @@ import { onlyEvents } from "applesauce-relay";
 import { getProfileContent, isValidProfile } from "applesauce-core/helpers";
 import type { Filter } from "applesauce-core/helpers";
 import type { ProfileContent } from "applesauce-core/helpers";
-import { map, takeWhile, toArray } from "rxjs/operators";
-import { firstValueFrom } from "rxjs";
+import { map } from "rxjs/operators";
 
 // NIP-50 search relay — relay.ditto.pub supports the `search` filter field
 const NIP50_RELAY = "wss://relay.ditto.pub";
@@ -115,28 +114,28 @@ export function useContactSearch(
       return;
     }
 
-    const timer = setTimeout(async () => {
-      try {
-        const filter = { kinds: [0], search: trimmed, limit: 10 } as Filter;
-        // Collect events until the EOSE settle signal fires — that's when we
-        // likely have all results. takeWhile(inclusive) completes on "EOSE"
-        // itself so toArray() resolves at that point rather than waiting for
-        // full stream completion (which waits for all relay retries to finish).
-        const events = await firstValueFrom(
-          resilientRequest(pool, [NIP50_RELAY], [filter]).pipe(
-            takeWhile((msg) => msg !== "EOSE", /* inclusive */ true),
-            onlyEvents(),
-            mapEventsToStore(store),
-            toArray(),
-          ),
-        ).catch(() => []);
-        setNip50Pubkeys(events.map((ev) => ev.pubkey));
-      } catch {
-        setNip50Pubkeys([]);
-      }
+    let sub: { unsubscribe(): void } | undefined;
+
+    const timer = setTimeout(() => {
+      setNip50Pubkeys([]); // clear stale results before new search
+      const filter = { kinds: [0], search: trimmed, limit: 10 } as Filter;
+      // Stream results as they arrive — each event triggers a state update so
+      // the dropdown populates progressively rather than waiting for EOSE.
+      sub = resilientRequest(pool, [NIP50_RELAY], [filter])
+        .pipe(onlyEvents(), mapEventsToStore(store))
+        .subscribe({
+          next: (ev) =>
+            setNip50Pubkeys((prev) =>
+              prev.includes(ev.pubkey) ? prev : [...prev, ev.pubkey],
+            ),
+          error: () => {},
+        });
     }, NIP50_DEBOUNCE_MS);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      sub?.unsubscribe();
+    };
   }, [query, store]);
 
   // ── 7. Profiles for NIP-50 results ───────────────────────────────────────
