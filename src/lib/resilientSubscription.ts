@@ -255,20 +255,47 @@ function processRelay(
 ): Observable<NostrEvent> {
   const limit = opts.limit;
 
-  // Live filters: strip limit so we get all future events.
-  const liveFilters: Filter[] = filters.map((f) => {
-    const lf = { ...f };
-    delete lf.limit;
-    return lf;
-  });
+  // Live filters: keep limit so the relay returns at most `limit` historical
+  // events before EOSE. New events published after the subscription opens are
+  // always forwarded regardless of limit — it only caps the backfill.
+  // On reconnect, since: lastReceivedAt is injected (see buildLiveSub) which
+  // already scopes the backfill to the gap window, so limit is less relevant
+  // there but harmless to keep.
+  const liveFilters: Filter[] = filters.map((f) => ({ ...f }));
 
-  // Pagination filters: strip since/until (TimelessFilter).
+  // Pagination filters: strip since/until/limit (TimelessFilter).
+  // NOTE: mergeFilters (used by loadBlocksFromRelay) only handles kinds, ids,
+  // authors, tag filters, limit, since, and until — it silently drops scalar
+  // fields like `search`. We preserve those extras here and re-apply them in
+  // extendingPool after the merge so they survive into every page REQ.
   const paginationFilters: TimelessFilter[] = filters.map((f) => {
     const pf: TimelessFilter = { ...f };
     delete (pf as Filter).since;
     delete (pf as Filter).until;
     delete (pf as Filter).limit;
     return pf;
+  });
+
+  // Scalar fields that mergeFilters drops — keyed by filter index so we can
+  // restore them per-filter after the merge.
+  const scalarExtras: Array<Partial<Filter>> = filters.map((f) => {
+    const extras: Partial<Filter> = {};
+    for (const key of Object.keys(f) as Array<keyof Filter>) {
+      if (
+        key === "kinds" ||
+        key === "ids" ||
+        key === "authors" ||
+        key === "since" ||
+        key === "until" ||
+        key === "limit" ||
+        key[0] === "#" ||
+        key[0] === "&"
+      )
+        continue;
+      // @ts-expect-error — copy any remaining scalar field (e.g. search)
+      extras[key] = f[key];
+    }
+    return extras;
   });
 
   return new Observable<NostrEvent>((subscriber) => {
@@ -304,9 +331,15 @@ function processRelay(
       // just the first) to keep the signal alive while pagination is in flight.
       // The relay is fixed in the outer scope so _relays is always [relay] and
       // can be ignored.
-      const extendingPool = (_relays: string[], filters: Filter[]) => {
+      const extendingPool = (_relays: string[], mergedFilters: Filter[]) => {
         signal.extend(relay);
-        return resilientSingleRelayRequest(pool, relay, filters, {
+        // mergeFilters (called by loadBlocksFromRelay) drops scalar fields like
+        // `search` — restore them from the original paginationFilters.
+        const restoredFilters = mergedFilters.map((f, i) => ({
+          ...(scalarExtras[i] ?? {}),
+          ...f,
+        }));
+        return resilientSingleRelayRequest(pool, relay, restoredFilters, {
           retryCount: opts.retryCount,
           retryDelay: opts.retryDelay,
         });

@@ -158,7 +158,7 @@ export default function RepositoriesPage({
               ))}
             </div>
 
-            {/* Infinite scroll sentinel — only in browse mode */}
+            {/* Infinite scroll sentinel */}
             {hasMore && (
               <div ref={sentinelRef} className="flex justify-center py-8">
                 {isLoading ? (
