@@ -107,6 +107,7 @@ import {
   isPermanentError,
   isRateLimited,
   resilientSingleRelayRequest,
+  resilientSubscription,
 } from "./resilientSubscription";
 
 export type { TagValuePointer };
@@ -230,15 +231,13 @@ function processRelayStream(
   // immediately since there is no history work to do.
   if (exhausted.has(key)) {
     signal.settle(relay);
-    return buildResilientLiveSub(
-      pool,
-      relay,
-      liveFilter,
+    return resilientSubscription(pool, [relay], [liveFilter], {
+      paginate: false,
+      gapFill: true,
+      settle: false,
       retryCount,
       gapFillBuffer,
-      signal,
-      /* exhaustedPath */ true,
-    );
+    }).pipe(onlyEvents()) as Observable<NostrEvent>;
   }
 
   return new Observable<NostrEvent>((subscriber) => {
@@ -481,89 +480,6 @@ function processRelayStream(
       gapFillResumeSub.unsubscribe();
     };
   });
-}
-
-/**
- * Build a resilient live-only subscription for an already-exhausted relay.
- * Uses the same retry/error-handling logic as the main processRelayStream live
- * subscription but without pagination or EOSE tracking.
- *
- * When exhaustedPath is true the settle signal has already been called by the
- * caller; this function does not call it again.
- */
-function buildResilientLiveSub(
-  pool: RelayPool,
-  relay: string,
-  liveFilter: Filter,
-  retryCount: number,
-  gapFillBuffer: number,
-  signal: SettleSignal,
-  exhaustedPath: boolean,
-): Observable<NostrEvent> {
-  let lastReceivedAt: number | undefined;
-  let everReceivedEose = false;
-  let reconnectAttempts = 0;
-
-  return defer(() => {
-    const filtersWithSince: Filter[] = [
-      {
-        ...liveFilter,
-        ...(lastReceivedAt !== undefined
-          ? { since: lastReceivedAt - gapFillBuffer }
-          : {}),
-      },
-    ];
-    const sub$ = pool.relay(relay).subscription(filtersWithSince, {
-      reconnect: false,
-    });
-    const remaining = getRateLimitCooldownRemaining(relay);
-    if (remaining > 0) {
-      if (!exhaustedPath) signal.settle(relay);
-      return timer(remaining).pipe(switchMap(() => sub$));
-    }
-    return sub$;
-  }).pipe(
-    tap((msg) => {
-      if (msg !== "EOSE") {
-        const t = (msg as NostrEvent).created_at;
-        if (lastReceivedAt === undefined || t > lastReceivedAt)
-          lastReceivedAt = t;
-      } else {
-        everReceivedEose = true;
-        reconnectAttempts = 0;
-      }
-    }),
-    onlyEvents(),
-    retry({
-      count: Infinity,
-      delay: (err) => {
-        if (err instanceof AuthRequiredError) throw err;
-        if (isPermanentError(err)) throw err;
-        reconnectAttempts++;
-        if (!everReceivedEose && reconnectAttempts > retryCount) throw err;
-        if (isRateLimited(err)) {
-          const { ms, timer$ } = rateLimitedRetryDelay(err, reconnectAttempts);
-          markRateLimited(relay, Date.now() + ms);
-          return timer$;
-        }
-        return defaultRetryDelay(err, reconnectAttempts);
-      },
-    }),
-    catchError((err) => {
-      if (err instanceof AuthRequiredError) {
-        console.debug(
-          `[tagValuePaginatedLoader] auth-required on ${relay} (exhausted path) — settling`,
-        );
-      } else if (isPermanentError(err)) {
-        const prefix = (err as RelayClosedError).reason.split(":")[0].trim();
-        console.debug(
-          `[tagValuePaginatedLoader] permanent error on ${relay} (${prefix}, exhausted path) — settling`,
-        );
-      }
-      signal.error(relay);
-      return EMPTY;
-    }),
-  ) as Observable<NostrEvent>;
 }
 
 function processBatch(
