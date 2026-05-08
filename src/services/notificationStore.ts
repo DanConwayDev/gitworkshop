@@ -43,6 +43,7 @@ import {
   map,
   switchMap,
   distinctUntilChanged,
+  debounceTime,
   startWith,
 } from "rxjs/operators";
 import { mapEventsToStore } from "applesauce-core";
@@ -391,8 +392,14 @@ export function acquireNotificationStore(
 
   // Repo stars live subscription — always-on, no history paging needed here.
   // Stars are not included in the thread loader; they have their own filter.
+  //
+  // repoCoords$ can emit rapidly on login as own-repo announcements arrive one
+  // by one from the git index relay. Without debouncing, switchMap would tear
+  // down and recreate the resilientSubscription for each new coord, producing
+  // 10+ near-simultaneous REQs for kind:7. debounceTime(500) lets the coord
+  // list stabilise before opening a single subscription covering all coords.
   const repoActivitySub = combineLatest([
-    repoCoords$,
+    repoCoords$.pipe(debounceTime(500)),
     repoRelays$,
     inboxRelays$,
   ])
