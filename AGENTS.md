@@ -232,7 +232,9 @@ When designing tags for Nostr events, follow these principles:
    );
 
    // ✅ Efficient: Filter at relay level
-   pool.subscription(relays, [{ kinds: [30402], "#t": ["electronics"] }]);
+   resilientSubscription(pool, relays, [
+     { kinds: [30402], "#t": ["electronics"] },
+   ]);
    ```
 
 #### `t` Tag Filtering for Community-Specific Content
@@ -627,11 +629,22 @@ function FollowButton({ pubkey }: { pubkey: string }) {
 
 ### Querying Events from Relays
 
+**CRITICAL**: Never call `pool.subscription()`, `pool.req()`, `pool.relay().subscription()`, or `pool.relay().request()` directly for fetching events. Always use the `resilientSubscription` / `resilientRequest` wrappers from `@/lib/resilientSubscription`. These wrappers provide:
+
+- Smart reconnect with `since: lastReceivedAt` gap-fill on reconnect
+- Foreground resume gap-fill (app coming back from background)
+- EOSE settle signal for knowing when initial data has loaded
+- Optional backward pagination
+- Rate-limit backoff and permanent-error fast-fail
+- Per-relay error isolation (one bad relay doesn't kill the stream)
+
+The only legitimate uses of `pool.relay(url)` **without** the resilient wrappers are reading relay metadata observables (`connected$`, `icon$`) for UI display — never for event fetching.
+
 There are three main patterns for querying events:
 
 #### Pattern 1: Using `useTimeline` Hook (Recommended)
 
-Best for feeds and timelines. Automatically handles subscriptions and casts to Note objects.
+Best for feeds and timelines. Automatically handles subscriptions and casts to Note objects. Internally uses `resilientSubscription`.
 
 ```tsx
 import { useTimeline } from "@/hooks/useTimeline";
@@ -648,41 +661,80 @@ function Feed() {
 }
 ```
 
-#### Pattern 2: Direct RelayPool Queries
+#### Pattern 2: `resilientSubscription` / `resilientRequest` (For Custom Queries)
 
-For custom queries with more control. Use with `use$` for reactivity.
+For custom queries with more control. **Always use these wrappers — never call `pool.subscription()` or `pool.req()` directly.**
+
+- `resilientSubscription` — long-lived subscription that reconnects automatically
+- `resilientRequest` — one-shot fetch that completes after EOSE (equivalent to `resilientSubscription` with `autoClose: true`)
 
 ```tsx
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
-import { pool } from "@/services/pool";
+import { pool } from "@/services/nostr";
+import { resilientRequest } from "@/lib/resilientSubscription";
 import {
   onlyEvents,
   mapEventsToStore,
   mapEventsToTimeline,
 } from "applesauce-relay";
+import type { NostrEvent } from "nostr-tools";
+import type { Observable } from "rxjs";
 
-function CustomFeed() {
+// One-shot fetch (completes after EOSE)
+function CustomFeed({ pubkey }: { pubkey: string }) {
   const store = useEventStore();
 
   const events = use$(
     () =>
-      pool
-        .subscription(
-          ["wss://relay.damus.io"],
-          [{ kinds: [1], authors: [pubkey] }],
-        )
-        .pipe(
-          onlyEvents(), // Filter out EOSE messages
-          mapEventsToStore(store), // Add to store
-          mapEventsToTimeline(), // Collect into array
-        ),
+      resilientRequest(
+        pool,
+        ["wss://relay.damus.io"],
+        [{ kinds: [1], authors: [pubkey] }],
+      ).pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+        mapEventsToTimeline(),
+      ) as unknown as Observable<NostrEvent[]>,
+    [pubkey, store],
+  );
+
+  return events?.map((e) => <div key={e.id}>{e.content}</div>);
+}
+
+// Long-lived subscription (stays open, reconnects automatically)
+function LiveFeed({ pubkey }: { pubkey: string }) {
+  const store = useEventStore();
+
+  const events = use$(
+    () =>
+      resilientSubscription(
+        pool,
+        ["wss://relay.damus.io"],
+        [{ kinds: [1], authors: [pubkey] }],
+      ).pipe(
+        onlyEvents(),
+        mapEventsToStore(store),
+        mapEventsToTimeline(),
+      ) as unknown as Observable<NostrEvent[]>,
     [pubkey, store],
   );
 
   return events?.map((e) => <div key={e.id}>{e.content}</div>);
 }
 ```
+
+**Key options for `resilientSubscription` / `resilientRequest`:**
+
+| Option       | Default | Description                                          |
+| ------------ | ------- | ---------------------------------------------------- |
+| `autoClose`  | `false` | Complete after EOSE (use `resilientRequest` instead) |
+| `paginate`   | `false` | Auto backward-paginate after EOSE                    |
+| `limit`      | `500`   | Page size for pagination                             |
+| `settle`     | `true`  | Emit `"EOSE"` settle signal                          |
+| `retryCount` | `3`     | Reconnect attempts before giving up                  |
+| `reconnect`  | `true`  | Smart reconnect with gap-fill                        |
+| `gapFill`    | `true`  | Gap-fill on foreground resume                        |
 
 #### Pattern 3: EventStore Queries
 
@@ -728,13 +780,11 @@ import type { Observable } from "rxjs";
 
 const events = use$(
   () =>
-    pool
-      .subscription(relays, filters)
-      .pipe(
-        onlyEvents(),
-        mapEventsToStore(store),
-        mapEventsToTimeline(),
-      ) as unknown as Observable<NostrEvent[]>,
+    resilientSubscription(pool, relays, filters).pipe(
+      onlyEvents(),
+      mapEventsToStore(store),
+      mapEventsToTimeline(),
+    ) as unknown as Observable<NostrEvent[]>,
   [relayKey, filterKey, store],
 );
 // events is now NostrEvent[] | undefined — no further cast needed
@@ -749,7 +799,7 @@ When the observable factory depends on optional parameters, return `undefined` e
 const events = use$(
   () => {
     if (!repoCoord) return undefined; // use$ handles undefined gracefully
-    return pool.subscription(relays, [{ kinds: [1621], "#a": [repoCoord] } as Filter]).pipe(
+    return resilientSubscription(pool, relays, [{ kinds: [1621], "#a": [repoCoord] } as Filter]).pipe(
       onlyEvents(),
       mapEventsToStore(store),
       mapEventsToTimeline(),
@@ -760,7 +810,7 @@ const events = use$(
 
 // ❌ Wrong: conditional hook call causes React rules-of-hooks violation
 if (!repoCoord) return null;
-const events = use$(() => pool.subscription(...), [store]);
+const events = use$(() => resilientSubscription(pool, relays, filters).pipe(...), [store]);
 ```
 
 **Key rule**: always include every variable the factory closes over in the dependency array, even optional ones. Missing deps cause stale subscriptions; extra deps only cause harmless re-subscriptions.
@@ -1359,6 +1409,7 @@ Use `castTimelineStream` in the observable pipeline so events are automatically 
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import { pool } from "@/services/nostr";
+import { resilientRequest } from "@/lib/resilientSubscription";
 import { castTimelineStream } from "applesauce-common/observable";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
@@ -1375,9 +1426,10 @@ export function useIssues(repoCoord: string | undefined): Issue[] | undefined {
   use$(() => {
     if (!repoCoord) return undefined;
     const filter = { kinds: [ISSUE_KIND], "#a": [repoCoord] } as Filter;
-    return pool
-      .req(RELAYS, [filter])
-      .pipe(onlyEvents(), mapEventsToStore(store));
+    return resilientRequest(pool, RELAYS, [filter]).pipe(
+      onlyEvents(),
+      mapEventsToStore(store),
+    );
   }, [repoCoord, store]);
 
   // Read from store and cast to Issue instances
@@ -1565,7 +1617,7 @@ accountManager.removeAccount(pubkey);
 import { ADMIN_PUBKEYS } from "@/lib/admins";
 
 // ✅ Secure: only accept events from trusted authors
-const events = await pool.req(relays, [
+resilientRequest(pool, relays, [
   {
     kinds: [30078],
     authors: ADMIN_PUBKEYS,
@@ -1575,7 +1627,7 @@ const events = await pool.req(relays, [
 ]);
 
 // ❌ INSECURE: accepts events from anyone
-const events = await pool.req(relays, [
+resilientRequest(pool, relays, [
   {
     kinds: [30078],
     "#d": ["app-config"],
