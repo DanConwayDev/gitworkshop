@@ -3,11 +3,14 @@ import { use$ } from "@/hooks/use$";
 import { useMyUser } from "@/hooks/useUser";
 import { useEventStore } from "@/hooks/useEventStore";
 import { pool } from "@/services/nostr";
+import { resilientRequest } from "@/lib/resilientSubscription";
 import { mapEventsToStore } from "applesauce-core";
+import { onlyEvents } from "applesauce-relay";
 import { getProfileContent, isValidProfile } from "applesauce-core/helpers";
 import type { Filter } from "applesauce-core/helpers";
 import type { ProfileContent } from "applesauce-core/helpers";
-import { map } from "rxjs/operators";
+import { map, takeWhile, toArray } from "rxjs/operators";
+import { firstValueFrom } from "rxjs";
 
 // NIP-50 search relay — relay.ditto.pub supports the `search` filter field
 const NIP50_RELAY = "wss://relay.ditto.pub";
@@ -115,19 +118,19 @@ export function useContactSearch(
     const timer = setTimeout(async () => {
       try {
         const filter = { kinds: [0], search: trimmed, limit: 10 } as Filter;
-        // pool.request completes after EOSE — ideal for one-shot NIP-50 queries
-        const events = await new Promise<string[]>((resolve) => {
-          const pubkeys: string[] = [];
-          pool
-            .request([NIP50_RELAY], [filter])
-            .pipe(mapEventsToStore(store))
-            .subscribe({
-              next: (ev) => pubkeys.push(ev.pubkey),
-              complete: () => resolve(pubkeys),
-              error: () => resolve(pubkeys),
-            });
-        });
-        setNip50Pubkeys(events);
+        // Collect events until the EOSE settle signal fires — that's when we
+        // likely have all results. takeWhile(inclusive) completes on "EOSE"
+        // itself so toArray() resolves at that point rather than waiting for
+        // full stream completion (which waits for all relay retries to finish).
+        const events = await firstValueFrom(
+          resilientRequest(pool, [NIP50_RELAY], [filter]).pipe(
+            takeWhile((msg) => msg !== "EOSE", /* inclusive */ true),
+            onlyEvents(),
+            mapEventsToStore(store),
+            toArray(),
+          ),
+        ).catch(() => []);
+        setNip50Pubkeys(events.map((ev) => ev.pubkey));
       } catch {
         setNip50Pubkeys([]);
       }
