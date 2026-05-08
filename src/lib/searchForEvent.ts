@@ -30,7 +30,8 @@
  */
 
 import type { RelayPool } from "applesauce-relay";
-import { completeOnEose, onlyEvents } from "applesauce-relay";
+import { onlyEvents } from "applesauce-relay";
+import { resilientRequest } from "@/lib/resilientSubscription";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import { normalizeUrl } from "@/lib/url";
@@ -537,10 +538,8 @@ export function searchForEvent(
 
       const relays = [...new Set(allRelaysSearched.map(normalizeUrl))];
 
-      const sub = pool
-        .subscription(relays, allFilters)
+      const sub = resilientRequest(pool, relays, allFilters)
         .pipe(
-          completeOnEose(),
           onlyEvents(),
           takeUntil(found$),
           catchError(() => EMPTY),

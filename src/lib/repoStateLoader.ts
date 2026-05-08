@@ -13,18 +13,24 @@
  *   signed state (out of scope for this loader — it just delivers the raw
  *   events).
  *
- * Reactive relay list:
- *   The loader subscribes to relays$ from the RelayGroup and reacts to new
- *   relays being added. Each newly discovered relay gets its own subscription.
- *   Existing relay subscriptions are never touched — only new relays trigger
- *   new work.
+ * Deduplication and relay provenance:
+ *   resilientSubscription does NOT deduplicate events — it emits every event
+ *   from every relay. The Relay class stamps each event with addSeenRelay
+ *   before it reaches this loader, so older versions from behind-servers
+ *   still carry their source relay URL when they hit mapEventsToStore().
+ *   The EventStore deduplicates by created_at (keeps newest) but the relay
+ *   provenance is already recorded, so getSeenRelays(event) works correctly
+ *   on any event retrieved from the store later.
  *
- * Settle signal:
- *   A single settled$ Subject is shared across the entire observable lifetime.
- *   Each relay pushes to it on EOSE (or error/close). makeSettleSignal()
- *   debounces those pushes so that a burst of relays finishing close together
- *   (including newly added ones) produces a single "EOSE" emission. This
- *   matches the settle semantics of createPaginatedTagValueLoader exactly.
+ * Reactive relay list:
+ *   resilientSubscription's Observable<string[]> overload diffs the relay set
+ *   on each emission: new relays get their own per-relay stream, removed relays
+ *   are unsubscribed. Existing relay streams are never disturbed.
+ *
+ * Reconnect:
+ *   resilientSubscription keeps each per-relay stream alive with smart
+ *   reconnect (since: lastReceivedAt - gapFillBuffer) and foreground resume
+ *   gap-fill, so live state updates are received reliably.
  *
  * EventStore + relay provenance:
  *   The Relay class applies `addSeenRelay` internally on every req, so each
@@ -36,14 +42,16 @@
  */
 
 import type { RelayPool } from "applesauce-relay";
+import { onlyEvents } from "applesauce-relay";
 import type { IEventStore } from "applesauce-core/event-store";
 import { mapEventsToStore } from "applesauce-core";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
-import { Observable, Subject, EMPTY } from "rxjs";
-import { catchError, distinctUntilChanged } from "rxjs/operators";
-import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
-import type { SettleSignal } from "./settleSignal";
+import type { Observable } from "rxjs";
+import { EMPTY } from "rxjs";
+import { catchError } from "rxjs/operators";
+import { resilientSubscription } from "./resilientSubscription";
+import { DEFAULT_SETTLE_TIME } from "./settleSignal";
 
 export type RepoStateResponse = NostrEvent | "EOSE";
 
@@ -56,70 +64,22 @@ export interface RepoStateLoaderOptions {
 }
 
 /**
- * Open a single-relay subscription for kind:30618 state events.
- * Calls signal.settle() on EOSE, signal.error() on error, so the settle
- * signal is never blocked by a misbehaving relay.
- *
- * The Relay class applies `addSeenRelay` internally, so emitted events are
- * already stamped with the relay URL before reaching this function.
- *
- * Returns an Observable<NostrEvent> that completes when the relay closes
- * the subscription (normal for addressable-event fetches).
- */
-function queryRelay(
-  pool: RelayPool,
-  relayUrl: string,
-  stateFilter: Filter,
-  signal: SettleSignal,
-): Observable<NostrEvent> {
-  return new Observable<NostrEvent>((subscriber) => {
-    // Use the single-relay subscription API (which still emits
-    // NostrEvent | "EOSE") rather than pool.subscription() — the group-level
-    // API now strips EOSE from the stream, and we need it here to drive the
-    // settle signal.
-    const sub = pool
-      .relay(relayUrl)
-      .subscription([stateFilter], { reconnect: false })
-      .subscribe({
-        next: (msg) => {
-          if (msg === "EOSE") {
-            signal.settle(relayUrl);
-          } else {
-            subscriber.next(msg);
-          }
-        },
-        error: () => {
-          signal.error(relayUrl);
-          subscriber.complete();
-        },
-        complete: () => {
-          // Some relays close cleanly after EOSE without a separate EOSE
-          // message — treat completion as settled too.
-          signal.settle(relayUrl);
-          subscriber.complete();
-        },
-      });
-
-    return () => sub.unsubscribe();
-  });
-}
-
-/**
  * Fetch all versions of the kind:30618 repository state event from every
  * relay in the provided relay list, writing events into the EventStore as
  * they arrive.
  *
- * The observable reacts to new relays being added: each newly discovered
- * relay gets its own subscription without disturbing existing ones.
+ * Uses resilientSubscription with the reactive relay-list overload so that:
+ *   - Each relay gets its own per-relay stream with smart reconnect and
+ *     foreground resume gap-fill, keeping the subscription alive for live
+ *     state updates.
+ *   - New relays added to relays$ are picked up automatically; removed relays
+ *     are unsubscribed without disturbing existing streams.
+ *   - Events are NOT deduplicated by resilientSubscription — every relay's
+ *     version flows through to mapEventsToStore(), which stamps relay
+ *     provenance before the EventStore deduplicates by created_at.
  *
- * The Relay class applies `addSeenRelay` internally, so events arrive
- * already stamped with their source relay URL. getSeenRelays(event) is
- * therefore available on any event retrieved from the store later.
- *
- * Emits NostrEvent | "EOSE". "EOSE" fires once all relays that have
- * responded so far have settled (debounced by settleTime ms). If new relays
- * are added later they push to the same settled$ Subject, resetting the
- * debounce window so "EOSE" reflects the full current relay set.
+ * Emits NostrEvent | "EOSE". "EOSE" fires once all current relays have
+ * settled (debounced by settleTime ms).
  *
  * Does not complete — callers should unsubscribe when done (use$ handles this).
  *
@@ -133,84 +93,30 @@ function queryRelay(
  */
 export function loadRepoStateFromRelays(
   pool: RelayPool,
-  relays$: import("rxjs").Observable<string[]>,
+  relays$: Observable<string[]>,
   dTag: string,
   maintainerSet: string[],
   eventStore: IEventStore,
   opts: RepoStateLoaderOptions = {},
 ): Observable<RepoStateResponse> {
-  const settleMs = opts.settleTime ?? DEFAULT_SETTLE_TIME;
+  const stateFilter: Filter = {
+    kinds: [30618],
+    authors: maintainerSet,
+    "#d": [dTag],
+  } as Filter;
 
-  return new Observable<RepoStateResponse>((subscriber) => {
-    const stateFilter: Filter = {
-      kinds: [30618],
-      authors: maintainerSet,
-      "#d": [dTag],
-    } as Filter;
-
-    // Single settle signal shared across all relay subscriptions for this
-    // observable lifetime. Relay count is dynamic (relays$ can grow), so we
-    // use debounce + hard cap only (no relayIds).
-    const signal = makeSettleSignal({ settleTime: settleMs });
-
-    // Track relay URLs that already have a subscription so new relays don't
-    // re-trigger existing ones.
-    const knownRelayUrls = new Set<string>();
-
-    // Merge stream for all per-relay event observables.
-    const relayEvents$ = new Subject<NostrEvent>();
-
-    const storeSub = relayEvents$
-      .pipe(
-        mapEventsToStore(eventStore),
-        catchError(() => EMPTY),
-      )
-      .subscribe({
-        next: (event) => subscriber.next(event as NostrEvent),
-      });
-
-    const eoseSub = signal.eose$.subscribe({
-      next: () => subscriber.next("EOSE"),
-    });
-
-    const relaySub = relays$
-      .pipe(
-        distinctUntilChanged(
-          (a, b) =>
-            a.length === b.length && a.every((url) => knownRelayUrls.has(url)),
-        ),
-        catchError(() => EMPTY),
-      )
-      .subscribe({
-        next: (currentUrls) => {
-          const newUrls = currentUrls.filter((url) => !knownRelayUrls.has(url));
-
-          if (newUrls.length === 0) {
-            // relays$ emitted but no new relays — if we have never seen any
-            // relays at all (group started empty), settle immediately so the
-            // consumer doesn't wait forever.
-            if (knownRelayUrls.size === 0) signal.settle("(empty)");
-            return;
-          }
-
-          for (const url of newUrls) {
-            knownRelayUrls.add(url);
-            // Each new relay gets its own subscription. Events flow into
-            // relayEvents$ which is already piped through the EventStore.
-            // queryRelay handles errors internally (signal.error + complete),
-            // so no error handler is needed on this subscribe.
-            queryRelay(pool, url, stateFilter, signal).subscribe({
-              next: (event) => relayEvents$.next(event),
-            });
-          }
-        },
-      });
-
-    return () => {
-      relaySub.unsubscribe();
-      storeSub.unsubscribe();
-      eoseSub.unsubscribe();
-      relayEvents$.complete();
-    };
-  });
+  return resilientSubscription(pool, relays$, [stateFilter], {
+    settleTime: opts.settleTime ?? DEFAULT_SETTLE_TIME,
+    // Keep subscriptions alive for live state updates — reconnect and
+    // gap-fill are the whole point of using resilientSubscription here.
+    reconnect: true,
+    gapFill: true,
+    // No pagination — kind:30618 is addressable/replaceable; there is at
+    // most one current version per pubkey+d-tag combination per relay.
+    paginate: false,
+  }).pipe(
+    onlyEvents(),
+    mapEventsToStore(eventStore),
+    catchError(() => EMPTY),
+  ) as Observable<RepoStateResponse>;
 }
