@@ -307,15 +307,19 @@ function processRelayStream(
 
     // Delegate reconnect, backoff, rate-limit handling, and foreground gap-fill
     // to resilientSubscription. settle: false — we manage the outer signal
-    // ourselves (signal.settle/error are called from the EOSE handler and
-    // the error path below). The stream emits NostrEvent | "EOSE"; we
-    // intercept "EOSE" to decide whether to paginate, then forward events.
+    // ourselves via onRelaySettle/onRelayError callbacks, which resilientSubscription
+    // fires at every point it would normally call signal.settle/error. This
+    // restores the rate-limit cooldown settle that was lost when buildResilientLiveSub
+    // was replaced: if the relay is rate-limited on first connect, onRelaySettle
+    // fires immediately so the EOSE signal is not blocked.
     const liveSub = resilientSubscription(pool, [relay], [liveFilter], {
       paginate: false,
       gapFill: true,
       settle: false,
       retryCount,
       gapFillBuffer,
+      onRelaySettle: () => signal.settle(relay),
+      onRelayError: () => signal.error(relay),
     }).subscribe({
       next: (msg) => {
         if (msg === "EOSE") {
@@ -346,13 +350,6 @@ function processRelayStream(
           }
           subscriber.next(event);
         }
-      },
-      error: (err) => {
-        // resilientSubscription surfaces errors only after all retries are
-        // exhausted or a fast-fail condition is hit. Settle the signal so
-        // consumers don't wait forever, then complete silently.
-        signal.error(relay);
-        console.debug(`[tagValuePaginatedLoader] relay ${relay} failed:`, err);
       },
       complete: () => subscriber.complete(),
     });

@@ -113,6 +113,18 @@ export interface ResilientSubscriptionOptions {
   retryDelay?:
     | number
     | ((error: unknown, retryCount: number) => ReturnType<typeof timer>);
+  /**
+   * Called when a relay settles (EOSE received, or rate-limit cooldown active
+   * on first connect, or no pagination needed). Useful when the caller manages
+   * its own settle signal and passes settle: false.
+   */
+  onRelaySettle?: (relay: string) => void;
+  /**
+   * Called when a relay fails permanently (all retries exhausted, auth-required,
+   * or permanent CLOSED). Useful when the caller manages its own settle signal
+   * and passes settle: false.
+   */
+  onRelayError?: (relay: string) => void;
 }
 
 /**
@@ -250,7 +262,11 @@ function processRelay(
       | "retryDelay"
       | "autoClose"
     >
-  > & { manualPaginate$: Observable<void> | undefined },
+  > & {
+    manualPaginate$: Observable<void> | undefined;
+    onRelaySettle: ((relay: string) => void) | undefined;
+    onRelayError: ((relay: string) => void) | undefined;
+  },
   signal: SettleSignal,
 ): Observable<NostrEvent> {
   const limit = opts.limit;
@@ -367,6 +383,7 @@ function processRelay(
           catchError(() => EMPTY),
           finalize(() => {
             signal.settle(relay);
+            opts.onRelaySettle?.(relay);
             // autoClose: pagination is the last work for this relay — complete
             // the per-relay stream so the merged stream can finish naturally.
             if (opts.autoClose) subscriber.complete();
@@ -429,6 +446,7 @@ function processRelay(
       const remaining = getRateLimitCooldownRemaining(relay);
       if (remaining > 0) {
         signal.settle(relay);
+        opts.onRelaySettle?.(relay);
         return timer(remaining).pipe(switchMap(() => sub$));
       }
       relayRateLimitCooldown.delete(relay);
@@ -523,6 +541,7 @@ function processRelay(
             );
           }
           signal.error(relay);
+          opts.onRelayError?.(relay);
           return EMPTY;
         }),
       )
@@ -539,11 +558,13 @@ function processRelay(
                 // loadBlocksFromRelay will naturally exhaust when the relay
                 // returns zero events.
                 signal.settle(relay);
+                opts.onRelaySettle?.(relay);
                 startPagination();
               } else {
                 // Auto mode: paginate if relay was truncated
                 if (countBeforeEose < limit) {
                   signal.settle(relay);
+                  opts.onRelaySettle?.(relay);
                   // autoClose: no pagination needed — complete the per-relay stream
                   if (opts.autoClose) subscriber.complete();
                 } else {
@@ -552,6 +573,7 @@ function processRelay(
               }
             } else {
               signal.settle(relay);
+              opts.onRelaySettle?.(relay);
               // autoClose: no pagination — complete the per-relay stream so the
               // merged stream finishes naturally once all relays are done.
               if (opts.autoClose) subscriber.complete();
@@ -574,6 +596,7 @@ function processRelay(
           // resubscribe; with autoClose repeat() is skipped so this fires.
           if (opts.autoClose) {
             signal.settle(relay);
+            opts.onRelaySettle?.(relay);
           }
           subscriber.complete();
         },
@@ -672,6 +695,8 @@ function resilientSubscriptionStatic(
   const retryCount = opts.retryCount ?? 3;
   const retryDelay = opts.retryDelay ?? defaultRetryDelay;
   const manualPaginate$ = opts.manualPaginate$;
+  const onRelaySettle = opts.onRelaySettle;
+  const onRelayError = opts.onRelayError;
 
   if (relays.length === 0) return EMPTY;
 
@@ -685,6 +710,8 @@ function resilientSubscriptionStatic(
     retryCount,
     retryDelay,
     manualPaginate$,
+    onRelaySettle,
+    onRelayError,
   };
 
   if (!settle) {
@@ -748,6 +775,8 @@ function resilientSubscriptionReactive(
   const retryCount = opts.retryCount ?? 3;
   const retryDelay = opts.retryDelay ?? defaultRetryDelay;
   const manualPaginate$ = opts.manualPaginate$;
+  const onRelaySettle = opts.onRelaySettle;
+  const onRelayError = opts.onRelayError;
 
   const resolvedOpts = {
     autoClose,
@@ -759,6 +788,8 @@ function resilientSubscriptionReactive(
     retryCount,
     retryDelay,
     manualPaginate$,
+    onRelaySettle,
+    onRelayError,
   };
 
   return new Observable<ResilientSubscriptionResponse>((subscriber) => {
