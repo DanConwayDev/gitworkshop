@@ -28,7 +28,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Subject } from "rxjs";
+import { BehaviorSubject, Subject } from "rxjs";
 import { isFromRelay } from "applesauce-core/helpers";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
@@ -221,34 +221,31 @@ export function useRepositorySearch(
 
   // ── Search mode ────────────────────────────────────────────────────────────
 
-  // Per-session set of event IDs belonging to the current search. Stored in a
-  // ref so mutations don't cause re-renders — the reactive store.timeline()
-  // subscription handles UI updates. Replaced wholesale on each new search so
-  // stale results from a previous query never bleed through.
-  const searchEventIdsRef = useRef<Set<string>>(new Set());
-  // Bump to force the store.timeline() observable to re-subscribe with a fresh
-  // closure that reads the newly-cleared searchEventIdsRef.
-  const [searchSessionKey, setSearchSessionKey] = useState(0);
   const [matchedUserPubkeys, setMatchedUserPubkeys] = useState<Set<string>>(
     new Set(),
   );
 
-  // Reactive read of search results — filtered to the current session's IDs.
+  // A BehaviorSubject that emits the current session's resolved repos directly.
+  // Using a subject rather than store.timeline() + filter avoids the dedup
+  // problem: when a repeated query causes the relay to re-deliver events that
+  // are already in the EventStore, eventStore.add() is a no-op and never
+  // notifies store.timeline() subscribers — so the results would stay blank.
+  // By pushing resolved repos into this subject ourselves whenever an event
+  // arrives (or is confirmed already in the store), we always get an emission.
+  const searchReposSubjectRef = useRef<
+    BehaviorSubject<ResolvedRepo[] | undefined>
+  >(new BehaviorSubject<ResolvedRepo[] | undefined>(undefined));
+  // Bumped each time a new search session starts (inside the debounce timer)
+  // so that use$ re-subscribes to the freshly-created BehaviorSubject.
+  const [searchSessionKey, setSearchSessionKey] = useState(0);
+
+  // Reactive read of search results — driven by the subject above.
+  // searchSessionKey in deps ensures use$ re-subscribes to the new subject
+  // instance created for each query (including repeated queries).
   const searchRepos = use$(() => {
     if (!isSearchMode) return undefined;
-
-    return store
-      .timeline([{ kinds: [REPO_KIND] } as Filter])
-      .pipe(
-        map((events) =>
-          groupIntoResolvedRepos(
-            events.filter((ev) => searchEventIdsRef.current.has(ev.id)),
-          ),
-        ),
-      ) as unknown as Observable<ResolvedRepo[]>;
-    // searchSessionKey re-subscribes on each new query so the filter closure
-    // picks up the freshly-cleared searchEventIdsRef.
-  }, [isSearchMode, store, relayKey, searchSessionKey]);
+    return searchReposSubjectRef.current;
+  }, [isSearchMode, searchSessionKey]);
 
   useEffect(() => {
     if (!isSearchMode) {
@@ -257,9 +254,6 @@ export function useRepositorySearch(
       return;
     }
 
-    // Reset session state for the new query.
-    searchEventIdsRef.current = new Set();
-    setSearchSessionKey((k) => k + 1);
     setMatchedUserPubkeys(new Set());
     setHasMore(true);
     paginatingRef.current = false;
@@ -272,12 +266,30 @@ export function useRepositorySearch(
     const debounceTimer = setTimeout(() => {
       setIsLoading(true);
 
+      // Fresh session: new ID set + new subject so the previous query's results
+      // are cleared and the observable re-subscribes to the new subject.
+      const sessionIds = new Set<string>();
+      const subject = new BehaviorSubject<ResolvedRepo[] | undefined>(
+        undefined,
+      );
+      searchReposSubjectRef.current = subject;
+      // Bump the session key so use$ re-subscribes to this new subject instance.
+      setSearchSessionKey((k) => k + 1);
+
+      // Helper: rebuild and push the current resolved repo list into the subject.
+      // Called on every incoming event (new or duplicate-in-store) so the UI
+      // always updates even when eventStore.add() is a no-op (dedup case).
+      const pushResults = () => {
+        const events = eventStore.getTimeline([
+          { kinds: [REPO_KIND] } as Filter,
+        ]);
+        subject.next(
+          groupIntoResolvedRepos(events.filter((ev) => sessionIds.has(ev.id))),
+        );
+      };
+
       const paginate$ = new Subject<void>();
       paginateSubRef.current = paginate$;
-
-      // Capture the session's ID set so callbacks always write into the correct
-      // set even if the ref is replaced by a later query before cleanup runs.
-      const sessionIds = searchEventIdsRef.current;
 
       // One-shot guard: clears isLoading after the initial EOSE from either
       // search. Pagination loading is managed separately via the settle timer.
@@ -313,6 +325,8 @@ export function useRepositorySearch(
           const ev = msg as NostrEvent;
           sessionIds.add(ev.id);
           eventStore.add(ev);
+          // Push results regardless of whether eventStore.add was a no-op.
+          pushResults();
 
           if (paginatingRef.current) {
             pageEventCountRef.current++;
@@ -353,6 +367,7 @@ export function useRepositorySearch(
             if (!sessionIds.has(ev.id)) {
               sessionIds.add(ev.id);
               eventStore.add(ev);
+              pushResults();
             }
           },
         });
