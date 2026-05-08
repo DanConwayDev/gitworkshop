@@ -292,18 +292,15 @@ function processRelay(
     let window$: Subject<{ since?: number; until?: number }> | undefined;
 
     const startPagination = () => {
-      // Wrap pool so signal.extend() is called at the start of every internal
-      // page request, not just the first — loadBlocksFromRelay drives
-      // subsequent pages internally without pushing to window$ again.
-      //
-      // Use resilientSingleRelayRequest instead of pool.request so each
-      // pagination page gets exponential backoff, rate-limit handling, and
-      // permanent error fast-fail. The single-relay API is correct here —
-      // loadBlocksFromRelay always calls extendingPool with [relay], and
-      // pool.relay(relay).request() is the right one-shot primitive.
-      const extendingPool = (relays: string[], filters: Filter[]) => {
+      // loadBlocksFromRelay expects an UpstreamPool callback (relays, filters).
+      // We wrap it solely to call signal.extend() on every internal page request
+      // (not just the first), keeping the signal alive while pagination is in
+      // flight. The relay is already fixed in the outer scope — the relays
+      // argument is always [relay] — so we ignore it and use relay directly.
+      // The real pool singleton is used inside resilientSingleRelayRequest.
+      const extendingPool = (_relays: string[], filters: Filter[]) => {
         signal.extend(relay);
-        return resilientSingleRelayRequest(pool, relays[0], filters, {
+        return resilientSingleRelayRequest(pool, relay, filters, {
           retryCount: opts.retryCount,
           retryDelay: opts.retryDelay,
         });
