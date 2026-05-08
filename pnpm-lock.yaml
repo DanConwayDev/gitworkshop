@@ -256,6 +256,9 @@ importers:
       "@eslint/js":
         specifier: ^9.39.4
         version: 9.39.4
+      "@hirez_io/observer-spy":
+        specifier: 2.2.0
+        version: 2.2.0(rxjs@7.8.2)(typescript@5.9.3)
       "@html-eslint/eslint-plugin":
         specifier: ^0.41.0
         version: 0.41.0(eslint@9.39.4(jiti@1.21.7))
@@ -328,6 +331,9 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@26.1.0)
+      vitest-websocket-mock:
+        specifier: 0.5.0
+        version: 0.5.0(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@26.1.0))
 
 packages:
   "@adobe/css-tools@4.4.4":
@@ -850,6 +856,15 @@ packages:
       {
         integrity: sha512-kOfP2D+ykbcX/P3IFnokOhVRNoTozo5/JxhAIVYLpea/UBmCQ/YWPBfWIDuBImXX/15KH+eKh4xpEUyS2sQQGQ==,
       }
+
+  "@hirez_io/observer-spy@2.2.0":
+    resolution:
+      {
+        integrity: sha512-G9nv87vjRILgB/X1AtKBv1DZX7yXSYAOCXon/f+QULKoXVhVehYUF5Lv0SQ97ebf1sA48Z2CyQ9h2v4Pz6DgaQ==,
+      }
+    peerDependencies:
+      rxjs: ">=6.0.0"
+      typescript: ">=2.8.1"
 
   "@hono/node-server@1.19.11":
     resolution:
@@ -4918,6 +4933,13 @@ packages:
         integrity: sha512-SnL6sNutTwRWWR/vcmCYHSADjiEesp5TGQQ0pXyLhW5IoeibRlF/CbSLailbB3CNqJUk9cVJ9dUDnbD7GrcHBQ==,
       }
 
+  mock-socket@9.3.1:
+    resolution:
+      {
+        integrity: sha512-qxBgB7Qa2sEQgHFjj0dSigq7fX4k6Saisd5Nelwp2q8mlbAFh5dHV9JTTlF8viYJLSSWgMCZFUom8PJcMNBoJw==,
+      }
+    engines: { node: ">= 8" }
+
   ms@2.1.3:
     resolution:
       {
@@ -6495,6 +6517,14 @@ packages:
       yaml:
         optional: true
 
+  vitest-websocket-mock@0.5.0:
+    resolution:
+      {
+        integrity: sha512-vzBWeuF/kD/OCOFzB7WAclb7PxfI105qPkZtdOkPMwZdilBskQjJL4l319JtPtmeovDU7ZVhO3hTfGPjM4txQQ==,
+      }
+    peerDependencies:
+      vitest: ">=3"
+
   vitest@3.2.4:
     resolution:
       {
@@ -6964,6 +6994,11 @@ snapshots:
   "@floating-ui/utils@0.2.11": {}
 
   "@fontsource-variable/inter@5.2.8": {}
+
+  "@hirez_io/observer-spy@2.2.0(rxjs@7.8.2)(typescript@5.9.3)":
+    dependencies:
+      rxjs: 7.8.2
+      typescript: 5.9.3
 
   "@hono/node-server@1.19.11(hono@4.12.7)":
     dependencies:
@@ -9852,6 +9887,8 @@ snapshots:
       pkg-types: 1.3.1
       ufo: 1.6.3
 
+  mock-socket@9.3.1: {}
+
   ms@2.1.3: {}
 
   mz@2.7.0:
@@ -10916,6 +10953,12 @@ snapshots:
       "@types/node": 22.19.15
       fsevents: 2.3.3
       jiti: 1.21.7
+
+  vitest-websocket-mock@0.5.0(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@26.1.0)):
+    dependencies:
+      "@vitest/utils": 3.2.4
+      mock-socket: 9.3.1
+      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@26.1.0)
 
   vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@26.1.0):
     dependencies:
