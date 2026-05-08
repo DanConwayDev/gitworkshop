@@ -7,11 +7,11 @@ import {
   type RelayGroupSpec,
 } from "./useEventSearch";
 import type { SearchTarget } from "@/lib/searchForEvent";
-import type { RelayGroup, Relay } from "applesauce-relay";
+import type { RelayGroup } from "applesauce-relay";
 import type { NostrEvent } from "nostr-tools";
 import { ignoreUnhealthyRelaysOnPointers } from "applesauce-relay/operators";
 import { includeMailboxes } from "applesauce-core";
-import { of, merge, Observable } from "rxjs";
+import { of, merge } from "rxjs";
 import { map } from "rxjs/operators";
 import {
   liveness,
@@ -25,6 +25,7 @@ import {
   relayCurationMode,
 } from "@/services/settings";
 import { normalizeUrl } from "@/lib/url";
+import { relayGroupUrls$ } from "@/models/RepositoryRelayGroup";
 
 /** Max healthy inbox relays to take for the item author. */
 const MAX_INBOX_RELAYS = 3;
@@ -33,31 +34,10 @@ const MAX_INBOX_RELAYS = 3;
  * Subscribe reactively to a RelayGroup's relay URL list.
  * Re-renders (and re-runs dependent use$() calls) whenever the group gains
  * or loses relays. Returns a stable empty array when group is undefined.
- *
- * relays$ is protected in TypeScript but public at runtime — we cast to
- * access it so we can react to relay additions without polling.
  */
 function useRelayGroupUrls(group: RelayGroup | undefined): string[] {
-  const urls = use$(() => {
-    if (!group) return of([] as string[]);
-    return (group as unknown as { relays$: Observable<Relay[]> }).relays$.pipe(
-      map((relays) => relays.map((r) => r.url)),
-    );
-  }, [group]);
+  const urls = use$(() => relayGroupUrls$(group), [group]);
   return urls ?? [];
-}
-
-/**
- * Return the relays$ observable for a RelayGroup, or an observable of []
- * when the group is undefined. Used to pass a reactive relay list directly
- * to nip34ThreadItemLoader so it can handle new relays additively without
- * needing to be torn down and recreated.
- */
-function relayGroupUrls$(group: RelayGroup | undefined): Observable<string[]> {
-  if (!group) return of([] as string[]);
-  return (group as unknown as { relays$: Observable<Relay[]> }).relays$.pipe(
-    map((relays) => relays.map((r) => r.url)),
-  );
 }
 
 /**

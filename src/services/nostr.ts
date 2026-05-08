@@ -9,7 +9,7 @@ import {
   DnsIdentityLoader,
 } from "applesauce-loaders/loaders";
 import { RelayLiveness, RelayPool, onlyEvents } from "applesauce-relay";
-import type { RelayGroup, Relay } from "applesauce-relay";
+import type { RelayGroup } from "applesauce-relay";
 import { NostrConnectSigner } from "applesauce-signers";
 import type { NostrEvent } from "nostr-tools";
 import { verifyEvent } from "nostr-tools";
@@ -43,10 +43,10 @@ import {
   createPaginatedTagValueLoader,
   type PaginatedTagValueResponse,
 } from "@/lib/tagValuePaginatedLoader";
-import { withGapFill } from "@/lib/withGapFill";
-import { BACKOFF_RECONNECT } from "@/lib/relay";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
 import { normalizeUrl } from "@/lib/url";
+import { relayGroupUrls$ } from "@/models/RepositoryRelayGroup";
 
 /**
  * Global EventStore instance for all Nostr events.
@@ -741,7 +741,6 @@ export function nip34SupplementalRelayLoader(
   return new Observable<NostrEvent>((subscriber) => {
     const seenIds = new Set<string>();
     const knownRelayUrls = new Set<string>();
-    // Aggregates all per-item inbox subscriptions for cleanup on teardown.
     const inboxSubs = new Subscription();
 
     function fireLoaders(id: string, relays: string[]): void {
@@ -752,10 +751,6 @@ export function nip34SupplementalRelayLoader(
       });
     }
 
-    // When in outbox mode, reactively fetch the root event author's NIP-65
-    // inbox relays and query essentials from any not already covered by the
-    // relay group. Seeding perItemQueried with knownRelayUrls prevents
-    // double-querying when an inbox relay overlaps with a group relay.
     function fireAuthorInboxLoaders(ev: NostrEvent): void {
       const perItemQueried = new Set(knownRelayUrls);
       addressLoader({ kind: 10002, pubkey: ev.pubkey }).subscribe();
@@ -781,14 +776,10 @@ export function nip34SupplementalRelayLoader(
       inboxSubs.add(s);
     }
 
-    const relays$ = (relayGroup as unknown as { relays$: Observable<Relay[]> })
-      .relays$;
-
     // When new relays join the group, re-fire existing items' loaders against
-    // those new relays only (createPaginatedTagValueLoader batches them).
-    const relaySub = relays$
+    // those new relays only.
+    const relaySub = relayGroupUrls$(relayGroup)
       .pipe(
-        map((relays) => relays.map((r) => normalizeUrl(r.url))),
         distinctUntilChanged(
           (a, b) =>
             a.length === b.length && a.every((url) => knownRelayUrls.has(url)),
@@ -804,14 +795,15 @@ export function nip34SupplementalRelayLoader(
       });
 
     const filters = [{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter];
-    const itemSub = withGapFill(
-      relayGroup.subscription(filters, {
-        reconnect: BACKOFF_RECONNECT,
-        resubscribe: Infinity,
-      }),
+    const itemSub = resilientSubscription(
       pool,
-      () => [...knownRelayUrls],
+      relayGroupUrls$(relayGroup),
       filters,
+      {
+        reconnect: true,
+        gapFill: true,
+        settle: false,
+      },
     )
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
       .subscribe({
@@ -863,14 +855,9 @@ export function nip34RepoLoader(
 
   return new Observable<NostrEvent>((subscriber) => {
     const seenIds = new Set<string>();
-    // Track relay URLs we have already fired loaders against so we can detect
-    // genuinely new relays when the group grows.
     const knownRelayUrls = new Set<string>();
-    // Aggregates all per-item inbox subscriptions for cleanup on teardown.
     const inboxSubs = new Subscription();
 
-    // Fire nip34ListLoader for a single item against a specific set of relays.
-    // Inline so it can close over subscriber and seenIds.
     function fireLoaders(id: string, relays: string[]): void {
       nip34ListLoader(id, relays).subscribe({
         next: (msg) => {
@@ -879,10 +866,6 @@ export function nip34RepoLoader(
       });
     }
 
-    // When in outbox mode, reactively fetch the root event author's NIP-65
-    // inbox relays and query essentials from any not already covered by the
-    // relay group. Seeding perItemQueried with knownRelayUrls prevents
-    // double-querying when an inbox relay overlaps with a group relay.
     function fireAuthorInboxLoaders(ev: NostrEvent): void {
       const perItemQueried = new Set(knownRelayUrls);
       addressLoader({ kind: 10002, pubkey: ev.pubkey }).subscribe();
@@ -908,53 +891,33 @@ export function nip34RepoLoader(
       inboxSubs.add(s);
     }
 
-    // Subscribe to RelayGroup relay list changes. relays$ is protected in TS
-    // but public at runtime — cast to access it so we can react to new relays
-    // being added without polling.
-    const relays$ = (relayGroup as unknown as { relays$: Observable<Relay[]> })
-      .relays$;
-
-    const relaySub = relays$
+    // When new relays join the group, re-fire existing items' loaders against
+    // those new relays only. createPaginatedTagValueLoader batches all these
+    // calls within its buffer window into a single REQ per relay.
+    const relaySub = relayGroupUrls$(relayGroup)
       .pipe(
-        // Map to normalized URL strings for stable comparison
-        map((relays) => relays.map((r) => normalizeUrl(r.url))),
-        // Only proceed when the URL set actually changes
         distinctUntilChanged(
           (a, b) =>
             a.length === b.length && a.every((url) => knownRelayUrls.has(url)),
         ),
       )
       .subscribe((currentUrls) => {
-        // Diff: find relay URLs not yet known
         const newUrls = currentUrls.filter((url) => !knownRelayUrls.has(url));
         for (const url of newUrls) knownRelayUrls.add(url);
-
         if (newUrls.length === 0) return;
-
-        // For every item already discovered, fire loaders against the new
-        // relays only. createPaginatedTagValueLoader batches all these calls
-        // within its buffer window into a single REQ per relay.
         for (const id of seenIds) {
           fireLoaders(id, newUrls);
         }
       });
 
-    // Subscribe to issues, patches, and PRs — pipe each new item into the
-    // per-item essentials + comments loaders against all current relays.
-    // withGapFill wraps the RelayGroup subscription so that on foreground
-    // resume a one-shot gap-fill REQ is fired against the current relay
-    // snapshot, recovering any items published while the app was backgrounded.
-    const itemSub = withGapFill(
-      relayGroup.subscription(
-        [{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter],
-        {
-          reconnect: BACKOFF_RECONNECT,
-          resubscribe: Infinity,
-        },
-      ),
+    const itemFilters = [
+      { kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter,
+    ];
+    const itemSub = resilientSubscription(
       pool,
-      () => [...knownRelayUrls],
-      [{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter],
+      relayGroupUrls$(relayGroup),
+      itemFilters,
+      { reconnect: true, gapFill: true, settle: false },
     )
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
       .subscribe({
@@ -962,9 +925,9 @@ export function nip34RepoLoader(
           const ev = event as NostrEvent;
           if (!seenIds.has(ev.id)) {
             seenIds.add(ev.id);
-            // Use all currently known relays — knownRelayUrls is already
-            // populated by the relaySub above (relays$ is a BehaviorSubject
-            // so relaySub fires synchronously before itemSub can emit).
+            // knownRelayUrls is already populated by relaySub above
+            // (relayGroupUrls$ is a BehaviorSubject so relaySub fires
+            // synchronously before itemSub can emit).
             fireLoaders(ev.id, [...knownRelayUrls]);
             if (resolveAuthorInbox) fireAuthorInboxLoaders(ev);
           }
@@ -972,26 +935,17 @@ export function nip34RepoLoader(
         complete: () => subscriber.complete(),
       });
 
-    // Subscribe to self-contained repo-level events: kind 7 reactions (stars)
-    // and kind 10018 follow lists. Both are keyed by the announcement `a` tag
-    // and need no per-item loading, so they share a single subscription.
-    // withGapFill wraps the RelayGroup subscription so that on foreground
-    // resume a one-shot gap-fill REQ is fired against the current relay
-    // snapshot, recovering any events published while the app was backgrounded.
     const repoMetaFilters = [
       {
         kinds: [REACTION_KIND, GIT_REPOS_FOLLOW_KIND],
         "#a": coords,
       } as Filter,
     ];
-    const repoMetaSub = withGapFill(
-      relayGroup.subscription(repoMetaFilters, {
-        reconnect: BACKOFF_RECONNECT,
-        resubscribe: Infinity,
-      }),
+    const repoMetaSub = resilientSubscription(
       pool,
-      () => [...knownRelayUrls],
+      relayGroupUrls$(relayGroup),
       repoMetaFilters,
+      { reconnect: true, gapFill: true, settle: false },
     )
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
       .subscribe();

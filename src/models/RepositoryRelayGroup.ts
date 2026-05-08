@@ -1,9 +1,29 @@
 import { Observable, Subscription } from "rxjs";
+import { map } from "rxjs/operators";
 import type { Model } from "applesauce-core/event-store";
 import { RelayGroup } from "applesauce-relay";
+import type { Relay } from "applesauce-relay";
 import { REPO_KIND, getRepoRelays, getRepoMaintainers } from "@/lib/nip34";
 import { pool } from "@/services/nostr";
 import { normalizeUrl } from "@/lib/url";
+
+/**
+ * Return a reactive Observable<string[]> of normalized relay URLs for a
+ * RelayGroup. Emits whenever the group gains or loses relays.
+ *
+ * relays$ is protected in TypeScript but public at runtime — we cast to
+ * access it so we can react to relay additions without polling.
+ *
+ * Returns an observable of [] when group is undefined.
+ */
+export function relayGroupUrls$(
+  group: RelayGroup | undefined,
+): Observable<string[]> {
+  if (!group) return new Observable((s) => s.next([]));
+  return (group as unknown as { relays$: Observable<Relay[]> }).relays$.pipe(
+    map((relays) => relays.map((r) => normalizeUrl(r.url))),
+  );
+}
 
 /**
  * RepositoryRelayGroup — a long-lived RelayGroup for a repository, cached by

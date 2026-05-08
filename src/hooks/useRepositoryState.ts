@@ -15,6 +15,7 @@ import type { Observable } from "rxjs";
 import { map } from "rxjs/operators";
 import type { RelayGroup } from "applesauce-relay";
 import type { NostrEvent } from "nostr-tools";
+import { relayGroupUrls$ } from "@/models/RepositoryRelayGroup";
 
 /**
  * Pick the winning state event from a list of candidates.
@@ -100,7 +101,7 @@ export function useRepositoryState(
 
     const sub = loadRepoStateFromRelays(
       pool,
-      repoRelayGroup,
+      relayGroupUrls$(repoRelayGroup),
       dTag,
       maintainerSet,
       store,

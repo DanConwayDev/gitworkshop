@@ -35,13 +35,13 @@
  *   without any side-channel state.
  */
 
-import type { RelayGroup, Relay, RelayPool } from "applesauce-relay";
+import type { RelayPool } from "applesauce-relay";
 import type { IEventStore } from "applesauce-core/event-store";
 import { mapEventsToStore } from "applesauce-core";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import { Observable, Subject, EMPTY } from "rxjs";
-import { catchError, distinctUntilChanged, map } from "rxjs/operators";
+import { catchError, distinctUntilChanged } from "rxjs/operators";
 import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
 import type { SettleSignal } from "./settleSignal";
 
@@ -106,10 +106,11 @@ function queryRelay(
 
 /**
  * Fetch all versions of the kind:30618 repository state event from every
- * relay in the group, writing events into the EventStore as they arrive.
+ * relay in the provided relay list, writing events into the EventStore as
+ * they arrive.
  *
- * The observable reacts to new relays being added to the group: each newly
- * discovered relay gets its own subscription without disturbing existing ones.
+ * The observable reacts to new relays being added: each newly discovered
+ * relay gets its own subscription without disturbing existing ones.
  *
  * The Relay class applies `addSeenRelay` internally, so events arrive
  * already stamped with their source relay URL. getSeenRelays(event) is
@@ -122,8 +123,9 @@ function queryRelay(
  *
  * Does not complete — callers should unsubscribe when done (use$ handles this).
  *
- * @param pool           - Global RelayPool
- * @param repoRelayGroup - Relay group from useResolvedRepository
+ * @param pool      - Global RelayPool
+ * @param relays$   - Observable<string[]> of relay URLs; emits additively as
+ *                    new relays are discovered (e.g. from relayGroupUrls$())
  * @param dTag           - Repository d-tag identifier
  * @param maintainerSet  - All maintainer pubkeys
  * @param eventStore     - EventStore to write events into
@@ -131,7 +133,7 @@ function queryRelay(
  */
 export function loadRepoStateFromRelays(
   pool: RelayPool,
-  repoRelayGroup: RelayGroup,
+  relays$: import("rxjs").Observable<string[]>,
   dTag: string,
   maintainerSet: string[],
   eventStore: IEventStore,
@@ -155,15 +157,9 @@ export function loadRepoStateFromRelays(
     // re-trigger existing ones.
     const knownRelayUrls = new Set<string>();
 
-    // Merge stream for all per-relay event observables. We use a Subject so
-    // we can add new relay streams dynamically as the group grows.
+    // Merge stream for all per-relay event observables.
     const relayEvents$ = new Subject<NostrEvent>();
 
-    // Pipe all relay events through the EventStore and forward to subscriber.
-    // Events are already stamped with their source relay by the Relay class
-    // internally, so getSeenRelays() works on stored events.
-    // catchError defends against any downstream pipeline error reaching
-    // use$/useObservableState (which would crash the React tree).
     const storeSub = relayEvents$
       .pipe(
         mapEventsToStore(eventStore),
@@ -173,26 +169,16 @@ export function loadRepoStateFromRelays(
         next: (event) => subscriber.next(event as NostrEvent),
       });
 
-    // Forward EOSE sentinel to subscriber.
     const eoseSub = signal.eose$.subscribe({
       next: () => subscriber.next("EOSE"),
     });
 
-    // Subscribe to RelayGroup relay list changes. relays$ is protected in TS
-    // but public at runtime — cast to access it so we can react to new relays
-    // being added without polling.
-    const relays$ = (
-      repoRelayGroup as unknown as { relays$: Observable<Relay[]> }
-    ).relays$;
-
     const relaySub = relays$
       .pipe(
-        map((relays) => relays.map((r) => r.url)),
         distinctUntilChanged(
           (a, b) =>
             a.length === b.length && a.every((url) => knownRelayUrls.has(url)),
         ),
-        // Defensive: never let an upstream error reach the subscriber.
         catchError(() => EMPTY),
       )
       .subscribe({
