@@ -21,7 +21,7 @@ import {
   addProfilePointerTag,
 } from "applesauce-core/operations/tag/common";
 import { ISSUE_KIND } from "@/lib/nip34";
-import { getEventRelayHint, getPubkeyRelayHint } from "./hints";
+import { getPubkeyRelayHint } from "./hints";
 import type { NostrTag } from "@/lib/nostrContentTags";
 import type { KnownEventTemplate } from "applesauce-core/helpers/event";
 
@@ -106,7 +106,3 @@ export class IssueFactory extends EventFactory<
     return this.modifyPublicTags((tags) => [...tags, ...extraTags]);
   }
 }
-
-// Re-export relay hint helpers used by the factory, so callers that want to
-// add their own ad-hoc tags with matching hint resolution can reuse them.
-export { getEventRelayHint, getPubkeyRelayHint };

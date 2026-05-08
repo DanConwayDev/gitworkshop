@@ -702,7 +702,7 @@ export interface MarkdownContentProps {
   allowHtml?: boolean;
 }
 
-export function MarkdownContent({
+function MarkdownContent({
   content,
   className,
   cloneUrls = [],

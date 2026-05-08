@@ -22,7 +22,7 @@ const head = createHead({
   plugins: [InferSeoMetaPlugin()],
 });
 
-export function App() {
+function App() {
   return (
     <UnheadProvider head={head}>
       <EventStoreProvider eventStore={eventStore}>

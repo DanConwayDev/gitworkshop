@@ -25,7 +25,7 @@ import { getEventRelayHint } from "./hints";
 import type { KnownEventTemplate } from "applesauce-core/helpers/event";
 
 /** The label namespace used for subject-rename events (NIP-32 `#subject`). */
-export const SUBJECT_RENAME_NAMESPACE = "#subject";
+const SUBJECT_RENAME_NAMESPACE = "#subject";
 
 type LabelTemplate = KnownEventTemplate<typeof LABEL_KIND>;
 

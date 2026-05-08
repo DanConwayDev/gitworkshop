@@ -1,4 +1,4 @@
-import { ActionRunner, Actions } from "applesauce-actions";
+import { ActionRunner } from "applesauce-actions";
 import type { NostrEvent } from "nostr-tools";
 import { eventStore, publish } from "./nostr";
 import { accounts } from "./accounts";
@@ -56,9 +56,9 @@ function runnerPublish(event: NostrEvent): Promise<void> {
  *
  * Usage:
  * ```ts
- * import { runner, Actions } from '@/services/actions';
+ * import { runner } from '@/services/actions';
  *
- * await runner.run(Actions.UpdateProfile, { name: 'Alice' });
+ * await runner.run(UpdateProfile, { name: 'Alice' });
  * ```
  */
 export const runner = new ActionRunner(
@@ -66,6 +66,3 @@ export const runner = new ActionRunner(
   accounts.signer,
   runnerPublish,
 );
-
-// Export Actions for convenience
-export { Actions };
