@@ -11,15 +11,17 @@
  *   backward page. hasMore goes false when a page returns fewer than PAGE_SIZE
  *   events.
  *
- * Mode 2 — Search (non-empty query, debounced 300ms):
+ * Mode 2 — Search (non-empty committedQuery):
  *   Opens a resilientSubscription with manualPaginate$ for NIP-50
  *   { kinds: [30617], search: query } against gitIndexRelays. Simultaneously
  *   fires a resilientRequest for NIP-50 { kinds: [0], search: query } against
  *   relay.ditto.pub for user resolution, then fetches repos for matched users.
- *   Events stream into the EventStore; results are read reactively via
- *   store.timeline() filtered to the current session's event IDs.
- *   The same IntersectionObserver sentinel triggers loadMore() for search
- *   pagination too.
+ *   Results are pushed into a per-session BehaviorSubject so the UI always
+ *   updates even when eventStore.add() is a no-op (dedup case).
+ *
+ *   Query cache: completed sessions are stored in a Map keyed by
+ *   "trimmedQuery|relayKey". On a cache hit the previous BehaviorSubject
+ *   (already populated) is reused immediately — no relay request is made.
  *
  * RelayPage fix:
  *   When relayOverride is set, the displayed list is scoped to events that
@@ -52,7 +54,6 @@ import {
 const USER_SEARCH_RELAY = "wss://relay.ditto.pub";
 
 const PAGE_SIZE = 20;
-const SEARCH_DEBOUNCE_MS = 300;
 // How long to wait after the last event in a pagination page before concluding
 // the page is done. Covers both the normal case (events arrive then stop) and
 // the zero-events case (relay exhausted — timer fires with count=0).
@@ -75,10 +76,30 @@ export interface UseRepositorySearchResult {
   matchedUserPubkeys: Set<string>;
 }
 
+// ── Search result cache ───────────────────────────────────────────────────────
+
+interface SearchCacheEntry {
+  /** Live results subject — already populated with the last known results. */
+  subject: BehaviorSubject<ResolvedRepo[] | undefined>;
+  /** Whether there are more pages available for this query. */
+  hasMore: boolean;
+  /** Pubkeys that matched the NIP-50 user search for this query. */
+  matchedUserPubkeys: Set<string>;
+  /**
+   * Pagination subject for this session — still live if the subscription is
+   * open, null if the subscription has been torn down (e.g. relay changed).
+   */
+  paginate$: Subject<void> | null;
+}
+
+// Module-level cache so it survives re-renders and component remounts.
+// Keyed by "trimmedQuery|relayKey".
+const searchCache = new Map<string, SearchCacheEntry>();
+
 /**
  * Core hook for repository discovery and search.
  *
- * @param query         - Search query. Empty string = browse mode.
+ * @param query         - Committed search query. Empty string = browse mode.
  * @param relayOverride - When set, query only these relays (RelayPage).
  */
 export function useRepositorySearch(
@@ -235,13 +256,13 @@ export function useRepositorySearch(
   const searchReposSubjectRef = useRef<
     BehaviorSubject<ResolvedRepo[] | undefined>
   >(new BehaviorSubject<ResolvedRepo[] | undefined>(undefined));
-  // Bumped each time a new search session starts (inside the debounce timer)
-  // so that use$ re-subscribes to the freshly-created BehaviorSubject.
+  // Bumped each time a new search session starts so that use$ re-subscribes
+  // to the freshly-created (or cache-restored) BehaviorSubject.
   const [searchSessionKey, setSearchSessionKey] = useState(0);
 
   // Reactive read of search results — driven by the subject above.
   // searchSessionKey in deps ensures use$ re-subscribes to the new subject
-  // instance created for each query (including repeated queries).
+  // instance created for each query (including cache hits).
   const searchRepos = use$(() => {
     if (!isSearchMode) return undefined;
     return searchReposSubjectRef.current;
@@ -254,6 +275,23 @@ export function useRepositorySearch(
       return;
     }
 
+    const cacheKey = `${trimmedQuery}|${relayKey}`;
+    const cached = searchCache.get(cacheKey);
+
+    if (cached) {
+      // Cache hit — restore state immediately, no relay request needed.
+      searchReposSubjectRef.current = cached.subject;
+      paginateSubRef.current = cached.paginate$;
+      setSearchSessionKey((k) => k + 1);
+      setHasMore(cached.hasMore);
+      setMatchedUserPubkeys(cached.matchedUserPubkeys);
+      setIsLoading(false);
+      paginatingRef.current = false;
+      clearPageSettleTimer();
+      return;
+    }
+
+    // Cache miss — start a fresh search session.
     setMatchedUserPubkeys(new Set());
     setHasMore(true);
     paginatingRef.current = false;
@@ -263,146 +301,159 @@ export function useRepositorySearch(
     let userSub: { unsubscribe(): void } | null = null;
     let userRepoSub: { unsubscribe(): void } | null = null;
 
-    const debounceTimer = setTimeout(() => {
-      setIsLoading(true);
+    setIsLoading(true);
 
-      // Fresh session: new ID set + new subject so the previous query's results
-      // are cleared and the observable re-subscribes to the new subject.
-      const sessionIds = new Set<string>();
-      const subject = new BehaviorSubject<ResolvedRepo[] | undefined>(
-        undefined,
+    // Fresh session: new ID set + new subject.
+    const sessionIds = new Set<string>();
+    const subject = new BehaviorSubject<ResolvedRepo[] | undefined>(undefined);
+    searchReposSubjectRef.current = subject;
+    // Bump the session key so use$ re-subscribes to this new subject instance.
+    setSearchSessionKey((k) => k + 1);
+
+    // Build the cache entry upfront so pagination callbacks can update it.
+    const cacheEntry: SearchCacheEntry = {
+      subject,
+      hasMore: true,
+      matchedUserPubkeys: new Set(),
+      paginate$: null,
+    };
+    searchCache.set(cacheKey, cacheEntry);
+
+    // Helper: rebuild and push the current resolved repo list into the subject.
+    // Called on every incoming event (new or duplicate-in-store) so the UI
+    // always updates even when eventStore.add() is a no-op (dedup case).
+    const pushResults = () => {
+      const events = eventStore.getTimeline([{ kinds: [REPO_KIND] } as Filter]);
+      subject.next(
+        groupIntoResolvedRepos(events.filter((ev) => sessionIds.has(ev.id))),
       );
-      searchReposSubjectRef.current = subject;
-      // Bump the session key so use$ re-subscribes to this new subject instance.
-      setSearchSessionKey((k) => k + 1);
+    };
 
-      // Helper: rebuild and push the current resolved repo list into the subject.
-      // Called on every incoming event (new or duplicate-in-store) so the UI
-      // always updates even when eventStore.add() is a no-op (dedup case).
-      const pushResults = () => {
-        const events = eventStore.getTimeline([
-          { kinds: [REPO_KIND] } as Filter,
-        ]);
-        subject.next(
-          groupIntoResolvedRepos(events.filter((ev) => sessionIds.has(ev.id))),
-        );
-      };
+    const paginate$ = new Subject<void>();
+    paginateSubRef.current = paginate$;
+    cacheEntry.paginate$ = paginate$;
 
-      const paginate$ = new Subject<void>();
-      paginateSubRef.current = paginate$;
+    // One-shot guard: clears isLoading after the initial EOSE from either
+    // search. Pagination loading is managed separately via the settle timer.
+    let initialLoadingCleared = false;
+    let initialPageCount = 0;
 
-      // One-shot guard: clears isLoading after the initial EOSE from either
-      // search. Pagination loading is managed separately via the settle timer.
-      let initialLoadingCleared = false;
-      let initialPageCount = 0;
+    const clearInitialLoading = () => {
+      if (!initialLoadingCleared) {
+        initialLoadingCleared = true;
+        const more = initialPageCount >= PAGE_SIZE;
+        cacheEntry.hasMore = more;
+        setHasMore(more);
+        setIsLoading(false);
+      }
+    };
 
-      const clearInitialLoading = () => {
-        if (!initialLoadingCleared) {
-          initialLoadingCleared = true;
-          setHasMore(initialPageCount >= PAGE_SIZE);
-          setIsLoading(false);
+    // NIP-50 repo search with manual pagination.
+    repoSub = resilientSubscription(
+      pool,
+      relays,
+      [
+        {
+          kinds: [REPO_KIND],
+          search: trimmedQuery,
+          limit: PAGE_SIZE,
+        } as Filter,
+      ],
+      { manualPaginate$: paginate$, limit: PAGE_SIZE },
+    ).subscribe({
+      next: (msg) => {
+        if (msg === "EOSE") {
+          clearInitialLoading();
+          return;
         }
-      };
+        const ev = msg as NostrEvent;
+        sessionIds.add(ev.id);
+        eventStore.add(ev);
+        // Push results regardless of whether eventStore.add was a no-op.
+        pushResults();
 
-      // NIP-50 repo search with manual pagination.
-      repoSub = resilientSubscription(
-        pool,
-        relays,
-        [
-          {
-            kinds: [REPO_KIND],
-            search: trimmedQuery,
-            limit: PAGE_SIZE,
-          } as Filter,
-        ],
-        { manualPaginate$: paginate$, limit: PAGE_SIZE },
-      ).subscribe({
+        if (paginatingRef.current) {
+          pageEventCountRef.current++;
+          armPageSettleTimer(() => {
+            paginatingRef.current = false;
+            const more = pageEventCountRef.current >= PAGE_SIZE;
+            cacheEntry.hasMore = more;
+            setHasMore(more);
+            setIsLoading(false);
+          });
+        } else {
+          initialPageCount++;
+        }
+      },
+      error: () => {
+        clearPageSettleTimer();
+        clearInitialLoading();
+      },
+      complete: () => {
+        clearPageSettleTimer();
+        clearInitialLoading();
+      },
+    });
+
+    // NIP-50 user search (one-shot) — collect pubkeys then fetch their repos.
+    const userPubkeys = new Set<string>();
+
+    const startUserRepoFetch = () => {
+      if (userPubkeys.size === 0) return;
+      userRepoSub = resilientRequest(pool, relays, [
+        {
+          kinds: [REPO_KIND],
+          authors: [...userPubkeys],
+          limit: PAGE_SIZE,
+        } as Filter,
+      ]).subscribe({
         next: (msg) => {
-          if (msg === "EOSE") {
-            clearInitialLoading();
-            return;
-          }
+          if (msg === "EOSE") return;
           const ev = msg as NostrEvent;
-          sessionIds.add(ev.id);
-          eventStore.add(ev);
-          // Push results regardless of whether eventStore.add was a no-op.
-          pushResults();
-
-          if (paginatingRef.current) {
-            pageEventCountRef.current++;
-            armPageSettleTimer(() => {
-              paginatingRef.current = false;
-              setHasMore(pageEventCountRef.current >= PAGE_SIZE);
-              setIsLoading(false);
-            });
-          } else {
-            initialPageCount++;
+          if (!sessionIds.has(ev.id)) {
+            sessionIds.add(ev.id);
+            eventStore.add(ev);
+            pushResults();
           }
-        },
-        error: () => {
-          clearPageSettleTimer();
-          clearInitialLoading();
-        },
-        complete: () => {
-          clearPageSettleTimer();
-          clearInitialLoading();
         },
       });
+    };
 
-      // NIP-50 user search (one-shot) — collect pubkeys then fetch their repos.
-      const userPubkeys = new Set<string>();
-
-      const startUserRepoFetch = () => {
-        if (userPubkeys.size === 0) return;
-        userRepoSub = resilientRequest(pool, relays, [
-          {
-            kinds: [REPO_KIND],
-            authors: [...userPubkeys],
-            limit: PAGE_SIZE,
-          } as Filter,
-        ]).subscribe({
-          next: (msg) => {
-            if (msg === "EOSE") return;
-            const ev = msg as NostrEvent;
-            if (!sessionIds.has(ev.id)) {
-              sessionIds.add(ev.id);
-              eventStore.add(ev);
-              pushResults();
-            }
-          },
-        });
-      };
-
-      userSub = resilientRequest(
-        pool,
-        [USER_SEARCH_RELAY],
-        [{ kinds: [0], search: trimmedQuery, limit: 10 } as Filter],
-      ).subscribe({
-        next: (msg) => {
-          if (msg === "EOSE") {
-            clearInitialLoading();
-            setMatchedUserPubkeys(new Set(userPubkeys));
-            startUserRepoFetch();
-            return;
-          }
-          const ev = msg as NostrEvent;
-          userPubkeys.add(ev.pubkey);
-          eventStore.add(ev);
-        },
-        error: clearInitialLoading,
-        complete: () => {
+    userSub = resilientRequest(
+      pool,
+      [USER_SEARCH_RELAY],
+      [{ kinds: [0], search: trimmedQuery, limit: 10 } as Filter],
+    ).subscribe({
+      next: (msg) => {
+        if (msg === "EOSE") {
           clearInitialLoading();
-          setMatchedUserPubkeys(new Set(userPubkeys));
+          const pubkeySet = new Set(userPubkeys);
+          cacheEntry.matchedUserPubkeys = pubkeySet;
+          setMatchedUserPubkeys(pubkeySet);
           startUserRepoFetch();
-        },
-      });
-    }, SEARCH_DEBOUNCE_MS);
+          return;
+        }
+        const ev = msg as NostrEvent;
+        userPubkeys.add(ev.pubkey);
+        eventStore.add(ev);
+      },
+      error: clearInitialLoading,
+      complete: () => {
+        clearInitialLoading();
+        const pubkeySet = new Set(userPubkeys);
+        cacheEntry.matchedUserPubkeys = pubkeySet;
+        setMatchedUserPubkeys(pubkeySet);
+        startUserRepoFetch();
+      },
+    });
 
     return () => {
-      clearTimeout(debounceTimer);
       repoSub?.unsubscribe();
       userSub?.unsubscribe();
       userRepoSub?.unsubscribe();
+      // Null out the paginate$ ref in the cache entry so a future cache hit
+      // knows the subscription is no longer live (loadMore will be a no-op).
+      cacheEntry.paginate$ = null;
       paginateSubRef.current = null;
       clearPageSettleTimer();
     };
