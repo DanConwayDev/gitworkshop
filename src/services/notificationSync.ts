@@ -33,7 +33,7 @@
  */
 
 import { BehaviorSubject } from "rxjs";
-import { generateSecretKey } from "nostr-tools";
+import { generateSecretKey, getPublicKey } from "nostr-tools";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { PrivateKeySigner } from "applesauce-signers/signers";
 import { AppDataFactory } from "applesauce-common/factories";
@@ -109,6 +109,23 @@ function clearNsecCache(pubkey: string): void {
     localStorage.removeItem(nsecCacheKey(pubkey));
   } catch {
     // ignore
+  }
+}
+
+/**
+ * Synchronously derive the notification pubkey from the localStorage cache.
+ *
+ * Returns null if no valid cache entry exists (first-ever login, or cache
+ * was cleared). In that case the caller should fall back to the two-step
+ * fetch approach and let getOrCreateNotificationSigner populate the cache.
+ */
+export function getCachedNotificationPubkey(userPubkey: string): string | null {
+  const cache = loadNsecCache(userPubkey);
+  if (!cache) return null;
+  try {
+    return getPublicKey(hexToBytes(cache.hexKey));
+  } catch {
+    return null;
   }
 }
 

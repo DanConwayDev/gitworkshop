@@ -80,6 +80,7 @@ import {
   watchNip78Event,
   getOrCreateNotificationSigner,
   evictNotificationSigner,
+  getCachedNotificationPubkey,
 } from "./notificationSync";
 import { normalizeUrl } from "@/lib/url";
 
@@ -248,8 +249,16 @@ export function acquireNotificationStore(
   let historyLoaderPromise: Promise<ManualTimelineLoader> | null = null;
 
   // ---------------------------------------------------------------------------
-  // Fetch the nsec envelope from lookup relays + user outbox relays.
-  // Reactive — re-subscribes when outbox relays change.
+  // Fetch the nsec envelope and state event from lookup relays + outbox relays.
+  //
+  // Fast path (99.9% of sessions): the notification pubkey is already in
+  // localStorage from a previous session. We can issue a single
+  // resilientSubscription with both filters immediately — one relay round-trip
+  // instead of two.
+  //
+  // Slow path (first-ever login, or cache cleared): notifPubkey is unknown
+  // until the nsec envelope arrives and is decrypted. We start with just the
+  // nsec filter and upgrade to a combined subscription once the envelope lands.
   // ---------------------------------------------------------------------------
 
   const nsecEnvelopeSub = addressLoader({
@@ -264,72 +273,93 @@ export function acquireNotificationStore(
     "#d": [NOTIFICATION_NSEC_D_TAG],
   } as Filter;
 
-  const nsecOutboxSub = resilientSubscription(
+  // Try to read the notification pubkey from the localStorage cache so we can
+  // issue a combined subscription immediately without waiting for decryption.
+  const cachedNotifPubkey = getCachedNotificationPubkey(pubkey);
+
+  if (cachedNotifPubkey) {
+    // Fast path: fire addressLoader for the state event right away so lookup
+    // relays are queried in parallel with the outbox subscription below.
+    addressLoader({
+      kind: NIP78_KIND,
+      pubkey: cachedNotifPubkey,
+      identifier: NOTIFICATION_STATE_D_TAG,
+    }).subscribe();
+  }
+
+  // Combined outbox subscription: always includes the nsec envelope filter.
+  // When the notification pubkey is cached we also include the state filter so
+  // both events are fetched in a single relay request.
+  const outboxFilters: Filter[] = [nsecFilter];
+  if (cachedNotifPubkey) {
+    outboxFilters.push({
+      kinds: [NIP78_KIND],
+      authors: [cachedNotifPubkey],
+      "#d": [NOTIFICATION_STATE_D_TAG],
+    } as Filter);
+  }
+
+  const nip78OutboxSub = resilientSubscription(
     pool,
     outboxRelaysObservable(pubkey),
-    [nsecFilter],
+    outboxFilters,
     { retryCount: Infinity },
   )
     .pipe(onlyEvents(), mapEventsToStore(eventStore))
     .subscribe();
 
-  // ---------------------------------------------------------------------------
-  // Once the nsec envelope is decrypted, fetch the state event.
-  // Reactive — re-subscribes when outbox relays change OR the envelope arrives.
-  // ---------------------------------------------------------------------------
-
+  // Slow path: if the notification pubkey was not cached, wait for the nsec
+  // envelope to arrive in the EventStore, then fetch the state event.
   // We combine the nsec envelope observable with outbox relays so that
   // getOrCreateNotificationSigner is only called once the envelope has
   // actually landed in the EventStore. Without this guard, the function is
   // called before the relay fetch completes, finds no envelope, and falls
   // through to generating (and publishing) a brand-new nsec — prompting the
   // user's signer unnecessarily on every cold start / origin switch.
-  const stateEventSub = combineLatest([
-    (
-      eventStore.timeline([nsecFilter]) as unknown as Observable<NostrEvent[]>
-    ).pipe(startWith([] as NostrEvent[])),
-    outboxRelaysObservable(pubkey),
-  ])
-    .pipe(
-      switchMap(async ([envelopes, outboxes]) => {
-        // Don't attempt to resolve the signer until the envelope is present.
-        // getOrCreateNotificationSigner will generate a new nsec (and prompt
-        // the user's signer) if it finds nothing — we must avoid that race.
-        if (envelopes.length === 0) return null;
+  const stateEventSub = cachedNotifPubkey
+    ? null
+    : combineLatest([
+        (
+          eventStore.timeline([nsecFilter]) as unknown as Observable<
+            NostrEvent[]
+          >
+        ).pipe(startWith([] as NostrEvent[])),
+        outboxRelaysObservable(pubkey),
+      ])
+        .pipe(
+          switchMap(async ([envelopes, _outboxes]) => {
+            // Don't attempt to resolve the signer until the envelope is present.
+            if (envelopes.length === 0) return null;
 
-        const notifSigner = await getOrCreateNotificationSigner(pubkey);
-        if (!notifSigner) return null;
-        return { outboxes, notifPubkey: await notifSigner.getPublicKey() };
-      }),
-      switchMap((resolved) => {
-        if (!resolved) return of(undefined);
-        const { outboxes, notifPubkey } = resolved;
+            const notifSigner = await getOrCreateNotificationSigner(pubkey);
+            if (!notifSigner) return null;
+            return await notifSigner.getPublicKey();
+          }),
+          switchMap((notifPubkey) => {
+            if (!notifPubkey) return of(undefined);
 
-        // addressLoader covers lookup relays; subscribe to outboxes for the
-        // state event so it's fetched from the user's own write relays too.
-        addressLoader({
-          kind: NIP78_KIND,
-          pubkey: notifPubkey,
-          identifier: NOTIFICATION_STATE_D_TAG,
-        }).subscribe();
+            // addressLoader covers lookup relays.
+            addressLoader({
+              kind: NIP78_KIND,
+              pubkey: notifPubkey,
+              identifier: NOTIFICATION_STATE_D_TAG,
+            }).subscribe();
 
-        if (outboxes.length === 0) return of(undefined);
+            const stateFilter = {
+              kinds: [NIP78_KIND],
+              authors: [notifPubkey],
+              "#d": [NOTIFICATION_STATE_D_TAG],
+            } as Filter;
 
-        const stateFilter = {
-          kinds: [NIP78_KIND],
-          authors: [notifPubkey],
-          "#d": [NOTIFICATION_STATE_D_TAG],
-        } as Filter;
-
-        return resilientSubscription(
-          pool,
-          outboxRelaysObservable(pubkey),
-          [stateFilter],
-          { retryCount: Infinity },
-        ).pipe(onlyEvents(), mapEventsToStore(eventStore));
-      }),
-    )
-    .subscribe();
+            return resilientSubscription(
+              pool,
+              outboxRelaysObservable(pubkey),
+              [stateFilter],
+              { retryCount: Infinity },
+            ).pipe(onlyEvents(), mapEventsToStore(eventStore));
+          }),
+        )
+        .subscribe();
 
   const nip78WatchSub = watchNip78Event(pubkey, readState$);
 
@@ -456,8 +486,8 @@ export function acquireNotificationStore(
       localSub.unsubscribe();
       badgeSub.unsubscribe();
       nsecEnvelopeSub.unsubscribe();
-      nsecOutboxSub.unsubscribe();
-      stateEventSub.unsubscribe();
+      nip78OutboxSub.unsubscribe();
+      stateEventSub?.unsubscribe();
       nip78WatchSub.unsubscribe();
       ownRepoSub.unsubscribe();
       repoCoordsStoreSub.unsubscribe();
