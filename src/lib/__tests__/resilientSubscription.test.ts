@@ -14,9 +14,57 @@
  *   - `subscribeSpyTo` from @hirez_io/observer-spy for clean value assertions
  *   - `WS.clean()` in afterEach to tear down all mock servers
  *
- * Timer strategy: fake timers interact poorly with WS mock's Promise queue.
- * Instead we use retryDelay: 0 and settleTime: 1 so real async timers fire
- * quickly, then `await tick(n)` to flush the microtask/macrotask queue.
+ * ## Timer strategy
+ *
+ * `vi.useFakeTimers()` interacts poorly with the WS mock's internal Promise
+ * queue — `server.nextMessage` hangs because it relies on microtasks that
+ * fake timers don't advance. Instead, set `retryDelay: 0` and `settleTime: 1`
+ * so real async timers fire quickly, then use `await tick()` to flush the
+ * microtask/macrotask queue.
+ *
+ * ## Triggering retries
+ *
+ * Prefer sending `["CLOSED", subId, "error: ..."]` over closing the WebSocket
+ * to trigger a retry. A CLOSED message causes the relay's req() to throw a
+ * RelayClosedError which our retry() catches and re-executes defer(buildLiveSub)
+ * on — all on the same WebSocket connection, no reconnect dance needed.
+ *
+ * Avoid `server.error()` entirely: it calls server.close() internally, which
+ * tears down the mock server so it can no longer accept new connections.
+ *
+ * If you do need a WebSocket-level drop (e.g. to test the relay's own
+ * reconnect path), use `server.close({ wasClean: false, code: 1006 })` then
+ * `await server.closed` before `await server.connected`. This closes the
+ * current connection but keeps the mock server alive for the next client.
+ *
+ * ## server.messages includes CLOSE frames
+ *
+ * The relay sends ["CLOSE", subId] when a subscription is torn down (on
+ * unsubscribe, stream completion, or error). Don't assert
+ * `server.messages.toHaveLength(n)` — filter by `m[0] === "REQ"` instead.
+ *
+ * ## relay.reconnectTimer
+ *
+ * The Relay class has a built-in exponential backoff (starting at 1s) that
+ * fires after any connection drop, setting _ready$ to false until the timer
+ * completes. This delays the next REQ by at least 1s even when retryDelay: 0
+ * is set in resilientSubscription. Override it per-instance in beforeEach:
+ *   `r.reconnectTimer = () => of(0)`
+ * This makes _ready$ cycle false→true immediately so tests don't time out.
+ * Do NOT use `vi.spyOn(Relay, "createReconnectTimer")` — that affects the
+ * static factory and causes the relay to reconnect too aggressively, which
+ * sends spurious REQs and breaks permanent-error fast-fail assertions.
+ *
+ * ## reconnect: false in subscription() vs req()
+ *
+ * resilientSubscription passes `reconnect: false` to pool.relay().subscription().
+ * The relay's subscription() forwards this to req() — but req() uses the
+ * `resubscribe` option (not `reconnect`) for its customRepeatOperator. So
+ * `reconnect: false` does NOT disable the relay's internal repeat(). This is
+ * intentional: resilientSubscription owns the reconnect lifecycle via its own
+ * retry() + repeat() operators and disables the relay's internal reconnect by
+ * passing `reconnect: false` to the relay's subscription() which maps to the
+ * relay's own retry config, not the repeat/resubscribe config.
  */
 
 import { subscribeSpyTo } from "@hirez_io/observer-spy";
