@@ -32,7 +32,8 @@
  *   stop();
  */
 
-import { Subscription } from "rxjs";
+import { Subscription, combineLatest, of } from "rxjs";
+import { map, distinctUntilChanged } from "rxjs/operators";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { eventStore, pool } from "./nostr";
@@ -67,29 +68,42 @@ export const USER_REPLACEABLE_KINDS = [
  * catch updates published from other clients that may have written to
  * index relays but not to all of the user's outbox relays, or vice versa.
  *
+ * outboxRelays may be a static string[] (snapshot at call time) or an
+ * Observable<string[]> that emits as the relay list grows. When an observable
+ * is provided, new relays are added additively without tearing down existing
+ * connections.
+ *
  * Returns a cleanup function — call it when the account changes or logs out.
  */
 export function startUserIdentitySubscription(
   pubkey: string,
-  outboxRelays: string[],
+  outboxRelays: string[] | import("rxjs").Observable<string[]>,
 ): () => void {
-  // Union of outbox relays and lookup/index relays, normalized and deduplicated
-  const relays = [
-    ...new Set([...outboxRelays, ...lookupRelays.getValue()].map(normalizeUrl)),
-  ];
-
-  if (relays.length === 0) return () => {};
-
   const filter: Filter = {
     kinds: [...USER_REPLACEABLE_KINDS],
     authors: [pubkey],
   };
 
+  // Build a reactive relay list: union of outboxRelays + lookupRelays,
+  // normalized and deduplicated. lookupRelays is a BehaviorSubject so changes
+  // to the configured lookup relays are picked up automatically.
+  const outbox$ =
+    outboxRelays instanceof Array ? of(outboxRelays) : outboxRelays;
+
+  const relays$ = combineLatest([outbox$, lookupRelays]).pipe(
+    map(([outbox, lookup]) => [
+      ...new Set([...outbox, ...lookup].map(normalizeUrl)),
+    ]),
+    distinctUntilChanged(
+      (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+    ),
+  );
+
   // resilientSubscription provides:
   //   - lastReceivedAt-aware reconnect (avoids replaying full relay history)
   //   - foreground resume gap-fill (recovers events missed while backgrounded)
   //   - EOSE settle signal (not critical here but harmless)
-  const sub: Subscription = resilientSubscription(pool, relays, [filter], {
+  const sub: Subscription = resilientSubscription(pool, relays$, [filter], {
     reconnect: true,
     gapFill: true,
     settle: false, // no consumer needs the EOSE signal here

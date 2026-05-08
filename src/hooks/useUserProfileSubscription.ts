@@ -10,10 +10,10 @@
  *   - their relay list (kind:10002) so we know which relays to query
  *
  * Strategy:
- *   1. Subscribe to the user's replaceable events on the git index relays
- *      immediately (before we know their personal relays).
- *   2. Once we have their kind:10002 relay list, also subscribe on their
- *      personal outbox relays so we get the freshest data.
+ *   Single reactive subscription that starts immediately on the git index /
+ *   lookup relays and additively expands to the user's personal outbox relays
+ *   once their kind:10002 arrives — without ever tearing down the existing
+ *   relay connections.
  *
  * This hook is a no-op when:
  *   - pubkey is undefined
@@ -32,8 +32,8 @@ import { gitIndexRelays, lookupRelays } from "@/services/settings";
 import { mapEventsToStore } from "applesauce-core";
 import { onlyEvents } from "applesauce-relay";
 import { resilientSubscription } from "@/lib/resilientSubscription";
-import { switchMap, of } from "rxjs";
-import { map } from "rxjs/operators";
+import { combineLatest } from "rxjs";
+import { map, distinctUntilChanged, startWith } from "rxjs/operators";
 import type { Filter } from "applesauce-core/helpers";
 import { normalizeUrl } from "@/lib/url";
 
@@ -48,8 +48,8 @@ const USER_REPLACEABLE_KINDS = [
 
 /**
  * Subscribe to a user's replaceable events for the duration of the profile
- * page visit. Queries both the git index / lookup relays and the user's own
- * outbox relays (once their kind:10002 is known).
+ * page visit. Starts immediately on index + lookup relays and additively
+ * expands to the user's outbox relays once their kind:10002 is known.
  *
  * @param pubkey - The profile page owner's hex pubkey, or undefined to skip
  */
@@ -62,51 +62,38 @@ export function useUserProfileSubscription(pubkey: string | undefined): void {
   // already subscribed to by startUserIdentitySubscription in accounts.ts.
   const isOwnProfile = !!pubkey && pubkey === myPubkey;
 
-  // Phase 1: subscribe on index + lookup relays immediately.
-  // This gives us their kind:10002 so we can discover their personal relays.
   use$(() => {
     if (!pubkey || isOwnProfile) return undefined;
-
-    const relays = [
-      ...new Set(
-        [...gitIndexRelays.getValue(), ...lookupRelays.getValue()].map(
-          normalizeUrl,
-        ),
-      ),
-    ];
 
     const filter: Filter = {
       kinds: [...USER_REPLACEABLE_KINDS],
       authors: [pubkey],
     };
 
-    return resilientSubscription(pool, relays, [filter]).pipe(
+    // Reactive relay list: starts with index + lookup relays immediately, then
+    // additively expands to include the user's outbox relays once their
+    // kind:10002 arrives. resilientSubscription diffs on each emission so
+    // existing relay connections are never torn down.
+    const relays$ = combineLatest([
+      gitIndexRelays,
+      lookupRelays,
+      store.mailboxes(pubkey).pipe(startWith(undefined)),
+    ]).pipe(
+      map(([index, lookup, mailboxes]) => [
+        ...new Set(
+          [...index, ...lookup, ...(mailboxes?.outboxes ?? [])].map(
+            normalizeUrl,
+          ),
+        ),
+      ]),
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+      ),
+    );
+
+    return resilientSubscription(pool, relays$, [filter]).pipe(
       onlyEvents(),
       mapEventsToStore(store),
-    );
-  }, [pubkey, isOwnProfile, store]);
-
-  // Phase 2: once we have their kind:10002, also subscribe on their outbox
-  // relays. switchMap tears down the previous subscription whenever the
-  // outbox relay list changes (e.g. after phase 1 delivers their kind:10002).
-  use$(() => {
-    if (!pubkey || isOwnProfile) return undefined;
-
-    return store.mailboxes(pubkey).pipe(
-      map((mailboxes) => mailboxes?.outboxes ?? []),
-      switchMap((outboxes) => {
-        if (outboxes.length === 0) return of(undefined);
-
-        const filter: Filter = {
-          kinds: [...USER_REPLACEABLE_KINDS],
-          authors: [pubkey],
-        };
-
-        return resilientSubscription(pool, outboxes, [filter]).pipe(
-          onlyEvents(),
-          mapEventsToStore(store),
-        );
-      }),
     );
   }, [pubkey, isOwnProfile, store]);
 }

@@ -230,14 +230,10 @@ export function acquireNotificationStore(
   // repoActivitySub (which combines it) also reacts to relay list changes.
   const inboxRelays$ = inboxRelaysObservable(pubkey);
 
-  const badgeSub = inboxRelays$
-    .pipe(
-      switchMap((relays) =>
-        resilientSubscription(pool, relays, badgeFilters, {
-          retryCount: Infinity,
-        }).pipe(onlyEvents(), mapEventsToStore(eventStore)),
-      ),
-    )
+  const badgeSub = resilientSubscription(pool, inboxRelays$, badgeFilters, {
+    retryCount: Infinity,
+  })
+    .pipe(onlyEvents(), mapEventsToStore(eventStore))
     .subscribe();
 
   // ---------------------------------------------------------------------------
@@ -267,16 +263,13 @@ export function acquireNotificationStore(
     "#d": [NOTIFICATION_NSEC_D_TAG],
   } as Filter;
 
-  const nsecOutboxSub = outboxRelaysObservable(pubkey)
-    .pipe(
-      switchMap((relays) =>
-        relays.length === 0
-          ? of(undefined)
-          : resilientSubscription(pool, relays, [nsecFilter], {
-              retryCount: Infinity,
-            }).pipe(onlyEvents(), mapEventsToStore(eventStore)),
-      ),
-    )
+  const nsecOutboxSub = resilientSubscription(
+    pool,
+    outboxRelaysObservable(pubkey),
+    [nsecFilter],
+    { retryCount: Infinity },
+  )
+    .pipe(onlyEvents(), mapEventsToStore(eventStore))
     .subscribe();
 
   // ---------------------------------------------------------------------------
@@ -327,9 +320,12 @@ export function acquireNotificationStore(
           "#d": [NOTIFICATION_STATE_D_TAG],
         } as Filter;
 
-        return resilientSubscription(pool, outboxes, [stateFilter], {
-          retryCount: Infinity,
-        }).pipe(onlyEvents(), mapEventsToStore(eventStore));
+        return resilientSubscription(
+          pool,
+          outboxRelaysObservable(pubkey),
+          [stateFilter],
+          { retryCount: Infinity },
+        ).pipe(onlyEvents(), mapEventsToStore(eventStore));
       }),
     )
     .subscribe();
@@ -343,17 +339,13 @@ export function acquireNotificationStore(
   const repoCoords$ = new BehaviorSubject<string[]>([]);
 
   const ownRepoFilter: Filter = { kinds: [REPO_KIND], authors: [pubkey] };
-  const ownRepoSub = gitIndexRelays
-    .pipe(
-      distinctUntilChanged(
-        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
-      ),
-      switchMap((relays) =>
-        resilientSubscription(pool, relays, [ownRepoFilter], {
-          retryCount: Infinity,
-        }).pipe(onlyEvents(), mapEventsToStore(eventStore)),
-      ),
-    )
+  const ownRepoSub = resilientSubscription(
+    pool,
+    gitIndexRelays,
+    [ownRepoFilter],
+    { retryCount: Infinity },
+  )
+    .pipe(onlyEvents(), mapEventsToStore(eventStore))
     .subscribe();
 
   const repoCoordsStoreSub = (

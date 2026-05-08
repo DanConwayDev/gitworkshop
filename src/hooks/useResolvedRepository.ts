@@ -27,8 +27,8 @@ import { RepositoryModel } from "@/models/RepositoryModel";
 import { RepositoryRelayGroup } from "@/models/RepositoryRelayGroup";
 import type { Filter } from "applesauce-core/helpers";
 import type { Observable } from "rxjs";
-import { combineLatest, of } from "rxjs";
-import { switchMap, map } from "rxjs/operators";
+import { BehaviorSubject, combineLatest, of } from "rxjs";
+import { switchMap, map, distinctUntilChanged } from "rxjs/operators";
 import { normalizeUrl } from "@/lib/url";
 
 /** Max healthy mailbox relays to take per maintainer when querying NIP-65 relays. */
@@ -265,13 +265,22 @@ export function useResolvedRepository(
     [key],
   );
 
+  // Parallel BehaviorSubject tracking the extra group's relay URLs so we can
+  // pass a reactive relay list to resilientSubscription without needing access
+  // to RelayGroup's protected relays$ observable.
+  const extraRelays$ = useMemo(
+    () => (pubkey && dTag ? new BehaviorSubject<string[]>([]) : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [key],
+  );
+
   // Layer 3: once we know the repo's own relay list, add any relays not yet
   // in repoRelayGroup. Also subscribes to maintainer announcements on those relays.
+  const repoRelayKey = repo?.relays.join(",") ?? "";
+  const maintainerKey = repo?.maintainerSet.join(",") ?? "";
   // If a relay was previously added to extraRelaysForMaintainerMailboxCoverage
   // (Layer 4) and is now declared by the repo itself, remove it from the delta
   // group — repoRelayGroup now covers it and the delta subscription closes cleanly.
-  const repoRelayKey = repo?.relays.join(",") ?? "";
-  const maintainerKey = repo?.maintainerSet.join(",") ?? "";
   use$(() => {
     if (!dTag || !repo || !repoRelayGroup || repo.relays.length === 0)
       return undefined;
@@ -281,9 +290,31 @@ export function useResolvedRepository(
       if (!repoRelayGroup.has(relay)) repoRelayGroup.add(relay);
       // Evict from the delta group if it was added there before the announcement
       // arrived — repoRelayGroup now provides coverage for this relay.
-      if (extraRelaysForMaintainerMailboxCoverage?.has(relay))
+      if (extraRelaysForMaintainerMailboxCoverage?.has(relay)) {
         extraRelaysForMaintainerMailboxCoverage.remove(relay);
+        if (extraRelays$) {
+          extraRelays$.next(
+            extraRelaysForMaintainerMailboxCoverage.relays.map((r) => r.url),
+          );
+        }
+      }
     }
+
+    // Derive a reactive relay list from the repoRelayGroup model observable.
+    // RepositoryRelayGroup emits the same group instance every time a relay is
+    // added, so we map it to a URL array and deduplicate with distinctUntilChanged.
+    const repoRelayGroup$ = (
+      store.model(
+        RepositoryRelayGroup,
+        pubkey!,
+        dTag,
+      ) as unknown as Observable<RelayGroupType>
+    ).pipe(
+      map((g) => g.relays.map((r) => r.url)),
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+      ),
+    );
 
     // Subscribe to all maintainer announcements on the repo's relays so
     // newly-published announcements arrive in real time.
@@ -294,12 +325,19 @@ export function useResolvedRepository(
         "#d": [dTag],
       } as Filter,
     ];
-    return resilientSubscription(
-      pool,
-      repoRelayGroup.relays.map((r) => r.url),
-      filter,
-    ).pipe(onlyEvents(), mapEventsToStore(store));
-  }, [dTag, repoRelayKey, maintainerKey, store, repoRelayGroup]);
+    return resilientSubscription(pool, repoRelayGroup$, filter).pipe(
+      onlyEvents(),
+      mapEventsToStore(store),
+    );
+  }, [
+    dTag,
+    repoRelayKey,
+    maintainerKey,
+    store,
+    repoRelayGroup,
+    extraRelays$,
+    extraRelaysForMaintainerMailboxCoverage,
+  ]);
 
   // Layer 4: resolve maintainer outbox + inbox relays. Only relays not already
   // in repoRelayGroup are added to extraRelaysForMaintainerMailboxCoverage.
@@ -311,6 +349,7 @@ export function useResolvedRepository(
       !repo ||
       !repoRelayGroup ||
       !extraRelaysForMaintainerMailboxCoverage ||
+      !extraRelays$ ||
       repo.maintainerSet.length === 0
     )
       return undefined;
@@ -338,8 +377,12 @@ export function useResolvedRepository(
           repoRelayGroup,
         );
 
-        if (extraRelaysForMaintainerMailboxCoverage.relays.length === 0)
-          return of(null);
+        const urls = extraRelaysForMaintainerMailboxCoverage.relays.map(
+          (r) => r.url,
+        );
+        extraRelays$.next(urls);
+
+        if (urls.length === 0) return of(null);
 
         // Subscribe to maintainer announcements on the extra mailbox relays so
         // newly-published announcements arrive in real time.
@@ -350,11 +393,10 @@ export function useResolvedRepository(
             "#d": [dTag],
           } as Filter,
         ];
-        return resilientSubscription(
-          pool,
-          extraRelaysForMaintainerMailboxCoverage.relays.map((r) => r.url),
-          filter,
-        ).pipe(onlyEvents(), mapEventsToStore(store));
+        return resilientSubscription(pool, extraRelays$, filter).pipe(
+          onlyEvents(),
+          mapEventsToStore(store),
+        );
       }),
     ) as unknown as Observable<null>;
   }, [
@@ -363,6 +405,7 @@ export function useResolvedRepository(
     store,
     repoRelayGroup,
     extraRelaysForMaintainerMailboxCoverage,
+    extraRelays$,
   ]);
 
   const resolved: ResolvedRepository | undefined =
