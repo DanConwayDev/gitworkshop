@@ -535,14 +535,12 @@ function processRelay(
             reconnectAttempts = 0;
             if (opts.paginate || opts.manualPaginate$) {
               if (opts.manualPaginate$) {
-                // Manual mode: signal settled at EOSE; start pagination if needed
+                // Manual mode: always start pagination so the Subject has a
+                // subscriber. The caller decides when to fire the next page;
+                // loadBlocksFromRelay will naturally exhaust when the relay
+                // returns zero events.
                 signal.settle(relay);
-                if (countBeforeEose >= limit) {
-                  startPagination();
-                } else if (opts.autoClose) {
-                  // No pagination needed — we're done with this relay
-                  subscriber.complete();
-                }
+                startPagination();
               } else {
                 // Auto mode: paginate if relay was truncated
                 if (countBeforeEose < limit) {

@@ -101,6 +101,10 @@ export function useRepositorySearch(
 
   const [isLoading, setIsLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
+  // Browse mode: how many resolved repos to expose to the UI. Starts at
+  // PAGE_SIZE and grows by PAGE_SIZE on each loadMore() call so the store
+  // timeline is sliced lazily rather than dumping all cached events at once.
+  const [browseDisplayLimit, setBrowseDisplayLimit] = useState(PAGE_SIZE);
 
   // Subject that triggers the next backward page in the active subscription.
   const paginateSubRef = useRef<Subject<void> | null>(null);
@@ -130,9 +134,10 @@ export function useRepositorySearch(
 
   // ── Browse mode ────────────────────────────────────────────────────────────
 
-  // All kind:30617 events from the store, filtered to the current relay set
-  // when relayOverride is active (RelayPage fix).
-  const browseRepos = use$(() => {
+  // Full resolved repo list from the store — not sliced here so the
+  // subscription stays stable and never briefly returns undefined when the
+  // display limit advances (which would hide the sentinel and break scrolling).
+  const allBrowseRepos = use$(() => {
     if (isSearchMode) return undefined;
 
     return store.timeline([{ kinds: [REPO_KIND] } as Filter]).pipe(
@@ -148,11 +153,19 @@ export function useRepositorySearch(
     ) as unknown as Observable<ResolvedRepo[]>;
   }, [isSearchMode, store, relayKey]);
 
+  // Apply the display limit outside of use$ so advancing it never causes a
+  // re-subscribe (which would briefly yield undefined and hide the sentinel).
+  const browseRepos =
+    allBrowseRepos !== undefined
+      ? allBrowseRepos.slice(0, browseDisplayLimit)
+      : undefined;
+
   useEffect(() => {
     if (isSearchMode) return;
 
     setIsLoading(true);
     setHasMore(true);
+    setBrowseDisplayLimit(PAGE_SIZE);
     paginatingRef.current = false;
 
     const paginate$ = new Subject<void>();
@@ -164,7 +177,7 @@ export function useRepositorySearch(
     const sub = resilientSubscription(
       pool,
       relays,
-      [{ kinds: [REPO_KIND] } as Filter],
+      [{ kinds: [REPO_KIND], limit: PAGE_SIZE } as Filter],
       { manualPaginate$: paginate$, limit: PAGE_SIZE },
     ).subscribe({
       next: (msg) => {
@@ -392,6 +405,11 @@ export function useRepositorySearch(
   const loadMore = useCallback(() => {
     if (!hasMore || isLoading || !paginateSubRef.current) return;
     setIsLoading(true);
+    // Advance the display window so the newly-fetched events become visible
+    // once they arrive.
+    if (!isSearchMode) {
+      setBrowseDisplayLimit((prev) => prev + PAGE_SIZE);
+    }
     pageEventCountRef.current = 0;
     paginatingRef.current = true;
     // Arm the settle timer immediately — handles the zero-events case where the
@@ -402,7 +420,7 @@ export function useRepositorySearch(
       setIsLoading(false);
     });
     paginateSubRef.current.next();
-  }, [hasMore, isLoading, armPageSettleTimer]);
+  }, [hasMore, isLoading, isSearchMode, armPageSettleTimer]);
 
   // ── Assemble final result ──────────────────────────────────────────────────
 

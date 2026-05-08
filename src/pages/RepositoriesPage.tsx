@@ -36,8 +36,6 @@ export default function RepositoriesPage({
   const setSearch = (value: string) => {
     setSearchParams(value ? { q: value } : {}, { replace: true });
   };
-  const sentinelRef = useRef<HTMLDivElement>(null);
-
   const { repos, isLoading, hasMore, loadMore, matchedUserPubkeys } =
     useRepositorySearch(search, relayOverride);
 
@@ -56,25 +54,45 @@ export default function RepositoriesPage({
     twitterCard: "summary_large_image",
   });
 
-  // IntersectionObserver sentinel for infinite scroll (browse mode only)
-  const handleIntersect = useCallback(() => {
-    if (hasMore && !isLoading) loadMore();
-  }, [hasMore, isLoading, loadMore]);
-
+  // Keep a stable ref to the latest loadMore/hasMore/isLoading so the
+  // IntersectionObserver never needs to be torn down and recreated — tearing
+  // it down causes it to miss the intersection that triggered the re-render.
+  const loadMoreRef = useRef(loadMore);
+  const hasMoreRef = useRef(hasMore);
+  const isLoadingRef = useRef(isLoading);
   useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
 
+  // Callback ref — fires whenever the sentinel mounts/unmounts, so the
+  // observer is always attached even though the element renders conditionally.
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const setSentinelRef = useCallback((el: HTMLDivElement | null) => {
+    // Disconnect any previous observer
+    observerRef.current?.disconnect();
+    observerRef.current = null;
+    if (!el) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) handleIntersect();
+        if (
+          entries[0].isIntersecting &&
+          hasMoreRef.current &&
+          !isLoadingRef.current
+        ) {
+          loadMoreRef.current();
+        }
       },
       { rootMargin: "200px" },
     );
-
     observer.observe(el);
-    return () => observer.disconnect();
-  }, [handleIntersect]);
+    observerRef.current = observer;
+  }, []);
 
   // Determine what to render in the list area
   const showSkeletons =
@@ -160,7 +178,7 @@ export default function RepositoriesPage({
 
             {/* Infinite scroll sentinel */}
             {hasMore && (
-              <div ref={sentinelRef} className="flex justify-center py-8">
+              <div ref={setSentinelRef} className="flex justify-center py-8">
                 {isLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" />
                 ) : (
