@@ -80,6 +80,25 @@ export interface SettleSignal {
    */
   error(relayId: string): void;
   /**
+   * Add a new relay to the set of expected relays. The relay is treated as if
+   * it had been in relayIds from the start: allSettled$ will not fire until
+   * this relay also calls settle() or error(). Has no effect if the relay is
+   * already known (settled, errored, or pending).
+   *
+   * The debounce (rule 2) and hard-cap (rule 3) timers are unaffected — only
+   * the immediate-all-done check (rule 1) is extended.
+   */
+  addRelay(relayId: string): void;
+  /**
+   * Remove a relay from the set of expected relays. If the relay had not yet
+   * settled or errored, it is removed from the pending set so allSettled$ can
+   * fire without waiting for it. Any active extension timer for the relay is
+   * also cancelled.
+   *
+   * Has no effect if the relay was never added or has already settled/errored.
+   */
+  removeRelay(relayId: string): void;
+  /**
    * Observable that emits "EOSE" exactly once, per the firing rules above.
    * Merge this into the event stream to expose the settle signal.
    */
@@ -106,11 +125,18 @@ export function makeSettleSignal(opts: SettleSignalOptions = {}): SettleSignal {
   // Tracks relays that have called settle() or error().
   const doneRelays = new Set<string>();
 
+  // Mutable set of relay IDs we are waiting for (mirrors relayIds but can grow
+  // and shrink via addRelay / removeRelay after construction).
+  const pendingRelays = new Set<string>(relayIds);
+
   // Rule 1: immediate — fires when all relay IDs are accounted for.
   const allSettled$ = new Subject<void>();
 
   const checkAllDone = () => {
-    if (relayIds && relayIds.every((id) => doneRelays.has(id))) {
+    if (
+      relayIds !== undefined &&
+      [...pendingRelays].every((id) => doneRelays.has(id))
+    ) {
       allSettled$.next();
       allSettled$.complete();
     }
@@ -155,6 +181,8 @@ export function makeSettleSignal(opts: SettleSignalOptions = {}): SettleSignal {
       extend: () => {},
       settle: () => {},
       error: () => {},
+      addRelay: () => {},
+      removeRelay: () => {},
       eose$,
     };
   }
@@ -202,6 +230,23 @@ export function makeSettleSignal(opts: SettleSignalOptions = {}): SettleSignal {
     error(relayId: string): void {
       cancelExtension(relayId);
       doneRelays.add(relayId);
+      checkAllDone();
+    },
+
+    addRelay(relayId: string): void {
+      // No-op if already known (pending, settled, or errored).
+      if (pendingRelays.has(relayId) || doneRelays.has(relayId)) return;
+      pendingRelays.add(relayId);
+      // checkAllDone is intentionally NOT called here — we just added a new
+      // pending relay so the set cannot be fully done yet.
+    },
+
+    removeRelay(relayId: string): void {
+      if (!pendingRelays.has(relayId)) return;
+      cancelExtension(relayId);
+      // Mark as done so checkAllDone counts it as settled.
+      doneRelays.add(relayId);
+      pendingRelays.delete(relayId);
       checkAllDone();
     },
 

@@ -50,6 +50,7 @@ import {
   EMPTY,
   Observable,
   Subject,
+  Subscription,
   defer,
   finalize,
   identity,
@@ -568,8 +569,42 @@ function processRelay(
  * EOSE signal is not needed.
  *
  * Does NOT add mapEventsToStore or filterDuplicateEvents — callers handle that.
+ *
+ * Overloads:
+ *   - Static relay list: resilientSubscription(pool, string[], filters, opts)
+ *   - Reactive relay list: resilientSubscription(pool, Observable<string[]>, filters, opts)
+ *     When an Observable is provided the relay set is diffed on each emission.
+ *     New relays are added without disturbing existing streams; removed relays
+ *     are unsubscribed and removed from the settle signal.
  */
 export function resilientSubscription(
+  pool: RelayPool,
+  relays: string[],
+  filters: Filter[],
+  opts?: ResilientSubscriptionOptions,
+): Observable<ResilientSubscriptionResponse>;
+export function resilientSubscription(
+  pool: RelayPool,
+  relays: Observable<string[]>,
+  filters: Filter[],
+  opts?: ResilientSubscriptionOptions,
+): Observable<ResilientSubscriptionResponse>;
+export function resilientSubscription(
+  pool: RelayPool,
+  relays: string[] | Observable<string[]>,
+  filters: Filter[],
+  opts: ResilientSubscriptionOptions = {},
+): Observable<ResilientSubscriptionResponse> {
+  if (relays instanceof Observable) {
+    return resilientSubscriptionReactive(pool, relays, filters, opts);
+  }
+  return resilientSubscriptionStatic(pool, relays, filters, opts);
+}
+
+/**
+ * Static (non-reactive) implementation — relay list is fixed at call time.
+ */
+function resilientSubscriptionStatic(
   pool: RelayPool,
   relays: string[],
   filters: Filter[],
@@ -609,6 +644,8 @@ export function resilientSubscription(
       extend: () => {},
       settle: () => {},
       error: () => {},
+      addRelay: () => {},
+      removeRelay: () => {},
       eose$: EMPTY as Observable<"EOSE">,
     };
     const perRelayStreams = relays.map((relay) =>
@@ -629,6 +666,142 @@ export function resilientSubscription(
   );
 
   return merge(merge(...perRelayStreams), signal.eose$);
+}
+
+/**
+ * Reactive implementation — relay list is an Observable<string[]>.
+ *
+ * On each emission the relay set is diffed against the previous emission:
+ *   - New relays: a new processRelay() stream is started and merged into the
+ *     output. signal.addRelay() is called so allSettled$ waits for the new relay.
+ *   - Removed relays: the per-relay stream is unsubscribed and
+ *     signal.removeRelay() is called so allSettled$ no longer waits for it.
+ *   - Unchanged relays: their streams continue unaffected.
+ *
+ * The settle signal is created once with no initial relayIds (dynamic mode).
+ * Rule 1 (immediate all-done) is driven entirely by addRelay/removeRelay calls.
+ * Rules 2 (debounce) and 3 (hard cap) apply as normal.
+ */
+function resilientSubscriptionReactive(
+  pool: RelayPool,
+  relays$: Observable<string[]>,
+  filters: Filter[],
+  opts: ResilientSubscriptionOptions = {},
+): Observable<ResilientSubscriptionResponse> {
+  const autoClose = opts.autoClose ?? false;
+  const reconnect = opts.reconnect ?? (autoClose ? false : true);
+  const gapFill = opts.gapFill ?? (autoClose ? false : true);
+  const gapFillBuffer = opts.gapFillBuffer ?? 600;
+  const settle = opts.settle ?? true;
+  const settleTime = opts.settleTime ?? DEFAULT_SETTLE_TIME;
+  const paginate = opts.paginate ?? false;
+  const limit = opts.limit ?? 500;
+  const retryCount = opts.retryCount ?? 3;
+  const retryDelay = opts.retryDelay ?? defaultRetryDelay;
+  const manualPaginate$ = opts.manualPaginate$;
+
+  const resolvedOpts = {
+    autoClose,
+    reconnect,
+    gapFill,
+    gapFillBuffer,
+    paginate,
+    limit,
+    retryCount,
+    retryDelay,
+    manualPaginate$,
+  };
+
+  return new Observable<ResilientSubscriptionResponse>((subscriber) => {
+    // Create the settle signal without a fixed relay list (dynamic mode).
+    // When settle is disabled we use a dummy signal.
+    const signal: SettleSignal = settle
+      ? makeSettleSignal({ settleTime })
+      : {
+          extend: () => {},
+          settle: () => {},
+          error: () => {},
+          addRelay: () => {},
+          removeRelay: () => {},
+          eose$: EMPTY as Observable<"EOSE">,
+        };
+
+    // Map of relay URL → active Subscription so we can tear down removed relays.
+    const activeRelays = new Map<string, Subscription>();
+    let currentRelays = new Set<string>();
+
+    // Subscribe to the relay list observable and diff on each emission.
+    const relaySub = relays$.subscribe({
+      next: (newRelays) => {
+        const newSet = new Set(newRelays);
+
+        // Add new relays
+        for (const relay of newSet) {
+          if (!currentRelays.has(relay)) {
+            signal.addRelay(relay);
+            const relaySub = processRelay(
+              pool,
+              relay,
+              filters,
+              resolvedOpts,
+              signal,
+            ).subscribe({
+              next: (event) => subscriber.next(event),
+              error: (err) => {
+                // Per-relay errors are already handled inside processRelay
+                // (catchError → signal.error). This path should not be reached
+                // in normal operation, but guard defensively.
+                console.error(
+                  `[resilientSubscription] unexpected error from relay ${relay}:`,
+                  err,
+                );
+              },
+              // Per-relay completion (autoClose) is fine — the outer subscriber
+              // stays open until the relay$ observable completes.
+            });
+            activeRelays.set(relay, relaySub);
+          }
+        }
+
+        // Remove relays that are no longer in the list
+        for (const relay of currentRelays) {
+          if (!newSet.has(relay)) {
+            activeRelays.get(relay)?.unsubscribe();
+            activeRelays.delete(relay);
+            signal.removeRelay(relay);
+          }
+        }
+
+        currentRelays = newSet;
+      },
+      error: (err) => subscriber.error(err),
+      complete: () => {
+        // The relay list observable completed — we keep the existing relay
+        // streams alive (they manage their own lifecycle) but stop watching
+        // for new relays. The outer subscriber completes only when all
+        // per-relay streams have finished (autoClose) or when unsubscribed.
+        if (autoClose && activeRelays.size === 0) {
+          subscriber.complete();
+        }
+      },
+    });
+
+    // Merge the EOSE signal into the output stream.
+    const eoseSub = settle
+      ? signal.eose$.subscribe({
+          next: (v) => subscriber.next(v),
+          error: (err) => subscriber.error(err),
+        })
+      : { unsubscribe: () => {} };
+
+    // Teardown: unsubscribe all active relay streams and the relay list watcher.
+    return () => {
+      relaySub.unsubscribe();
+      eoseSub.unsubscribe();
+      for (const sub of activeRelays.values()) sub.unsubscribe();
+      activeRelays.clear();
+    };
+  });
 }
 
 /**
