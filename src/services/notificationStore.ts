@@ -267,9 +267,22 @@ export function acquireNotificationStore(
     identifier: NOTIFICATION_NSEC_D_TAG,
   }).subscribe();
 
-  // Try to read the notification pubkey from the localStorage cache so we can
-  // include both authors in a single filter immediately.
+  // ---------------------------------------------------------------------------
+  // notifPubkey$ — reactive notification pubkey.
+  //
+  // Starts with the localStorage-cached value (null on first-ever login).
+  // Updated by:
+  //   - watchNip78Event (below) when the nsec envelope changes in the EventStore
+  //   - The slow-path resolver (below) once the envelope is first decrypted
+  //
+  // Drives the outbox relay subscription: whenever this emits a new value,
+  // switchMap tears down the old resilientSubscription and opens a new one
+  // with an updated authors filter that includes the new notification pubkey.
+  // This ensures the new state event is fetched from relays immediately when
+  // another device rotates the nsec.
+  // ---------------------------------------------------------------------------
   const cachedNotifPubkey = getCachedNotificationPubkey(pubkey);
+  const notifPubkey$ = new BehaviorSubject<string | null>(cachedNotifPubkey);
 
   if (cachedNotifPubkey) {
     addressLoader({
@@ -279,29 +292,35 @@ export function acquireNotificationStore(
     }).subscribe();
   }
 
-  // Single filter covering both the nsec envelope (authored by the user) and
-  // the state event (authored by the notification keypair). When the notif
-  // pubkey is cached both authors are included from the start — one REQ to the
-  // relay instead of two. On first-ever login cachedNotifPubkey is null and
-  // only the user's pubkey is in the authors array; the slow-path sub below
-  // adds the state event subscription once the envelope is decrypted.
-  const nip78Filter = {
-    kinds: [NIP78_KIND],
-    authors: cachedNotifPubkey ? [pubkey, cachedNotifPubkey] : [pubkey],
-    "#d": [NOTIFICATION_NSEC_D_TAG, NOTIFICATION_STATE_D_TAG],
-  } as Filter;
+  // Outbox relay subscription — reactive to both relay list changes and
+  // notification pubkey changes. switchMap on notifPubkey$ tears down and
+  // rebuilds the resilientSubscription whenever the notification pubkey
+  // changes (e.g. another device rotated the nsec). The inner
+  // resilientSubscription is itself reactive to relay list changes via
+  // outboxRelaysObservable, so relay additions/removals are handled without
+  // tearing down the whole subscription.
+  const nip78OutboxSub = notifPubkey$
+    .pipe(
+      switchMap((notifPubkey) => {
+        const nip78Filter = {
+          kinds: [NIP78_KIND],
+          authors: notifPubkey ? [pubkey, notifPubkey] : [pubkey],
+          "#d": [NOTIFICATION_NSEC_D_TAG, NOTIFICATION_STATE_D_TAG],
+        } as Filter;
 
-  const nip78OutboxSub = resilientSubscription(
-    pool,
-    outboxRelaysObservable(pubkey),
-    [nip78Filter],
-    { retryCount: Infinity },
-  )
-    .pipe(onlyEvents(), mapEventsToStore(eventStore))
+        return resilientSubscription(
+          pool,
+          outboxRelaysObservable(pubkey),
+          [nip78Filter],
+          { retryCount: Infinity },
+        ).pipe(onlyEvents(), mapEventsToStore(eventStore));
+      }),
+    )
     .subscribe();
 
   // Slow path: notif pubkey was not cached — wait for the nsec envelope to
-  // arrive and be decrypted, then open a subscription for the state event.
+  // arrive and be decrypted, then update notifPubkey$ so the outbox sub above
+  // rebuilds its filter to include the state event author.
   // We guard on the envelope being present so getOrCreateNotificationSigner
   // doesn't generate a brand-new nsec (and prompt the user's signer) before
   // the relay fetch completes.
@@ -313,48 +332,34 @@ export function acquireNotificationStore(
 
   const stateEventSub = cachedNotifPubkey
     ? null
-    : combineLatest([
-        (
-          eventStore.timeline([nsecFilter]) as unknown as Observable<
-            NostrEvent[]
-          >
-        ).pipe(startWith([] as NostrEvent[])),
-        outboxRelaysObservable(pubkey),
-      ])
+    : (eventStore.timeline([nsecFilter]) as unknown as Observable<NostrEvent[]>)
         .pipe(
-          switchMap(async ([envelopes, _outboxes]) => {
+          startWith([] as NostrEvent[]),
+          switchMap(async (envelopes) => {
             if (envelopes.length === 0) return null;
 
             const notifSigner = await getOrCreateNotificationSigner(pubkey);
             if (!notifSigner) return null;
             return await notifSigner.getPublicKey();
           }),
-          switchMap((notifPubkey) => {
-            if (!notifPubkey) return of(undefined);
-
-            addressLoader({
-              kind: NIP78_KIND,
-              pubkey: notifPubkey,
-              identifier: NOTIFICATION_STATE_D_TAG,
-            }).subscribe();
-
-            const stateFilter = {
-              kinds: [NIP78_KIND],
-              authors: [notifPubkey],
-              "#d": [NOTIFICATION_STATE_D_TAG],
-            } as Filter;
-
-            return resilientSubscription(
-              pool,
-              outboxRelaysObservable(pubkey),
-              [stateFilter],
-              { retryCount: Infinity },
-            ).pipe(onlyEvents(), mapEventsToStore(eventStore));
-          }),
         )
-        .subscribe();
+        .subscribe((notifPubkey) => {
+          if (!notifPubkey) return;
 
-  const nip78WatchSub = watchNip78Event(pubkey, readState$);
+          // Update notifPubkey$ — this triggers the outbox sub to rebuild
+          // its filter and fetch the state event from relays.
+          if (notifPubkey !== notifPubkey$.getValue()) {
+            notifPubkey$.next(notifPubkey);
+          }
+
+          addressLoader({
+            kind: NIP78_KIND,
+            pubkey: notifPubkey,
+            identifier: NOTIFICATION_STATE_D_TAG,
+          }).subscribe();
+        });
+
+  const nip78WatchSub = watchNip78Event(pubkey, readState$, notifPubkey$);
 
   // ---------------------------------------------------------------------------
   // Repo discovery — own repos for relay coverage and star notifications
@@ -486,6 +491,7 @@ export function acquireNotificationStore(
       repoCoordsStoreSub.unsubscribe();
       repoActivitySub.unsubscribe();
       entry.historyLoader?.destroy();
+      notifPubkey$.complete();
       repoCoords$.complete();
     },
     refCount: 1,

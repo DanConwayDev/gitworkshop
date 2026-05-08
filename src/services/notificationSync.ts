@@ -350,14 +350,22 @@ export function schedulePublish(
  *      re-evaluates against the new envelope and the localStorage cache.
  *   2. Re-resolve the notification signer (which will invalidate the
  *      localStorage cache if the envelope is newer, then decrypt).
- *   3. Re-subscribe to the state event under the (potentially new) notification
- *      pubkey and merge any updated state into readState$.
+ *   3. Update notifPubkey$ with the (potentially new) notification pubkey so
+ *      the outbox relay subscription in notificationStore.ts rebuilds its
+ *      filter and fetches the new state event from relays.
+ *   4. Re-subscribe to the state event in the EventStore under the new pubkey
+ *      and merge any updated state into readState$.
+ *
+ * @param notifPubkey$ - BehaviorSubject owned by notificationStore. Updated
+ *   here whenever the notification pubkey changes so the outbox relay
+ *   subscription can rebuild its filter reactively.
  *
  * Returns the RxJS Subscription so the caller can unsubscribe on cleanup.
  */
 export function watchNip78Event(
   pubkey: string,
   readState$: BehaviorSubject<NotificationReadState>,
+  notifPubkey$: BehaviorSubject<string | null>,
 ): Subscription {
   const nsecFilter = {
     kinds: [NIP78_KIND],
@@ -391,7 +399,10 @@ export function watchNip78Event(
       lastEnvelopeId = envelope.id;
 
       // Evict the in-memory signer so getOrCreateNotificationSigner re-checks
-      // the localStorage cache validity against the new envelope.
+      // the localStorage cache validity against the new envelope. If the
+      // envelope is newer than our cached one, getOrCreateNotificationSigner
+      // will clear the localStorage cache and decrypt the new envelope,
+      // replacing both the in-memory signer and the localStorage cache.
       evictNotificationSigner(pubkey);
 
       try {
@@ -400,8 +411,16 @@ export function watchNip78Event(
 
         const notifPubkey = await notifSigner.getPublicKey();
 
+        // Notify the store so the outbox relay subscription rebuilds its
+        // filter to include the new notification pubkey. This is the key step
+        // that ensures the new state event is fetched from relays when the
+        // nsec rotates on another device.
+        if (notifPubkey !== notifPubkey$.getValue()) {
+          notifPubkey$.next(notifPubkey);
+        }
+
         // If the notification pubkey hasn't changed (same nsec, just
-        // re-published), the state subscription is still correct.
+        // re-published), the EventStore state subscription is still correct.
         if (notifPubkey === watchedNotifPubkey) return;
 
         // Tear down the old state subscription (different notification pubkey)
