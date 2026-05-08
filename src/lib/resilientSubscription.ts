@@ -292,12 +292,18 @@ function processRelay(
     let window$: Subject<{ since?: number; until?: number }> | undefined;
 
     const startPagination = () => {
-      // loadBlocksFromRelay expects an UpstreamPool callback (relays, filters).
-      // We wrap it solely to call signal.extend() on every internal page request
-      // (not just the first), keeping the signal alive while pagination is in
-      // flight. The relay is already fixed in the outer scope — the relays
-      // argument is always [relay] — so we ignore it and use relay directly.
-      // The real pool singleton is used inside resilientSingleRelayRequest.
+      // loadBlocksFromRelay is used here purely as a pagination cursor state
+      // machine: it tracks the backward cursor, prevents parallel page loads,
+      // and detects exhaustion (zero events returned). It does NOT perform the
+      // actual relay request — that is handled by extendingPool below, which
+      // replaces applesauce's internal request with resilientSingleRelayRequest
+      // so every page gets our own exponential backoff and rate-limit handling
+      // instead of applesauce's built-in retry logic.
+      //
+      // extendingPool also calls signal.extend() on every page request (not
+      // just the first) to keep the signal alive while pagination is in flight.
+      // The relay is fixed in the outer scope so _relays is always [relay] and
+      // can be ignored.
       const extendingPool = (_relays: string[], filters: Filter[]) => {
         signal.extend(relay);
         return resilientSingleRelayRequest(pool, relay, filters, {
