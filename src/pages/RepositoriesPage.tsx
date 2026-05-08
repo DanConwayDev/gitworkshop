@@ -36,7 +36,7 @@ export default function RepositoriesPage({
   // `committedQuery` is what actually gets sent to the relay.
   // `inputValue` is the live text in the input box.
   // They diverge while the user is typing — the query only commits on Enter
-  // or after 800ms of inactivity.
+  // or after 400ms of inactivity.
   const committedQuery = searchParams.get("q") ?? "";
   const [inputValue, setInputValue] = useState(committedQuery);
 
@@ -49,13 +49,13 @@ export default function RepositoriesPage({
     [setSearchParams],
   );
 
-  // 800ms debounce fallback — fires if the user stops typing without pressing Enter.
+  // 400ms debounce fallback — fires if the user stops typing without pressing Enter.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setInputValue(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => commitQuery(val), 800);
+    debounceRef.current = setTimeout(() => commitQuery(val), 400);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -156,7 +156,7 @@ export default function RepositoriesPage({
             <div className="relative max-w-md flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search repositories… (Enter or pause to search)"
+                placeholder="Search repositories…"
                 value={inputValue}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
