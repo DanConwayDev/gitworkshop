@@ -20,9 +20,21 @@
  *        is kicked off using loadBlocksFromRelay, starting from the oldest
  *        event seen, until the relay returns 0 events.
  *   4. The live subscription stays open throughout and after pagination,
- *      reconnecting automatically via defer() + retry() with backoff.
- *      On reconnect, since: lastReceivedAt avoids replaying full history;
- *      eoseSeen remains true so pagination is not re-triggered.
+ *      reconnecting automatically via defer() + retry() with exponential
+ *      backoff. On reconnect, since: lastReceivedAt avoids replaying full
+ *      history; eoseSeen remains true so pagination is not re-triggered.
+ *
+ * Reconnect behaviour (mirrors resilientSubscription):
+ *   - Exponential backoff: 1s × 2^(n-1), capped at 5 minutes.
+ *   - Rate-limited CLOSED: prolonged backoff (60–90s × 2^(n-1), capped at
+ *     30 minutes) + shared per-relay cooldown registry so other concurrent
+ *     subscriptions to the same relay also hold off.
+ *   - Permanent CLOSED (restricted/blocked/pow/mute/unsupported/invalid):
+ *     fast-fail immediately — no point retrying.
+ *   - AuthRequired: fast-fail — handled by the pool-level auth policy.
+ *   - Before first EOSE: capped at retryCount (default 3) attempts.
+ *   - After first EOSE: unlimited retries (relay was reachable, treat drops
+ *     as transient).
  *
  * Pagination modes:
  *   - Auto (default): pagination is triggered automatically after EOSE if the
@@ -59,7 +71,12 @@ import type { TagValuePointer } from "applesauce-loaders/loaders";
 import type { CacheRequest, TimelessFilter } from "applesauce-loaders";
 import { makeCacheRequest } from "applesauce-loaders/helpers";
 import type { RelayPool } from "applesauce-relay";
-import { completeOnEose, onlyEvents } from "applesauce-relay";
+import {
+  completeOnEose,
+  onlyEvents,
+  AuthRequiredError,
+  RelayClosedError,
+} from "applesauce-relay";
 import type { NostrEvent } from "nostr-tools";
 import {
   BehaviorSubject,
@@ -72,15 +89,25 @@ import {
   filter,
   finalize,
   merge,
-  retry,
   share,
   switchMap,
   take,
   tap,
+  timer,
+  retry,
 } from "rxjs";
 import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
 import type { SettleSignal, SettleSignalOptions } from "./settleSignal";
 import { foregroundResume$ } from "./foregroundResume";
+import {
+  defaultRetryDelay,
+  rateLimitedRetryDelay,
+  markRateLimited,
+  getRateLimitCooldownRemaining,
+  isPermanentError,
+  isRateLimited,
+  resilientSingleRelayRequest,
+} from "./resilientSubscription";
 
 export type { TagValuePointer };
 
@@ -113,6 +140,15 @@ export type PaginatedTagValueLoaderOptions = {
    * "load more" button patterns.
    */
   manualPaginate$?: Observable<void>;
+  /**
+   * Number of reconnect attempts per relay before giving up (before first
+   * EOSE). After first EOSE retries are unlimited. Default: 3.
+   */
+  retryCount?: number;
+  /**
+   * Gap-fill overlap buffer in seconds. Default: 600 (10 minutes).
+   */
+  gapFillBuffer?: number;
 };
 
 export type PaginatedTagValueLoader = (
@@ -161,8 +197,12 @@ function exhaustionKey(relay: string, tagName: string, f: Filter): string {
 }
 
 /**
- * Process one batch window: for each relay in the filter map, open a live
- * subscription and (if needed) paginate backward until exhausted.
+ * Process one relay stream: open a resilient live subscription and (if needed)
+ * paginate backward until exhausted.
+ *
+ * Reconnect behaviour mirrors processRelay in resilientSubscription:
+ *   - Exponential backoff, rate-limit handling, permanent error fast-fail,
+ *     AuthRequired fast-fail, unlimited retries after first EOSE.
  *
  * @param signal          - settle signal; call extend/settle/error as relay
  *                          work progresses.
@@ -176,6 +216,8 @@ function processRelayStream(
   paginationFilter: TimelessFilter,
   key: string,
   limit: number,
+  retryCount: number,
+  gapFillBuffer: number,
   exhausted: Set<string>,
   signal: SettleSignal,
   manualPaginate$: Observable<void> | undefined,
@@ -185,54 +227,56 @@ function processRelayStream(
   delete liveFilter.limit;
 
   // If already exhausted, just open the live subscription — signal settled
-  // immediately since there is no history work to do. No lastReceivedAt on
-  // this path since it's a fresh subscription with no prior state.
+  // immediately since there is no history work to do.
   if (exhausted.has(key)) {
     signal.settle(relay);
-    return defer(() =>
-      // Single-relay API so the stream still emits NostrEvent | "EOSE" —
-      // onlyEvents() needs the EOSE to strip.
-      pool.relay(relay).subscription([liveFilter], { reconnect: false }),
-    ).pipe(
-      onlyEvents(),
-      retry({ count: 3, delay: 1000, resetOnSuccess: true }),
-      // Relay connection errors (WebSocket close/error after retry) are
-      // non-fatal: swallow so they never reach use$/useObservableState and
-      // crash the React tree. The relay just stops contributing events.
-      catchError(() => EMPTY),
-    ) as Observable<NostrEvent>;
+    return buildResilientLiveSub(
+      pool,
+      relay,
+      liveFilter,
+      retryCount,
+      gapFillBuffer,
+      signal,
+      /* exhaustedPath */ true,
+    );
   }
 
   return new Observable<NostrEvent>((subscriber) => {
     let countBeforeEose = 0;
     let oldestSeen: number | undefined;
-    // lastReceivedAt is tracked per relay so that on reconnect we can inject
-    // since: lastReceivedAt - 600 to avoid re-receiving the full history.
-    // This is the primary motivation for using defer() + retry() instead of
-    // pool.subscription(reconnect: Infinity) — the latter reopens with the
-    // same static filter verbatim, causing the relay to replay everything it
-    // has up to its default limit on every reconnect (wasteful bandwidth).
-    // The tradeoff: we bypass applesauce's built-in reconnect backoff and
-    // replicate it manually with retry(). Applesauce's defaults are weak
-    // (count: 3, delay: 1000ms, resetOnSuccess: true) so this is acceptable.
+    // lastReceivedAt persists across retry/repeat cycles so reconnect REQs
+    // use since: lastReceivedAt - gapFillBuffer instead of replaying history.
     let lastReceivedAt: number | undefined;
     let eoseSeen = false;
+    // Once true, retries are unlimited — relay was reachable, treat drops as
+    // transient.
+    let everReceivedEose = false;
+    // Reconnect attempt counter for backoff. Reset to 0 each time EOSE is
+    // received so a relay that has been healthy starts its next reconnect
+    // from 1s rather than the capped maximum.
+    let reconnectAttempts = 0;
     let paginateSub: { unsubscribe(): void } | undefined;
     let manualSub: { unsubscribe(): void } | undefined;
     let gapFillSub: { unsubscribe(): void } | undefined;
 
-    // Shared pagination window — driven by auto (BehaviorSubject) or manual
-    // (Subject pushed on each manualPaginate$ emission after EOSE).
-    // Created lazily once EOSE is received.
+    // Shared pagination window — driven by auto (BehaviorSubject) or manual.
     let window$: Subject<{ since?: number; until?: number }> | undefined;
 
     const startPagination = () => {
       // Wrap pool so signal.extend() is called at the start of every internal
       // page request, not just the first — loadBlocksFromRelay drives
       // subsequent pages internally without pushing to window$ again.
+      //
+      // Use resilientSingleRelayRequest instead of pool.request so each
+      // pagination page gets exponential backoff, rate-limit handling, and
+      // permanent error fast-fail. The single-relay API is correct here —
+      // loadBlocksFromRelay always calls extendingPool with [relay], and
+      // pool.relay(relay).request() is the right one-shot primitive.
       const extendingPool = (relays: string[], filters: Filter[]) => {
         signal.extend(relay);
-        return pool.request(relays, filters);
+        return resilientSingleRelayRequest(pool, relays[0], filters, {
+          retryCount,
+        });
       };
 
       if (manualPaginate$) {
@@ -286,33 +330,37 @@ function processRelayStream(
         });
     };
 
-    // Use defer() so the subscription factory re-executes on each reconnect,
-    // allowing us to inject since: lastReceivedAt - 600 dynamically.
-    // reconnect: false — retry() below handles reconnection instead.
-    // IMPORTANT: defer() must be inlined here (not in a helper) so it closes
-    // over lastReceivedAt by reference and reads the current value on each
-    // reconnect attempt, not the value at subscription creation time.
-    const liveSub = defer(() =>
-      // Single-relay API so the stream still emits NostrEvent | "EOSE" —
-      // the group-level pool.subscription() drops EOSE in v6, but we need it
-      // here to drive settled$ and pagination.
-      pool.relay(relay).subscription(
-        [
-          {
-            ...liveFilter,
-            // On reconnect, only request events since the last received
-            // timestamp minus a 10-minute buffer to cover any gap during
-            // the disconnect. On first connect lastReceivedAt is undefined
-            // so no since is set — the relay sends its full recent history
-            // which we use as the initial depth probe.
-            ...(lastReceivedAt !== undefined
-              ? { since: lastReceivedAt - 600 }
-              : {}),
-          },
-        ],
-        { reconnect: false },
-      ),
-    )
+    // Build the live subscription factory. defer() re-executes on each retry
+    // so lastReceivedAt is read fresh on every reconnect attempt, injecting
+    // since: lastReceivedAt - gapFillBuffer to avoid replaying full history.
+    //
+    // reconnect: false — we own the reconnect lifecycle via retry() below.
+    const buildLiveSub = () => {
+      eoseSeen = false;
+      countBeforeEose = 0;
+      const filtersWithSince: Filter[] = [
+        {
+          ...liveFilter,
+          ...(lastReceivedAt !== undefined
+            ? { since: lastReceivedAt - gapFillBuffer }
+            : {}),
+        },
+      ];
+      // If this relay is currently rate-limited, wait out the cooldown before
+      // opening the subscription. Settle immediately so the EOSE signal is
+      // not blocked waiting for a relay we know won't respond yet.
+      const sub$ = pool.relay(relay).subscription(filtersWithSince, {
+        reconnect: false,
+      });
+      const remaining = getRateLimitCooldownRemaining(relay);
+      if (remaining > 0) {
+        signal.settle(relay);
+        return timer(remaining).pipe(switchMap(() => sub$));
+      }
+      return sub$;
+    };
+
+    const liveSub = defer(buildLiveSub)
       .pipe(
         tap((msg) => {
           if (msg !== "EOSE") {
@@ -321,19 +369,44 @@ function processRelayStream(
               lastReceivedAt = t;
           }
         }),
-        // Replicate applesauce's default subscription retry config.
-        // See DEFAULT_RETRY_CONFIG in applesauce-relay/dist/relay.js:
-        //   { count: 3, delay: 1000, resetOnSuccess: true }
-        // We must replicate rather than use reconnect: Infinity because
-        // defer() needs to re-run on each attempt to pick up lastReceivedAt.
-        retry({ count: 3, delay: 1000, resetOnSuccess: true }),
-        // After retries are exhausted, the relay is unreachable. Notify the
-        // settle signal so consumers don't wait forever, then complete the
-        // per-relay stream silently. The merge() of all per-relay streams
-        // continues — other relays carry on producing events. This MUST be
-        // after retry() so transient errors get retried first; only post-
-        // retry errors land here.
-        catchError(() => {
+        retry({
+          count: Infinity,
+          delay: (err) => {
+            // Auth-required: fast-fail — handled by pool-level auth policy.
+            if (err instanceof AuthRequiredError) throw err;
+            // Permanent policy errors: relay will never accept this REQ.
+            if (isPermanentError(err)) throw err;
+            reconnectAttempts++;
+            if (!everReceivedEose && reconnectAttempts > retryCount) throw err;
+            // Rate-limited: record cooldown so all concurrent subscriptions
+            // to this relay also hold off.
+            if (isRateLimited(err)) {
+              const { ms, timer$ } = rateLimitedRetryDelay(
+                err,
+                reconnectAttempts,
+              );
+              markRateLimited(relay, Date.now() + ms);
+              return timer$;
+            }
+            return defaultRetryDelay(err, reconnectAttempts);
+          },
+        }),
+        // After retries are exhausted (or a fast-fail error surfaces),
+        // notify the settle signal so consumers don't wait forever, then
+        // complete this per-relay stream silently.
+        catchError((err) => {
+          if (err instanceof AuthRequiredError) {
+            console.debug(
+              `[tagValuePaginatedLoader] auth-required on ${relay} — settling`,
+            );
+          } else if (isPermanentError(err)) {
+            const prefix = (err as RelayClosedError).reason
+              .split(":")[0]
+              .trim();
+            console.debug(
+              `[tagValuePaginatedLoader] permanent error on ${relay} (${prefix}) — settling`,
+            );
+          }
           signal.error(relay);
           return EMPTY;
         }),
@@ -342,6 +415,8 @@ function processRelayStream(
         next: (msg) => {
           if (msg === "EOSE") {
             eoseSeen = true;
+            everReceivedEose = true;
+            reconnectAttempts = 0;
             if (manualPaginate$) {
               // Manual mode: signal settled at EOSE regardless of count —
               // the user decides when to request more
@@ -373,9 +448,8 @@ function processRelayStream(
       });
 
     // Foreground resume gap-fill: when the app returns from background, fire a
-    // one-shot REQ with since: lastReceivedAt - 600 to recover missed events.
-    // Only fires if we have received at least one event (lastReceivedAt defined).
-    // completeOnEose() auto-completes after EOSE so the subscription is short-lived.
+    // one-shot REQ with since: lastReceivedAt - gapFillBuffer to recover missed
+    // events. completeOnEose() auto-completes after EOSE so it's short-lived.
     // EventStore deduplication (mapEventsToStore + filterDuplicateEvents in
     // processBatch) handles any overlap with the live subscription.
     const gapFillResumeSub = foregroundResume$.subscribe(() => {
@@ -383,11 +457,10 @@ function processRelayStream(
       gapFillSub?.unsubscribe();
       const gapFilter: Filter = {
         ...liveFilter,
-        since: lastReceivedAt - 600,
+        since: lastReceivedAt - gapFillBuffer,
       };
       gapFillSub = pool
-        .relay(relay)
-        .subscription([gapFilter], { reconnect: false })
+        .subscription([relay], gapFilter, { reconnect: false })
         .pipe(completeOnEose(), onlyEvents())
         .subscribe({
           next: (event) => subscriber.next(event),
@@ -407,6 +480,89 @@ function processRelayStream(
   });
 }
 
+/**
+ * Build a resilient live-only subscription for an already-exhausted relay.
+ * Uses the same retry/error-handling logic as the main processRelayStream live
+ * subscription but without pagination or EOSE tracking.
+ *
+ * When exhaustedPath is true the settle signal has already been called by the
+ * caller; this function does not call it again.
+ */
+function buildResilientLiveSub(
+  pool: RelayPool,
+  relay: string,
+  liveFilter: Filter,
+  retryCount: number,
+  gapFillBuffer: number,
+  signal: SettleSignal,
+  exhaustedPath: boolean,
+): Observable<NostrEvent> {
+  let lastReceivedAt: number | undefined;
+  let everReceivedEose = false;
+  let reconnectAttempts = 0;
+
+  return defer(() => {
+    const filtersWithSince: Filter[] = [
+      {
+        ...liveFilter,
+        ...(lastReceivedAt !== undefined
+          ? { since: lastReceivedAt - gapFillBuffer }
+          : {}),
+      },
+    ];
+    const sub$ = pool.relay(relay).subscription(filtersWithSince, {
+      reconnect: false,
+    });
+    const remaining = getRateLimitCooldownRemaining(relay);
+    if (remaining > 0) {
+      if (!exhaustedPath) signal.settle(relay);
+      return timer(remaining).pipe(switchMap(() => sub$));
+    }
+    return sub$;
+  }).pipe(
+    tap((msg) => {
+      if (msg !== "EOSE") {
+        const t = (msg as NostrEvent).created_at;
+        if (lastReceivedAt === undefined || t > lastReceivedAt)
+          lastReceivedAt = t;
+      } else {
+        everReceivedEose = true;
+        reconnectAttempts = 0;
+      }
+    }),
+    onlyEvents(),
+    retry({
+      count: Infinity,
+      delay: (err) => {
+        if (err instanceof AuthRequiredError) throw err;
+        if (isPermanentError(err)) throw err;
+        reconnectAttempts++;
+        if (!everReceivedEose && reconnectAttempts > retryCount) throw err;
+        if (isRateLimited(err)) {
+          const { ms, timer$ } = rateLimitedRetryDelay(err, reconnectAttempts);
+          markRateLimited(relay, Date.now() + ms);
+          return timer$;
+        }
+        return defaultRetryDelay(err, reconnectAttempts);
+      },
+    }),
+    catchError((err) => {
+      if (err instanceof AuthRequiredError) {
+        console.debug(
+          `[tagValuePaginatedLoader] auth-required on ${relay} (exhausted path) — settling`,
+        );
+      } else if (isPermanentError(err)) {
+        const prefix = (err as RelayClosedError).reason.split(":")[0].trim();
+        console.debug(
+          `[tagValuePaginatedLoader] permanent error on ${relay} (${prefix}, exhausted path) — settling`,
+        );
+      }
+      signal.error(relay);
+      return EMPTY;
+    }),
+  ) as Observable<NostrEvent>;
+}
+
 function processBatch(
   pool: RelayPool,
   tagName: string,
@@ -416,6 +572,8 @@ function processBatch(
   settleOpts: SettleSignalOptions,
 ): { events$: Observable<NostrEvent>; eose$: Observable<"EOSE"> } {
   const limit = opts.limit ?? 500;
+  const retryCount = opts.retryCount ?? 3;
+  const gapFillBuffer = opts.gapFillBuffer ?? 600;
   const relayFilterMap = buildRelayFilterMap(tagName, pointers, opts);
   const relayIds = Object.keys(relayFilterMap);
 
@@ -437,6 +595,8 @@ function processBatch(
       paginationFilter,
       key,
       limit,
+      retryCount,
+      gapFillBuffer,
       exhausted,
       signal,
       opts.manualPaginate$,
@@ -480,7 +640,8 @@ function processBatch(
  * the EOSE signal is not needed.
  *
  * - Batches pointers by bufferTime/bufferSize (same as createTagValueLoader)
- * - Opens a live subscription per relay (reconnect: false + defer/retry backoff)
+ * - Opens a resilient live subscription per relay with exponential backoff,
+ *   rate-limit handling, and permanent error fast-fail
  * - Paginates backward per relay until exhausted
  * - Skips already-exhausted relay+batch combos on subsequent calls
  * - Emits "EOSE" settleTime ms after the first relay finishes its current work

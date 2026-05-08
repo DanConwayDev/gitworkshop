@@ -161,9 +161,16 @@ const relayRateLimitCooldown = new Map<string, number>();
  * Mark a relay as rate-limited until `until` (epoch ms).
  * Only extends the cooldown — never shortens an existing one.
  */
-function markRateLimited(relayUrl: string, until: number): void {
+export function markRateLimited(relayUrl: string, until: number): void {
   const existing = relayRateLimitCooldown.get(relayUrl) ?? 0;
   if (until > existing) relayRateLimitCooldown.set(relayUrl, until);
+}
+
+/**
+ * Returns the remaining rate-limit cooldown in ms for a relay, or 0 if none.
+ */
+export function getRateLimitCooldownRemaining(relayUrl: string): number {
+  return Math.max(0, (relayRateLimitCooldown.get(relayUrl) ?? 0) - Date.now());
 }
 
 /**
@@ -178,7 +185,7 @@ function markRateLimited(relayUrl: string, until: number): void {
  * existing subscription, which defer()+retry() resolves automatically because
  * req() generates a fresh nanoid() on each re-execution.
  */
-const PERMANENT_CLOSED_PREFIXES = new Set([
+export const PERMANENT_CLOSED_PREFIXES = new Set([
   "restricted", // paid relay, invite-only, etc. — will never let us read
   "blocked", // our pubkey or IP is blocked from reading
   "pow", // proof-of-work required on REQ (we don't support PoW)
@@ -191,7 +198,7 @@ const PERMANENT_CLOSED_PREFIXES = new Set([
  * Extract the NIP-01 machine-readable prefix from a RelayClosedError reason,
  * e.g. "rate-limited: too many requests" → "rate-limited".
  */
-function closedPrefix(err: RelayClosedError): string {
+export function closedPrefix(err: RelayClosedError): string {
   return err.reason.split(":")[0].trim();
 }
 
@@ -199,7 +206,7 @@ function closedPrefix(err: RelayClosedError): string {
  * Returns true for CLOSED errors that are permanent relay policy decisions
  * and should not be retried.
  */
-function isPermanentError(err: unknown): boolean {
+export function isPermanentError(err: unknown): boolean {
   return (
     err instanceof RelayClosedError &&
     !(err instanceof AuthRequiredError) &&
@@ -211,7 +218,7 @@ function isPermanentError(err: unknown): boolean {
  * Returns true for CLOSED errors that indicate rate-limiting and need a
  * prolonged backoff before retrying.
  */
-function isRateLimited(err: unknown): boolean {
+export function isRateLimited(err: unknown): boolean {
   return (
     err instanceof RelayClosedError &&
     !(err instanceof AuthRequiredError) &&
@@ -288,9 +295,18 @@ function processRelay(
       // Wrap pool so signal.extend() is called at the start of every internal
       // page request, not just the first — loadBlocksFromRelay drives
       // subsequent pages internally without pushing to window$ again.
+      //
+      // Use resilientSingleRelayRequest instead of pool.request so each
+      // pagination page gets exponential backoff, rate-limit handling, and
+      // permanent error fast-fail. The single-relay API is correct here —
+      // loadBlocksFromRelay always calls extendingPool with [relay], and
+      // pool.relay(relay).request() is the right one-shot primitive.
       const extendingPool = (relays: string[], filters: Filter[]) => {
         signal.extend(relay);
-        return pool.request(relays, filters);
+        return resilientSingleRelayRequest(pool, relays[0], filters, {
+          retryCount: opts.retryCount,
+          retryDelay: opts.retryDelay,
+        });
       };
 
       if (opts.manualPaginate$) {
@@ -375,7 +391,7 @@ function processRelay(
       const sub$ = pool.relay(relay).subscription(filtersWithSince, {
         reconnect: false,
       });
-      const remaining = (relayRateLimitCooldown.get(relay) ?? 0) - Date.now();
+      const remaining = getRateLimitCooldownRemaining(relay);
       if (remaining > 0) {
         signal.settle(relay);
         return timer(remaining).pipe(switchMap(() => sub$));
@@ -834,4 +850,78 @@ export function resilientRequest(
     ...opts,
     autoClose: true,
   });
+}
+
+/**
+ * Resilient one-shot request to a single relay.
+ *
+ * Uses pool.relay(relay).request() — the proper single-relay one-shot API
+ * that completes naturally after EOSE — wrapped with defer() + retry() so
+ * each attempt gets a fresh REQ and the full error-classification logic
+ * (exponential backoff, rate-limit cooldown, permanent error fast-fail,
+ * AuthRequired fast-fail) is applied.
+ *
+ * This is the right primitive for pagination page requests where:
+ *   - The relay is already known (no pool-level fan-out needed)
+ *   - The request must complete after EOSE (one page = one REQ)
+ *   - Reconnect and gap-fill are not applicable
+ *
+ * Returns Observable<NostrEvent> (EOSE is consumed internally by
+ * pool.relay().request()).
+ */
+export function resilientSingleRelayRequest(
+  pool: RelayPool,
+  relay: string,
+  filters: Filter[],
+  opts: Pick<ResilientSubscriptionOptions, "retryCount" | "retryDelay"> = {},
+): Observable<NostrEvent> {
+  const retryCount = opts.retryCount ?? 3;
+  let reconnectAttempts = 0;
+  let everSucceeded = false;
+
+  return defer(() => {
+    // If this relay is currently rate-limited, wait out the cooldown before
+    // opening the request. This prevents hammering a relay that just told us
+    // to back off, which would reset its rate-limit window.
+    const remaining = getRateLimitCooldownRemaining(relay);
+    const req$ = pool.relay(relay).request(filters);
+    if (remaining > 0) return timer(remaining).pipe(switchMap(() => req$));
+    return req$;
+  }).pipe(
+    tap(() => {
+      // Any event received means the request is succeeding — reset backoff
+      // so the next retry (if any) starts from 1s again.
+      everSucceeded = true;
+    }),
+    retry({
+      count: Infinity,
+      delay: (err) => {
+        if (err instanceof AuthRequiredError) throw err;
+        if (isPermanentError(err)) throw err;
+        reconnectAttempts++;
+        if (!everSucceeded && reconnectAttempts > retryCount) throw err;
+        if (isRateLimited(err)) {
+          const { ms, timer$ } = rateLimitedRetryDelay(err, reconnectAttempts);
+          markRateLimited(relay, Date.now() + ms);
+          return timer$;
+        }
+        const retryDelay = opts.retryDelay ?? defaultRetryDelay;
+        return typeof retryDelay === "function"
+          ? retryDelay(err, reconnectAttempts)
+          : timer(retryDelay);
+      },
+    }),
+    catchError((err) => {
+      if (err instanceof AuthRequiredError) {
+        console.debug(
+          `[resilientSingleRelayRequest] auth-required on ${relay} — giving up`,
+        );
+      } else if (isPermanentError(err)) {
+        console.debug(
+          `[resilientSingleRelayRequest] permanent error on ${relay} (${closedPrefix(err as RelayClosedError)}) — giving up`,
+        );
+      }
+      return EMPTY;
+    }),
+  );
 }
