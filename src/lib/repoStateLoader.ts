@@ -48,8 +48,8 @@ import { mapEventsToStore } from "applesauce-core";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
-import { EMPTY } from "rxjs";
-import { catchError } from "rxjs/operators";
+import { EMPTY, merge } from "rxjs";
+import { catchError, filter, share } from "rxjs/operators";
 import { resilientSubscription } from "./resilientSubscription";
 import { DEFAULT_SETTLE_TIME } from "./settleSignal";
 
@@ -105,7 +105,11 @@ export function loadRepoStateFromRelays(
     "#d": [dTag],
   } as Filter;
 
-  return resilientSubscription(pool, relays$, [stateFilter], {
+  // Split into two branches sharing the same source so that:
+  //   • Events are written into the store (mapEventsToStore) and passed through.
+  //   • "EOSE" sentinel reaches the caller — onlyEvents() would strip it, so
+  //     it must be passed through a separate branch.
+  const raw$ = resilientSubscription(pool, relays$, [stateFilter], {
     settleTime: opts.settleTime ?? DEFAULT_SETTLE_TIME,
     // Keep subscriptions alive for live state updates — reconnect and
     // gap-fill are the whole point of using resilientSubscription here.
@@ -115,8 +119,14 @@ export function loadRepoStateFromRelays(
     // most one current version per pubkey+d-tag combination per relay.
     paginate: false,
   }).pipe(
-    onlyEvents(),
-    mapEventsToStore(eventStore),
     catchError(() => EMPTY),
+    share(),
+  );
+
+  return merge(
+    // Write events into the store; pass them downstream as RepoStateResponse.
+    raw$.pipe(onlyEvents(), mapEventsToStore(eventStore)),
+    // Let the EOSE sentinel through to the caller.
+    raw$.pipe(filter((msg): msg is "EOSE" => msg === "EOSE")),
   ) as Observable<RepoStateResponse>;
 }
