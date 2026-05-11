@@ -1,6 +1,4 @@
-import { ActionRunner, Actions } from "applesauce-actions";
-import { EventFactory } from "applesauce-core";
-import { getSeenRelays } from "applesauce-core/helpers/relays";
+import { ActionRunner } from "applesauce-actions";
 import type { NostrEvent } from "nostr-tools";
 import { eventStore, publish } from "./nostr";
 import { accounts } from "./accounts";
@@ -19,28 +17,6 @@ const INDEX_RELAY_KINDS = new Set<number>([
   10018, // NIP-51 Git repositories follow list
   10317, // Grasp server list
 ]);
-
-/**
- * Global EventFactory instance for creating signed events.
- * Uses accounts.signer — a ProxySigner that automatically tracks the active
- * account, so switching accounts is reflected immediately without recreating
- * the factory.
- */
-export const factory = new EventFactory({
-  signer: accounts.signer,
-  /**
-   * Provide relay hints for event tags (E/e) by looking up which relay the
-   * event was received from in the EventStore. This ensures NIP-22 comment
-   * events include valid relay hints on their E/e tags, which is required by
-   * some relays and improves event discoverability.
-   */
-  getEventRelayHint: (id: string): string | undefined => {
-    const event = eventStore.getEvent(id);
-    if (!event) return undefined;
-    const seen = getSeenRelays(event);
-    return seen ? [...seen][0] : undefined;
-  },
-});
 
 /**
  * Publish function passed to the ActionRunner.
@@ -66,14 +42,27 @@ function runnerPublish(event: NostrEvent): Promise<void> {
  * Global ActionRunner instance for executing pre-built Nostr actions.
  * Examples: UpdateProfile, CreateNote, etc.
  *
+ * In Applesauce v6 the ActionRunner takes the signer directly — the
+ * `EventFactory` singleton is gone, and actions instantiate typed factories
+ * (e.g. `IssueFactory`, `ProfileFactory`) per-call.
+ *
+ * Relay-hint resolution (`getEventRelayHint` / `getPubkeyRelayHint`) now
+ * lives in `src/factories/hints.ts` and is passed per-call into tag
+ * operations such as `addProfilePointerTag(pubkey, getPubkeyRelayHint)`.
+ *
+ * Uses `accounts.signer` — a ProxySigner that automatically tracks the
+ * active account, so switching accounts is reflected immediately without
+ * recreating the runner.
+ *
  * Usage:
  * ```ts
- * import { runner, Actions } from '@/services/actions';
+ * import { runner } from '@/services/actions';
  *
- * await runner.run(Actions.UpdateProfile, { name: 'Alice' });
+ * await runner.run(UpdateProfile, { name: 'Alice' });
  * ```
  */
-export const runner = new ActionRunner(eventStore, factory, runnerPublish);
-
-// Export Actions for convenience
-export { Actions };
+export const runner = new ActionRunner(
+  eventStore,
+  accounts.signer,
+  runnerPublish,
+);

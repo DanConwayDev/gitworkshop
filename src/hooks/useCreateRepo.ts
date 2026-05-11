@@ -13,13 +13,10 @@
 import { useCallback, useRef, useState } from "react";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { nip19 } from "nostr-tools";
-import type { NostrEvent, EventTemplate } from "nostr-tools";
+import type { NostrEvent } from "nostr-tools";
 import { createInitialCommit } from "@/lib/create-repo";
-import {
-  RepoAnnouncementBlueprint,
-  RepoStateBlueprint,
-} from "@/blueprints/repo";
-import { factory } from "@/services/actions";
+import { RepoAnnouncementFactory } from "@/factories/RepoAnnouncementFactory";
+import { RepoStateFactory } from "@/factories/RepoStateFactory";
 import { eventStore, pool } from "@/services/nostr";
 import { outboxStore } from "@/services/outbox";
 
@@ -124,31 +121,21 @@ export function useCreateRepo() {
         );
         const relayUrls = input.graspServers.map((s) => s.wsUrl);
 
-        // Create event templates via the factory (uses the active account's signer)
-        const announcementTemplate = await factory.create(
-          RepoAnnouncementBlueprint,
+        // Build + sign both events using typed factories
+        const signedAnnouncement = await RepoAnnouncementFactory.create(
           input.identifier,
           input.name,
           input.description,
           cloneUrls,
           relayUrls,
           commitHash,
-        );
+        ).sign(account.signer);
 
-        const stateTemplate = await factory.create(
-          RepoStateBlueprint,
+        const signedState = await RepoStateFactory.create(
           input.identifier,
           commitHash,
           "main",
-        );
-
-        // Sign both events
-        const signedAnnouncement = await account.signer.signEvent(
-          announcementTemplate as EventTemplate,
-        );
-        const signedState = await account.signer.signEvent(
-          stateTemplate as EventTemplate,
-        );
+        ).sign(account.signer);
 
         if (abort.signal.aborted) return;
 

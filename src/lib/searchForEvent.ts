@@ -30,7 +30,8 @@
  */
 
 import type { RelayPool } from "applesauce-relay";
-import { completeOnEose, onlyEvents } from "applesauce-relay";
+import { onlyEvents } from "applesauce-relay";
+import { resilientRequest } from "@/lib/resilientSubscription";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import { normalizeUrl } from "@/lib/url";
@@ -49,6 +50,7 @@ import {
   debounceTime,
   distinctUntilChanged,
   timeout,
+  catchError,
 } from "rxjs/operators";
 
 // ---------------------------------------------------------------------------
@@ -361,55 +363,59 @@ export function searchForEvent(
           });
         teardown.add(connSub);
 
-        // Use relayInstance.req() directly instead of pool.req([url]) to
-        // bypass RelayGroup.internalSubscription()'s catchError wrapper, which
-        // silently converts connection errors into fake EOSE messages — making
-        // an unreachable relay look like a successful empty response.
+        // Use relayInstance.request() — the proper one-shot API that completes
+        // after EOSE and returns NostrEvent directly. We use the single-relay
+        // API (not pool.subscription/pool.req) to bypass RelayGroup's catchError
+        // wrapper, which silently converts connection errors into fake EOSE
+        // messages — making an unreachable relay look like a successful empty
+        // response. request() completes on EOSE so we detect it via complete().
         const sub = relayInstance
-          .req([searchFilter])
+          .request([searchFilter])
           .pipe(
             // If the relay doesn't respond within relayTimeout ms, treat it as
-            // an error. This handles relays that fail to connect (req() hangs
+            // an error. This handles relays that fail to connect (request() hangs
             // indefinitely because the Relay class catches connection errors
             // internally and retries — it never propagates them to subscribers).
             timeout({ first: relayTimeout }),
             takeUntil(found$),
           )
           .subscribe({
-            next: (msg) => {
+            next: (event) => {
               if (found) return;
 
-              if (msg === "EOSE") {
-                eoseRelays.add(relayUrl);
-                activeRelays.delete(relayUrl);
+              // relay.request() emits NostrEvent directly (EOSE is consumed
+              // internally and triggers stream completion via complete() below).
+              if (!found) {
+                found = true;
                 subscriber.next({
-                  type: "relay-eose",
+                  type: "relay-found",
                   relay: relayUrl,
                   group: groupLabel,
+                  event,
                 });
+                found$.next();
+                subscriber.complete();
+              }
+            },
+            complete: () => {
+              // relay.request() completes after EOSE — treat as EOSE received.
+              if (found) return;
+              eoseRelays.add(relayUrl);
+              activeRelays.delete(relayUrl);
+              subscriber.next({
+                type: "relay-eose",
+                relay: relayUrl,
+                group: groupLabel,
+              });
 
-                // Nudge the settle debounce for immediate groups
-                if (!isDeferred) anyImmediateResponse$.next();
+              // Nudge the settle debounce for immediate groups
+              if (!isDeferred) anyImmediateResponse$.next();
 
-                if (
-                  activeRelays.size === 0 &&
-                  subscribedRelays.size === eoseRelays.size
-                ) {
-                  checkGroupExhausted();
-                }
-              } else {
-                const event = msg as NostrEvent;
-                if (!found) {
-                  found = true;
-                  subscriber.next({
-                    type: "relay-found",
-                    relay: relayUrl,
-                    group: groupLabel,
-                    event,
-                  });
-                  found$.next();
-                  subscriber.complete();
-                }
+              if (
+                activeRelays.size === 0 &&
+                subscribedRelays.size === eoseRelays.size
+              ) {
+                checkGroupExhausted();
               }
             },
             error: (err) => {
@@ -532,9 +538,12 @@ export function searchForEvent(
 
       const relays = [...new Set(allRelaysSearched.map(normalizeUrl))];
 
-      const sub = pool
-        .req(relays, allFilters)
-        .pipe(completeOnEose(), onlyEvents(), takeUntil(found$))
+      const sub = resilientRequest(pool, relays, allFilters)
+        .pipe(
+          onlyEvents(),
+          takeUntil(found$),
+          catchError(() => EMPTY),
+        )
         .subscribe({
           next: (event) => {
             if (found) return;

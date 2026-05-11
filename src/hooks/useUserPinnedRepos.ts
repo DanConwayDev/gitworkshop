@@ -64,9 +64,10 @@ export function useUserPinnedRepos(
           "#d": coords.map((c) => c.split(":")[2]).filter(Boolean),
         } as Filter;
 
-        return resilientSubscription(pool, gitIndexRelays.getValue(), [
-          filter,
-        ]).pipe(onlyEvents(), mapEventsToStore(store));
+        return resilientSubscription(pool, gitIndexRelays, [filter]).pipe(
+          onlyEvents(),
+          mapEventsToStore(store),
+        );
       }),
     );
   }, [pubkey, store]);

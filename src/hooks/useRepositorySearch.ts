@@ -4,30 +4,33 @@
  * Two-mode hook for the RepositoriesPage:
  *
  * Mode 1 — Browse (empty query):
- *   Fetches kind:30617 events page-by-page using an `until` cursor against
- *   gitIndexRelays (or relayOverride). Uses pool.req() so batch.length
- *   reflects the true relay-sent count for cursor advancement.
- *   Returns { repos, isLoading, hasMore, loadMore }.
+ *   Opens a resilientSubscription with manualPaginate$ against gitIndexRelays
+ *   (or relayOverride). Events stream into the EventStore as they arrive;
+ *   the EOSE settle signal clears isLoading. The IntersectionObserver sentinel
+ *   calls loadMore() which fires the manualPaginate$ subject to fetch the next
+ *   backward page. hasMore goes false when a page returns fewer than PAGE_SIZE
+ *   events.
  *
- * Mode 2 — Search (non-empty query, debounced 300ms):
- *   Fires NIP-50 { kinds: [30617], search: query } against gitIndexRelays.
- *   Simultaneously fires NIP-50 { kinds: [0], search: query } against
- *   relay.ditto.pub for user resolution.
- *   Returns repos from the NIP-50 result set, plus matchedUserPubkeys for
- *   badge display on RepoCards whose maintainer matched a user result.
+ * Mode 2 — Search (non-empty committedQuery):
+ *   Opens a resilientSubscription with manualPaginate$ for NIP-50
+ *   { kinds: [30617], search: query } against gitIndexRelays. Simultaneously
+ *   fires a resilientRequest for NIP-50 { kinds: [0], search: query } against
+ *   relay.ditto.pub for user resolution, then fetches repos for matched users.
+ *   Results are pushed into a per-session BehaviorSubject so the UI always
+ *   updates even when eventStore.add() is a no-op (dedup case).
+ *
+ *   Query cache: completed sessions are stored in a Map keyed by
+ *   "trimmedQuery|relayKey". On a cache hit the previous BehaviorSubject
+ *   (already populated) is reused immediately — no relay request is made.
  *
  * RelayPage fix:
  *   When relayOverride is set, the displayed list is scoped to events that
- *   were actually received from those relays (via getSeenRelays). This
- *   prevents EventStore events from other relays bleeding into the view.
- *
- * All fetched events are piped through mapEventsToStore so downstream
- * components (UserLink, UserAvatar) can reactively read profiles.
+ *   were actually received from those relays (via isFromRelay). This prevents
+ *   EventStore events from other relays bleeding into the view.
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { lastValueFrom, toArray } from "rxjs";
-import { onlyEvents, completeOnEose } from "applesauce-relay";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { BehaviorSubject, Subject } from "rxjs";
 import { isFromRelay } from "applesauce-core/helpers";
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
@@ -42,21 +45,28 @@ import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
 import { map } from "rxjs/operators";
 import type { Observable } from "rxjs";
+import {
+  resilientSubscription,
+  resilientRequest,
+} from "@/lib/resilientSubscription";
 
 // NIP-50 user resolution relay — supports kind:0 search
 const USER_SEARCH_RELAY = "wss://relay.ditto.pub";
 
 const PAGE_SIZE = 20;
-const SEARCH_DEBOUNCE_MS = 300;
+// How long to wait after the last event in a pagination page before concluding
+// the page is done. Covers both the normal case (events arrive then stop) and
+// the zero-events case (relay exhausted — timer fires with count=0).
+const PAGE_SETTLE_MS = 600;
 
 export interface UseRepositorySearchResult {
   /** Resolved repos to display. undefined = initial loading. */
   repos: ResolvedRepo[] | undefined;
-  /** True while a fetch is in flight (initial load or search). */
+  /** True while a fetch is in flight (initial load, search, or pagination). */
   isLoading: boolean;
-  /** True when there are more pages to load (browse mode only). */
+  /** True when there are more pages to load. */
   hasMore: boolean;
-  /** Load the next page (browse mode). No-op in search mode. */
+  /** Trigger the next page (called by IntersectionObserver sentinel). */
   loadMore: () => void;
   /**
    * Pubkeys that matched the NIP-50 kind:0 user search.
@@ -66,10 +76,30 @@ export interface UseRepositorySearchResult {
   matchedUserPubkeys: Set<string>;
 }
 
+// ── Search result cache ───────────────────────────────────────────────────────
+
+interface SearchCacheEntry {
+  /** Live results subject — already populated with the last known results. */
+  subject: BehaviorSubject<ResolvedRepo[] | undefined>;
+  /** Whether there are more pages available for this query. */
+  hasMore: boolean;
+  /** Pubkeys that matched the NIP-50 user search for this query. */
+  matchedUserPubkeys: Set<string>;
+  /**
+   * Pagination subject for this session — still live if the subscription is
+   * open, null if the subscription has been torn down (e.g. relay changed).
+   */
+  paginate$: Subject<void> | null;
+}
+
+// Module-level cache so it survives re-renders and component remounts.
+// Keyed by "trimmedQuery|relayKey".
+const searchCache = new Map<string, SearchCacheEntry>();
+
 /**
  * Core hook for repository discovery and search.
  *
- * @param query         - Search query. Empty string = browse mode.
+ * @param query         - Committed search query. Empty string = browse mode.
  * @param relayOverride - When set, query only these relays (RelayPage).
  */
 export function useRepositorySearch(
@@ -85,119 +115,54 @@ export function useRepositorySearch(
   const relays = relayOverride ?? liveGitIndexRelays;
   const relayKey = relays.join(",");
 
-  // ── Browse mode state ──────────────────────────────────────────────────────
-  // browseIsLoading starts true (initial load pending) and is set to false
-  // once the first page fetch completes. It is NOT reset when entering/leaving
-  // search mode — the browse data persists across search sessions.
-  const [browseIsLoading, setBrowseIsLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(true);
-  // Cursor: oldest created_at from the last page
-  const untilRef = useRef<number | undefined>(undefined);
-  // Track whether we've already started the initial fetch for this relay set.
-  // null = not yet started; string = relay key of the last started fetch.
-  const fetchedRelayKey = useRef<string | null>(null);
-
-  // ── Search mode state ──────────────────────────────────────────────────────
-  const [searchIsLoading, setSearchIsLoading] = useState(false);
-  // Raw events returned by the NIP-50 kind:30617 search
-  const [searchRepoEvents, setSearchRepoEvents] = useState<
-    NostrEvent[] | undefined
-  >(undefined);
-  // Pubkeys matched by the NIP-50 kind:0 user search
-  const [matchedUserPubkeys, setMatchedUserPubkeys] = useState<Set<string>>(
-    new Set(),
-  );
-
   const trimmedQuery = query.trim();
   const isSearchMode = trimmedQuery.length > 0;
 
-  // ── Browse mode: initial fetch + loadMore ─────────────────────────────────
+  // ── Shared state ───────────────────────────────────────────────────────────
 
-  const fetchPage = useCallback(
-    async (until: number | undefined) => {
-      const filter: Filter = {
-        kinds: [REPO_KIND],
-        limit: PAGE_SIZE,
-        ...(until !== undefined ? { until } : {}),
-      };
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+  // Browse mode: how many resolved repos to expose to the UI. Starts at
+  // PAGE_SIZE and grows by PAGE_SIZE on each loadMore() call so the store
+  // timeline is sliced lazily rather than dumping all cached events at once.
+  const [browseDisplayLimit, setBrowseDisplayLimit] = useState(PAGE_SIZE);
 
-      let batch: NostrEvent[] = [];
-      try {
-        // pool.req() (not pool.request()) so batch.length reflects the true
-        // relay-sent count — pool.request() deduplicates against the store,
-        // which would cause premature termination.
-        batch = await lastValueFrom(
-          pool
-            .req(relays, filter)
-            .pipe(completeOnEose(), onlyEvents(), toArray()),
-          { defaultValue: [] },
-        );
-      } catch {
-        // Non-fatal — show whatever landed
-      }
+  // Subject that triggers the next backward page in the active subscription.
+  const paginateSubRef = useRef<Subject<void> | null>(null);
 
-      // Add to store as a side-effect so profiles etc. are available.
-      // The Relay class marks each event with addSeenRelay(event, relayUrl)
-      // synchronously, so isFromRelay() in the browseRepos observable will
-      // correctly scope the view to this relay set.
-      for (const ev of batch) eventStore.add(ev);
+  // Settle timer for pagination pages. Started immediately when loadMore() fires
+  // (handles zero-events case) and reset on each incoming event. When it fires,
+  // the page is considered done.
+  const pageSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Count of events received in the current pagination page.
+  const pageEventCountRef = useRef(0);
+  // Whether we are currently waiting for a pagination page to settle.
+  const paginatingRef = useRef(false);
 
-      if (batch.length < PAGE_SIZE) {
-        setHasMore(false);
-      } else {
-        setHasMore(true);
-        const oldest = Math.min(...batch.map((e) => e.created_at));
-        untilRef.current = oldest - 1;
-      }
+  // Start (or restart) the page settle timer. Called immediately on loadMore()
+  // and on every event that arrives while paginatingRef is true.
+  const armPageSettleTimer = useCallback((onSettle: () => void) => {
+    if (pageSettleTimerRef.current) clearTimeout(pageSettleTimerRef.current);
+    pageSettleTimerRef.current = setTimeout(onSettle, PAGE_SETTLE_MS);
+  }, []);
 
-      return batch;
-    },
-    [relays],
-  );
+  const clearPageSettleTimer = useCallback(() => {
+    if (pageSettleTimerRef.current) {
+      clearTimeout(pageSettleTimerRef.current);
+      pageSettleTimerRef.current = null;
+    }
+  }, []);
 
-  // Initial fetch when relay set changes
-  useEffect(() => {
-    if (isSearchMode) return;
-    if (fetchedRelayKey.current === relayKey) return;
-    fetchedRelayKey.current = relayKey;
+  // ── Browse mode ────────────────────────────────────────────────────────────
 
-    // Reset state for new relay set
-    untilRef.current = undefined;
-    setHasMore(true);
-    setBrowseIsLoading(true);
-
-    let cancelled = false;
-
-    fetchPage(undefined).then(() => {
-      if (!cancelled) setBrowseIsLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [relayKey, isSearchMode, fetchPage]);
-
-  const loadMore = useCallback(() => {
-    if (!hasMore || browseIsLoading || isSearchMode) return;
-    setBrowseIsLoading(true);
-
-    fetchPage(untilRef.current).then(() => {
-      setBrowseIsLoading(false);
-    });
-  }, [hasMore, browseIsLoading, isSearchMode, fetchPage]);
-
-  // ── Browse mode: reactive read from store, scoped to relay ────────────────
-
-  // All kind:30617 events from the store, filtered to those seen on the
-  // current relay set when relayOverride is active (RelayPage fix).
-  const browseRepos = use$(() => {
+  // Full resolved repo list from the store — not sliced here so the
+  // subscription stays stable and never briefly returns undefined when the
+  // display limit advances (which would hide the sentinel and break scrolling).
+  const allBrowseRepos = use$(() => {
     if (isSearchMode) return undefined;
 
     return store.timeline([{ kinds: [REPO_KIND] } as Filter]).pipe(
       map((events) => {
-        // When relayOverride is set, scope to events seen on those relays.
-        // getSeenRelays is set synchronously by the Relay class when an event
-        // arrives, so this filter is accurate for events fetched this session.
         const scoped =
           relayOverride && relayOverride.length > 0
             ? events.filter((ev) =>
@@ -207,121 +172,337 @@ export function useRepositorySearch(
         return groupIntoResolvedRepos(scoped);
       }),
     ) as unknown as Observable<ResolvedRepo[]>;
-  }, [isSearchMode, store, relayKey]); // relayKey ensures re-sub when relay changes
+  }, [isSearchMode, store, relayKey]);
 
-  // ── Search mode: debounced NIP-50 ─────────────────────────────────────────
+  // Apply the display limit outside of use$ so advancing it never causes a
+  // re-subscribe (which would briefly yield undefined and hide the sentinel).
+  const browseRepos =
+    allBrowseRepos !== undefined
+      ? allBrowseRepos.slice(0, browseDisplayLimit)
+      : undefined;
+
+  useEffect(() => {
+    if (isSearchMode) return;
+
+    setIsLoading(true);
+    setHasMore(true);
+    setBrowseDisplayLimit(PAGE_SIZE);
+    paginatingRef.current = false;
+
+    const paginate$ = new Subject<void>();
+    paginateSubRef.current = paginate$;
+
+    // Events received before EOSE (the initial page).
+    let initialPageCount = 0;
+
+    const sub = resilientSubscription(
+      pool,
+      relays,
+      [{ kinds: [REPO_KIND], limit: PAGE_SIZE } as Filter],
+      { manualPaginate$: paginate$, limit: PAGE_SIZE },
+    ).subscribe({
+      next: (msg) => {
+        if (msg === "EOSE") {
+          setHasMore(initialPageCount >= PAGE_SIZE);
+          setIsLoading(false);
+          return;
+        }
+        const ev = msg as NostrEvent;
+        eventStore.add(ev);
+
+        if (paginatingRef.current) {
+          // Counting events in a pagination page — reset the settle timer.
+          pageEventCountRef.current++;
+          armPageSettleTimer(() => {
+            paginatingRef.current = false;
+            setHasMore(pageEventCountRef.current >= PAGE_SIZE);
+            setIsLoading(false);
+          });
+        } else {
+          initialPageCount++;
+        }
+      },
+      error: () => {
+        clearPageSettleTimer();
+        setIsLoading(false);
+      },
+      complete: () => {
+        clearPageSettleTimer();
+        setIsLoading(false);
+      },
+    });
+
+    return () => {
+      sub.unsubscribe();
+      paginate$.complete();
+      paginateSubRef.current = null;
+      clearPageSettleTimer();
+    };
+  }, [relayKey, isSearchMode, armPageSettleTimer, clearPageSettleTimer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Search mode ────────────────────────────────────────────────────────────
+
+  const [matchedUserPubkeys, setMatchedUserPubkeys] = useState<Set<string>>(
+    new Set(),
+  );
+
+  // A BehaviorSubject that emits the current session's resolved repos directly.
+  // Using a subject rather than store.timeline() + filter avoids the dedup
+  // problem: when a repeated query causes the relay to re-deliver events that
+  // are already in the EventStore, eventStore.add() is a no-op and never
+  // notifies store.timeline() subscribers — so the results would stay blank.
+  // By pushing resolved repos into this subject ourselves whenever an event
+  // arrives (or is confirmed already in the store), we always get an emission.
+  const searchReposSubjectRef = useRef<
+    BehaviorSubject<ResolvedRepo[] | undefined>
+  >(new BehaviorSubject<ResolvedRepo[] | undefined>(undefined));
+  // Bumped each time a new search session starts so that use$ re-subscribes
+  // to the freshly-created (or cache-restored) BehaviorSubject.
+  const [searchSessionKey, setSearchSessionKey] = useState(0);
+
+  // Reactive read of search results — driven by the subject above.
+  // searchSessionKey in deps ensures use$ re-subscribes to the new subject
+  // instance created for each query (including cache hits).
+  const searchRepos = use$(() => {
+    if (!isSearchMode) return undefined;
+    return searchReposSubjectRef.current;
+  }, [isSearchMode, searchSessionKey]);
 
   useEffect(() => {
     if (!isSearchMode) {
-      // Leaving search mode — clear search state
-      setSearchRepoEvents(undefined);
       setMatchedUserPubkeys(new Set());
-      setSearchIsLoading(false);
+      setIsLoading(false);
       return;
     }
 
-    // During debounce window: keep previous results, no loading spinner
-    const timer = setTimeout(async () => {
-      setSearchIsLoading(true);
+    const cacheKey = `${trimmedQuery}|${relayKey}`;
+    const cached = searchCache.get(cacheKey);
 
-      try {
-        // Fire both searches in parallel
-        const [repoEvents, userEvents] = await Promise.all([
-          // NIP-50 repo search against git index relays
-          lastValueFrom(
-            pool
-              .request(relays, [
-                {
-                  kinds: [REPO_KIND],
-                  search: trimmedQuery,
-                  limit: PAGE_SIZE,
-                } as Filter,
-              ])
-              .pipe(onlyEvents(), toArray()),
-            { defaultValue: [] as NostrEvent[] },
-          ),
-          // NIP-50 user search against relay.ditto.pub
-          lastValueFrom(
-            pool
-              .request(
-                [USER_SEARCH_RELAY],
-                [{ kinds: [0], search: trimmedQuery, limit: 10 } as Filter],
-              )
-              .pipe(onlyEvents(), toArray()),
-            { defaultValue: [] as NostrEvent[] },
-          ),
-        ]);
+    if (cached) {
+      // Cache hit — restore state immediately, no relay request needed.
+      searchReposSubjectRef.current = cached.subject;
+      paginateSubRef.current = cached.paginate$;
+      setSearchSessionKey((k) => k + 1);
+      setHasMore(cached.hasMore);
+      setMatchedUserPubkeys(cached.matchedUserPubkeys);
+      setIsLoading(false);
+      paginatingRef.current = false;
+      clearPageSettleTimer();
+      return;
+    }
 
-        // Add all fetched events to the store for reactive profile lookups
-        for (const ev of repoEvents) eventStore.add(ev);
-        for (const ev of userEvents) eventStore.add(ev);
+    // Cache miss — start a fresh search session.
+    setMatchedUserPubkeys(new Set());
+    setHasMore(true);
+    paginatingRef.current = false;
+    clearPageSettleTimer();
 
-        const matchedPubkeys = new Set(userEvents.map((ev) => ev.pubkey));
+    let repoSub: { unsubscribe(): void } | null = null;
+    let userSub: { unsubscribe(): void } | null = null;
+    let userRepoSub: { unsubscribe(): void } | null = null;
 
-        // Fetch repos authored by matched users so user-name searches return results
-        let userRepoEvents: NostrEvent[] = [];
-        if (matchedPubkeys.size > 0) {
-          userRepoEvents = await lastValueFrom(
-            pool
-              .request(relays, [
-                {
-                  kinds: [REPO_KIND],
-                  authors: [...matchedPubkeys],
-                  limit: PAGE_SIZE,
-                } as Filter,
-              ])
-              .pipe(onlyEvents(), toArray()),
-            { defaultValue: [] as NostrEvent[] },
-          );
-          for (const ev of userRepoEvents) eventStore.add(ev);
-        }
+    setIsLoading(true);
 
-        // Merge repo events, deduplicating by event id
-        const allRepoEvents = repoEvents.slice();
-        const seenIds = new Set(repoEvents.map((ev) => ev.id));
-        for (const ev of userRepoEvents) {
-          if (!seenIds.has(ev.id)) {
-            seenIds.add(ev.id);
-            allRepoEvents.push(ev);
-          }
-        }
+    // Fresh session: new ID set + new subject.
+    const sessionIds = new Set<string>();
+    const subject = new BehaviorSubject<ResolvedRepo[] | undefined>(undefined);
+    searchReposSubjectRef.current = subject;
+    // Bump the session key so use$ re-subscribes to this new subject instance.
+    setSearchSessionKey((k) => k + 1);
 
-        setSearchRepoEvents(allRepoEvents);
-        setMatchedUserPubkeys(matchedPubkeys);
-      } catch {
-        setSearchRepoEvents([]);
-        setMatchedUserPubkeys(new Set());
-      } finally {
-        setSearchIsLoading(false);
+    // Build the cache entry upfront so pagination callbacks can update it.
+    const cacheEntry: SearchCacheEntry = {
+      subject,
+      hasMore: true,
+      matchedUserPubkeys: new Set(),
+      paginate$: null,
+    };
+    searchCache.set(cacheKey, cacheEntry);
+
+    // Helper: rebuild and push the current resolved repo list into the subject.
+    // Called on every incoming event (new or duplicate-in-store) so the UI
+    // always updates even when eventStore.add() is a no-op (dedup case).
+    const pushResults = () => {
+      const events = eventStore.getTimeline([{ kinds: [REPO_KIND] } as Filter]);
+      subject.next(
+        groupIntoResolvedRepos(events.filter((ev) => sessionIds.has(ev.id))),
+      );
+    };
+
+    const paginate$ = new Subject<void>();
+    paginateSubRef.current = paginate$;
+    cacheEntry.paginate$ = paginate$;
+
+    // One-shot guard: clears isLoading after the initial EOSE from either
+    // search. Pagination loading is managed separately via the settle timer.
+    let initialLoadingCleared = false;
+    let initialPageCount = 0;
+
+    const clearInitialLoading = () => {
+      if (!initialLoadingCleared) {
+        initialLoadingCleared = true;
+        const more = initialPageCount >= PAGE_SIZE;
+        cacheEntry.hasMore = more;
+        setHasMore(more);
+        setIsLoading(false);
       }
-    }, SEARCH_DEBOUNCE_MS);
+    };
 
-    return () => clearTimeout(timer);
-  }, [trimmedQuery, relayKey, isSearchMode]); // eslint-disable-line react-hooks/exhaustive-deps
+    // NIP-50 repo search with manual pagination.
+    repoSub = resilientSubscription(
+      pool,
+      relays,
+      [
+        {
+          kinds: [REPO_KIND],
+          search: trimmedQuery,
+          limit: PAGE_SIZE,
+        } as Filter,
+      ],
+      { manualPaginate$: paginate$, limit: PAGE_SIZE },
+    ).subscribe({
+      next: (msg) => {
+        if (msg === "EOSE") {
+          clearInitialLoading();
+          return;
+        }
+        const ev = msg as NostrEvent;
+        sessionIds.add(ev.id);
+        eventStore.add(ev);
+        // Push results regardless of whether eventStore.add was a no-op.
+        pushResults();
 
-  // ── Resolve search results into ResolvedRepo[] ────────────────────────────
+        if (paginatingRef.current) {
+          pageEventCountRef.current++;
+          armPageSettleTimer(() => {
+            paginatingRef.current = false;
+            const more = pageEventCountRef.current >= PAGE_SIZE;
+            cacheEntry.hasMore = more;
+            setHasMore(more);
+            setIsLoading(false);
+          });
+        } else {
+          initialPageCount++;
+        }
+      },
+      error: () => {
+        clearPageSettleTimer();
+        clearInitialLoading();
+      },
+      complete: () => {
+        clearPageSettleTimer();
+        clearInitialLoading();
+      },
+    });
 
-  const searchRepos = useMemo<ResolvedRepo[] | undefined>(() => {
-    if (!isSearchMode) return undefined;
-    if (searchRepoEvents === undefined) return undefined; // still loading
-    return groupIntoResolvedRepos(searchRepoEvents);
-  }, [isSearchMode, searchRepoEvents]);
+    // NIP-50 user search (one-shot) — collect pubkeys then fetch their repos.
+    const userPubkeys = new Set<string>();
 
-  // ── Assemble final result ─────────────────────────────────────────────────
+    const startUserRepoFetch = () => {
+      if (userPubkeys.size === 0) return;
+      userRepoSub = resilientRequest(pool, relays, [
+        {
+          kinds: [REPO_KIND],
+          authors: [...userPubkeys],
+          limit: PAGE_SIZE,
+        } as Filter,
+      ]).subscribe({
+        next: (msg) => {
+          if (msg === "EOSE") return;
+          const ev = msg as NostrEvent;
+          if (!sessionIds.has(ev.id)) {
+            sessionIds.add(ev.id);
+            eventStore.add(ev);
+            pushResults();
+          }
+        },
+      });
+    };
+
+    userSub = resilientRequest(
+      pool,
+      [USER_SEARCH_RELAY],
+      [{ kinds: [0], search: trimmedQuery, limit: 10 } as Filter],
+    ).subscribe({
+      next: (msg) => {
+        if (msg === "EOSE") {
+          clearInitialLoading();
+          const pubkeySet = new Set(userPubkeys);
+          cacheEntry.matchedUserPubkeys = pubkeySet;
+          setMatchedUserPubkeys(pubkeySet);
+          startUserRepoFetch();
+          return;
+        }
+        const ev = msg as NostrEvent;
+        userPubkeys.add(ev.pubkey);
+        eventStore.add(ev);
+      },
+      error: clearInitialLoading,
+      complete: () => {
+        clearInitialLoading();
+        const pubkeySet = new Set(userPubkeys);
+        cacheEntry.matchedUserPubkeys = pubkeySet;
+        setMatchedUserPubkeys(pubkeySet);
+        startUserRepoFetch();
+      },
+    });
+
+    return () => {
+      repoSub?.unsubscribe();
+      userSub?.unsubscribe();
+      userRepoSub?.unsubscribe();
+      // Null out the paginate$ ref in the cache entry so a future cache hit
+      // knows the subscription is no longer live (loadMore will be a no-op).
+      cacheEntry.paginate$ = null;
+      paginateSubRef.current = null;
+      clearPageSettleTimer();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- relays captured via relayKey
+  }, [
+    trimmedQuery,
+    relayKey,
+    isSearchMode,
+    armPageSettleTimer,
+    clearPageSettleTimer,
+  ]);
+
+  // ── loadMore ───────────────────────────────────────────────────────────────
+
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoading || !paginateSubRef.current) return;
+    setIsLoading(true);
+    // Advance the display window so the newly-fetched events become visible
+    // once they arrive.
+    if (!isSearchMode) {
+      setBrowseDisplayLimit((prev) => prev + PAGE_SIZE);
+    }
+    pageEventCountRef.current = 0;
+    paginatingRef.current = true;
+    // Arm the settle timer immediately — handles the zero-events case where the
+    // relay is exhausted and no events arrive to reset the timer.
+    armPageSettleTimer(() => {
+      paginatingRef.current = false;
+      setHasMore(pageEventCountRef.current >= PAGE_SIZE);
+      setIsLoading(false);
+    });
+    paginateSubRef.current.next();
+  }, [hasMore, isLoading, isSearchMode, armPageSettleTimer]);
+
+  // ── Assemble final result ──────────────────────────────────────────────────
 
   if (isSearchMode) {
     return {
       repos: searchRepos,
-      isLoading: searchIsLoading,
-      hasMore: false,
-      loadMore: () => {},
+      isLoading,
+      hasMore,
+      loadMore,
       matchedUserPubkeys,
     };
   }
 
   return {
     repos: browseRepos,
-    isLoading: browseIsLoading,
+    isLoading,
     hasMore,
     loadMore,
     matchedUserPubkeys: new Set(),

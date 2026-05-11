@@ -141,12 +141,3 @@ export function OutboxStatusBadge({ event }: { event: NostrEvent }) {
     </Popover>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Keep old names as aliases so existing import sites still compile.
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use OutboxStatusBadge instead */
-export const OutboxStatusStrip = OutboxStatusBadge;
-/** @deprecated Use OutboxStatusBadge instead */
-export const OutboxStatusInline = OutboxStatusBadge;

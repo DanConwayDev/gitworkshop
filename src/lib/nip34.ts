@@ -12,7 +12,7 @@ import {
   getReplaceableIdentifier,
   getOrComputeCachedValue,
 } from "applesauce-core/helpers";
-import { ISSUE_LABEL_NAMESPACE } from "@/blueprints/label";
+import { ISSUE_LABEL_NAMESPACE } from "@/factories/IssueLabelFactory";
 import { getThreadTree } from "@/lib/threadTree";
 import { normalizeUrl } from "@/lib/url";
 

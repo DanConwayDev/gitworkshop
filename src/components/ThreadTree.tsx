@@ -48,7 +48,7 @@ import { runner } from "@/services/actions";
 import {
   isInlineComment,
   parseInlineCommentLocation,
-} from "@/blueprints/inline-comment";
+} from "@/lib/inlineComment";
 import { diffLineHash, fileDiffCardId } from "@/lib/diffCardId";
 import { Link } from "react-router-dom";
 import type { SnippetLine } from "@/pages/PRPage";

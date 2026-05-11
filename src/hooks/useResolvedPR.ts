@@ -8,33 +8,32 @@
  * Internally:
  * 1. Fetches the root event from relays via useEventSearch (through
  *    useNip34ItemDetailLoader) and triggers tiered loading
- * 2. For patches: fetches patch chain events from relays
- * 3. Subscribes to PRDetailModel which reactively produces ResolvedPR
- * 4. For patch revisions: batch-loads revision root comments
+ * 2. Subscribes to PRDetailModel which reactively produces ResolvedPR
+ * 3. For patch revisions: batch-loads revision root comments
  *
  * The model handles PR-vs-Patch branching internally. The page never needs
  * to know which kind it's looking at.
+ *
+ * Patch chain events (kind:1617 with #e references) are NOT fetched here
+ * directly. useNip34ItemDetailLoader fires nip34ThreadItemLoader with
+ * includeThread:true, which uses nip34ThreadReplyLoader (no kind restriction,
+ * #e tag) — this already fetches all patches referencing the root. usePatchChain
+ * reads those events from the store via store.timeline().
  */
 
 import { useMemo } from "react";
 import { use$ } from "./use$";
 import { useEventStore } from "./useEventStore";
-import { mapEventsToStore } from "applesauce-core";
-import { onlyEvents } from "applesauce-relay";
-import { withGapFill } from "@/lib/withGapFill";
-import { pool } from "@/services/nostr";
-import { BACKOFF_RECONNECT } from "@/lib/relay";
 import {
   useNip34ItemDetailLoader,
   useNip34ItemLoaderBatch,
 } from "./useNip34Loaders";
 import type { EventSearchState, RelayGroupSpec } from "./useEventSearch";
 import { PRDetailModel } from "@/models/PRDetailModel";
-import { PATCH_KIND, type ResolvedPR } from "@/lib/nip34";
+import { type ResolvedPR } from "@/lib/nip34";
 import { relayCurationMode } from "@/services/settings";
 import type { RelayGroup } from "applesauce-relay";
-import type { Filter } from "applesauce-core/helpers";
-import type { Observable } from "rxjs";
+import { type Observable } from "rxjs";
 
 export interface UseResolvedPROptions {
   /** Extra clone URLs for fallback relay queries (from the repo). */
@@ -80,46 +79,7 @@ export function useResolvedPR(
     retryKey,
   );
 
-  // ── 2. For patches: fetch patch chain events from relays ────────────────
-  // Fetch all kind:1617 patches that reference the root via #e.
-  // This covers both additional patches in the original set and revision roots.
-  // Done unconditionally — for PRs the filter simply won't match anything.
-  use$(() => {
-    if (!prId) return undefined;
-    const filter = { kinds: [PATCH_KIND], "#e": [prId] } as Filter;
-    if (repoRelayGroup) {
-      return withGapFill(
-        repoRelayGroup.subscription([filter], {
-          reconnect: BACKOFF_RECONNECT,
-          resubscribe: Infinity,
-        }),
-        pool,
-        () => repoRelayGroup.relays.map((r) => r.url),
-        [filter],
-      ).pipe(onlyEvents(), mapEventsToStore(store));
-    }
-    return undefined;
-  }, [prId, repoRelayGroup, store]);
-
-  // Also fetch the root patch itself (belt and suspenders).
-  use$(() => {
-    if (!prId) return undefined;
-    const filter: Filter = { kinds: [PATCH_KIND], ids: [prId] };
-    if (repoRelayGroup) {
-      return withGapFill(
-        repoRelayGroup.subscription([filter], {
-          reconnect: BACKOFF_RECONNECT,
-          resubscribe: Infinity,
-        }),
-        pool,
-        () => repoRelayGroup.relays.map((r) => r.url),
-        [filter],
-      ).pipe(onlyEvents(), mapEventsToStore(store));
-    }
-    return undefined;
-  }, [prId, repoRelayGroup, store]);
-
-  // ── 3. Subscribe to PRDetailModel ───────────────────────────────────────
+  // ── 2. Subscribe to PRDetailModel ───────────────────────────────────────
   const resolved = use$(() => {
     if (!prId) return undefined;
     return store.model(
@@ -129,7 +89,7 @@ export function useResolvedPR(
     ) as unknown as Observable<ResolvedPR | undefined>;
   }, [prId, maintainerKey, store]);
 
-  // ── 4. For patch revisions: batch-load revision root comments ───────────
+  // ── 3. For patch revisions: batch-load revision root comments ───────────
   // Once the model resolves, we know which revision root IDs exist.
   // Load their essentials + comments so they appear in the timeline.
   const revisionRootIds = useMemo(() => {

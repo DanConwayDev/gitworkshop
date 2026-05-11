@@ -9,7 +9,7 @@ import {
   DnsIdentityLoader,
 } from "applesauce-loaders/loaders";
 import { RelayLiveness, RelayPool, onlyEvents } from "applesauce-relay";
-import type { RelayGroup, IRelay } from "applesauce-relay";
+import type { RelayGroup } from "applesauce-relay";
 import { NostrConnectSigner } from "applesauce-signers";
 import type { NostrEvent } from "nostr-tools";
 import { verifyEvent } from "nostr-tools";
@@ -20,6 +20,7 @@ import {
   distinctUntilChanged,
   firstValueFrom,
   of,
+  timer,
 } from "rxjs";
 import { filter, map, take, timeout } from "rxjs/operators";
 import { MailboxesModel } from "applesauce-core/models";
@@ -33,6 +34,7 @@ import {
 } from "./settings";
 import {
   ISSUE_KIND,
+  PATCH_KIND,
   PR_ROOT_KINDS,
   LEGACY_REPLY_KINDS,
   COVER_NOTE_KIND,
@@ -42,10 +44,10 @@ import {
   createPaginatedTagValueLoader,
   type PaginatedTagValueResponse,
 } from "@/lib/tagValuePaginatedLoader";
-import { withGapFill } from "@/lib/withGapFill";
-import { BACKOFF_RECONNECT } from "@/lib/relay";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
 import { normalizeUrl } from "@/lib/url";
+import { relayGroupUrls$ } from "@/models/RepositoryRelayGroup";
 
 /**
  * Global EventStore instance for all Nostr events.
@@ -71,15 +73,70 @@ export const pool = new RelayPool();
 
 /**
  * Global relay liveness tracker.
- * Monitors connection health for relays discovered via NIP-65 outbox model so
- * that dead or repeatedly-failing relays are skipped automatically.
  *
- * Repo-declared relays and explicit relay hints bypass liveness filtering —
- * they are authoritative and should always be tried. Only user-discovered
- * outbox relays (kind:10002) are filtered through this tracker.
+ * Tracks online / offline / dead state for every relay the pool sees. Used
+ * for status indicators, persistence, and (in future) filtering relay
+ * suggestion lists. **Not** consulted for reconnect cadence — that is owned
+ * solely by the reconnectTimer override below, so this layer is purely
+ * informational and does not influence retry behavior in resilientSubscription.
  */
 export const liveness = new RelayLiveness();
 liveness.connectToPool(pool);
+
+// Replace each relay's reconnectTimer with a 3-phase backoff curve. This is
+// the **single source of truth** for socket-level reconnect cadence — no
+// other layer (resilientSubscription, RelayLiveness, etc.) governs WS retry
+// timing.
+//
+// applesauce-relay@6.0.0 uses 1.5^attempts × 1000ms capped at 5min, which
+// produces a tight burst (1.5s, 2.25s, 3.4s, 5s, 7.6s, 11s, …) that hammers
+// 404 / unreachable URLs with many connection attempts before slowing down.
+//
+// Three-phase replacement:
+//   - attempts 1-3:  1s,  2s,  4s          (network blip / relay restart)
+//   - attempts 4-6:  30s, 60s, 2min        (server likely under load)
+//   - attempts 7-9:  5min, 10min, 20min    (probably down)
+//   - attempts 10+:  30min cap             (low-cost periodic probe)
+//
+// No termination — applesauce's share+keepAlive on watchTower naturally
+// pauses the reconnect loop when no callers are subscribed (after a 30s
+// keep-alive window with refCount=0 the WS closes cleanly and no further
+// startReconnectTimer fires). attempts$ persists on the Relay instance, so
+// when a caller comes back later the curve resumes from where it left off.
+// While a caller is subscribed, capping at 30min gives auto-revival probes
+// for relays that have come back without manual intervention.
+//
+// Requires the patches/applesauce-relay@6.0.0.patch which makes
+// RelayPool.relay() emit on pool.add$ — without that, this subscribe never
+// fires for newly-created relays.
+const RECONNECT_PHASES_MS: number[] = [
+  // Phase 1 — burst (attempts 1-3)
+  1_000,
+  2_000,
+  4_000,
+  // Phase 2 — under-load pause (attempts 4-6)
+  30_000,
+  60_000,
+  120_000,
+  // Phase 3 — probably down (attempts 7-9)
+  5 * 60_000,
+  10 * 60_000,
+  20 * 60_000,
+];
+const RECONNECT_CAP_MS = 30 * 60_000;
+
+function reconnectDelayMs(attempts: number): number {
+  // attempts is 1-based for the first failure; use index attempts-1.
+  const i = Math.max(0, attempts - 1);
+  return i < RECONNECT_PHASES_MS.length
+    ? RECONNECT_PHASES_MS[i]
+    : RECONNECT_CAP_MS;
+}
+
+pool.add$.subscribe((relay) => {
+  relay.reconnectTimer = (_error, attempts) =>
+    timer(reconnectDelayMs(attempts));
+});
 
 /**
  * Setup NostrConnectSigner to use the global relay pool.
@@ -91,6 +148,66 @@ NostrConnectSigner.pool = pool;
 // Inject the pool into the outbox store so it can publish to relays.
 // This is done here (after pool is created) to avoid a circular dependency.
 outboxStore.pool = pool;
+
+/**
+ * NIP-42 auto-auth policy — wired once at the pool level.
+ *
+ * When a relay sends an AUTH challenge we check (synchronously from the
+ * EventStore cache) whether the relay URL appears in the active account's
+ * NIP-65 inbox or outbox list.  If it does, we authenticate immediately.
+ * Unknown relays are silently skipped — authenticating to arbitrary relays
+ * would leak the user's identity to any relay that asks.
+ *
+ * The active account is read lazily at challenge time so this works correctly
+ * after account switches without needing to re-wire.  accounts.ts imports
+ * nostr.ts (not the other way around) so we import accounts lazily here to
+ * avoid a circular dependency.
+ */
+pool.add$.subscribe((relay) => {
+  relay.challenge$
+    .pipe(
+      // Only act when a real challenge string arrives
+      filter(Boolean),
+      // Don't re-auth if the challenge string hasn't changed
+      distinctUntilChanged(),
+    )
+    .subscribe(async () => {
+      // Lazy import to avoid circular dependency (accounts → nostr → accounts)
+      const { accounts } = await import("./accounts");
+      const account = accounts.active$.getValue();
+      if (!account) return;
+
+      // Synchronous cache check — kind:10002 is kept live by
+      // userIdentitySubscription so this will almost always be populated.
+      // We use getByFilters() directly rather than eventStore.model() because
+      // model() returns an Observable backed by a ReplaySubject(1), which has
+      // no synchronous .getValue() accessor.  getByFilters() hits the in-memory
+      // database directly and is the correct synchronous read path here.
+      const [mailboxEvent] = eventStore.getByFilters([
+        { kinds: [10002], authors: [account.pubkey], limit: 1 },
+      ]);
+      const inboxes: string[] = mailboxEvent
+        ? mailboxEvent.tags
+            .filter((t) => t[0] === "r" && t[2] === "read")
+            .map((t) => t[1])
+        : [];
+      const outboxes: string[] = mailboxEvent
+        ? mailboxEvent.tags
+            .filter((t) => t[0] === "r" && (!t[2] || t[2] === "write"))
+            .map((t) => t[1])
+        : [];
+      const trusted = new Set([...inboxes, ...outboxes]);
+
+      if (!trusted.has(relay.url)) return;
+
+      try {
+        await relay.authenticate(account.signer);
+      } catch (err) {
+        // Non-fatal — relay may reject auth or signer may be unavailable
+        console.warn(`[auth] NIP-42 auth failed for ${relay.url}:`, err);
+      }
+    });
+});
 
 /** Max relays to use per group when resolving */
 const MAX_RESOLVED_RELAYS = 5;
@@ -632,13 +749,14 @@ export function nip34ListLoader(
           }
         }
       },
-      error: (err) => subscriber.error(err),
     });
 
     const commentsSub = nip34CommentsLoader({
       value: itemId,
       relays,
-    }).subscribe(subscriber);
+    }).subscribe({
+      next: (msg) => subscriber.next(msg),
+    });
 
     return () => {
       essentialsSub.unsubscribe();
@@ -679,17 +797,16 @@ export function nip34SupplementalRelayLoader(
   return new Observable<NostrEvent>((subscriber) => {
     const seenIds = new Set<string>();
     const knownRelayUrls = new Set<string>();
-    // Aggregates all per-item inbox subscriptions for cleanup on teardown.
     const inboxSubs = new Subscription();
 
     function fireLoaders(id: string, relays: string[]): void {
-      nip34ListLoader(id, relays).subscribe(subscriber);
+      nip34ListLoader(id, relays).subscribe({
+        next: (msg) => {
+          if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
+        },
+      });
     }
 
-    // When in outbox mode, reactively fetch the root event author's NIP-65
-    // inbox relays and query essentials from any not already covered by the
-    // relay group. Seeding perItemQueried with knownRelayUrls prevents
-    // double-querying when an inbox relay overlaps with a group relay.
     function fireAuthorInboxLoaders(ev: NostrEvent): void {
       const perItemQueried = new Set(knownRelayUrls);
       addressLoader({ kind: 10002, pubkey: ev.pubkey }).subscribe();
@@ -706,19 +823,19 @@ export function nip34SupplementalRelayLoader(
             .filter((r) => !perItemQueried.has(r));
           if (newRelays.length === 0) return;
           for (const r of newRelays) perItemQueried.add(r);
-          nip34ListLoader(ev.id, newRelays).subscribe(subscriber);
+          nip34ListLoader(ev.id, newRelays).subscribe({
+            next: (msg) => {
+              if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
+            },
+          });
         });
       inboxSubs.add(s);
     }
 
-    const relays$ = (relayGroup as unknown as { relays$: Observable<IRelay[]> })
-      .relays$;
-
     // When new relays join the group, re-fire existing items' loaders against
-    // those new relays only (createPaginatedTagValueLoader batches them).
-    const relaySub = relays$
+    // those new relays only.
+    const relaySub = relayGroupUrls$(relayGroup)
       .pipe(
-        map((relays) => relays.map((r) => normalizeUrl(r.url))),
         distinctUntilChanged(
           (a, b) =>
             a.length === b.length && a.every((url) => knownRelayUrls.has(url)),
@@ -734,14 +851,15 @@ export function nip34SupplementalRelayLoader(
       });
 
     const filters = [{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter];
-    const itemSub = withGapFill(
-      relayGroup.subscription(filters, {
-        reconnect: BACKOFF_RECONNECT,
-        resubscribe: Infinity,
-      }),
+    const itemSub = resilientSubscription(
       pool,
-      () => [...knownRelayUrls],
+      relayGroupUrls$(relayGroup),
       filters,
+      {
+        reconnect: true,
+        gapFill: true,
+        settle: false,
+      },
     )
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
       .subscribe({
@@ -753,7 +871,6 @@ export function nip34SupplementalRelayLoader(
             if (resolveAuthorInbox) fireAuthorInboxLoaders(ev);
           }
         },
-        error: (err) => subscriber.error(err),
         complete: () => subscriber.complete(),
       });
 
@@ -794,22 +911,17 @@ export function nip34RepoLoader(
 
   return new Observable<NostrEvent>((subscriber) => {
     const seenIds = new Set<string>();
-    // Track relay URLs we have already fired loaders against so we can detect
-    // genuinely new relays when the group grows.
     const knownRelayUrls = new Set<string>();
-    // Aggregates all per-item inbox subscriptions for cleanup on teardown.
     const inboxSubs = new Subscription();
 
-    // Fire nip34ListLoader for a single item against a specific set of relays.
-    // Inline so it can close over subscriber and seenIds.
     function fireLoaders(id: string, relays: string[]): void {
-      nip34ListLoader(id, relays).subscribe(subscriber);
+      nip34ListLoader(id, relays).subscribe({
+        next: (msg) => {
+          if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
+        },
+      });
     }
 
-    // When in outbox mode, reactively fetch the root event author's NIP-65
-    // inbox relays and query essentials from any not already covered by the
-    // relay group. Seeding perItemQueried with knownRelayUrls prevents
-    // double-querying when an inbox relay overlaps with a group relay.
     function fireAuthorInboxLoaders(ev: NostrEvent): void {
       const perItemQueried = new Set(knownRelayUrls);
       addressLoader({ kind: 10002, pubkey: ev.pubkey }).subscribe();
@@ -826,58 +938,42 @@ export function nip34RepoLoader(
             .filter((r) => !perItemQueried.has(r));
           if (newRelays.length === 0) return;
           for (const r of newRelays) perItemQueried.add(r);
-          nip34ListLoader(ev.id, newRelays).subscribe(subscriber);
+          nip34ListLoader(ev.id, newRelays).subscribe({
+            next: (msg) => {
+              if (msg !== "EOSE") subscriber.next(msg as NostrEvent);
+            },
+          });
         });
       inboxSubs.add(s);
     }
 
-    // Subscribe to RelayGroup relay list changes. relays$ is protected in TS
-    // but public at runtime — cast to access it so we can react to new relays
-    // being added without polling.
-    const relays$ = (relayGroup as unknown as { relays$: Observable<IRelay[]> })
-      .relays$;
-
-    const relaySub = relays$
+    // When new relays join the group, re-fire existing items' loaders against
+    // those new relays only. createPaginatedTagValueLoader batches all these
+    // calls within its buffer window into a single REQ per relay.
+    const relaySub = relayGroupUrls$(relayGroup)
       .pipe(
-        // Map to normalized URL strings for stable comparison
-        map((relays) => relays.map((r) => normalizeUrl(r.url))),
-        // Only proceed when the URL set actually changes
         distinctUntilChanged(
           (a, b) =>
             a.length === b.length && a.every((url) => knownRelayUrls.has(url)),
         ),
       )
       .subscribe((currentUrls) => {
-        // Diff: find relay URLs not yet known
         const newUrls = currentUrls.filter((url) => !knownRelayUrls.has(url));
         for (const url of newUrls) knownRelayUrls.add(url);
-
         if (newUrls.length === 0) return;
-
-        // For every item already discovered, fire loaders against the new
-        // relays only. createPaginatedTagValueLoader batches all these calls
-        // within its buffer window into a single REQ per relay.
         for (const id of seenIds) {
           fireLoaders(id, newUrls);
         }
       });
 
-    // Subscribe to issues, patches, and PRs — pipe each new item into the
-    // per-item essentials + comments loaders against all current relays.
-    // withGapFill wraps the RelayGroup subscription so that on foreground
-    // resume a one-shot gap-fill REQ is fired against the current relay
-    // snapshot, recovering any items published while the app was backgrounded.
-    const itemSub = withGapFill(
-      relayGroup.subscription(
-        [{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter],
-        {
-          reconnect: BACKOFF_RECONNECT,
-          resubscribe: Infinity,
-        },
-      ),
+    const itemFilters = [
+      { kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter,
+    ];
+    const itemSub = resilientSubscription(
       pool,
-      () => [...knownRelayUrls],
-      [{ kinds: [...REPO_ITEM_KINDS], "#a": coords } as Filter],
+      relayGroupUrls$(relayGroup),
+      itemFilters,
+      { reconnect: true, gapFill: true, settle: false },
     )
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
       .subscribe({
@@ -885,42 +981,30 @@ export function nip34RepoLoader(
           const ev = event as NostrEvent;
           if (!seenIds.has(ev.id)) {
             seenIds.add(ev.id);
-            // Use all currently known relays — knownRelayUrls is already
-            // populated by the relaySub above (relays$ is a BehaviorSubject
-            // so relaySub fires synchronously before itemSub can emit).
+            // knownRelayUrls is already populated by relaySub above
+            // (relayGroupUrls$ is a BehaviorSubject so relaySub fires
+            // synchronously before itemSub can emit).
             fireLoaders(ev.id, [...knownRelayUrls]);
             if (resolveAuthorInbox) fireAuthorInboxLoaders(ev);
           }
         },
-        error: (err) => subscriber.error(err),
         complete: () => subscriber.complete(),
       });
 
-    // Subscribe to self-contained repo-level events: kind 7 reactions (stars)
-    // and kind 10018 follow lists. Both are keyed by the announcement `a` tag
-    // and need no per-item loading, so they share a single subscription.
-    // withGapFill wraps the RelayGroup subscription so that on foreground
-    // resume a one-shot gap-fill REQ is fired against the current relay
-    // snapshot, recovering any events published while the app was backgrounded.
     const repoMetaFilters = [
       {
         kinds: [REACTION_KIND, GIT_REPOS_FOLLOW_KIND],
         "#a": coords,
       } as Filter,
     ];
-    const repoMetaSub = withGapFill(
-      relayGroup.subscription(repoMetaFilters, {
-        reconnect: BACKOFF_RECONNECT,
-        resubscribe: Infinity,
-      }),
+    const repoMetaSub = resilientSubscription(
       pool,
-      () => [...knownRelayUrls],
+      relayGroupUrls$(relayGroup),
       repoMetaFilters,
+      { reconnect: true, gapFill: true, settle: false },
     )
       .pipe(onlyEvents(), mapEventsToStore(eventStore))
-      .subscribe({
-        error: (err) => subscriber.error(err),
-      });
+      .subscribe();
 
     return () => {
       relaySub.unsubscribe();
@@ -960,11 +1044,17 @@ function nip34ThreadLoadAll(
  *
  * For each comment discovered by nip34CommentsLoader, all three thread
  * loaders are fired recursively so child events on individual comments
- * (reactions, zaps, deletions, etc.) are also fetched. A seenIds set
- * prevents duplicate loader calls within the same subscription lifetime.
- * Because the thread loaders are singleton batching loaders, all per-comment
- * calls within their bufferTime window are collapsed into a single relay
- * subscription per tag name.
+ * (reactions, zaps, deletions, etc.) are also fetched.
+ *
+ * For each revision root patch (kind:1617 with t:root-revision) discovered
+ * by nip34ThreadReplyLoader on the root item, all three thread loaders are
+ * also fired so the individual commit patches in the revision (which reference
+ * the revision root via #e, not the original root) are fetched.
+ *
+ * A seenIds set prevents duplicate loader calls within the same subscription
+ * lifetime across both recursion paths. Because the thread loaders are
+ * singleton batching loaders, all per-comment/per-revision calls within their
+ * bufferTime window are collapsed into a single relay subscription per tag name.
  *
  * Reactive relay list: accepts Observable<string[]> | string[]. When the
  * observable emits new relay URLs, loaders are re-fired for all already-seen
@@ -984,9 +1074,16 @@ export function nip34ThreadItemLoader(
     // knownRelayUrls: relay URLs we have already fired loaders against
     const knownRelayUrls = new Set<string>();
 
-    // Fire all three thread loaders for an item against a specific relay list
+    // Fire all three thread loaders for an item against a specific relay list.
+    // Results are forwarded to the outer subscriber and also inspected by
+    // handleRevisionRootEvent so revision root patches trigger recursion.
     function fireThreadLoaders(id: string, relayList: string[]): void {
-      nip34ThreadLoadAll(id, relayList).subscribe(subscriber);
+      nip34ThreadLoadAll(id, relayList).subscribe({
+        next: (msg) => {
+          subscriber.next(msg);
+          handleRevisionRootEvent(msg);
+        },
+      });
     }
 
     // Subscribe to relay list changes. When new relay URLs appear, re-fire
@@ -997,6 +1094,46 @@ export function nip34ThreadItemLoader(
           sub.complete();
         }) as Observable<string[]>)
       : relays;
+
+    // Shared handler: when a comment (kind:1111/1619) is discovered, fire
+    // thread loaders for it recursively so its own children are fetched.
+    function handleCommentEvent(msg: PaginatedTagValueResponse): void {
+      if (msg === "EOSE") return;
+      const event = msg as NostrEvent;
+      if (!seenIds.has(event.id)) {
+        seenIds.add(event.id);
+        fireThreadLoaders(event.id, [...knownRelayUrls]);
+      }
+    }
+
+    // Shared handler: when a revision root patch (kind:1617 with
+    // t:root-revision / t:revision-root) is discovered via #e, fire thread
+    // loaders for it so its child commit patches are fetched.
+    function handleRevisionRootEvent(msg: PaginatedTagValueResponse): void {
+      if (msg === "EOSE") return;
+      const event = msg as NostrEvent;
+      if (event.kind !== PATCH_KIND) return;
+      const isRevisionRoot = event.tags.some(
+        ([name, val]) =>
+          name === "t" && (val === "root-revision" || val === "revision-root"),
+      );
+      if (!isRevisionRoot) return;
+      if (!seenIds.has(event.id)) {
+        seenIds.add(event.id);
+        fireThreadLoaders(event.id, [...knownRelayUrls]);
+      }
+    }
+
+    // Fire recursive loaders (comments only) for a given item ID against a
+    // specific relay list. nip34ThreadReplyLoader is NOT called here — it is
+    // already called inside fireThreadLoaders (via nip34ThreadLoadAll) and its
+    // results are piped through handleRevisionRootEvent there. Calling it again
+    // here would duplicate relay requests.
+    function fireRecursiveLoaders(id: string, relayList: string[]): void {
+      nip34CommentsLoader({ value: id, relays: relayList }).subscribe({
+        next: handleCommentEvent,
+      });
+    }
 
     const relaySub = relays$
       .pipe(
@@ -1011,10 +1148,12 @@ export function nip34ThreadItemLoader(
         for (const url of newUrls) knownRelayUrls.add(url);
         if (newUrls.length === 0) return;
 
-        // Re-fire for all already-seen IDs (root + comments) on new relays only.
+        // Re-fire thread loaders and recursive loaders for all already-seen
+        // IDs against only the new relays.
         // createPaginatedTagValueLoader batches these into one REQ per relay.
         for (const id of seenIds) {
           fireThreadLoaders(id, newUrls);
+          fireRecursiveLoaders(id, newUrls);
         }
       });
 
@@ -1023,26 +1162,12 @@ export function nip34ThreadItemLoader(
     seenIds.add(itemId);
     fireThreadLoaders(itemId, [...knownRelayUrls]);
 
-    // Recursively fetch child events for each comment.
-    // New comments use all currently known relays at discovery time.
-    const commentsSub = nip34CommentsLoader({
-      value: itemId,
-      relays: [...knownRelayUrls],
-    }).subscribe({
-      next: (msg) => {
-        if (msg === "EOSE") return;
-        const event = msg as NostrEvent;
-        if (!seenIds.has(event.id)) {
-          seenIds.add(event.id);
-          fireThreadLoaders(event.id, [...knownRelayUrls]);
-        }
-      },
-      error: (err) => subscriber.error(err),
-    });
+    // Fire recursive loaders for the root item against the initial relay set.
+    // New relays arriving later are handled in relaySub above.
+    fireRecursiveLoaders(itemId, [...knownRelayUrls]);
 
     return () => {
       relaySub.unsubscribe();
-      commentsSub.unsubscribe();
     };
   });
 }

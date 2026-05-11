@@ -69,7 +69,7 @@ import {
   InlineCommentThread,
   InlineCommentBadge,
 } from "@/components/InlineCommentThread";
-import type { InlineCommentOptions } from "@/blueprints/inline-comment";
+import type { InlineCommentLocation as InlineCommentOptions } from "@/factories/InlineCommentFactory";
 import {
   getLastLineComments,
   buildThreadEvents,

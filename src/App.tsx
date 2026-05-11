@@ -8,11 +8,10 @@ import {
   EventStoreProvider,
   AccountsProvider,
   ActionsProvider,
-  FactoryProvider,
 } from "applesauce-react/providers";
 import { eventStore } from "@/services/nostr";
 import { accounts } from "@/services/accounts";
-import { runner, factory } from "@/services/actions";
+import { runner } from "@/services/actions";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthModalProvider } from "@/contexts/AuthModalContext";
@@ -23,23 +22,21 @@ const head = createHead({
   plugins: [InferSeoMetaPlugin()],
 });
 
-export function App() {
+function App() {
   return (
     <UnheadProvider head={head}>
       <EventStoreProvider eventStore={eventStore}>
         <AccountsProvider manager={accounts}>
           <ActionsProvider runner={runner}>
-            <FactoryProvider factory={factory}>
-              <AuthModalProvider>
-                <TooltipProvider>
-                  <Toaster />
-                  <AuthModal />
-                  <Suspense>
-                    <AppRouter />
-                  </Suspense>
-                </TooltipProvider>
-              </AuthModalProvider>
-            </FactoryProvider>
+            <AuthModalProvider>
+              <TooltipProvider>
+                <Toaster />
+                <AuthModal />
+                <Suspense>
+                  <AppRouter />
+                </Suspense>
+              </TooltipProvider>
+            </AuthModalProvider>
           </ActionsProvider>
         </AccountsProvider>
       </EventStoreProvider>

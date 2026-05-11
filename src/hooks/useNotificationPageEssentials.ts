@@ -31,6 +31,7 @@ import type { NostrEvent } from "nostr-tools";
 import type { Filter } from "applesauce-core/helpers";
 
 import { pool, nip34ListLoader } from "@/services/nostr";
+import { resilientRequest } from "@/lib/resilientSubscription";
 import { gitIndexRelays } from "@/services/settings";
 import { RepositoryRelayGroup } from "@/models/RepositoryRelayGroup";
 import { resolveRepoCoord } from "@/lib/notificationUtils";
@@ -213,14 +214,12 @@ export function useNotificationPageEssentials(
       if (existing.length > 0) continue;
 
       missingFetches.push(
-        pool
-          .subscription(gitIndexRelays.getValue(), [
-            { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
-          ])
-          .pipe(
-            onlyEvents(),
-            mapEventsToStore(store),
-          ) as unknown as Observable<NostrEvent>,
+        resilientRequest(pool, gitIndexRelays.getValue(), [
+          { kinds: [REPO_KIND], authors: [pubkey], "#d": [dTag] } as Filter,
+        ]).pipe(
+          onlyEvents(),
+          mapEventsToStore(store),
+        ) as unknown as Observable<NostrEvent>,
       );
     }
 

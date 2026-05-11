@@ -200,7 +200,7 @@ function LegacyRedirect() {
   return <RepoLayout />;
 }
 
-export function AppRouter() {
+function AppRouter() {
   return (
     <BrowserRouter>
       <ScrollToTop />

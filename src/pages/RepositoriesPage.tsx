@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import type React from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
@@ -32,14 +32,50 @@ export default function RepositoriesPage({
   relayStatusBanner,
 }: RepositoriesPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const search = searchParams.get("q") ?? "";
-  const setSearch = (value: string) => {
-    setSearchParams(value ? { q: value } : {}, { replace: true });
+
+  // `committedQuery` is what actually gets sent to the relay.
+  // `inputValue` is the live text in the input box.
+  // They diverge while the user is typing — the query only commits on Enter
+  // or after 400ms of inactivity.
+  const committedQuery = searchParams.get("q") ?? "";
+  const [inputValue, setInputValue] = useState(committedQuery);
+
+  const commitQuery = useCallback(
+    (value: string) => {
+      setSearchParams(value.trim() ? { q: value.trim() } : {}, {
+        replace: true,
+      });
+    },
+    [setSearchParams],
+  );
+
+  // 400ms debounce fallback — fires if the user stops typing without pressing Enter.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputValue(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => commitQuery(val), 400);
   };
-  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      commitQuery(inputValue);
+    }
+  };
+
+  // Keep inputValue in sync if the URL changes externally (e.g. back/forward).
+  const prevCommittedRef = useRef(committedQuery);
+  useEffect(() => {
+    if (committedQuery !== prevCommittedRef.current) {
+      prevCommittedRef.current = committedQuery;
+      setInputValue(committedQuery);
+    }
+  }, [committedQuery]);
 
   const { repos, isLoading, hasMore, loadMore, matchedUserPubkeys } =
-    useRepositorySearch(search, relayOverride);
+    useRepositorySearch(committedQuery, relayOverride);
 
   const title = relayLabel
     ? `Repositories on ${relayLabel} - ngit`
@@ -56,25 +92,45 @@ export default function RepositoriesPage({
     twitterCard: "summary_large_image",
   });
 
-  // IntersectionObserver sentinel for infinite scroll (browse mode only)
-  const handleIntersect = useCallback(() => {
-    if (hasMore && !isLoading) loadMore();
-  }, [hasMore, isLoading, loadMore]);
-
+  // Keep a stable ref to the latest loadMore/hasMore/isLoading so the
+  // IntersectionObserver never needs to be torn down and recreated — tearing
+  // it down causes it to miss the intersection that triggered the re-render.
+  const loadMoreRef = useRef(loadMore);
+  const hasMoreRef = useRef(hasMore);
+  const isLoadingRef = useRef(isLoading);
   useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
 
+  // Callback ref — fires whenever the sentinel mounts/unmounts, so the
+  // observer is always attached even though the element renders conditionally.
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const setSentinelRef = useCallback((el: HTMLDivElement | null) => {
+    // Disconnect any previous observer
+    observerRef.current?.disconnect();
+    observerRef.current = null;
+    if (!el) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) handleIntersect();
+        if (
+          entries[0].isIntersecting &&
+          hasMoreRef.current &&
+          !isLoadingRef.current
+        ) {
+          loadMoreRef.current();
+        }
       },
       { rootMargin: "200px" },
     );
-
     observer.observe(el);
-    return () => observer.disconnect();
-  }, [handleIntersect]);
+    observerRef.current = observer;
+  }, []);
 
   // Determine what to render in the list area
   const showSkeletons =
@@ -100,9 +156,10 @@ export default function RepositoriesPage({
             <div className="relative max-w-md flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search repositories..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search repositories…"
+                value={inputValue}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
                 className="pl-10 bg-background/60 backdrop-blur-sm border-border/60 focus-visible:ring-pink-500/30"
                 autoFocus
               />
@@ -135,7 +192,7 @@ export default function RepositoriesPage({
             <CardContent className="py-16 text-center">
               <GitBranch className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
               <p className="text-muted-foreground text-lg">
-                {search
+                {committedQuery
                   ? "No repositories match your search"
                   : "No repositories found on this relay"}
               </p>
@@ -158,9 +215,9 @@ export default function RepositoriesPage({
               ))}
             </div>
 
-            {/* Infinite scroll sentinel — only in browse mode */}
+            {/* Infinite scroll sentinel */}
             {hasMore && (
-              <div ref={sentinelRef} className="flex justify-center py-8">
+              <div ref={setSentinelRef} className="flex justify-center py-8">
                 {isLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" />
                 ) : (

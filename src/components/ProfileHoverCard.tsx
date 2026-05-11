@@ -209,7 +209,16 @@ export function ProfileHoverCard({
 }: ProfileHoverCardProps) {
   return (
     <HoverCard openDelay={300} closeDelay={150}>
-      <HoverCardTrigger asChild={asChild}>{children}</HoverCardTrigger>
+      {/*
+       * Always use asChild so HoverCardTrigger never emits its own <a>.
+       * When the caller hasn't provided a forwardRef element, wrap in a
+       * <span> so Radix can attach its event handlers without introducing
+       * an anchor — this prevents the "a cannot appear as descendant of a"
+       * warning when ProfileHoverCard is used inside a <Link>.
+       */}
+      <HoverCardTrigger asChild>
+        {asChild ? children : <span className="inline-flex">{children}</span>}
+      </HoverCardTrigger>
       <HoverCardContent
         side="bottom"
         align="start"

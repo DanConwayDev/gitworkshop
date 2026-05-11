@@ -33,10 +33,10 @@
  */
 
 import { BehaviorSubject } from "rxjs";
-import { generateSecretKey } from "nostr-tools";
+import { generateSecretKey, getPublicKey } from "nostr-tools";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { PrivateKeySigner } from "applesauce-signers/signers";
-import { EventFactory } from "applesauce-core/event-factory";
+import { AppDataFactory } from "applesauce-common/factories";
 import { eventStore } from "@/services/nostr";
 import {
   parseReadState,
@@ -109,6 +109,23 @@ function clearNsecCache(pubkey: string): void {
     localStorage.removeItem(nsecCacheKey(pubkey));
   } catch {
     // ignore
+  }
+}
+
+/**
+ * Synchronously derive the notification pubkey from the localStorage cache.
+ *
+ * Returns null if no valid cache entry exists (first-ever login, or cache
+ * was cleared). In that case the caller should fall back to the two-step
+ * fetch approach and let getOrCreateNotificationSigner populate the cache.
+ */
+export function getCachedNotificationPubkey(userPubkey: string): string | null {
+  const cache = loadNsecCache(userPubkey);
+  if (!cache) return null;
+  try {
+    return getPublicKey(hexToBytes(cache.hexKey));
+  } catch {
+    return null;
   }
 }
 
@@ -209,17 +226,14 @@ export async function getOrCreateNotificationSigner(
   const hexKey = bytesToHex(secretKey);
 
   try {
-    const { factory } = await import("@/services/actions");
     const { outboxStore } = await import("@/services/outbox");
-    const { AppDataBlueprint } = await import("applesauce-common/blueprints");
 
-    const draft = await factory.create(
-      AppDataBlueprint<{ nsec: string }>,
+    // Encrypted (NIP-44) envelope signed by the user's own signer.
+    const signed = await AppDataFactory.create<{ nsec: string }>(
       NOTIFICATION_NSEC_D_TAG,
       { nsec: hexKey },
-      "nip44" as const,
-    );
-    const signed = await factory.sign(draft);
+      "nip44",
+    ).sign(userSigner);
 
     // Add to local store immediately
     eventStore.add(signed);
@@ -287,19 +301,15 @@ export async function publishReadState(
     const notifSigner = await getOrCreateNotificationSigner(pubkey);
     if (!notifSigner) return;
 
-    const { AppDataBlueprint } = await import("applesauce-common/blueprints");
     const { outboxStore } = await import("@/services/outbox");
 
-    // Use a temporary EventFactory backed by the dedicated notification signer
-    const notifFactory = new EventFactory({ signer: notifSigner });
-
-    const draft = await notifFactory.create(
-      AppDataBlueprint<NotificationReadState>,
+    // Encrypt + sign with the dedicated notification keypair (self-encrypt:
+    // pubkey == author so decryption works symmetrically).
+    const signed = await AppDataFactory.create<NotificationReadState>(
       NOTIFICATION_STATE_D_TAG,
       state,
-      "nip44" as const,
-    );
-    const signed = await notifFactory.sign(draft);
+      "nip44",
+    ).sign(notifSigner);
 
     // Add to local store immediately for optimistic updates
     eventStore.add(signed);
@@ -340,14 +350,22 @@ export function schedulePublish(
  *      re-evaluates against the new envelope and the localStorage cache.
  *   2. Re-resolve the notification signer (which will invalidate the
  *      localStorage cache if the envelope is newer, then decrypt).
- *   3. Re-subscribe to the state event under the (potentially new) notification
- *      pubkey and merge any updated state into readState$.
+ *   3. Update notifPubkey$ with the (potentially new) notification pubkey so
+ *      the outbox relay subscription in notificationStore.ts rebuilds its
+ *      filter and fetches the new state event from relays.
+ *   4. Re-subscribe to the state event in the EventStore under the new pubkey
+ *      and merge any updated state into readState$.
+ *
+ * @param notifPubkey$ - BehaviorSubject owned by notificationStore. Updated
+ *   here whenever the notification pubkey changes so the outbox relay
+ *   subscription can rebuild its filter reactively.
  *
  * Returns the RxJS Subscription so the caller can unsubscribe on cleanup.
  */
 export function watchNip78Event(
   pubkey: string,
   readState$: BehaviorSubject<NotificationReadState>,
+  notifPubkey$: BehaviorSubject<string | null>,
 ): Subscription {
   const nsecFilter = {
     kinds: [NIP78_KIND],
@@ -381,7 +399,10 @@ export function watchNip78Event(
       lastEnvelopeId = envelope.id;
 
       // Evict the in-memory signer so getOrCreateNotificationSigner re-checks
-      // the localStorage cache validity against the new envelope.
+      // the localStorage cache validity against the new envelope. If the
+      // envelope is newer than our cached one, getOrCreateNotificationSigner
+      // will clear the localStorage cache and decrypt the new envelope,
+      // replacing both the in-memory signer and the localStorage cache.
       evictNotificationSigner(pubkey);
 
       try {
@@ -390,8 +411,16 @@ export function watchNip78Event(
 
         const notifPubkey = await notifSigner.getPublicKey();
 
+        // Notify the store so the outbox relay subscription rebuilds its
+        // filter to include the new notification pubkey. This is the key step
+        // that ensures the new state event is fetched from relays when the
+        // nsec rotates on another device.
+        if (notifPubkey !== notifPubkey$.getValue()) {
+          notifPubkey$.next(notifPubkey);
+        }
+
         // If the notification pubkey hasn't changed (same nsec, just
-        // re-published), the state subscription is still correct.
+        // re-published), the EventStore state subscription is still correct.
         if (notifPubkey === watchedNotifPubkey) return;
 
         // Tear down the old state subscription (different notification pubkey)

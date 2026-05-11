@@ -281,9 +281,17 @@ export function buildRepoStarFilter(
  * - Returns undefined if no root can be determined.
  */
 export function getNotificationRootId(ev: NostrEvent): string | undefined {
-  // Root events — their own ID
-  if (ev.kind === ISSUE_KIND || ev.kind === PR_KIND || ev.kind === PATCH_KIND) {
+  // Issues and PRs are always roots — their own ID
+  if (ev.kind === ISSUE_KIND || ev.kind === PR_KIND) {
     return ev.id;
+  }
+
+  // Patches (kind:1617) can be either a root patch or a child patch (commit).
+  // A child patch has an #e tag pointing to the root patch event ID.
+  // A root patch has no such #e tag — its own ID is the root.
+  if (ev.kind === PATCH_KIND) {
+    const parentPatchId = ev.tags.find(([t]) => t === "e")?.[1];
+    return parentPatchId ?? ev.id;
   }
 
   // NIP-22 comment — uppercase E root pointer

@@ -9,9 +9,10 @@ import NotFound from "./NotFound";
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, GitBranch } from "lucide-react";
 import type { Filter } from "applesauce-core/helpers";
-import type { CountResponse } from "applesauce-relay";
+import type { RelayCountResponse as CountResponse } from "applesauce-relay";
 import type { Observable } from "rxjs";
-import { map } from "rxjs/operators";
+import { map, catchError } from "rxjs/operators";
+import { EMPTY } from "rxjs";
 
 /**
  * Browse repositories on a specific relay.
@@ -79,6 +80,7 @@ function RelayStatusBanner({ relayUrl }: { relayUrl: string }) {
         map((record) =>
           Object.values(record).reduce((sum, r) => sum + r.count, 0),
         ),
+        catchError(() => EMPTY),
       ),
     [relayUrl],
   );

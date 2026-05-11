@@ -46,7 +46,14 @@ import {
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
-import { switchMap, map, of, distinctUntilChanged } from "rxjs";
+import {
+  combineLatest,
+  switchMap,
+  map,
+  of,
+  distinctUntilChanged,
+  startWith,
+} from "rxjs";
 
 /** Root item kinds — events that carry the `a` repo coord tag directly. */
 const ROOT_ITEM_KINDS = new Set([ISSUE_KIND, PATCH_KIND, PR_KIND]);
@@ -160,11 +167,13 @@ export function isGitActivity(event: NostrEvent): boolean {
  * Fetch and reactively subscribe to a user's recent git activity.
  *
  * Two-phase fetch:
- *   Phase 1 — outbox relays: query the user's NIP-65 write relays (populated
- *             by useUserProfileSubscription) for their authored activity events.
+ *   Phase 1 — outbox relays: reactive subscription that starts immediately on
+ *             git index relays and additively expands to the user's NIP-65
+ *             outbox relays once their kind:10002 arrives.
  *   Phase 2 — repo relays: query the git index relays for repo announcements
  *             authored by this user, then query those repo relays for the same
- *             activity kinds authored by this user.
+ *             activity kinds authored by this user. gitIndexRelays is passed as
+ *             an observable so relay list changes are handled reactively.
  *
  * Both phases write into the EventStore. The read layer subscribes to
  * store.timeline() and filters/sorts in memory.
@@ -183,27 +192,31 @@ export function useUserActivity(
   use$(() => {
     if (!pubkey) return undefined;
 
-    // Use the mailboxes model which is populated by useUserProfileSubscription.
-    // switchMap re-subscribes whenever the outbox relay list changes.
-    return store.mailboxes(pubkey).pipe(
-      map((mailboxes) => mailboxes?.outboxes ?? []),
-      switchMap((outboxes) => {
-        // Fall back to git index relays if we don't know their outbox yet.
-        const relays =
-          outboxes.length > 0 ? outboxes : gitIndexRelays.getValue();
-        if (relays.length === 0) return of(undefined);
+    const filter: Filter = {
+      kinds: ACTIVITY_KINDS,
+      authors: [pubkey],
+      limit: ACTIVITY_LIMIT,
+    };
 
-        const filter: Filter = {
-          kinds: ACTIVITY_KINDS,
-          authors: [pubkey],
-          limit: ACTIVITY_LIMIT,
-        };
-
-        return resilientSubscription(pool, relays, [filter], {
-          paginate: false,
-        }).pipe(onlyEvents(), mapEventsToStore(store));
+    // Reactive relay list: starts with git index relays immediately, then
+    // additively expands to the user's outbox relays once their kind:10002
+    // arrives. No teardown on relay list changes.
+    const relays$ = combineLatest([
+      gitIndexRelays,
+      store.mailboxes(pubkey).pipe(startWith(undefined)),
+    ]).pipe(
+      map(([index, mailboxes]) => {
+        const outboxes = mailboxes?.outboxes ?? [];
+        return [...new Set([...index, ...outboxes])];
       }),
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+      ),
     );
+
+    return resilientSubscription(pool, relays$, [filter], {
+      paginate: false,
+    }).pipe(onlyEvents(), mapEventsToStore(store));
   }, [pubkey, store]);
 
   // -------------------------------------------------------------------------
@@ -232,6 +245,9 @@ export function useUserActivity(
         }
         return [...relaySet];
       }),
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+      ),
       switchMap((repoRelays) => {
         if (repoRelays.length === 0) return of(undefined);
 
@@ -266,48 +282,50 @@ export function useUserActivity(
       authors: [pubkey],
     };
 
-    // Combine the activity timeline with the user's outbox relays so we can
-    // fetch missing parents from the right relays.
-    return store.mailboxes(pubkey).pipe(
-      map((mailboxes) => mailboxes?.outboxes ?? []),
-      switchMap((outboxes) => {
-        const relays =
-          outboxes.length > 0 ? outboxes : gitIndexRelays.getValue();
+    // Reactive relay list for fetching missing parents — same as phase 1.
+    const relays$ = combineLatest([
+      gitIndexRelays,
+      store.mailboxes(pubkey).pipe(startWith(undefined)),
+    ]).pipe(
+      map(([index, mailboxes]) => {
+        const outboxes = mailboxes?.outboxes ?? [];
+        return [...new Set([...index, ...outboxes])];
+      }),
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+      ),
+    );
 
-        return (
-          store.timeline([activityFilter]) as unknown as Observable<
-            NostrEvent[]
-          >
-        ).pipe(
-          // Collect the set of missing parent IDs as a sorted string so we
-          // only re-subscribe when the set actually changes.
-          map((events) => {
-            const missingIds = new Set<string>();
-            for (const ev of events) {
-              if (!isSecondaryKind(ev.kind)) continue;
-              const parentId = getSecondaryParentId(ev);
-              if (!parentId) continue;
-              if (!store.getEvent(parentId)) missingIds.add(parentId);
-            }
-            return [...missingIds].sort().join(",");
-          }),
-          distinctUntilChanged(),
-          switchMap((missingKey) => {
-            if (!missingKey || relays.length === 0) return of(undefined);
+    return (
+      store.timeline([activityFilter]) as unknown as Observable<NostrEvent[]>
+    ).pipe(
+      // Collect the set of missing parent IDs as a sorted string so we
+      // only re-subscribe when the set actually changes.
+      map((events) => {
+        const missingIds = new Set<string>();
+        for (const ev of events) {
+          if (!isSecondaryKind(ev.kind)) continue;
+          const parentId = getSecondaryParentId(ev);
+          if (!parentId) continue;
+          if (!store.getEvent(parentId)) missingIds.add(parentId);
+        }
+        return [...missingIds].sort().join(",");
+      }),
+      distinctUntilChanged(),
+      switchMap((missingKey) => {
+        if (!missingKey) return of(undefined);
 
-            const ids = missingKey.split(",").filter(Boolean);
-            if (ids.length === 0) return of(undefined);
+        const ids = missingKey.split(",").filter(Boolean);
+        if (ids.length === 0) return of(undefined);
 
-            const filter: Filter = {
-              kinds: [...ROOT_ITEM_KINDS],
-              ids,
-            };
+        const filter: Filter = {
+          kinds: [...ROOT_ITEM_KINDS],
+          ids,
+        };
 
-            return resilientSubscription(pool, relays, [filter], {
-              paginate: false,
-            }).pipe(onlyEvents(), mapEventsToStore(store));
-          }),
-        );
+        return resilientSubscription(pool, relays$, [filter], {
+          paginate: false,
+        }).pipe(onlyEvents(), mapEventsToStore(store));
       }),
     );
   }, [pubkey, store]);

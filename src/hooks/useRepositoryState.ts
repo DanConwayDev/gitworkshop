@@ -15,6 +15,7 @@ import type { Observable } from "rxjs";
 import { map } from "rxjs/operators";
 import type { RelayGroup } from "applesauce-relay";
 import type { NostrEvent } from "nostr-tools";
+import { relayGroupUrls$ } from "@/models/RepositoryRelayGroup";
 
 /**
  * Pick the winning state event from a list of candidates.
@@ -43,7 +44,7 @@ function pickWinningStateEvent(
  *
  * Each relay in the group is queried individually so that every relay's
  * version of the addressable event is observed. The loader stamps each event
- * with its source relay via markFromRelay() before writing it to the
+ * with its source relay via `addSeenRelay` before writing it to the
  * EventStore, so getSeenRelays(event) is available on any stored event.
  *
  * Returns a tuple of:
@@ -100,7 +101,7 @@ export function useRepositoryState(
 
     const sub = loadRepoStateFromRelays(
       pool,
-      repoRelayGroup,
+      relayGroupUrls$(repoRelayGroup),
       dTag,
       maintainerSet,
       store,
@@ -154,7 +155,7 @@ export function useRepositoryState(
   // Per-relay state registry: for each relay URL, keep the best state event
   // seen from that relay. Derived reactively from the store — no side-channel
   // state needed because the loader stamps each event with its source relay
-  // via markFromRelay() before writing it to the store.
+  // via `addSeenRelay` before writing it to the store.
   //
   // For each valid state event, getSeenRelays() returns the set of relay URLs
   // it was received from. We invert that: for each relay URL, we keep the

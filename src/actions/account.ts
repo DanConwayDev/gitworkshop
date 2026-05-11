@@ -21,12 +21,13 @@
  */
 
 import type { Action } from "applesauce-actions";
-import { ProfileBlueprint } from "applesauce-common/blueprints";
-import { modifyPublicTags } from "applesauce-core/operations";
+import { ProfileFactory } from "applesauce-core/factories";
+import { blankEventTemplate, EventFactory } from "applesauce-core/factories";
 import type { ProfileContent } from "applesauce-core/helpers";
 import { kinds } from "nostr-tools";
 import { outboxStore } from "@/services/outbox";
 import { eventStore } from "@/services/nostr";
+
 /** Relays every new account is bootstrapped onto (inbox + outbox). */
 export const ACCOUNT_BOOTSTRAP_RELAYS = [
   "wss://relay.ditto.pub",
@@ -54,11 +55,12 @@ const BOOTSTRAP_GROUP_IDS = ["bootstrap-relays", "index-relays"];
  * (purplepag.es etc.) pick up the new account straight away.
  */
 export function CreateAccount(displayName: string): Action {
-  return async ({ factory, sign }) => {
+  return async ({ signer }) => {
     // --- kind:0 profile ---
     const profileContent: ProfileContent = { name: displayName };
-    const profileDraft = await factory.create(ProfileBlueprint, profileContent);
-    const profileSigned = await sign(profileDraft);
+    const profileSigned = await ProfileFactory.create()
+      .override(profileContent)
+      .sign(signer);
     eventStore.add(profileSigned);
     await outboxStore.publish(profileSigned, BOOTSTRAP_GROUP_IDS);
 
@@ -68,11 +70,11 @@ export function CreateAccount(displayName: string): Action {
       "r",
       url,
     ]);
-    const mailboxesDraft = await factory.build(
-      { kind: kinds.RelayList, content: "" },
-      modifyPublicTags(() => relayTags),
-    );
-    const mailboxesSigned = await sign(mailboxesDraft);
+    const mailboxesSigned = await new EventFactory((resolve) =>
+      resolve(blankEventTemplate(kinds.RelayList)),
+    )
+      .modifyPublicTags((tags) => [...tags, ...relayTags])
+      .sign(signer);
     eventStore.add(mailboxesSigned);
     await outboxStore.publish(mailboxesSigned, BOOTSTRAP_GROUP_IDS);
   };

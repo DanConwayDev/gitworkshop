@@ -3,7 +3,9 @@ import { use$ } from "@/hooks/use$";
 import { useMyUser } from "@/hooks/useUser";
 import { useEventStore } from "@/hooks/useEventStore";
 import { pool } from "@/services/nostr";
+import { resilientRequest } from "@/lib/resilientSubscription";
 import { mapEventsToStore } from "applesauce-core";
+import { onlyEvents } from "applesauce-relay";
 import { getProfileContent, isValidProfile } from "applesauce-core/helpers";
 import type { Filter } from "applesauce-core/helpers";
 import type { ProfileContent } from "applesauce-core/helpers";
@@ -112,28 +114,28 @@ export function useContactSearch(
       return;
     }
 
-    const timer = setTimeout(async () => {
-      try {
-        const filter = { kinds: [0], search: trimmed, limit: 10 } as Filter;
-        // pool.request completes after EOSE — ideal for one-shot NIP-50 queries
-        const events = await new Promise<string[]>((resolve) => {
-          const pubkeys: string[] = [];
-          pool
-            .request([NIP50_RELAY], [filter])
-            .pipe(mapEventsToStore(store))
-            .subscribe({
-              next: (ev) => pubkeys.push(ev.pubkey),
-              complete: () => resolve(pubkeys),
-              error: () => resolve(pubkeys),
-            });
+    let sub: { unsubscribe(): void } | undefined;
+
+    const timer = setTimeout(() => {
+      setNip50Pubkeys([]); // clear stale results before new search
+      const filter = { kinds: [0], search: trimmed, limit: 10 } as Filter;
+      // Stream results as they arrive — each event triggers a state update so
+      // the dropdown populates progressively rather than waiting for EOSE.
+      sub = resilientRequest(pool, [NIP50_RELAY], [filter])
+        .pipe(onlyEvents(), mapEventsToStore(store))
+        .subscribe({
+          next: (ev) =>
+            setNip50Pubkeys((prev) =>
+              prev.includes(ev.pubkey) ? prev : [...prev, ev.pubkey],
+            ),
+          error: () => {},
         });
-        setNip50Pubkeys(events);
-      } catch {
-        setNip50Pubkeys([]);
-      }
     }, NIP50_DEBOUNCE_MS);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      sub?.unsubscribe();
+    };
   }, [query, store]);
 
   // ── 7. Profiles for NIP-50 results ───────────────────────────────────────

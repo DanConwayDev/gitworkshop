@@ -13,6 +13,8 @@ import { IssueListModel } from "@/models/IssueListModel";
 import { getTagValue } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
+import { EMPTY } from "rxjs";
+import { catchError } from "rxjs/operators";
 import { nip34RepoLoader } from "@/services/nostr";
 
 // ---------------------------------------------------------------------------
@@ -113,7 +115,9 @@ export function useIssues(
   // singleton loader instances.
   use$(() => {
     if (!coords || coords.length === 0 || !repoRelayGroup) return undefined;
-    return nip34RepoLoader(coords, repoRelayGroup);
+    return nip34RepoLoader(coords, repoRelayGroup).pipe(
+      catchError(() => EMPTY),
+    );
   }, [cacheKey, repoRelayGroup]);
 
   // Subscribe to the model — cached by the store, shared across components.

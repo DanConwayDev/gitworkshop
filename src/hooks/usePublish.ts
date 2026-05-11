@@ -82,11 +82,3 @@ export function usePublish() {
     error,
   };
 }
-
-/**
- * Alias for usePublish for backward compatibility.
- * @deprecated Use usePublish instead
- */
-export function useNostrPublish() {
-  return usePublish();
-}

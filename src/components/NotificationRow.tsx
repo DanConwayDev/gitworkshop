@@ -245,6 +245,7 @@ function ThreadNotificationRow({
                   pubkey={pk}
                   size="sm"
                   className="h-5 w-5 text-[8px] opacity-60"
+                  noHoverCard
                 />
               ))}
               {commenters.length > 3 && (

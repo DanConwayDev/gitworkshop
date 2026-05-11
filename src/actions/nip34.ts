@@ -14,29 +14,34 @@
  *
  * The git index (wss://index.ngit.dev) is intentionally NOT a publish target —
  * it syncs from other relays and should not receive direct publishes.
+ *
+ * --- Applesauce v6 note ---
+ * Actions receive a `signer` in the context (not a `factory`). Event drafts
+ * are built with typed factory classes from `@/factories/` (IssueFactory,
+ * StatusChangeFactory, etc.) and finalised with `.sign(signer)`.
  */
 
 import type { Action } from "applesauce-actions";
 import type { NostrEvent } from "nostr-tools";
-import { IssueBlueprint, type IssueOptions } from "@/blueprints/issue";
-import { CommentBlueprint, type CommentOptions } from "@/blueprints/comment";
+import { CommentFactory, ReactionFactory } from "applesauce-common/factories";
+
+import { IssueFactory, type IssueOptions } from "@/factories/IssueFactory";
 import {
-  buildInlineCommentTemplate,
-  type InlineCommentOptions,
-} from "@/blueprints/inline-comment";
+  StatusChangeFactory,
+  STATUS_KIND_MAP,
+} from "@/factories/StatusChangeFactory";
+import { IssueLabelFactory } from "@/factories/IssueLabelFactory";
+import { IssueSubjectRenameFactory } from "@/factories/IssueSubjectRenameFactory";
 import {
-  CoverNoteBlueprint,
+  CoverNoteFactory,
   type CoverNoteOptions,
-} from "@/blueprints/cover-note";
-import { StatusChangeBlueprint, STATUS_KIND_MAP } from "@/blueprints/status";
+} from "@/factories/CoverNoteFactory";
+import { DeletionFactory } from "@/factories/DeletionFactory";
 import {
-  IssueSubjectRenameBlueprint,
-  IssueLabelBlueprint,
-} from "@/blueprints/label";
-import {
-  DeletionBlueprint,
-  AddressableDeletionBlueprint,
-} from "@/blueprints/deletion";
+  InlineCommentFactory,
+  type InlineCommentLocation,
+} from "@/factories/InlineCommentFactory";
+
 import type { IssueStatus } from "@/lib/nip34";
 import { outboxStore } from "@/services/outbox";
 import { eventStore } from "@/services/nostr";
@@ -67,6 +72,23 @@ function buildGroupIds(
 }
 
 // ---------------------------------------------------------------------------
+// Shared options
+// ---------------------------------------------------------------------------
+
+/** Extended options for CreateComment — adds extraTags on top of CommentFactoryOptions. */
+export interface CreateCommentOptions {
+  /** NIP-31 alt tag override */
+  alt?: string;
+  /** NIP-40 expiration timestamp */
+  expiration?: number;
+  /**
+   * Additional raw tags to append verbatim (e.g. NIP-94 `imeta` tags from
+   * Blossom uploads). Each element is a tag tuple like `["imeta", "url ...", ...]`.
+   */
+  extraTags?: string[][];
+}
+
+// ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
 
@@ -82,16 +104,14 @@ export function CreateIssue(
   content: string,
   options?: IssueOptions,
 ): Action {
-  return async ({ factory, sign, self }) => {
-    const draft = await factory.create(
-      IssueBlueprint,
+  return async ({ signer, self }) => {
+    const signed = await IssueFactory.create(
       repoCoord,
       ownerPubkey,
       subject,
       content,
       options,
-    );
-    const signed = await sign(draft);
+    ).sign(signer);
 
     // Add to local store immediately so the UI reflects the new issue without
     // waiting for a relay round-trip.
@@ -117,17 +137,15 @@ export function ChangeIssueStatus(
   repoCoords: string[],
   nextStatus: Exclude<IssueStatus, "deleted">,
 ): Action {
-  return async ({ factory, sign, self }) => {
+  return async ({ signer, self }) => {
     const statusKind = STATUS_KIND_MAP[nextStatus];
-    const draft = await factory.create(
-      StatusChangeBlueprint,
+    const signed = await StatusChangeFactory.create(
       statusKind,
       itemId,
       repoCoords,
       itemAuthorPubkey,
       self,
-    );
-    const signed = await sign(draft);
+    ).sign(signer);
 
     // Add to local store immediately so the UI reflects the status change
     // without waiting for a relay round-trip.
@@ -157,13 +175,11 @@ export function RenameIssueSubject(
   repoCoords?: string[],
   issueAuthorPubkey?: string,
 ): Action {
-  return async ({ factory, sign, self }) => {
-    const draft = await factory.create(
-      IssueSubjectRenameBlueprint,
+  return async ({ signer, self }) => {
+    const signed = await IssueSubjectRenameFactory.create(
       issueId,
       newSubject,
-    );
-    const signed = await sign(draft);
+    ).sign(signer);
 
     // Add to local store immediately so the rename is reflected in the UI
     // without waiting for a relay round-trip.
@@ -191,9 +207,8 @@ export function AttachIssueLabels(
   repoCoords?: string[],
   issueAuthorPubkey?: string,
 ): Action {
-  return async ({ factory, sign, self }) => {
-    const draft = await factory.create(IssueLabelBlueprint, issueId, labels);
-    const signed = await sign(draft);
+  return async ({ signer, self }) => {
+    const signed = await IssueLabelFactory.create(issueId, labels).sign(signer);
 
     // Add to local store immediately so the label change is reflected in the
     // UI without waiting for a relay round-trip.
@@ -225,10 +240,10 @@ export function CreateReaction(
   emoji: string,
   repoCoords?: string[],
 ): Action {
-  return async ({ factory, sign, self }) => {
-    const { ReactionBlueprint } = await import("applesauce-common/blueprints");
-    const draft = await factory.create(ReactionBlueprint, targetEvent, emoji);
-    const signed = await sign(draft);
+  return async ({ signer, self }) => {
+    const signed = await ReactionFactory.create(targetEvent, emoji).sign(
+      signer,
+    );
 
     // Add to local store immediately for optimistic UI
     eventStore.add(signed);
@@ -240,15 +255,6 @@ export function CreateReaction(
       .publish(signed, buildGroupIds(self, repoCoords, notifyPubkeys))
       .catch(console.error);
   };
-}
-
-/** Extended options for CreateComment — adds extraTags on top of CommentBlueprintOptions. */
-export interface CreateCommentOptions extends CommentOptions {
-  /**
-   * Additional raw tags to append verbatim (e.g. NIP-94 `imeta` tags from
-   * Blossom uploads). Each element is a tag tuple like `["imeta", "url ...", ...]`.
-   */
-  extraTags?: string[][];
 }
 
 /**
@@ -270,17 +276,17 @@ export function CreateComment(
   rootEvent?: NostrEvent,
   options?: CreateCommentOptions,
 ): Action {
-  return async ({ factory, sign, self }) => {
-    const { extraTags, ...blueprintOptions } = options ?? {};
-    const draft = await factory.create(
-      CommentBlueprint,
-      parent,
-      content,
-      blueprintOptions,
-    );
-    // Append imeta / extra tags that CommentBlueprint doesn't handle natively
+  return async ({ signer, self }) => {
+    const { extraTags, alt, expiration } = options ?? {};
+
+    let factory = CommentFactory.create(parent, content, {
+      alt,
+      expiration,
+    });
+
+    // Append imeta / extra tags that CommentFactory doesn't handle natively
     if (extraTags && extraTags.length > 0) {
-      draft.tags = [...draft.tags, ...extraTags];
+      factory = factory.modifyPublicTags((tags) => [...tags, ...extraTags]);
     }
 
     // Strip trailing slashes from relay hints on pointer tags. The URL
@@ -289,14 +295,16 @@ export function CreateComment(
     // propagated from existing comments carry whatever hint was stored there.
     // Some relays reject events whose relay hints don't match their own URL.
     const POINTER_TAGS = new Set(["E", "e", "A", "a"]);
-    draft.tags = draft.tags.map((tag) => {
-      if (POINTER_TAGS.has(tag[0]) && tag[2]) {
-        return [tag[0], tag[1], tag[2].replace(/\/$/, ""), ...tag.slice(3)];
-      }
-      return tag;
-    });
+    factory = factory.modifyPublicTags((tags) =>
+      tags.map((tag) => {
+        if (POINTER_TAGS.has(tag[0]) && tag[2]) {
+          return [tag[0], tag[1], tag[2].replace(/\/$/, ""), ...tag.slice(3)];
+        }
+        return tag;
+      }),
+    );
 
-    const signed = await sign(draft);
+    const signed = await factory.sign(signer);
 
     // Add to local store immediately so the comment appears in the thread
     // without waiting for a relay round-trip.
@@ -316,7 +324,7 @@ export function CreateComment(
     const rootPubkey = rootEvent?.pubkey ?? parent.pubkey;
 
     // Also notify any pubkeys @mentioned in the comment content. The
-    // CommentBlueprint adds lowercase "p" tags for nostr: mentions via
+    // CommentFactory.text() adds lowercase "p" tags for nostr: mentions via
     // setShortTextContent — collect those so their inboxes receive the event.
     const mentionedPubkeys = signed.tags
       .filter(([t]) => t === "p")
@@ -357,14 +365,12 @@ export function CreateCoverNote(
   repoCoords?: string[],
   options?: CoverNoteOptions,
 ): Action {
-  return async ({ factory, sign, self }) => {
-    const draft = await factory.create(
-      CoverNoteBlueprint,
+  return async ({ signer, self }) => {
+    const signed = await CoverNoteFactory.create(
       rootEvent,
       content,
       options,
-    );
-    const signed = await sign(draft);
+    ).sign(signer);
 
     // Add to local store immediately so the cover note appears without
     // waiting for a relay round-trip.
@@ -399,7 +405,7 @@ export function DeleteEvent(
   repoCoords?: string[],
   reason?: string,
 ): Action {
-  return async ({ factory, sign, self }) => {
+  return async ({ signer, self }) => {
     // Validate: all events must be authored by the signer
     for (const ev of events) {
       if (ev.pubkey !== self) {
@@ -409,8 +415,7 @@ export function DeleteEvent(
       }
     }
 
-    const draft = await factory.create(DeletionBlueprint, events, reason);
-    const signed = await sign(draft);
+    const signed = await DeletionFactory.forEvents(events, reason).sign(signer);
 
     // Add to local store immediately so the UI can react
     eventStore.add(signed);
@@ -511,16 +516,15 @@ export function CreateInlineComment(
   rootEvent: NostrEvent,
   parentEvent: NostrEvent,
   content: string,
-  options: InlineCommentOptions,
+  options: InlineCommentLocation,
 ): Action {
-  return async ({ sign, self }) => {
-    const draft = buildInlineCommentTemplate(
+  return async ({ signer, self }) => {
+    const signed = await InlineCommentFactory.forLocation(
       rootEvent,
       parentEvent,
       content,
       options,
-    );
-    const signed = await sign(draft);
+    ).sign(signer);
 
     // Add to local store immediately so the comment appears without a relay round-trip.
     eventStore.add(signed);
@@ -556,30 +560,29 @@ export function DeleteRepo(
   repoCoords?: string[],
   reason?: string,
 ): Action {
-  return async ({ factory, sign, self }) => {
+  return async ({ signer, self }) => {
     if (announcement.pubkey !== self) {
       throw new Error(
         `Cannot delete repo announcement ${announcement.id.slice(0, 8)}: not authored by current account`,
       );
     }
 
-    let draft;
-    if (mode === "version") {
-      // Delete only this specific event version via `e` tag
-      draft = await factory.create(DeletionBlueprint, [announcement], reason);
-    } else {
-      // Delete the entire repository (all versions) via `a` tag
-      const dTag = announcement.tags.find(([t]) => t === "d")?.[1] ?? "";
-      const aCoord = `${announcement.kind}:${announcement.pubkey}:${dTag}`;
-      draft = await factory.create(
-        AddressableDeletionBlueprint,
-        aCoord,
-        announcement.kind,
-        reason,
-      );
-    }
+    const factory =
+      mode === "version"
+        ? // Delete only this specific event version via `e` tag
+          DeletionFactory.forEvents([announcement], reason)
+        : // Delete the entire repository (all versions) via `a` tag
+          (() => {
+            const dTag = announcement.tags.find(([t]) => t === "d")?.[1] ?? "";
+            const aCoord = `${announcement.kind}:${announcement.pubkey}:${dTag}`;
+            return DeletionFactory.forAddressable(
+              aCoord,
+              announcement.kind,
+              reason,
+            );
+          })();
 
-    const signed = await sign(draft);
+    const signed = await factory.sign(signer);
 
     // Add to local store immediately so the UI can react
     eventStore.add(signed);

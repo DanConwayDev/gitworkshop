@@ -10,48 +10,54 @@
  * no existing event is found — we simply build a fresh one.
  */
 
-import { modifyPublicTags } from "applesauce-core/operations";
-import {
-  addProfilePointerTag,
-  removeProfilePointerTag,
-} from "applesauce-core/operations/tag/common";
 import type { Action } from "applesauce-actions";
 import type { ProfilePointer } from "applesauce-core/helpers";
 import { firstValueFrom, of, timeout } from "rxjs";
+import {
+  GitAuthorListFactory,
+  GIT_AUTHORS_KIND,
+} from "@/factories/GitAuthorListFactory";
 
-/** kind:10017 — NIP-51 Git authors follow list */
-export const GIT_AUTHORS_KIND = 10017;
+export { GIT_AUTHORS_KIND };
 
-function ModifyGitAuthorsEvent(
-  operations: ReturnType<typeof addProfilePointerTag>[],
-): Action {
-  return async ({ events, factory, user, publish, sign }) => {
+/** Add a pubkey to the user's NIP-51 Git authors follow list (kind:10017). */
+export function AddGitAuthor(user: string | ProfilePointer): Action {
+  return async ({ events, user: me, publish, signer }) => {
     const [event, outboxes] = await Promise.all([
       firstValueFrom(
         events
-          .replaceable(GIT_AUTHORS_KIND, user.pubkey)
+          .replaceable(GIT_AUTHORS_KIND, me.pubkey)
           .pipe(timeout({ first: 1000, with: () => of(undefined) })),
       ),
-      user.outboxes$.$first(1000, undefined),
+      me.outboxes$.$first(1000, undefined),
     ]);
 
-    const operation = modifyPublicTags(...operations);
+    const factory = event
+      ? GitAuthorListFactory.modify(event)
+      : GitAuthorListFactory.create();
 
-    // Modify existing event or build a fresh one — no throw for missing list
-    const signed = event
-      ? await factory.modify(event, operation).then(sign)
-      : await factory.build({ kind: GIT_AUTHORS_KIND }, operation).then(sign);
-
+    const signed = await factory.addUser(user).sign(signer);
     await publish(signed, outboxes);
   };
 }
 
-/** Add a pubkey to the user's NIP-51 Git authors follow list (kind:10017). */
-export function AddGitAuthor(user: string | ProfilePointer): Action {
-  return ModifyGitAuthorsEvent([addProfilePointerTag(user)]);
-}
-
 /** Remove a pubkey from the user's NIP-51 Git authors follow list (kind:10017). */
 export function RemoveGitAuthor(user: string | ProfilePointer): Action {
-  return ModifyGitAuthorsEvent([removeProfilePointerTag(user)]);
+  return async ({ events, user: me, publish, signer }) => {
+    const [event, outboxes] = await Promise.all([
+      firstValueFrom(
+        events
+          .replaceable(GIT_AUTHORS_KIND, me.pubkey)
+          .pipe(timeout({ first: 1000, with: () => of(undefined) })),
+      ),
+      me.outboxes$.$first(1000, undefined),
+    ]);
+
+    const factory = event
+      ? GitAuthorListFactory.modify(event)
+      : GitAuthorListFactory.create();
+
+    const signed = await factory.removeUser(user).sign(signer);
+    await publish(signed, outboxes);
+  };
 }

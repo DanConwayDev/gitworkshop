@@ -37,7 +37,7 @@ export function useUserRepositories(
     if (!pubkey) return undefined;
     return resilientSubscription(
       pool,
-      gitIndexRelays.getValue(),
+      gitIndexRelays,
       [{ kinds: [REPO_KIND], authors: [pubkey] } as Filter],
       { paginate: true },
     ).pipe(onlyEvents(), mapEventsToStore(store));

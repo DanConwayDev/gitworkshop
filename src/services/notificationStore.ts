@@ -38,11 +38,12 @@
  * Action implementations (markAsRead, etc.) live in notificationActions.ts.
  */
 
-import { BehaviorSubject, combineLatest, of } from "rxjs";
+import { BehaviorSubject, combineLatest, merge, of } from "rxjs";
 import {
   map,
   switchMap,
   distinctUntilChanged,
+  debounceTime,
   startWith,
 } from "rxjs/operators";
 import { mapEventsToStore } from "applesauce-core";
@@ -54,6 +55,7 @@ import {
   lookupRelays,
   gitIndexRelays,
 } from "@/services/settings";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import {
   buildNotificationFilters,
   buildNotificationBadgeFilters,
@@ -78,8 +80,8 @@ import {
   watchNip78Event,
   getOrCreateNotificationSigner,
   evictNotificationSigner,
+  getCachedNotificationPubkey,
 } from "./notificationSync";
-import { BACKOFF_RECONNECT } from "@/lib/relay";
 import { normalizeUrl } from "@/lib/url";
 
 // ---------------------------------------------------------------------------
@@ -230,17 +232,10 @@ export function acquireNotificationStore(
   // repoActivitySub (which combines it) also reacts to relay list changes.
   const inboxRelays$ = inboxRelaysObservable(pubkey);
 
-  const badgeSub = inboxRelays$
-    .pipe(
-      switchMap((relays) =>
-        pool
-          .subscription(relays, badgeFilters, {
-            reconnect: BACKOFF_RECONNECT,
-            resubscribe: Infinity,
-          })
-          .pipe(onlyEvents(), mapEventsToStore(eventStore)),
-      ),
-    )
+  const badgeSub = resilientSubscription(pool, inboxRelays$, badgeFilters, {
+    retryCount: Infinity,
+  })
+    .pipe(onlyEvents(), mapEventsToStore(eventStore))
     .subscribe();
 
   // ---------------------------------------------------------------------------
@@ -254,8 +249,16 @@ export function acquireNotificationStore(
   let historyLoaderPromise: Promise<ManualTimelineLoader> | null = null;
 
   // ---------------------------------------------------------------------------
-  // Fetch the nsec envelope from lookup relays + user outbox relays.
-  // Reactive — re-subscribes when outbox relays change.
+  // Fetch the nsec envelope and state event from lookup relays + outbox relays.
+  //
+  // Fast path (99.9% of sessions): the notification pubkey is already in
+  // localStorage from a previous session. We can issue a single
+  // resilientSubscription with both filters immediately — one relay round-trip
+  // instead of two.
+  //
+  // Slow path (first-ever login, or cache cleared): notifPubkey is unknown
+  // until the nsec envelope arrives and is decrypted. We start with just the
+  // nsec filter and upgrade to a combined subscription once the envelope lands.
   // ---------------------------------------------------------------------------
 
   const nsecEnvelopeSub = addressLoader({
@@ -264,80 +267,99 @@ export function acquireNotificationStore(
     identifier: NOTIFICATION_NSEC_D_TAG,
   }).subscribe();
 
+  // ---------------------------------------------------------------------------
+  // notifPubkey$ — reactive notification pubkey.
+  //
+  // Starts with the localStorage-cached value (null on first-ever login).
+  // Updated by:
+  //   - watchNip78Event (below) when the nsec envelope changes in the EventStore
+  //   - The slow-path resolver (below) once the envelope is first decrypted
+  //
+  // Drives the outbox relay subscription: whenever this emits a new value,
+  // switchMap tears down the old resilientSubscription and opens a new one
+  // with an updated authors filter that includes the new notification pubkey.
+  // This ensures the new state event is fetched from relays immediately when
+  // another device rotates the nsec.
+  // ---------------------------------------------------------------------------
+  const cachedNotifPubkey = getCachedNotificationPubkey(pubkey);
+  const notifPubkey$ = new BehaviorSubject<string | null>(cachedNotifPubkey);
+
+  if (cachedNotifPubkey) {
+    addressLoader({
+      kind: NIP78_KIND,
+      pubkey: cachedNotifPubkey,
+      identifier: NOTIFICATION_STATE_D_TAG,
+    }).subscribe();
+  }
+
+  // Outbox relay subscription — reactive to both relay list changes and
+  // notification pubkey changes. switchMap on notifPubkey$ tears down and
+  // rebuilds the resilientSubscription whenever the notification pubkey
+  // changes (e.g. another device rotated the nsec). The inner
+  // resilientSubscription is itself reactive to relay list changes via
+  // outboxRelaysObservable, so relay additions/removals are handled without
+  // tearing down the whole subscription.
+  const nip78OutboxSub = notifPubkey$
+    .pipe(
+      switchMap((notifPubkey) => {
+        const nip78Filter = {
+          kinds: [NIP78_KIND],
+          authors: notifPubkey ? [pubkey, notifPubkey] : [pubkey],
+          "#d": [NOTIFICATION_NSEC_D_TAG, NOTIFICATION_STATE_D_TAG],
+        } as Filter;
+
+        return resilientSubscription(
+          pool,
+          outboxRelaysObservable(pubkey),
+          [nip78Filter],
+          { retryCount: Infinity },
+        ).pipe(onlyEvents(), mapEventsToStore(eventStore));
+      }),
+    )
+    .subscribe();
+
+  // Slow path: notif pubkey was not cached — wait for the nsec envelope to
+  // arrive and be decrypted, then update notifPubkey$ so the outbox sub above
+  // rebuilds its filter to include the state event author.
+  // We guard on the envelope being present so getOrCreateNotificationSigner
+  // doesn't generate a brand-new nsec (and prompt the user's signer) before
+  // the relay fetch completes.
   const nsecFilter = {
     kinds: [NIP78_KIND],
     authors: [pubkey],
     "#d": [NOTIFICATION_NSEC_D_TAG],
   } as Filter;
 
-  const nsecOutboxSub = outboxRelaysObservable(pubkey)
-    .pipe(
-      switchMap((relays) =>
-        relays.length === 0
-          ? of(undefined)
-          : pool
-              .subscription(relays, [nsecFilter])
-              .pipe(onlyEvents(), mapEventsToStore(eventStore)),
-      ),
-    )
-    .subscribe();
+  const stateEventSub = cachedNotifPubkey
+    ? null
+    : (eventStore.timeline([nsecFilter]) as unknown as Observable<NostrEvent[]>)
+        .pipe(
+          startWith([] as NostrEvent[]),
+          switchMap(async (envelopes) => {
+            if (envelopes.length === 0) return null;
 
-  // ---------------------------------------------------------------------------
-  // Once the nsec envelope is decrypted, fetch the state event.
-  // Reactive — re-subscribes when outbox relays change OR the envelope arrives.
-  // ---------------------------------------------------------------------------
+            const notifSigner = await getOrCreateNotificationSigner(pubkey);
+            if (!notifSigner) return null;
+            return await notifSigner.getPublicKey();
+          }),
+        )
+        .subscribe((notifPubkey) => {
+          if (!notifPubkey) return;
 
-  // We combine the nsec envelope observable with outbox relays so that
-  // getOrCreateNotificationSigner is only called once the envelope has
-  // actually landed in the EventStore. Without this guard, the function is
-  // called before the relay fetch completes, finds no envelope, and falls
-  // through to generating (and publishing) a brand-new nsec — prompting the
-  // user's signer unnecessarily on every cold start / origin switch.
-  const stateEventSub = combineLatest([
-    (
-      eventStore.timeline([nsecFilter]) as unknown as Observable<NostrEvent[]>
-    ).pipe(startWith([] as NostrEvent[])),
-    outboxRelaysObservable(pubkey),
-  ])
-    .pipe(
-      switchMap(async ([envelopes, outboxes]) => {
-        // Don't attempt to resolve the signer until the envelope is present.
-        // getOrCreateNotificationSigner will generate a new nsec (and prompt
-        // the user's signer) if it finds nothing — we must avoid that race.
-        if (envelopes.length === 0) return null;
+          // Update notifPubkey$ — this triggers the outbox sub to rebuild
+          // its filter and fetch the state event from relays.
+          if (notifPubkey !== notifPubkey$.getValue()) {
+            notifPubkey$.next(notifPubkey);
+          }
 
-        const notifSigner = await getOrCreateNotificationSigner(pubkey);
-        if (!notifSigner) return null;
-        return { outboxes, notifPubkey: await notifSigner.getPublicKey() };
-      }),
-      switchMap((resolved) => {
-        if (!resolved) return of(undefined);
-        const { outboxes, notifPubkey } = resolved;
+          addressLoader({
+            kind: NIP78_KIND,
+            pubkey: notifPubkey,
+            identifier: NOTIFICATION_STATE_D_TAG,
+          }).subscribe();
+        });
 
-        // addressLoader covers lookup relays; subscribe to outboxes for the
-        // state event so it's fetched from the user's own write relays too.
-        addressLoader({
-          kind: NIP78_KIND,
-          pubkey: notifPubkey,
-          identifier: NOTIFICATION_STATE_D_TAG,
-        }).subscribe();
-
-        if (outboxes.length === 0) return of(undefined);
-
-        const stateFilter = {
-          kinds: [NIP78_KIND],
-          authors: [notifPubkey],
-          "#d": [NOTIFICATION_STATE_D_TAG],
-        } as Filter;
-
-        return pool
-          .subscription(outboxes, [stateFilter])
-          .pipe(onlyEvents(), mapEventsToStore(eventStore));
-      }),
-    )
-    .subscribe();
-
-  const nip78WatchSub = watchNip78Event(pubkey, readState$);
+  const nip78WatchSub = watchNip78Event(pubkey, readState$, notifPubkey$);
 
   // ---------------------------------------------------------------------------
   // Repo discovery — own repos for relay coverage and star notifications
@@ -346,20 +368,13 @@ export function acquireNotificationStore(
   const repoCoords$ = new BehaviorSubject<string[]>([]);
 
   const ownRepoFilter: Filter = { kinds: [REPO_KIND], authors: [pubkey] };
-  const ownRepoSub = gitIndexRelays
-    .pipe(
-      distinctUntilChanged(
-        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
-      ),
-      switchMap((relays) =>
-        pool
-          .subscription(relays, [ownRepoFilter], {
-            reconnect: BACKOFF_RECONNECT,
-            resubscribe: Infinity,
-          })
-          .pipe(onlyEvents(), mapEventsToStore(eventStore)),
-      ),
-    )
+  const ownRepoSub = resilientSubscription(
+    pool,
+    gitIndexRelays,
+    [ownRepoFilter],
+    { retryCount: Infinity },
+  )
+    .pipe(onlyEvents(), mapEventsToStore(eventStore))
     .subscribe();
 
   const repoCoordsStoreSub = (
@@ -405,8 +420,14 @@ export function acquireNotificationStore(
 
   // Repo stars live subscription — always-on, no history paging needed here.
   // Stars are not included in the thread loader; they have their own filter.
+  //
+  // repoCoords$ can emit rapidly on login as own-repo announcements arrive one
+  // by one from the git index relay. Without debouncing, switchMap would tear
+  // down and recreate the resilientSubscription for each new coord, producing
+  // 10+ near-simultaneous REQs for kind:7. debounceTime(500) lets the coord
+  // list stabilise before opening a single subscription covering all coords.
   const repoActivitySub = combineLatest([
-    repoCoords$,
+    repoCoords$.pipe(debounceTime(500)),
     repoRelays$,
     inboxRelays$,
   ])
@@ -432,29 +453,23 @@ export function acquireNotificationStore(
         const inboxSet = new Set(inboxRelays);
         const extraRepoRelays = repoRelays.filter((r) => !inboxSet.has(r));
 
-        const subs = [
-          pool
-            .subscription(repoRelays, [starFilter], {
-              reconnect: BACKOFF_RECONNECT,
-              resubscribe: Infinity,
-            })
-            .pipe(onlyEvents(), mapEventsToStore(eventStore)),
+        const streams = [
+          resilientSubscription(pool, repoRelays, [starFilter], {
+            retryCount: Infinity,
+          }).pipe(onlyEvents(), mapEventsToStore(eventStore)),
         ];
 
         if (extraRepoRelays.length > 0) {
           // Badge filters on extra repo relays so we don't miss thread activity
           // on repos whose relays aren't in the user's inbox
-          subs.push(
-            pool
-              .subscription(extraRepoRelays, badgeFilters, {
-                reconnect: BACKOFF_RECONNECT,
-                resubscribe: Infinity,
-              })
-              .pipe(onlyEvents(), mapEventsToStore(eventStore)),
+          streams.push(
+            resilientSubscription(pool, extraRepoRelays, badgeFilters, {
+              retryCount: Infinity,
+            }).pipe(onlyEvents(), mapEventsToStore(eventStore)),
           );
         }
 
-        return combineLatest(subs);
+        return merge(...streams);
       }),
     )
     .subscribe();
@@ -469,13 +484,14 @@ export function acquireNotificationStore(
       localSub.unsubscribe();
       badgeSub.unsubscribe();
       nsecEnvelopeSub.unsubscribe();
-      nsecOutboxSub.unsubscribe();
-      stateEventSub.unsubscribe();
+      nip78OutboxSub.unsubscribe();
+      stateEventSub?.unsubscribe();
       nip78WatchSub.unsubscribe();
       ownRepoSub.unsubscribe();
       repoCoordsStoreSub.unsubscribe();
       repoActivitySub.unsubscribe();
       entry.historyLoader?.destroy();
+      notifPubkey$.complete();
       repoCoords$.complete();
     },
     refCount: 1,

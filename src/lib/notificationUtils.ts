@@ -3,6 +3,7 @@
  * Used by both NotificationsPage and the Dashboard compact panel.
  */
 
+import type { NostrEvent } from "nostr-tools";
 import type {
   NotificationItem,
   SocialNotificationItem,
@@ -18,6 +19,7 @@ import {
   STATUS_OPEN,
   STATUS_DRAFT,
   PR_UPDATE_KIND,
+  extractPatchSubject,
 } from "@/lib/nip34";
 
 // ---------------------------------------------------------------------------
@@ -56,6 +58,12 @@ export function titleFromEvent(ev: {
   }
   const subject = ev.tags.find(([t]) => t === "subject")?.[1];
   if (subject) return subject;
+  // For patch events, use extractPatchSubject which properly parses the
+  // git-format-patch content (handles cover letters and individual patches).
+  if (ev.kind === PATCH_KIND) {
+    const parsed = extractPatchSubject(ev as NostrEvent);
+    if (parsed && parsed !== "(untitled)") return parsed;
+  }
   const desc = ev.tags.find(([t]) => t === "description")?.[1];
   if (desc) {
     const firstLine = desc.split("\n")[0];

@@ -6,15 +6,13 @@
  * "30617:<pubkey>:<dtag>".
  *
  * Strategy:
- *   Layer 1a — subscribe to the user's kind:7 reactions (k=30617) on their
- *              outbox relays (discovered via MailboxesModel). kind:7 is a
- *              regular event published to the user's own outbox, NOT to git
- *              index relays. We use the same two-phase pattern as
- *              useUserProfileSubscription: lookup relays first (to get
- *              kind:10002), then outbox relays once known.
+ *   Layer 1a — single reactive subscription for the user's kind:7 reactions.
+ *              Starts immediately on index + lookup relays and additively
+ *              expands to the user's outbox relays once their kind:10002 arrives.
  *   Layer 1b — watch those reactions reactively; when coords change, fetch the
  *              corresponding repo announcements from git index relays (where
- *              kind:30617 announcements live).
+ *              kind:30617 announcements live). Passes gitIndexRelays as an
+ *              observable so relay list changes are handled reactively.
  *   Layer 2  — read both reactions and repo announcements from the EventStore
  *              reactively and return resolved repos filtered to starred coords.
  *
@@ -39,7 +37,14 @@ import {
 import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
-import { switchMap, map, of } from "rxjs";
+import {
+  switchMap,
+  map,
+  of,
+  combineLatest,
+  distinctUntilChanged,
+  startWith,
+} from "rxjs";
 
 /** kind:7 — NIP-25 reaction */
 const REACTION_KIND = 7;
@@ -64,46 +69,38 @@ export function useUserStarredRepos(
 ): ResolvedRepo[] | undefined {
   const store = useEventStore();
 
-  // Layer 1a — Phase 1: query lookup relays immediately so we can discover
-  // the user's kind:10002 outbox relay list. kind:7 reactions are regular
-  // events published to the user's own outbox, not to git index relays.
+  // Layer 1a — single reactive subscription: starts on index + lookup relays
+  // immediately and additively expands to the user's outbox relays once their
+  // kind:10002 arrives. No teardown on relay list changes.
   use$(() => {
     if (!pubkey) return undefined;
 
-    const relays = [
-      ...new Set(
-        [...gitIndexRelays.getValue(), ...lookupRelays.getValue()].map(
-          normalizeUrl,
+    const relays$ = combineLatest([
+      gitIndexRelays,
+      lookupRelays,
+      store.mailboxes(pubkey).pipe(startWith(undefined)),
+    ]).pipe(
+      map(([index, lookup, mailboxes]) => [
+        ...new Set(
+          [...index, ...lookup, ...(mailboxes?.outboxes ?? [])].map(
+            normalizeUrl,
+          ),
         ),
+      ]),
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
       ),
-    ];
+    );
 
-    return resilientSubscription(pool, relays, [
+    return resilientSubscription(pool, relays$, [
       starReactionFilter(pubkey),
     ]).pipe(onlyEvents(), mapEventsToStore(store));
   }, [pubkey, store]);
 
-  // Layer 1a — Phase 2: once we have their kind:10002, subscribe on their
-  // outbox relays. switchMap tears down the previous subscription when the
-  // outbox list changes (e.g. after phase 1 delivers their kind:10002).
-  use$(() => {
-    if (!pubkey) return undefined;
-
-    return store.mailboxes(pubkey).pipe(
-      map((mailboxes) => mailboxes?.outboxes ?? []),
-      switchMap((outboxes) => {
-        if (outboxes.length === 0) return of(undefined);
-
-        return resilientSubscription(pool, outboxes, [
-          starReactionFilter(pubkey),
-        ]).pipe(onlyEvents(), mapEventsToStore(store));
-      }),
-    );
-  }, [pubkey, store]);
-
   // Layer 1b: watch the reactions in the store; when the starred coords change,
   // fetch the corresponding repo announcements from git index relays (where
-  // kind:30617 announcements are published).
+  // kind:30617 announcements are published). gitIndexRelays is passed as an
+  // observable so relay list changes are handled reactively.
   use$(() => {
     if (!pubkey) return undefined;
 
@@ -134,9 +131,10 @@ export function useUserStarredRepos(
           authors: coordPubkeys,
         };
 
-        return resilientSubscription(pool, gitIndexRelays.getValue(), [
-          repoFilter,
-        ]).pipe(onlyEvents(), mapEventsToStore(store));
+        return resilientSubscription(pool, gitIndexRelays, [repoFilter]).pipe(
+          onlyEvents(),
+          mapEventsToStore(store),
+        );
       }),
     );
   }, [pubkey, store]);

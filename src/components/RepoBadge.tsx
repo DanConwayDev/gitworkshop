@@ -223,6 +223,7 @@ function RepoBadgeInner({
             pubkey={pubkey}
             size="xs"
             className="h-3.5 w-3.5 shrink-0"
+            noHoverCard={asSpan}
           />
           <UserName
             pubkey={pubkey}

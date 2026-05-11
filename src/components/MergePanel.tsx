@@ -40,7 +40,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { nip19 } from "nostr-tools";
-import type { EventTemplate, NostrEvent } from "nostr-tools";
+import type { NostrEvent } from "nostr-tools";
 import {
   GitMerge,
   GitBranch,
@@ -78,11 +78,13 @@ import { createMergeCommitObject } from "@/lib/patch-merge";
 import { createPackfile, type PackableObject } from "@/lib/git-packfile";
 import { pushToGitServer, type RefUpdate } from "@/lib/git-push";
 import { pool as relayPool, eventStore } from "@/services/nostr";
-import { factory } from "@/services/actions";
 import { outboxStore } from "@/services/outbox";
 
-import { RepoStateBlueprint } from "@/blueprints/repo";
-import { StatusChangeBlueprint, STATUS_KIND_MAP } from "@/blueprints/status";
+import { RepoStateFactory } from "@/factories/RepoStateFactory";
+import {
+  StatusChangeFactory,
+  STATUS_KIND_MAP,
+} from "@/factories/StatusChangeFactory";
 import type { CommitPerson } from "@/lib/git-objects";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
@@ -404,16 +406,11 @@ export function MergePanel({
       ];
 
       // ── Step 2+3: Publish state + push ────────────────────────────────
-      const stateTemplate = await factory.create(
-        RepoStateBlueprint,
+      const signedState = await RepoStateFactory.create(
         repo.dTag,
         mergeCommitObj.hash,
         defaultBranchName,
-      );
-
-      const signedState = await account.signer.signEvent(
-        stateTemplate as EventTemplate,
-      );
+      ).sign(account.signer);
 
       setMergeStep("publishing-state");
       await publishToGraspRelays(signedState, graspRelayUrls);
@@ -430,31 +427,27 @@ export function MergePanel({
       setMergeStep("publishing-status");
 
       const statusKind = STATUS_KIND_MAP["resolved"];
-      const statusDraft = await factory.create(
-        StatusChangeBlueprint,
+      const patchQuoteTags = (patchChain ?? []).map((patch) => [
+        "q",
+        patch.event.id,
+        "",
+        patch.pubkey,
+      ]);
+
+      const signedStatus = await StatusChangeFactory.create(
         statusKind,
         pr.rootEvent.id,
         pr.repoCoords,
         pr.pubkey,
         account.pubkey,
-      );
-
-      const statusTags = [
-        ...(statusDraft.tags ?? []),
-        ["merge-commit", mergeCommitObj.hash],
-        ["r", mergeCommitObj.hash],
-      ];
-
-      for (const patch of patchChain ?? []) {
-        statusTags.push(["q", patch.event.id, "", patch.pubkey]);
-      }
-
-      const statusTemplate: EventTemplate = {
-        ...statusDraft,
-        tags: statusTags,
-      };
-
-      const signedStatus = await account.signer.signEvent(statusTemplate);
+      )
+        .modifyPublicTags((tags) => [
+          ...tags,
+          ["merge-commit", mergeCommitObj.hash],
+          ["r", mergeCommitObj.hash],
+          ...patchQuoteTags,
+        ])
+        .sign(account.signer);
 
       await outboxStore.publish(signedStatus, [
         `outbox:${account.pubkey}`,
@@ -521,16 +514,11 @@ export function MergePanel({
       const { objects, newTipCommitHash } = mergeability.applyResult;
 
       // Publish state event pointing to the new tip
-      const stateTemplate = await factory.create(
-        RepoStateBlueprint,
+      const signedState = await RepoStateFactory.create(
         repo.dTag,
         newTipCommitHash,
         defaultBranchName,
-      );
-
-      const signedState = await account.signer.signEvent(
-        stateTemplate as EventTemplate,
-      );
+      ).sign(account.signer);
 
       setMergeStep("publishing-state");
       await publishToGraspRelays(signedState, graspRelayUrls);
@@ -548,31 +536,27 @@ export function MergePanel({
       setMergeStep("publishing-status");
 
       const statusKind = STATUS_KIND_MAP["resolved"];
-      const statusDraft = await factory.create(
-        StatusChangeBlueprint,
+      const patchQuoteTags = (patchChain ?? []).map((patch) => [
+        "q",
+        patch.event.id,
+        "",
+        patch.pubkey,
+      ]);
+
+      const signedStatus = await StatusChangeFactory.create(
         statusKind,
         pr.rootEvent.id,
         pr.repoCoords,
         pr.pubkey,
         account.pubkey,
-      );
-
-      const statusTags = [
-        ...(statusDraft.tags ?? []),
-        ["merge-commit", newTipCommitHash],
-        ["r", newTipCommitHash],
-      ];
-
-      for (const patch of patchChain ?? []) {
-        statusTags.push(["q", patch.event.id, "", patch.pubkey]);
-      }
-
-      const statusTemplate: EventTemplate = {
-        ...statusDraft,
-        tags: statusTags,
-      };
-
-      const signedStatus = await account.signer.signEvent(statusTemplate);
+      )
+        .modifyPublicTags((tags) => [
+          ...tags,
+          ["merge-commit", newTipCommitHash],
+          ["r", newTipCommitHash],
+          ...patchQuoteTags,
+        ])
+        .sign(account.signer);
 
       await outboxStore.publish(signedStatus, [
         `outbox:${account.pubkey}`,
@@ -634,16 +618,11 @@ export function MergePanel({
       const { mergeCommitObj } = prMergeability.result;
 
       // ── Step 2+3: Publish state + push ────────────────────────────────
-      const stateTemplate = await factory.create(
-        RepoStateBlueprint,
+      const signedState = await RepoStateFactory.create(
         repo.dTag,
         mergeCommitObj.hash,
         defaultBranchName,
-      );
-
-      const signedState = await account.signer.signEvent(
-        stateTemplate as EventTemplate,
-      );
+      ).sign(account.signer);
 
       setMergeStep("publishing-state");
       await publishToGraspRelays(signedState, graspRelayUrls);
@@ -660,27 +639,19 @@ export function MergePanel({
       setMergeStep("publishing-status");
 
       const statusKind = STATUS_KIND_MAP["resolved"];
-      const statusDraft = await factory.create(
-        StatusChangeBlueprint,
+      const signedStatus = await StatusChangeFactory.create(
         statusKind,
         pr.rootEvent.id,
         pr.repoCoords,
         pr.pubkey,
         account.pubkey,
-      );
-
-      const statusTags = [
-        ...(statusDraft.tags ?? []),
-        ["merge-commit", mergeCommitObj.hash],
-        ["r", mergeCommitObj.hash],
-      ];
-
-      const statusTemplate: EventTemplate = {
-        ...statusDraft,
-        tags: statusTags,
-      };
-
-      const signedStatus = await account.signer.signEvent(statusTemplate);
+      )
+        .modifyPublicTags((tags) => [
+          ...tags,
+          ["merge-commit", mergeCommitObj.hash],
+          ["r", mergeCommitObj.hash],
+        ])
+        .sign(account.signer);
 
       await outboxStore.publish(signedStatus, [
         `outbox:${account.pubkey}`,

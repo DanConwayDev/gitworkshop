@@ -20,9 +20,21 @@
  *        is kicked off using loadBlocksFromRelay, starting from the oldest
  *        event seen, until the relay returns 0 events.
  *   4. The live subscription stays open throughout and after pagination,
- *      reconnecting automatically via defer() + retry() with backoff.
- *      On reconnect, since: lastReceivedAt avoids replaying full history;
- *      eoseSeen remains true so pagination is not re-triggered.
+ *      reconnecting automatically via defer() + retry() with exponential
+ *      backoff. On reconnect, since: lastReceivedAt avoids replaying full
+ *      history; eoseSeen remains true so pagination is not re-triggered.
+ *
+ * Reconnect behaviour (mirrors resilientSubscription):
+ *   - Exponential backoff: 1s × 2^(n-1), capped at 5 minutes.
+ *   - Rate-limited CLOSED: prolonged backoff (60–90s × 2^(n-1), capped at
+ *     30 minutes) + shared per-relay cooldown registry so other concurrent
+ *     subscriptions to the same relay also hold off.
+ *   - Permanent CLOSED (restricted/blocked/pow/mute/unsupported/invalid):
+ *     fast-fail immediately — no point retrying.
+ *   - AuthRequired: fast-fail — handled by the pool-level auth policy.
+ *   - Before first EOSE: capped at retryCount (default 3) attempts.
+ *   - After first EOSE: unlimited retries (relay was reachable, treat drops
+ *     as transient).
  *
  * Pagination modes:
  *   - Auto (default): pagination is triggered automatically after EOSE if the
@@ -59,7 +71,7 @@ import type { TagValuePointer } from "applesauce-loaders/loaders";
 import type { CacheRequest, TimelessFilter } from "applesauce-loaders";
 import { makeCacheRequest } from "applesauce-loaders/helpers";
 import type { RelayPool } from "applesauce-relay";
-import { completeOnEose, onlyEvents } from "applesauce-relay";
+import { onlyEvents } from "applesauce-relay";
 import type { NostrEvent } from "nostr-tools";
 import {
   BehaviorSubject,
@@ -67,18 +79,20 @@ import {
   Observable,
   Subject,
   bufferTime,
-  defer,
+  catchError,
   filter,
   finalize,
   merge,
-  retry,
   share,
   switchMap,
   take,
-  tap,
 } from "rxjs";
 import { makeSettleSignal, DEFAULT_SETTLE_TIME } from "./settleSignal";
-import { foregroundResume$ } from "./foregroundResume";
+import type { SettleSignal, SettleSignalOptions } from "./settleSignal";
+import {
+  resilientSingleRelayRequest,
+  resilientSubscription,
+} from "./resilientSubscription";
 
 export type { TagValuePointer };
 
@@ -111,6 +125,15 @@ export type PaginatedTagValueLoaderOptions = {
    * "load more" button patterns.
    */
   manualPaginate$?: Observable<void>;
+  /**
+   * Number of reconnect attempts per relay before giving up (before first
+   * EOSE). After first EOSE retries are unlimited. Default: 3.
+   */
+  retryCount?: number;
+  /**
+   * Gap-fill overlap buffer in seconds. Default: 600 (10 minutes).
+   */
+  gapFillBuffer?: number;
 };
 
 export type PaginatedTagValueLoader = (
@@ -159,11 +182,15 @@ function exhaustionKey(relay: string, tagName: string, f: Filter): string {
 }
 
 /**
- * Process one batch window: for each relay in the filter map, open a live
- * subscription and (if needed) paginate backward until exhausted.
+ * Process one relay stream: open a resilient live subscription and (if needed)
+ * paginate backward until exhausted.
  *
- * @param settled$       - push to this when a relay finishes its current work;
- *                         the caller debounces it to emit "EOSE" into the stream.
+ * Reconnect behaviour mirrors processRelay in resilientSubscription:
+ *   - Exponential backoff, rate-limit handling, permanent error fast-fail,
+ *     AuthRequired fast-fail, unlimited retries after first EOSE.
+ *
+ * @param signal          - settle signal; call extend/settle/error as relay
+ *                          work progresses.
  * @param manualPaginate$ - if provided, disables auto-pagination; each emission
  *                         requests the next backward block from this relay.
  */
@@ -174,8 +201,10 @@ function processRelayStream(
   paginationFilter: TimelessFilter,
   key: string,
   limit: number,
+  retryCount: number,
+  gapFillBuffer: number,
   exhausted: Set<string>,
-  settled$: Subject<void>,
+  signal: SettleSignal,
   manualPaginate$: Observable<void> | undefined,
 ): Observable<NostrEvent> {
   // No limit on the live filter — we want all future events.
@@ -183,42 +212,48 @@ function processRelayStream(
   delete liveFilter.limit;
 
   // If already exhausted, just open the live subscription — signal settled
-  // immediately since there is no history work to do. No lastReceivedAt on
-  // this path since it's a fresh subscription with no prior state.
+  // immediately since there is no history work to do.
   if (exhausted.has(key)) {
-    settled$.next();
-    return defer(() =>
-      pool.subscription([relay], [liveFilter], { reconnect: false }),
-    ).pipe(
-      onlyEvents(),
-      retry({ count: 3, delay: 1000, resetOnSuccess: true }),
-    ) as Observable<NostrEvent>;
+    signal.settle(relay);
+    return resilientSubscription(pool, [relay], [liveFilter], {
+      paginate: false,
+      gapFill: true,
+      settle: false,
+      retryCount,
+      gapFillBuffer,
+    }).pipe(onlyEvents()) as Observable<NostrEvent>;
   }
 
   return new Observable<NostrEvent>((subscriber) => {
     let countBeforeEose = 0;
     let oldestSeen: number | undefined;
-    // lastReceivedAt is tracked per relay so that on reconnect we can inject
-    // since: lastReceivedAt - 600 to avoid re-receiving the full history.
-    // This is the primary motivation for using defer() + retry() instead of
-    // pool.subscription(reconnect: Infinity) — the latter reopens with the
-    // same static filter verbatim, causing the relay to replay everything it
-    // has up to its default limit on every reconnect (wasteful bandwidth).
-    // The tradeoff: we bypass applesauce's built-in reconnect backoff and
-    // replicate it manually with retry(). Applesauce's defaults are weak
-    // (count: 3, delay: 1000ms, resetOnSuccess: true) so this is acceptable.
-    let lastReceivedAt: number | undefined;
     let eoseSeen = false;
     let paginateSub: { unsubscribe(): void } | undefined;
     let manualSub: { unsubscribe(): void } | undefined;
-    let gapFillSub: { unsubscribe(): void } | undefined;
 
-    // Shared pagination window — driven by auto (BehaviorSubject) or manual
-    // (Subject pushed on each manualPaginate$ emission after EOSE).
-    // Created lazily once EOSE is received.
+    // Shared pagination window — driven by auto (BehaviorSubject) or manual.
     let window$: Subject<{ since?: number; until?: number }> | undefined;
 
     const startPagination = () => {
+      // loadBlocksFromRelay is used here purely as a pagination cursor state
+      // machine: it tracks the backward cursor, prevents parallel page loads,
+      // and detects exhaustion (zero events returned). It does NOT perform the
+      // actual relay request — that is handled by extendingPool below, which
+      // replaces applesauce's internal request with resilientSingleRelayRequest
+      // so every page gets our own exponential backoff and rate-limit handling
+      // instead of applesauce's built-in retry logic.
+      //
+      // extendingPool also calls signal.extend() on every page request (not
+      // just the first) to keep the signal alive while pagination is in flight.
+      // The relay is fixed in the outer scope so _relays is always [relay] and
+      // can be ignored.
+      const extendingPool = (_relays: string[], filters: Filter[]) => {
+        signal.extend(relay);
+        return resilientSingleRelayRequest(pool, relay, filters, {
+          retryCount,
+        });
+      };
+
       if (manualPaginate$) {
         // Manual mode: create a plain Subject; each manualPaginate$ emission
         // pushes a new window value to request the next block.
@@ -242,13 +277,19 @@ function processRelayStream(
 
       paginateSub = window$
         .pipe(
-          loadBlocksFromRelay(pool, relay, [paginationFilter], { limit }),
+          loadBlocksFromRelay(extendingPool, relay, [paginationFilter], {
+            limit,
+          }),
+          // Relay errors during backward pagination are non-fatal — finalize
+          // below still runs (on both completion and error) so signal.settle
+          // is called and the relay is marked exhausted in auto mode.
+          catchError(() => EMPTY),
           finalize(() => {
             if (!manualPaginate$) {
               // Auto: fully exhausted when loadBlocksFromRelay completes
               exhausted.add(key);
             }
-            settled$.next();
+            signal.settle(relay);
           }),
         )
         .subscribe({
@@ -259,117 +300,64 @@ function processRelayStream(
             }
             subscriber.next(event);
           },
-          error: (err) => subscriber.error(err),
           // Completing does not complete the outer observable —
           // the live subscription keeps it alive
         });
     };
 
-    // Use defer() so the subscription factory re-executes on each reconnect,
-    // allowing us to inject since: lastReceivedAt - 600 dynamically.
-    // reconnect: false — retry() below handles reconnection instead.
-    // IMPORTANT: defer() must be inlined here (not in a helper) so it closes
-    // over lastReceivedAt by reference and reads the current value on each
-    // reconnect attempt, not the value at subscription creation time.
-    const liveSub = defer(() =>
-      pool.subscription(
-        [relay],
-        [
-          {
-            ...liveFilter,
-            // On reconnect, only request events since the last received
-            // timestamp minus a 10-minute buffer to cover any gap during
-            // the disconnect. On first connect lastReceivedAt is undefined
-            // so no since is set — the relay sends its full recent history
-            // which we use as the initial depth probe.
-            ...(lastReceivedAt !== undefined
-              ? { since: lastReceivedAt - 600 }
-              : {}),
-          },
-        ],
-        { reconnect: false },
-      ),
-    )
-      .pipe(
-        tap((msg) => {
-          if (msg !== "EOSE") {
-            const t = (msg as NostrEvent).created_at;
-            if (lastReceivedAt === undefined || t > lastReceivedAt)
-              lastReceivedAt = t;
-          }
-        }),
-        // Replicate applesauce's default subscription retry config.
-        // See DEFAULT_RETRY_CONFIG in applesauce-relay/dist/relay.js:
-        //   { count: 3, delay: 1000, resetOnSuccess: true }
-        // We must replicate rather than use reconnect: Infinity because
-        // defer() needs to re-run on each attempt to pick up lastReceivedAt.
-        retry({ count: 3, delay: 1000, resetOnSuccess: true }),
-      )
-      .subscribe({
-        next: (msg) => {
-          if (msg === "EOSE") {
-            eoseSeen = true;
-            if (manualPaginate$) {
-              // Manual mode: signal settled at EOSE regardless of count —
-              // the user decides when to request more
-              settled$.next();
-              // Only start pagination machinery if there may be more history
-              if (countBeforeEose >= limit) startPagination();
-              else exhausted.add(key);
-            } else {
-              // Auto mode: paginate if relay was truncated, otherwise done
-              if (countBeforeEose < limit) {
-                exhausted.add(key);
-                settled$.next();
-              } else {
-                startPagination();
-              }
-            }
+    // Delegate reconnect, backoff, rate-limit handling, and foreground gap-fill
+    // to resilientSubscription. settle: false — we manage the outer signal
+    // ourselves via onRelaySettle/onRelayError callbacks, which resilientSubscription
+    // fires at every point it would normally call signal.settle/error. This
+    // restores the rate-limit cooldown settle that was lost when buildResilientLiveSub
+    // was replaced: if the relay is rate-limited on first connect, onRelaySettle
+    // fires immediately so the EOSE signal is not blocked.
+    const liveSub = resilientSubscription(pool, [relay], [liveFilter], {
+      paginate: false,
+      gapFill: true,
+      settle: false,
+      retryCount,
+      gapFillBuffer,
+      onRelaySettle: () => signal.settle(relay),
+      onRelayError: () => signal.error(relay),
+    }).subscribe({
+      next: (msg) => {
+        if (msg === "EOSE") {
+          eoseSeen = true;
+          if (manualPaginate$) {
+            // Manual mode: signal settled at EOSE regardless of count —
+            // the user decides when to request more
+            signal.settle(relay);
+            // Only start pagination machinery if there may be more history
+            if (countBeforeEose >= limit) startPagination();
+            else exhausted.add(key);
           } else {
-            const event = msg as NostrEvent;
-            if (!eoseSeen) {
-              countBeforeEose++;
-              if (oldestSeen === undefined || event.created_at < oldestSeen) {
-                oldestSeen = event.created_at;
-              }
+            // Auto mode: paginate if relay was truncated, otherwise done
+            if (countBeforeEose < limit) {
+              exhausted.add(key);
+              signal.settle(relay);
+            } else {
+              startPagination();
             }
-            subscriber.next(event);
           }
-        },
-        error: (err) => subscriber.error(err),
-        complete: () => subscriber.complete(),
-      });
-
-    // Foreground resume gap-fill: when the app returns from background, fire a
-    // one-shot REQ with since: lastReceivedAt - 600 to recover missed events.
-    // Only fires if we have received at least one event (lastReceivedAt defined).
-    // completeOnEose() auto-completes after EOSE so the subscription is short-lived.
-    // EventStore deduplication (mapEventsToStore + filterDuplicateEvents in
-    // processBatch) handles any overlap with the live subscription.
-    const gapFillResumeSub = foregroundResume$.subscribe(() => {
-      if (lastReceivedAt === undefined) return;
-      gapFillSub?.unsubscribe();
-      const gapFilter: Filter = {
-        ...liveFilter,
-        since: lastReceivedAt - 600,
-      };
-      gapFillSub = pool
-        .subscription([relay], [gapFilter], { reconnect: false })
-        .pipe(completeOnEose(), onlyEvents())
-        .subscribe({
-          next: (event) => subscriber.next(event),
-          error: () => {
-            /* gap-fill errors are non-fatal */
-          },
-        });
+        } else {
+          const event = msg as NostrEvent;
+          if (!eoseSeen) {
+            countBeforeEose++;
+            if (oldestSeen === undefined || event.created_at < oldestSeen) {
+              oldestSeen = event.created_at;
+            }
+          }
+          subscriber.next(event);
+        }
+      },
+      complete: () => subscriber.complete(),
     });
 
     return () => {
       liveSub.unsubscribe();
       paginateSub?.unsubscribe();
       manualSub?.unsubscribe();
-      gapFillSub?.unsubscribe();
-      gapFillResumeSub.unsubscribe();
     };
   });
 }
@@ -380,34 +368,43 @@ function processBatch(
   pointers: TagValuePointer[],
   opts: PaginatedTagValueLoaderOptions,
   exhausted: Set<string>,
-  settled$: Subject<void>,
-): Observable<NostrEvent> {
+  settleOpts: SettleSignalOptions,
+): { events$: Observable<NostrEvent>; eose$: Observable<"EOSE"> } {
   const limit = opts.limit ?? 500;
+  const retryCount = opts.retryCount ?? 3;
+  const gapFillBuffer = opts.gapFillBuffer ?? 600;
   const relayFilterMap = buildRelayFilterMap(tagName, pointers, opts);
+  const relayIds = Object.keys(relayFilterMap);
 
-  const perRelayStreams = Object.entries(relayFilterMap).map(
-    ([relay, relayFilter]) => {
-      const key = exhaustionKey(relay, tagName, relayFilter);
-      const paginationFilter: TimelessFilter = { ...relayFilter };
-      delete (paginationFilter as Filter).limit;
+  const signal = makeSettleSignal({
+    ...settleOpts,
+    relayIds,
+  });
 
-      return processRelayStream(
-        pool,
-        relay,
-        relayFilter,
-        paginationFilter,
-        key,
-        limit,
-        exhausted,
-        settled$,
-        opts.manualPaginate$,
-      );
-    },
-  );
+  const perRelayStreams = relayIds.map((relay) => {
+    const relayFilter = relayFilterMap[relay];
+    const key = exhaustionKey(relay, tagName, relayFilter);
+    const paginationFilter: TimelessFilter = { ...relayFilter };
+    delete (paginationFilter as Filter).limit;
+
+    return processRelayStream(
+      pool,
+      relay,
+      relayFilter,
+      paginationFilter,
+      key,
+      limit,
+      retryCount,
+      gapFillBuffer,
+      exhausted,
+      signal,
+      opts.manualPaginate$,
+    );
+  });
 
   if (perRelayStreams.length === 0) {
-    settled$.next();
-    return EMPTY;
+    // relayIds is empty — makeSettleSignal fires eose$ immediately
+    return { events$: EMPTY, eose$: signal.eose$ };
   }
 
   let combined: Observable<NostrEvent> = merge(...perRelayStreams);
@@ -431,7 +428,7 @@ function processBatch(
     ) as Observable<NostrEvent>;
   }
 
-  return combined;
+  return { events$: combined, eose$: signal.eose$ };
 }
 
 /**
@@ -442,7 +439,8 @@ function processBatch(
  * the EOSE signal is not needed.
  *
  * - Batches pointers by bufferTime/bufferSize (same as createTagValueLoader)
- * - Opens a live subscription per relay (reconnect: false + defer/retry backoff)
+ * - Opens a resilient live subscription per relay with exponential backoff,
+ *   rate-limit handling, and permanent error fast-fail
  * - Paginates backward per relay until exhausted
  * - Skips already-exhausted relay+batch combos on subsequent calls
  * - Emits "EOSE" settleTime ms after the first relay finishes its current work
@@ -471,16 +469,16 @@ export function createPaginatedTagValueLoader(
     .subscribe((pointers) => {
       if (pointers.length === 0) return;
 
-      // Per-batch settle signal — any relay finishing its work pushes here
-      const { settled$, eose$ } = makeSettleSignal(settleMs);
+      // Per-batch settle signal — created inside processBatch with relay count
+      const settleOpts: SettleSignalOptions = { settleTime: settleMs };
 
-      const events$ = processBatch(
+      const { events$, eose$ } = processBatch(
         pool,
         tagName,
         pointers,
         opts,
         exhausted,
-        settled$,
+        settleOpts,
       );
 
       const upstream: Observable<PaginatedTagValueResponse> = merge(
@@ -506,7 +504,7 @@ export function createPaginatedTagValueLoader(
               // Pass "EOSE" through; filter events to only those relevant to
               // this pointer's tag value
               filter(
-                (msg) =>
+                (msg: PaginatedTagValueResponse) =>
                   msg === "EOSE" ||
                   msg.tags.some(
                     (tag) => tag[0] === tagName && tag[1] === pointer.value,

@@ -309,6 +309,26 @@ function EventRedirect({
   if (kind === PR_KIND || kind === PATCH_KIND) {
     const coord = getRepoCoord(event);
     if (!coord) return <NotFound />;
+
+    // Sub-patch: a kind:1617 that has an #e tag pointing to the root patch.
+    // Redirect directly to /prs/<root-nevent>/commit/<sub-patch-nevent> so
+    // the user lands on the root PR page with the sub-patch commit highlighted,
+    // rather than treating the sub-patch as a standalone root PR.
+    if (kind === PATCH_KIND) {
+      const rootPatchId = event.tags.find(([t]) => t === "e")?.[1];
+      if (rootPatchId) {
+        const subPatchNevent = eventIdToNevent(eventId, hintRelays);
+        const rootNevent = eventIdToNevent(rootPatchId, hintRelays);
+        return (
+          <RepoCoordRedirect
+            coord={coord}
+            hintRelays={hintRelays}
+            subPath={`/prs/${rootNevent}/commit/${subPatchNevent}`}
+          />
+        );
+      }
+    }
+
     const nevent = eventIdToNevent(eventId, hintRelays);
     const fragment = commentId ? `#${commentId.slice(0, 15)}` : "";
     return (
