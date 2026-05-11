@@ -82,9 +82,9 @@ import { foregroundResume$ } from "./foregroundResume";
  *
  * Cadence: socket-level reconnects are governed entirely by
  * relay.reconnectTimer (configured in nostr.ts as a 3-phase curve). Our
- * retry handler does **not** apply its own backoff for transport failures —
- * it waits on relay.open$ for the next successful reconnect, which lets all
- * concurrent subscribers wake up simultaneously when the socket recovers.
+ * retry handler subscribes to the watchTower (keeping it alive so the
+ * reconnect timer can drive new connection attempts) and waits for open$
+ * to confirm a successful connection before re-executing buildLiveSub.
  */
 export class TransportError extends Error {
   constructor(relay: string) {
@@ -443,9 +443,9 @@ function processRelay(
     //
     // Socket-level reconnect cadence is governed entirely by
     // relay.reconnectTimer (replaced with a 3-phase curve in nostr.ts).
-    // Our retry handler below uses relay.open$ to wake on the next
-    // successful reconnect, sharing cadence with all other concurrent
-    // subscribers to the same relay.
+    // Our retry handler subscribes to the watchTower (keeping it alive so
+    // the reconnect timer can drive new connection attempts) and waits for
+    // open$ to confirm a successful connection before re-executing buildLiveSub.
     const buildLiveSub = () => {
       // Reset per-subscription-cycle state so that countBeforeEose and
       // oldestSeen are tracked correctly after a retry or graceful-close repeat.
@@ -562,9 +562,26 @@ function processRelay(
             }
             // Transport-level error: the shared WebSocket is failing. Cadence
             // is owned entirely by relay.reconnectTimer (3-phase curve in
-            // nostr.ts). We wait for relay.open$ so all concurrent
-            // subscribers wake up simultaneously when the socket recovers,
-            // then defer() re-executes with since: lastReceivedAt to gap-fill.
+            // nostr.ts).
+            //
+            // The naive approach of waiting on relay.open$ breaks because:
+            // while waiting, nothing is subscribed to the watchTower. After
+            // the watchTower's 30s keepAlive window, its source is fully
+            // unsubscribed. When the reconnect timer fires and sets ready$=true,
+            // the watchTower is already gone — no new WebSocket attempt is made
+            // and open$ never fires.
+            //
+            // The naive approach of waiting on relay.ready$ breaks because:
+            // error$ is only cleared on open$ (successful connection). When
+            // ready$ becomes true and defer() re-executes buildLiveSub, error$
+            // is still non-null → immediate TransportError → infinite loop.
+            //
+            // Correct fix: subscribe to the watchTower during the delay to
+            // keep it alive (so the reconnect timer can drive new connection
+            // attempts), AND wait for open$ to confirm the connection succeeded
+            // before re-executing buildLiveSub. open$ fires synchronously from
+            // the watchTower's openObserver, so it will emit while we are
+            // subscribed to the watchTower here.
             //
             // Settle the signal as errored on each transport failure — the
             // settle signal is one-shot per relay so the first call wins,
@@ -576,11 +593,35 @@ function processRelay(
             // No retryCount budget here — while the socket is bouncing we
             // patiently wait. If the relay never recovers, open$ never fires
             // and the subscription quietly remains dormant; if a caller
-            // unsubscribes, take(1) is torn down with no leak.
+            // unsubscribes, the watchTower sub and take(1) are torn down
+            // with no leak.
             if (err instanceof TransportError) {
               signal.error(relay);
               opts.onRelayError?.(relay);
-              return pool.relay(relay).open$.pipe(take(1));
+              const relayObj = pool.relay(relay);
+              // watchTower is protected in TypeScript but is a plain property
+              // at runtime — cast to access it. Subscribing to it increments
+              // the share() refcount, keeping the WebSocket alive so the
+              // reconnect timer can drive new connection attempts.
+              const wt = (
+                relayObj as unknown as { watchTower: Observable<never> }
+              ).watchTower;
+              return new Observable<never>((s) => {
+                // Keep the watchTower alive so the reconnect timer can drive
+                // new connection attempts. The watchTower is share()d so this
+                // just increments the refcount — no duplicate socket is opened.
+                const watchSub = wt.subscribe();
+                // Wait for the next successful open before completing so
+                // defer() re-executes buildLiveSub with a clean error$ state.
+                const openSub = relayObj.open$.pipe(take(1)).subscribe({
+                  next: () => s.complete(),
+                  error: (e) => s.error(e),
+                });
+                return () => {
+                  watchSub.unsubscribe();
+                  openSub.unsubscribe();
+                };
+              });
             }
             // NIP-01 CLOSED (non-rate-limited, non-permanent): use our own
             // backoff. The WebSocket is still open so waitForReady won't block.
@@ -1092,14 +1133,25 @@ export function resilientSingleRelayRequest(
           markRateLimited(relay, Date.now() + ms);
           return timer$;
         }
-        // Transport error: cadence is owned by relay.reconnectTimer (3-phase
-        // curve in nostr.ts). Wait for the next successful socket open$ so
-        // all concurrent callers wake up simultaneously when the socket
-        // recovers. No retryCount budget here — if the relay never recovers
-        // we patiently wait, and if the caller unsubscribes take(1) is torn
-        // down with no leak.
+        // Transport error: same fix as processRelay — subscribe to the
+        // watchTower to keep it alive (so the reconnect timer drives new
+        // connection attempts) and wait for open$ to confirm success before
+        // defer() re-executes. See processRelay for the full explanation.
         if (err instanceof TransportError) {
-          return pool.relay(relay).open$.pipe(take(1));
+          const relayObj = pool.relay(relay);
+          const wt = (relayObj as unknown as { watchTower: Observable<never> })
+            .watchTower;
+          return new Observable<never>((s) => {
+            const watchSub = wt.subscribe();
+            const openSub = relayObj.open$.pipe(take(1)).subscribe({
+              next: () => s.complete(),
+              error: (e) => s.error(e),
+            });
+            return () => {
+              watchSub.unsubscribe();
+              openSub.unsubscribe();
+            };
+          });
         }
         // CLOSED (non-rate-limited, non-permanent): own backoff; WS is open.
         reconnectAttempts++;
