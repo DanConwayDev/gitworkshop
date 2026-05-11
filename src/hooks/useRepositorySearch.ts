@@ -344,6 +344,10 @@ export function useRepositorySearch(
         const more = initialPageCount >= PAGE_SIZE;
         cacheEntry.hasMore = more;
         setHasMore(more);
+        // Always push results (even an empty array) so the subject transitions
+        // from undefined → [] when there are no matches. Without this, repos
+        // stays undefined after EOSE and the skeleton never clears.
+        pushResults();
         setIsLoading(false);
       }
     };
