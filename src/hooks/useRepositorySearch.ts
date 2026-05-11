@@ -59,6 +59,15 @@ const PAGE_SIZE = 20;
 // the zero-events case (relay exhausted — timer fires with count=0).
 const PAGE_SETTLE_MS = 600;
 
+/**
+ * Per-relay query outcome for the current search/browse subscription.
+ *
+ * - "searching" — REQ sent, waiting for EOSE
+ * - "success"   — EOSE received (relay answered, regardless of event count)
+ * - "error"     — transport failure, permanent CLOSED, or retries exhausted
+ */
+export type RelayQueryStatus = "searching" | "success" | "error";
+
 export interface UseRepositorySearchResult {
   /** Resolved repos to display. undefined = initial loading. */
   repos: ResolvedRepo[] | undefined;
@@ -74,6 +83,13 @@ export interface UseRepositorySearchResult {
    * Use to show a "matched user" badge on RepoCards.
    */
   matchedUserPubkeys: Set<string>;
+  /**
+   * Per-relay query status for the active subscription.
+   * All relays start as "searching" when the subscription opens and
+   * transition to "success" (EOSE) or "error" (failure) as results arrive.
+   * Resets to all-"searching" whenever the relay list or query changes.
+   */
+  relayStatuses: Record<string, RelayQueryStatus>;
 }
 
 // ── Search result cache ───────────────────────────────────────────────────────
@@ -90,6 +106,8 @@ interface SearchCacheEntry {
    * open, null if the subscription has been torn down (e.g. relay changed).
    */
   paginate$: Subject<void> | null;
+  /** Final per-relay query statuses — restored on cache hit. */
+  relayStatuses: Record<string, RelayQueryStatus>;
 }
 
 // Module-level cache so it survives re-renders and component remounts.
@@ -126,6 +144,12 @@ export function useRepositorySearch(
   // PAGE_SIZE and grows by PAGE_SIZE on each loadMore() call so the store
   // timeline is sliced lazily rather than dumping all cached events at once.
   const [browseDisplayLimit, setBrowseDisplayLimit] = useState(PAGE_SIZE);
+
+  // Per-relay query status — initialised to all-"searching" when a subscription
+  // opens, then flipped to "success" or "error" via onRelaySettle/onRelayError.
+  const [relayStatuses, setRelayStatuses] = useState<
+    Record<string, RelayQueryStatus>
+  >({});
 
   // Subject that triggers the next backward page in the active subscription.
   const paginateSubRef = useRef<Subject<void> | null>(null);
@@ -189,6 +213,9 @@ export function useRepositorySearch(
     setBrowseDisplayLimit(PAGE_SIZE);
     paginatingRef.current = false;
 
+    // Initialise all relays as "searching" for this subscription.
+    setRelayStatuses(Object.fromEntries(relays.map((r) => [r, "searching"])));
+
     const paginate$ = new Subject<void>();
     paginateSubRef.current = paginate$;
 
@@ -199,7 +226,14 @@ export function useRepositorySearch(
       pool,
       relays,
       [{ kinds: [REPO_KIND], limit: PAGE_SIZE } as Filter],
-      { manualPaginate$: paginate$, limit: PAGE_SIZE },
+      {
+        manualPaginate$: paginate$,
+        limit: PAGE_SIZE,
+        onRelaySettle: (relay) =>
+          setRelayStatuses((prev) => ({ ...prev, [relay]: "success" })),
+        onRelayError: (relay) =>
+          setRelayStatuses((prev) => ({ ...prev, [relay]: "error" })),
+      },
     ).subscribe({
       next: (msg) => {
         if (msg === "EOSE") {
@@ -288,6 +322,8 @@ export function useRepositorySearch(
       setIsLoading(false);
       paginatingRef.current = false;
       clearPageSettleTimer();
+      // Restore the final relay statuses from the completed session.
+      setRelayStatuses(cached.relayStatuses);
       return;
     }
 
@@ -296,6 +332,9 @@ export function useRepositorySearch(
     setHasMore(true);
     paginatingRef.current = false;
     clearPageSettleTimer();
+
+    // Initialise all relays as "searching" for this subscription.
+    setRelayStatuses(Object.fromEntries(relays.map((r) => [r, "searching"])));
 
     let repoSub: { unsubscribe(): void } | null = null;
     let userSub: { unsubscribe(): void } | null = null;
@@ -316,6 +355,9 @@ export function useRepositorySearch(
       hasMore: true,
       matchedUserPubkeys: new Set(),
       paginate$: null,
+      relayStatuses: Object.fromEntries(
+        relays.map((r) => [r, "searching" as RelayQueryStatus]),
+      ),
     };
     searchCache.set(cacheKey, cacheEntry);
 
@@ -363,7 +405,24 @@ export function useRepositorySearch(
           limit: PAGE_SIZE,
         } as Filter,
       ],
-      { manualPaginate$: paginate$, limit: PAGE_SIZE },
+      {
+        manualPaginate$: paginate$,
+        limit: PAGE_SIZE,
+        onRelaySettle: (relay) => {
+          cacheEntry.relayStatuses = {
+            ...cacheEntry.relayStatuses,
+            [relay]: "success",
+          };
+          setRelayStatuses((prev) => ({ ...prev, [relay]: "success" }));
+        },
+        onRelayError: (relay) => {
+          cacheEntry.relayStatuses = {
+            ...cacheEntry.relayStatuses,
+            [relay]: "error",
+          };
+          setRelayStatuses((prev) => ({ ...prev, [relay]: "error" }));
+        },
+      },
     ).subscribe({
       next: (msg) => {
         if (msg === "EOSE") {
@@ -501,6 +560,7 @@ export function useRepositorySearch(
       hasMore,
       loadMore,
       matchedUserPubkeys,
+      relayStatuses,
     };
   }
 
@@ -510,5 +570,6 @@ export function useRepositorySearch(
     hasMore,
     loadMore,
     matchedUserPubkeys: new Set(),
+    relayStatuses,
   };
 }

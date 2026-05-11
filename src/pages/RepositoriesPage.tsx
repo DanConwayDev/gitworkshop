@@ -1,8 +1,9 @@
-import { useEffect, useRef, useCallback, useMemo, useState } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import type React from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useRepositorySearch } from "@/hooks/useRepositorySearch";
+import type { RelayQueryStatus } from "@/hooks/useRepositorySearch";
 import { useRepoPath } from "@/hooks/useRepoPath";
 import { usePrefetchNip05 } from "@/hooks/usePrefetchNip05";
 import { UserLink } from "@/components/UserAvatar";
@@ -14,7 +15,6 @@ import { GitBranch, Search, ExternalLink, Loader2, User } from "lucide-react";
 import type { ResolvedRepo } from "@/lib/nip34";
 import { formatDistanceToNow } from "date-fns";
 import { use$ } from "@/hooks/use$";
-import { pool } from "@/services/nostr";
 import { gitIndexRelays } from "@/services/settings";
 
 interface RepositoriesPageProps {
@@ -74,8 +74,14 @@ export default function RepositoriesPage({
     }
   }, [committedQuery]);
 
-  const { repos, isLoading, hasMore, loadMore, matchedUserPubkeys } =
-    useRepositorySearch(committedQuery, relayOverride);
+  const {
+    repos,
+    isLoading,
+    hasMore,
+    loadMore,
+    matchedUserPubkeys,
+    relayStatuses,
+  } = useRepositorySearch(committedQuery, relayOverride);
 
   const title = relayLabel
     ? `Repositories on ${relayLabel} - ngit`
@@ -175,7 +181,10 @@ export default function RepositoriesPage({
           </div>
 
           {/* Relay pills — show which relays are being searched */}
-          <RelayPillsRow relayOverride={relayOverride} />
+          <RelayPillsRow
+            relayOverride={relayOverride}
+            relayStatuses={relayStatuses}
+          />
         </div>
       </div>
 
@@ -330,27 +339,29 @@ function RepoCard({ repo, isUserMatch }: RepoCardProps) {
 // Relay pills
 // ---------------------------------------------------------------------------
 
-/** Single relay pill with a live connection-status dot. */
-function RelayPill({ relayUrl }: { relayUrl: string }) {
-  const inst = useMemo(() => pool.relay(relayUrl), [relayUrl]);
-  const connected = use$(() => inst.connected$, [inst]);
-
+/** Single relay pill showing the query outcome for that relay. */
+function RelayPill({
+  relayUrl,
+  status,
+}: {
+  relayUrl: string;
+  status: RelayQueryStatus;
+}) {
   const label = relayUrl.replace(/^wss?:\/\//, "").replace(/\/$/, "");
 
-  // Three states: undefined = connecting, true = connected, false = disconnected
   const dotClass =
-    connected === undefined
-      ? "bg-amber-400"
-      : connected
+    status === "searching"
+      ? "bg-amber-400 animate-pulse"
+      : status === "success"
         ? "bg-green-500"
-        : "bg-muted-foreground/40";
+        : "bg-red-500/70";
 
   const title =
-    connected === undefined
-      ? `${relayUrl} — connecting…`
-      : connected
-        ? `${relayUrl} — connected`
-        : `${relayUrl} — disconnected`;
+    status === "searching"
+      ? `${relayUrl} — searching…`
+      : status === "success"
+        ? `${relayUrl} — responded`
+        : `${relayUrl} — failed`;
 
   return (
     <span
@@ -364,7 +375,13 @@ function RelayPill({ relayUrl }: { relayUrl: string }) {
 }
 
 /** Row of relay pills shown below the search box. */
-function RelayPillsRow({ relayOverride }: { relayOverride?: string[] }) {
+function RelayPillsRow({
+  relayOverride,
+  relayStatuses,
+}: {
+  relayOverride?: string[];
+  relayStatuses: Record<string, RelayQueryStatus>;
+}) {
   const liveGitIndexRelays =
     use$(() => gitIndexRelays, []) ?? gitIndexRelays.getValue();
   const relays = relayOverride ?? liveGitIndexRelays;
@@ -377,7 +394,11 @@ function RelayPillsRow({ relayOverride }: { relayOverride?: string[] }) {
         Searching:
       </span>
       {relays.map((url) => (
-        <RelayPill key={url} relayUrl={url} />
+        <RelayPill
+          key={url}
+          relayUrl={url}
+          status={relayStatuses[url] ?? "searching"}
+        />
       ))}
     </div>
   );
