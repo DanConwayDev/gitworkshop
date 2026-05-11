@@ -217,7 +217,7 @@ export function ProfileHoverCard({
        * warning when ProfileHoverCard is used inside a <Link>.
        */}
       <HoverCardTrigger asChild>
-        {asChild ? children : <span className="contents">{children}</span>}
+        {asChild ? children : <span className="inline-flex">{children}</span>}
       </HoverCardTrigger>
       <HoverCardContent
         side="bottom"
