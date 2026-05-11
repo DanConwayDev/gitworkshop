@@ -45,6 +45,36 @@ function normalizeRelayUrls(urls: string[]): string[] {
   return [...new Set(urls.map(normalizeUrl))];
 }
 
+/**
+ * Compare two relay URLs forgiving of cosmetic differences.
+ *
+ * Both `normalizeUrl` (this app) and `normalizeURL` (applesauce-core, called
+ * inside `RelayPool.relay()`) are run, but they disagree on trailing slashes:
+ * applesauce keeps the WHATWG `URL`-canonical trailing slash, this app strips
+ * it. For most relays both forms collapse to the same string after our
+ * `normalizeUrl` is applied, but pathological inputs (uppercased path, extra
+ * slashes, query strings) can still mismatch. This compares URLs by the
+ * fields that actually identify the relay: scheme + host + port + pathname
+ * (with trailing slashes collapsed).
+ *
+ * Returns true when the two URLs refer to the same relay endpoint.
+ */
+function urlsMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    if (ua.protocol.toLowerCase() !== ub.protocol.toLowerCase()) return false;
+    if (ua.host.toLowerCase() !== ub.host.toLowerCase()) return false;
+    const pa = ua.pathname.replace(/\/+$/, "");
+    const pb = ub.pathname.replace(/\/+$/, "");
+    return pa === pb;
+  } catch {
+    // Fall back to lenient string compare
+    return a.replace(/\/+$/, "") === b.replace(/\/+$/, "");
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -97,6 +127,14 @@ export interface OutboxRelayEntry {
    * Each entry records the timestamp, ok/fail, and raw relay message.
    */
   attempts: RelayAttempt[];
+  /**
+   * Unix seconds. Set when an EVENT message is sent to this relay and a
+   * response is being awaited. Cleared (undefined) once a response arrives
+   * or the attempt is otherwise resolved. Persisted to IndexedDB so the
+   * "sending for N seconds" UI is correct after a tab reload that finds
+   * a still-in-flight publish.
+   */
+  inFlightSince?: number;
 }
 
 export interface OutboxItem {
@@ -242,7 +280,11 @@ function classifyFailure(msg: string):
 // ---------------------------------------------------------------------------
 
 const DB_NAME = "gitworkshop-outbox";
-const DB_VERSION = 6; // bumped: corrected permanent failure reason labels
+// Schema version. Bumping wipes the store. Adding optional fields to
+// OutboxItem / OutboxRelayEntry is backwards-compatible at the IndexedDB
+// level (no schema migration needed) — only bump when removing/renaming
+// fields would corrupt deserialization.
+const DB_VERSION = 6;
 const STORE_NAME = "outbox";
 
 let db: IDBDatabase | null = null;
@@ -350,7 +392,19 @@ class OutboxStore {
   private async init() {
     try {
       const items = await idbGetAll();
-      this.items$.next(items.sort((a, b) => b.createdAt - a.createdAt));
+      // Any in-flight markers from a previous tab session are stale — the
+      // WebSocket and Observable subscription that owned them are gone.
+      // Clear them so retryPendingItems() starts fresh attempts that set
+      // accurate inFlightSince timestamps.
+      const cleaned = items.map((item) => ({
+        ...item,
+        relays: item.relays.map((r) =>
+          r.inFlightSince !== undefined
+            ? { ...r, inFlightSince: undefined }
+            : r,
+        ),
+      }));
+      this.items$.next(cleaned.sort((a, b) => b.createdAt - a.createdAt));
       this.pruneOldItems();
       this.retryPendingItems();
     } catch (err) {
@@ -601,7 +655,8 @@ class OutboxStore {
       this.retryTimers.delete(timerKey);
     }
 
-    // Reset relay status to pending
+    // Reset relay status to pending and clear any stale in-flight marker so
+    // sendToSpecificRelays starts a fresh elapsed timer.
     const updatedRelays = item.relays.map((r) =>
       r.url === relayUrl
         ? {
@@ -609,6 +664,7 @@ class OutboxStore {
             status: "pending" as const,
             message: "",
             retryAfter: undefined,
+            inFlightSince: undefined,
           }
         : r,
     );
@@ -669,6 +725,20 @@ class OutboxStore {
     }
     if (urls.length === 0) return;
 
+    // Mark targeted relays as in-flight so the UI can show "sending for N s".
+    // We persist this so a reload while a publish is mid-flight still shows
+    // accurate elapsed time (the old timestamp survives in IndexedDB and the
+    // UI shows time-since-original-send rather than resetting to 0).
+    const now = Math.floor(Date.now() / 1000);
+    const targeted = new Set(urls.map((u) => normalizeUrl(u)));
+    const flagged = item.relays.map((r) =>
+      targeted.has(r.url) ? { ...r, inFlightSince: r.inFlightSince ?? now } : r,
+    );
+    const flaggedItem: OutboxItem = { ...item, relays: flagged };
+    // Fire-and-forget the persist — the subscribe below still needs to start
+    // immediately so we don't lose responses that arrive in the same tick.
+    void this.upsert(flaggedItem);
+
     const subscription = this.pool.event(urls, item.event).subscribe({
       next: (response: PublishResponse) => {
         this.handleResponse(item.id, response);
@@ -679,6 +749,13 @@ class OutboxStore {
         for (const url of urls) {
           this.handleResponse(item.id, { ok: false, message: msg, from: url });
         }
+      },
+      complete: () => {
+        // pool.event() completes once every targeted relay has reported (or
+        // applesauce's per-relay eventTimeout has fired). Any relay still
+        // marked in-flight at this point received no message — fall back to a
+        // synthetic timeout response so the UI doesn't hang.
+        this.finalizeStillInFlight(item.id, urls);
       },
     });
 
@@ -705,8 +782,29 @@ class OutboxStore {
     const fromUrl = normalizeUrl(response.from);
     const now = Math.floor(Date.now() / 1000);
 
-    const updatedRelays = item.relays.map((relay) => {
-      if (relay.url !== fromUrl) return relay;
+    // Find the matching relay entry. Prefer exact URL equality but fall back
+    // to a forgiving compare so a cosmetic mismatch (trailing slash, host
+    // case) never silently drops a response and leaves the relay stuck on
+    // "sending…".
+    const matchIdx = (() => {
+      const exact = item.relays.findIndex((r) => r.url === fromUrl);
+      if (exact >= 0) return exact;
+      return item.relays.findIndex((r) => urlsMatch(r.url, fromUrl));
+    })();
+
+    if (matchIdx < 0) {
+      console.warn(
+        "[outbox] received PublishResponse for unknown relay:",
+        response.from,
+        "(normalized:",
+        fromUrl,
+        ") — dropping",
+      );
+      return;
+    }
+
+    const updatedRelays = item.relays.map((relay, idx) => {
+      if (idx !== matchIdx) return relay;
 
       const attempt: RelayAttempt = {
         at: now,
@@ -715,12 +813,15 @@ class OutboxStore {
       };
       const attempts = [...(relay.attempts ?? []), attempt];
 
+      // Every branch produces a finalized relay state, so always clear the
+      // in-flight timestamp.
+      const baseUpdate = { ...relay, attempts, inFlightSince: undefined };
+
       if (response.ok) {
         return {
-          ...relay,
+          ...baseUpdate,
           status: "success" as const,
           message: attempt.message,
-          attempts,
         };
       }
 
@@ -731,19 +832,17 @@ class OutboxStore {
         case "duplicate":
           // Relay already has the event — counts as delivered
           return {
-            ...relay,
+            ...baseUpdate,
             status: "success" as const,
             message: "duplicate",
-            attempts,
           };
 
         case "permanent":
           return {
-            ...relay,
+            ...baseUpdate,
             status: "permanent" as const,
             message: msg,
             permanentReason: classification.reason,
-            attempts,
           };
 
         case "transient": {
@@ -754,11 +853,10 @@ class OutboxStore {
           if (delayMs === undefined) {
             // Exhausted automatic retries — leave as failed, manual retry only
             return {
-              ...relay,
+              ...baseUpdate,
               status: "failed" as const,
               message: msg,
               transientSubkind: classification.subkind,
-              attempts,
             };
           }
 
@@ -768,22 +866,20 @@ class OutboxStore {
           this.scheduleRetry(itemId, relay.url, delayMs);
 
           return {
-            ...relay,
+            ...baseUpdate,
             status: "retrying" as const,
             message: msg,
             retryAfter,
             transientSubkind: classification.subkind,
-            attempts,
           };
         }
 
         default:
           // Unknown failure — will be retried on next page load
           return {
-            ...relay,
+            ...baseUpdate,
             status: "failed" as const,
             message: msg,
-            attempts,
           };
       }
     });
@@ -820,6 +916,28 @@ class OutboxStore {
     }, delayMs);
 
     this.retryTimers.set(timerKey, timer);
+  }
+
+  /**
+   * Safety net: when `pool.event()` completes, any targeted relay still
+   * marked in-flight received nothing at all (not even applesauce's synthetic
+   * "Timeout" PublishResponse — which would normally come through after
+   * `eventTimeout`). Synthesize a transient failure so the UI doesn't hang
+   * on "sending…" and the normal retry pipeline kicks in.
+   */
+  private finalizeStillInFlight(itemId: string, urls: string[]): void {
+    const targeted = new Set(urls.map((u) => normalizeUrl(u)));
+    const item = this.items$.getValue().find((i) => i.id === itemId);
+    if (!item) return;
+    for (const relay of item.relays) {
+      if (relay.inFlightSince === undefined) continue;
+      if (!targeted.has(relay.url)) continue;
+      this.handleResponse(itemId, {
+        ok: false,
+        from: relay.url,
+        message: "Timeout",
+      });
+    }
   }
 
   // -------------------------------------------------------------------------

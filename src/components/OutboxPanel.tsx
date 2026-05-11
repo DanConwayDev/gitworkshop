@@ -14,6 +14,7 @@
 
 import { use$ } from "@/hooks/use$";
 import { useCountdown } from "@/hooks/useCountdown";
+import { useElapsed } from "@/hooks/useElapsed";
 import {
   outboxStore,
   type OutboxItem,
@@ -548,6 +549,31 @@ function AttemptRow({ attempt }: { attempt: RelayAttempt }) {
   );
 }
 
+/**
+ * Visualises the currently-in-flight publish attempt — i.e. the EVENT
+ * message has been sent and we're waiting for an OK from the relay.
+ */
+function InFlightAttemptRow({
+  startedAt,
+  elapsed,
+}: {
+  startedAt: number;
+  elapsed: string | null;
+}) {
+  const label = useRelativeTime(startedAt);
+  return (
+    <div className="flex items-start gap-1.5 py-0.5">
+      <Clock className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5 animate-pulse" />
+      <div className="min-w-0 flex-1">
+        <span className="text-muted-foreground/60">sent {label}</span>
+        <span className="text-muted-foreground italic block">
+          waiting for response{elapsed ? ` (${elapsed})` : "…"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function RelayRow({
   relay,
   itemId,
@@ -560,10 +586,16 @@ function RelayRow({
     relay.status === "failed" ||
     relay.status === "retrying" ||
     relay.status === "permanent";
-  const hasDetail =
-    relay.message.length > 0 || (relay.attempts?.length ?? 0) > 0;
+  // Always allow expansion — even a pristine pending relay shows useful
+  // info (when the send started, what groups it serves) in the drawer.
+  const hasDetail = true;
   const summary = shortSummary(relay.status, relay);
   const countdown = useCountdown(relay.retryAfter);
+  // Elapsed time since the current EVENT message was dispatched. Only
+  // meaningful while a response is being awaited (status === "pending").
+  const elapsed = useElapsed(
+    relay.status === "pending" ? relay.inFlightSince : undefined,
+  );
 
   const summaryColor =
     relay.status === "success"
@@ -590,6 +622,15 @@ function RelayRow({
         <span className={`shrink-0 font-medium ${summaryColor}`}>
           {summary}
         </span>
+        {/* In-flight elapsed counter for pending sends */}
+        {relay.status === "pending" && elapsed && (
+          <span
+            className="shrink-0 tabular-nums text-muted-foreground/60"
+            title="Elapsed time since the EVENT message was sent"
+          >
+            {elapsed}
+          </span>
+        )}
         {/* Countdown to next automatic retry */}
         {relay.status === "retrying" && countdown && (
           <span className="shrink-0 tabular-nums text-muted-foreground/60">
@@ -624,6 +665,14 @@ function RelayRow({
       {/* Expanded detail */}
       {expanded && (
         <div className="mt-1 ml-5 space-y-1 rounded border border-border bg-muted/40 px-2 py-1.5">
+          {/* In-flight pending attempt: shown above completed attempts so the
+              user can see the live attempt alongside its history. */}
+          {relay.status === "pending" && relay.inFlightSince !== undefined && (
+            <InFlightAttemptRow
+              startedAt={relay.inFlightSince}
+              elapsed={elapsed}
+            />
+          )}
           {/* Attempt history, newest first */}
           {attempts.length > 0 && (
             <div className="space-y-0.5">
@@ -632,6 +681,15 @@ function RelayRow({
               ))}
             </div>
           )}
+          {/* Empty-state placeholder for a brand-new pending relay with no
+              prior attempts and no in-flight marker yet. */}
+          {relay.status === "pending" &&
+            relay.inFlightSince === undefined &&
+            attempts.length === 0 && (
+              <div className="text-muted-foreground/60 italic">
+                Queued — waiting for a connection slot
+              </div>
+            )}
         </div>
       )}
     </div>
