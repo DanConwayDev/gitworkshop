@@ -16,11 +16,11 @@ import { verifyEvent } from "nostr-tools";
 import {
   Observable,
   Subscription,
-  NEVER,
   merge,
   distinctUntilChanged,
   firstValueFrom,
   of,
+  timer,
 } from "rxjs";
 import { filter, map, take, timeout } from "rxjs/operators";
 import { MailboxesModel } from "applesauce-core/models";
@@ -44,10 +44,7 @@ import {
   createPaginatedTagValueLoader,
   type PaginatedTagValueResponse,
 } from "@/lib/tagValuePaginatedLoader";
-import {
-  resilientSubscription,
-  setDefaultLiveness,
-} from "@/lib/resilientSubscription";
+import { resilientSubscription } from "@/lib/resilientSubscription";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
 import { normalizeUrl } from "@/lib/url";
 import { relayGroupUrls$ } from "@/models/RepositoryRelayGroup";
@@ -76,37 +73,69 @@ export const pool = new RelayPool();
 
 /**
  * Global relay liveness tracker.
- * Monitors connection health for relays discovered via NIP-65 outbox model so
- * that dead or repeatedly-failing relays are skipped automatically.
  *
- * Repo-declared relays and explicit relay hints bypass liveness filtering —
- * they are authoritative and should always be tried. Only user-discovered
- * outbox relays (kind:10002) are filtered through this tracker.
+ * Tracks online / offline / dead state for every relay the pool sees. Used
+ * for status indicators, persistence, and (in future) filtering relay
+ * suggestion lists. **Not** consulted for reconnect cadence — that is owned
+ * solely by the reconnectTimer override below, so this layer is purely
+ * informational and does not influence retry behavior in resilientSubscription.
  */
 export const liveness = new RelayLiveness();
 liveness.connectToPool(pool);
-// Register liveness as the module-level default so every resilientSubscription
-// / resilientRequest call benefits from liveness-aware fast-failing without
-// needing to thread the instance through every call site.
-setDefaultLiveness(liveness);
 
-// Override reconnectTimer on every relay so that dead relays
-// (ERR_ADDRESS_UNREACHABLE, 404, etc.) stop reconnecting entirely rather than
-// backing off indefinitely. The Relay class's default reconnectTimer retries
-// forever with exponential backoff (capped at 5 minutes) — it has no awareness
-// of liveness. By replacing it we ensure that once liveness marks a relay
-// dead (after maxFailuresBeforeDead unclean closes — default 5), the
-// WebSocket is never reopened, stopping the perpetual reconnect loop visible
-// in the browser console for permanently-broken relay URLs.
+// Replace each relay's reconnectTimer with a 3-phase backoff curve. This is
+// the **single source of truth** for socket-level reconnect cadence — no
+// other layer (resilientSubscription, RelayLiveness, etc.) governs WS retry
+// timing.
 //
-// Relays that are merely offline (in backoff but not yet dead) still
-// reconnect normally via the original timer.
+// applesauce-relay@6.0.0 uses 1.5^attempts × 1000ms capped at 5min, which
+// produces a tight burst (1.5s, 2.25s, 3.4s, 5s, 7.6s, 11s, …) that hammers
+// 404 / unreachable URLs with many connection attempts before slowing down.
+//
+// Three-phase replacement:
+//   - attempts 1-3:  1s,  2s,  4s          (network blip / relay restart)
+//   - attempts 4-6:  30s, 60s, 2min        (server likely under load)
+//   - attempts 7-9:  5min, 10min, 20min    (probably down)
+//   - attempts 10+:  30min cap             (low-cost periodic probe)
+//
+// No termination — applesauce's share+keepAlive on watchTower naturally
+// pauses the reconnect loop when no callers are subscribed (after a 30s
+// keep-alive window with refCount=0 the WS closes cleanly and no further
+// startReconnectTimer fires). attempts$ persists on the Relay instance, so
+// when a caller comes back later the curve resumes from where it left off.
+// While a caller is subscribed, capping at 30min gives auto-revival probes
+// for relays that have come back without manual intervention.
+//
+// Requires the patches/applesauce-relay@6.0.0.patch which makes
+// RelayPool.relay() emit on pool.add$ — without that, this subscribe never
+// fires for newly-created relays.
+const RECONNECT_PHASES_MS: number[] = [
+  // Phase 1 — burst (attempts 1-3)
+  1_000,
+  2_000,
+  4_000,
+  // Phase 2 — under-load pause (attempts 4-6)
+  30_000,
+  60_000,
+  120_000,
+  // Phase 3 — probably down (attempts 7-9)
+  5 * 60_000,
+  10 * 60_000,
+  20 * 60_000,
+];
+const RECONNECT_CAP_MS = 30 * 60_000;
+
+function reconnectDelayMs(attempts: number): number {
+  // attempts is 1-based for the first failure; use index attempts-1.
+  const i = Math.max(0, attempts - 1);
+  return i < RECONNECT_PHASES_MS.length
+    ? RECONNECT_PHASES_MS[i]
+    : RECONNECT_CAP_MS;
+}
+
 pool.add$.subscribe((relay) => {
-  const original = relay.reconnectTimer.bind(relay);
-  relay.reconnectTimer = (error, attempts) => {
-    if (liveness.getState(relay.url)?.state === "dead") return NEVER;
-    return original(error, attempts);
-  };
+  relay.reconnectTimer = (_error, attempts) =>
+    timer(reconnectDelayMs(attempts));
 });
 
 /**

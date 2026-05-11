@@ -34,7 +34,7 @@
  * and callers use onlyEvents() to strip EOSE if not needed.
  */
 
-import type { RelayLiveness, RelayPool } from "applesauce-relay";
+import type { RelayPool } from "applesauce-relay";
 import {
   completeOnEose,
   onlyEvents,
@@ -58,6 +58,7 @@ import {
   repeat,
   retry,
   switchMap,
+  take,
   tap,
   timer,
   catchError,
@@ -67,35 +68,29 @@ import type { SettleSignal, SettleSignalOptions } from "./settleSignal";
 import { foregroundResume$ } from "./foregroundResume";
 
 /**
- * Thrown when a WebSocket closes uncleanly (ERR_ADDRESS_UNREACHABLE, 404, etc.)
- * while a subscription / request is in flight.
+ * Thrown when the shared WebSocket to a relay is in a failed state — either
+ * already failed at the moment we subscribe (relay.error$ non-null), or
+ * transitions to failed while we are subscribed.
  *
  * The Relay class swallows WebSocket errors in its watchTower (catchError →
  * NEVER) and never surfaces them to our retry() handler. On an unclean close
  * it sets ready$=false and waits in waitForReady() — so a naive subscription
- * just hangs silently rather than erroring. We race the subscription against
- * relay.error$ (a BehaviorSubject set to non-null by startReconnectTimer on
- * any unclean close) and throw this error ourselves to let retry() take over.
+ * just hangs silently rather than erroring. We watch relay.error$ (a
+ * BehaviorSubject set to non-null by startReconnectTimer on any unclean
+ * close, cleared on successful open$) and surface this error ourselves to
+ * let retry() take over.
+ *
+ * Cadence: socket-level reconnects are governed entirely by
+ * relay.reconnectTimer (configured in nostr.ts as a 3-phase curve). Our
+ * retry handler does **not** apply its own backoff for transport failures —
+ * it waits on relay.open$ for the next successful reconnect, which lets all
+ * concurrent subscribers wake up simultaneously when the socket recovers.
  */
 export class TransportError extends Error {
   constructor(relay: string) {
     super(`transport failure on ${relay}`);
     this.name = "TransportError";
   }
-}
-
-/**
- * Module-level default liveness tracker.
- *
- * Set this once at app startup (in nostr.ts) so every resilientSubscription /
- * resilientRequest call benefits from liveness-aware fast-failing without
- * needing to thread the instance through every call site. Individual calls
- * can override via opts.liveness.
- */
-let defaultLiveness: RelayLiveness | undefined;
-
-export function setDefaultLiveness(liveness: RelayLiveness): void {
-  defaultLiveness = liveness;
 }
 
 export interface ResilientSubscriptionOptions {
@@ -152,22 +147,11 @@ export interface ResilientSubscriptionOptions {
    */
   onRelaySettle?: (relay: string) => void;
   /**
-   * Called when a relay fails permanently (all retries exhausted, auth-required,
-   * or permanent CLOSED). Useful when the caller manages its own settle signal
-   * and passes settle: false.
+   * Called when a relay fails permanently (auth-required or permanent CLOSED).
+   * Useful when the caller manages its own settle signal and passes
+   * settle: false.
    */
   onRelayError?: (relay: string) => void;
-  /**
-   * Liveness tracker to consult before each connection attempt.
-   *
-   * When provided (or when the module-level default is set via
-   * setDefaultLiveness), dead relays are fast-failed immediately without
-   * opening a WebSocket — avoiding the silent hang inside Relay.waitForReady()
-   * that would otherwise block indefinitely for unreachable / 404 relays.
-   *
-   * Defaults to the module-level default set by setDefaultLiveness().
-   */
-  liveness?: RelayLiveness;
 }
 
 /**
@@ -309,14 +293,9 @@ function processRelay(
     manualPaginate$: Observable<void> | undefined;
     onRelaySettle: ((relay: string) => void) | undefined;
     onRelayError: ((relay: string) => void) | undefined;
-    liveness: RelayLiveness | undefined;
   },
   signal: SettleSignal,
 ): Observable<NostrEvent> {
-  // Read liveness lazily so it picks up the module-level default even if
-  // setDefaultLiveness() was called after the subscription was created.
-  const getLiveness = () => opts.liveness ?? defaultLiveness;
-
   const limit = opts.limit;
 
   // Live filters: keep limit so the relay returns at most `limit` historical
@@ -452,16 +431,21 @@ function processRelay(
     // every reconnect attempt, injecting since: lastReceivedAt - gapFillBuffer
     // to avoid replaying the full relay history.
     //
-    // We pass reconnect: false to disable applesauce's internal repeat() logic.
-    // applesauce's "reconnect" option maps to a repeat() operator that
-    // resubscribes after a graceful relay CLOSED (up to 3× with linear backoff
-    // by default). We disable it here because:
-    //   1. We own the reconnect lifecycle via our own retry() + repeat() below.
-    //   2. Internal resubscriptions would bypass our lastReceivedAt tracking,
-    //      causing the reconnect REQ to replay the full relay history instead
-    //      of using since: lastReceivedAt - gapFillBuffer.
-    //   3. Internal resubscriptions would not update the settle signal, so EOSE
-    //      could fire before the relay has finished resending missed events.
+    // Note on applesauce's `reconnect` / `resubscribe` options: in
+    // applesauce-relay@6.0.0 the `reconnect` option on subscription() /
+    // request() is plumbed through but never read by req() — only publish()
+    // consumes it (see relay.js:758). The `resubscribe` option (which maps
+    // to a repeat() operator) IS read but defaults to undefined → identity,
+    // i.e. no internal repeat. So we don't need to pass either; applesauce
+    // does no internal REQ-level retry/repeat for subscriptions. The only
+    // applesauce retry layer is the auth-only retry inside req() (line 546)
+    // which only handles AuthRequiredError.
+    //
+    // Socket-level reconnect cadence is governed entirely by
+    // relay.reconnectTimer (replaced with a 3-phase curve in nostr.ts).
+    // Our retry handler below uses relay.open$ to wake on the next
+    // successful reconnect, sharing cadence with all other concurrent
+    // subscribers to the same relay.
     const buildLiveSub = () => {
       // Reset per-subscription-cycle state so that countBeforeEose and
       // oldestSeen are tracked correctly after a retry or graceful-close repeat.
@@ -469,16 +453,6 @@ function processRelay(
       // so the reconnect REQ uses since: lastReceivedAt - gapFillBuffer.
       eoseSeen = false;
       countBeforeEose = 0;
-
-      // Liveness check: if the relay has been marked dead by the liveness
-      // tracker (too many unclean WebSocket closes — e.g. ERR_ADDRESS_UNREACHABLE
-      // or 404 handshake failures), fast-fail immediately rather than opening
-      // a subscription that would hang in Relay.waitForReady() indefinitely.
-      // The fast-fail throws a TransportError which the retry() handler below
-      // detects and aborts on (rather than burning retry slots).
-      if (getLiveness()?.getState(relay)?.state === "dead") {
-        throw new TransportError(relay);
-      }
 
       const filtersWithSince: Filter[] = liveFilters.map((f) => ({
         ...f,
@@ -506,6 +480,8 @@ function processRelay(
       // reset to null on successful open. This means a single subscription
       // catches both:
       //   - already non-null when we subscribe → relay is currently failed
+      //     (fast-fail for late-comers — settle signal sees error
+      //     immediately, doesn't wait for the underlying retry cycle)
       //   - transitions to non-null while we are subscribed → relay just failed
       //
       // We can't merge() error$ into the subscription stream — error$ never
@@ -514,9 +490,7 @@ function processRelay(
       // that forwards subscription notifications and listens to error$ for
       // the lifetime of the inner subscription only.
       const relayObj = pool.relay(relay);
-      const inner$ = relayObj.subscription(filtersWithSince, {
-        reconnect: false,
-      });
+      const inner$ = relayObj.subscription(filtersWithSince);
       const sub$ = new Observable<NostrEvent | "EOSE">((s) => {
         const errSub = relayObj.error$.subscribe((err) => {
           if (err !== null) s.error(new TransportError(relay));
@@ -572,21 +546,13 @@ function processRelay(
             // Permanent policy errors: the relay will never accept this
             // subscription regardless of retries. Fast-fail immediately.
             if (isPermanentError(err)) throw err;
-            // Dead relay (liveness): fast-fail before burning a retry slot.
-            // Covers both the throw in buildLiveSub and any TransportError
-            // that arrives after liveness has since marked the relay dead.
-            if (
-              err instanceof TransportError &&
-              getLiveness()?.getState(relay)?.state === "dead"
-            )
-              throw err;
-            reconnectAttempts++;
-            if (!everReceivedEose && reconnectAttempts > opts.retryCount)
-              throw err;
             // Rate-limited: relay is overloaded. Record the cooldown so all
             // other concurrent subscriptions to this relay also hold off,
             // preventing a stampede that would reset the relay's window.
             if (isRateLimited(err)) {
+              reconnectAttempts++;
+              if (!everReceivedEose && reconnectAttempts > opts.retryCount)
+                throw err;
               const { ms, timer$ } = rateLimitedRetryDelay(
                 err,
                 reconnectAttempts,
@@ -594,29 +560,33 @@ function processRelay(
               markRateLimited(relay, Date.now() + ms);
               return timer$;
             }
-            // Transport-level error (TransportError from our error$ race):
-            // The Relay class enforces its own reconnect backoff via
-            // reconnectTimer + waitForReady(). Our next defer() execution
-            // will call subscription() which blocks in waitForReady() until
-            // the relay is ready.
+            // Transport-level error: the shared WebSocket is failing. Cadence
+            // is owned entirely by relay.reconnectTimer (3-phase curve in
+            // nostr.ts). We wait for relay.open$ so all concurrent
+            // subscribers wake up simultaneously when the socket recovers,
+            // then defer() re-executes with since: lastReceivedAt to gap-fill.
             //
-            // IMPORTANT: we must not re-enter waitForReady() while liveness
-            // has the relay in backoff. If we do, the relay reconnects, fails
-            // again, and close$ fires — but recordFailure() ignores it because
-            // isInBackoff() is still true. failureCount never reaches
-            // maxFailuresBeforeDead and the relay never becomes "dead".
+            // Settle the signal as errored on each transport failure — the
+            // settle signal is one-shot per relay so the first call wins,
+            // but firing on every transport flap is correct because
+            // late-comers that subscribe while the socket is currently down
+            // need to fast-settle their settle signal immediately rather
+            // than wait for the underlying retry cycle to complete.
             //
-            // Wait out the full liveness backoff window before retrying.
-            // Each retry then gets a fresh backoff window, close$ fires once
-            // per attempt, and recordFailure() increments failureCount
-            // correctly until the relay is marked dead.
+            // No retryCount budget here — while the socket is bouncing we
+            // patiently wait. If the relay never recovers, open$ never fires
+            // and the subscription quietly remains dormant; if a caller
+            // unsubscribes, take(1) is torn down with no leak.
             if (err instanceof TransportError) {
-              const backoffRemaining =
-                getLiveness()?.getBackoffRemaining(relay) ?? 0;
-              return timer(Math.max(backoffRemaining, 50));
+              signal.error(relay);
+              opts.onRelayError?.(relay);
+              return pool.relay(relay).open$.pipe(take(1));
             }
             // NIP-01 CLOSED (non-rate-limited, non-permanent): use our own
             // backoff. The WebSocket is still open so waitForReady won't block.
+            reconnectAttempts++;
+            if (!everReceivedEose && reconnectAttempts > opts.retryCount)
+              throw err;
             return typeof opts.retryDelay === "function"
               ? opts.retryDelay(err, reconnectAttempts)
               : timer(opts.retryDelay ?? 0);
@@ -826,10 +796,6 @@ function resilientSubscriptionStatic(
   const manualPaginate$ = opts.manualPaginate$;
   const onRelaySettle = opts.onRelaySettle;
   const onRelayError = opts.onRelayError;
-  // liveness is captured here for type plumbing only — processRelay reads it
-  // lazily via getLiveness() so it picks up the module-level default even if
-  // setDefaultLiveness() was called after this subscription started.
-  const liveness = opts.liveness;
 
   if (relays.length === 0) return EMPTY;
 
@@ -845,7 +811,6 @@ function resilientSubscriptionStatic(
     manualPaginate$,
     onRelaySettle,
     onRelayError,
-    liveness,
   };
 
   if (!settle) {
@@ -911,7 +876,6 @@ function resilientSubscriptionReactive(
   const manualPaginate$ = opts.manualPaginate$;
   const onRelaySettle = opts.onRelaySettle;
   const onRelayError = opts.onRelayError;
-  const liveness = opts.liveness;
 
   const resolvedOpts = {
     autoClose,
@@ -925,7 +889,6 @@ function resilientSubscriptionReactive(
     manualPaginate$,
     onRelaySettle,
     onRelayError,
-    liveness,
   };
 
   return new Observable<ResilientSubscriptionResponse>((subscriber) => {
@@ -1080,12 +1043,6 @@ export function resilientSingleRelayRequest(
   let everSucceeded = false;
 
   return defer(() => {
-    // If this relay has been marked dead by the liveness tracker, fast-fail
-    // immediately rather than calling pool.relay().request() which would hang
-    // in waitForReady() while the relay's reconnectTimer keeps retrying.
-    if (defaultLiveness?.getState(relay)?.state === "dead") {
-      throw new TransportError(relay);
-    }
     // If this relay is currently rate-limited, wait out the cooldown before
     // opening the request. This prevents hammering a relay that just told us
     // to back off, which would reset its rate-limit window.
@@ -1128,27 +1085,25 @@ export function resilientSingleRelayRequest(
       delay: (err) => {
         if (err instanceof AuthRequiredError) throw err;
         if (isPermanentError(err)) throw err;
-        // Dead relay (liveness): fast-fail before burning a retry slot.
-        if (
-          err instanceof TransportError &&
-          defaultLiveness?.getState(relay)?.state === "dead"
-        )
-          throw err;
-        reconnectAttempts++;
-        if (!everSucceeded && reconnectAttempts > retryCount) throw err;
         if (isRateLimited(err)) {
+          reconnectAttempts++;
+          if (!everSucceeded && reconnectAttempts > retryCount) throw err;
           const { ms, timer$ } = rateLimitedRetryDelay(err, reconnectAttempts);
           markRateLimited(relay, Date.now() + ms);
           return timer$;
         }
-        // Transport error: wait out the liveness backoff (or a minimum yield)
-        // before retrying so each retry gets a fresh backoff window and
-        // failureCount increments correctly until the relay is marked dead.
+        // Transport error: cadence is owned by relay.reconnectTimer (3-phase
+        // curve in nostr.ts). Wait for the next successful socket open$ so
+        // all concurrent callers wake up simultaneously when the socket
+        // recovers. No retryCount budget here — if the relay never recovers
+        // we patiently wait, and if the caller unsubscribes take(1) is torn
+        // down with no leak.
         if (err instanceof TransportError) {
-          const backoffRemaining =
-            defaultLiveness?.getBackoffRemaining(relay) ?? 0;
-          return timer(Math.max(backoffRemaining, 50));
+          return pool.relay(relay).open$.pipe(take(1));
         }
+        // CLOSED (non-rate-limited, non-permanent): own backoff; WS is open.
+        reconnectAttempts++;
+        if (!everSucceeded && reconnectAttempts > retryCount) throw err;
         const retryDelay = opts.retryDelay ?? defaultRetryDelay;
         return typeof retryDelay === "function"
           ? retryDelay(err, reconnectAttempts)
@@ -1163,10 +1118,6 @@ export function resilientSingleRelayRequest(
       } else if (isPermanentError(err)) {
         console.debug(
           `[resilientSingleRelayRequest] permanent error on ${relay} (${closedPrefix(err as RelayClosedError)}) — giving up`,
-        );
-      } else if (err instanceof TransportError) {
-        console.debug(
-          `[resilientSingleRelayRequest] transport failure on ${relay} (${defaultLiveness?.getState(relay)?.state ?? "unknown"}) — giving up`,
         );
       }
       return EMPTY;
