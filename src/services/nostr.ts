@@ -16,6 +16,7 @@ import { verifyEvent } from "nostr-tools";
 import {
   Observable,
   Subscription,
+  NEVER,
   merge,
   distinctUntilChanged,
   firstValueFrom,
@@ -43,7 +44,10 @@ import {
   createPaginatedTagValueLoader,
   type PaginatedTagValueResponse,
 } from "@/lib/tagValuePaginatedLoader";
-import { resilientSubscription } from "@/lib/resilientSubscription";
+import {
+  resilientSubscription,
+  setDefaultLiveness,
+} from "@/lib/resilientSubscription";
 import { outboxStore, type RelayGroupResolver } from "./outbox";
 import { normalizeUrl } from "@/lib/url";
 import { relayGroupUrls$ } from "@/models/RepositoryRelayGroup";
@@ -81,6 +85,29 @@ export const pool = new RelayPool();
  */
 export const liveness = new RelayLiveness();
 liveness.connectToPool(pool);
+// Register liveness as the module-level default so every resilientSubscription
+// / resilientRequest call benefits from liveness-aware fast-failing without
+// needing to thread the instance through every call site.
+setDefaultLiveness(liveness);
+
+// Override reconnectTimer on every relay so that dead relays
+// (ERR_ADDRESS_UNREACHABLE, 404, etc.) stop reconnecting entirely rather than
+// backing off indefinitely. The Relay class's default reconnectTimer retries
+// forever with exponential backoff (capped at 5 minutes) — it has no awareness
+// of liveness. By replacing it we ensure that once liveness marks a relay
+// dead (after maxFailuresBeforeDead unclean closes — default 5), the
+// WebSocket is never reopened, stopping the perpetual reconnect loop visible
+// in the browser console for permanently-broken relay URLs.
+//
+// Relays that are merely offline (in backoff but not yet dead) still
+// reconnect normally via the original timer.
+pool.add$.subscribe((relay) => {
+  const original = relay.reconnectTimer.bind(relay);
+  relay.reconnectTimer = (error, attempts) => {
+    if (liveness.getState(relay.url)?.state === "dead") return NEVER;
+    return original(error, attempts);
+  };
+});
 
 /**
  * Setup NostrConnectSigner to use the global relay pool.

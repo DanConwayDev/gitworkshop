@@ -122,7 +122,8 @@
   },
   "pnpm": {
     "patchedDependencies": {
-      "@jsr/fiatjaf__git-natural-api": "patches/@jsr__fiatjaf__git-natural-api.patch"
+      "@jsr/fiatjaf__git-natural-api": "patches/@jsr__fiatjaf__git-natural-api.patch",
+      "applesauce-relay@6.0.0": "patches/applesauce-relay@6.0.0.patch"
     }
   }
 }

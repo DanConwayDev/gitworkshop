@@ -8,6 +8,9 @@ patchedDependencies:
   "@jsr/fiatjaf__git-natural-api":
     hash: e6a9784d914604ca85d2bd2cdf1a092302b9dc30b419b03bc473a17329939574
     path: patches/@jsr__fiatjaf__git-natural-api.patch
+  applesauce-relay@6.0.0:
+    hash: 64ca9181e3752be372954d682363fab5a5f6d135053f54f36129457e2d17798e
+    path: patches/applesauce-relay@6.0.0.patch
 
 importers:
   .:
@@ -143,7 +146,7 @@ importers:
         version: 6.0.0(@capacitor/core@7.6.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       applesauce-relay:
         specifier: ^6
-        version: 6.0.0(typescript@5.9.3)
+        version: 6.0.0(patch_hash=64ca9181e3752be372954d682363fab5a5f6d135053f54f36129457e2d17798e)(typescript@5.9.3)
       applesauce-signers:
         specifier: ^6
         version: 6.0.1(@capacitor/core@7.6.2)(typescript@5.9.3)
@@ -8483,7 +8486,7 @@ snapshots:
       - supports-color
       - typescript
 
-  applesauce-relay@6.0.0(typescript@5.9.3):
+  applesauce-relay@6.0.0(patch_hash=64ca9181e3752be372954d682363fab5a5f6d135053f54f36129457e2d17798e)(typescript@5.9.3):
     dependencies:
       "@noble/hashes": 1.8.0
       applesauce-core: 6.0.0(typescript@5.9.3)

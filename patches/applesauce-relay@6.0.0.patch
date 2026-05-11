@@ -1,0 +1,16 @@
+diff --git a/dist/pool.js b/dist/pool.js
+index f0d0b4820118292c32d8ec9bbe250c079e4b9989..754d6f268d4a70282230a19a80e814ec40457c8b 100644
+--- a/dist/pool.js
++++ b/dist/pool.js
+@@ -46,6 +46,11 @@ export class RelayPool {
+         relay = new Relay(url, this.options);
+         this.relays.set(url, relay);
+         this.relays$.next(this.relays);
++        // Notify subscribers (e.g. RelayLiveness.connectToPool) so they can
++        // observe the new relay's lifecycle. Without this, RelayLiveness never
++        // tracks any relay's open$/close$ events and getState() always returns
++        // undefined.
++        this.add$.next(relay);
+         return relay;
+     }
+     /** Create a group of relays */
