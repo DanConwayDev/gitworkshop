@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import {
   ArrowLeft,
-  AlertCircle,
   CheckCircle2,
   Copy,
   Check,
@@ -51,11 +50,13 @@ function RelayStatusIcon({ status }: { status: RelaySearchStatus }) {
         <Loader2 className="h-3 w-3 shrink-0 animate-spin text-blue-500/70" />
       );
     case "eose":
-      return (
-        <AlertCircle className="h-3 w-3 shrink-0 text-muted-foreground/50" />
-      );
+      // Relay connected and responded successfully — just didn't have the event.
+      // Subtle green confirms the relay was reached and responded — the
+      // "not found" label on the row clarifies the event wasn't there.
+      return <CheckCircle2 className="h-3 w-3 shrink-0 text-green-500/40" />;
     case "found":
-      return <CheckCircle2 className="h-3 w-3 shrink-0 text-green-500" />;
+      // Never rendered — EventSearchStatus is only shown when !search.found.
+      return null;
     case "error":
       return (
         <XCircle className="h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-400" />
@@ -74,6 +75,8 @@ function RelayRow({ url, status }: { url: string; status: RelaySearchStatus }) {
   // treat them identically in the UI.
   const isFailed = status === "connection-failed" || status === "error";
   const isTimeout = status === "timeout";
+  // eose = relay connected, responded, but didn't have the event
+  const isEose = status === "eose";
 
   return (
     <li className="flex items-center gap-2 text-xs font-mono py-0.5">
@@ -96,6 +99,11 @@ function RelayRow({ url, status }: { url: string; status: RelaySearchStatus }) {
       {isTimeout && (
         <span className="shrink-0 text-xs font-sans italic text-muted-foreground/60">
           no response
+        </span>
+      )}
+      {isEose && (
+        <span className="shrink-0 text-xs font-sans text-muted-foreground/50">
+          not found
         </span>
       )}
     </li>
@@ -222,10 +230,11 @@ export function EventSearchStatus({
     description = `Looking for this ${itemLabel.toLowerCase()} on connected relays.`;
     icon = <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />;
   } else {
-    // found — shouldn't render this component, but handle gracefully
-    headline = `${itemLabel} found`;
+    // Fallback — all guards above should be exhaustive while this component
+    // is only rendered when !search.found, but satisfy TypeScript.
+    headline = "";
     description = "";
-    icon = <CheckCircle2 className="h-8 w-8 text-green-500" />;
+    icon = null;
   }
 
   return (
@@ -240,7 +249,7 @@ export function EventSearchStatus({
               <p className="text-sm text-muted-foreground">{description}</p>
             )}
           </div>
-          {onSearchMore && !search.found && !searchMoreActive && (
+          {onSearchMore && !searchMoreActive && (
             <div className="flex flex-col items-center space-y-3">
               <Button onClick={onSearchMore} className="gap-2">
                 <Search className="h-4 w-4" />
