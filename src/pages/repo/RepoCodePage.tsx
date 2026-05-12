@@ -126,7 +126,7 @@ export default function RepoCodePage() {
 
   // Combined "pulling" signal: true while either Nostr relay EOSE is pending
   // or the git server fetch is in flight with stale data already shown.
-  // Used for the locator bar's "Checking…" indicator.
+  // Used for the CodeBar's "Checking…" indicator.
   const pulling =
     cloneUrls.length > 0 ? !repoRelayEose || poolState.pulling : false;
 
@@ -357,8 +357,8 @@ export default function RepoCodePage() {
 
       {cloneUrls.length > 0 && !allUrlsIncompatible && (
         <>
-          {/* Locator bar: branch selector + breadcrumb + commit info */}
-          <LocatorBar
+          {/* CodeBar: branch selector + breadcrumb + commit info */}
+          <CodeBar
             loading={activeExplorer.loading}
             refs={activeExplorer.refs}
             currentRef={currentRef}
@@ -814,7 +814,7 @@ function CollapsibleBreadcrumb({
   // Only report when the search is expanded (searchCompact=false). When compact
   // the search bar is w-7 so the breadcrumb is artificially wide — measuring
   // then would report "not truncated", expand the search, squeeze the breadcrumb
-  // again, and loop. The LocatorBar resets searchCompact=false on path change,
+  // again, and loop. The CodeBar resets searchCompact=false on path change,
   // which triggers a fresh evaluation with the expanded search width.
   const minNeededPx = rootPx + lastPx;
   const isTruncated =
@@ -1193,10 +1193,10 @@ function GoToFileSearch({
   );
 }
 
-// Locator bar
+// CodeBar
 // ---------------------------------------------------------------------------
 
-function LocatorBar({
+function CodeBar({
   loading,
   refs,
   currentRef,

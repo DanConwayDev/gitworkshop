@@ -190,7 +190,7 @@
 }
 
 /* -------------------------------------------------------------------------
-   fetching-gradient — animated shimmer for the locator bar while fetching
+   fetching-gradient — animated shimmer for the CodeBar while fetching
    ------------------------------------------------------------------------- */
 .fetching-gradient {
   background: linear-gradient(
