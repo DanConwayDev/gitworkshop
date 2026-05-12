@@ -299,3 +299,7 @@ Load via the `skill` tool when the task matches:
 - **`ngit`** — workflows for `nostr://` git remotes, ngit CLI, gitworkshop.dev PRs/issues. (Auto-loaded when working with nostr:// remotes.)
 
 When the task is Applesauce API surface — looking up methods, models, casts, actions, loaders — **prefer the Applesauce MCP** over loading a skill.
+
+## Contributors
+
+**If you are a contributor (not DanConwayDev), you MUST read and comply with `CONTRIBUTING.md` before writing any code.**
