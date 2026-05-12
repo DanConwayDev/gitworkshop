@@ -9,7 +9,7 @@ patchedDependencies:
     hash: e6a9784d914604ca85d2bd2cdf1a092302b9dc30b419b03bc473a17329939574
     path: patches/@jsr__fiatjaf__git-natural-api.patch
   applesauce-core@6.0.0:
-    hash: fb99bd1b1314126f130c5ccbbf74daa6e9e027e520ab6cc5cf8ca19dd3ee6330
+    hash: 0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9
     path: patches/applesauce-core@6.0.0.patch
   applesauce-relay@6.0.0:
     hash: 64ca9181e3752be372954d682363fab5a5f6d135053f54f36129457e2d17798e
@@ -140,7 +140,7 @@ importers:
         version: 6.0.0(typescript@5.9.3)
       applesauce-core:
         specifier: ^6
-        version: 6.0.0(patch_hash=fb99bd1b1314126f130c5ccbbf74daa6e9e027e520ab6cc5cf8ca19dd3ee6330)(typescript@5.9.3)
+        version: 6.0.0(patch_hash=0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9)(typescript@5.9.3)
       applesauce-loaders:
         specifier: ^6
         version: 6.0.0(typescript@5.9.3)
@@ -8356,7 +8356,7 @@ snapshots:
 
   applesauce-accounts@6.0.0(@capacitor/core@7.6.2)(typescript@5.9.3):
     dependencies:
-      applesauce-core: 6.0.0(patch_hash=fb99bd1b1314126f130c5ccbbf74daa6e9e027e520ab6cc5cf8ca19dd3ee6330)(typescript@5.9.3)
+      applesauce-core: 6.0.0(patch_hash=0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9)(typescript@5.9.3)
       applesauce-signers: 6.0.1(@capacitor/core@7.6.2)(typescript@5.9.3)
       nanoid: 5.1.6
       rxjs: 7.8.2
@@ -8370,7 +8370,7 @@ snapshots:
   applesauce-actions@6.0.0(typescript@5.9.3):
     dependencies:
       applesauce-common: 6.0.1(typescript@5.9.3)
-      applesauce-core: 6.0.0(patch_hash=fb99bd1b1314126f130c5ccbbf74daa6e9e027e520ab6cc5cf8ca19dd3ee6330)(typescript@5.9.3)
+      applesauce-core: 6.0.0(patch_hash=0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9)(typescript@5.9.3)
       rxjs: 7.8.2
     transitivePeerDependencies:
       - supports-color
@@ -8379,7 +8379,7 @@ snapshots:
   applesauce-common@6.0.1(typescript@5.9.3):
     dependencies:
       "@scure/base": 1.2.6
-      applesauce-core: 6.0.0(patch_hash=fb99bd1b1314126f130c5ccbbf74daa6e9e027e520ab6cc5cf8ca19dd3ee6330)(typescript@5.9.3)
+      applesauce-core: 6.0.0(patch_hash=0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9)(typescript@5.9.3)
       hash-sum: 2.0.0
       light-bolt11-decoder: 3.2.0
       nanoid: 5.1.6
@@ -8395,7 +8395,7 @@ snapshots:
       "@types/mdast": 4.0.4
       "@types/unist": 3.0.3
       applesauce-common: 6.0.1(typescript@5.9.3)
-      applesauce-core: 6.0.0(patch_hash=fb99bd1b1314126f130c5ccbbf74daa6e9e027e520ab6cc5cf8ca19dd3ee6330)(typescript@5.9.3)
+      applesauce-core: 6.0.0(patch_hash=0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9)(typescript@5.9.3)
       mdast-util-find-and-replace: 3.0.2
       remark: 15.0.1
       remark-parse: 11.0.0
@@ -8420,7 +8420,7 @@ snapshots:
       - supports-color
       - typescript
 
-  applesauce-core@6.0.0(patch_hash=fb99bd1b1314126f130c5ccbbf74daa6e9e027e520ab6cc5cf8ca19dd3ee6330)(typescript@5.9.3):
+  applesauce-core@6.0.0(patch_hash=0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9)(typescript@5.9.3):
     dependencies:
       debug: 4.4.3
       fast-deep-equal: 3.1.3
@@ -8454,7 +8454,7 @@ snapshots:
 
   applesauce-loaders@6.0.0(typescript@5.9.3):
     dependencies:
-      applesauce-core: 6.0.0(patch_hash=fb99bd1b1314126f130c5ccbbf74daa6e9e027e520ab6cc5cf8ca19dd3ee6330)(typescript@5.9.3)
+      applesauce-core: 6.0.0(patch_hash=0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9)(typescript@5.9.3)
       nanoid: 5.1.6
       rxjs: 7.8.2
     transitivePeerDependencies:
@@ -8471,7 +8471,7 @@ snapshots:
       applesauce-accounts: 6.0.0(@capacitor/core@7.6.2)(typescript@5.9.3)
       applesauce-actions: 6.0.0(typescript@5.9.3)
       applesauce-content: 6.0.0(typescript@5.9.3)
-      applesauce-core: 6.0.0(patch_hash=fb99bd1b1314126f130c5ccbbf74daa6e9e027e520ab6cc5cf8ca19dd3ee6330)(typescript@5.9.3)
+      applesauce-core: 6.0.0(patch_hash=0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9)(typescript@5.9.3)
     transitivePeerDependencies:
       - "@capacitor/core"
       - react-dom
@@ -8492,7 +8492,7 @@ snapshots:
   applesauce-relay@6.0.0(patch_hash=64ca9181e3752be372954d682363fab5a5f6d135053f54f36129457e2d17798e)(typescript@5.9.3):
     dependencies:
       "@noble/hashes": 1.8.0
-      applesauce-core: 6.0.0(patch_hash=fb99bd1b1314126f130c5ccbbf74daa6e9e027e520ab6cc5cf8ca19dd3ee6330)(typescript@5.9.3)
+      applesauce-core: 6.0.0(patch_hash=0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9)(typescript@5.9.3)
       nanoid: 5.1.6
       nostr-tools: 2.19.4(typescript@5.9.3)
       rxjs: 7.8.2
@@ -8517,7 +8517,7 @@ snapshots:
   applesauce-signers@6.0.1(@capacitor/core@7.6.2)(typescript@5.9.3):
     dependencies:
       "@noble/secp256k1": 1.7.2
-      applesauce-core: 6.0.0(patch_hash=fb99bd1b1314126f130c5ccbbf74daa6e9e027e520ab6cc5cf8ca19dd3ee6330)(typescript@5.9.3)
+      applesauce-core: 6.0.0(patch_hash=0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9)(typescript@5.9.3)
       debug: 4.4.3
       nanoid: 5.1.6
       rxjs: 7.8.2
