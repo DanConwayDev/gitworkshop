@@ -167,16 +167,28 @@ export async function getOrCreateNotificationSigner(
     | NostrEvent
     | undefined;
 
-  // 2. localStorage cache — valid if the envelope hasn't been superseded
+  // 2. localStorage cache — valid only if the current envelope in the store
+  //    matches our cached one per NIP-01 ordering: a different envelope wins
+  //    if it has a newer created_at, or equal created_at AND a lexicographically
+  //    lower id. The simple created_at <= comparison was not enough: when two
+  //    clients independently publish their first envelope within the same
+  //    second, both timestamps are equal and `<=` returned true for the loser,
+  //    leaving each client stuck on its own self-published cache forever.
   const nsecCache = loadNsecCache(pubkey);
   if (nsecCache) {
-    const cacheIsValid =
-      // No newer envelope in the store — safe to use cached key
-      !currentEnvelope ||
-      // Same event — definitely still valid
-      currentEnvelope.id === nsecCache.eventId ||
-      // Store has an older or equal event — cache is still current
-      currentEnvelope.created_at <= nsecCache.createdAt;
+    let cacheIsValid: boolean;
+    if (!currentEnvelope) {
+      cacheIsValid = true;
+    } else if (currentEnvelope.id === nsecCache.eventId) {
+      cacheIsValid = true;
+    } else if (currentEnvelope.created_at !== nsecCache.createdAt) {
+      // Strictly older store event => cache wins; strictly newer => cache stale
+      cacheIsValid = currentEnvelope.created_at < nsecCache.createdAt;
+    } else {
+      // Equal timestamps — NIP-01 tie-breaker: lower id wins.
+      // Cache is still valid only if the cached event has the lower id.
+      cacheIsValid = nsecCache.eventId < currentEnvelope.id;
+    }
 
     if (cacheIsValid) {
       try {
@@ -188,7 +200,7 @@ export async function getOrCreateNotificationSigner(
         clearNsecCache(pubkey);
       }
     } else {
-      // A newer envelope has arrived — invalidate the stale cache
+      // A winning envelope has arrived — invalidate the stale cache
       clearNsecCache(pubkey);
     }
   }
