@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "pnpm i --silent && vite",
     "build": "pnpm i --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'Project built successfully!'",
-    "test": "pnpm i --silent && tsc --noEmit && eslint && prettier --check . && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
-    "pre-commit": "pnpm i --silent && tsc --noEmit && eslint && prettier --write . && git update-index --again && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'Pre-commit OK'",
+    "test": "pnpm i --silent && tsc --noEmit && eslint && prettier --check --log-level warn . && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
+    "pre-commit": "pnpm i --silent && tsc --noEmit && eslint && prettier --write --log-level warn . && git update-index --again && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'Pre-commit OK'",
     "format": "prettier -w ."
   },
   "dependencies": {
