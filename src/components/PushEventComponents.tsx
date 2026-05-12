@@ -173,17 +173,18 @@ export function PatchSetPushEvent({
 }) {
   const { rootPatch, chain } = revision;
 
-  const timeAgo = formatDistanceToNow(
-    new Date(rootPatch.event.created_at * 1000),
-    { addSuffix: true },
-  );
+  const isForcePush = revision.isRevision;
 
-  const commits = useMemo(
+  // Build commit items with per-patch author info so we can detect
+  // commits pushed by someone other than the original opener.
+  const patchCommits = useMemo(
     () =>
       chain
         .filter((p) => !p.isCoverLetter)
         .map((p) => ({
           id: p.id,
+          pubkey: p.event.pubkey,
+          createdAt: p.event.created_at,
           commitId: p.commitId,
           // nevent1 of the patch event ID is the canonical URL segment.
           // The router decodes it back to the event ID for patchMatch.
@@ -195,7 +196,21 @@ export function PatchSetPushEvent({
     [chain, relayHints?.join(",")],
   );
 
-  const isForcePush = revision.isRevision;
+  // Group consecutive commits by the same author pubkey. Patches contributed
+  // by a different user than the opener get their own attributed header row.
+  const commitGroups = useMemo(() => {
+    type C = (typeof patchCommits)[number];
+    const groups: Array<{ pubkey: string; commits: C[] }> = [];
+    for (const c of patchCommits) {
+      const last = groups[groups.length - 1];
+      if (last && last.pubkey === c.pubkey) {
+        last.commits.push(c);
+      } else {
+        groups.push({ pubkey: c.pubkey, commits: [c] });
+      }
+    }
+    return groups;
+  }, [patchCommits]);
 
   return (
     <div className="relative flex gap-3 py-2 pl-1">
@@ -207,44 +222,99 @@ export function PatchSetPushEvent({
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
-        {/* Header row */}
-        <div className="flex items-center gap-2 flex-wrap mb-1.5">
-          <UserLink
-            pubkey={rootPatch.pubkey}
-            avatarSize="sm"
-            nameClassName="text-sm font-medium text-foreground"
-          />
-          <span className="text-sm text-muted-foreground">
-            {isForcePush ? "force pushed" : "opened this patch"}
-            {revisionNumber !== undefined && revisionNumber > 1 && (
-              <span className="ml-1 text-xs text-muted-foreground/60">
-                (revision {revisionNumber})
-              </span>
+      <div className="flex-1 min-w-0 space-y-2">
+        {commitGroups.length === 0 ? (
+          // Edge case: cover-letter-only chain — show just the opener header
+          <div className="flex items-center gap-2 flex-wrap">
+            <UserLink
+              pubkey={rootPatch.pubkey}
+              avatarSize="sm"
+              nameClassName="text-sm font-medium text-foreground"
+            />
+            <span className="text-sm text-muted-foreground">
+              {isForcePush ? "force pushed" : "opened this patch"}
+              {revisionNumber !== undefined && revisionNumber > 1 && (
+                <span className="ml-1 text-xs text-muted-foreground/60">
+                  (revision {revisionNumber})
+                </span>
+              )}
+            </span>
+            <span className="text-xs text-muted-foreground/50">
+              {formatDistanceToNow(
+                new Date(rootPatch.event.created_at * 1000),
+                { addSuffix: true },
+              )}
+            </span>
+            {superseded && (
+              <OutdatedBadge
+                commitsHref={basePath ? `${basePath}/commits` : undefined}
+              />
             )}
-          </span>
-          <span className="text-xs text-muted-foreground/50">{timeAgo}</span>
-          {superseded && (
-            <OutdatedBadge
-              commitsHref={basePath ? `${basePath}/commits` : undefined}
-            />
-          )}
-        </div>
+          </div>
+        ) : (
+          commitGroups.map((group, groupIdx) => {
+            const isFirstGroup = groupIdx === 0;
+            const groupTimeAgo = formatDistanceToNow(
+              new Date(group.commits[0].createdAt * 1000),
+              { addSuffix: true },
+            );
+            const actionLabel = isFirstGroup
+              ? isForcePush
+                ? "force pushed"
+                : "opened this patch"
+              : group.commits.length === 1
+                ? "added a commit"
+                : "added commits";
 
-        {/* Commit list */}
-        <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 divide-y divide-border/30">
-          {commits.map((c) => (
-            <CommitRow
-              key={c.id}
-              shortHash={c.shortHash}
-              subject={c.subject}
-              superseded={superseded}
-              href={
-                basePath ? `${basePath}/commit/${c.linkSegment}` : undefined
-              }
-            />
-          ))}
-        </div>
+            return (
+              <div key={`group-${groupIdx}`}>
+                {/* Group header */}
+                <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                  <UserLink
+                    pubkey={group.pubkey}
+                    avatarSize="sm"
+                    nameClassName="text-sm font-medium text-foreground"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {actionLabel}
+                    {isFirstGroup &&
+                      revisionNumber !== undefined &&
+                      revisionNumber > 1 && (
+                        <span className="ml-1 text-xs text-muted-foreground/60">
+                          (revision {revisionNumber})
+                        </span>
+                      )}
+                  </span>
+                  <span className="text-xs text-muted-foreground/50">
+                    {groupTimeAgo}
+                  </span>
+                  {isFirstGroup && superseded && (
+                    <OutdatedBadge
+                      commitsHref={basePath ? `${basePath}/commits` : undefined}
+                    />
+                  )}
+                </div>
+
+                {/* Commits for this group */}
+                <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 divide-y divide-border/30">
+                  {group.commits.map((c) => (
+                    <CommitRow
+                      key={c.id}
+                      shortHash={c.shortHash}
+                      subject={c.subject}
+                      superseded={superseded}
+                      href={
+                        basePath
+                          ? `${basePath}/commit/${c.linkSegment}`
+                          : undefined
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
