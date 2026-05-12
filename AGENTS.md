@@ -34,7 +34,7 @@ This file deliberately avoids enumerating models, casts, actions, hooks, and loa
 - `/src/factories/` — typed `EventFactory` subclasses for project-specific kinds (NIP-34 issues, PRs, repo announcements, statuses). Shared relay-hint resolvers live in `hints.ts`.
 - `/src/casts/` — typed `EventCast` wrappers around raw events with memoised computed properties (`Issue`, `Patch`, `PR`, `Repository`, `RepositoryState`).
 - `/src/components/` — UI. `ui/` is shadcn/ui primitives; `auth/` has `LoginArea`, `AuthModal`, `AccountSwitcher`, etc.
-- `/src/hooks/` — custom hooks (`use$`, `useEventStore`, `useAccount`, `useTimeline`, `useEvents`, `usePublish`, `useAction`, plus dozens of feature hooks). List with `ls src/hooks/`.
+- `/src/hooks/` — custom hooks (`use$`, `useEventStore`, `useAccount`, `usePublish`, `useAction`, plus dozens of feature hooks). List with `ls src/hooks/`.
 - `/src/pages/` — page components used by React Router.
 - `/src/types/` — TypeScript type definitions.
 - `/src/test/` — testing utilities including `TestApp`.
@@ -120,8 +120,8 @@ Reading relay metadata observables (`connected$`, `icon$`) for UI display is fin
 Patterns, in order of preference:
 
 1. **Read from the EventStore** (`store.getByFilters(filters)` / `store.timeline(filters)` / `store.event(id)` / `store.model(...)`). On `RepoLayout`, `IssuePage`, and `PRPage` the relay fetches are already wired upstream (see "Pre-wired loaders" below). Components inside those pages should read from the store rather than opening their own subscriptions.
-2. **`useTimeline(relays, filters, castClass?)`** — recommended for new top-level feeds. Defaults to the `Note` cast; pass `Article`, `Issue`, etc. for other kinds. Internally uses `resilientSubscription`.
-3. **Custom pipeline with `resilientSubscription` / `resilientRequest`** — when you need pagination, custom reactivity, or a non-trivial cast pipeline.
+2. **Two-layer hook (relay fetch + store read)** — when the data isn't already pre-wired. This is the dominant pattern across `src/hooks/` (`useUserRepositories`, `useUserStarredRepos`, `useUserPinnedRepos`, `useUserActivity`, `useResolvedRepository`, etc.). Use one `use$` to fire `resilientSubscription(pool, relays, filters).pipe(onlyEvents(), mapEventsToStore(store))` (return `undefined` to short-circuit when inputs are missing), then a second `use$` to read the resulting events back via `store.model(...)` / `store.timeline(...)` / `store.getByFilters(...)`. Copy `src/hooks/useUserRepositories.ts` as the canonical template.
+3. **Direct `resilientSubscription` / `resilientRequest`** — for one-off fetches, search flows, or anywhere you need pagination, custom reactivity, or a non-trivial pipeline outside a hook. See `src/lib/searchForEvent.ts`, `src/services/userIdentitySubscription.ts`.
 4. **`createPaginatedTagValueLoader`** from `@/lib/tagValuePaginatedLoader` — drop-in replacement for applesauce's `createTagValueLoader` that adds per-relay backward pagination, persistent live subscription, rate-limit-aware reconnect, and an EOSE settle signal. Use it for high-cardinality `#e` / `#E` / `#a` / `#q` fan-out (essentials, comments, threads, repo-level item streams). The NIP-34 singletons in `src/services/nostr.ts` (`nip34EssentialsLoader`, `nip34CommentsLoader`, the thread loaders) are all instances of this — calls within the buffer window are batched into one REQ per relay automatically, so always reuse the singleton rather than instantiating a new one.
 
 For options, conditional/optional observables, tag-filter casting (`#a`, `#E`, `#t`), reactive counts, and `mapEventsToTimeline()` typing, load the **`resilient-subscriptions`** skill.
@@ -133,7 +133,7 @@ Relay fetching for the main collaboration surfaces is already invoked at the pag
 - **`RepoLayout`** (`src/pages/repo/RepoLayout.tsx`) — fires `nip34RepoLoader` (via `useIssues` / `usePRs`) and, in outbox mode, `nip34SupplementalRelayLoader`. This loads every issue/PR root + their essentials (status, labels, deletions, cover notes, legacy replies) and NIP-22 comments for the whole repo. It also subscribes to repo meta (kind:7 stars, kind:10018 followers).
 - **`IssuePage` / `PRPage`** — go through `useResolvedIssue` / `useResolvedPR` → `useNip34ItemDetailLoader`, which fires `nip34ListLoader` + `nip34ThreadItemLoader` for the item. The thread loader recursively pulls every event referencing the root or any comment via `#e` / `#E` / `#q` (reactions, zaps, deletions, quotes, child comments) — no kind restriction.
 
-Inside any component or hook on those pages, the right move is `store.getByFilters(...)` / `store.timeline(...)` / `store.model(...)` (see `src/hooks/useInlineComments.ts` for an example). Only reach for `resilientSubscription` / `useTimeline` / a new `createPaginatedTagValueLoader` instance when the data isn't already in scope of one of the pre-wired loaders.
+Inside any component or hook on those pages, the right move is `store.getByFilters(...)` / `store.timeline(...)` / `store.model(...)` (see `src/hooks/useInlineComments.ts` for an example). Only reach for `resilientSubscription` or a new `createPaginatedTagValueLoader` instance when the data isn't already in scope of one of the pre-wired loaders.
 
 ### Custom Event Kinds — Factory + Cast + Hook
 

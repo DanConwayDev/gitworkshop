@@ -25,30 +25,55 @@ Use `resilientSubscription` (long-lived) or `resilientRequest` (one-shot, comple
 
 ## Three query patterns
 
-### 1. `useTimeline` — recommended for feeds
+### 1. Two-layer hook — fetch then read (dominant pattern)
 
-```tsx
-import { useTimeline } from "@/hooks/useTimeline";
-import { Article } from "applesauce-common/casts";
-
-const notes = useTimeline(["wss://relay.damus.io"], [{ kinds: [1], limit: 50 }]);
-const articles = useTimeline(relays, [{ kinds: [30023], limit: 20 }], Article);
-```
-
-Internally uses `resilientSubscription` and casts via `castTimelineStream`. Defaults to the `Note` cast; pass another cast class for other kinds.
-
-### 2. Custom pipeline with `resilientSubscription` / `resilientRequest`
-
-For pagination, custom reactivity, or non-trivial cast pipelines:
+This is what virtually every feature hook in `src/hooks/` does (`useUserRepositories`, `useUserStarredRepos`, `useUserPinnedRepos`, `useUserActivity`, `useResolvedRepository`, etc.). One `use$` fires a relay subscription that pipes events into the EventStore; a second `use$` reads them back via `store.model(...)` / `store.timeline(...)` / `store.getByFilters(...)`.
 
 ```tsx
 import { use$ } from "@/hooks/use$";
 import { useEventStore } from "@/hooks/useEventStore";
 import { pool } from "@/services/nostr";
-import { resilientRequest, resilientSubscription } from "@/lib/resilientSubscription";
-import { onlyEvents, mapEventsToStore, mapEventsToTimeline } from "applesauce-relay";
+import { resilientSubscription } from "@/lib/resilientSubscription";
+import { mapEventsToStore } from "applesauce-core";
+import { onlyEvents } from "applesauce-relay";
+import type { Filter } from "applesauce-core/helpers";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
+
+export function useUserRepositories(pubkey: string | undefined) {
+  const store = useEventStore();
+
+  // Layer 1: fetch into the EventStore. Return undefined to short-circuit
+  // when inputs aren't ready — use$ tolerates undefined factories.
+  use$(() => {
+    if (!pubkey) return undefined;
+    return resilientSubscription(
+      pool,
+      gitIndexRelays,
+      [{ kinds: [REPO_KIND], authors: [pubkey] } as Filter],
+      { paginate: true },
+    ).pipe(onlyEvents(), mapEventsToStore(store));
+  }, [pubkey, store]);
+
+  // Layer 2: read reactively from the store.
+  return use$(() => {
+    if (!pubkey) return undefined;
+    return store.model(RepositoryListModel, pubkey) as unknown as Observable<
+      ResolvedRepo[]
+    >;
+  }, [pubkey, store]);
+}
+```
+
+The Layer 1 `use$` is fire-and-forget — its return value isn't read. The Layer 2 `use$` is what the component renders from. Copy `src/hooks/useUserRepositories.ts` as the canonical template.
+
+### 2. Inline `resilientSubscription` / `resilientRequest` for one-offs
+
+For pagination flows, search, or anywhere outside a feature hook where Layer 2 isn't needed:
+
+```tsx
+import { resilientRequest, resilientSubscription } from "@/lib/resilientSubscription";
+import { mapEventsToTimeline } from "applesauce-core";
 
 // One-shot fetch (completes after EOSE)
 const events = use$(
@@ -73,12 +98,14 @@ const live = use$(
 );
 ```
 
-### 3. `store.getEvents` / `store.timeline` — local-only
+See `src/lib/searchForEvent.ts` and `src/services/userIdentitySubscription.ts` for non-hook examples.
 
-Query events already in the EventStore without touching relays:
+### 3. `store.getByFilters` / `store.timeline` — local-only
+
+Query events already in the EventStore without touching relays. This is the right move on pages with pre-wired loaders (`RepoLayout`, `IssuePage`, `PRPage`):
 
 ```ts
-const cached = store.getEvents({ kinds: [1], limit: 20 });
+const cached = store.getByFilters({ kinds: [1], limit: 20 });
 const live = store.timeline([{ kinds: [1] }]); // observable
 ```
 
@@ -180,7 +207,7 @@ const filter = { kinds: [1111], "#E": [issue.id] } as Filter;
 const commentCount = useEventCount([filter]);
 ```
 
-Note: this counts events already in the store — pair it with a sibling subscription that loads the events into the store, or use `useTimeline` / a custom `resilientSubscription` whose pipeline runs `mapEventsToStore`.
+Note: this counts events already in the store — pair it with a sibling subscription (the Layer 1 `use$` from the two-layer pattern, or any `resilientSubscription` whose pipeline runs `mapEventsToStore`) so the events are actually present.
 
 ## High-cardinality tag-value fan-out — `createPaginatedTagValueLoader`
 
