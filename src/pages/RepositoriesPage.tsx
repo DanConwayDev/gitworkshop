@@ -388,10 +388,14 @@ function RelayPillsRow({
 
   if (relays.length === 0) return null;
 
+  const isSearching = relays.some(
+    (url) => (relayStatuses[url] ?? "searching") === "searching",
+  );
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-xs text-muted-foreground/60 mr-0.5">
-        Searching:
+        {isSearching ? "Searching:" : "Searched:"}
       </span>
       {relays.map((url) => (
         <RelayPill
