@@ -164,6 +164,16 @@ File uploads use Blossom via `useBlossomUpload` / `useBlossomFallback`.
 
 The active account is exposed via `useAccount()` (returns `{ pubkey, signer } | null`). The signer implements NIP-07 (`signEvent`, optional `nip04`, optional `nip44`).
 
+## Git Operations via GRASP — `git-grasp-pool`
+
+`src/lib/git-grasp-pool/` is the **only sanctioned way to do git HTTP** in this app. It hand-rolls the smart-HTTP protocol on top of `@fiatjaf/git-natural-api`'s low-level primitives so we can stream just the objects we need (commits, trees with `blob:none`, individual blobs by path) instead of cloning, race the announced clone URLs, fall back across mirrors, route through a CORS proxy when needed, and serve everything out of a content-addressed L1+L2 (Map + IndexedDB) cache. Treat it the same way as `resilientSubscription` for events: never roll your own.
+
+- **React entrypoint:** `useGitPool(cloneUrls, { knownHeadCommit?, stateRefs?, stateCreatedAt? })` from `src/hooks/useGitPool.ts`. Returns `{ poolState, pool }`. Multiple components on the same repo share one pool via the registry — pass the announced clone URLs straight in.
+- **Imperative / outside React:** `getOrCreatePool({ cloneUrls, stateEvent$? })` from `@/lib/git-grasp-pool`. The same registry deduplicates pools and grows a pool's URL set when new announcements arrive.
+- **Read APIs on the pool** (all cache-first, all accept an optional `fallbackUrls` for one-off URLs like a PR author's fork): `getSingleCommit`, `getCommitHistory`, `getTree`, `getFullTree`, `getBlob`, `getObjectByPath`, `findMergeBase`, `countCommitsBehind`, `findCommitBeforeTimestamp`. For diffs, fetch two `getFullTree` results, walk them with `diffTrees`, fetch only the changed blobs, then `generateUnifiedDiff` (all exported from the barrel).
+- **State event integration is automatic** when you pass `knownHeadCommit` / `stateRefs` / `stateCreatedAt` — the pool computes `state-behind-git` / `state-commit-unavailable` warnings, per-URL `UrlRefStatus`, and `crossRefDiscrepancies` for the multi-server status UI; it also schedules backoff re-fetches when the signed Nostr state is ahead of every git server.
+- **Don't:** import from `@fiatjaf/git-natural-api` outside `git-grasp-pool/git-http.ts`, construct `GitGraspPool` yourself, add a parallel cache, or fan out `Promise.any(cloneUrls.map(fetch...))` in a hook. The deep details (cache layout, packfile parsing, error classification, eviction) live in the source — read `src/lib/git-grasp-pool/` when you need them.
+
 ## Routing
 
 Routes live in `AppRouter.tsx`. To add one:
