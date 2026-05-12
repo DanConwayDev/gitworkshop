@@ -61,7 +61,7 @@ shadcn/ui primitives live in `@/components/ui`. List the directory (`ls src/comp
 
 The git pre-commit hook runs `pnpm pre-commit`, which runs `tsc --noEmit`, `eslint`, `prettier --write .` (auto-formats and re-stages), `vitest run`, and `vite build`. `pnpm test` is the same pipeline but with `prettier --check` (CI-style, no writes).
 
-**Don't run `pnpm test`, `tsc`, `eslint`, `prettier`, or `vitest` separately as part of finishing a task** — committing already validates everything. Stage your changes and commit; if pre-commit rejects the commit, fix the reported error and commit again.
+**Don't run `pnpm test`, `tsc`, `eslint`, `prettier`, or `vitest` separately as part of finishing a task** — committing already validates everything. Stage your changes and commit; if pre-commit rejects the commit, fix **all reported warnings and errors** (not just hard errors — warnings that caused a non-zero exit must also be resolved), then `git commit --amend` to fold the fixes into the original commit.
 
 If you don't have a git pre-commit hook installed (fresh clone), copy this into `.git/hooks/pre-commit` and `chmod +x` it:
 
@@ -272,11 +272,11 @@ describe("MyComponent", () => {
 
 ## Validating Your Changes
 
-**Your task is finished when `git commit` succeeds.** The pre-commit hook handles type-checking, linting, formatting, tests, and build. If pre-commit rejects the commit, fix the reported error and commit again.
+**Your task is finished when `git commit` succeeds — commit automatically without waiting to be asked.** The pre-commit hook handles type-checking, linting, formatting, tests, and build. If pre-commit rejects the commit, fix **all reported warnings and errors** (warnings that cause a non-zero exit are just as blocking as hard errors), then `git commit --amend` to fold the fixes into the original commit.
 
 ### Using Git
 
-Use `git status` / `git diff` / `git log` to inspect state and learn project conventions. If you make a mistake, `git checkout` restores files. **Always commit when you are finished** — non-negotiable, every completed task ends with a commit.
+Use `git status` / `git diff` / `git log` to inspect state and learn project conventions. If you make a mistake, `git checkout` restores files. **Always commit when you are finished** — non-negotiable, every completed task ends with a successful commit.
 
 ## Specialized Skills
 
