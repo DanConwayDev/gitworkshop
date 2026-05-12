@@ -2,18 +2,20 @@
  * ZapModal — multi-step NIP-57 zap flow.
  *
  *   select-amount → fetching-invoice → awaiting-payment
- *     ├─→ paying-webln → paid-awaiting-receipt → success
- *     ├─→ paying-nwc → paid-awaiting-receipt → success
- *     └─→ connect-nwc → awaiting-payment
+ *     ├─→ paying-webln → (close on success)
+ *     ├─→ paying-nwc   → (close on success)
+ *     └─→ connect-nwc  → awaiting-payment
  *
- * Receipt detection runs in parallel from two sources: a short-lived
- * pool.subscription on the relays we asked the LNURL provider to publish to,
- * and the global EventStore (which the existing nip34ThreadItemLoader is
- * already feeding). First match wins; 30s timeout downgrades to a "payment
- * may have succeeded" success state rather than a hard failure.
+ * WebLN and NWC payments close the modal directly on their promise
+ * resolution — we trust the wallet's confirmation as proof of payment.
+ *
+ * While the QR / awaiting-payment view is showing, a kind:9735 receipt watch
+ * runs in parallel (live pool.subscription + the local EventStore that the
+ * thread loader is already feeding). If the user scans the QR and pays
+ * externally, the arriving receipt auto-closes the modal.
  *
  * An AbortController is created when payment starts and aborted on close to
- * stop the receipt subscription and suppress post-unmount state updates.
+ * stop in-flight wallet calls and suppress post-unmount state updates.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NostrEvent } from "nostr-tools";
@@ -22,7 +24,7 @@ import { useActiveAccount } from "applesauce-react/hooks";
 import { getZapRequest } from "applesauce-common/helpers";
 import { WalletBaseError } from "applesauce-wallet-connect/helpers/error";
 import { Subscription } from "rxjs";
-import { Zap, Loader2, Check, AlertCircle, Copy } from "lucide-react";
+import { Zap, Loader2, AlertCircle, Copy } from "lucide-react";
 
 import { use$ } from "@/hooks/use$";
 import { useUser } from "@/hooks/useUser";
@@ -59,7 +61,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { NwcQrConnect } from "@/components/zap/NwcQrConnect";
 
 const PRESETS = [21, 100, 500, 1000, 5000, 10000] as const;
-const RECEIPT_TIMEOUT_MS = 30_000;
 
 type Step =
   | "select-amount"
@@ -67,9 +68,7 @@ type Step =
   | "awaiting-payment"
   | "paying-webln"
   | "paying-nwc"
-  | "paid-awaiting-receipt"
   | "connect-nwc"
-  | "success"
   | "error";
 
 interface ZapModalProps {
@@ -135,13 +134,11 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
   const [invoice, setInvoice] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCanRetry, setErrorCanRetry] = useState<boolean>(true);
-  const [receiptLate, setReceiptLate] = useState<boolean>(false);
   const [nwcInput, setNwcInput] = useState<string>("");
   const [nwcError, setNwcError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const receiptSubsRef = useRef<Subscription[]>([]);
-  const receiptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const effectiveSats = useMemo(() => {
     if (customSats.trim()) {
@@ -163,10 +160,6 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
   const teardownReceiptWatch = useCallback(() => {
     for (const sub of receiptSubsRef.current) sub.unsubscribe();
     receiptSubsRef.current = [];
-    if (receiptTimerRef.current) {
-      clearTimeout(receiptTimerRef.current);
-      receiptTimerRef.current = null;
-    }
   }, []);
 
   const abort = useCallback(() => {
@@ -185,7 +178,6 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
       setInvoice(null);
       setErrorMessage(null);
       setErrorCanRetry(true);
-      setReceiptLate(false);
       setMessage("");
       setNwcInput("");
       setNwcError(null);
@@ -239,19 +231,24 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
   }, [abort]);
 
   // --- receipt watch ---
+  // Runs only while the QR / awaiting-payment view is shown so an external
+  // scan-and-pay (i.e. user scans the QR with a wallet on another device)
+  // auto-closes the modal once the kind:9735 receipt lands. WebLN and NWC
+  // payments close the modal directly on their promise resolution and never
+  // depend on this.
   const startReceiptWatch = useCallback(
     (requestId: string, relays: string[]) => {
       teardownReceiptWatch();
 
-      const match = (receipt: NostrEvent) => {
+      const onReceipt = (receipt: NostrEvent) => {
         const req = getZapRequest(receipt);
         if (req && req.id === requestId) {
           teardownReceiptWatch();
-          setStep("success");
           toast({
             title: "Zap sent!",
             description: `${effectiveSats.toLocaleString()} sats delivered.`,
           });
+          onOpenChange(false);
         }
       };
 
@@ -265,7 +262,7 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
             since: Math.floor(Date.now() / 1000) - 30,
           })
           .subscribe({
-            next: match,
+            next: onReceipt,
             error: (e) => console.warn("Zap receipt subscription error:", e),
           });
         receiptSubsRef.current.push(sub);
@@ -283,7 +280,7 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
           ])
           .subscribe({
             next: (events) => {
-              for (const ev of events) match(ev);
+              for (const ev of events) onReceipt(ev);
             },
             error: (e) => console.warn("EventStore zap subscription error:", e),
           });
@@ -291,14 +288,8 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
       } catch (e) {
         console.warn("Could not open EventStore zap subscription:", e);
       }
-
-      receiptTimerRef.current = setTimeout(() => {
-        // Don't transition out of paid state — just mark as late.
-        setReceiptLate(true);
-        teardownReceiptWatch();
-      }, RECEIPT_TIMEOUT_MS);
     },
-    [event.id, event.pubkey, effectiveSats, teardownReceiptWatch],
+    [event.id, event.pubkey, effectiveSats, teardownReceiptWatch, onOpenChange],
   );
 
   // --- step: build zap request, fetch invoice ---
@@ -361,7 +352,15 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
     try {
       await enableWebLN();
       await window.webln.sendPayment(invoice);
-      setStep("paid-awaiting-receipt");
+      // Payment confirmed by the extension — we don't wait for the kind:9735
+      // receipt. Close the modal; the sidebar zap total will update when the
+      // receipt arrives via the existing thread loader.
+      teardownReceiptWatch();
+      toast({
+        title: "Zap sent!",
+        description: `${effectiveSats.toLocaleString()} sats delivered.`,
+      });
+      onOpenChange(false);
     } catch (err) {
       const { message: msg, canRetry } = describeWalletError(err);
       setErrorMessage(msg);
@@ -373,7 +372,7 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
         variant: "destructive",
       });
     }
-  }, [invoice]);
+  }, [invoice, effectiveSats, onOpenChange, teardownReceiptWatch]);
 
   // --- NWC payment ---
   const payWithNWC = useCallback(async () => {
@@ -389,7 +388,13 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
       if (controller.signal.aborted) return;
       await wallet.payInvoice(invoice);
       if (controller.signal.aborted) return;
-      setStep("paid-awaiting-receipt");
+      // Same as WebLN — payment confirmed by the wallet, close immediately.
+      teardownReceiptWatch();
+      toast({
+        title: "Zap sent!",
+        description: `${effectiveSats.toLocaleString()} sats delivered.`,
+      });
+      onOpenChange(false);
     } catch (err) {
       if (controller.signal.aborted) return;
       const { message: msg, canRetry } = describeWalletError(err);
@@ -402,7 +407,7 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
         variant: "destructive",
       });
     }
-  }, [invoice, wallet]);
+  }, [invoice, wallet, effectiveSats, onOpenChange, teardownReceiptWatch]);
 
   // --- NWC inline connect ---
   const submitNwcUri = useCallback(() => {
@@ -448,7 +453,7 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
         </DialogHeader>
 
         {/* LNURL load error */}
-        {endpointError && step !== "success" && (
+        {endpointError && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive flex items-start gap-2">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>{endpointError}</span>
@@ -618,38 +623,6 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
           </div>
         )}
 
-        {/* ----- STEP: paid-awaiting-receipt ----- */}
-        {step === "paid-awaiting-receipt" && (
-          <div className="flex flex-col items-center gap-3 py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
-            <p className="text-sm text-muted-foreground">
-              Payment sent — waiting for the Nostr receipt…
-            </p>
-            {receiptLate && (
-              <p className="text-xs text-muted-foreground text-center max-w-xs">
-                The receipt hasn't arrived yet. Your payment likely succeeded;
-                the zap total will update once relays catch up.
-              </p>
-            )}
-            {receiptLate && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setStep("success");
-                  toast({
-                    title: "Zap sent",
-                    description:
-                      "Payment confirmed. Receipt pending from relays.",
-                  });
-                }}
-              >
-                Close
-              </Button>
-            )}
-          </div>
-        )}
-
         {/* ----- STEP: connect-nwc ----- */}
         {step === "connect-nwc" && (
           <div className="space-y-3">
@@ -702,24 +675,6 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
                 Tip: save a wallet permanently in Settings → Lightning Wallet.
               </p>
             </div>
-          </div>
-        )}
-
-        {/* ----- STEP: success ----- */}
-        {step === "success" && (
-          <div className="flex flex-col items-center gap-3 py-6">
-            <div className="rounded-full bg-amber-100 dark:bg-amber-900/30 p-3">
-              <Check className="h-8 w-8 text-amber-600 dark:text-amber-400" />
-            </div>
-            <p className="text-lg font-semibold">Zap sent!</p>
-            <p className="text-sm text-muted-foreground text-center">
-              {effectiveSats.toLocaleString()} sats to {recipientName}
-              {receiptLate &&
-                " — the on-chain total will update when relays propagate the receipt."}
-            </p>
-            <Button onClick={() => onOpenChange(false)} className="mt-2">
-              Done
-            </Button>
           </div>
         )}
 
