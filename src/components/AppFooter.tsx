@@ -1,8 +1,24 @@
 import { Link } from "react-router-dom";
-import { Sun, Moon } from "lucide-react";
+import { Sun, Moon, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { use$ } from "@/hooks/use$";
-import { theme, toggleTheme } from "@/services/settings";
+import {
+  themeMode,
+  cycleThemeMode,
+  type ThemeMode,
+} from "@/services/settings";
+
+const THEME_ICON: Record<ThemeMode, typeof Sun> = {
+  light: Sun,
+  dark: Moon,
+  system: Monitor,
+};
+
+const NEXT_MODE: Record<ThemeMode, ThemeMode> = {
+  system: "light",
+  light: "dark",
+  dark: "system",
+};
 
 const gitCommit = __GIT_COMMIT__;
 const commitDate = __COMMIT_DATE__;
@@ -27,7 +43,9 @@ const NAV_SECTIONS = [
 ];
 
 export function AppFooter() {
-  const currentTheme = use$(theme);
+  const mode = use$(themeMode);
+  const Icon = THEME_ICON[mode];
+  const themeLabel = `Theme: ${mode} (click to switch to ${NEXT_MODE[mode]})`;
 
   return (
     <footer className="mt-24 border-t border-border/40 bg-muted/30">
@@ -79,14 +97,11 @@ export function AppFooter() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
+              onClick={cycleThemeMode}
+              aria-label={themeLabel}
+              title={themeLabel}
             >
-              {currentTheme === "light" ? (
-                <Sun className="h-4 w-4" />
-              ) : (
-                <Moon className="h-4 w-4" />
-              )}
+              <Icon className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -102,14 +117,11 @@ export function AppFooter() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground sm:hidden"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
+            onClick={cycleThemeMode}
+            aria-label={themeLabel}
+            title={themeLabel}
           >
-            {currentTheme === "light" ? (
-              <Sun className="h-4 w-4" />
-            ) : (
-              <Moon className="h-4 w-4" />
-            )}
+            <Icon className="h-4 w-4" />
           </Button>
         </div>
       </div>
