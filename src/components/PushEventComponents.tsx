@@ -196,14 +196,21 @@ export function PatchSetPushEvent({
     [chain, relayHints?.join(",")],
   );
 
-  // Group consecutive commits by the same author pubkey. Patches contributed
-  // by a different user than the opener get their own attributed header row.
+  // Group consecutive commits that share the same author AND were published
+  // within PUSH_WINDOW_SECS of the first commit in the group. This ensures
+  // that patches belonging to a single push are collapsed under one header,
+  // while commits added later — even by the same author — get their own row.
+  const PUSH_WINDOW_SECS = 300; // 5 minutes
   const commitGroups = useMemo(() => {
     type C = (typeof patchCommits)[number];
     const groups: Array<{ pubkey: string; commits: C[] }> = [];
     for (const c of patchCommits) {
       const last = groups[groups.length - 1];
-      if (last && last.pubkey === c.pubkey) {
+      const withinWindow =
+        last &&
+        last.pubkey === c.pubkey &&
+        c.createdAt - last.commits[0].createdAt <= PUSH_WINDOW_SECS;
+      if (withinWindow) {
         last.commits.push(c);
       } else {
         groups.push({ pubkey: c.pubkey, commits: [c] });
@@ -213,19 +220,16 @@ export function PatchSetPushEvent({
   }, [patchCommits]);
 
   return (
-    <div className="relative flex gap-3 py-2 pl-1">
-      {/* Icon column */}
-      <div className="flex items-start pt-0.5 shrink-0">
-        <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-muted/40">
-          <GitCommitHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0 space-y-2">
-        {commitGroups.length === 0 ? (
-          // Edge case: cover-letter-only chain — show just the opener header
-          <div className="flex items-center gap-2 flex-wrap">
+    <>
+      {commitGroups.length === 0 ? (
+        // Edge case: cover-letter-only chain — show just the opener row
+        <div className="relative flex gap-3 py-2 pl-1">
+          <div className="flex items-start pt-0.5 shrink-0">
+            <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-muted/40">
+              <GitCommitHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+          </div>
+          <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
             <UserLink
               pubkey={rootPatch.pubkey}
               avatarSize="sm"
@@ -251,24 +255,37 @@ export function PatchSetPushEvent({
               />
             )}
           </div>
-        ) : (
-          commitGroups.map((group, groupIdx) => {
-            const isFirstGroup = groupIdx === 0;
-            const groupTimeAgo = formatDistanceToNow(
-              new Date(group.commits[0].createdAt * 1000),
-              { addSuffix: true },
-            );
-            const actionLabel = isFirstGroup
-              ? isForcePush
-                ? "force pushed"
-                : "opened this patch"
-              : group.commits.length === 1
-                ? "added a commit"
-                : "added commits";
+        </div>
+      ) : (
+        commitGroups.map((group, groupIdx) => {
+          const isFirstGroup = groupIdx === 0;
+          const groupTimeAgo = formatDistanceToNow(
+            new Date(group.commits[0].createdAt * 1000),
+            { addSuffix: true },
+          );
+          const actionLabel = isFirstGroup
+            ? isForcePush
+              ? "force pushed"
+              : "opened this patch"
+            : group.commits.length === 1
+              ? "added a commit"
+              : "added commits";
 
-            return (
-              <div key={`group-${groupIdx}`}>
-                {/* Group header */}
+          return (
+            <div
+              key={`group-${groupIdx}`}
+              className="relative flex gap-3 py-2 pl-1"
+            >
+              {/* Icon column */}
+              <div className="flex items-start pt-0.5 shrink-0">
+                <div className="flex items-center justify-center h-8 w-8 rounded-full border bg-muted/40">
+                  <GitCommitHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                {/* Header row */}
                 <div className="flex items-center gap-2 flex-wrap mb-1.5">
                   <UserLink
                     pubkey={group.pubkey}
@@ -312,11 +329,11 @@ export function PatchSetPushEvent({
                   ))}
                 </div>
               </div>
-            );
-          })
-        )}
-      </div>
-    </div>
+            </div>
+          );
+        })
+      )}
+    </>
   );
 }
 
