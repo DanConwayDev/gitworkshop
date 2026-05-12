@@ -98,11 +98,18 @@ pnpm pre-commit
 
 `NIP.md` documents custom kinds and schema extensions this project defines. **Whenever you generate a new kind or change a custom schema, update `NIP.md`.**
 
-### Nostr Security Model — quick rule
+### Repository authorization model — non-negotiable
 
-Nostr is permissionless: **anyone can publish any event.** Any feature that implies trust (admin/moderator actions, addressable events owned by a specific user) MUST filter queries by `authors`. Addressable-event URLs MUST include the author (`/:npub/:repoId`, not `/:repoId`).
+Nostr is permissionless: **anyone can publish any event.** A NIP-34 repository is _not_ a single pubkey + identifier; it's an identifier plus the **transitive maintainer chain** of pubkeys that mutually list each other in their kind:30617 announcements. Any event that participates in repo state (issues, patches, PRs, status events, labels, repo state kind:30618, repo announcements themselves) is only authoritative if its author is in that maintainer set — or, for issue/PR comments and statuses, the author of the root item.
 
-For the full pattern (admin pubkey filters, NIP-72 community moderation, when filtering is NOT required), load the **`nostr-security`** skill.
+**Rules:**
+
+- **Always filter by `authors`** when fetching anything trust-bearing for a repo. Never trust an event because its `#a` / `#d` matches.
+- **URLs for addressable events include the author**: `/:npub/:repoId/...`, never `/:repoId/...`. (See §"Routing" — multi-segment repo routes must be declared above the `/:nip19` catch-all.)
+- **Don't roll your own author check.** The maintainer set is computed (with cycle detection) by the `Repository` cast in `src/casts/Repository.ts` and surfaced as `repo.maintainerSet` / `repo.allCoordinates` via `useResolvedRepository`. Pass those into any new query or status check; copy the pattern from `src/hooks/useIssues.ts`, `src/hooks/usePRs.ts`, or `src/hooks/useRepositoryState.ts`.
+- **Background:** see `docs/matainership.md` for the full multi-maintainer model (recursive maintainers, mutual listing = one repo, splits when the chain breaks).
+
+For events that are intentionally open (kind:1 notes, kind:7 reactions, follower kind:10018 lists, public discovery feeds), filtering by author defeats the point — don't.
 
 ### Querying Events from Relays
 
@@ -110,23 +117,29 @@ For the full pattern (admin pubkey filters, NIP-72 community moderation, when fi
 
 Reading relay metadata observables (`connected$`, `icon$`) for UI display is fine without the wrappers — never for event fetching.
 
-Three patterns, in order of preference:
+Patterns, in order of preference:
 
-1. **`useTimeline(relays, filters, castClass?)`** — recommended for feeds. Defaults to the `Note` cast; pass `Article`, `Issue`, etc. for other kinds. Internally uses `resilientSubscription`.
-2. **Custom pipeline with `resilientSubscription` / `resilientRequest`** — when you need pagination, custom reactivity, or a non-trivial cast pipeline.
-3. **`store.getEvents(filter)` / `store.timeline(filters)`** — local-only queries against the EventStore.
+1. **Read from the EventStore** (`store.getByFilters(filters)` / `store.timeline(filters)` / `store.event(id)` / `store.model(...)`). On `RepoLayout`, `IssuePage`, and `PRPage` the relay fetches are already wired upstream (see "Pre-wired loaders" below). Components inside those pages should read from the store rather than opening their own subscriptions.
+2. **`useTimeline(relays, filters, castClass?)`** — recommended for new top-level feeds. Defaults to the `Note` cast; pass `Article`, `Issue`, etc. for other kinds. Internally uses `resilientSubscription`.
+3. **Custom pipeline with `resilientSubscription` / `resilientRequest`** — when you need pagination, custom reactivity, or a non-trivial cast pipeline.
+4. **`createPaginatedTagValueLoader`** from `@/lib/tagValuePaginatedLoader` — drop-in replacement for applesauce's `createTagValueLoader` that adds per-relay backward pagination, persistent live subscription, rate-limit-aware reconnect, and an EOSE settle signal. Use it for high-cardinality `#e` / `#E` / `#a` / `#q` fan-out (essentials, comments, threads, repo-level item streams). The NIP-34 singletons in `src/services/nostr.ts` (`nip34EssentialsLoader`, `nip34CommentsLoader`, the thread loaders) are all instances of this — calls within the buffer window are batched into one REQ per relay automatically, so always reuse the singleton rather than instantiating a new one.
 
 For options, conditional/optional observables, tag-filter casting (`#a`, `#E`, `#t`), reactive counts, and `mapEventsToTimeline()` typing, load the **`resilient-subscriptions`** skill.
 
+#### Pre-wired loaders — don't duplicate them
+
+Relay fetching for the main collaboration surfaces is already invoked at the page boundary; new code below those pages should _read_ from the EventStore rather than opening its own subscriptions:
+
+- **`RepoLayout`** (`src/pages/repo/RepoLayout.tsx`) — fires `nip34RepoLoader` (via `useIssues` / `usePRs`) and, in outbox mode, `nip34SupplementalRelayLoader`. This loads every issue/PR root + their essentials (status, labels, deletions, cover notes, legacy replies) and NIP-22 comments for the whole repo. It also subscribes to repo meta (kind:7 stars, kind:10018 followers).
+- **`IssuePage` / `PRPage`** — go through `useResolvedIssue` / `useResolvedPR` → `useNip34ItemDetailLoader`, which fires `nip34ListLoader` + `nip34ThreadItemLoader` for the item. The thread loader recursively pulls every event referencing the root or any comment via `#e` / `#E` / `#q` (reactions, zaps, deletions, quotes, child comments) — no kind restriction.
+
+Inside any component or hook on those pages, the right move is `store.getByFilters(...)` / `store.timeline(...)` / `store.model(...)` (see `src/hooks/useInlineComments.ts` for an example). Only reach for `resilientSubscription` / `useTimeline` / a new `createPaginatedTagValueLoader` instance when the data isn't already in scope of one of the pre-wired loaders.
+
 ### Custom Event Kinds — Factory + Cast + Hook
 
-For any project-specific kind, use the three-layer pattern (already used throughout `src/factories/` and `src/casts/`):
+For any project-specific kind, use the three-layer pattern: **Factory** in `src/factories/` (builds + signs), **Cast** in `src/casts/` (typed wrapper with `Symbol.for(...)`-cached getters), **Hook** in `src/hooks/` (subscribes and casts via `castTimelineStream`). **Never** manually parse `NostrEvent.tags` in hooks or components.
 
-1. **Factory** in `src/factories/` — typed `EventFactory<K>` subclass that builds and signs events.
-2. **Cast** in `src/casts/` — typed `EventCast` wrapper with memoised computed properties.
-3. **Hook** in `src/hooks/` — subscribes via `resilientSubscription` and casts events with `castTimelineStream`.
-
-**Never** manually parse `NostrEvent.tags` in hooks or components — use the cast system. Load the **`applesauce-custom-kinds`** skill for the full pattern with code examples and v5→v6 differences.
+Don't reinvent — copy the closest existing example and adapt: `IssueFactory` + `Issue` + `useIssues`, or `PatchFactory` + `Patch` + `usePatchChain`, or `RepositoryFactory` + `Repository` + `useResolvedRepository`. Look up additional `applesauce-core/operations/...` and `EventCast` / `EventFactory` API in the Applesauce MCP.
 
 ### NIP-22 Comments (kind:1111)
 
@@ -134,18 +147,16 @@ Replies to non-kind-1 events (NIP-34 issues/patches, NIP-23 articles) use **kind
 
 ### NIP-19 Identifiers and Routing
 
-Bech32 identifiers (`npub1`, `nprofile1`, `note1`, `nevent1`, `naddr1`) route at the URL **root** — `/:nip19` is handled by `src/pages/NIP19Page.tsx`. **Never nest** under `/note/`, `/profile/`, etc.
+Bech32 identifiers (`npub1`, `nprofile1`, `note1`, `nevent1`, `naddr1`) route at the URL **root** — `/:nip19` is handled by `src/pages/NIP19Page.tsx`, which branches on `nip19.decode().type`. **Never nest** under `/note/`, `/profile/`, etc.
 
-Filters only accept hex — always `nip19.decode()` before querying. Treat `nsec1` and unknown prefixes as 404.
+- Filters only accept hex — always `nip19.decode()` before querying. For `naddr1`, decoded data is `{ kind, pubkey, identifier, relays? }` — **always include `pubkey` in `authors`** (see §"Repository authorization model"). For `nevent1`, decoded data is `{ id, author?, kind?, relays? }` — pass `relays` into your subscription as a hint.
+- Treat `nsec1` and unknown prefixes as 404.
+- Build with `nip19.npubEncode` / `noteEncode` / `neventEncode` / `nprofileEncode` / `naddrEncode`.
+- **Route ordering matters.** Multi-segment routes (`/:npub/:repoId`, `/:npub/:repoId/issues/:issueId`) **must** appear above the catch-all `/:nip19` route — React Router matches top-to-bottom and stops at the first match.
 
-**Route ordering matters.** This app has multi-segment routes (`/:npub/:repoId`, `/:npub/:repoId/issues/:issueId`) that **must** appear above the catch-all `/:nip19` route. React Router matches top-to-bottom and stops at the first match.
+### File Uploads
 
-For the full identifier-type comparison, decoding patterns, and route-ordering rules, load the **`nip19-routing`** skill.
-
-### File Uploads & Encryption
-
-- File uploads use Blossom via `useBlossomUpload` / `useBlossomFallback`.
-- **`nostr-encryption`** skill — NIP-44 / NIP-04 via the user's signer (DMs, gift wraps, private content).
+File uploads use Blossom via `useBlossomUpload` / `useBlossomFallback`.
 
 ### Authentication
 
@@ -161,7 +172,7 @@ Routes live in `AppRouter.tsx`. To add one:
 2. Import it in `AppRouter.tsx`.
 3. Place it **above** the `/:nip19` catch-all and the `*` 404 route.
 
-The router auto-scrolls to top on navigation. See the **`nip19-routing`** skill for the catch-all and route-ordering rules.
+The router auto-scrolls to top on navigation.
 
 ## Loading and Empty States
 
@@ -273,11 +284,7 @@ Load via the `skill` tool when the task matches:
 
 - **`react-rxjs-observables`** — using `use$` correctly: factory pattern, dependency arrays, conditional observables, common mistakes.
 - **`resilient-subscriptions`** — `resilientSubscription` / `resilientRequest` deep-dive: options, three query patterns, tag-filter casting, `mapEventsToTimeline` typing, reactive counts.
-- **`applesauce-custom-kinds`** — the factory + cast + hook three-layer pattern for project-specific kinds, end-to-end with code (covers v5→v6 changes).
-- **`nostr-security`** — author filtering for trusted operations, NIP-72 moderation, when filtering is NOT required.
-- **`nip19-routing`** — identifier-type comparison, decoding for queries, route ordering with the `/:nip19` catch-all.
 - **`nip22-comments`** — kind:1111 comment trees on non-kind-1 events; uppercase `E`/`P` vs lowercase `e`/`p`.
-- **`nostr-encryption`** — NIP-44 (and legacy NIP-04) via the user's signer.
 - **`theming`** — fonts (@fontsource), color schemes, light/dark, `isolate` + negative z-index.
 - **`ngit`** — workflows for `nostr://` git remotes, ngit CLI, gitworkshop.dev PRs/issues. (Auto-loaded when working with nostr:// remotes.)
 

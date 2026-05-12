@@ -182,6 +182,24 @@ const commentCount = useEventCount([filter]);
 
 Note: this counts events already in the store — pair it with a sibling subscription that loads the events into the store, or use `useTimeline` / a custom `resilientSubscription` whose pipeline runs `mapEventsToStore`.
 
-## Loaders for pagination
+## High-cardinality tag-value fan-out — `createPaginatedTagValueLoader`
 
-For infinite-scroll feeds, Applesauce ships loaders (`createTimelineLoader`, `createEventLoader`, `addressLoader`, `reactionsLoader`). Look them up in the Applesauce MCP (`applesauce_search_methods` for "loader") for the current API.
+For `#e` / `#E` / `#a` / `#q` queries that fan out across many tag values (every issue's status events, every comment's children, every repo's items), use **`createPaginatedTagValueLoader`** from `@/lib/tagValuePaginatedLoader` instead of opening a fresh `resilientSubscription` per item.
+
+It is a drop-in replacement for applesauce's `createTagValueLoader` that adds:
+
+- per-relay backward pagination (auto or manual via `manualPaginate$`)
+- a persistent live subscription with the same exponential-backoff / rate-limit / permanent-error handling as `resilientSubscription`
+- per-batch EOSE settle signal (emits `"EOSE"` 200ms after the first relay finishes)
+- in-memory exhaustion tracking so re-mounted components skip pagination
+
+Calls within the same `bufferTime` window are batched into one REQ per relay automatically — so for N items you get **one** subscription per relay, not N. **Always reuse the existing singletons** in `src/services/nostr.ts` rather than creating a new instance:
+
+| Singleton                       | Tag | Purpose                                                                          |
+| ------------------------------- | --- | -------------------------------------------------------------------------------- |
+| `nip34EssentialsLoader`         | `e` | status (1630-1633), labels (1985), deletions (5), cover notes, legacy replies   |
+| `nip34CommentsLoader`           | `E` | NIP-22 comments (1111), PR updates (1619)                                       |
+| `nip34EssentialDeletionsLoader` | `e` | kind:5 deletions of essential events                                            |
+| (private thread loaders)        | `e`/`E`/`q` | fired internally by `nip34ThreadItemLoader` for full thread fan-out  |
+
+Only instantiate a new `createPaginatedTagValueLoader` when you have a genuinely new tag-value fan-out shape that none of the singletons cover.
