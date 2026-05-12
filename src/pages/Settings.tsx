@@ -1,5 +1,5 @@
 import type React from "react";
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useSeoMeta } from "@unhead/react";
 import {
   Card,
@@ -35,7 +35,6 @@ import { use$ } from "@/hooks/use$";
 import { useAccount } from "@/hooks/useAccount";
 import { useUser } from "@/hooks/useUser";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   walletConnectUri$,
@@ -44,10 +43,7 @@ import {
   setWalletConnectUri,
   hasWebLN,
 } from "@/services/wallet";
-import { WalletConnect } from "applesauce-wallet-connect";
-import { pool } from "@/services/nostr";
-import { generateSecretKey } from "nostr-tools";
-import { qrcode } from "@libs/qrcode";
+import { NwcQrConnect } from "@/components/zap/NwcQrConnect";
 import { useGraspServers } from "@/hooks/useGraspServers";
 import { usePublish } from "@/hooks/usePublish";
 import { useRobustReplaceableAction } from "@/hooks/useRobustReplaceableAction";
@@ -890,120 +886,6 @@ function FallbackRelaysSection() {
         <NewRelayForm onAdd={handleAddFallbackRelay} />
       </CardContent>
     </Card>
-  );
-}
-
-const DEFAULT_NWC_AUTH_RELAY = "wss://relay.getalby.com/v1";
-
-function NwcQrConnect({ onConnected }: { onConnected: () => void }) {
-  const [relay, setRelay] = useState(DEFAULT_NWC_AUTH_RELAY);
-  const [error, setError] = useState<string | null>(null);
-
-  // Generate a fresh ephemeral WalletConnect client. Re-created when the relay
-  // changes; not stored anywhere — we only persist the connectURI once the
-  // wallet service pairs.
-  const ephemeralWallet = useMemo(() => {
-    setError(null);
-    return new WalletConnect({
-      pool,
-      relays: [relay],
-      secret: generateSecretKey(),
-    });
-  }, [relay]);
-
-  const authUri = useMemo(() => {
-    return ephemeralWallet.getAuthURI({
-      methods: ["pay_invoice"],
-      name: "gitworkshop",
-      expiresAt: Math.floor(Date.now() / 1000) + 60 * 60 * 2,
-    });
-  }, [ephemeralWallet]);
-
-  const qrSvg = useMemo(
-    () =>
-      qrcode(authUri, {
-        output: "svg",
-        border: 2,
-        ecl: "MEDIUM",
-        dark: "#000000",
-        light: "#ffffff",
-      }),
-    [authUri],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    ephemeralWallet
-      .waitForService(controller.signal)
-      .then(() => {
-        if (controller.signal.aborted) return;
-        const uri = ephemeralWallet.connectURI;
-        if (!uri) {
-          setError("Wallet paired but no connection URI was issued.");
-          return;
-        }
-        setWalletConnectUri(uri);
-        onConnected();
-      })
-      .catch((e) => {
-        if (controller.signal.aborted) return;
-        setError(e instanceof Error ? e.message : "Pairing failed");
-      });
-    return () => controller.abort();
-  }, [ephemeralWallet, onConnected]);
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Scan with an NWC-compatible wallet, or open the link on the same device.
-      </p>
-
-      <div className="flex flex-col items-center gap-2">
-        <a
-          href={authUri}
-          target="_blank"
-          rel="noreferrer"
-          title="Open in wallet app"
-          className="inline-block bg-white p-3 rounded-md border"
-        >
-          <div
-            className="block"
-            style={{ width: 224, height: 224 }}
-            // SVG is generated locally from a URI we just built — no user input.
-            dangerouslySetInnerHTML={{ __html: qrSvg }}
-          />
-        </a>
-        <a
-          href={authUri}
-          target="_blank"
-          rel="noreferrer"
-          className="text-xs text-muted-foreground underline break-all max-w-full"
-        >
-          Open in wallet app
-        </a>
-      </div>
-
-      <div className="space-y-1">
-        <Label className="text-sm">Auth relay</Label>
-        <Input
-          value={relay}
-          onChange={(e) => setRelay(e.target.value)}
-          placeholder="wss://relay.example.com"
-          className="font-mono text-xs"
-        />
-        <p className="text-xs text-muted-foreground">
-          Your wallet must pair via the same relay. The default works for most
-          users.
-        </p>
-      </div>
-
-      {error && <p className="text-xs text-destructive">{error}</p>}
-
-      <p className="text-xs text-muted-foreground flex items-center gap-2">
-        <Loader2 className="h-3 w-3 animate-spin" />
-        Waiting for wallet to pair…
-      </p>
-    </div>
   );
 }
 

@@ -55,6 +55,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { QRCodeCanvas } from "@/components/ui/qrcode";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { NwcQrConnect } from "@/components/zap/NwcQrConnect";
 
 const PRESETS = [21, 100, 500, 1000, 5000, 10000] as const;
 const RECEIPT_TIMEOUT_MS = 30_000;
@@ -651,33 +653,55 @@ export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
         {/* ----- STEP: connect-nwc ----- */}
         {step === "connect-nwc" && (
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Paste a Nostr Wallet Connect URI from your wallet (e.g. Alby,
-              Mutiny, ZBD, Coinos).
-            </p>
-            <Textarea
-              value={nwcInput}
-              onChange={(e) => setNwcInput(e.target.value)}
-              placeholder="nostr+walletconnect://..."
-              rows={3}
-              className="font-mono text-xs"
-            />
-            {nwcError && <p className="text-xs text-destructive">{nwcError}</p>}
-            <div className="flex justify-end gap-2">
+            <Tabs defaultValue="qr">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="qr">Scan QR</TabsTrigger>
+                <TabsTrigger value="paste">Paste URI</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="qr">
+                <NwcQrConnect
+                  appName="gitworkshop zap"
+                  size={192}
+                  onConnected={() => setStep("awaiting-payment")}
+                />
+              </TabsContent>
+
+              <TabsContent value="paste" className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Paste a Nostr Wallet Connect URI from your wallet (e.g. Alby,
+                  Mutiny, ZBD, Coinos).
+                </p>
+                <Textarea
+                  value={nwcInput}
+                  onChange={(e) => setNwcInput(e.target.value)}
+                  placeholder="nostr+walletconnect://..."
+                  rows={3}
+                  className="font-mono text-xs"
+                />
+                {nwcError && (
+                  <p className="text-xs text-destructive">{nwcError}</p>
+                )}
+                <div className="flex justify-end">
+                  <Button onClick={submitNwcUri} disabled={!nwcInput.trim()}>
+                    Connect
+                  </Button>
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            <div className="flex justify-between items-center pt-1">
               <Button
                 variant="ghost"
+                size="sm"
                 onClick={() => setStep("awaiting-payment")}
               >
                 Back
               </Button>
-              <Button onClick={submitNwcUri} disabled={!nwcInput.trim()}>
-                Connect
-              </Button>
+              <p className="text-xs text-muted-foreground">
+                Tip: save a wallet permanently in Settings → Lightning Wallet.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Tip: you can save a wallet permanently in Settings → Lightning
-              Wallet.
-            </p>
           </div>
         )}
 
