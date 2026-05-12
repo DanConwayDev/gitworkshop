@@ -1,5 +1,5 @@
 import type React from "react";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useSeoMeta } from "@unhead/react";
 import {
   Card,
@@ -34,6 +34,20 @@ import { validateGraspServer } from "@/lib/grasp";
 import { use$ } from "@/hooks/use$";
 import { useAccount } from "@/hooks/useAccount";
 import { useUser } from "@/hooks/useUser";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  walletConnectUri$,
+  walletConnect$,
+  disconnectWallet,
+  setWalletConnectUri,
+  hasWebLN,
+} from "@/services/wallet";
+import { WalletConnect } from "applesauce-wallet-connect";
+import { pool } from "@/services/nostr";
+import { generateSecretKey } from "nostr-tools";
+import { qrcode } from "@libs/qrcode";
 import { useGraspServers } from "@/hooks/useGraspServers";
 import { usePublish } from "@/hooks/usePublish";
 import { useRobustReplaceableAction } from "@/hooks/useRobustReplaceableAction";
@@ -54,6 +68,7 @@ import {
   Info,
   Plus,
   RotateCcw,
+  Zap,
 } from "lucide-react";
 
 const CURATION_OPTIONS: {
@@ -878,6 +893,280 @@ function FallbackRelaysSection() {
   );
 }
 
+const DEFAULT_NWC_AUTH_RELAY = "wss://relay.getalby.com/v1";
+
+function NwcQrConnect({ onConnected }: { onConnected: () => void }) {
+  const [relay, setRelay] = useState(DEFAULT_NWC_AUTH_RELAY);
+  const [error, setError] = useState<string | null>(null);
+
+  // Generate a fresh ephemeral WalletConnect client. Re-created when the relay
+  // changes; not stored anywhere — we only persist the connectURI once the
+  // wallet service pairs.
+  const ephemeralWallet = useMemo(() => {
+    setError(null);
+    return new WalletConnect({
+      pool,
+      relays: [relay],
+      secret: generateSecretKey(),
+    });
+  }, [relay]);
+
+  const authUri = useMemo(() => {
+    return ephemeralWallet.getAuthURI({
+      methods: ["pay_invoice"],
+      name: "gitworkshop",
+      expiresAt: Math.floor(Date.now() / 1000) + 60 * 60 * 2,
+    });
+  }, [ephemeralWallet]);
+
+  const qrSvg = useMemo(
+    () =>
+      qrcode(authUri, {
+        output: "svg",
+        border: 2,
+        ecl: "MEDIUM",
+        dark: "#000000",
+        light: "#ffffff",
+      }),
+    [authUri],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    ephemeralWallet
+      .waitForService(controller.signal)
+      .then(() => {
+        if (controller.signal.aborted) return;
+        const uri = ephemeralWallet.connectURI;
+        if (!uri) {
+          setError("Wallet paired but no connection URI was issued.");
+          return;
+        }
+        setWalletConnectUri(uri);
+        onConnected();
+      })
+      .catch((e) => {
+        if (controller.signal.aborted) return;
+        setError(e instanceof Error ? e.message : "Pairing failed");
+      });
+    return () => controller.abort();
+  }, [ephemeralWallet, onConnected]);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Scan with an NWC-compatible wallet, or open the link on the same device.
+      </p>
+
+      <div className="flex flex-col items-center gap-2">
+        <a
+          href={authUri}
+          target="_blank"
+          rel="noreferrer"
+          title="Open in wallet app"
+          className="inline-block bg-white p-3 rounded-md border"
+        >
+          <div
+            className="block"
+            style={{ width: 224, height: 224 }}
+            // SVG is generated locally from a URI we just built — no user input.
+            dangerouslySetInnerHTML={{ __html: qrSvg }}
+          />
+        </a>
+        <a
+          href={authUri}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-muted-foreground underline break-all max-w-full"
+        >
+          Open in wallet app
+        </a>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-sm">Auth relay</Label>
+        <Input
+          value={relay}
+          onChange={(e) => setRelay(e.target.value)}
+          placeholder="wss://relay.example.com"
+          className="font-mono text-xs"
+        />
+        <p className="text-xs text-muted-foreground">
+          Your wallet must pair via the same relay. The default works for most
+          users.
+        </p>
+      </div>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+
+      <p className="text-xs text-muted-foreground flex items-center gap-2">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Waiting for wallet to pair…
+      </p>
+    </div>
+  );
+}
+
+function LightningWalletSection() {
+  const uri = use$(walletConnectUri$);
+  const wallet = use$(walletConnect$);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<"qr" | "paste">("qr");
+  const weblnDetected = hasWebLN();
+
+  const onSave = () => {
+    setError(null);
+    try {
+      setWalletConnectUri(draft.trim());
+      setDraft("");
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid connection string");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Zap className="h-5 w-5 text-amber-500" />
+          Lightning Wallet
+        </CardTitle>
+        <CardDescription>
+          Configure a wallet to zap PRs, issues, and other users. WebLN is
+          detected automatically; Nostr Wallet Connect (NIP-47) requires a
+          connection string from your wallet.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="rounded-md border p-3 text-sm">
+          <div className="flex items-center gap-2">
+            <Badge variant={weblnDetected ? "default" : "secondary"}>
+              {weblnDetected ? "Detected" : "Not detected"}
+            </Badge>
+            <span className="font-medium">WebLN browser extension</span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {weblnDetected
+              ? "Zap dialogs will offer one-tap payment via your extension (e.g. Alby)."
+              : "Install a WebLN provider (Alby, Bitcoin Connect, etc.) to enable one-tap zaps."}
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Nostr Wallet Connect</span>
+            {uri && !editing && (
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    setDraft(uri);
+                    setEditing(true);
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-destructive hover:text-destructive"
+                  onClick={() => {
+                    disconnectWallet();
+                    setEditing(false);
+                  }}
+                >
+                  Disconnect
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {uri && !editing && (
+            <div className="rounded-md border p-3 space-y-1">
+              <div className="flex items-center gap-2 text-sm">
+                <Badge variant="default">Connected</Badge>
+                {wallet?.service && (
+                  <span className="font-mono text-xs text-muted-foreground truncate">
+                    {wallet.service.slice(0, 12)}…
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A wallet connection string is saved. Click Edit to replace it or
+                Disconnect to remove it.
+              </p>
+            </div>
+          )}
+
+          {(!uri || editing) && (
+            <Tabs
+              value={mode}
+              onValueChange={(v) => setMode(v as "qr" | "paste")}
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="qr">Scan QR</TabsTrigger>
+                <TabsTrigger value="paste">Paste URI</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="qr" className="space-y-2">
+                <NwcQrConnect
+                  onConnected={() => {
+                    setEditing(false);
+                    setDraft("");
+                    setError(null);
+                  }}
+                />
+              </TabsContent>
+
+              <TabsContent value="paste" className="space-y-2">
+                <Textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="nostr+walletconnect://..."
+                  rows={3}
+                  className="font-mono text-xs"
+                />
+                {error && <p className="text-xs text-destructive">{error}</p>}
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" onClick={onSave} disabled={!draft.trim()}>
+                    Save
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Get a connection string from your wallet (Alby, Mutiny, ZBD,
+                  Coinos, etc.). The URI is stored only in your browser's local
+                  storage.
+                </p>
+              </TabsContent>
+
+              {editing && (
+                <div className="flex justify-end pt-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditing(false);
+                      setDraft("");
+                      setError(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </Tabs>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   useSeoMeta({
     title: "Settings - ngit",
@@ -898,6 +1187,7 @@ export default function Settings() {
       </div>
 
       <RelayCurationSection />
+      <LightningWalletSection />
       <GraspRelaysSection />
       <DiscoveryRelaysSection />
       <DefaultNostrConnectRelaysSection />
