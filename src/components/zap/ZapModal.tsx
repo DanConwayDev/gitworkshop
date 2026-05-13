@@ -27,6 +27,7 @@ import { Subscription } from "rxjs";
 import { Zap, Loader2, AlertCircle, Copy } from "lucide-react";
 
 import { use$ } from "@/hooks/use$";
+import { useLoadProfile } from "@/hooks/useLoadProfile";
 import { useUser } from "@/hooks/useUser";
 import { toast } from "@/hooks/useToast";
 import {
@@ -117,6 +118,7 @@ function describeWalletError(err: unknown): {
 
 export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
   const account = useActiveAccount();
+  useLoadProfile(event.pubkey);
   const recipient = useUser(event.pubkey);
   const recipientProfile = use$(() => recipient?.profile$, [recipient]);
   const recipientInboxes = use$(() => recipient?.inboxes$, [recipient]);
