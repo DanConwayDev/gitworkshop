@@ -96,28 +96,43 @@ export async function signZapRequest(
 
 /**
  * Pick which relays go into the zap request's `relays` tag. The LNURL provider
- * publishes the receipt to these — so include every set of relays that needs to
- * receive the receipt:
- *   1. Extra relays supplied by the caller (e.g. repo-declared relays) — highest
- *      priority so they always make it in.
- *   2. Recipient's inbox relays — the most canonical home for receipts addressed
- *      to this user.
- *   3. Sender's outbox relays — so the sender can find their own receipts.
- *   4. Fallback relays — well-connected public relays for broad visibility.
- * Deduplicates and caps at `max` (default 8) to keep the request small.
+ * publishes the receipt to these.
+ *
+ * Priority: repo relays fill most slots, but we always guarantee:
+ *   - at least 1 recipient inbox (so the recipient sees the zap)
+ *   - at least 1 sender outbox (so the sender sees their own receipt)
+ *   - if neither inbox nor outbox is available, at least 1 fallback
+ *
+ * After reserving those guaranteed slots, remaining slots are filled with repo
+ * relays first, then leftover inboxes/outboxes/fallback. Deduplicates and caps
+ * at `max` (default 8).
  */
 export function pickZapRelays(
   recipientInboxes: string[] | undefined,
   fallback: string[],
   max = 8,
-  extraRelays: string[] = [],
+  repoRelays: string[] = [],
   senderOutboxes: string[] = [],
 ): string[] {
-  const merged = [
-    ...extraRelays,
-    ...(recipientInboxes ?? []),
+  const inboxes = recipientInboxes ?? [];
+
+  // Reserve guaranteed slots so no single set can monopolise the list.
+  const guaranteed = new Set<string>();
+  if (inboxes[0]) guaranteed.add(inboxes[0]);
+  if (senderOutboxes[0]) guaranteed.add(senderOutboxes[0]);
+  if (guaranteed.size === 0 && fallback[0]) guaranteed.add(fallback[0]);
+
+  // Fill remaining slots: repo relays first, then leftover inboxes/outboxes/fallback.
+  const result = new Set<string>(guaranteed);
+  for (const relay of [
+    ...repoRelays,
+    ...inboxes,
     ...senderOutboxes,
     ...fallback,
-  ];
-  return [...new Set(merged)].slice(0, max);
+  ]) {
+    if (result.size >= max) break;
+    result.add(relay);
+  }
+
+  return [...result];
 }
