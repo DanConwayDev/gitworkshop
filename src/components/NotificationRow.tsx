@@ -18,6 +18,7 @@ import {
   GitMerge,
   XCircle,
   Star,
+  Zap,
   Archive,
   ArchiveRestore,
   Eye,
@@ -44,6 +45,7 @@ import type { NotificationActions } from "@/hooks/useNotifications";
 import type {
   NotificationItem,
   SocialNotificationItem,
+  RepoZapNotificationItem,
 } from "@/lib/notifications";
 import type { ResolvedIssueLite } from "@/lib/nip34";
 
@@ -457,6 +459,163 @@ function SocialNotificationRow({
 }
 
 // ---------------------------------------------------------------------------
+// Repo zap notification row
+// ---------------------------------------------------------------------------
+
+function RepoZapNotificationRow({
+  item,
+  actions,
+  compact,
+  currentView,
+}: {
+  item: RepoZapNotificationItem;
+  actions: NotificationActions;
+  compact: boolean;
+  currentView: ViewTab;
+}) {
+  const actorPubkeys = useMemo(() => getActorPubkeys(item), [item]);
+  const lastActive = formatDistanceToNow(new Date(item.latestActivity * 1000), {
+    addSuffix: true,
+  });
+
+  // Format sats compactly for display
+  const satsLabel =
+    item.totalSats >= 1_000_000
+      ? `${(item.totalSats / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`
+      : item.totalSats >= 1_000
+        ? `${(item.totalSats / 1_000).toFixed(1).replace(/\.0$/, "")}k`
+        : String(item.totalSats);
+
+  return (
+    <li
+      className={cn(
+        "group transition-colors",
+        item.unread
+          ? "bg-accent/30 hover:bg-accent/50 border-l-2 border-l-pink-500"
+          : "hover:bg-accent/20 border-l-2 border-l-transparent",
+      )}
+    >
+      <div className="flex items-start">
+        <div
+          className="flex items-start gap-3 min-w-0 cursor-default flex-1 px-3 py-3"
+          onClick={() => actions.markAsRead(item.rootId)}
+        >
+          {/* Unread dot */}
+          <div className="w-2 pt-1.5 shrink-0">
+            {item.unread ? (
+              <div className="h-2 w-2 rounded-full bg-pink-500 shrink-0" />
+            ) : (
+              <div className="h-2 w-2 shrink-0" />
+            )}
+          </div>
+
+          {/* Zap icon */}
+          <Zap className="h-4 w-4 text-amber-400 shrink-0 mt-0.5 fill-amber-400" />
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {actorPubkeys.slice(0, 5).map((pk) => (
+                <UserAvatar
+                  key={pk}
+                  pubkey={pk}
+                  size="sm"
+                  className="h-5 w-5 text-[8px]"
+                />
+              ))}
+              {actorPubkeys.length > 5 && (
+                <span className="text-xs text-muted-foreground">
+                  +{actorPubkeys.length - 5}
+                </span>
+              )}
+              <span
+                className={cn(
+                  "text-sm ml-0.5",
+                  item.unread
+                    ? "font-medium text-foreground"
+                    : "text-foreground/80",
+                )}
+              >
+                zapped
+              </span>
+              {item.totalSats > 0 && (
+                <span className="text-xs text-amber-500 font-medium">
+                  {satsLabel} sats
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              <span className="text-xs text-muted-foreground shrink-0">
+                {lastActive}
+              </span>
+              {item.repoCoord && (
+                <>
+                  <span className="text-muted-foreground/40 text-xs">
+                    &middot;
+                  </span>
+                  <RepoBadge coord={item.repoCoord} asSpan />
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Action buttons — icon-only when compact */}
+        <div className="hidden md:group-hover:flex items-center gap-1 self-center pr-3 shrink-0">
+          {item.unread ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsRead(item.rootId)}
+              title="Mark as read"
+            >
+              <Eye className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Read"}
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsUnread(item.rootId)}
+              title="Mark as unread"
+            >
+              <EyeOff className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Unread"}
+            </Button>
+          )}
+          {currentView === "inbox" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsArchived(item.rootId)}
+              title="Archive"
+            >
+              <Archive className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Archive"}
+            </Button>
+          )}
+          {currentView === "archived" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 text-xs", compact && "w-7 p-0")}
+              onClick={() => actions.markAsUnarchived(item.rootId)}
+              title="Move to inbox"
+            >
+              <ArchiveRestore className={cn("h-3 w-3", !compact && "mr-1")} />
+              {!compact && "Inbox"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
@@ -476,11 +635,21 @@ export function NotificationRow({
   // Always call hooks unconditionally — React rules of hooks.
   // useRootEvent is called inside ThreadNotificationRow, but we need to
   // dispatch before that. Social items have synthetic rootIds so we pass
-  // through to SocialNotificationRow which doesn't call it.
-  if (item.kind !== "thread") {
+  // through to the appropriate social row which doesn't call it.
+  if (item.kind === "repo-star") {
     return (
       <SocialNotificationRow
         item={item as SocialNotificationItem}
+        actions={actions}
+        compact={compact}
+        currentView={currentView}
+      />
+    );
+  }
+  if (item.kind === "repo-zap") {
+    return (
+      <RepoZapNotificationRow
+        item={item as RepoZapNotificationItem}
         actions={actions}
         compact={compact}
         currentView={currentView}

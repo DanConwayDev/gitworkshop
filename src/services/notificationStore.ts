@@ -60,6 +60,7 @@ import {
   buildNotificationFilters,
   buildNotificationBadgeFilters,
   buildRepoStarFilter,
+  buildRepoZapFilter,
   parseReadState,
   DEFAULT_READ_STATE,
   NIP78_KIND,
@@ -450,11 +451,12 @@ export function acquireNotificationStore(
         // (stars are low-volume). Thread filters go only to repo relays not
         // already covered by the badge subscription to avoid duplicate REQs.
         const starFilter = buildRepoStarFilter(coords);
+        const zapFilter = buildRepoZapFilter(coords);
         const inboxSet = new Set(inboxRelays);
         const extraRepoRelays = repoRelays.filter((r) => !inboxSet.has(r));
 
         const streams = [
-          resilientSubscription(pool, repoRelays, [starFilter], {
+          resilientSubscription(pool, repoRelays, [starFilter, zapFilter], {
             retryCount: Infinity,
           }).pipe(onlyEvents(), mapEventsToStore(eventStore)),
         ];

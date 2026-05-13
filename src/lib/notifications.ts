@@ -10,12 +10,16 @@
  *      us via #p (someone filed an issue on our repo, pushed a PR update,
  *      closed an issue we authored, posted a cover note on our item, etc.)
  *   3. Legacy NIP-34 replies (kind:1622) that tag us via #p
+ *   4. NIP-57 zap receipts (kind:9735) on issues/PRs/patches or our comments
+ *      where we are the recipient (#p tag)
  *
- * Social notifications — repo stars:
- *   4. kind:7 reactions with content "+" targeting our repos (#k:30617, #a)
+ * Social notifications — repo stars, repo zaps:
+ *   5. kind:7 reactions with content "+" targeting our repos (#k:30617, #a)
+ *   6. kind:9735 zap receipts targeting our repo announcements (#k:30617, #a)
  *
  * Social items are grouped:
  *   - Repo stars → one item per repo, rootId "stars:<repoCoord>"
+ *   - Repo zaps  → one item per repo, rootId "zaps:<repoCoord>"
  *
  * Read/archived state uses a concise high-water-mark model (inspired by
  * gitworkshop) stored in a NIP-78 event for cross-device sync:
@@ -68,8 +72,24 @@ export const NIP34_ROOT_KINDS = [PATCH_KIND, PR_KIND, ISSUE_KIND] as const;
 /** NIP-25 kind:7 — reaction */
 export const REACTION_KIND = 7;
 
+/** NIP-57 kind:9735 — zap receipt */
+export const ZAP_RECEIPT_KIND = 9735;
+
+/**
+ * The set of NIP-34 + NIP-22 kind values (as strings) that we care about for
+ * thread/comment zap notifications. Used in #k relay-side tag filters so we
+ * only receive zap receipts on git-related events, not generic kind:1 notes.
+ */
+export const ZAP_THREAD_K_VALUES = [
+  ...NIP34_ROOT_KINDS.map(String),
+  String(COMMENT_KIND),
+] as const;
+
 /** Prefix for repo-star notification rootIds */
 export const REPO_STARS_PREFIX = "stars:";
+
+/** Prefix for repo-zap notification rootIds */
+export const REPO_ZAPS_PREFIX = "zaps:";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -138,8 +158,37 @@ export interface SocialNotificationItem {
   unreadEventIds: string[];
 }
 
+/**
+ * A social notification group — repo zaps (kind:9735 targeting our repos).
+ * rootId is a synthetic string (not a Nostr event ID).
+ */
+export interface RepoZapNotificationItem {
+  kind: "repo-zap";
+  /**
+   * Synthetic root ID: "zaps:30617:<pubkey>:<dtag>"
+   */
+  rootId: string;
+  /** The repo coordinate for this item */
+  repoCoord: string;
+  /** All zap receipt events in this group, sorted newest-first */
+  events: NostrEvent[];
+  /** Whether any event in this group is unread */
+  unread: boolean;
+  /** Whether this group is archived */
+  archived: boolean;
+  /** Most recent event timestamp in this group */
+  latestActivity: number;
+  /** Unread event IDs, oldest-first */
+  unreadEventIds: string[];
+  /** Total sats zapped accumulated across all events in this group */
+  totalSats: number;
+}
+
 /** Union of all notification item types */
-export type NotificationItem = ThreadNotificationItem | SocialNotificationItem;
+export type NotificationItem =
+  | ThreadNotificationItem
+  | SocialNotificationItem
+  | RepoZapNotificationItem;
 
 // ---------------------------------------------------------------------------
 // Default state
@@ -184,19 +233,31 @@ export function buildNotificationBadgeFilters(pubkey: string): Filter[] {
       "#p": [pubkey],
       limit: 10,
     } as Filter,
+    // Zap receipts (thread items + comments) where we are the recipient.
+    // #k limits to git-related kinds so generic kind:1 zaps don't flood us.
+    {
+      kinds: [ZAP_RECEIPT_KIND],
+      "#p": [pubkey],
+      "#k": [...ZAP_THREAD_K_VALUES],
+      limit: 10,
+    } as Filter,
   ];
 }
 
 /**
  * Build relay filters for thread notification events targeting a pubkey.
  *
- * Two filters:
+ * Three filters:
  *   1. NIP-22 comments on NIP-34 root events authored by us (#P + #K)
  *   2. Events that tag us directly (#p) — new issues, PRs, patches,
  *      PR updates (kind:1619), status changes (kinds:1630–1633), cover notes
  *      (kind:1624), and kind:1622 legacy NIP-34 replies. Kind:1 generic text
  *      notes are intentionally excluded — they are not git-related and would
  *      flood notifications with unrelated Nostr mentions.
+ *   3. NIP-57 zap receipts (kind:9735) where we are the recipient (#p) and
+ *      the zapped event is a NIP-34 root item or a NIP-22 comment (#k).
+ *      Repo-coord-targeted zaps (#k=30617) are fetched separately via
+ *      buildRepoZapFilter — excluded here to avoid double-counting.
  *
  * @param pubkey - The user's pubkey
  * @param since  - If provided, only fetch events after this Unix timestamp
@@ -237,6 +298,13 @@ export function buildNotificationFilters(
       "#p": [pubkey],
       ...timeConstraint,
     } as Filter,
+    // Zap receipts on thread items + comments (#k excludes repo-kind=30617)
+    {
+      kinds: [ZAP_RECEIPT_KIND],
+      "#p": [pubkey],
+      "#k": [...ZAP_THREAD_K_VALUES],
+      ...timeConstraint,
+    } as Filter,
   ];
 }
 
@@ -266,6 +334,27 @@ export function buildRepoStarFilter(
   } as Filter;
 }
 
+/**
+ * Filter for kind:9735 zap receipts targeting our repo announcements.
+ * Requires knowing the repo coords.
+ *
+ * @param repoCoords - The repo coordinates to filter by
+ * @param since      - If provided, only fetch events after this Unix timestamp.
+ *                     When absent a limit of 50 is applied.
+ */
+export function buildRepoZapFilter(
+  repoCoords: string[],
+  since?: number,
+): Filter {
+  const timeConstraint: Partial<Filter> = since ? { since } : { limit: 50 };
+  return {
+    kinds: [ZAP_RECEIPT_KIND],
+    "#k": [String(REPO_KIND)],
+    "#a": repoCoords,
+    ...timeConstraint,
+  } as Filter;
+}
+
 // ---------------------------------------------------------------------------
 // Thread grouping
 // ---------------------------------------------------------------------------
@@ -278,9 +367,17 @@ export function buildRepoStarFilter(
  * - If it's a PR update (kind:1619), the uppercase E tag is the root PR.
  * - If it's a status change (kinds:1630–1633), the NIP-10 root #e tag is the root.
  * - If it's a legacy reply (kind:1622), the NIP-10 root #e tag is the root.
+ * - If it's a zap receipt (kind:9735):
+ *     - #k in NIP34_ROOT_KINDS → #e is the root item ID
+ *     - #k = COMMENT_KIND → look up rootId in commentRootMap (if provided);
+ *       falls back to #e (the comment ID) if unknown
+ *     - #k = REPO_KIND → returns undefined (handled as social, not thread)
  * - Returns undefined if no root can be determined.
  */
-export function getNotificationRootId(ev: NostrEvent): string | undefined {
+export function getNotificationRootId(
+  ev: NostrEvent,
+  commentRootMap?: Map<string, string>,
+): string | undefined {
   // Issues and PRs are always roots — their own ID
   if (ev.kind === ISSUE_KIND || ev.kind === PR_KIND) {
     return ev.id;
@@ -303,6 +400,33 @@ export function getNotificationRootId(ev: NostrEvent): string | undefined {
   // PR update (kind:1619) — uppercase E tag points to the root PR
   if (ev.kind === PR_UPDATE_KIND) {
     return ev.tags.find(([t]) => t === "E")?.[1];
+  }
+
+  // NIP-57 zap receipt (kind:9735) — route by the #k (zapped event kind)
+  if (ev.kind === ZAP_RECEIPT_KIND) {
+    const k = ev.tags.find(([t]) => t === "k")?.[1];
+    const e = ev.tags.find(([t]) => t === "e")?.[1];
+
+    // Repo zap → handled as a social notification, not a thread item
+    if (k === String(REPO_KIND)) return undefined;
+
+    // Zapping a NIP-34 root item → #e IS the thread root
+    if (
+      k !== undefined &&
+      NIP34_ROOT_KINDS.includes(
+        Number(k) as (typeof NIP34_ROOT_KINDS)[number],
+      ) &&
+      e
+    ) {
+      return e;
+    }
+
+    // Zapping a NIP-22 comment → resolve to the comment's thread root
+    if (k === String(COMMENT_KIND) && e) {
+      return commentRootMap?.get(e) ?? e;
+    }
+
+    return e;
   }
 
   // Status changes (kinds:1630–1633) and legacy NIP-34 replies (kind:1622)
@@ -342,11 +466,16 @@ export function isEventArchived(
  *
  * Returns items sorted by latestActivity (newest first).
  * Events from the user's own pubkey are excluded.
+ *
+ * @param commentRootMap - Optional map from comment event ID to thread root ID,
+ *   used to resolve the root for zap receipts that target a NIP-22 comment.
+ *   Built by the caller from the EventStore so this function stays pure.
  */
 export function groupNotifications(
   events: NostrEvent[],
   state: NotificationReadState,
   selfPubkey: string,
+  commentRootMap?: Map<string, string>,
 ): ThreadNotificationItem[] {
   const readIdSet = new Set(state.ri);
   const archivedIdSet = new Set(state.ai);
@@ -360,7 +489,7 @@ export function groupNotifications(
   for (const ev of events) {
     if (ev.pubkey === selfPubkey) continue;
 
-    const rootId = getNotificationRootId(ev);
+    const rootId = getNotificationRootId(ev, commentRootMap);
     if (!rootId) continue;
 
     const group = groups.get(rootId) ?? { events: [], latestActivity: 0 };
@@ -481,8 +610,117 @@ export function groupSocialNotifications(
 }
 
 // ---------------------------------------------------------------------------
-// Cutoff advancement
+// Repo zap grouping
 // ---------------------------------------------------------------------------
+
+/**
+ * Group repo-zap events (kind:9735) into one RepoZapNotificationItem per repo.
+ *
+ * Mirrors the structure of groupSocialNotifications. Filters to events that
+ * have an #a tag matching one of the user's repo coordinates and where the
+ * sender is not the recipient (no self-zap notifications).
+ *
+ * @param repoZapEvents  kind:9735 receipts targeting our repos
+ * @param repoCoords     our own repo coordinates (used to validate grouping)
+ */
+export function groupRepoZapNotifications(
+  repoZapEvents: NostrEvent[],
+  repoCoords: string[],
+  state: NotificationReadState,
+  selfPubkey: string,
+): RepoZapNotificationItem[] {
+  if (repoZapEvents.length === 0 || repoCoords.length === 0) return [];
+
+  const readIdSet = new Set(state.ri);
+  const archivedIdSet = new Set(state.ai);
+  const coordSet = new Set(repoCoords);
+
+  // Build coord → events map in a single O(n) pass
+  const byCoord = new Map<string, NostrEvent[]>();
+  for (const ev of repoZapEvents) {
+    // Filter out self-zaps (sender is us) by checking the embedded zap request
+    // sender pubkey (uppercase P tag), falling back to the receipt pubkey.
+    const senderPubkey = ev.tags.find(([t]) => t === "P")?.[1] ?? ev.pubkey;
+    if (senderPubkey === selfPubkey) continue;
+
+    for (const [t, v] of ev.tags) {
+      if (t === "a" && coordSet.has(v)) {
+        const bucket = byCoord.get(v);
+        if (bucket) {
+          bucket.push(ev);
+        } else {
+          byCoord.set(v, [ev]);
+        }
+        break; // each event belongs to at most one coord group
+      }
+    }
+  }
+
+  const items: RepoZapNotificationItem[] = [];
+
+  for (const [coord, events] of byCoord) {
+    // Sort newest-first
+    events.sort((a, b) => b.created_at - a.created_at);
+
+    const latestActivity = events[0]?.created_at ?? 0;
+    const unreadEvents = events.filter(
+      (ev) => !isEventRead(ev, state, readIdSet),
+    );
+    const unread = unreadEvents.length > 0;
+    const archived = events.every((ev) =>
+      isEventArchived(ev, state, archivedIdSet),
+    );
+    // unreadEvents is newest-first; reverse gives oldest-first IDs
+    const unreadEventIds = unreadEvents.map((ev) => ev.id).reverse();
+
+    // Sum sats across all zap receipts in this group.
+    // Amount is in the bolt11 tag's description; use a lightweight parse of
+    // the amount tag from the embedded zap request for a quick total.
+    let totalSats = 0;
+    for (const ev of events) {
+      const amountMsats = extractZapAmountMsats(ev);
+      if (amountMsats > 0) totalSats += Math.floor(amountMsats / 1000);
+    }
+
+    items.push({
+      kind: "repo-zap",
+      rootId: `${REPO_ZAPS_PREFIX}${coord}`,
+      repoCoord: coord,
+      events,
+      unread,
+      archived,
+      latestActivity,
+      unreadEventIds,
+      totalSats,
+    });
+  }
+
+  return items;
+}
+
+/**
+ * Extract the zap amount in millisats from a kind:9735 zap receipt by parsing
+ * the `amount` tag from the embedded kind:9734 zap request (the `description`
+ * tag on the receipt). Returns 0 if the amount cannot be determined.
+ *
+ * We intentionally avoid importing applesauce-common's getZapAmount here to
+ * keep notifications.ts dependency-free of that package.
+ */
+function extractZapAmountMsats(zapReceipt: NostrEvent): number {
+  try {
+    const description = zapReceipt.tags.find(([t]) => t === "description")?.[1];
+    if (!description) return 0;
+    const zapRequest = JSON.parse(description) as {
+      tags?: string[][];
+    };
+    const amountStr = zapRequest.tags?.find(([t]) => t === "amount")?.[1];
+    if (!amountStr) return 0;
+    const amount = Number(amountStr);
+    return Number.isFinite(amount) && amount > 0 ? amount : 0;
+  } catch {
+    return 0;
+  }
+}
 
 /**
  * Advance the read cutoff and prune the ID array.

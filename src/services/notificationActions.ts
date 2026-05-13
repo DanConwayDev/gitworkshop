@@ -9,12 +9,14 @@
 import {
   buildNotificationFilters,
   buildRepoStarFilter,
+  buildRepoZapFilter,
   getNotificationRootId,
   isEventRead,
   isEventArchived,
   advanceReadCutoff,
   advanceArchivedCutoff,
   REPO_STARS_PREFIX,
+  REPO_ZAPS_PREFIX,
   type NotificationReadState,
 } from "@/lib/notifications";
 import { eventStore } from "@/services/nostr";
@@ -28,7 +30,9 @@ import { updateReadState } from "./notificationStore";
 
 /** True if rootId is a synthetic social rootId (not a Nostr event ID) */
 function isSocialRootId(rootId: string): boolean {
-  return rootId.startsWith(REPO_STARS_PREFIX);
+  return (
+    rootId.startsWith(REPO_STARS_PREFIX) || rootId.startsWith(REPO_ZAPS_PREFIX)
+  );
 }
 
 /**
@@ -44,7 +48,11 @@ function getAllNotificationEvents(entry: NotificationStoreEntry): NostrEvent[] {
     coords.length > 0
       ? (eventStore.getByFilters([buildRepoStarFilter(coords)]) as NostrEvent[])
       : [];
-  return [...thread, ...stars];
+  const repoZaps =
+    coords.length > 0
+      ? (eventStore.getByFilters([buildRepoZapFilter(coords)]) as NostrEvent[])
+      : [];
+  return [...thread, ...stars, ...repoZaps];
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +69,11 @@ function filterEventsForRootId(
   selfPubkey: string,
 ): NostrEvent[] {
   if (isSocialRootId(rootId)) {
-    const coord = rootId.slice(REPO_STARS_PREFIX.length);
+    // Strip prefix to get the raw coord (same length stripping for both prefixes)
+    const prefix = rootId.startsWith(REPO_ZAPS_PREFIX)
+      ? REPO_ZAPS_PREFIX
+      : REPO_STARS_PREFIX;
+    const coord = rootId.slice(prefix.length);
     return allEvents.filter(
       (ev) =>
         ev.pubkey !== selfPubkey &&

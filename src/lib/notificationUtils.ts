@@ -21,6 +21,7 @@ import {
   PR_UPDATE_KIND,
   extractPatchSubject,
 } from "@/lib/nip34";
+import { ZAP_RECEIPT_KIND } from "@/lib/notifications";
 
 // ---------------------------------------------------------------------------
 // Root type inference
@@ -171,6 +172,7 @@ export function buildNotificationSummary(
   let reopened = false;
   let drafted = false;
   let newRevision = false;
+  let zapSats = 0;
 
   for (const ev of unreadEvents) {
     if (ev.kind === COVER_NOTE_KIND) {
@@ -187,6 +189,8 @@ export function buildNotificationSummary(
       drafted = true;
     } else if (ev.kind === PR_UPDATE_KIND) {
       newRevision = true;
+    } else if (ev.kind === ZAP_RECEIPT_KIND) {
+      zapSats += extractZapSatsFromReceipt(ev);
     }
   }
 
@@ -208,9 +212,38 @@ export function buildNotificationSummary(
       `${coverNoteCount} cover ${coverNoteCount === 1 ? "note" : "notes"} updated`,
     );
   }
+  if (zapSats > 0) {
+    parts.push(`${formatSats(zapSats)} zapped`);
+  }
 
   const unreadText = parts.length > 0 ? parts.join(" · ") : undefined;
   return { purpose, unreadText, hasMerge: merged, hasClosed: closed };
+}
+
+/**
+ * Extract sats from a kind:9735 zap receipt by reading the `amount` tag in
+ * the embedded zap request. Returns 0 if the amount cannot be parsed.
+ */
+function extractZapSatsFromReceipt(zapReceipt: NostrEvent): number {
+  try {
+    const description = zapReceipt.tags.find(([t]) => t === "description")?.[1];
+    if (!description) return 0;
+    const zapRequest = JSON.parse(description) as { tags?: string[][] };
+    const amountStr = zapRequest.tags?.find(([t]) => t === "amount")?.[1];
+    if (!amountStr) return 0;
+    const msats = Number(amountStr);
+    return Number.isFinite(msats) && msats > 0 ? Math.floor(msats / 1000) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Format a sats amount compactly: 1200 → "1.2k", 1000000 → "1M", etc. */
+function formatSats(sats: number): string {
+  if (sats >= 1_000_000)
+    return `${(sats / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (sats >= 1_000) return `${(sats / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(sats);
 }
 
 // ---------------------------------------------------------------------------
