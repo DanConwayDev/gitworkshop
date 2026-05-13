@@ -234,6 +234,14 @@ export default function IssuePage() {
                     ))}
                   </div>
                 )}
+                {issue.zapTotal ? (
+                  <div className="flex items-center gap-1 text-amber-500">
+                    <Zap className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">
+                      {compactNumber(issue.zapTotal)} sats
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}
