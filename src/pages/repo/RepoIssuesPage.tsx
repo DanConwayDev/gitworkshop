@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { repoToPath, eventIdToNevent } from "@/lib/routeUtils";
+import { compactNumber } from "@/lib/utils";
 import { useSeoMeta } from "@unhead/react";
 import { useProfile } from "@/hooks/useProfile";
 import { formatDistanceToNow } from "date-fns";
@@ -366,7 +367,7 @@ function IssueRow({
           {issue.zapTotal > 0 && (
             <span className="inline-flex items-center gap-0.5 text-amber-500">
               <Zap className="h-3 w-3" />
-              {issue.zapTotal.toLocaleString()}
+              {compactNumber(issue.zapTotal)}
             </span>
           )}
           {issue.participantCount > 1 && (
