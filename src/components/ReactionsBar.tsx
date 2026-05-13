@@ -160,7 +160,13 @@ export function ReactionsBar({
   if (grouped.size === 0 && !activeAccount) return null;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-1.5 pt-2", className)}>
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-1.5 pt-2",
+        pickerOpen && "w-full",
+        className,
+      )}
+    >
       {/* Existing reaction groups — collapsed view */}
       {!pickerOpen &&
         Array.from(grouped.entries()).map(([emoji, pubkeys]) => {
@@ -196,10 +202,10 @@ export function ReactionsBar({
               <Heart className="h-3 w-3" />
             </button>
           ) : (
-            <div className="flex flex-col gap-2 w-full">
+            <div className="flex flex-col gap-2 w-full bg-muted/40 rounded-lg p-3">
               {/* Row 1: existing reactions with who reacted */}
               {grouped.size > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-col gap-2">
                   {Array.from(grouped.entries()).map(([emoji, pubkeys]) => {
                     const iMine = myPubkey ? pubkeys.has(myPubkey) : false;
                     return (
