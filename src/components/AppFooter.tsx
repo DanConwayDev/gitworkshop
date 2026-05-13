@@ -2,7 +2,12 @@ import { Link } from "react-router-dom";
 import { Sun, Moon, SunMoon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { use$ } from "@/hooks/use$";
-import { themeMode, cycleThemeMode, type ThemeMode } from "@/services/settings";
+import {
+  themeMode,
+  systemTheme,
+  cycleThemeMode,
+  type ThemeMode,
+} from "@/services/settings";
 
 const THEME_ICON: Record<ThemeMode, typeof Sun> = {
   light: Sun,
@@ -10,10 +15,10 @@ const THEME_ICON: Record<ThemeMode, typeof Sun> = {
   system: SunMoon,
 };
 
-const NEXT_MODE: Record<ThemeMode, ThemeMode> = {
-  system: "light",
-  light: "dark",
-  dark: "system",
+const NEXT_MODE: Record<ThemeMode, (os: "light" | "dark") => ThemeMode> = {
+  system: (os) => (os === "dark" ? "light" : "dark"),
+  light: (os) => (os === "dark" ? "dark" : "system"),
+  dark: (os) => (os === "dark" ? "system" : "light"),
 };
 
 const gitCommit = __GIT_COMMIT__;
@@ -40,8 +45,9 @@ const NAV_SECTIONS = [
 
 export function AppFooter() {
   const mode = use$(themeMode);
+  const os = use$(systemTheme) ?? "light";
   const Icon = THEME_ICON[mode];
-  const themeLabel = `Theme: ${mode} (click to switch to ${NEXT_MODE[mode]})`;
+  const themeLabel = `Theme: ${mode} (click to switch to ${NEXT_MODE[mode](os)})`;
 
   return (
     <footer className="mt-24 border-t border-border/40 bg-muted/30">

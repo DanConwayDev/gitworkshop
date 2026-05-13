@@ -297,7 +297,7 @@ export const themeMode = new BehaviorSubject<ThemeMode>(readStoredMode());
 // their system theme — when mode is "system" this propagates to the app
 // without needing a reload.
 const systemMql = window.matchMedia("(prefers-color-scheme: dark)");
-const systemTheme = new BehaviorSubject<ResolvedTheme>(
+export const systemTheme = new BehaviorSubject<ResolvedTheme>(
   systemMql.matches ? "dark" : "light",
 );
 systemMql.addEventListener("change", (e) => {
