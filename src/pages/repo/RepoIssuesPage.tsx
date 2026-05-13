@@ -30,7 +30,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, MessageCircle, Users, CircleDot, X, Plus } from "lucide-react";
+import {
+  Search,
+  MessageCircle,
+  Users,
+  CircleDot,
+  X,
+  Plus,
+  Zap,
+} from "lucide-react";
 import { UserAvatar } from "@/components/UserAvatar";
 import type { IssueStatus, ResolvedIssueLite } from "@/lib/nip34";
 
@@ -347,12 +355,18 @@ function IssueRow({
           </div>
         </div>
 
-        {/* Comment & participant counts — right-aligned */}
+        {/* Comment, zap & participant counts — right-aligned */}
         <div className="flex items-center gap-3 self-center text-xs text-muted-foreground shrink-0">
           {issue.commentCount > 0 && (
             <span className="inline-flex items-center gap-0.5">
               <MessageCircle className="h-3 w-3" />
               {issue.commentCount}
+            </span>
+          )}
+          {issue.zapTotal > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-amber-500">
+              <Zap className="h-3 w-3" />
+              {issue.zapTotal.toLocaleString()}
             </span>
           )}
           {issue.participantCount > 1 && (

@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, MessageCircle, Users, X } from "lucide-react";
+import { Search, MessageCircle, Users, X, Zap } from "lucide-react";
 import type { IssueStatus, ResolvedPRLite, PRItemType } from "@/lib/nip34";
 
 const TYPE_OPTIONS: MultiSelectOption[] = [
@@ -321,12 +321,18 @@ function PRRow({
           </div>
         </div>
 
-        {/* Comment & participant counts — right-aligned */}
+        {/* Comment, zap & participant counts — right-aligned */}
         <div className="flex items-center gap-3 self-center text-xs text-muted-foreground shrink-0">
           {pr.commentCount > 0 && (
             <span className="inline-flex items-center gap-0.5">
               <MessageCircle className="h-3 w-3" />
               {pr.commentCount}
+            </span>
+          )}
+          {pr.zapTotal > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-amber-500">
+              <Zap className="h-3 w-3" />
+              {pr.zapTotal.toLocaleString()}
             </span>
           )}
           {pr.participantCount > 1 && (
