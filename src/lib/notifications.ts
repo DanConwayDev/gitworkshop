@@ -405,8 +405,12 @@ export function getNotificationRootId(
     const k = ev.tags.find(([t]) => t === "k")?.[1];
     const e = ev.tags.find(([t]) => t === "e")?.[1];
 
-    // Repo zap → handled as a social notification, not a thread item
-    if (k === String(REPO_KIND)) return undefined;
+    // Repo zap → handled as a social notification, not a thread item.
+    // Match on explicit k=REPO_KIND, or on #a presence (addressable-event
+    // zap without k tag — common since k is optional in the zap request and
+    // not reliably copied to the receipt by all LNURL servers).
+    if (k === String(REPO_KIND) || ev.tags.some(([t]) => t === "a"))
+      return undefined;
 
     // Zapping a NIP-34 root item → #e IS the thread root
     if (

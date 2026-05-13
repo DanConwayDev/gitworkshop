@@ -116,11 +116,14 @@ export function NotificationModel(
           }
 
           // Separate thread zaps from repo zaps already handled above.
-          // Thread zap receipts are those with #k NOT equal to REPO_KIND.
+          // Repo zap receipts are those with k=REPO_KIND OR with an #a tag
+          // (addressable-event zap). Thread items are regular events so their
+          // receipts have #e but never #a.
           const threadZapEvents = allThreadEvents.filter(
             (ev) =>
               ev.kind === ZAP_RECEIPT_KIND &&
-              ev.tags.find(([t]) => t === "k")?.[1] !== String(REPO_KIND),
+              ev.tags.find(([t]) => t === "k")?.[1] !== String(REPO_KIND) &&
+              !ev.tags.some(([t]) => t === "a"),
           );
 
           // Non-zap thread events (comments, issues, PRs, etc.)
