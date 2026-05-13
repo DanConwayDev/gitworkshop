@@ -446,6 +446,16 @@ export default function PRPage() {
     effectiveMergeBase,
   ]);
 
+  // ── Fast-forward detection (for body card "outdated" badge) ──────────
+  // If the latest PR update's tip includes the original PR tip in its history,
+  // the original push is a fast-forward ancestor — not truly "outdated".
+  const isLatestFastForwardFromOriginal = useMemo(() => {
+    if (!hasRevisions || !originalPRTipCommitId) return false;
+    return prCommitHistory.commits.some(
+      (c) => c.hash === originalPRTipCommitId,
+    );
+  }, [hasRevisions, originalPRTipCommitId, prCommitHistory.commits]);
+
   const defaultBranchName = gitPoolState.defaultBranch ?? repoState?.headBranch;
   const defaultBranchHead = gitPoolState.latestCommit?.hash;
 
@@ -1228,8 +1238,13 @@ export default function PRPage() {
                         : undefined
                   }
                   commitsSuperseded={
-                    // PR: superseded when there are PR updates
-                    (pr.itemType === "pr" && hasRevisions) ||
+                    // PR: superseded only when there are updates AND the latest
+                    // update is not simply a fast-forward of the original commit
+                    // (a FF means the original commit is still in history, so it
+                    // isn't truly outdated).
+                    (pr.itemType === "pr" &&
+                      hasRevisions &&
+                      !isLatestFastForwardFromOriginal) ||
                     // Patch: superseded when first revision was inlined and there are more
                     (pr.itemType === "patch" &&
                       pr.firstRevisionInlined === true &&
@@ -1268,6 +1283,11 @@ export default function PRPage() {
                       {((): React.ReactNode => {
                         // Track revision number (1-based) as we walk the timeline.
                         let revisionCounter = 0;
+                        // Track the previous PR tip for fast-forward detection in
+                        // each PRUpdatePushEvent.  Starts at the original PR tip
+                        // (the root event's `c` tag) and advances with each update.
+                        let previousPRTipCommitId: string | undefined =
+                          originalPRTipCommitId;
                         return pr.timelineNodes.map((node, idx) => {
                           if (node.type === "revision") {
                             if (
@@ -1312,6 +1332,9 @@ export default function PRPage() {
                             ) {
                               revisionCounter += 1;
                               const currentRevNum = revisionCounter;
+                              // Capture the previous tip before advancing the tracker.
+                              const prevTip = previousPRTipCommitId;
+                              previousPRTipCommitId = node.revision.tipCommitId;
                               return (
                                 <PRUpdatePushEvent
                                   key={`pr-update-${node.revision.updateEvent.id}`}
@@ -1333,6 +1356,7 @@ export default function PRPage() {
                                     undefined
                                   }
                                   repoCoords={repoAllCoords ?? pr.repoCoords}
+                                  previousTipCommitId={prevTip}
                                 />
                               );
                             }

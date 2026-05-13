@@ -486,6 +486,7 @@ export function PRUpdatePushEvent({
   fallbackUrls,
   mergeBase: mergeBaseProp,
   repoCoords,
+  previousTipCommitId,
 }: {
   update: PRUpdate | PRUpdateLike;
   superseded: boolean;
@@ -502,6 +503,15 @@ export function PRUpdatePushEvent({
   mergeBase?: string;
   /** Repo coordinate strings — enables the delete button for the event author. */
   repoCoords?: string[];
+  /**
+   * The tip commit from the previous revision (the original PR's `c` tag for
+   * the first update, or the prior update's tip for subsequent ones). When
+   * provided, the component uses it to detect fast-forward updates: if this
+   * commit exists in the new tip's history the update is a FF and we show only
+   * the *new* commits (those after the previous tip) and say "pushed" instead
+   * of "force pushed".
+   */
+  previousTipCommitId?: string;
 }) {
   const timeAgo = formatDistanceToNow(
     new Date(update.event.created_at * 1000),
@@ -579,13 +589,30 @@ export function PRUpdatePushEvent({
     return [...trimmed].reverse();
   }, [commitHistory.commits, effectiveMergeBase]);
 
+  // Detect fast-forward: the previous tip is reachable from the new tip, i.e.
+  // it appears somewhere in the new tip's history.  A fast-forward means no
+  // history was rewritten — only new commits were added on top.
+  const isFastForward = useMemo(() => {
+    if (!previousTipCommitId || !loadedCommits.length) return false;
+    return loadedCommits.some((c) => c.hash === previousTipCommitId);
+  }, [previousTipCommitId, loadedCommits]);
+
+  // For fast-forward updates only show the commits that are *new* (after the
+  // previous tip), so we don't repeat commits already shown in the original
+  // push row or an earlier update row.
+  const displayCommits = useMemo(() => {
+    if (!isFastForward || !previousTipCommitId) return loadedCommits;
+    const idx = loadedCommits.findIndex((c) => c.hash === previousTipCommitId);
+    return idx === -1 ? loadedCommits : loadedCommits.slice(idx + 1);
+  }, [isFastForward, previousTipCommitId, loadedCommits]);
+
   const rows = useMemo(() => {
     // Prefer explicitly passed commits, then git-loaded commits.
     const source =
       commits && commits.length > 0
         ? commits
-        : loadedCommits.length > 0
-          ? loadedCommits.map((c) => ({
+        : displayCommits.length > 0
+          ? displayCommits.map((c) => ({
               hash: c.hash,
               subject: c.message.split("\n")[0],
             }))
@@ -617,7 +644,7 @@ export function PRUpdatePushEvent({
     return [];
   }, [
     commits,
-    loadedCommits,
+    displayCommits,
     commitHistory.loading,
     update.tipCommitId,
     basePath,
@@ -652,7 +679,7 @@ export function PRUpdatePushEvent({
               nameClassName="text-sm font-medium text-foreground"
             />
             <span className="text-sm text-muted-foreground">
-              force pushed
+              {isFastForward ? "pushed" : "force pushed"}
               {revisionNumber !== undefined && revisionNumber > 1 && (
                 <span className="ml-1 text-xs text-muted-foreground/60">
                   (revision {revisionNumber})
