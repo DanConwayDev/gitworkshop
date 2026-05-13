@@ -51,6 +51,7 @@ import { relayCurationMode } from "@/services/settings";
 import { cn } from "@/lib/utils";
 import { StarButton } from "@/components/StarButton";
 import { FollowRepoButton } from "@/components/FollowRepoButton";
+import { RepoZapButton } from "@/components/RepoZapButton";
 import {
   parseRepoRoute,
   decodeEventIdentifier,
@@ -474,6 +475,12 @@ function RepoLayoutResolved({
                 nip05={nip05}
               />
               <div className="flex items-center gap-2 flex-shrink-0">
+                <RepoZapButton
+                  targetAnnouncement={repo.announcements.find(
+                    (a) => a.pubkey === repo.selectedMaintainer,
+                  )}
+                  repoCoords={repo.allCoordinates}
+                />
                 <FollowRepoButton allCoords={repo.allCoordinates} />
                 <StarButton
                   targetAnnouncement={repo.announcements.find(
