@@ -96,14 +96,28 @@ export async function signZapRequest(
 
 /**
  * Pick which relays go into the zap request's `relays` tag. The LNURL provider
- * publishes the receipt to these, so they should be relays the user and the
- * public can read. Keep the list small — most providers cap at 4–5.
+ * publishes the receipt to these — so include every set of relays that needs to
+ * receive the receipt:
+ *   1. Extra relays supplied by the caller (e.g. repo-declared relays) — highest
+ *      priority so they always make it in.
+ *   2. Recipient's inbox relays — the most canonical home for receipts addressed
+ *      to this user.
+ *   3. Sender's outbox relays — so the sender can find their own receipts.
+ *   4. Fallback relays — well-connected public relays for broad visibility.
+ * Deduplicates and caps at `max` (default 8) to keep the request small.
  */
 export function pickZapRelays(
   recipientInboxes: string[] | undefined,
   fallback: string[],
-  max = 5,
+  max = 8,
+  extraRelays: string[] = [],
+  senderOutboxes: string[] = [],
 ): string[] {
-  const merged = [...(recipientInboxes ?? []), ...fallback];
+  const merged = [
+    ...extraRelays,
+    ...(recipientInboxes ?? []),
+    ...senderOutboxes,
+    ...fallback,
+  ];
   return [...new Set(merged)].slice(0, max);
 }
