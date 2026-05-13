@@ -110,6 +110,7 @@ export function ReactionsBar({
   const [deleting, setDeleting] = useState(false);
 
   const myPubkey = activeAccount?.pubkey;
+  const isOwn = !!myPubkey && myPubkey === event.pubkey;
 
   const sendReaction = useCallback(
     async (emoji: string) => {
@@ -157,10 +158,16 @@ export function ReactionsBar({
     [reactions, myPubkey],
   );
 
-  if (grouped.size === 0 && !activeAccount) return null;
+  if (grouped.size === 0 && (!activeAccount || isOwn)) return null;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-1.5 pt-2", className)}>
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-1.5 pt-2",
+        pickerOpen && "w-full",
+        className,
+      )}
+    >
       {/* Existing reaction groups — collapsed view */}
       {!pickerOpen &&
         Array.from(grouped.entries()).map(([emoji, pubkeys]) => {
@@ -177,78 +184,78 @@ export function ReactionsBar({
           );
         })}
 
-      {/* Add reaction / picker toggle — only shown when logged in */}
-      {activeAccount && (
-        <>
-          {!pickerOpen ? (
-            <button
-              type="button"
-              onClick={() => setPickerOpen(true)}
-              disabled={sending}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border border-border/40 px-2 py-0.5",
-                "text-xs text-muted-foreground/50 hover:text-muted-foreground hover:border-border/70",
-                "transition-colors disabled:opacity-40",
-                grouped.size === 0 && "-ml-0.5",
-              )}
-              aria-label="Add reaction"
-            >
-              <Heart className="h-3 w-3" />
-            </button>
-          ) : (
-            <div className="flex flex-col gap-2 w-full">
-              {/* Row 1: existing reactions with who reacted */}
-              {grouped.size > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  {Array.from(grouped.entries()).map(([emoji, pubkeys]) => {
-                    const iMine = myPubkey ? pubkeys.has(myPubkey) : false;
-                    return (
-                      <ReactionGroup
-                        key={emoji}
-                        emoji={emoji}
-                        pubkeys={pubkeys}
-                        isMine={iMine}
-                        disabled={sending}
-                        onClickMine={() => {
-                          const ev = myReactionEvent(emoji);
-                          if (ev) setDeleteTarget(ev);
-                        }}
-                        onClickOther={() => sendReaction(emoji)}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-              {/* Row 2: unused preset emojis to pick from + close */}
-              <div className="flex flex-wrap items-center gap-1">
-                {PRESET_EMOJIS.filter((emoji) => !grouped.has(emoji)).map(
-                  (emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      disabled={sending}
-                      onClick={() => sendReaction(emoji)}
-                      className={cn(
-                        "rounded border border-border/40 px-1.5 py-0.5 text-sm",
-                        "hover:bg-muted/60 transition-colors disabled:opacity-40 text-foreground",
-                      )}
-                    >
-                      {emoji === "+" ? "👍" : emoji}
-                    </button>
-                  ),
-                )}
-                <button
-                  type="button"
-                  onClick={() => setPickerOpen(false)}
-                  className="rounded border border-border/30 p-0.5 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                  aria-label="Close reaction picker"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
+      {/* Add reaction button — hidden for own events */}
+      {activeAccount && !isOwn && !pickerOpen && (
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          disabled={sending}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border border-border/40 px-2 py-0.5",
+            "text-xs text-muted-foreground/50 hover:text-muted-foreground hover:border-border/70",
+            "transition-colors disabled:opacity-40",
+            grouped.size === 0 && "-ml-0.5",
+          )}
+          aria-label="Add reaction"
+        >
+          <Heart className="h-3 w-3" />
+        </button>
+      )}
+
+      {/* Expanded picker */}
+      {pickerOpen && activeAccount && (
+        <div className="flex flex-col gap-2 w-full bg-muted/40 rounded-lg p-3">
+          {/* Row 1: existing reactions with who reacted */}
+          {grouped.size > 0 && (
+            <div className="flex flex-col gap-2">
+              {Array.from(grouped.entries()).map(([emoji, pubkeys]) => {
+                const iMine = myPubkey ? pubkeys.has(myPubkey) : false;
+                return (
+                  <ReactionGroup
+                    key={emoji}
+                    emoji={emoji}
+                    pubkeys={pubkeys}
+                    isMine={iMine}
+                    disabled={sending}
+                    onClickMine={() => {
+                      const ev = myReactionEvent(emoji);
+                      if (ev) setDeleteTarget(ev);
+                    }}
+                    onClickOther={() => sendReaction(emoji)}
+                  />
+                );
+              })}
             </div>
           )}
-        </>
+          {/* Row 2: unused preset emojis + close — preset hidden for own events */}
+          <div className="flex flex-wrap items-center gap-1">
+            {!isOwn &&
+              PRESET_EMOJIS.filter((emoji) => !grouped.has(emoji)).map(
+                (emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    disabled={sending}
+                    onClick={() => sendReaction(emoji)}
+                    className={cn(
+                      "rounded border border-border/40 px-1.5 py-0.5 text-sm",
+                      "hover:bg-muted/60 transition-colors disabled:opacity-40 text-foreground",
+                    )}
+                  >
+                    {emoji === "+" ? "👍" : emoji}
+                  </button>
+                ),
+              )}
+            <button
+              type="button"
+              onClick={() => setPickerOpen(false)}
+              className="rounded border border-border/30 p-0.5 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              aria-label="Close reaction picker"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Delete confirmation dialog */}

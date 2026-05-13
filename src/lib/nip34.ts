@@ -7,6 +7,8 @@ import {
   getNip10References,
   getCommentRootPointer,
   getZapAmount,
+  getZapRequest,
+  getZapSender,
 } from "applesauce-common/helpers";
 import {
   getReplaceableIdentifier,
@@ -1358,6 +1360,18 @@ export type IssueTimelineNode =
       /** True when the author is authorised (maintainer or item author) */
       authorised: boolean;
       ts: number;
+    }
+  | {
+      type: "zap";
+      /** The kind:9735 zap receipt */
+      event: NostrEvent;
+      /** Sender pubkey extracted from the embedded zap request */
+      sender: string | undefined;
+      /** Payment amount in sats */
+      amountSats: number;
+      /** Message from the zap request content */
+      message: string;
+      ts: number;
     };
 
 /**
@@ -1544,6 +1558,12 @@ interface BuildTimelineBaseArgs {
    * Comes from resolveItemEssentials.deletedEssentialEventIds.
    */
   deletedEssentialEventIds?: Set<string>;
+  /**
+   * Zap receipts (kind:9735) on the root item. When provided, zaps with a
+   * message longer than 18 characters or an amount above 499 sats are
+   * surfaced as compact `"zap"` timeline nodes.
+   */
+  zaps?: NostrEvent[];
 }
 
 export interface BuildIssueTimelineArgs extends BuildTimelineBaseArgs {
@@ -1574,6 +1594,7 @@ export type BuildTimelineArgs = BuildIssueTimelineArgs | BuildPRTimelineArgs;
  *                 authors with an `authorised` flag for display purposes
  * - `"revision"`: patch-set pushes or PR Updates (PR/patch only)
  * - `"thread"`:   NIP-22 comments and legacy replies, threaded
+ * - `"zap"`:      zap receipts with message > 18 chars or amount > 499 sats
  *
  * All nodes are sorted chronologically. At equal timestamps, non-thread
  * nodes sort before thread nodes (activity markers before replies).
@@ -1666,6 +1687,31 @@ export function buildTimelineNodes(
     })
     .filter((n) => n.labels.length > 0);
 
+  // ── Zap nodes ─────────────────────────────────────────────────────────────
+  // Only show zaps that meet the display threshold:
+  //   message length > 18 characters, OR amount > 499 sats.
+  const ZAP_MSG_MIN_LENGTH = 19;
+  const ZAP_SATS_MIN = 500;
+  const zapNodes: (IssueTimelineNode | PRTimelineNode)[] = (
+    args.zaps ?? []
+  ).flatMap((ev) => {
+    const zapRequest = getZapRequest(ev);
+    const message = (zapRequest?.content ?? "").trim();
+    const amountSats = Math.floor((getZapAmount(ev) ?? 0) / 1000);
+    if (message.length < ZAP_MSG_MIN_LENGTH && amountSats < ZAP_SATS_MIN)
+      return [];
+    return [
+      {
+        type: "zap" as const,
+        event: ev,
+        sender: getZapSender(ev),
+        amountSats,
+        message,
+        ts: ev.created_at,
+      },
+    ];
+  });
+
   // ── Thread nodes (root-level comments) ───────────────────────────────────
   // For patches: only comments whose E root tag points at the original root.
   // Revision-rooted comments are handled below, interleaved after their revision.
@@ -1697,6 +1743,7 @@ export function buildTimelineNodes(
       ...statusNodes,
       ...renameNodes,
       ...labelNodes,
+      ...zapNodes,
       ...rootThreadNodes,
     ] as IssueTimelineNode[];
 
@@ -1754,6 +1801,7 @@ export function buildTimelineNodes(
     ...statusNodes,
     ...renameNodes,
     ...labelNodes,
+    ...zapNodes,
     ...rootThreadNodes,
     ...revisionNodes,
   ] as PRTimelineNode[];
@@ -1847,6 +1895,18 @@ export type PRTimelineNode =
       labels: string[];
       /** True when the author is authorised (maintainer or item author) */
       authorised: boolean;
+      ts: number;
+    }
+  | {
+      type: "zap";
+      /** The kind:9735 zap receipt */
+      event: NostrEvent;
+      /** Sender pubkey extracted from the embedded zap request */
+      sender: string | undefined;
+      /** Payment amount in sats */
+      amountSats: number;
+      /** Message from the zap request content */
+      message: string;
       ts: number;
     };
 

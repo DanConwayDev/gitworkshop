@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NostrEvent } from "nostr-tools";
 import { Link } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
+import { compactNumber } from "@/lib/utils";
 import { useSeoMeta } from "@unhead/react";
 import { useProfile } from "@/hooks/useProfile";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -13,6 +14,7 @@ import {
   SubjectRenameCard,
   StatusChangeCard,
   LabelChangeCard,
+  ZapMessageCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
 import { EventSearchStatus } from "@/components/EventSearchStatus";
@@ -25,6 +27,7 @@ import { LabelBadge } from "@/components/LabelBadge";
 import { ManageLabels, type LabelEventEntry } from "@/components/ManageLabels";
 import { ReplyBox } from "@/components/ReplyBox";
 import { CoverNoteBox } from "@/components/CoverNoteBox";
+import { ZapButton } from "@/components/zap/ZapButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -232,6 +235,14 @@ export default function IssuePage() {
                     ))}
                   </div>
                 )}
+                {issue.zapTotal ? (
+                  <div className="flex items-center gap-1 text-amber-500">
+                    <Zap className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">
+                      {compactNumber(issue.zapTotal)} sats
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -341,6 +352,17 @@ export default function IssuePage() {
                           />
                         );
                       }
+                      if (node.type === "zap") {
+                        return (
+                          <ZapMessageCard
+                            key={node.event.id}
+                            event={node.event}
+                            sender={node.sender}
+                            amountSats={node.amountSats}
+                            message={node.message}
+                          />
+                        );
+                      }
                       // thread node
                       return (
                         <ThreadTree
@@ -406,15 +428,15 @@ export default function IssuePage() {
                       </span>
                     </div>
 
-                    {!!issue?.zapTotal && (
+                    {issue?.zapTotal ? (
                       <div className="flex items-center gap-2 text-sm">
                         <Zap className="h-4 w-4 text-amber-500" />
                         <span className="text-muted-foreground">Zaps</span>
                         <span className="ml-auto font-medium">
-                          {issue.zapTotal} sats
+                          {compactNumber(issue.zapTotal)} sats
                         </span>
                       </div>
-                    )}
+                    ) : null}
 
                     <div className="flex items-center gap-2 text-sm">
                       <Users className="h-4 w-4 text-muted-foreground" />
@@ -425,6 +447,13 @@ export default function IssuePage() {
                         {issue?.participants.length ?? 0}
                       </span>
                     </div>
+
+                    {issue?.rootEvent && (
+                      <ZapButton
+                        event={issue.rootEvent as NostrEvent}
+                        className="w-full justify-center"
+                      />
+                    )}
                   </div>
 
                   <Separator />

@@ -36,6 +36,9 @@ importers:
       "@hookform/resolvers":
         specifier: ^3.10.0
         version: 3.10.0(react-hook-form@7.71.2(react@18.3.1))
+      "@libs/qrcode":
+        specifier: jsr:^3.0.1
+        version: "@jsr/libs__qrcode@3.0.1"
       "@noble/hashes":
         specifier: ^2.0.1
         version: 2.0.1
@@ -153,6 +156,9 @@ importers:
       applesauce-signers:
         specifier: ^6
         version: 6.0.1(@capacitor/core@7.6.2)(typescript@5.9.3)
+      applesauce-wallet-connect:
+        specifier: ^6.0.0
+        version: 6.0.0(typescript@5.9.3)
       blurhash:
         specifier: ^2.0.5
         version: 2.0.5
@@ -980,6 +986,13 @@ packages:
       {
         integrity: sha512-Vg/bTWCj4cH21h0iWXLejmVxNd5UBM3+Y4S4ch1LNheodeJzqUG6F3vRl/ignQGintj5ATI/84PCJs0KYRFuwA==,
         tarball: https://npm.jsr.io/~/11/@jsr/fiatjaf__git-natural-api/0.2.4.tgz,
+      }
+
+  "@jsr/libs__qrcode@3.0.1":
+    resolution:
+      {
+        integrity: sha512-kmB/aAUr55cB4h5+UHmig9Cx8UWEckpEBYdgmKIP1qaEZU3EpLQZHs4GL/78c+WVAdC9H6Gx+JwjX3g6GvsB2Q==,
+        tarball: https://npm.jsr.io/~/11/@jsr/libs__qrcode/3.0.1.tgz,
       }
 
   "@modelcontextprotocol/sdk@1.27.1":
@@ -1998,6 +2011,7 @@ packages:
       }
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-arm-musleabihf@4.59.0":
     resolution:
@@ -2006,6 +2020,7 @@ packages:
       }
     cpu: [arm]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-arm64-gnu@4.59.0":
     resolution:
@@ -2014,6 +2029,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-arm64-musl@4.59.0":
     resolution:
@@ -2022,6 +2038,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-loong64-gnu@4.59.0":
     resolution:
@@ -2030,6 +2047,7 @@ packages:
       }
     cpu: [loong64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-loong64-musl@4.59.0":
     resolution:
@@ -2038,6 +2056,7 @@ packages:
       }
     cpu: [loong64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-ppc64-gnu@4.59.0":
     resolution:
@@ -2046,6 +2065,7 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-ppc64-musl@4.59.0":
     resolution:
@@ -2054,6 +2074,7 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-riscv64-gnu@4.59.0":
     resolution:
@@ -2062,6 +2083,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-riscv64-musl@4.59.0":
     resolution:
@@ -2070,6 +2092,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-s390x-gnu@4.59.0":
     resolution:
@@ -2078,6 +2101,7 @@ packages:
       }
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-x64-gnu@4.59.0":
     resolution:
@@ -2086,6 +2110,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-x64-musl@4.59.0":
     resolution:
@@ -2094,6 +2119,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-openbsd-x64@4.59.0":
     resolution:
@@ -2275,6 +2301,7 @@ packages:
     engines: { node: ">=10" }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   "@swc/core-linux-arm64-musl@1.15.18":
     resolution:
@@ -2284,6 +2311,7 @@ packages:
     engines: { node: ">=10" }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   "@swc/core-linux-x64-gnu@1.15.18":
     resolution:
@@ -2293,6 +2321,7 @@ packages:
     engines: { node: ">=10" }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   "@swc/core-linux-x64-musl@1.15.18":
     resolution:
@@ -2302,6 +2331,7 @@ packages:
     engines: { node: ">=10" }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   "@swc/core-win32-arm64-msvc@1.15.18":
     resolution:
@@ -2898,6 +2928,12 @@ packages:
     resolution:
       {
         integrity: sha512-SV60zT7+kMdASEOUfOvNGSFQFjfXdGbhyAQvCMaN3S5JIMzbO8YMmf9BzyGJF+HoWZRi888xscXCgkAea6mUJw==,
+      }
+
+  applesauce-wallet-connect@6.0.0:
+    resolution:
+      {
+        integrity: sha512-rdVvc2NIa6VqnJh2JucyMjhA+S9bohPfXxChJtM4TkWwTFxkhkao9W+7Fuoe9ctelubGKXBbmtOSX3WowjgUOg==,
       }
 
   arg@5.0.2:
@@ -7068,6 +7104,8 @@ snapshots:
       "@noble/hashes": 2.0.1
       fflate: 0.8.2
 
+  "@jsr/libs__qrcode@3.0.1": {}
+
   "@modelcontextprotocol/sdk@1.27.1(zod@3.25.76)":
     dependencies:
       "@hono/node-server": 1.19.11(hono@4.12.7)
@@ -8525,6 +8563,16 @@ snapshots:
       nostr-signer-capacitor-plugin: 0.0.5(@capacitor/core@7.6.2)
     transitivePeerDependencies:
       - "@capacitor/core"
+      - supports-color
+      - typescript
+
+  applesauce-wallet-connect@6.0.0(typescript@5.9.3):
+    dependencies:
+      "@noble/hashes": 1.8.0
+      applesauce-common: 6.0.1(typescript@5.9.3)
+      applesauce-core: 6.0.0(patch_hash=0a7b60f33bf563aa15b495e63a65e451e715094233b1e19e1fce743d01355ff9)(typescript@5.9.3)
+      rxjs: 7.8.2
+    transitivePeerDependencies:
       - supports-color
       - typescript
 

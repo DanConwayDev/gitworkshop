@@ -73,3 +73,16 @@ export function safeFormat(
   if (isNaN(d.getTime()) || timestampSeconds === 0) return null;
   return format(d, formatStr);
 }
+
+/**
+ * Format a number compactly: below 1000 as-is, otherwise as e.g. "1.5k",
+ * "10k", "1.2m". Uses Intl.NumberFormat compact notation (lowercase).
+ */
+export function compactNumber(n: number): string {
+  return new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  })
+    .format(n)
+    .toLowerCase();
+}

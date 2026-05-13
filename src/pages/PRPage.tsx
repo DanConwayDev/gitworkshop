@@ -18,6 +18,7 @@ import {
   SubjectRenameCard,
   StatusChangeCard,
   LabelChangeCard,
+  ZapMessageCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
 
@@ -33,6 +34,7 @@ import { LabelBadge } from "@/components/LabelBadge";
 import { ManageLabels, type LabelEventEntry } from "@/components/ManageLabels";
 import { ReplyBox } from "@/components/ReplyBox";
 import { CoverNoteBox } from "@/components/CoverNoteBox";
+import { ZapButton } from "@/components/zap/ZapButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -54,7 +56,7 @@ import {
   PatchSetPushEvent,
   PRUpdatePushEvent,
 } from "@/components/PushEventComponents";
-import { cn } from "@/lib/utils";
+import { cn, compactNumber } from "@/lib/utils";
 import { PRFilesTab } from "@/components/PRFilesTab";
 import { PatchFilesTab } from "@/components/PatchFilesTab";
 import { diffTrees, generateUnifiedDiff } from "@/lib/git-grasp-pool";
@@ -1121,6 +1123,14 @@ export default function PRPage() {
                       ))}
                     </div>
                   )}
+                  {pr.zapTotal ? (
+                    <div className="flex items-center gap-1 text-amber-500">
+                      <Zap className="h-3.5 w-3.5" />
+                      <span className="text-xs font-medium">
+                        {compactNumber(pr.zapTotal)} sats
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -1396,6 +1406,17 @@ export default function PRPage() {
                               />
                             );
                           }
+                          if (node.type === "zap") {
+                            return (
+                              <ZapMessageCard
+                                key={node.event.id}
+                                event={node.event}
+                                sender={node.sender}
+                                amountSats={node.amountSats}
+                                message={node.message}
+                              />
+                            );
+                          }
                           // thread node
                           return (
                             <ThreadTree
@@ -1659,15 +1680,15 @@ export default function PRPage() {
                       </span>
                     </div>
 
-                    {!!pr?.zapTotal && (
+                    {pr?.zapTotal ? (
                       <div className="flex items-center gap-2 text-sm">
                         <Zap className="h-4 w-4 text-amber-500" />
                         <span className="text-muted-foreground">Zaps</span>
                         <span className="ml-auto font-medium">
-                          {pr.zapTotal} sats
+                          {compactNumber(pr.zapTotal)} sats
                         </span>
                       </div>
-                    )}
+                    ) : null}
 
                     <div className="flex items-center gap-2 text-sm">
                       <Users className="h-4 w-4 text-muted-foreground" />
@@ -1678,6 +1699,13 @@ export default function PRPage() {
                         {pr?.participants.length ?? 0}
                       </span>
                     </div>
+
+                    {pr?.rootEvent && (
+                      <ZapButton
+                        event={pr.rootEvent as NostrEvent}
+                        className="w-full justify-center"
+                      />
+                    )}
                   </div>
 
                   <Separator />

@@ -42,6 +42,7 @@ import { ReplyBox } from "@/components/ReplyBox";
 import type { ThreadContext } from "@/components/EventThreadComponents";
 import { OutboxStatusBadge } from "@/components/OutboxStatusStrip";
 import { ReactionsBar } from "@/components/ReactionsBar";
+import { ZapsBar } from "@/components/zap/ZapsBar";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { DeleteEvent } from "@/actions/nip34";
 import { runner } from "@/services/actions";
@@ -598,7 +599,16 @@ export function ThreadComment({
           UserLink uses w-8 avatar + gap-1.5 = 38px before the name text. */}
       <div className="sm:ml-[38px]">
         <CommentContent content={event.content} />
-        {ctx && <ReactionsBar event={event} repoCoords={ctx.repoCoords} />}
+        {ctx && (
+          <div className="flex flex-wrap items-center gap-3 pt-2 empty:hidden">
+            <ZapsBar event={event} />
+            <ReactionsBar
+              event={event}
+              repoCoords={ctx.repoCoords}
+              className="pt-0"
+            />
+          </div>
+        )}
       </div>
 
       {/* Inline reply composer */}

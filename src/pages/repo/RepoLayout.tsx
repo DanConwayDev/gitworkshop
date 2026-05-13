@@ -51,6 +51,7 @@ import { relayCurationMode } from "@/services/settings";
 import { cn } from "@/lib/utils";
 import { StarButton } from "@/components/StarButton";
 import { FollowRepoButton } from "@/components/FollowRepoButton";
+import { RepoZapButton } from "@/components/RepoZapButton";
 import {
   parseRepoRoute,
   decodeEventIdentifier,
@@ -60,6 +61,8 @@ import {
   GitCommitLinkContext,
   type GitCommitLinkContextValue,
 } from "@/components/CommitLinkContext";
+import { RepoRelaysContext } from "@/contexts/RepoRelaysContext";
+import { relayGroupUrls$ } from "@/models/RepositoryRelayGroup";
 import { EMPTY } from "rxjs";
 import { catchError } from "rxjs/operators";
 // ---------------------------------------------------------------------------
@@ -195,6 +198,12 @@ function RepoLayoutResolved({
   const repoRelayGroup = resolved?.repoRelayGroup;
   const extraRelaysForMaintainerMailboxCoverage =
     resolved?.extraRelaysForMaintainerMailboxCoverage;
+
+  // Reactive relay URL list for RepoRelaysContext — updates as outbox relays
+  // are discovered so any ZapModal rendered under this layout uses the current
+  // full set when building the zap request's relays tag.
+  const repoRelayUrls =
+    use$(() => relayGroupUrls$(repoRelayGroup), [repoRelayGroup]) ?? [];
 
   // Respect the user's relay curation preference.
   const curationMode = use$(relayCurationMode);
@@ -459,190 +468,200 @@ function RepoLayoutResolved({
   );
 
   return (
-    <div className="min-h-full">
-      {/* Repo header */}
-      <div className="relative isolate border-b border-border/40">
-        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-pink-500/5 via-transparent to-pink-500/5" />
+    <RepoRelaysContext.Provider value={repoRelayUrls}>
+      <div className="min-h-full">
+        {/* Repo header */}
+        <div className="relative isolate border-b border-border/40">
+          <div className="absolute inset-0 -z-10 bg-gradient-to-br from-pink-500/5 via-transparent to-pink-500/5" />
 
-        <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-0">
-          {repo ? (
-            <div className="flex items-center justify-between gap-3 mb-4 min-w-0 overflow-hidden">
-              <RepoBreadcrumb
-                pubkey={pubkey}
-                repoName={repo.name}
-                basePath={basePath}
-                nip05={nip05}
-              />
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <FollowRepoButton allCoords={repo.allCoordinates} />
-                <StarButton
-                  targetAnnouncement={repo.announcements.find(
-                    (a) => a.pubkey === repo.selectedMaintainer,
-                  )}
-                  allAnnouncements={repo.announcements}
-                  repoCoords={repo.allCoordinates}
+          <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-0">
+            {repo ? (
+              <div className="flex items-center justify-between gap-3 mb-4 min-w-0 overflow-hidden">
+                <RepoBreadcrumb
+                  pubkey={pubkey}
+                  repoName={repo.name}
+                  basePath={basePath}
+                  nip05={nip05}
                 />
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 mb-4">
-              <Skeleton className="h-5 w-24" />
-              <span className="text-muted-foreground">/</span>
-              <Skeleton className="h-5 w-32" />
-            </div>
-          )}
-
-          {/* Tab navigation */}
-          <nav className="flex gap-1 -mb-px">
-            {/* Primary tabs — always visible */}
-            <TabLink
-              to={basePath}
-              active={isCodeTab}
-              icon={<Code2 className="h-4 w-4" />}
-              label="Code"
-            />
-            <TabLink
-              to={`${basePath}/issues`}
-              active={isIssuesTab}
-              icon={<CircleDot className="h-4 w-4" />}
-              label="Issues"
-              count={openIssueCount}
-            />
-            <TabLink
-              to={`${basePath}/prs`}
-              active={isPRsTab}
-              icon={<GitPullRequest className="h-4 w-4" />}
-              label="PRs"
-              count={openPRCount}
-            />
-
-            {/* Secondary tabs — visible on md+ screens */}
-            <div className="hidden md:flex gap-1">
-              <TabLink
-                to={`${basePath}/about`}
-                active={isAboutTab}
-                icon={<Info className="h-4 w-4" />}
-                label="About"
-              />
-              {isMaintainer && (
-                <TabLink
-                  to={`${basePath}/settings`}
-                  active={isSettingsTab}
-                  icon={<Settings className="h-4 w-4" />}
-                  label="Settings"
-                />
-              )}
-            </div>
-
-            {/* "More" dropdown — mobile only */}
-            <div className="md:hidden flex items-end pb-px">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className={cn(
-                      "inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
-                      isAboutTab || isSettingsTab
-                        ? "border-pink-500 text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <RepoZapButton
+                    targetAnnouncement={repo.announcements.find(
+                      (a) => a.pubkey === repo.selectedMaintainer,
                     )}
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                    <span className="sr-only">More</span>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem asChild>
-                    <Link
-                      to={`${basePath}/about`}
-                      className="flex items-center gap-2"
+                    repoCoords={repo.allCoordinates}
+                  />
+                  <FollowRepoButton allCoords={repo.allCoordinates} />
+                  <StarButton
+                    targetAnnouncement={repo.announcements.find(
+                      (a) => a.pubkey === repo.selectedMaintainer,
+                    )}
+                    allAnnouncements={repo.announcements}
+                    repoCoords={repo.allCoordinates}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 mb-4">
+                <Skeleton className="h-5 w-24" />
+                <span className="text-muted-foreground">/</span>
+                <Skeleton className="h-5 w-32" />
+              </div>
+            )}
+
+            {/* Tab navigation */}
+            <nav className="flex gap-1 -mb-px">
+              {/* Primary tabs — always visible */}
+              <TabLink
+                to={basePath}
+                active={isCodeTab}
+                icon={<Code2 className="h-4 w-4" />}
+                label="Code"
+              />
+              <TabLink
+                to={`${basePath}/issues`}
+                active={isIssuesTab}
+                icon={<CircleDot className="h-4 w-4" />}
+                label="Issues"
+                count={openIssueCount}
+              />
+              <TabLink
+                to={`${basePath}/prs`}
+                active={isPRsTab}
+                icon={<GitPullRequest className="h-4 w-4" />}
+                label="PRs"
+                count={openPRCount}
+              />
+
+              {/* Secondary tabs — visible on md+ screens */}
+              <div className="hidden md:flex gap-1">
+                <TabLink
+                  to={`${basePath}/about`}
+                  active={isAboutTab}
+                  icon={<Info className="h-4 w-4" />}
+                  label="About"
+                />
+                {isMaintainer && (
+                  <TabLink
+                    to={`${basePath}/settings`}
+                    active={isSettingsTab}
+                    icon={<Settings className="h-4 w-4" />}
+                    label="Settings"
+                  />
+                )}
+              </div>
+
+              {/* "More" dropdown — mobile only */}
+              <div className="md:hidden flex items-end pb-px">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
+                        isAboutTab || isSettingsTab
+                          ? "border-pink-500 text-foreground"
+                          : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+                      )}
                     >
-                      <Info className="h-4 w-4" />
-                      About
-                    </Link>
-                  </DropdownMenuItem>
-                  {isMaintainer && (
+                      <MoreHorizontal className="h-4 w-4" />
+                      <span className="sr-only">More</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
                     <DropdownMenuItem asChild>
                       <Link
-                        to={`${basePath}/settings`}
+                        to={`${basePath}/about`}
                         className="flex items-center gap-2"
                       >
-                        <Settings className="h-4 w-4" />
-                        Settings
+                        <Info className="h-4 w-4" />
+                        About
                       </Link>
                     </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </nav>
+                    {isMaintainer && (
+                      <DropdownMenuItem asChild>
+                        <Link
+                          to={`${basePath}/settings`}
+                          className="flex items-center gap-2"
+                        >
+                          <Settings className="h-4 w-4" />
+                          Settings
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </nav>
+          </div>
         </div>
-      </div>
 
-      {/* Page content */}
-      {ctxValue ? (
-        <GitCommitLinkContext.Provider value={gitCommitLinkCtxValue}>
-          <RepoContext.Provider value={ctxValue}>
-            {subPage === "code" ? (
-              <RepoCodePage />
-            ) : subPage === "commits" ? (
-              <RepoCommitsPage />
-            ) : subPage === "commit" ? (
-              <RepoCommitPage />
-            ) : subPage === "issue" ? (
-              <IssuePage />
-            ) : subPage === "issues" ? (
-              <RepoIssuesPage />
-            ) : subPage === "pr" ? (
-              <PRPage />
-            ) : subPage === "pr-commit" ? (
-              <PRPage />
-            ) : subPage === "prs" ? (
-              <RepoPRsPage />
-            ) : subPage === "about" ? (
-              <RepoAboutPage />
-            ) : subPage === "edit" ? (
-              <RepoEditPage />
-            ) : subPage === "settings" ? (
-              <RepoSettingsPage />
-            ) : null}
-          </RepoContext.Provider>
-        </GitCommitLinkContext.Provider>
-      ) : repoSearch &&
-        (repoSearch.concludedNotFound ||
-          repoSearch.deleted ||
-          repoSearch.vanished ||
-          (Object.keys(repoSearch.relayStatuses).length > 0 &&
-            repoSearchDelayElapsed)) &&
-        !repoSearch.found ? (
-        <EventSearchStatus
-          search={repoSearch}
-          itemLabel="Repository"
-          backPath="/"
-          backLabel="Back to repositories"
-          searchMoreActive={true}
-        />
-      ) : subPage === "issue" || subPage === "pr" || subPage === "pr-commit" ? (
-        /* Show an issue/PR-shaped skeleton while the repo context resolves,
+        {/* Page content */}
+        {ctxValue ? (
+          <GitCommitLinkContext.Provider value={gitCommitLinkCtxValue}>
+            <RepoContext.Provider value={ctxValue}>
+              {subPage === "code" ? (
+                <RepoCodePage />
+              ) : subPage === "commits" ? (
+                <RepoCommitsPage />
+              ) : subPage === "commit" ? (
+                <RepoCommitPage />
+              ) : subPage === "issue" ? (
+                <IssuePage />
+              ) : subPage === "issues" ? (
+                <RepoIssuesPage />
+              ) : subPage === "pr" ? (
+                <PRPage />
+              ) : subPage === "pr-commit" ? (
+                <PRPage />
+              ) : subPage === "prs" ? (
+                <RepoPRsPage />
+              ) : subPage === "about" ? (
+                <RepoAboutPage />
+              ) : subPage === "edit" ? (
+                <RepoEditPage />
+              ) : subPage === "settings" ? (
+                <RepoSettingsPage />
+              ) : null}
+            </RepoContext.Provider>
+          </GitCommitLinkContext.Provider>
+        ) : repoSearch &&
+          (repoSearch.concludedNotFound ||
+            repoSearch.deleted ||
+            repoSearch.vanished ||
+            (Object.keys(repoSearch.relayStatuses).length > 0 &&
+              repoSearchDelayElapsed)) &&
+          !repoSearch.found ? (
+          <EventSearchStatus
+            search={repoSearch}
+            itemLabel="Repository"
+            backPath="/"
+            backLabel="Back to repositories"
+            searchMoreActive={true}
+          />
+        ) : subPage === "issue" ||
+          subPage === "pr" ||
+          subPage === "pr-commit" ? (
+          /* Show an issue/PR-shaped skeleton while the repo context resolves,
            so the transition to the real page feels seamless. */
-        <>
-          <div className="border-b border-border/40">
-            <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-4">
-              <div className="space-y-3">
-                <div className="flex gap-3">
-                  <Skeleton className="h-6 w-16 rounded-full" />
-                  <Skeleton className="h-7 w-96" />
-                </div>
-                <div className="flex gap-3">
-                  <Skeleton className="h-6 w-6 rounded-full" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-20" />
+          <>
+            <div className="border-b border-border/40">
+              <div className="container max-w-screen-xl px-4 md:px-8 pt-6 pb-4">
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                    <Skeleton className="h-7 w-96" />
+                  </div>
+                  <div className="flex gap-3">
+                    <Skeleton className="h-6 w-6 rounded-full" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </>
-      ) : null}
-    </div>
+          </>
+        ) : null}
+      </div>
+    </RepoRelaysContext.Provider>
   );
 }
 

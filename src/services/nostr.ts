@@ -993,7 +993,7 @@ export function nip34RepoLoader(
 
     const repoMetaFilters = [
       {
-        kinds: [REACTION_KIND, GIT_REPOS_FOLLOW_KIND],
+        kinds: [REACTION_KIND, GIT_REPOS_FOLLOW_KIND, 9735],
         "#a": coords,
       } as Filter,
     ];

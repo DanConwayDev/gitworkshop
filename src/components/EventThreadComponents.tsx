@@ -30,6 +30,7 @@ import {
   ShieldAlert,
   Tag,
   Trash2,
+  Zap,
 } from "lucide-react";
 import { EventCardActions } from "@/components/EventCardActions";
 import { CommentContent } from "@/components/CommentContent";
@@ -70,6 +71,8 @@ import { useActiveAccount } from "applesauce-react/hooks";
 import { DeleteEvent } from "@/actions/nip34";
 import { runner } from "@/services/actions";
 import { parseInlineCommentLocation } from "@/lib/inlineComment";
+import { ReactionsBar } from "@/components/ReactionsBar";
+import { ZapsBar } from "@/components/zap/ZapsBar";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -276,6 +279,14 @@ export function EventBodyCard({
               </div>
             </div>
           )}
+          <div className="flex flex-wrap items-center gap-3 pt-1 empty:hidden">
+            <ZapsBar event={event} />
+            <ReactionsBar
+              event={event}
+              repoCoords={repoCoords}
+              className="pt-0"
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -725,6 +736,79 @@ export function LabelChangeCard({
             label="label change"
           />
         )}
+        <EventCardActions event={event} />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ZapMessageCard — compact timeline card for a notable zap with a message
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders a kind:9735 zap receipt as a compact timeline entry.
+ *
+ * Only shown when the zap meets the display threshold (message > 18 chars
+ * or amount > 499 sats). Mirrors the layout of StatusChangeCard /
+ * LabelChangeCard: left icon strip + one-liner of metadata + message.
+ */
+export function ZapMessageCard({
+  event,
+  sender,
+  amountSats,
+  message,
+}: {
+  event: NostrEvent;
+  sender: string | undefined;
+  amountSats: number;
+  message: string;
+}) {
+  const timeAgo = formatDistanceToNow(new Date(event.created_at * 1000), {
+    addSuffix: true,
+  });
+
+  return (
+    <div className="relative flex gap-3 py-1.5 pl-1">
+      <div className="flex items-start pt-0.5">
+        <div className="flex items-center justify-center h-8 w-8 rounded-full border border-amber-200/50 bg-amber-50/20 dark:border-amber-800/40 dark:bg-amber-950/20 shrink-0">
+          <Zap className="h-3.5 w-3.5 text-amber-500" />
+        </div>
+      </div>
+
+      <div className="flex-1 min-w-0 pt-1">
+        <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+          {sender ? (
+            <UserLink
+              pubkey={sender}
+              avatarSize="sm"
+              nameClassName="text-sm font-medium text-foreground"
+            />
+          ) : (
+            <span className="text-sm font-medium text-foreground">
+              Anonymous
+            </span>
+          )}
+          <span>zapped</span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200/60 bg-amber-50/30 dark:border-amber-800/40 dark:bg-amber-950/20 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+            <Zap className="h-3 w-3" />
+            {amountSats.toLocaleString()} sats
+          </span>
+          {message && (
+            <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {timeAgo}
+            </span>
+          )}
+        </div>
+        {message && (
+          <p className="mt-1 text-sm text-foreground/80 break-words">
+            {message}
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
         <EventCardActions event={event} />
       </div>
     </div>

@@ -4,6 +4,7 @@
  */
 
 import type { NostrEvent } from "nostr-tools";
+import { getZapAmount } from "applesauce-common/helpers";
 import type {
   NotificationItem,
   SocialNotificationItem,
@@ -21,6 +22,8 @@ import {
   PR_UPDATE_KIND,
   extractPatchSubject,
 } from "@/lib/nip34";
+import { ZAP_RECEIPT_KIND } from "@/lib/notifications";
+import { compactNumber } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Root type inference
@@ -171,6 +174,7 @@ export function buildNotificationSummary(
   let reopened = false;
   let drafted = false;
   let newRevision = false;
+  let zapSats = 0;
 
   for (const ev of unreadEvents) {
     if (ev.kind === COVER_NOTE_KIND) {
@@ -187,6 +191,8 @@ export function buildNotificationSummary(
       drafted = true;
     } else if (ev.kind === PR_UPDATE_KIND) {
       newRevision = true;
+    } else if (ev.kind === ZAP_RECEIPT_KIND) {
+      zapSats += Math.floor((getZapAmount(ev) ?? 0) / 1000);
     }
   }
 
@@ -207,6 +213,9 @@ export function buildNotificationSummary(
     parts.push(
       `${coverNoteCount} cover ${coverNoteCount === 1 ? "note" : "notes"} updated`,
     );
+  }
+  if (zapSats > 0) {
+    parts.push(`${compactNumber(zapSats)} zapped`);
   }
 
   const unreadText = parts.length > 0 ? parts.join(" · ") : undefined;
