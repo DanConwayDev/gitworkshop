@@ -18,6 +18,7 @@ import {
   SubjectRenameCard,
   StatusChangeCard,
   LabelChangeCard,
+  ZapMessageCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
 
@@ -1378,6 +1379,17 @@ export default function PRPage() {
                                 labels={node.labels}
                                 authorised={node.authorised}
                                 repoCoords={repoAllCoords ?? pr.repoCoords}
+                              />
+                            );
+                          }
+                          if (node.type === "zap") {
+                            return (
+                              <ZapMessageCard
+                                key={node.event.id}
+                                event={node.event}
+                                sender={node.sender}
+                                amountSats={node.amountSats}
+                                message={node.message}
                               />
                             );
                           }

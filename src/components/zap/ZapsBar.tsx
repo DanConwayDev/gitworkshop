@@ -16,6 +16,7 @@ import {
   getZapAmount,
   getZapSender,
   isValidZap,
+  getZapRequest,
 } from "applesauce-common/helpers";
 import { EventZapsModel } from "applesauce-common/models";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -63,6 +64,7 @@ export function ZapsBar({ event, className }: ZapsBarProps) {
         event: ev,
         sender: getZapSender(ev),
         amountSats: Math.floor((getZapAmount(ev) ?? 0) / 1000),
+        message: (getZapRequest(ev)?.content ?? "").trim(),
       }))
       .filter((z) => z.amountSats > 0)
       .sort((a, b) => b.amountSats - a.amountSats);
@@ -126,6 +128,7 @@ export function ZapsBar({ event, className }: ZapsBarProps) {
                   key={z.event.id}
                   sender={z.sender}
                   amountSats={z.amountSats}
+                  message={z.message}
                 />
               ))}
             </div>
@@ -243,22 +246,32 @@ export function ZapsBar({ event, className }: ZapsBarProps) {
 function ZapperCard({
   sender,
   amountSats,
+  message,
 }: {
   sender: string | undefined;
   amountSats: number;
+  message: string;
 }) {
   return (
-    <div className="inline-flex items-center rounded-lg border border-amber-200/40 overflow-hidden">
-      {/* Amount */}
-      <div className="px-2.5 py-1 bg-amber-50/20 dark:bg-amber-950/20 text-xs font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1">
-        <Zap className="h-3 w-3 shrink-0" />
-        <span>{amountSats.toLocaleString()}</span>
-      </div>
-      {/* Sender */}
-      {sender && (
-        <div className="flex items-center gap-1.5 px-2 py-1 bg-background/60">
-          <UserLink pubkey={sender} avatarSize="sm" nameClassName="text-xs" />
+    <div className="flex flex-col rounded-lg border border-amber-200/40 overflow-hidden">
+      <div className="flex items-center">
+        {/* Amount */}
+        <div className="px-2.5 py-1 bg-amber-50/20 dark:bg-amber-950/20 text-xs font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1 shrink-0">
+          <Zap className="h-3 w-3 shrink-0" />
+          <span>{amountSats.toLocaleString()}</span>
         </div>
+        {/* Sender */}
+        {sender && (
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-background/60">
+            <UserLink pubkey={sender} avatarSize="sm" nameClassName="text-xs" />
+          </div>
+        )}
+      </div>
+      {/* Message */}
+      {message && (
+        <p className="px-2.5 py-1.5 text-xs text-foreground/80 border-t border-amber-200/30 break-words">
+          {message}
+        </p>
       )}
     </div>
   );

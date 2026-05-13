@@ -372,6 +372,7 @@ export function PRDetailModel(
             deletedEssentialEventIds: core.deletedEssentialEventIds,
             revisions,
             revisionRootIds,
+            zaps,
           });
 
           // ── Participants ────────────────────────────────────────────

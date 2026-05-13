@@ -171,6 +171,7 @@ export function IssueDetailModel(
             essentials,
             authorisedUsers: core.authorisedUsers,
             deletedEssentialEventIds: core.deletedEssentialEventIds,
+            zaps,
           });
 
           // ── Participants ────────────────────────────────────────────

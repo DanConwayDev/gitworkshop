@@ -14,6 +14,7 @@ import {
   SubjectRenameCard,
   StatusChangeCard,
   LabelChangeCard,
+  ZapMessageCard,
 } from "@/components/EventThreadComponents";
 import { ThreadTree } from "@/components/ThreadTree";
 import { EventSearchStatus } from "@/components/EventSearchStatus";
@@ -348,6 +349,17 @@ export default function IssuePage() {
                             labels={node.labels}
                             authorised={node.authorised}
                             repoCoords={repoAllCoords ?? issue.repoCoords}
+                          />
+                        );
+                      }
+                      if (node.type === "zap") {
+                        return (
+                          <ZapMessageCard
+                            key={node.event.id}
+                            event={node.event}
+                            sender={node.sender}
+                            amountSats={node.amountSats}
+                            message={node.message}
                           />
                         );
                       }
