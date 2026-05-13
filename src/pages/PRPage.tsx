@@ -55,7 +55,7 @@ import {
   PatchSetPushEvent,
   PRUpdatePushEvent,
 } from "@/components/PushEventComponents";
-import { cn } from "@/lib/utils";
+import { cn, compactNumber } from "@/lib/utils";
 import { PRFilesTab } from "@/components/PRFilesTab";
 import { PatchFilesTab } from "@/components/PatchFilesTab";
 import { diffTrees, generateUnifiedDiff } from "@/lib/git-grasp-pool";
@@ -1641,7 +1641,7 @@ export default function PRPage() {
                         <Zap className="h-4 w-4 text-amber-500" />
                         <span className="text-muted-foreground">Zaps</span>
                         <span className="ml-auto font-medium">
-                          {pr.zapTotal} sats
+                          {compactNumber(pr.zapTotal)} sats
                         </span>
                       </div>
                     ) : null}

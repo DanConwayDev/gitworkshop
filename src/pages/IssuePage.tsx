@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NostrEvent } from "nostr-tools";
 import { Link } from "react-router-dom";
 import { repoToPath } from "@/lib/routeUtils";
+import { compactNumber } from "@/lib/utils";
 import { useSeoMeta } from "@unhead/react";
 import { useProfile } from "@/hooks/useProfile";
 import { useActiveAccount } from "applesauce-react/hooks";
@@ -412,7 +413,7 @@ export default function IssuePage() {
                         <Zap className="h-4 w-4 text-amber-500" />
                         <span className="text-muted-foreground">Zaps</span>
                         <span className="ml-auto font-medium">
-                          {issue.zapTotal} sats
+                          {compactNumber(issue.zapTotal)} sats
                         </span>
                       </div>
                     ) : null}
