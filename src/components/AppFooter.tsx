@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Sun, Moon, SunMoon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { use$ } from "@/hooks/use$";
 import { themeMode, cycleThemeMode, type ThemeMode } from "@/services/settings";
@@ -7,7 +7,7 @@ import { themeMode, cycleThemeMode, type ThemeMode } from "@/services/settings";
 const THEME_ICON: Record<ThemeMode, typeof Sun> = {
   light: Sun,
   dark: Moon,
-  system: Monitor,
+  system: SunMoon,
 };
 
 const NEXT_MODE: Record<ThemeMode, ThemeMode> = {
