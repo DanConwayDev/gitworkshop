@@ -70,6 +70,8 @@ import { useActiveAccount } from "applesauce-react/hooks";
 import { DeleteEvent } from "@/actions/nip34";
 import { runner } from "@/services/actions";
 import { parseInlineCommentLocation } from "@/lib/inlineComment";
+import { ReactionsBar } from "@/components/ReactionsBar";
+import { ZapsBar } from "@/components/zap/ZapsBar";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 
@@ -276,6 +278,14 @@ export function EventBodyCard({
               </div>
             </div>
           )}
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <ZapsBar event={event} />
+            <ReactionsBar
+              event={event}
+              repoCoords={repoCoords}
+              className="pt-0"
+            />
+          </div>
         </CardContent>
       </Card>
 
