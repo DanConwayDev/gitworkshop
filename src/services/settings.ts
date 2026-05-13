@@ -1,4 +1,10 @@
-import { BehaviorSubject, Observable, Subject, Subscription } from "rxjs";
+import {
+  BehaviorSubject,
+  Observable,
+  Subject,
+  Subscription,
+  combineLatest,
+} from "rxjs";
 import { map, distinctUntilChanged } from "rxjs/operators";
 import { normalizeUrl } from "@/lib/url";
 
@@ -261,13 +267,22 @@ export const DEFAULT_GRASP_SERVERS: readonly string[] = [
 // Theme
 // ---------------------------------------------------------------------------
 
-function getSystemTheme(): "light" | "dark" {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
+/**
+ * What the user picks. "system" follows the OS via prefers-color-scheme and
+ * tracks changes live; "light" and "dark" are explicit overrides.
+ */
+export type ThemeMode = "light" | "dark" | "system";
+
+/** What actually applies to the DOM after resolving "system". */
+export type ResolvedTheme = "light" | "dark";
+
+function readStoredMode(): ThemeMode {
+  const saved = localStorage.getItem("theme");
+  if (saved === "light" || saved === "dark" || saved === "system") return saved;
+  return "system";
 }
 
-function applyTheme(t: "light" | "dark") {
+function applyTheme(t: ResolvedTheme) {
   if (t === "dark") {
     document.documentElement.classList.add("dark");
   } else {
@@ -275,20 +290,61 @@ function applyTheme(t: "light" | "dark") {
   }
 }
 
-export const theme = new BehaviorSubject<"light" | "dark">(getSystemTheme());
+/** The user's selected mode. Read this for UI state (icon, dropdown value). */
+export const themeMode = new BehaviorSubject<ThemeMode>(readStoredMode());
 
-// Apply theme class on every change
-theme.subscribe(applyTheme);
-
-// Persist user preference; omit key when it matches the system default so
-// future system-theme changes are respected by users who haven't customised it.
-persist(theme, "theme", {
-  serialize: (v) => v,
-  deserialize: (v) => (v === "light" || v === "dark" ? v : getSystemTheme()),
+// Tracks the OS preference live. matchMedia fires whenever the user flips
+// their system theme — when mode is "system" this propagates to the app
+// without needing a reload.
+const systemMql = window.matchMedia("(prefers-color-scheme: dark)");
+export const systemTheme = new BehaviorSubject<ResolvedTheme>(
+  systemMql.matches ? "dark" : "light",
+);
+systemMql.addEventListener("change", (e) => {
+  systemTheme.next(e.matches ? "dark" : "light");
 });
 
-export function toggleTheme() {
-  theme.next(theme.getValue() === "dark" ? "light" : "dark");
+/** What's actually painted. Subscribe to this to react to theme changes. */
+export const resolvedTheme: Observable<ResolvedTheme> = combineLatest([
+  themeMode,
+  systemTheme,
+]).pipe(
+  map(([mode, sys]) => (mode === "system" ? sys : mode)),
+  distinctUntilChanged(),
+);
+
+resolvedTheme.subscribe(applyTheme);
+
+// Persist the user's mode. `defaultValue: "system"` makes persist() DELETE
+// the localStorage key whenever the user picks "system" again — so they go
+// back to following the OS instead of being locked into a snapshot of it.
+persist(themeMode, "theme", {
+  serialize: (v) => v,
+  deserialize: (v) =>
+    v === "light" || v === "dark" || v === "system" ? v : "system",
+  defaultValue: "system",
+});
+
+export function setThemeMode(mode: ThemeMode) {
+  themeMode.next(mode);
+}
+
+/**
+ * Cycle order adapts to the current OS theme so clicking from system always
+ * produces a visible change (never lands on the same resolved colour):
+ *   OS=light:  system → dark → light → system
+ *   OS=dark:   system → light → dark → system
+ */
+export function cycleThemeMode() {
+  const current = themeMode.getValue();
+  const osDark = systemMql.matches;
+  if (current === "system") {
+    themeMode.next(osDark ? "light" : "dark");
+  } else if (current === "light") {
+    themeMode.next(osDark ? "dark" : "system");
+  } else {
+    themeMode.next(osDark ? "system" : "light");
+  }
 }
 
 // ---------------------------------------------------------------------------
