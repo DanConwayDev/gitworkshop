@@ -600,7 +600,7 @@ export function ThreadComment({
       <div className="sm:ml-[38px]">
         <CommentContent content={event.content} />
         {ctx && (
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+          <div className="flex flex-wrap items-center gap-3 pt-2 empty:hidden">
             <ZapsBar event={event} />
             <ReactionsBar
               event={event}

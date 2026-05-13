@@ -85,14 +85,13 @@ export function ZapsBar({ event, className }: ZapsBarProps) {
   const isSelf = account?.pubkey === event.pubkey;
   let disabledReason: string | null = null;
   if (!account) disabledReason = "Sign in to zap";
-  else if (isSelf) disabledReason = "You can't zap yourself";
   // Only report "no lightning address" once the profile has actually loaded
   // (profile === undefined means still loading; null/object means loaded)
   else if (profile !== undefined && !lnurl)
     disabledReason = "Recipient has no lightning address";
 
-  // Mirror ReactionsBar: hide entirely when nothing to show and not logged in
-  if (totalSats === 0 && !account) return null;
+  // Hide entirely when nothing to show and not able to interact
+  if (totalSats === 0 && (!account || isSelf)) return null;
 
   const zapBtn = (
     <button
@@ -135,6 +134,7 @@ export function ZapsBar({ event, className }: ZapsBarProps) {
           {/* Bottom row: zap button + close — mirrors ReactionsBar picker row */}
           <div className="flex flex-wrap items-center gap-1">
             {account &&
+              !isSelf &&
               (disabledReason ? (
                 <TooltipProvider delayDuration={150}>
                   <Tooltip>
@@ -205,8 +205,9 @@ export function ZapsBar({ event, className }: ZapsBarProps) {
             </button>
           )}
 
-          {/* Zap button — always shown when logged in */}
+          {/* Zap button — hidden for own events */}
           {account &&
+            !isSelf &&
             (disabledReason ? (
               <TooltipProvider delayDuration={150}>
                 <Tooltip>

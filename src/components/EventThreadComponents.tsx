@@ -278,7 +278,7 @@ export function EventBodyCard({
               </div>
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center gap-3 pt-1 empty:hidden">
             <ZapsBar event={event} />
             <ReactionsBar
               event={event}
