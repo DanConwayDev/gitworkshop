@@ -253,8 +253,9 @@ function ZapperCard({
   message: string;
 }) {
   return (
-    <div className="flex flex-col rounded-lg border border-amber-200/40 overflow-hidden">
-      <div className="flex items-center">
+    <div className="flex flex-col sm:flex-row sm:items-center rounded-lg border border-amber-200/40 overflow-hidden">
+      {/* Amount + Sender — fixed-width left column */}
+      <div className="flex items-center shrink-0">
         {/* Amount */}
         <div className="px-2.5 py-1 bg-amber-50/20 dark:bg-amber-950/20 text-xs font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1 shrink-0">
           <Zap className="h-3 w-3 shrink-0" />
@@ -267,9 +268,15 @@ function ZapperCard({
           </div>
         )}
       </div>
-      {/* Message */}
+      {/* Message — below on mobile, right-side column on sm+ */}
       {message && (
-        <p className="px-2.5 py-1.5 text-xs text-foreground/80 border-t border-amber-200/30 break-words">
+        <p
+          className={cn(
+            "px-2.5 py-1.5 text-xs text-foreground/70 break-words",
+            "border-t border-amber-200/30",
+            "sm:border-t-0 sm:border-l sm:flex-1 sm:min-w-0 sm:truncate sm:py-1",
+          )}
+        >
           {message}
         </p>
       )}
