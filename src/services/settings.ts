@@ -329,12 +329,22 @@ export function setThemeMode(mode: ThemeMode) {
   themeMode.next(mode);
 }
 
-/** Cycle order: system → light → dark → system. */
+/**
+ * Cycle order adapts to the current OS theme so clicking from system always
+ * produces a visible change (never lands on the same resolved colour):
+ *   OS=light:  system → dark → light → system
+ *   OS=dark:   system → light → dark → system
+ */
 export function cycleThemeMode() {
   const current = themeMode.getValue();
-  themeMode.next(
-    current === "system" ? "light" : current === "light" ? "dark" : "system",
-  );
+  const osDark = systemMql.matches;
+  if (current === "system") {
+    themeMode.next(osDark ? "light" : "dark");
+  } else if (current === "light") {
+    themeMode.next(osDark ? "dark" : "system");
+  } else {
+    themeMode.next(osDark ? "system" : "light");
+  }
 }
 
 // ---------------------------------------------------------------------------
