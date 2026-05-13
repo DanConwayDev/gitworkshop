@@ -33,6 +33,7 @@ import type { Filter } from "applesauce-core/helpers";
 import {
   getCommentRootPointer,
   getNip10References,
+  getZapAmount,
 } from "applesauce-common/helpers";
 import {
   ISSUE_KIND,
@@ -347,9 +348,12 @@ export function buildRepoZapFilter(
   since?: number,
 ): Filter {
   const timeConstraint: Partial<Filter> = since ? { since } : { limit: 50 };
+  // Note: we do NOT include "#k" here. Per NIP-57 Appendix E, the zap receipt
+  // only copies p/e/a/P from the zap request; the k tag is in the request only
+  // and is not reliably propagated to the receipt by all LNURL servers.
+  // The #a coord filter alone is sufficient to identify repo zaps.
   return {
     kinds: [ZAP_RECEIPT_KIND],
-    "#k": [String(REPO_KIND)],
     "#a": repoCoords,
     ...timeConstraint,
   } as Filter;
@@ -673,13 +677,11 @@ export function groupRepoZapNotifications(
     // unreadEvents is newest-first; reverse gives oldest-first IDs
     const unreadEventIds = unreadEvents.map((ev) => ev.id).reverse();
 
-    // Sum sats across all zap receipts in this group.
-    // Amount is in the bolt11 tag's description; use a lightweight parse of
-    // the amount tag from the embedded zap request for a quick total.
+    // Sum sats across all zap receipts in this group via the bolt11 invoice.
     let totalSats = 0;
     for (const ev of events) {
-      const amountMsats = extractZapAmountMsats(ev);
-      if (amountMsats > 0) totalSats += Math.floor(amountMsats / 1000);
+      const msats = getZapAmount(ev) ?? 0;
+      if (msats > 0) totalSats += Math.floor(msats / 1000);
     }
 
     items.push({
@@ -696,30 +698,6 @@ export function groupRepoZapNotifications(
   }
 
   return items;
-}
-
-/**
- * Extract the zap amount in millisats from a kind:9735 zap receipt by parsing
- * the `amount` tag from the embedded kind:9734 zap request (the `description`
- * tag on the receipt). Returns 0 if the amount cannot be determined.
- *
- * We intentionally avoid importing applesauce-common's getZapAmount here to
- * keep notifications.ts dependency-free of that package.
- */
-function extractZapAmountMsats(zapReceipt: NostrEvent): number {
-  try {
-    const description = zapReceipt.tags.find(([t]) => t === "description")?.[1];
-    if (!description) return 0;
-    const zapRequest = JSON.parse(description) as {
-      tags?: string[][];
-    };
-    const amountStr = zapRequest.tags?.find(([t]) => t === "amount")?.[1];
-    if (!amountStr) return 0;
-    const amount = Number(amountStr);
-    return Number.isFinite(amount) && amount > 0 ? amount : 0;
-  } catch {
-    return 0;
-  }
 }
 
 /**
