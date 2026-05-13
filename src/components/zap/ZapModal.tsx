@@ -38,6 +38,7 @@ import {
 } from "@/lib/zap";
 import { pool, eventStore } from "@/services/nostr";
 import { fallbackRelays } from "@/services/settings";
+import { useRepoRelays } from "@/contexts/RepoRelaysContext";
 import {
   walletConnect$,
   setWalletConnectUri,
@@ -76,13 +77,6 @@ interface ZapModalProps {
   onOpenChange: (open: boolean) => void;
   event: NostrEvent;
   lnurl: string;
-  /**
-   * Additional relays to include in the zap request's `relays` tag so the
-   * LNURL provider publishes the receipt there. Pass the repo-declared relays
-   * when zapping a repo announcement — this ensures the receipt lands where
-   * nip34RepoLoader is already subscribed.
-   */
-  extraRelays?: string[];
 }
 
 function describeWalletError(err: unknown): {
@@ -121,19 +115,14 @@ function describeWalletError(err: unknown): {
   return { message: "Payment failed.", canRetry: true };
 }
 
-export function ZapModal({
-  open,
-  onOpenChange,
-  event,
-  lnurl,
-  extraRelays = [],
-}: ZapModalProps) {
+export function ZapModal({ open, onOpenChange, event, lnurl }: ZapModalProps) {
   const account = useActiveAccount();
   const recipient = useUser(event.pubkey);
   const recipientProfile = use$(() => recipient?.profile$, [recipient]);
   const recipientInboxes = use$(() => recipient?.inboxes$, [recipient]);
   const sender = useUser(account?.pubkey);
   const senderOutboxes = use$(() => sender?.outboxes$, [sender]);
+  const repoRelays = useRepoRelays();
   const myFallbackRelays = use$(fallbackRelays);
   const wallet = use$(walletConnect$);
   const weblnAvailable = useMemo(() => hasWebLN(), []);
@@ -323,7 +312,7 @@ export function ZapModal({
         recipientInboxes,
         myFallbackRelays,
         8,
-        extraRelays,
+        repoRelays,
         senderOutboxes ?? [],
       );
 
@@ -360,7 +349,7 @@ export function ZapModal({
     recipientInboxes,
     senderOutboxes,
     myFallbackRelays,
-    extraRelays,
+    repoRelays,
     event,
     amountMsats,
     message,

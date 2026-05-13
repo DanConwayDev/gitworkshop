@@ -192,9 +192,6 @@ export function RepoZapButton({
           onOpenChange={setZapModalOpen}
           event={targetAnnouncement}
           lnurl={lnurl}
-          extraRelays={targetAnnouncement.tags
-            .filter((t) => t[0] === "relays")
-            .flatMap((t) => t.slice(1))}
         />
       )}
     </>
