@@ -33,7 +33,7 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn, compactNumber } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // ZapsBar
@@ -198,10 +198,10 @@ export function ZapsBar({ event, className }: ZapsBarProps) {
                 "dark:border-amber-800/40 dark:bg-amber-950/20 dark:text-amber-400",
                 "hover:bg-amber-100/50 dark:hover:bg-amber-900/30 transition-colors",
               )}
-              aria-label={`${totalSats.toLocaleString()} sats in zaps — click to expand`}
+              aria-label={`${compactNumber(totalSats)} sats in zaps — click to expand`}
             >
               <Zap className="h-3 w-3" />
-              <span>{totalSats.toLocaleString()}</span>
+              <span>{compactNumber(totalSats)}</span>
             </button>
           )}
 

@@ -25,7 +25,7 @@ import { useLoadProfile } from "@/hooks/useLoadProfile";
 import { useRepoZaps } from "@/hooks/useRepoZaps";
 import { useAuthModal } from "@/contexts/AuthModalContext";
 import { getRecipientLnurl } from "@/lib/zap";
-import { cn } from "@/lib/utils";
+import { cn, compactNumber } from "@/lib/utils";
 import {
   Popover,
   PopoverContent,
@@ -144,7 +144,7 @@ export function RepoZapButton({
           <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
             <PopoverTrigger asChild>
               <button type="button" className={countBtnClass}>
-                {formatSats(totalSats)}
+                {compactNumber(totalSats)}
               </button>
             </PopoverTrigger>
             <PopoverContent
@@ -155,7 +155,7 @@ export function RepoZapButton({
               <div className="px-3 py-2 border-b border-border flex items-center gap-1.5">
                 <Zap className="h-3.5 w-3.5 text-amber-500" />
                 <p className="text-xs font-medium text-muted-foreground">
-                  {formatSats(totalSats)} sats from{" "}
+                  {compactNumber(totalSats)} sats from{" "}
                   {zappers.length === 1
                     ? "1 zapper"
                     : `${zappers.length} zappers`}
@@ -174,7 +174,7 @@ export function RepoZapButton({
                         nameClassName="text-sm"
                       />
                       <span className="text-xs font-medium text-amber-600 dark:text-amber-400 tabular-nums shrink-0">
-                        {formatSats(z.totalSats)}
+                        {compactNumber(z.totalSats)}
                       </span>
                     </div>
                   ))}
@@ -196,12 +196,4 @@ export function RepoZapButton({
       )}
     </>
   );
-}
-
-/** Format sats for compact display: e.g. 21000 → "21,000", 1200000 → "1.2M" */
-function formatSats(sats: number): string {
-  if (sats >= 1_000_000)
-    return `${(sats / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (sats >= 10_000) return `${(sats / 1_000).toFixed(0)}k`;
-  return sats.toLocaleString();
 }
