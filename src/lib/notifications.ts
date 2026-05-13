@@ -76,16 +76,6 @@ export const REACTION_KIND = 7;
 /** NIP-57 kind:9735 — zap receipt */
 export const ZAP_RECEIPT_KIND = 9735;
 
-/**
- * The set of NIP-34 + NIP-22 kind values (as strings) that we care about for
- * thread/comment zap notifications. Used in #k relay-side tag filters so we
- * only receive zap receipts on git-related events, not generic kind:1 notes.
- */
-export const ZAP_THREAD_K_VALUES = [
-  ...NIP34_ROOT_KINDS.map(String),
-  String(COMMENT_KIND),
-] as const;
-
 /** Prefix for repo-star notification rootIds */
 export const REPO_STARS_PREFIX = "stars:";
 
@@ -234,12 +224,16 @@ export function buildNotificationBadgeFilters(pubkey: string): Filter[] {
       "#p": [pubkey],
       limit: 10,
     } as Filter,
-    // Zap receipts (thread items + comments) where we are the recipient.
-    // #k limits to git-related kinds so generic kind:1 zaps don't flood us.
+    // Zap receipts where we are the recipient and the zap targets an event
+    // (i.e. has an #e tag). Note: we do NOT filter by #k here — the k tag is
+    // in the zap *request*, not the receipt, and is not reliably copied to the
+    // receipt by all LNURL servers. Client-side routing in
+    // getNotificationRootId handles the absent-k case by falling through to
+    // the #e tag, and groupNotifications skips receipts with no resolvable
+    // root (e.g. profile zaps with no #e).
     {
       kinds: [ZAP_RECEIPT_KIND],
       "#p": [pubkey],
-      "#k": [...ZAP_THREAD_K_VALUES],
       limit: 10,
     } as Filter,
   ];
@@ -299,11 +293,11 @@ export function buildNotificationFilters(
       "#p": [pubkey],
       ...timeConstraint,
     } as Filter,
-    // Zap receipts on thread items + comments (#k excludes repo-kind=30617)
+    // Zap receipts where we are the recipient. No #k filter — see comment in
+    // buildNotificationBadgeFilters for rationale.
     {
       kinds: [ZAP_RECEIPT_KIND],
       "#p": [pubkey],
-      "#k": [...ZAP_THREAD_K_VALUES],
       ...timeConstraint,
     } as Filter,
   ];
