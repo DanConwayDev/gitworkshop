@@ -130,6 +130,13 @@ export interface NotificationStoreEntry {
   historyLoader: ManualTimelineLoader | null;
   /** Debounce timer handle — owned here so notificationSync can clear it */
   publishTimer: ReturnType<typeof setTimeout> | null;
+  /**
+   * The created_at of the most recent state event we published (or loaded from
+   * the store on startup). Used by watchNip78Event to decide whether an
+   * incoming relay state event is newer (replace) or older/equal (merge).
+   * 0 means we haven't published or loaded a state event yet this session.
+   */
+  lastPublishedStateAt: number;
   /** Subscription teardown */
   cleanup: (() => void) | null;
   /** Reference count — cleaned up when it drops to 0 */
@@ -364,7 +371,11 @@ export function acquireNotificationStore(
           }).subscribe();
         });
 
-  const nip78WatchSub = watchNip78Event(pubkey, readState$, notifPubkey$);
+  // nip78WatchSub is assigned after entry is constructed so we can pass entry
+  // directly as the PublishTimerHolder — entry satisfies the interface and
+  // shares the same lastPublishedStateAt field that publishReadState writes.
+  // eslint-disable-next-line prefer-const
+  let nip78WatchSub!: import("rxjs").Subscription;
 
   // ---------------------------------------------------------------------------
   // Repo discovery — own repos for relay coverage and star notifications
@@ -486,6 +497,7 @@ export function acquireNotificationStore(
     repoCoords$,
     historyLoader: null,
     publishTimer: null,
+    lastPublishedStateAt: 0,
     cleanup: () => {
       localSub.unsubscribe();
       badgeSub.unsubscribe();
@@ -502,6 +514,11 @@ export function acquireNotificationStore(
     },
     refCount: 1,
   };
+
+  // watchNip78Event is called after entry is constructed so we can pass entry
+  // directly as the PublishTimerHolder. entry.lastPublishedStateAt is written
+  // by publishReadState and read by the watcher — same object, no stale refs.
+  nip78WatchSub = watchNip78Event(pubkey, readState$, notifPubkey$, entry);
 
   // Attach the lazy loader factory to the entry via closure
   (

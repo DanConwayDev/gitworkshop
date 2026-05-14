@@ -316,11 +316,11 @@ const PUBLISH_DEBOUNCE_MS = 2000;
 export async function publishReadState(
   pubkey: string,
   state: NotificationReadState,
+  holder?: PublishTimerHolder,
 ): Promise<void> {
   try {
     const notifSigner = await getOrCreateNotificationSigner(pubkey);
     if (!notifSigner) return;
-
     const { outboxStore } = await import("@/services/outbox");
 
     // Encrypt + sign with the dedicated notification keypair (self-encrypt:
@@ -339,6 +339,10 @@ export async function publishReadState(
       .encryptedContent(notifPubkey, JSON.stringify(state), "nip44")
       .sign();
 
+    // Record the timestamp of this publish so watchNip78Event can distinguish
+    // our own events from events published by another device/tab.
+    if (holder) holder.lastPublishedStateAt = signed.created_at;
+
     // Add to local store immediately for optimistic updates
     eventStore.add(signed);
 
@@ -352,6 +356,7 @@ export async function publishReadState(
 
 export interface PublishTimerHolder {
   publishTimer: ReturnType<typeof setTimeout> | null;
+  lastPublishedStateAt: number;
 }
 
 export function schedulePublish(
@@ -362,7 +367,7 @@ export function schedulePublish(
   if (holder.publishTimer) clearTimeout(holder.publishTimer);
   holder.publishTimer = setTimeout(() => {
     holder.publishTimer = null;
-    publishReadState(pubkey, readState$.getValue());
+    publishReadState(pubkey, readState$.getValue(), holder);
   }, PUBLISH_DEBOUNCE_MS);
 }
 
@@ -394,6 +399,7 @@ export function watchNip78Event(
   pubkey: string,
   readState$: BehaviorSubject<NotificationReadState>,
   notifPubkey$: BehaviorSubject<string | null>,
+  holder: PublishTimerHolder,
 ): Subscription {
   const nsecFilter = {
     kinds: [NIP78_KIND],
@@ -477,10 +483,25 @@ export function watchNip78Event(
 
               const relayState = parseReadState(content);
               const currentLocal = readState$.getValue();
-              const merged = mergeReadStates(currentLocal, relayState);
 
-              if (JSON.stringify(merged) !== JSON.stringify(currentLocal)) {
-                readState$.next(merged);
+              // If the relay state event is strictly newer than the last event
+              // we published ourselves, it came from another device/tab and
+              // should replace local state outright — merging would silently
+              // undo reversals like "mark as unread" (which lower rb or remove
+              // IDs from ri) because mergeReadStates only ever advances state.
+              //
+              // If it's the same age or older (our own echo from the relay, or
+              // a race between two tabs), merge so we don't lose any IDs the
+              // relay might have that we don't.
+              let next: NotificationReadState;
+              if (latest.created_at > holder.lastPublishedStateAt) {
+                next = relayState;
+              } else {
+                next = mergeReadStates(currentLocal, relayState);
+              }
+
+              if (JSON.stringify(next) !== JSON.stringify(currentLocal)) {
+                readState$.next(next);
               }
             } catch {
               // Decryption failed
