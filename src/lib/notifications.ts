@@ -501,7 +501,8 @@ export function groupNotifications(
   for (const ev of events) {
     if (ev.pubkey === selfPubkey) continue;
 
-    // Skip events confirmed as non-git by the async resolver
+    // Skip events pending async root-kind resolution (ambiguous zap receipts
+    // with no #k tag). They are held back until confirmed as git-related.
     if (nonGitEventIds?.has(ev.id)) continue;
 
     const rootId = getNotificationRootId(ev, commentRootMap);

@@ -135,12 +135,13 @@ export interface NotificationStoreEntry {
    */
   repoCoords$: BehaviorSubject<string[]>;
   /**
-   * Set of notification event IDs confirmed as non-git by the async resolver.
-   * Populated by the zap-receipt watcher in acquireNotificationStore: when a
-   * zap receipt has no #k tag (LNURL server omitted it), isGitThreadNotification
-   * fetches the zapped event and resolves the root kind. If the root is not a
-   * NIP-34 git item, the receipt's ID is added here so groupNotifications skips
-   * it. Events not yet resolved are kept until the async fetch completes.
+   * Set of zap receipt event IDs excluded from the notification list.
+   * Contains two categories:
+   *   - Pending: ambiguous zap receipts (no #k tag) awaiting async resolution.
+   *     Removed once confirmed as git (flows through) or non-git (stays).
+   *   - Confirmed non-git: zap receipts whose root was resolved to a non-NIP-34
+   *     kind. Kept permanently so they never appear in the notification list.
+   * groupNotifications skips any event whose ID is in this set.
    */
   nonGitEventIds$: BehaviorSubject<Set<string>>;
   /** Manual timeline loader for paged history fetches */
@@ -509,18 +510,22 @@ export function acquireNotificationStore(
     .subscribe();
 
   // ---------------------------------------------------------------------------
-  // Non-git zap filter — async resolver for zap receipts with no #k tag
+  // Ambiguous zap filter — hold-then-confirm for zap receipts with no #k tag
   //
   // When a zap receipt has no #k tag (LNURL server omitted it), we cannot
-  // determine the zapped event kind from the receipt alone. isGitThreadNotification
-  // fetches the zapped event (store first, then relays) and resolves the root
-  // kind. If the root is not a NIP-34 git item, the receipt ID is added to
-  // nonGitEventIds$ so groupNotifications skips it on the next model emit.
+  // determine the zapped event kind from the receipt alone. Such events are
+  // held in excludedEventIds$ until isGitThreadNotification resolves the root:
+  //   - Confirmed git      → remove from excludedEventIds$ (event flows through)
+  //   - Confirmed non-git  → keep in excludedEventIds$ permanently
+  //   - Unresolvable       → remove from excludedEventIds$ (isGitThreadNotification
+  //                          returns true — never silently drop)
   //
-  // Events not yet resolved are kept until the async fetch completes — we
-  // prefer a brief false-positive over silently dropping ambiguous items.
+  // The model receives excludedEventIds$ and groupNotifications skips any event
+  // whose ID is in it, so ambiguous zaps never flash briefly in the list.
   // ---------------------------------------------------------------------------
-  const nonGitEventIds$ = new BehaviorSubject<Set<string>>(new Set());
+  const excludedEventIds$ = new BehaviorSubject<Set<string>>(new Set());
+  // Tracks which IDs are still awaiting resolution (subset of excludedEventIds$)
+  const pendingIds = new Set<string>();
   const classifiedIds = new Set<string>();
 
   // Mirror inboxRelays$ into a plain array so the async callbacks can read
@@ -540,6 +545,8 @@ export function acquireNotificationStore(
   ).subscribe({
     next: (events) => {
       const evts = events as NostrEvent[];
+      const newlyAmbiguous: NostrEvent[] = [];
+
       for (const ev of evts) {
         // Only zap receipts with no #k tag need async resolution.
         // All other ambiguous cases are handled synchronously by
@@ -549,15 +556,34 @@ export function acquireNotificationStore(
         if (ev.tags.some(([t]) => t === "k")) continue; // k present — handled synchronously
         if (classifiedIds.has(ev.id)) continue;
         classifiedIds.add(ev.id);
+        newlyAmbiguous.push(ev);
+      }
 
+      if (newlyAmbiguous.length === 0) return;
+
+      // Add all newly-seen ambiguous events to the excluded set in one emit
+      const withExcluded = new Set(excludedEventIds$.getValue());
+      for (const ev of newlyAmbiguous) {
+        withExcluded.add(ev.id);
+        pendingIds.add(ev.id);
+      }
+      excludedEventIds$.next(withExcluded);
+
+      // Resolve each asynchronously
+      for (const ev of newlyAmbiguous) {
         isGitThreadNotification(ev, eventStore, pool, currentInboxRelays).then(
           (isGit) => {
-            if (!isGit) {
-              const prev = nonGitEventIds$.getValue();
+            pendingIds.delete(ev.id);
+            if (isGit) {
+              // Confirmed git (or unresolvable) — remove from excluded so the
+              // event flows through to the model on the next emit.
+              const prev = excludedEventIds$.getValue();
+              if (!prev.has(ev.id)) return;
               const next = new Set(prev);
-              next.add(ev.id);
-              nonGitEventIds$.next(next);
+              next.delete(ev.id);
+              excludedEventIds$.next(next);
             }
+            // Confirmed non-git — leave in excludedEventIds$ permanently.
           },
         );
       }
@@ -568,7 +594,7 @@ export function acquireNotificationStore(
     pubkey,
     readState$,
     repoCoords$,
-    nonGitEventIds$,
+    nonGitEventIds$: excludedEventIds$,
     historyLoader: null,
     publishTimer: null,
     lastPublishedStateAt: 0,
@@ -587,7 +613,7 @@ export function acquireNotificationStore(
       entry.historyLoader?.destroy();
       notifPubkey$.complete();
       repoCoords$.complete();
-      nonGitEventIds$.complete();
+      excludedEventIds$.complete();
     },
     refCount: 1,
   };
