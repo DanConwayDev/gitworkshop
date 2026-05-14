@@ -50,11 +50,7 @@ import { mapEventsToStore } from "applesauce-core";
 import { MailboxesModel } from "applesauce-core/models";
 import { onlyEvents } from "applesauce-relay";
 import { pool, eventStore, addressLoader } from "@/services/nostr";
-import {
-  fallbackRelays,
-  lookupRelays,
-  gitIndexRelays,
-} from "@/services/settings";
+import { fallbackRelays, gitIndexRelays } from "@/services/settings";
 import { resilientSubscription } from "@/lib/resilientSubscription";
 import {
   buildNotificationFilters,
@@ -181,17 +177,25 @@ function inboxRelaysObservable(pubkey: string) {
 }
 
 /**
- * Observable of the user's NIP-65 outbox relays merged with lookupRelays.
- * Same startWith pattern — emits lookupRelays immediately, then expands.
+ * Observable of the user's NIP-65 outbox relays merged with fallbackRelays.
+ * Same startWith pattern — emits fallbackRelays immediately, then expands once
+ * the user's kind:10002 arrives.
+ *
+ * NIP-78 state events are published to `outbox:<pubkey>` + `fallback-relays`
+ * (ditto/damus/nos.lol/primal). Using lookupRelays here was wrong: lookup
+ * servers (purplepag.es, index.hzrd149.com, indexer.coracle.social) don't
+ * store kind:30078 app-data events, so the subscription would never receive
+ * live state updates from other devices for users without configured outbox
+ * relays.
  */
 function outboxRelaysObservable(pubkey: string) {
   return combineLatest([
     eventStore.model(MailboxesModel, pubkey).pipe(startWith(undefined)),
-    lookupRelays,
+    fallbackRelays,
   ]).pipe(
-    map(([mailboxes, lookup]) => {
+    map(([mailboxes, fallback]) => {
       const outboxes = mailboxes?.outboxes ?? [];
-      return [...new Set([...outboxes, ...lookup].map(normalizeUrl))];
+      return [...new Set([...outboxes, ...fallback].map(normalizeUrl))];
     }),
     distinctUntilChanged(
       (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
