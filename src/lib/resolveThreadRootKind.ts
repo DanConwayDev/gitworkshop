@@ -247,8 +247,8 @@ export async function resolveThreadRootKind(
  * Convenience wrapper around resolveThreadRootKind for the common
  * notification-filtering use case.
  *
- * Returns true when the kind cannot be determined (null) so that
- * ambiguous notifications are kept rather than silently dropped.
+ * Returns false when the kind cannot be determined (null) — unresolvable
+ * events are treated as non-git and excluded from notifications.
  */
 export async function isGitThreadNotification(
   event: NostrEvent,
@@ -257,6 +257,6 @@ export async function isGitThreadNotification(
   relays: string[],
 ): Promise<boolean> {
   const kind = await resolveThreadRootKind(event, store, pool, relays);
-  if (kind === null) return true; // unknown → keep
+  if (kind === null) return false; // unresolvable → exclude
   return kind === ISSUE_KIND || kind === PR_KIND || kind === PATCH_KIND;
 }

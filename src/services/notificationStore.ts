@@ -517,8 +517,8 @@ export function acquireNotificationStore(
   // held in excludedEventIds$ until isGitThreadNotification resolves the root:
   //   - Confirmed git      → remove from excludedEventIds$ (event flows through)
   //   - Confirmed non-git  → keep in excludedEventIds$ permanently
-  //   - Unresolvable       → remove from excludedEventIds$ (isGitThreadNotification
-  //                          returns true — never silently drop)
+  //   - Unresolvable       → keep in excludedEventIds$ permanently (treated as
+  //                          non-git — excluded rather than shown as noise)
   //
   // The model receives excludedEventIds$ and groupNotifications skips any event
   // whose ID is in it, so ambiguous zaps never flash briefly in the list.
@@ -575,15 +575,15 @@ export function acquireNotificationStore(
           (isGit) => {
             pendingIds.delete(ev.id);
             if (isGit) {
-              // Confirmed git (or unresolvable) — remove from excluded so the
-              // event flows through to the model on the next emit.
+              // Confirmed git — remove from excluded so the event flows
+              // through to the model on the next emit.
               const prev = excludedEventIds$.getValue();
               if (!prev.has(ev.id)) return;
               const next = new Set(prev);
               next.delete(ev.id);
               excludedEventIds$.next(next);
             }
-            // Confirmed non-git — leave in excludedEventIds$ permanently.
+            // Confirmed non-git or unresolvable — leave in excludedEventIds$.
           },
         );
       }
