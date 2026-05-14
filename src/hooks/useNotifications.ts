@@ -144,6 +144,7 @@ export function useNotifications(): {
   const pubkey = entry?.pubkey;
   const readState$ = entry?.readState$;
   const repoCoords$ = entry?.repoCoords$;
+  const nonGitEventIds$ = entry?.nonGitEventIds$;
 
   // Activate the full history fetch on mount. activateFullFetch is idempotent —
   // it creates the loader and fires the first page only once per store entry.
@@ -174,17 +175,20 @@ export function useNotifications(): {
       return entry.historyLoader.historyReachedArchive$;
     }, [entry?.historyLoader]) ?? false;
 
-  // model cache key is pubkey only; readState$ and repoCoords$ are passed
-  // as separate arguments and are not part of the cache key.
+  // model cache key is pubkey only; readState$, repoCoords$, and
+  // nonGitEventIds$ are passed as separate arguments and are not part of the
+  // cache key.
   const output = use$(() => {
-    if (!pubkey || !readState$ || !repoCoords$) return undefined;
+    if (!pubkey || !readState$ || !repoCoords$ || !nonGitEventIds$)
+      return undefined;
     return store.model(
       NotificationModel,
       pubkey,
       readState$,
       repoCoords$,
+      nonGitEventIds$,
     ) as unknown as Observable<NotificationModelOutput>;
-  }, [pubkey, readState$, repoCoords$, store]);
+  }, [pubkey, readState$, repoCoords$, nonGitEventIds$, store]);
 
   const actions: NotificationActions = {
     markAsRead: (rootId) => entry && actionMarkAsRead(entry, rootId),
@@ -225,18 +229,21 @@ export function useUnreadNotificationCount(): number {
   const pubkey = entry?.pubkey;
   const readState$ = entry?.readState$;
   const repoCoords$ = entry?.repoCoords$;
+  const nonGitEventIds$ = entry?.nonGitEventIds$;
 
   const count = use$(() => {
-    if (!pubkey || !readState$ || !repoCoords$) return undefined;
+    if (!pubkey || !readState$ || !repoCoords$ || !nonGitEventIds$)
+      return undefined;
     return (
       store.model(
         NotificationModel,
         pubkey,
         readState$,
         repoCoords$,
+        nonGitEventIds$,
       ) as unknown as Observable<NotificationModelOutput>
     ).pipe(map((output) => output.unreadCount));
-  }, [pubkey, readState$, repoCoords$, store]);
+  }, [pubkey, readState$, repoCoords$, nonGitEventIds$, store]);
 
   return count ?? 0;
 }

@@ -38,7 +38,13 @@
  * Action implementations (markAsRead, etc.) live in notificationActions.ts.
  */
 
-import { BehaviorSubject, combineLatest, merge, of } from "rxjs";
+import {
+  BehaviorSubject,
+  combineLatest,
+  merge,
+  of,
+  type Subscription,
+} from "rxjs";
 import {
   map,
   switchMap,
@@ -52,6 +58,7 @@ import { onlyEvents } from "applesauce-relay";
 import { pool, eventStore, addressLoader } from "@/services/nostr";
 import { fallbackRelays, gitIndexRelays } from "@/services/settings";
 import { resilientSubscription } from "@/lib/resilientSubscription";
+import { isGitThreadNotification } from "@/lib/resolveThreadRootKind";
 import {
   buildNotificationFilters,
   buildNotificationBadgeFilters,
@@ -62,6 +69,7 @@ import {
   NIP78_KIND,
   NOTIFICATION_STATE_D_TAG,
   NOTIFICATION_NSEC_D_TAG,
+  ZAP_RECEIPT_KIND,
   type NotificationReadState,
 } from "@/lib/notifications";
 import { REPO_KIND } from "@/lib/nip34";
@@ -126,6 +134,15 @@ export interface NotificationStoreEntry {
    * user. Used by NotificationModel to group social notifications by repo.
    */
   repoCoords$: BehaviorSubject<string[]>;
+  /**
+   * Set of notification event IDs confirmed as non-git by the async resolver.
+   * Populated by the zap-receipt watcher in acquireNotificationStore: when a
+   * zap receipt has no #k tag (LNURL server omitted it), isGitThreadNotification
+   * fetches the zapped event and resolves the root kind. If the root is not a
+   * NIP-34 git item, the receipt's ID is added here so groupNotifications skips
+   * it. Events not yet resolved are kept until the async fetch completes.
+   */
+  nonGitEventIds$: BehaviorSubject<Set<string>>;
   /** Manual timeline loader for paged history fetches */
   historyLoader: ManualTimelineLoader | null;
   /** Debounce timer handle — owned here so notificationSync can clear it */
@@ -491,10 +508,67 @@ export function acquireNotificationStore(
     )
     .subscribe();
 
+  // ---------------------------------------------------------------------------
+  // Non-git zap filter — async resolver for zap receipts with no #k tag
+  //
+  // When a zap receipt has no #k tag (LNURL server omitted it), we cannot
+  // determine the zapped event kind from the receipt alone. isGitThreadNotification
+  // fetches the zapped event (store first, then relays) and resolves the root
+  // kind. If the root is not a NIP-34 git item, the receipt ID is added to
+  // nonGitEventIds$ so groupNotifications skips it on the next model emit.
+  //
+  // Events not yet resolved are kept until the async fetch completes — we
+  // prefer a brief false-positive over silently dropping ambiguous items.
+  // ---------------------------------------------------------------------------
+  const nonGitEventIds$ = new BehaviorSubject<Set<string>>(new Set());
+  const classifiedIds = new Set<string>();
+
+  // Mirror inboxRelays$ into a plain array so the async callbacks can read
+  // the current relay list without subscribing inside an async function.
+  let currentInboxRelays: string[] = [];
+  const inboxRelaysMirrorSub: Subscription = inboxRelays$.subscribe(
+    (relays) => {
+      currentInboxRelays = relays;
+    },
+  );
+
+  const threadFiltersForWatcher = buildNotificationBadgeFilters(pubkey);
+  const nonGitWatcherSub: Subscription = (
+    eventStore.timeline(threadFiltersForWatcher) as unknown as Observable<
+      NostrEvent[]
+    >
+  ).subscribe({
+    next: (events) => {
+      const evts = events as NostrEvent[];
+      for (const ev of evts) {
+        // Only zap receipts with no #k tag need async resolution.
+        // All other ambiguous cases are handled synchronously by
+        // getNotificationRootId / resolveThreadRootKind.
+        if (ev.kind !== ZAP_RECEIPT_KIND) continue;
+        if (ev.tags.some(([t]) => t === "a")) continue; // repo zap — skip
+        if (ev.tags.some(([t]) => t === "k")) continue; // k present — handled synchronously
+        if (classifiedIds.has(ev.id)) continue;
+        classifiedIds.add(ev.id);
+
+        isGitThreadNotification(ev, eventStore, pool, currentInboxRelays).then(
+          (isGit) => {
+            if (!isGit) {
+              const prev = nonGitEventIds$.getValue();
+              const next = new Set(prev);
+              next.add(ev.id);
+              nonGitEventIds$.next(next);
+            }
+          },
+        );
+      }
+    },
+  });
+
   const entry: NotificationStoreEntry = {
     pubkey,
     readState$,
     repoCoords$,
+    nonGitEventIds$,
     historyLoader: null,
     publishTimer: null,
     lastPublishedStateAt: 0,
@@ -508,9 +582,12 @@ export function acquireNotificationStore(
       ownRepoSub.unsubscribe();
       repoCoordsStoreSub.unsubscribe();
       repoActivitySub.unsubscribe();
+      inboxRelaysMirrorSub.unsubscribe();
+      nonGitWatcherSub.unsubscribe();
       entry.historyLoader?.destroy();
       notifPubkey$.complete();
       repoCoords$.complete();
+      nonGitEventIds$.complete();
     },
     refCount: 1,
   };

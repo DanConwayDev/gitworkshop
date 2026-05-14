@@ -487,6 +487,7 @@ export function groupNotifications(
   state: NotificationReadState,
   selfPubkey: string,
   commentRootMap?: Map<string, string>,
+  nonGitEventIds?: Set<string>,
 ): ThreadNotificationItem[] {
   const readIdSet = new Set(state.ri);
   const archivedIdSet = new Set(state.ai);
@@ -499,6 +500,9 @@ export function groupNotifications(
 
   for (const ev of events) {
     if (ev.pubkey === selfPubkey) continue;
+
+    // Skip events confirmed as non-git by the async resolver
+    if (nonGitEventIds?.has(ev.id)) continue;
 
     const rootId = getNotificationRootId(ev, commentRootMap);
     if (!rootId) continue;
