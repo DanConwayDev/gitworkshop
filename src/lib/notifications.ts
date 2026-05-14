@@ -370,6 +370,9 @@ export function buildRepoZapFilter(
  *     - #k = COMMENT_KIND → look up rootId in commentRootMap (if provided);
  *       falls back to #e (the comment ID) if unknown
  *     - #k = REPO_KIND → returns undefined (handled as social, not thread)
+ *     - #k is any other known kind (e.g. kind:1) → returns undefined (not a
+ *       git notification; prevents zaps on regular Nostr notes from appearing)
+ *     - #k absent → falls through to #e (some LNURL servers omit the k tag)
  * - Returns undefined if no root can be determined.
  */
 export function getNotificationRootId(
@@ -427,6 +430,12 @@ export function getNotificationRootId(
     if (k === String(COMMENT_KIND) && e) {
       return commentRootMap?.get(e) ?? e;
     }
+
+    // If #k is explicitly set to a non-NIP-34, non-comment kind (e.g. kind:1),
+    // this is a zap on an unrelated Nostr event — not a git notification.
+    // Only fall through to return #e when #k is absent (some LNURL servers
+    // don't copy the k tag from the zap request to the receipt).
+    if (k !== undefined) return undefined;
 
     return e;
   }
