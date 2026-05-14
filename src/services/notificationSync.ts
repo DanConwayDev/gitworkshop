@@ -241,11 +241,19 @@ export async function getOrCreateNotificationSigner(
     const { outboxStore } = await import("@/services/outbox");
 
     // Encrypted (NIP-44) envelope signed by the user's own signer.
+    // Use .as(userSigner).encryptedContent() rather than passing "nip44" to
+    // AppDataFactory.create() — the create() static method calls .data()
+    // internally before the signer is set on the factory, so the signer
+    // captured in the setHiddenContent closure is always undefined and the
+    // encrypt step throws silently.
+    const userPubkey = await userSigner.getPublicKey();
     const signed = await AppDataFactory.create<{ nsec: string }>(
       NOTIFICATION_NSEC_D_TAG,
       { nsec: hexKey },
-      "nip44",
-    ).sign(userSigner);
+    )
+      .as(userSigner)
+      .encryptedContent(userPubkey, JSON.stringify({ nsec: hexKey }), "nip44")
+      .sign();
 
     // Add to local store immediately
     eventStore.add(signed);
@@ -317,11 +325,19 @@ export async function publishReadState(
 
     // Encrypt + sign with the dedicated notification keypair (self-encrypt:
     // pubkey == author so decryption works symmetrically).
+    // Use .as(notifSigner).encryptedContent() rather than passing "nip44" to
+    // AppDataFactory.create() — the create() static method calls .data()
+    // internally before the signer is set on the factory, so the signer
+    // captured in the setHiddenContent closure is always undefined and the
+    // encrypt step throws silently.
+    const notifPubkey = await notifSigner.getPublicKey();
     const signed = await AppDataFactory.create<NotificationReadState>(
       NOTIFICATION_STATE_D_TAG,
       state,
-      "nip44",
-    ).sign(notifSigner);
+    )
+      .as(notifSigner)
+      .encryptedContent(notifPubkey, JSON.stringify(state), "nip44")
+      .sign();
 
     // Add to local store immediately for optimistic updates
     eventStore.add(signed);
