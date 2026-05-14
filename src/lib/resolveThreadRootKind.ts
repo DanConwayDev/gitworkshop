@@ -11,7 +11,10 @@
  *      - For NIP-34 root kinds (issue/PR/patch) the event IS the root.
  *      - For NIP-22 comments the uppercase K tag carries the root kind, or
  *        the CommentPointer carries it directly (no relay fetch needed).
- *      - For zap receipts the #k tag carries the zapped event kind.
+ *      - For zap receipts the embedded zap request (description tag) carries
+ *        the zapped event kind via its #k tag; the receipt's own #k tag is a
+ *        fallback for servers that copy it. For addressable-event zaps the #a
+ *        coordinate carries the kind directly.
  *      - For other thread events (status changes, PR updates, legacy replies)
  *        the kind is known from the event itself.
  *
@@ -38,6 +41,9 @@ import {
   isCommentEventPointer,
   isCommentAddressPointer,
   getNip10References,
+  getZapRequest,
+  getZapEventPointer,
+  getZapAddressPointer,
 } from "applesauce-common/helpers";
 import type { Filter } from "applesauce-core/helpers";
 import { firstValueFrom, timeout } from "rxjs";
@@ -50,7 +56,6 @@ import {
   COMMENT_KIND,
   LEGACY_REPLY_KIND,
   STATUS_KINDS,
-  REPO_KIND,
 } from "@/lib/nip34";
 import { ZAP_RECEIPT_KIND } from "@/lib/notifications";
 
@@ -176,32 +181,41 @@ export async function resolveThreadRootKind(
 
   // ── Tier 1: zap receipt ───────────────────────────────────────────────────
   if (event.kind === ZAP_RECEIPT_KIND) {
-    // Repo zaps (#a tag present, or k=REPO_KIND) are social notifications,
-    // not thread items — callers should not be calling us for these, but
-    // guard anyway.
-    if (
-      event.tags.some(([t]) => t === "a") ||
-      event.tags.find(([t]) => t === "k")?.[1] === String(REPO_KIND)
-    ) {
-      return REPO_KIND;
+    // Addressable-event zaps (#a tag present) — the coordinate encodes the
+    // kind directly, so no relay fetch is needed. Repo zaps (REPO_KIND) are
+    // social notifications, not thread items; other addressable kinds are
+    // returned as-is so callers can decide.
+    const addrPointer = getZapAddressPointer(event);
+    if (addrPointer !== null) {
+      return addrPointer.kind;
     }
 
-    const k = event.tags.find(([t]) => t === "k")?.[1];
-    const e = event.tags.find(([t]) => t === "e")?.[1];
+    // Read the zapped event kind from the embedded zap request first (the
+    // request always carries the #k tag because the client sets it), then
+    // fall back to the receipt's own #k tag for servers that copy it.
+    const zapRequest = getZapRequest(event);
+    const kRaw =
+      zapRequest?.tags.find(([t]) => t === "k")?.[1] ??
+      event.tags.find(([t]) => t === "k")?.[1];
 
-    if (!e) return null; // profile zap with no #e — not a thread item
+    const eventPointer = getZapEventPointer(event);
+    if (!eventPointer) return null; // profile zap with no #e — not a thread item
 
-    if (k !== undefined) {
-      const kNum = Number(k);
+    if (kRaw !== undefined) {
+      const kNum = Number(kRaw);
       if (Number.isNaN(kNum)) return null;
 
       // If k is a NIP-22 comment, the zap targets a comment — we need the
       // comment's thread root kind, not COMMENT_KIND itself.
       if (kNum === COMMENT_KIND) {
         // Tiers 2/3: fetch the comment, then recurse once to get root kind.
-        let comment = getFromStore(store, e);
+        let comment = getFromStore(store, eventPointer.id);
         if (!comment) {
-          comment = await fetchFromRelays(pool, relays, e);
+          comment = await fetchFromRelays(
+            pool,
+            eventPointer.relays ?? relays,
+            eventPointer.id,
+          );
           if (comment) store.add(comment);
         }
         if (!comment) return null;
@@ -213,11 +227,15 @@ export async function resolveThreadRootKind(
       return kNum;
     }
 
-    // k absent — LNURL server didn't copy the tag. Fetch the zapped event
-    // and inspect its kind (Tiers 2/3).
-    let zapTarget = getFromStore(store, e);
+    // k absent even in the embedded request — LNURL server didn't set it.
+    // Fetch the zapped event and inspect its kind (Tiers 2/3).
+    let zapTarget = getFromStore(store, eventPointer.id);
     if (!zapTarget) {
-      zapTarget = await fetchFromRelays(pool, relays, e);
+      zapTarget = await fetchFromRelays(
+        pool,
+        eventPointer.relays ?? relays,
+        eventPointer.id,
+      );
       if (zapTarget) store.add(zapTarget);
     }
     if (!zapTarget) return null;
