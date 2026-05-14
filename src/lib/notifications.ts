@@ -734,6 +734,9 @@ export function advanceReadCutoff(
     newRb = threeDaysAgo;
   }
 
+  // Never let the cutoff go backwards — only advance it.
+  newRb = Math.max(newRb, state.rb);
+
   // Prune IDs older than the new cutoff — O(1) per ID via Map
   const newRi = state.ri.filter((id) => {
     const ev = eventById.get(id);
@@ -773,6 +776,9 @@ export function advanceArchivedCutoff(
   } else {
     newAb = threeDaysAgo;
   }
+
+  // Never let the cutoff go backwards — only advance it.
+  newAb = Math.max(newAb, state.ab);
 
   // Prune IDs older than the new cutoff — O(1) per ID via Map
   const newAi = state.ai.filter((id) => {

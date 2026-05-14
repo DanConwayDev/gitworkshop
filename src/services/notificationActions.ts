@@ -17,6 +17,8 @@ import {
   advanceArchivedCutoff,
   REPO_STARS_PREFIX,
   REPO_ZAPS_PREFIX,
+  REACTION_KIND,
+  ZAP_RECEIPT_KIND,
   type NotificationReadState,
 } from "@/lib/notifications";
 import { eventStore } from "@/services/nostr";
@@ -70,12 +72,15 @@ function filterEventsForRootId(
 ): NostrEvent[] {
   if (isSocialRootId(rootId)) {
     // Strip prefix to get the raw coord (same length stripping for both prefixes)
-    const prefix = rootId.startsWith(REPO_ZAPS_PREFIX)
-      ? REPO_ZAPS_PREFIX
-      : REPO_STARS_PREFIX;
+    const isZap = rootId.startsWith(REPO_ZAPS_PREFIX);
+    const prefix = isZap ? REPO_ZAPS_PREFIX : REPO_STARS_PREFIX;
     const coord = rootId.slice(prefix.length);
+    // Filter by kind to avoid accidentally matching thread events (e.g. status
+    // changes, PRs) that also carry an #a tag pointing to the same repo coord.
+    const expectedKind = isZap ? ZAP_RECEIPT_KIND : REACTION_KIND;
     return allEvents.filter(
       (ev) =>
+        ev.kind === expectedKind &&
         ev.pubkey !== selfPubkey &&
         ev.tags.some(([t, v]) => t === "a" && v === coord),
     );
