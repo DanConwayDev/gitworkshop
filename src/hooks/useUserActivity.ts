@@ -53,6 +53,7 @@ import {
   of,
   distinctUntilChanged,
   startWith,
+  auditTime,
 } from "rxjs";
 
 /** Root item kinds — events that carry the `a` repo coord tag directly. */
@@ -299,6 +300,11 @@ export function useUserActivity(
     return (
       store.timeline([activityFilter]) as unknown as Observable<NostrEvent[]>
     ).pipe(
+      // Collapse rapid bursts of store emissions (e.g. bulk event arrival on
+      // page load) before scanning for missing parent IDs. Without this the
+      // map runs synchronously on every single incoming event, calling
+      // store.getEvent() in a loop each time.
+      auditTime(100),
       // Collect the set of missing parent IDs as a sorted string so we
       // only re-subscribe when the set actually changes.
       map((events) => {

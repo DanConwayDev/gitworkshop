@@ -13,7 +13,7 @@
  * src/services/notificationStore.ts.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { map, type Observable } from "rxjs";
 import { use$ } from "./use$";
@@ -190,15 +190,19 @@ export function useNotifications(): {
     ) as unknown as Observable<NotificationModelOutput>;
   }, [pubkey, readState$, repoCoords$, nonGitEventIds$, store]);
 
-  const actions: NotificationActions = {
-    markAsRead: (rootId) => entry && actionMarkAsRead(entry, rootId),
-    markAsUnread: (rootId) => entry && actionMarkAsUnread(entry, rootId),
-    markAsArchived: (rootId) => entry && actionMarkAsArchived(entry, rootId),
-    markAsUnarchived: (rootId) =>
-      entry && actionMarkAsUnarchived(entry, rootId),
-    markAllAsRead: () => entry && actionMarkAllAsRead(entry),
-    markAllAsArchived: () => entry && actionMarkAllAsArchived(entry),
-  };
+  const actions: NotificationActions = useMemo(
+    () => ({
+      markAsRead: (rootId) => entry && actionMarkAsRead(entry, rootId),
+      markAsUnread: (rootId) => entry && actionMarkAsUnread(entry, rootId),
+      markAsArchived: (rootId) => entry && actionMarkAsArchived(entry, rootId),
+      markAsUnarchived: (rootId) =>
+        entry && actionMarkAsUnarchived(entry, rootId),
+      markAllAsRead: () => entry && actionMarkAllAsRead(entry),
+      markAllAsArchived: () => entry && actionMarkAllAsArchived(entry),
+    }),
+    // entry is stable for the lifetime of a pubkey — only changes on account switch
+    [entry],
+  );
 
   const history: NotificationHistoryState = {
     loading: historyLoading,
