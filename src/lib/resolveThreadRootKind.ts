@@ -24,7 +24,10 @@
  *      the referenced event in the in-memory store.
  *
  *   3. Fetch from relays.
- *      If the event is not in the store, fire a one-shot resilientRequest.
+ *      If the event is not in the store, fetch via the module-level batched
+ *      fetcher so concurrent calls (e.g. many ambiguous zap receipts arriving
+ *      at once) are coalesced into a single { ids: [...] } REQ per relay
+ *      rather than one REQ per event.
  *      For NIP-22 comments, one hop may be needed: comment → thread root.
  *
  * Returns the root kind number, or null if it cannot be determined (network
@@ -35,7 +38,6 @@
 import type { NostrEvent } from "nostr-tools";
 import type { EventStore } from "applesauce-core";
 import type { RelayPool } from "applesauce-relay";
-import { onlyEvents } from "applesauce-relay";
 import {
   getCommentRootPointer,
   isCommentEventPointer,
@@ -45,9 +47,11 @@ import {
   getZapEventPointer,
   getZapAddressPointer,
 } from "applesauce-common/helpers";
-import type { Filter } from "applesauce-core/helpers";
 import { firstValueFrom, timeout } from "rxjs";
-import { resilientRequest } from "@/lib/resilientSubscription";
+import {
+  createBatchedEventFetcher,
+  type BatchedEventFetcher,
+} from "@/lib/resilientSubscription";
 import {
   ISSUE_KIND,
   PATCH_KIND,
@@ -65,13 +69,29 @@ import { ZAP_RECEIPT_KIND } from "@/lib/notifications";
 
 const STATUS_KIND_SET = new Set<number>(STATUS_KINDS);
 
+/**
+ * Module-level batched fetcher singleton.
+ * Lazily initialised on first use so the pool is available.
+ * All calls within a 500 ms window are coalesced into one REQ per relay.
+ */
+let _batchedFetcher: BatchedEventFetcher | null = null;
+let _batchedFetcherPool: RelayPool | null = null;
+
+function getBatchedFetcher(pool: RelayPool): BatchedEventFetcher {
+  if (_batchedFetcher === null || _batchedFetcherPool !== pool) {
+    _batchedFetcher = createBatchedEventFetcher(pool);
+    _batchedFetcherPool = pool;
+  }
+  return _batchedFetcher;
+}
+
 /** Fetch a single event by ID from the store, or undefined if absent. */
 function getFromStore(store: EventStore, id: string): NostrEvent | undefined {
   return (store.getByFilters([{ ids: [id] }]) as NostrEvent[])[0];
 }
 
 /**
- * Fetch a single event by ID from relays.
+ * Fetch a single event by ID from relays, batching concurrent calls.
  * Returns undefined on timeout, error, or not-found.
  */
 async function fetchFromRelays(
@@ -83,10 +103,7 @@ async function fetchFromRelays(
   if (relays.length === 0) return undefined;
   try {
     return await firstValueFrom(
-      resilientRequest(pool, relays, [{ ids: [id] } as Filter]).pipe(
-        onlyEvents(),
-        timeout(timeoutMs),
-      ),
+      getBatchedFetcher(pool)(id, relays).pipe(timeout(timeoutMs)),
     );
   } catch {
     return undefined;

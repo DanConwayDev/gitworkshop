@@ -51,12 +51,15 @@ import {
   Observable,
   Subject,
   Subscription,
+  bufferTime,
   defer,
+  filter,
   finalize,
   identity,
   merge,
   repeat,
   retry,
+  share,
   switchMap,
   take,
   tap,
@@ -1175,4 +1178,201 @@ export function resilientSingleRelayRequest(
       return EMPTY;
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// createBatchedEventFetcher
+// ---------------------------------------------------------------------------
+
+/**
+ * Options for createBatchedEventFetcher.
+ */
+export interface BatchedEventFetcherOptions {
+  /**
+   * Time window in ms to buffer incoming requests before firing a batch REQ.
+   * Default: 500
+   */
+  bufferTime?: number;
+  /**
+   * Maximum number of IDs per batch window.
+   * Default: 200
+   */
+  bufferSize?: number;
+  /**
+   * Extra relay URLs always included in every batch REQ (e.g. fallback relays).
+   * These are unioned with the per-call relay hints.
+   */
+  extraRelays?: string[];
+  /**
+   * When false (default) each batch uses resilientRequest — the per-relay
+   * stream completes after EOSE. Callers that don't find their event within
+   * the batch receive an empty observable (treat as "not found").
+   *
+   * When true each batch uses resilientSubscription — the per-relay stream
+   * stays open indefinitely. Callers remain subscribed until they find their
+   * event or unsubscribe. Useful for watching for an event that may not exist
+   * yet (e.g. waiting for a reply to arrive).
+   */
+  live?: boolean;
+  /**
+   * ResilientSubscription options forwarded to the underlying
+   * resilientRequest / resilientSubscription call for each relay stream.
+   * autoClose is set automatically based on the `live` flag and must not be
+   * passed here.
+   */
+  relayOpts?: Omit<ResilientSubscriptionOptions, "autoClose">;
+}
+
+/** A pointer passed to the batched fetcher. */
+interface EventPointer {
+  id: string;
+  /** Relay hints for this specific event. Unioned with extraRelays. */
+  relays: string[];
+}
+
+/**
+ * A batched event fetcher.
+ *
+ * Call it with an event ID and relay hints; it returns an Observable<NostrEvent>
+ * that emits the event when found.
+ *
+ * - In request mode (live: false, default): completes after the batch EOSE.
+ *   If the event is not found the observable completes empty — wrap in
+ *   firstValueFrom() with a timeout to get Promise<NostrEvent | undefined>.
+ * - In subscription mode (live: true): stays open until the caller unsubscribes.
+ */
+export type BatchedEventFetcher = (
+  id: string,
+  relays: string[],
+) => Observable<NostrEvent>;
+
+/**
+ * Build a per-relay filter map from a batch of pointers.
+ * Returns Map<relayUrl, string[]> — the set of IDs to request from each relay.
+ */
+function buildBatchRelayMap(
+  pointers: EventPointer[],
+  extraRelays: string[],
+): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+
+  const addId = (relay: string, id: string) => {
+    let ids = map.get(relay);
+    if (!ids) {
+      ids = [];
+      map.set(relay, ids);
+    }
+    if (!ids.includes(id)) ids.push(id);
+  };
+
+  for (const { id, relays } of pointers) {
+    const allRelays = new Set([...relays, ...extraRelays]);
+    for (const relay of allRelays) addId(relay, id);
+  }
+
+  return map;
+}
+
+/**
+ * Creates a batched event fetcher that coalesces individual event-by-ID
+ * requests into a single `{ ids: [...] }` REQ per relay per buffer window.
+ *
+ * All the benefits of resilientRequest / resilientSubscription are preserved
+ * (rate-limit backoff, reconnect, permanent error fast-fail, transport error
+ * handling) because each per-relay stream is a full resilientRequest /
+ * resilientSubscription pipeline.
+ *
+ * Create one instance per pool at module/app level and reuse it — the
+ * internal queue and buffer state are shared across all callers, which is
+ * what enables the batching.
+ *
+ * @example
+ * // Module level
+ * const fetchEvent = createBatchedEventFetcher(pool, { extraRelays: fallbackRelays });
+ *
+ * // Per call — request mode (default)
+ * const event = await firstValueFrom(
+ *   fetchEvent(id, relayHints).pipe(timeout(5000))
+ * ).catch(() => undefined);
+ *
+ * // Per call — subscription mode
+ * const fetcher = createBatchedEventFetcher(pool, { live: true });
+ * fetcher(id, relays).subscribe(event => console.log('arrived:', event));
+ */
+export function createBatchedEventFetcher(
+  pool: RelayPool,
+  opts: BatchedEventFetcherOptions = {},
+): BatchedEventFetcher {
+  const bufferMs = opts.bufferTime ?? 500;
+  const bufferMax = opts.bufferSize ?? 200;
+  const extraRelays = opts.extraRelays ?? [];
+  const live = opts.live ?? false;
+  const relayOpts = opts.relayOpts ?? {};
+
+  // Incoming pointer queue — one entry per call to the returned fetcher.
+  const queue = new Subject<EventPointer>();
+
+  // Emits one shared observable per batch window. Each emission is the merged
+  // stream of all per-relay resilientRequest / resilientSubscription pipelines
+  // for that batch, shared so all callers in the window subscribe to the same
+  // underlying REQs.
+  const next = new Subject<Observable<NostrEvent>>();
+
+  // Process each buffer window.
+  queue.pipe(bufferTime(bufferMs, undefined, bufferMax)).subscribe((batch) => {
+    if (batch.length === 0) return;
+
+    const relayMap = buildBatchRelayMap(batch, extraRelays);
+
+    // One resilientRequest / resilientSubscription per relay, merged together.
+    const perRelayStreams = Array.from(relayMap.entries()).map(
+      ([relay, ids]) => {
+        const filters: Filter[] = [{ ids } as Filter];
+        return resilientSubscription(pool, [relay], filters, {
+          ...relayOpts,
+          autoClose: !live,
+        }).pipe(onlyEvents()) as Observable<NostrEvent>;
+      },
+    );
+
+    if (perRelayStreams.length === 0) return;
+
+    const batch$: Observable<NostrEvent> = merge(...perRelayStreams).pipe(
+      // Keep the shared stream alive as long as at least one caller is
+      // subscribed. resetOnRefCountZero: false means late subscribers (those
+      // that subscribe after the first event has already arrived) still see
+      // future events from the same batch rather than triggering a new one.
+      share({ resetOnRefCountZero: false, resetOnComplete: false }),
+    );
+
+    next.next(batch$);
+  });
+
+  return (id: string, relays: string[]): Observable<NostrEvent> =>
+    new Observable<NostrEvent>((observer) => {
+      // Enqueue before subscribing to next$ so the pointer is in the buffer
+      // before the next tick's bufferTime flush. (Same reasoning as batchLoader
+      // in applesauce — bufferTime uses setTimeout internally so the queue.next
+      // always lands before the flush even though it's synchronous here.)
+      queue.next({ id, relays });
+
+      const filtered$: Observable<NostrEvent> = next.pipe(
+        // Latch onto the very next batch emission — that's the one our
+        // pointer was included in.
+        take(1),
+        // Subscribe to the shared batch stream and filter for our ID.
+        switchMap((batch$: Observable<NostrEvent>) =>
+          batch$.pipe(filter((event: NostrEvent) => event.id === id)),
+        ),
+      );
+
+      // In request mode, complete as soon as we find the event so the
+      // caller's firstValueFrom() resolves immediately rather than waiting
+      // for the full batch EOSE.
+      const out$ = live ? filtered$ : filtered$.pipe(take(1));
+
+      const sub = out$.subscribe(observer);
+
+      return () => sub.unsubscribe();
+    });
 }
