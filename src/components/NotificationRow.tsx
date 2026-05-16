@@ -9,7 +9,6 @@
 
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { formatDistanceToNow } from "date-fns";
 import {
   CircleDot,
   GitPullRequest,
@@ -41,6 +40,7 @@ import {
 } from "@/lib/notificationUtils";
 import { eventIdToNevent } from "@/lib/routeUtils";
 import { StatusIcon } from "@/components/StatusIcon";
+import { useRelativeTime } from "@/hooks/useRelativeTime";
 import type { NotificationActions } from "@/hooks/useNotifications";
 import type {
   NotificationItem,
@@ -139,9 +139,7 @@ function ThreadNotificationRow({
   const linkPath = buildNotificationLink(nevent, item);
 
   const commenters = compact ? [] : getCommenters(item);
-  const lastActive = formatDistanceToNow(new Date(item.latestActivity * 1000), {
-    addSuffix: true,
-  });
+  const lastActive = useRelativeTime(item.latestActivity);
 
   return (
     <li
@@ -330,9 +328,7 @@ function SocialNotificationRow({
   currentView: ViewTab;
 }) {
   const actorPubkeys = useMemo(() => getActorPubkeys(item), [item]);
-  const lastActive = formatDistanceToNow(new Date(item.latestActivity * 1000), {
-    addSuffix: true,
-  });
+  const lastActive = useRelativeTime(item.latestActivity);
 
   return (
     <li
@@ -474,9 +470,7 @@ function RepoZapNotificationRow({
   currentView: ViewTab;
 }) {
   const actorPubkeys = useMemo(() => getActorPubkeys(item), [item]);
-  const lastActive = formatDistanceToNow(new Date(item.latestActivity * 1000), {
-    addSuffix: true,
-  });
+  const lastActive = useRelativeTime(item.latestActivity);
 
   // Format sats compactly for display
   const satsLabel =

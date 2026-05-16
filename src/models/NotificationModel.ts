@@ -16,7 +16,10 @@ import { combineLatest, of, type Observable } from "rxjs";
 import { auditTime, map, switchMap } from "rxjs/operators";
 import type { Model } from "applesauce-core/event-store";
 import type { NostrEvent } from "nostr-tools";
-import { getCommentRootPointer } from "applesauce-common/helpers";
+import {
+  getCommentRootPointer,
+  isCommentEventPointer,
+} from "applesauce-common/helpers";
 import { REPO_KIND, COMMENT_KIND } from "@/lib/nip34";
 import {
   buildNotificationFilters,
@@ -41,9 +44,12 @@ export interface NotificationModelOutput {
  * Create a NotificationModel that subscribes to notification events in the
  * store and combines them with the read state to produce grouped items.
  *
- * @param pubkey      - The user's pubkey
- * @param readState$  - Observable of the current read/archived state
- * @param repoCoords$ - Observable of the user's own repo coordinates
+ * @param pubkey           - The user's pubkey
+ * @param readState$       - Observable of the current read/archived state
+ * @param repoCoords$      - Observable of the user's own repo coordinates
+ * @param nonGitEventIds$  - Observable of event IDs confirmed as non-git by
+ *   the async resolver. Populated by the zap-receipt watcher in
+ *   notificationStore. Events in this set are excluded from thread grouping.
  *
  * Cache key: pubkey only (via getKey). The BehaviorSubject references are
  * stable for the lifetime of the store entry.
@@ -52,6 +58,7 @@ export function NotificationModel(
   pubkey: string,
   readState$: Observable<NotificationReadState>,
   repoCoords$: Observable<string[]>,
+  nonGitEventIds$: Observable<Set<string>>,
 ): Model<NotificationModelOutput> {
   return (store) => {
     const threadFilters = buildNotificationFilters(pubkey);
@@ -91,12 +98,20 @@ export function NotificationModel(
       repoStarEvents$,
       repoZapEvents$,
       repoCoords$,
+      nonGitEventIds$,
     ]).pipe(
       // Collapse rapid emissions (e.g. many events arriving at once)
       auditTime(100),
 
       map(
-        ([threadEventsRaw, readState, starEventsRaw, zapEventsRaw, coords]) => {
+        ([
+          threadEventsRaw,
+          readState,
+          starEventsRaw,
+          zapEventsRaw,
+          coords,
+          nonGitEventIds,
+        ]) => {
           const allThreadEvents = threadEventsRaw as NostrEvent[];
           const allStarEvents = starEventsRaw as NostrEvent[];
           const allRepoZapEvents = zapEventsRaw as NostrEvent[];
@@ -109,7 +124,7 @@ export function NotificationModel(
           for (const ev of allThreadEvents) {
             if (ev.kind === COMMENT_KIND) {
               const rootPointer = getCommentRootPointer(ev);
-              if (rootPointer && "id" in rootPointer && rootPointer.id) {
+              if (rootPointer && isCommentEventPointer(rootPointer)) {
                 commentRootMap.set(ev.id, rootPointer.id);
               }
             }
@@ -138,6 +153,7 @@ export function NotificationModel(
             readState,
             pubkey,
             commentRootMap,
+            nonGitEventIds,
           );
           const socialItems = groupSocialNotifications(
             allStarEvents,

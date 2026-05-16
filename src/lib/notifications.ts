@@ -34,6 +34,9 @@ import {
   getCommentRootPointer,
   getNip10References,
   getZapAmount,
+  getZapRequest,
+  getZapEventPointer,
+  getZapAddressPointer,
 } from "applesauce-common/helpers";
 import {
   ISSUE_KIND,
@@ -366,10 +369,16 @@ export function buildRepoZapFilter(
  * - If it's a status change (kinds:1630–1633), the NIP-10 root #e tag is the root.
  * - If it's a legacy reply (kind:1622), the NIP-10 root #e tag is the root.
  * - If it's a zap receipt (kind:9735):
- *     - #k in NIP34_ROOT_KINDS → #e is the root item ID
+ *     - #a tag present (addressable-event zap) → returns undefined (repo zaps
+ *       are social notifications; other addressable kinds are not tracked here)
+ *     - #k in NIP34_ROOT_KINDS → #e is the root item ID. #k is read from the
+ *       embedded zap request first (always set by the client), falling back to
+ *       the receipt's own #k tag.
  *     - #k = COMMENT_KIND → look up rootId in commentRootMap (if provided);
  *       falls back to #e (the comment ID) if unknown
- *     - #k = REPO_KIND → returns undefined (handled as social, not thread)
+ *     - #k is any other known kind (e.g. kind:1) → returns undefined (not a
+ *       git notification; prevents zaps on regular Nostr notes from appearing)
+ *     - #k absent in both request and receipt → falls through to #e
  * - Returns undefined if no root can be determined.
  */
 export function getNotificationRootId(
@@ -400,17 +409,24 @@ export function getNotificationRootId(
     return ev.tags.find(([t]) => t === "E")?.[1];
   }
 
-  // NIP-57 zap receipt (kind:9735) — route by the #k (zapped event kind)
+  // NIP-57 zap receipt (kind:9735) — route by the zapped event kind
   if (ev.kind === ZAP_RECEIPT_KIND) {
-    const k = ev.tags.find(([t]) => t === "k")?.[1];
-    const e = ev.tags.find(([t]) => t === "e")?.[1];
+    // Addressable-event zap (#a tag present) — the coordinate encodes the
+    // kind directly. Repo zaps (REPO_KIND) are social notifications handled
+    // separately; any other addressable kind is not a thread item we track.
+    const addrPointer = getZapAddressPointer(ev);
+    if (addrPointer !== null) return undefined;
 
-    // Repo zap → handled as a social notification, not a thread item.
-    // Match on explicit k=REPO_KIND, or on #a presence (addressable-event
-    // zap without k tag — common since k is optional in the zap request and
-    // not reliably copied to the receipt by all LNURL servers).
-    if (k === String(REPO_KIND) || ev.tags.some(([t]) => t === "a"))
-      return undefined;
+    // Read the zapped event kind from the embedded zap request first (the
+    // request always carries the #k tag because the client sets it), then
+    // fall back to the receipt's own #k tag for servers that copy it.
+    const zapRequest = getZapRequest(ev);
+    const k =
+      zapRequest?.tags.find(([t]) => t === "k")?.[1] ??
+      ev.tags.find(([t]) => t === "k")?.[1];
+
+    const eventPointer = getZapEventPointer(ev);
+    const e = eventPointer?.id;
 
     // Zapping a NIP-34 root item → #e IS the thread root
     if (
@@ -427,6 +443,13 @@ export function getNotificationRootId(
     if (k === String(COMMENT_KIND) && e) {
       return commentRootMap?.get(e) ?? e;
     }
+
+    // If #k is explicitly set to a non-NIP-34, non-comment kind (e.g. kind:1),
+    // this is a zap on an unrelated Nostr event — not a git notification.
+    // Only fall through to return #e when #k is absent (some LNURL servers
+    // don't copy the k tag from the zap request to the receipt, and the
+    // embedded zap request may also lack it in rare cases).
+    if (k !== undefined) return undefined;
 
     return e;
   }
@@ -478,6 +501,7 @@ export function groupNotifications(
   state: NotificationReadState,
   selfPubkey: string,
   commentRootMap?: Map<string, string>,
+  nonGitEventIds?: Set<string>,
 ): ThreadNotificationItem[] {
   const readIdSet = new Set(state.ri);
   const archivedIdSet = new Set(state.ai);
@@ -490,6 +514,10 @@ export function groupNotifications(
 
   for (const ev of events) {
     if (ev.pubkey === selfPubkey) continue;
+
+    // Skip events pending async root-kind resolution (ambiguous zap receipts
+    // with no #k tag). They are held back until confirmed as git-related.
+    if (nonGitEventIds?.has(ev.id)) continue;
 
     const rootId = getNotificationRootId(ev, commentRootMap);
     if (!rootId) continue;
