@@ -52,10 +52,10 @@
     "applesauce-actions": "^6",
     "applesauce-common": "^6",
     "applesauce-content": "^6",
-    "applesauce-core": "^6",
+    "applesauce-core": "^6.0.3",
     "applesauce-loaders": "^6",
     "applesauce-react": "^6",
-    "applesauce-relay": "^6",
+    "applesauce-relay": "^6.0.3",
     "applesauce-signers": "^6",
     "applesauce-wallet-connect": "^6.0.0",
     "blurhash": "^2.0.5",
@@ -125,9 +125,7 @@
   },
   "pnpm": {
     "patchedDependencies": {
-      "@jsr/fiatjaf__git-natural-api": "patches/@jsr__fiatjaf__git-natural-api.patch",
-      "applesauce-relay@6.0.0": "patches/applesauce-relay@6.0.0.patch",
-      "applesauce-core@6.0.0": "patches/applesauce-core@6.0.0.patch"
+      "@jsr/fiatjaf__git-natural-api": "patches/@jsr__fiatjaf__git-natural-api.patch"
     }
   }
 }
