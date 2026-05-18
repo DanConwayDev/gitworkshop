@@ -30,7 +30,7 @@ import {
   Hash,
 } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
-import type { Commit } from "@fiatjaf/git-natural-api";
+import type { Commit } from "@/lib/vendored/git-natural-api";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 import { CommitDiffView } from "@/components/CommitDiffView";
 import { CommitMessageBody } from "@/components/CommitMessageBody";

@@ -17,7 +17,7 @@ import type {
   Tree,
   InfoRefsUploadPackResponse,
   ParsedObject,
-} from "@fiatjaf/git-natural-api";
+} from "@/lib/vendored/git-natural-api";
 
 // ---------------------------------------------------------------------------
 // IndexedDB setup

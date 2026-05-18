@@ -18,7 +18,7 @@
  */
 
 import { createTwoFilesPatch } from "diff";
-import type { Tree } from "@fiatjaf/git-natural-api";
+import type { Tree } from "@/lib/vendored/git-natural-api";
 import type { GitGraspPool } from "./pool";
 
 // ---------------------------------------------------------------------------

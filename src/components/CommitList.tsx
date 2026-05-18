@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, GitCommit, User, Clock, Loader2 } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
-import type { Commit } from "@fiatjaf/git-natural-api";
+import type { Commit } from "@/lib/vendored/git-natural-api";
 
 // ---------------------------------------------------------------------------
 // CommitList — grouped by date

@@ -1,12 +1,11 @@
 /**
- * Vendored from @fiatjaf/git-natural-api/parse-packfile.ts
+ * Vendored from @fiatjaf/git-natural-api v0.2.4
+ * https://jsr.io/@fiatjaf/git-natural-api
  *
- * The package doesn't export this module via its "exports" map, so we vendor
- * it here to use in tests and (later) in the push pipeline.
- *
- * TODO: Once the full git workflow (apply patches -> pack -> push) is complete,
- * review what can be PR'd back to @fiatjaf/git-natural-api and what should
- * live in our own git-grasp-pool helper package.
+ * Local modifications (already applied):
+ *  - Removed debug console.log calls
+ *  - Renamed internal `deflate` helper to `inflate` for clarity
+ *  - Cleaned up BigBatchError handling comments
  */
 
 import { sha1 } from "@noble/hashes/legacy.js";

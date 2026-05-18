@@ -15,7 +15,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { GitCommit, User, Clock, GitMerge, Copy, Check } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
-import type { Commit } from "@fiatjaf/git-natural-api";
+import type { Commit } from "@/lib/vendored/git-natural-api";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 
 // ---------------------------------------------------------------------------

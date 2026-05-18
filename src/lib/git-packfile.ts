@@ -12,7 +12,7 @@
  *
  * The packfiles produced by this module are compatible with real git servers
  * (GitHub, Gitea, cgit, etc.) and with the parsePackfile function from
- * @fiatjaf/git-natural-api.
+ * src/lib/vendored/git-natural-api.
  *
  * Uses:
  *   - fflate's deflateSync for zlib compression (matching the parse side's Inflate)

@@ -14,7 +14,6 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@fiatjaf/git-natural-api": "npm:@jsr/fiatjaf__git-natural-api@^0.2.4",
     "@fontsource-variable/inter": "^5.2.8",
     "@hookform/resolvers": "^3.10.0",
     "@libs/qrcode": "jsr:^3.0.1",
@@ -124,8 +123,6 @@
     "vitest-websocket-mock": "0.5.0"
   },
   "pnpm": {
-    "patchedDependencies": {
-      "@jsr/fiatjaf__git-natural-api": "patches/@jsr__fiatjaf__git-natural-api.patch"
-    }
+    "patchedDependencies": {}
   }
 }

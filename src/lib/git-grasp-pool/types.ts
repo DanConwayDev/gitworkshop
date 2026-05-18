@@ -10,7 +10,7 @@ import type {
   Commit,
   Tree,
   InfoRefsUploadPackResponse,
-} from "@fiatjaf/git-natural-api";
+} from "@/lib/vendored/git-natural-api";
 
 // Re-export library types that appear in our public API
 export type { Commit, Tree, InfoRefsUploadPackResponse };

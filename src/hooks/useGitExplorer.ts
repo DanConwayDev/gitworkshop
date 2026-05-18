@@ -16,7 +16,7 @@ import type {
   Commit,
   Tree,
   InfoRefsUploadPackResponse,
-} from "@fiatjaf/git-natural-api";
+} from "@/lib/vendored/git-natural-api";
 import type { GitGraspPool, PoolState } from "@/lib/git-grasp-pool";
 import { FULL_NEST_LIMIT } from "@/lib/git-grasp-pool/cache";
 

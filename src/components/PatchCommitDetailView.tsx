@@ -66,7 +66,7 @@ import {
   type CommitHashResult,
 } from "@/lib/patch-verify";
 import { mergePatchChainDiff } from "@/lib/patch-diff-merge";
-import type { Commit } from "@fiatjaf/git-natural-api";
+import type { Commit } from "@/lib/vendored/git-natural-api";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parsePackfile } from "@/lib/vendored/parse-packfile";
+import { parsePackfile } from "@/lib/vendored/git-natural-api/parse-packfile";
 import {
   createPackfile,
   encodeTypeSize,

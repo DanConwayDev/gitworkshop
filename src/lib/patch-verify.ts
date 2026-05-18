@@ -30,7 +30,7 @@ import { extractPatchDiff } from "@/lib/nip34";
 import { formatTimezone, extractGpgSignature } from "@/lib/patch-commits";
 import type { Patch } from "@/casts/Patch";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
-import type { Tree } from "@fiatjaf/git-natural-api";
+import type { Tree } from "@/lib/vendored/git-natural-api";
 
 // ---------------------------------------------------------------------------
 // Blob verification types (lightweight, no git server needed)

@@ -1,7 +1,7 @@
 /**
  * git-grasp-pool — git HTTP protocol layer
  *
- * Uses only the low-level exports from @fiatjaf/git-natural-api:
+ * Uses only the low-level exports from the vendored git-natural-api:
  *   fetchPackfile, createWantRequest, loadTree, parseTree, parseCommit,
  *   getInfoRefs, MissingRef, ParsedObject
  *
@@ -21,6 +21,7 @@
 import {
   getInfoRefs as libGetInfoRefs,
   fetchPackfile,
+  createWantRequest,
   loadTree,
   parseCommit,
   type Commit,
@@ -28,35 +29,7 @@ import {
   type TreeEntry,
   type InfoRefsUploadPackResponse,
   type ParsedObject,
-} from "@fiatjaf/git-natural-api";
-
-// ---------------------------------------------------------------------------
-// Vendored from @fiatjaf/git-natural-api/packs.ts (not exported by the package)
-// createWantRequest builds the git smart-HTTP pkt-line want request body.
-// ---------------------------------------------------------------------------
-
-function pktEncode(data: string): string {
-  if (data.length === 0) return "0000";
-  const len = data.length + 4;
-  return len.toString(16).padStart(4, "0") + data;
-}
-
-function createWantRequest(
-  commitSha: string,
-  capabilities: string[],
-  deepen: number | undefined,
-  filter?: string,
-): string {
-  if (commitSha.length !== 40)
-    throw new Error(`invalid commit '${commitSha}', must be 40 char hex`);
-  const pkts: string[] = [];
-  pkts.push(`want ${commitSha} ${capabilities.join(" ")} agent=nsa/1.0.0\n`);
-  if (typeof deepen !== "undefined") pkts.push(`deepen ${deepen}\n`);
-  if (filter) pkts.push("filter " + filter + "\n");
-  pkts.push("");
-  pkts.push("done\n");
-  return pkts.map(pktEncode).join("");
-}
+} from "@/lib/vendored/git-natural-api";
 import type { CorsProxyManager } from "./cors-proxy";
 import type { GitObjectCache, RawObjectsEntry } from "./cache";
 import { FULL_NEST_LIMIT } from "./cache";

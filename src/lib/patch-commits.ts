@@ -8,7 +8,7 @@
  *   ["committer",     "<name>", "<email>", "<timestamp>", "<tz-offset>"]
  *
  * This module extracts that metadata and constructs `Commit` objects (matching
- * the type from @fiatjaf/git-natural-api) that can be injected into the
+ * the type from src/lib/vendored/git-natural-api) that can be injected into the
  * GitGraspPool cache. This makes `pool.getSingleCommit()` return the right
  * data for patch-sourced commits, enabling the commit detail page to render
  * without needing the git server to have these commits.
@@ -23,7 +23,7 @@
  * instead of tree-based diffing.
  */
 
-import type { Commit } from "@fiatjaf/git-natural-api";
+import type { Commit } from "@/lib/vendored/git-natural-api";
 import type { Patch } from "@/casts/Patch";
 
 // ---------------------------------------------------------------------------
