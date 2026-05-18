@@ -2,7 +2,7 @@
  * NwcQrConnect — NIP-47 wallet pairing via auth URI + QR code.
  *
  * Creates a fresh ephemeral WalletConnect client, renders its
- * `nostr+walletauth://...` URI as an SVG QR (via @libs/qrcode), and waits
+ * `nostr+walletauth://...` URI as an SVG QR (via qrcode), and waits
  * for the wallet service to pair. When pairing completes, the resolved
  * `connectURI` is persisted via setWalletConnectUri and `onConnected` fires.
  *
@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { WalletConnect } from "applesauce-wallet-connect";
 import { generateSecretKey } from "nostr-tools";
-import { qrcode } from "@libs/qrcode";
+import QRCode from "qrcode";
 import { Loader2 } from "lucide-react";
 
 import { pool } from "@/services/nostr";
@@ -56,17 +56,17 @@ export function NwcQrConnect({
     });
   }, [ephemeralWallet, appName]);
 
-  const qrSvg = useMemo(
-    () =>
-      qrcode(authUri, {
-        output: "svg",
-        border: 2,
-        ecl: "MEDIUM",
-        dark: "#000000",
-        light: "#ffffff",
-      }),
-    [authUri],
-  );
+  const [qrSvg, setQrSvg] = useState<string>("");
+  useEffect(() => {
+    QRCode.toString(authUri, {
+      type: "svg",
+      margin: 2,
+      errorCorrectionLevel: "M",
+      color: { dark: "#000000", light: "#ffffff" },
+    })
+      .then(setQrSvg)
+      .catch(() => setQrSvg(""));
+  }, [authUri]);
 
   useEffect(() => {
     const controller = new AbortController();

@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "pnpm i --silent && vite",
-    "build": "pnpm i --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'Project built successfully!'",
-    "test": "pnpm i --silent && tsc --noEmit && eslint && prettier --check --log-level warn . && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
-    "pre-commit": "pnpm i --silent && tsc --noEmit && eslint && prettier --write --log-level warn . && git update-index --again && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'Pre-commit OK'",
+    "dev": "vite",
+    "build": "vite build -l error && cp dist/index.html dist/404.html && echo 'Project built successfully!'",
+    "test": "tsc --noEmit && eslint && prettier --check --log-level warn . && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
+    "pre-commit": "tsc --noEmit && eslint && prettier --write --log-level warn . && git update-index --again && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'Pre-commit OK'",
     "format": "prettier -w ."
   },
   "dependencies": {
@@ -16,7 +16,6 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/inter": "^5.2.8",
     "@hookform/resolvers": "^3.10.0",
-    "@libs/qrcode": "jsr:^3.0.1",
     "@noble/hashes": "^2.0.1",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -121,8 +120,5 @@
     "vite": "^6.4.1",
     "vitest": "^3.2.4",
     "vitest-websocket-mock": "0.5.0"
-  },
-  "pnpm": {
-    "patchedDependencies": {}
   }
 }
