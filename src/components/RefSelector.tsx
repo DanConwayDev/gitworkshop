@@ -1397,6 +1397,7 @@ export function RefSelector({
                       effectiveSource={effectiveSource}
                       pool={pool}
                       urlStates={urlStates}
+                      cloneUrls={cloneUrls}
                     />
                   ))}
                 </div>
@@ -1427,6 +1428,7 @@ export function RefSelector({
                       effectiveSource={effectiveSource}
                       pool={pool}
                       urlStates={urlStates}
+                      cloneUrls={cloneUrls}
                     />
                   ))}
                 </div>

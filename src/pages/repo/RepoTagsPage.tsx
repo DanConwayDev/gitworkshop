@@ -220,6 +220,7 @@ export default function RepoTagsPage() {
                   effectiveSource={effectiveSource}
                   pool={pool}
                   urlStates={poolState.urls}
+                  cloneUrls={cloneUrls}
                   annotated={tag.rawTagOid !== undefined}
                 />
               );

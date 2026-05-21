@@ -98,13 +98,34 @@ export function StatusIcon({
 export function StatusTooltipText({
   refWithStatus,
   effectiveSource,
+  cloneUrls,
+  urlStates,
 }: {
   refWithStatus: RefWithStatus;
   /** "nostr" or a concrete clone URL — never "default". */
   effectiveSource: string;
+  cloneUrls?: string[];
+  urlStates?: Record<string, UrlState>;
 }) {
   const serverLabel =
     effectiveSource !== "nostr" ? gitServerDomain(effectiveSource) : null;
+
+  // Compute which servers have this ref (for not-on-server / git-server-only)
+  const fullRefName = `${refWithStatus.isBranch ? "refs/heads/" : "refs/tags/"}${refWithStatus.name}`;
+  const peeledRefName = `${fullRefName}^{}`;
+  const serversWithRef: string[] = useMemo(() => {
+    if (!cloneUrls || !urlStates) return [];
+    return cloneUrls.filter((url) => {
+      const us = urlStates[url];
+      if (!us?.infoRefs) return false;
+      return (
+        us.infoRefs.refs[fullRefName] !== undefined ||
+        us.infoRefs.refs[peeledRefName] !== undefined
+      );
+    });
+  }, [cloneUrls, urlStates, fullRefName, peeledRefName]);
+
+  const serverDomains = serversWithRef.map(gitServerDomain);
 
   switch (refWithStatus.status) {
     case "verified":
@@ -186,16 +207,47 @@ export function StatusTooltipText({
       );
     case "git-server-only":
       return (
-        <span>
-          This ref exists on the git server but isn't in the maintainer's Nostr
-          state
-        </span>
+        <div className="space-y-1">
+          <p>
+            This ref exists on the git server but isn't in the maintainer's
+            Nostr state
+          </p>
+          {serverDomains.length > 0 && (
+            <p className="text-muted-foreground text-[11px]">
+              Available on:{" "}
+              {serverDomains.map((d, i) => (
+                <span key={d}>
+                  <code className="font-mono bg-muted px-1 rounded">{d}</code>
+                  {i < serverDomains.length - 1 ? ", " : ""}
+                </span>
+              ))}
+            </p>
+          )}
+        </div>
       );
     case "not-on-server":
       return (
-        <span>
-          This ref is not available on {serverLabel ?? "the selected server"}
-        </span>
+        <div className="space-y-1">
+          <p>
+            This ref is not available on {serverLabel ?? "the selected server"}
+          </p>
+          {serverDomains.length > 0 && (
+            <p className="text-muted-foreground text-[11px]">
+              Available on:{" "}
+              {serverDomains.map((d, i) => (
+                <span key={d}>
+                  <code className="font-mono bg-muted px-1 rounded">{d}</code>
+                  {i < serverDomains.length - 1 ? ", " : ""}
+                </span>
+              ))}
+            </p>
+          )}
+          {serversWithRef.length === 0 && cloneUrls && cloneUrls.length > 0 && (
+            <p className="text-muted-foreground text-[11px]">
+              Not found on any configured git server
+            </p>
+          )}
+        </div>
       );
     case "no-state":
       return null;
@@ -293,6 +345,8 @@ interface BaseRefRowProps {
   effectiveSource: string;
   pool?: GitGraspPool | null;
   urlStates?: Record<string, UrlState>;
+  /** All clone URLs — used to compute which servers have a ref. */
+  cloneUrls?: string[];
 }
 
 export interface CompactRefRowProps extends BaseRefRowProps {
@@ -354,6 +408,7 @@ function CompactRefRow({
   effectiveSource,
   pool,
   urlStates,
+  cloneUrls,
 }: CompactRefRowProps) {
   const sourceHash = useSourceHash(refWithStatus, effectiveSource, urlStates);
   const commit = useLazyCommit(pool, sourceHash);
@@ -441,6 +496,8 @@ function CompactRefRow({
           <StatusTooltipText
             refWithStatus={refWithStatus}
             effectiveSource={effectiveSource}
+            cloneUrls={cloneUrls}
+            urlStates={urlStates}
           />
         </TooltipContent>
       </Tooltip>
@@ -459,6 +516,7 @@ function ExpandedRefRow({
   effectiveSource,
   pool,
   urlStates,
+  cloneUrls,
   divergence,
   annotated,
   onSelect,
@@ -483,6 +541,21 @@ function ExpandedRefRow({
     (refWithStatus.status === "git-server-only" && !sourceIsGitServer);
   const showTooltip =
     refWithStatus.status !== "no-state" && refWithStatus.status !== "loading";
+
+  // Compute which servers have this ref — used for the availability badge
+  const fullRefName = `${refWithStatus.isBranch ? "refs/heads/" : "refs/tags/"}${refWithStatus.name}`;
+  const peeledRefName = `${fullRefName}^{}`;
+  const serversWithRef = useMemo(() => {
+    if (!cloneUrls || !urlStates) return [];
+    return cloneUrls.filter((url) => {
+      const us = urlStates[url];
+      if (!us?.infoRefs) return false;
+      return (
+        us.infoRefs.refs[fullRefName] !== undefined ||
+        us.infoRefs.refs[peeledRefName] !== undefined
+      );
+    });
+  }, [cloneUrls, urlStates, fullRefName, peeledRefName]);
 
   const Icon = refWithStatus.isBranch ? GitBranch : Tag;
 
@@ -524,12 +597,24 @@ function ExpandedRefRow({
         <StatusTooltipText
           refWithStatus={refWithStatus}
           effectiveSource={effectiveSource}
+          cloneUrls={cloneUrls}
+          urlStates={urlStates}
         />
       </TooltipContent>
     </Tooltip>
   ) : (
     <StatusIcon status={refWithStatus.status} className="shrink-0" />
   );
+
+  // Availability badge for absent refs — tells the user which servers do have
+  // this ref so they can switch source or understand the situation at a glance.
+  // Only rendered on the expanded density (full-page views) where there's room.
+  const availabilityBadge = isAbsent ? (
+    <ServerAvailabilityBadge
+      status={refWithStatus.status}
+      serversWithRef={serversWithRef}
+    />
+  ) : null;
 
   return (
     <Wrapper
@@ -550,7 +635,7 @@ function ExpandedRefRow({
       <Icon className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
 
       <div className="flex-1 min-w-0 space-y-1">
-        {/* Line 1: name + default badge + status icon + ahead/behind badges (right-aligned) */}
+        {/* Line 1: name + default badge + status icon + availability badge + ahead/behind badges (right-aligned) */}
         <div className="flex items-center gap-2 min-w-0">
           <span
             className={cn(
@@ -574,6 +659,7 @@ function ExpandedRefRow({
             </Badge>
           )}
           {statusIconWithTooltip}
+          {availabilityBadge}
           {hasBranchBadges && (
             <div className="ml-auto flex items-center gap-1.5 shrink-0">
               <BranchDivergenceBadges
@@ -623,6 +709,94 @@ function ExpandedRefRow({
         </div>
       )}
     </Wrapper>
+  );
+}
+
+/**
+ * A compact badge shown on expanded rows for absent refs, telling the user
+ * which git servers do (or don't) have the ref.
+ *
+ * - "not-on-server": ref is absent from the selected server but may exist
+ *   elsewhere. Shows "on <domain>" when exactly one other server has it, or
+ *   "on N servers" when multiple do. Falls back to "nostr only" when the ref
+ *   is in the Nostr state but on no git server.
+ * - "git-server-only": ref exists on git servers but not in the Nostr state.
+ *   Shows which server(s) have it.
+ *
+ * A tooltip (side="left") lists all servers with the ref for full context.
+ * On mobile the badge itself carries the information so no hover is needed.
+ */
+function ServerAvailabilityBadge({
+  status,
+  serversWithRef,
+}: {
+  status: RefStatus;
+  serversWithRef: string[];
+}) {
+  const domains = serversWithRef.map(gitServerDomain);
+
+  let label: string;
+  let title: string;
+
+  if (status === "not-on-server") {
+    if (domains.length === 0) {
+      // In Nostr state but on no git server yet — or servers still loading
+      return null;
+    } else if (domains.length === 1) {
+      label = `on ${domains[0]}`;
+      title = `This ref is only available on ${domains[0]}`;
+    } else {
+      label = `on ${domains.length} servers`;
+      title = `Available on: ${domains.join(", ")}`;
+    }
+  } else if (status === "git-server-only") {
+    if (domains.length === 0) return null;
+    if (domains.length === 1) {
+      label = `${domains[0]} only`;
+      title = `Only on ${domains[0]} — not in the Nostr state`;
+    } else {
+      label = `${domains.length} servers only`;
+      title = `On ${domains.join(", ")} — not in the Nostr state`;
+    }
+  } else {
+    return null;
+  }
+
+  const badge = (
+    <Badge
+      variant="outline"
+      className="text-[10px] h-4 px-1.5 shrink-0 font-normal text-muted-foreground border-muted-foreground/30 cursor-default"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {label}
+    </Badge>
+  );
+
+  // Tooltip provides the full server list — useful on desktop and as a
+  // confirmation on mobile (long-press). The badge label already carries
+  // enough context for mobile users who can't hover.
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent
+        side="left"
+        className="max-w-[260px] text-xs"
+        sideOffset={8}
+      >
+        <div className="space-y-1">
+          <p>{title}</p>
+          {domains.length > 1 && (
+            <ul className="space-y-0.5">
+              {domains.map((d) => (
+                <li key={d}>
+                  <code className="font-mono bg-muted px-1 rounded">{d}</code>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

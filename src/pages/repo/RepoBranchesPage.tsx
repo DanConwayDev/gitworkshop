@@ -319,6 +319,7 @@ export default function RepoBranchesPage() {
                   effectiveSource={effectiveSource}
                   pool={pool}
                   urlStates={poolState.urls}
+                  cloneUrls={cloneUrls}
                   divergence={div}
                 />
               );
