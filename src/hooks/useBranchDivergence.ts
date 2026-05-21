@@ -121,6 +121,24 @@ export function useBranchDivergence(
         async (branch): Promise<[string, BranchDivergence] | null> => {
           const fullRefName = `refs/heads/${branch.name}`;
           try {
+            // Fast path: identical to the default branch.
+            if (branch.hash === defaultBranch.hash) {
+              const latestCommit = await pool.getSingleCommit(
+                branch.hash,
+                abort.signal,
+              );
+              if (abort.signal.aborted) return null;
+              return [
+                fullRefName,
+                {
+                  ahead: 0,
+                  behind: 0,
+                  latestCommit,
+                  noMergeBase: false,
+                },
+              ];
+            }
+
             // Step 1+2: merge base + latest commit, in parallel. findMergeBase
             // populates the branch's 200-commit history in the cache as a
             // side effect, which step 4 below relies on.
@@ -130,29 +148,42 @@ export function useBranchDivergence(
             ]);
             if (abort.signal.aborted) return null;
 
+            // No shared ancestor within the pool's commit walk — surface
+            // explicitly as `noMergeBase` so the row renders "orphaned"
+            // rather than just blank/unknown.
+            if (mergeBase === null) {
+              return [
+                fullRefName,
+                {
+                  ahead: null,
+                  behind: null,
+                  latestCommit,
+                  noMergeBase: true,
+                },
+              ];
+            }
+
             let ahead: number | null = null;
             let behind: number | null = null;
 
-            if (mergeBase) {
-              // Step 3: how far the default branch is past the merge base.
-              behind = await pool.countCommitsBehind(mergeBase, abort.signal);
-              if (abort.signal.aborted) return null;
+            // Step 3: how far the default branch is past the merge base.
+            behind = await pool.countCommitsBehind(mergeBase, abort.signal);
+            if (abort.signal.aborted) return null;
 
-              // Step 4: how far this branch is past the merge base. Served
-              // from the cache populated by findMergeBase above.
-              if (mergeBase === branch.hash) {
-                ahead = 0;
-              } else {
-                const chain = await pool.getCommitHistory(
-                  branch.hash,
-                  200,
-                  abort.signal,
-                );
-                if (abort.signal.aborted) return null;
-                if (chain) {
-                  const idx = chain.findIndex((c) => c.hash === mergeBase);
-                  if (idx !== -1) ahead = idx;
-                }
+            // Step 4: how far this branch is past the merge base. Served
+            // from the cache populated by findMergeBase above.
+            if (mergeBase === branch.hash) {
+              ahead = 0;
+            } else {
+              const chain = await pool.getCommitHistory(
+                branch.hash,
+                200,
+                abort.signal,
+              );
+              if (abort.signal.aborted) return null;
+              if (chain) {
+                const idx = chain.findIndex((c) => c.hash === mergeBase);
+                if (idx !== -1) ahead = idx;
               }
             }
 
@@ -160,12 +191,15 @@ export function useBranchDivergence(
               ahead,
               behind,
               latestCommit,
+              noMergeBase: false,
             };
             return [fullRefName, value];
           } catch {
             if (abort.signal.aborted) return null;
             // Per-branch failures degrade gracefully — surface "unknown"
-            // counts so the row still renders.
+            // counts so the row still renders. We deliberately leave
+            // `noMergeBase` unset here so transient fetch errors don't
+            // masquerade as orphaned branches in the UI.
             return [
               fullRefName,
               { ahead: null, behind: null, latestCommit: null },

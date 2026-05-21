@@ -6,11 +6,13 @@
  *   - default-branch badge
  *   - per-ref status vs the Nostr-signed state (verified / mismatch / etc.)
  *   - latest commit hash, message and committer timestamp
- *   - ahead/behind counts vs the default branch
+ *   - ahead/behind labels vs the default branch (or "merged" / "up to date"
+ *     / "orphaned" when one of the special cases applies)
  *
- * The source selector behaves identically to the popover surface: switching
- * source recomputes per-ref status against that server, preserves other query
- * params, and is rendered through `<SourceSelector presentation="page-toolbar" />`.
+ * The source selector is rendered as a right-aligned dropdown
+ * (`SourceSelectorDropdown`) so it stays visually compact next to the page
+ * title — the same affordance as the popover ref selector's source row,
+ * just promoted to a standalone trigger.
  */
 import { useCallback, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -21,8 +23,8 @@ import { useGitPool } from "@/hooks/useGitPool";
 import { useGitExplorer } from "@/hooks/useGitExplorer";
 import { useRefsWithStatus } from "@/hooks/useRefsWithStatus";
 import { useBranchDivergence } from "@/hooks/useBranchDivergence";
-import { SourceSelector } from "@/components/SourceSelector";
-import { RefRow } from "@/components/RefRow";
+import { SourceSelectorDropdown } from "@/components/SourceSelector";
+import { RefRow, type BranchDivergence } from "@/components/RefRow";
 import type { RefWithStatus } from "@/lib/refStatus";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -47,12 +49,17 @@ type DivergenceMap = ReturnType<typeof useBranchDivergence>["divergence"];
  *   2 — ahead-only (commits ahead, none behind)
  *   3 — diverged (both ahead and behind)
  *   4 — unknown (divergence not yet computed)
+ *   5 — orphaned (no shared ancestor) — sinks to the bottom so the rest of
+ *       the list stays readable
  */
 function branchRank(
-  divergence: { ahead: number | null; behind: number | null } | undefined,
+  divergence:
+    | { ahead: number | null; behind: number | null; noMergeBase?: boolean }
+    | undefined,
 ): number {
   if (!divergence) return 4;
-  const { ahead, behind } = divergence;
+  const { ahead, behind, noMergeBase } = divergence;
+  if (noMergeBase) return 5;
   if (ahead === null || behind === null) return 4;
   if (ahead === 0 && behind > 0) return 0;
   if (ahead === 0 && behind === 0) return 1;
@@ -223,7 +230,7 @@ export default function RepoBranchesPage() {
 
   return (
     <div className="container max-w-screen-xl px-4 md:px-8 py-6 space-y-4">
-      {/* Title + count */}
+      {/* Title row: branch icon + count on the left, source dropdown on the right */}
       <div className="flex items-center gap-3 flex-wrap">
         <GitBranch className="h-5 w-5 text-muted-foreground shrink-0" />
         <h2 className="text-lg font-semibold shrink-0">Branches</h2>
@@ -241,25 +248,25 @@ export default function RepoBranchesPage() {
             {mismatchCount} differ
           </Badge>
         )}
+        <div className="ml-auto">
+          <SourceSelectorDropdown
+            selectedSource={selectedSource}
+            onSelectSource={handleSourceChange}
+            repoState={repoState}
+            repoRelayEose={repoRelayEose}
+            stateCreatedAt={repoState?.event.created_at}
+            urlStates={poolState.urls}
+            cloneUrls={cloneUrls}
+            graspCloneUrls={repo?.graspCloneUrls ?? []}
+            additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
+            stateBehindGit={stateBehindGit}
+            poolWarning={poolState.warning}
+            pool={pool}
+            relayStateMap={relayStateMap}
+            winnerUrl={poolState.winnerUrl}
+          />
+        </div>
       </div>
-
-      {/* Source selector — full-page toolbar card */}
-      <SourceSelector
-        presentation="page-toolbar"
-        selectedSource={selectedSource}
-        onSelectSource={handleSourceChange}
-        repoState={repoState}
-        repoRelayEose={repoRelayEose}
-        stateCreatedAt={repoState?.event.created_at}
-        urlStates={poolState.urls}
-        cloneUrls={cloneUrls}
-        graspCloneUrls={repo?.graspCloneUrls ?? []}
-        additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
-        stateBehindGit={stateBehindGit}
-        poolWarning={poolState.warning}
-        pool={pool}
-        relayStateMap={relayStateMap}
-      />
 
       {/* List body */}
       {showSkeletons && <BranchesSkeleton />}
@@ -292,8 +299,19 @@ export default function RepoBranchesPage() {
           <div className="divide-y divide-border/40">
             {sortedBranches.map((branch) => {
               const fullName = `refs/heads/${branch.name}`;
-              const div = branch.isDefault
-                ? undefined
+              // The default branch is intentionally absent from the
+              // divergence map (divergence vs itself is always 0). Pass a
+              // virtual `up to date` entry so the row still renders the
+              // text-label badge alongside the rest of the list — matching
+              // GitHub's branches page where master/main shows "default"
+              // and "up to date" side by side.
+              const div: BranchDivergence | undefined = branch.isDefault
+                ? {
+                    ahead: 0,
+                    behind: 0,
+                    latestCommit: null,
+                    noMergeBase: false,
+                  }
                 : divergence.get(fullName);
               const row = (
                 <RefRow

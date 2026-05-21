@@ -19,7 +19,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useGitPool } from "@/hooks/useGitPool";
 import { useGitExplorer } from "@/hooks/useGitExplorer";
 import { useRefsWithStatus } from "@/hooks/useRefsWithStatus";
-import { SourceSelector } from "@/components/SourceSelector";
+import { SourceSelectorDropdown } from "@/components/SourceSelector";
 import { RefRow } from "@/components/RefRow";
 import { compareTagsNewestFirst } from "@/lib/refStatus";
 import { Card, CardContent } from "@/components/ui/card";
@@ -158,7 +158,7 @@ export default function RepoTagsPage() {
 
   return (
     <div className="container max-w-screen-xl px-4 md:px-8 py-6 space-y-4">
-      {/* Title + count */}
+      {/* Title row: tag icon + count on the left, source dropdown on the right */}
       <div className="flex items-center gap-3 flex-wrap">
         <Tag className="h-5 w-5 text-muted-foreground shrink-0" />
         <h2 className="text-lg font-semibold shrink-0">Tags</h2>
@@ -176,25 +176,25 @@ export default function RepoTagsPage() {
             {mismatchCount} differ
           </Badge>
         )}
+        <div className="ml-auto">
+          <SourceSelectorDropdown
+            selectedSource={selectedSource}
+            onSelectSource={handleSourceChange}
+            repoState={repoState}
+            repoRelayEose={repoRelayEose}
+            stateCreatedAt={repoState?.event.created_at}
+            urlStates={poolState.urls}
+            cloneUrls={cloneUrls}
+            graspCloneUrls={repo?.graspCloneUrls ?? []}
+            additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
+            stateBehindGit={stateBehindGit}
+            poolWarning={poolState.warning}
+            pool={pool}
+            relayStateMap={relayStateMap}
+            winnerUrl={poolState.winnerUrl}
+          />
+        </div>
       </div>
-
-      {/* Source selector — full-page toolbar card */}
-      <SourceSelector
-        presentation="page-toolbar"
-        selectedSource={selectedSource}
-        onSelectSource={handleSourceChange}
-        repoState={repoState}
-        repoRelayEose={repoRelayEose}
-        stateCreatedAt={repoState?.event.created_at}
-        urlStates={poolState.urls}
-        cloneUrls={cloneUrls}
-        graspCloneUrls={repo?.graspCloneUrls ?? []}
-        additionalGitServerUrls={repo?.additionalGitServerUrls ?? []}
-        stateBehindGit={stateBehindGit}
-        poolWarning={poolState.warning}
-        pool={pool}
-        relayStateMap={relayStateMap}
-      />
 
       {/* List */}
       {showSkeletons && <TagsSkeleton />}

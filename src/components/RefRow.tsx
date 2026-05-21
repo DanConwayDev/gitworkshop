@@ -36,8 +36,8 @@ import {
   ShieldQuestion,
   AlertTriangle,
   Minus,
-  ArrowUp,
-  ArrowDown,
+  GitMerge,
+  Unlink,
 } from "lucide-react";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
@@ -303,6 +303,13 @@ export interface BranchDivergence {
   ahead: number | null;
   behind: number | null;
   latestCommit: Commit | null;
+  /**
+   * True when the divergence lookup completed but found no shared ancestor
+   * with the default branch within the pool's commit walk. Surfaces as the
+   * "orphaned" badge in the expanded row, so the user can distinguish an
+   * unrelated branch (separate history) from one still being computed.
+   */
+  noMergeBase?: boolean;
 }
 
 export interface ExpandedRefRowProps extends BaseRefRowProps {
@@ -489,8 +496,14 @@ function ExpandedRefRow({
 
   const ahead = divergence?.ahead ?? null;
   const behind = divergence?.behind ?? null;
-  const hasDivergenceBadges =
-    ahead !== null || behind !== null || annotated === true;
+  const noMergeBase = divergence?.noMergeBase === true;
+  // For branches the trailing area shows ahead/behind text badges. The
+  // ExpandedRefRow is used by both the branches page (where `divergence` is
+  // passed) and the tags page (where `annotated` may be passed). We only
+  // render the trailing branch badges when `divergence` is supplied.
+  const hasBranchBadges = !!divergence;
+  const hasAnnotatedBadge = annotated === true;
+  const hasDivergenceBadges = hasBranchBadges || hasAnnotatedBadge;
 
   const statusIconWithTooltip = showTooltip ? (
     <Tooltip>
@@ -587,30 +600,17 @@ function ExpandedRefRow({
         </div>
       </div>
 
-      {/* Trailing: ahead/behind (branches) or annotated badge (tags) */}
+      {/* Trailing: ahead/behind labels (branches) or annotated badge (tags) */}
       {hasDivergenceBadges && (
         <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-          {ahead !== null && ahead > 0 && (
-            <Badge
-              variant="outline"
-              className="text-[10px] h-5 px-1.5 font-normal gap-0.5"
-              title={`${ahead} commit${ahead === 1 ? "" : "s"} ahead of default`}
-            >
-              <ArrowUp className="h-3 w-3" />
-              {ahead}
-            </Badge>
+          {hasBranchBadges && (
+            <BranchDivergenceBadges
+              ahead={ahead}
+              behind={behind}
+              noMergeBase={noMergeBase}
+            />
           )}
-          {behind !== null && behind > 0 && (
-            <Badge
-              variant="outline"
-              className="text-[10px] h-5 px-1.5 font-normal gap-0.5"
-              title={`${behind} commit${behind === 1 ? "" : "s"} behind default`}
-            >
-              <ArrowDown className="h-3 w-3" />
-              {behind}
-            </Badge>
-          )}
-          {annotated === true && (
+          {hasAnnotatedBadge && (
             <Badge
               variant="secondary"
               className="text-[10px] h-5 px-1.5 font-normal"
@@ -622,5 +622,102 @@ function ExpandedRefRow({
         </div>
       )}
     </Wrapper>
+  );
+}
+
+/**
+ * Render the ahead/behind status of a branch versus the default branch as a
+ * compact set of text-labelled badges. Mirrors the visual vocabulary of
+ * GitHub's branches page rather than the up/down arrows used in the popover
+ * ref selector — text reads more naturally on a full-page comparison view
+ * where we're not pushing/pulling, just comparing.
+ *
+ * State table:
+ *   noMergeBase                   → "orphaned" (no shared ancestor)
+ *   ahead === null && behind === null → nothing (still computing)
+ *   ahead === 0  && behind === 0   → "up to date"
+ *   ahead === 0  && behind > 0     → "merged" + "{N} behind"
+ *   ahead > 0   && behind === 0    → "{N} ahead"
+ *   ahead > 0   && behind > 0      → "{N} ahead" + "{N} behind"
+ */
+function BranchDivergenceBadges({
+  ahead,
+  behind,
+  noMergeBase,
+}: {
+  ahead: number | null;
+  behind: number | null;
+  noMergeBase: boolean;
+}) {
+  if (noMergeBase) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant="outline"
+            className="text-[10px] h-5 px-1.5 font-normal gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400 cursor-default"
+          >
+            <Unlink className="h-3 w-3" />
+            orphaned
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent
+          side="left"
+          className="max-w-[260px] text-xs"
+          sideOffset={8}
+        >
+          No shared commit with the default branch within the recent history —
+          this branch has unrelated history (e.g. a separate root) or its merge
+          base is too deep to detect.
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (ahead === null || behind === null) return null;
+
+  if (ahead === 0 && behind === 0) {
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] h-5 px-1.5 font-normal text-muted-foreground"
+        title="Branch tip matches the default branch"
+      >
+        up to date
+      </Badge>
+    );
+  }
+
+  return (
+    <>
+      {ahead === 0 && behind > 0 && (
+        <Badge
+          variant="outline"
+          className="text-[10px] h-5 px-1.5 font-normal gap-1 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+          title="All commits on this branch are reachable from the default branch"
+        >
+          <GitMerge className="h-3 w-3" />
+          merged
+        </Badge>
+      )}
+      {ahead > 0 && (
+        <Badge
+          variant="outline"
+          className="text-[10px] h-5 px-1.5 font-normal"
+          title={`${ahead} commit${ahead === 1 ? "" : "s"} ahead of default`}
+        >
+          {ahead} ahead
+        </Badge>
+      )}
+      {behind > 0 && (
+        <Badge
+          variant="outline"
+          className="text-[10px] h-5 px-1.5 font-normal"
+          title={`${behind} commit${behind === 1 ? "" : "s"} behind default`}
+        >
+          {behind} behind
+        </Badge>
+      )}
+    </>
   );
 }

@@ -7,6 +7,11 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Check,
   AlertTriangle,
   Radio,
@@ -15,7 +20,10 @@ import {
   XCircle,
   HelpCircle,
   Copy,
+  ChevronDown,
 } from "lucide-react";
+import { deriveEffectiveSource } from "@/lib/sourceUtils";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { nip19 } from "nostr-tools";
 import type { NostrEvent } from "nostr-tools";
 import { formatDistanceStrict } from "date-fns";
@@ -42,6 +50,20 @@ import { findOlderStateEvent } from "@/lib/refStatus";
 export function gitServerDomain(url: string): string {
   try {
     return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Short hostname + path label from a clone URL, e.g. "github.com/foo/bar".
+ * Useful for compact source-label rendering in dropdowns and chips.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function shortServerLabel(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.hostname + (u.pathname !== "/" ? u.pathname : "");
   } catch {
     return url;
   }
@@ -1088,5 +1110,184 @@ export function SourceSelector({
         )}
       </ScrollArea>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SourceSelectorDropdown — popover-trigger variant for full-page toolbars
+// ---------------------------------------------------------------------------
+
+export interface SourceSelectorDropdownProps extends SourceSelectorProps {
+  /**
+   * Pool's currently-winning git server URL. Required to resolve the
+   * "default" sentinel into a concrete effective source for the trigger
+   * label.
+   */
+  winnerUrl?: string | null;
+  /** Popover content alignment (defaults to "end" — right-aligned). */
+  contentAlign?: "start" | "end" | "center";
+  className?: string;
+}
+
+/**
+ * Dropdown wrapper around `SourceSelector` for full-page toolbars
+ * (`/branches`, `/tags`). Renders a compact trigger button — like the source
+ * row in the popover ref selector — and opens the full SourceSelector panel
+ * in a popover on click.
+ *
+ * The trigger surfaces the currently-resolved source (and a small status
+ * accent when git and Nostr are out of sync) so the user can see at a glance
+ * what's authoritative without opening the panel.
+ */
+export function SourceSelectorDropdown({
+  winnerUrl,
+  contentAlign = "end",
+  className,
+  ...selectorProps
+}: SourceSelectorDropdownProps) {
+  const {
+    selectedSource,
+    repoState,
+    repoRelayEose,
+    stateBehindGit,
+    poolWarning,
+    onSelectSource,
+    onRefRevertToDefault,
+  } = selectorProps;
+
+  const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
+
+  const isLoading = repoState === undefined || !repoRelayEose;
+  const isNoState = repoRelayEose && repoState === null;
+
+  const aheadServerUrl =
+    poolWarning?.kind === "state-behind-git" ? poolWarning.gitServerUrl : null;
+  const effectiveSource = deriveEffectiveSource(
+    selectedSource,
+    stateBehindGit,
+    isNoState,
+    winnerUrl,
+    aheadServerUrl,
+  );
+  const effectiveSourceIsGitServer = effectiveSource !== "nostr";
+  const isManualGitSource =
+    selectedSource !== "default" && selectedSource !== "nostr";
+  const sourceIsNostr = !effectiveSourceIsGitServer;
+  const hasProblems = stateBehindGit;
+
+  const sourceLabel = effectiveSourceIsGitServer
+    ? selectedSource === "default"
+      ? `default (${gitServerDomain(effectiveSource)})`
+      : shortServerLabel(effectiveSource)
+    : "nostr";
+
+  // Close popover after selection so the trigger re-focuses naturally.
+  const handleSelectSource = useCallback(
+    (src: string) => {
+      onSelectSource(src);
+      setOpen(false);
+    },
+    [onSelectSource],
+  );
+
+  const handleRefRevertToDefault = useCallback(
+    (newSource: string) => {
+      onRefRevertToDefault?.(newSource);
+      setOpen(false);
+    },
+    [onRefRevertToDefault],
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen} modal={false}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-xs shadow-sm transition-colors",
+            "hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            hasProblems &&
+              !isManualGitSource &&
+              "border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10",
+            className,
+          )}
+        >
+          {sourceIsNostr ? (
+            <Radio
+              className={cn(
+                "h-3.5 w-3.5 shrink-0",
+                isLoading
+                  ? "text-muted-foreground/40"
+                  : "text-purple-500 dark:text-purple-400",
+              )}
+            />
+          ) : (
+            <Server
+              className={cn(
+                "h-3.5 w-3.5 shrink-0",
+                hasProblems && !isManualGitSource
+                  ? "text-amber-500"
+                  : isManualGitSource
+                    ? "text-blue-500 dark:text-blue-400"
+                    : "text-muted-foreground/60",
+              )}
+            />
+          )}
+
+          <span className="text-muted-foreground/60 shrink-0 hidden sm:inline">
+            Source
+          </span>
+
+          <span
+            className={cn(
+              "font-medium truncate max-w-[160px] sm:max-w-[220px]",
+              isLoading
+                ? "text-muted-foreground/50"
+                : isManualGitSource
+                  ? "text-blue-600 dark:text-blue-400"
+                  : sourceIsNostr
+                    ? "text-purple-600 dark:text-purple-400"
+                    : hasProblems
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-foreground/80",
+            )}
+          >
+            {sourceLabel}
+          </span>
+
+          {hasProblems && !isManualGitSource && (
+            <AlertTriangle className="h-3 w-3 shrink-0 text-amber-500" />
+          )}
+
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        </button>
+      </PopoverTrigger>
+
+      <PopoverContent
+        className={cn(
+          "p-0 overflow-hidden z-50",
+          isMobile ? "w-screen" : "w-[480px]",
+        )}
+        align={contentAlign}
+        side="bottom"
+        sideOffset={6}
+        avoidCollisions={!isMobile}
+      >
+        <SourceSelector
+          {...selectorProps}
+          presentation="popover-header"
+          onSelectSource={handleSelectSource}
+          onRefRevertToDefault={
+            onRefRevertToDefault ? handleRefRevertToDefault : undefined
+          }
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
