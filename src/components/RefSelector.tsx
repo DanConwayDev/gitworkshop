@@ -32,7 +32,6 @@ import {
   ChevronUp,
   CheckCircle2,
   XCircle,
-  Minus,
   Braces,
 } from "lucide-react";
 import type { NostrEvent } from "nostr-tools";
@@ -1447,53 +1446,6 @@ export function RefSelector({
               )}
           </div>
         </ScrollArea>
-
-        {/* Footer legend — shown for default/nostr source with state */}
-        {repoState !== null &&
-          repoState !== undefined &&
-          !isManualGitSource && (
-            <>
-              <Separator />
-              <div className="px-3 py-2 flex items-center gap-3 text-[11px] text-muted-foreground/60">
-                <span className="flex items-center gap-1">
-                  <ShieldCheck className="h-3 w-3 text-emerald-500/70" />
-                  matches nostr
-                </span>
-                <span className="flex items-center gap-1">
-                  <ShieldAlert className="h-3 w-3 text-amber-500/70" />
-                  differs from nostr
-                </span>
-                <span className="flex items-center gap-1">
-                  <ShieldQuestion className="h-3 w-3 text-muted-foreground/40" />
-                  git server only
-                </span>
-              </div>
-            </>
-          )}
-        {/* Footer legend for manually-selected git server source */}
-        {isManualGitSource && (
-          <>
-            <Separator />
-            <div className="px-3 py-2 flex items-center gap-3 text-[11px] text-muted-foreground/60 flex-wrap">
-              <span className="flex items-center gap-1">
-                <ShieldCheck className="h-3 w-3 text-emerald-500/70" />
-                matches nostr
-              </span>
-              <span className="flex items-center gap-1">
-                <ShieldAlert className="h-3 w-3 text-sky-500/70" />
-                older nostr state
-              </span>
-              <span className="flex items-center gap-1">
-                <ShieldAlert className="h-3 w-3 text-amber-500/70" />
-                differs from nostr
-              </span>
-              <span className="flex items-center gap-1">
-                <Minus className="h-3 w-3 text-muted-foreground/30" />
-                not on this server
-              </span>
-            </div>
-          </>
-        )}
       </PopoverContent>
     </Popover>
   );
