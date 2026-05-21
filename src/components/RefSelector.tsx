@@ -39,7 +39,7 @@ import type { NostrEvent } from "nostr-tools";
 import { formatDistanceStrict } from "date-fns";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 import { deriveEffectiveSource } from "@/lib/sourceUtils";
-import { useIsMobile } from "@/hooks/useIsMobile";
+import { useMobilePopoverFullWidth } from "@/hooks/useMobilePopoverFullWidth";
 import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import type { PoolWarning, UrlState } from "@/lib/git-grasp-pool/types";
@@ -737,32 +737,11 @@ function SourceHeader({
 }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [rawEventOpen, setRawEventOpen] = useState(false);
-  const isMobile = useIsMobile();
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
-
-  const updatePopoverStyle = useCallback(() => {
-    if (!isMobile) {
-      setPopoverStyle({});
-      return;
-    }
-    const el = triggerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const margin = 8;
-    setPopoverStyle({
-      width: `calc(100vw - ${margin * 2}px)`,
-      maxWidth: `calc(100vw - ${margin * 2}px)`,
-      marginLeft: `-${rect.left - margin}px`,
+  const { triggerRef, popoverStyle, avoidCollisions, isMobile } =
+    useMobilePopoverFullWidth<HTMLButtonElement>({
+      open: selectorOpen,
+      scrollIntoViewOnMobile: false,
     });
-  }, [isMobile]);
-
-  useEffect(() => {
-    if (!selectorOpen) return;
-    updatePopoverStyle();
-    window.addEventListener("resize", updatePopoverStyle);
-    return () => window.removeEventListener("resize", updatePopoverStyle);
-  }, [selectorOpen, updatePopoverStyle]);
 
   const isLoading = repoState === undefined || !repoRelayEose;
   const hasProblems = mismatchCount > 0 || stateBehindGit;
@@ -979,7 +958,7 @@ function SourceHeader({
           align="start"
           side="bottom"
           sideOffset={0}
-          avoidCollisions={!isMobile}
+          avoidCollisions={avoidCollisions}
           style={popoverStyle}
         >
           <SourceSelector
@@ -1091,50 +1070,8 @@ export function RefSelector({
   });
   const isNoState = repoRelayEose && repoState === null;
 
-  const isMobile = useIsMobile();
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
-
-  // Recompute popover position/width on open and resize.
-  const updatePopoverStyle = useCallback(() => {
-    if (!isMobile) {
-      setPopoverStyle({});
-      return;
-    }
-    const el = triggerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const margin = 8;
-    setPopoverStyle({
-      width: `calc(100vw - ${margin * 2}px)`,
-      maxWidth: `calc(100vw - ${margin * 2}px)`,
-      marginLeft: `-${rect.left - margin}px`,
-    });
-  }, [isMobile]);
-
-  useEffect(() => {
-    if (!open) return;
-    updatePopoverStyle();
-    window.addEventListener("resize", updatePopoverStyle);
-    return () => window.removeEventListener("resize", updatePopoverStyle);
-  }, [open, updatePopoverStyle]);
-
-  // On mobile, scroll the trigger into view when the dropdown opens.
-  useEffect(() => {
-    if (!open || !isMobile) return;
-    const el = triggerRef.current;
-    if (!el) return;
-    const id = setTimeout(() => {
-      const stickyHeader = document.querySelector("header.sticky");
-      const headerHeight = stickyHeader
-        ? stickyHeader.getBoundingClientRect().height
-        : 0;
-      const triggerTop =
-        el.getBoundingClientRect().top + window.scrollY - headerHeight - 8;
-      window.scrollTo({ top: triggerTop, behavior: "smooth" });
-    }, 50);
-    return () => clearTimeout(id);
-  }, [open, isMobile]);
+  const { triggerRef, popoverStyle, avoidCollisions, isMobile } =
+    useMobilePopoverFullWidth<HTMLButtonElement>({ open });
 
   // Tags in the popover are sorted newest-first by version.
   const tags = useMemo(
@@ -1356,7 +1293,7 @@ export function RefSelector({
         align="start"
         sideOffset={6}
         style={popoverStyle}
-        avoidCollisions={!isMobile}
+        avoidCollisions={avoidCollisions}
       >
         {/* Source header — clickable, opens source selector */}
         <SourceHeader

@@ -23,7 +23,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { deriveEffectiveSource } from "@/lib/sourceUtils";
-import { useIsMobile } from "@/hooks/useIsMobile";
+import { useMobilePopoverFullWidth } from "@/hooks/useMobilePopoverFullWidth";
 import { nip19 } from "nostr-tools";
 import type { NostrEvent } from "nostr-tools";
 import { formatDistanceStrict } from "date-fns";
@@ -1156,7 +1156,8 @@ export function SourceSelectorDropdown({
   } = selectorProps;
 
   const [open, setOpen] = useState(false);
-  const isMobile = useIsMobile();
+  const { triggerRef, popoverStyle, avoidCollisions, isMobile } =
+    useMobilePopoverFullWidth<HTMLButtonElement>({ open });
 
   const isLoading = repoState === undefined || !repoRelayEose;
   const isNoState = repoRelayEose && repoState === null;
@@ -1203,6 +1204,7 @@ export function SourceSelectorDropdown({
     <Popover open={open} onOpenChange={setOpen} modal={false}>
       <PopoverTrigger asChild>
         <button
+          ref={triggerRef}
           type="button"
           className={cn(
             "inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-xs shadow-sm transition-colors",
@@ -1277,7 +1279,8 @@ export function SourceSelectorDropdown({
         align={contentAlign}
         side="bottom"
         sideOffset={6}
-        avoidCollisions={!isMobile}
+        style={popoverStyle}
+        avoidCollisions={avoidCollisions}
       >
         <SourceSelector
           {...selectorProps}
