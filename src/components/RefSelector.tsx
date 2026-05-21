@@ -16,12 +16,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   GitBranch,
   Tag,
-  Check,
   ChevronsUpDown,
   Search,
   ShieldCheck,
@@ -46,13 +44,10 @@ import type { GitRef } from "@/hooks/useGitExplorer";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import type { PoolWarning, UrlState } from "@/lib/git-grasp-pool/types";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
-import {
-  type RefStatus,
-  type RefWithStatus,
-  compareTagsNewestFirst,
-} from "@/lib/refStatus";
+import { type RefWithStatus, compareTagsNewestFirst } from "@/lib/refStatus";
 import { useRefsWithStatus } from "@/hooks/useRefsWithStatus";
 import { SourceSelector, gitServerDomain } from "@/components/SourceSelector";
+import { RefRow } from "@/components/RefRow";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -138,308 +133,6 @@ export interface RefSelectorProps {
 // ---------------------------------------------------------------------------
 
 // gitServerDomain is imported from @/components/SourceSelector
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function StatusIcon({
-  status,
-  className,
-}: {
-  status: RefStatus;
-  className?: string;
-}) {
-  switch (status) {
-    case "verified":
-      return (
-        <ShieldCheck
-          className={cn("h-3.5 w-3.5 text-emerald-500", className)}
-        />
-      );
-    case "mismatch":
-      return (
-        <ShieldAlert className={cn("h-3.5 w-3.5 text-amber-500", className)} />
-      );
-    case "old-state":
-      return (
-        <ShieldAlert className={cn("h-3.5 w-3.5 text-sky-500", className)} />
-      );
-    case "state-behind":
-      return (
-        <AlertTriangle className={cn("h-3 w-3 text-amber-500", className)} />
-      );
-    case "git-server-only":
-      return (
-        <ShieldQuestion
-          className={cn("h-3.5 w-3.5 text-muted-foreground/50", className)}
-        />
-      );
-    case "not-on-server":
-      return (
-        <Minus className={cn("h-3 w-3 text-muted-foreground/30", className)} />
-      );
-    case "no-state":
-      return null;
-    case "loading":
-      return null;
-  }
-}
-
-function StatusTooltipText({
-  refWithStatus,
-  effectiveSource,
-}: {
-  refWithStatus: RefWithStatus;
-  effectiveSource: string; // "nostr" or a concrete clone URL — never "default"
-}) {
-  const serverLabel =
-    effectiveSource !== "nostr" ? gitServerDomain(effectiveSource) : null;
-
-  switch (refWithStatus.status) {
-    case "verified":
-      return (
-        <span>
-          {serverLabel
-            ? `${serverLabel} matches the Nostr state for this ref`
-            : "Matches Nostr state — the maintainer's published state matches this git server"}
-        </span>
-      );
-    case "mismatch": {
-      const displayServerCommit = (
-        refWithStatus.serverCommit ?? refWithStatus.hash
-      ).slice(0, 8);
-      const displayStateCommit = refWithStatus.stateCommit?.slice(0, 8);
-      return (
-        <div className="space-y-1">
-          <p className="font-medium text-amber-400">Differs from Nostr state</p>
-          <p>
-            Nostr state has{" "}
-            <code className="font-mono text-[11px] bg-amber-500/20 px-1 rounded">
-              {displayStateCommit}
-            </code>{" "}
-            but {serverLabel ? serverLabel : "the git server"} has{" "}
-            <code className="font-mono text-[11px] bg-muted px-1 rounded">
-              {displayServerCommit}
-            </code>
-          </p>
-          <p className="text-muted-foreground text-[11px]">
-            The maintainer likely pushed directly to{" "}
-            {serverLabel ? serverLabel : "the git server"} without publishing a
-            Nostr state update.
-          </p>
-        </div>
-      );
-    }
-    case "old-state": {
-      const displayServerCommit = (
-        refWithStatus.serverCommit ?? refWithStatus.hash
-      ).slice(0, 8);
-      return (
-        <div className="space-y-1">
-          <p className="font-medium text-sky-400">
-            Matches an older Nostr state
-          </p>
-          <p>
-            {serverLabel ? serverLabel : "This server"} has{" "}
-            <code className="font-mono text-[11px] bg-muted px-1 rounded">
-              {displayServerCommit}
-            </code>{" "}
-            which matches a previously published state
-            {refWithStatus.oldStateCreatedAt && (
-              <>
-                {" "}
-                from{" "}
-                {safeFormatDistanceToNow(refWithStatus.oldStateCreatedAt, {
-                  addSuffix: true,
-                })}
-              </>
-            )}
-            . The latest Nostr state has{" "}
-            <code className="font-mono text-[11px] bg-sky-500/20 px-1 rounded">
-              {refWithStatus.stateCommit?.slice(0, 8)}
-            </code>
-            .
-          </p>
-          <p className="text-muted-foreground text-[11px]">
-            This server hasn't synced to the latest Nostr state yet.
-          </p>
-        </div>
-      );
-    }
-    case "state-behind":
-      return (
-        <span>
-          The git server has newer commits than the maintainer's last Nostr
-          state — the maintainer hasn't re-published yet
-        </span>
-      );
-    case "git-server-only":
-      return (
-        <span>
-          This ref exists on the git server but isn't in the maintainer's Nostr
-          state
-        </span>
-      );
-    case "not-on-server":
-      return (
-        <span>
-          This ref is not available on {serverLabel ?? "the selected server"}
-        </span>
-      );
-    case "no-state":
-      return null;
-    case "loading":
-      return <span>Checking Nostr state…</span>;
-  }
-}
-
-function RefRow({
-  refWithStatus,
-  isSelected,
-  onSelect,
-  effectiveSource,
-  pool,
-  urlStates,
-}: {
-  refWithStatus: RefWithStatus;
-  isSelected: boolean;
-  onSelect: () => void;
-  /** Resolved source — "nostr" or a concrete clone URL, never "default". */
-  effectiveSource: string;
-  pool?: GitGraspPool | null;
-  urlStates?: Record<string, UrlState>;
-}) {
-  const [commitTs, setCommitTs] = useState<number | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
-  // Resolve the commit hash for the effective source.
-  // When the source is a git server URL, use that server's commit for this ref
-  // (from refCommits) so the timestamp reflects what that server has, not the
-  // pool winner's commit.
-  const fullRefName = `${refWithStatus.isBranch ? "refs/heads/" : "refs/tags/"}${refWithStatus.name}`;
-  const sourceHash = useMemo(() => {
-    if (effectiveSource !== "nostr" && urlStates) {
-      const us = urlStates[effectiveSource];
-      // Prefer peeled commit (annotated tags), fall back to raw ref
-      return (
-        us?.refCommits[`${fullRefName}^{}`] ??
-        us?.refCommits[fullRefName] ??
-        refWithStatus.hash
-      );
-    }
-    return refWithStatus.hash;
-  }, [effectiveSource, urlStates, fullRefName, refWithStatus.hash]);
-
-  useEffect(() => {
-    if (!pool) return;
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setCommitTs(null);
-
-    pool
-      .getSingleCommit(sourceHash, ac.signal)
-      .then((commit) => {
-        if (ac.signal.aborted || !commit) return;
-        setCommitTs(commit.committer?.timestamp ?? commit.author.timestamp);
-      })
-      .catch(() => {});
-
-    return () => {
-      ac.abort();
-    };
-  }, [sourceHash, pool]);
-  // "not-on-server" = ref absent from the selected git server
-  // "git-server-only" = ref absent from nostr state; fade it only when nostr
-  //   is the effective source so the user can see these refs exist but
-  //   understand they're not in the signed state. When a git server is the
-  //   source (stateBehindGit, no-state, or manual selection) these refs are
-  //   fully present and should not be dimmed.
-  const sourceIsGitServer = effectiveSource !== "nostr";
-  const isAbsent =
-    refWithStatus.status === "not-on-server" ||
-    (refWithStatus.status === "git-server-only" && !sourceIsGitServer);
-  const showTooltip =
-    refWithStatus.status !== "no-state" && refWithStatus.status !== "loading";
-
-  const row = (
-    <button
-      onClick={onSelect}
-      className={cn(
-        "flex items-center gap-2.5 w-full px-3 py-2 text-left text-sm rounded-md transition-all duration-150",
-        "hover:bg-accent/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        isSelected && "bg-accent",
-        refWithStatus.status === "mismatch" &&
-          "hover:bg-amber-500/10 dark:hover:bg-amber-500/10",
-        refWithStatus.status === "old-state" &&
-          "hover:bg-sky-500/10 dark:hover:bg-sky-500/10",
-        isAbsent && "opacity-50",
-      )}
-    >
-      {/* Selection check */}
-      <div className="w-4 shrink-0">
-        {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
-      </div>
-
-      {/* Ref name + committer timestamp */}
-      <span className="flex-1 flex items-baseline gap-2 min-w-0 overflow-hidden">
-        <span
-          className={cn(
-            "truncate font-mono text-[13px]",
-            isSelected && "font-medium",
-            refWithStatus.status === "mismatch" &&
-              "text-amber-600 dark:text-amber-400",
-            refWithStatus.status === "old-state" &&
-              "text-sky-600 dark:text-sky-400",
-            isAbsent && "text-muted-foreground",
-          )}
-          title={refWithStatus.name}
-        >
-          {refWithStatus.name}
-        </span>
-        {commitTs !== null && (
-          <span className="shrink-0 text-[11px] text-muted-foreground/40 font-normal">
-            {safeFormatDistanceToNow(commitTs, { addSuffix: true })}
-          </span>
-        )}
-      </span>
-
-      {/* Default badge */}
-      {refWithStatus.isDefault && (
-        <Badge
-          variant="secondary"
-          className="text-[10px] h-4 px-1.5 shrink-0 font-normal"
-        >
-          default
-        </Badge>
-      )}
-
-      {/* Status icon */}
-      <StatusIcon status={refWithStatus.status} className="shrink-0" />
-    </button>
-  );
-
-  if (showTooltip) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{row}</TooltipTrigger>
-        <TooltipContent
-          side="right"
-          className="max-w-[280px] text-xs"
-          sideOffset={8}
-        >
-          <StatusTooltipText
-            refWithStatus={refWithStatus}
-            effectiveSource={effectiveSource}
-          />
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return row;
-}
 
 // ---------------------------------------------------------------------------
 // Popover header: source row + optional expandable diff-summary bar
@@ -1760,6 +1453,7 @@ export function RefSelector({
                   {filteredBranches.map((branch) => (
                     <RefRow
                       key={branch.name}
+                      density="compact"
                       refWithStatus={branch}
                       isSelected={branch.name === currentRef}
                       onSelect={() => handleSelect(branch.name)}
@@ -1789,6 +1483,7 @@ export function RefSelector({
                   {filteredTags.map((tag) => (
                     <RefRow
                       key={tag.name}
+                      density="compact"
                       refWithStatus={tag}
                       isSelected={tag.name === currentRef}
                       onSelect={() => handleSelect(tag.name)}
