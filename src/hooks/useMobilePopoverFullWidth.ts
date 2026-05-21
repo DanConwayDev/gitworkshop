@@ -2,12 +2,35 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 /**
+ * Alignment of the popover relative to its trigger, matching the values
+ * accepted by Radix's `<PopoverContent align>`. The hook needs this to
+ * compute the correct `marginLeft` shift, since Radix positions the popover
+ * differently depending on alignment.
+ */
+export type PopoverAlign = "start" | "end" | "center";
+
+/**
  * Options for `useMobilePopoverFullWidth`.
  */
 export interface UseMobilePopoverFullWidthOptions {
   /** Whether the popover is currently open. Required so we can recompute on open and attach/detach listeners. */
   open: boolean;
-  /** Margin in px from the viewport edges on mobile. Defaults to 8. */
+  /**
+   * The `align` prop you intend to pass to `<PopoverContent>`. Required
+   * because Radix positions a popover differently depending on alignment —
+   * `start` anchors its left edge to the trigger's left edge, `end` anchors
+   * its right edge to the trigger's right edge, `center` centres it. The
+   * hook needs to know this to compute the correct `marginLeft` shift that
+   * pushes the popover flush against the viewport edges on mobile.
+   *
+   * Defaults to `"start"`.
+   */
+  align?: PopoverAlign;
+  /**
+   * Margin in px from the viewport edges on mobile. Defaults to `0` so the
+   * popover sits flush against both viewport edges — a full-width sheet-like
+   * presentation. Increase if you want a small inset.
+   */
   margin?: number;
   /**
    * When true, smoothly scrolls the trigger into view (below any sticky header)
@@ -26,14 +49,15 @@ export interface UseMobilePopoverFullWidthResult<
   triggerRef: React.RefObject<TElement>;
   /**
    * Inline style to apply to the `<PopoverContent>`. On mobile this widens
-   * the popover to fill the viewport (minus margin) and shifts it so its left
-   * edge sits at the viewport's left margin regardless of where the trigger is.
-   * On desktop returns an empty object.
+   * the popover to fill the viewport (minus the optional margin) and shifts
+   * it so both its left and right edges sit at the requested margin from
+   * the viewport — regardless of where the trigger is or which `align` was
+   * passed. On desktop returns an empty object.
    */
   popoverStyle: React.CSSProperties;
   /**
    * Convenience flag for the consumer to forward to `<PopoverContent
-   * avoidCollisions={!isMobile}>`. We disable Radix's collision avoidance on
+   * avoidCollisions={...}>`. We disable Radix's collision avoidance on
    * mobile because we're positioning the popover ourselves.
    */
   avoidCollisions: boolean;
@@ -44,11 +68,13 @@ export interface UseMobilePopoverFullWidthResult<
 /**
  * Shared mobile-fullwidth popover sizing/positioning logic.
  *
- * On mobile, a popover anchored to a trigger near the right side of the
- * screen with `align="end"` only widens leftward up to the trigger's right
- * edge — leaving large left-side gaps. This hook computes inline width and
- * negative `marginLeft` so the popover always spans the full viewport
- * (minus a small margin) regardless of the trigger's horizontal position.
+ * On mobile, a popover anchored to a trigger near one side of the screen
+ * (e.g. a right-aligned dropdown with `align="end"`) widens only as far as
+ * its anchor edge before overflowing past the viewport — so the popover ends
+ * up with very uneven left/right gaps. This hook computes an inline width
+ * and a `marginLeft` shift so the popover is always full-viewport-wide and
+ * has equal (or zero) margin on both sides, regardless of trigger position
+ * or `align`.
  *
  * Also (optionally) smoothly scrolls the trigger into view when the popover
  * opens on mobile, so the trigger and popover content stay visible together.
@@ -57,7 +83,7 @@ export interface UseMobilePopoverFullWidthResult<
  *
  * ```tsx
  * const { triggerRef, popoverStyle, avoidCollisions, isMobile } =
- *   useMobilePopoverFullWidth({ open });
+ *   useMobilePopoverFullWidth({ open, align: "end" });
  *
  * return (
  *   <Popover open={open} onOpenChange={setOpen}>
@@ -66,6 +92,7 @@ export interface UseMobilePopoverFullWidthResult<
  *     </PopoverTrigger>
  *     <PopoverContent
  *       className={isMobile ? "w-screen" : "w-[420px]"}
+ *       align="end"
  *       style={popoverStyle}
  *       avoidCollisions={avoidCollisions}
  *     >
@@ -79,7 +106,8 @@ export function useMobilePopoverFullWidth<
   TElement extends HTMLElement = HTMLButtonElement,
 >({
   open,
-  margin = 8,
+  align = "start",
+  margin = 0,
   scrollIntoViewOnMobile = true,
 }: UseMobilePopoverFullWidthOptions): UseMobilePopoverFullWidthResult<TElement> {
   const isMobile = useIsMobile();
@@ -94,12 +122,37 @@ export function useMobilePopoverFullWidth<
     const el = triggerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const popoverWidth = viewportWidth - margin * 2;
+
+    // Radix positions `<PopoverContent>` such that:
+    //   align="start"  → popover.left  = trigger.left
+    //   align="end"    → popover.right = trigger.right
+    //                    → popover.left = trigger.right - popoverWidth
+    //   align="center" → popover.left = trigger.left + trigger.width/2 - popoverWidth/2
+    //
+    // We want popover.left = margin in viewport coords, so we add a
+    // `marginLeft` equal to (margin - naturalLeft).
+    let naturalLeft: number;
+    switch (align) {
+      case "end":
+        naturalLeft = rect.right - popoverWidth;
+        break;
+      case "center":
+        naturalLeft = rect.left + rect.width / 2 - popoverWidth / 2;
+        break;
+      case "start":
+      default:
+        naturalLeft = rect.left;
+        break;
+    }
+
     setPopoverStyle({
-      width: `calc(100vw - ${margin * 2}px)`,
-      maxWidth: `calc(100vw - ${margin * 2}px)`,
-      marginLeft: `-${rect.left - margin}px`,
+      width: `${popoverWidth}px`,
+      maxWidth: `${popoverWidth}px`,
+      marginLeft: `${margin - naturalLeft}px`,
     });
-  }, [isMobile, margin]);
+  }, [isMobile, margin, align]);
 
   // Recompute on open and on resize while open.
   useEffect(() => {

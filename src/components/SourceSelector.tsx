@@ -1157,7 +1157,7 @@ export function SourceSelectorDropdown({
 
   const [open, setOpen] = useState(false);
   const { triggerRef, popoverStyle, avoidCollisions, isMobile } =
-    useMobilePopoverFullWidth<HTMLButtonElement>({ open });
+    useMobilePopoverFullWidth<HTMLButtonElement>({ open, align: contentAlign });
 
   const isLoading = repoState === undefined || !repoRelayEose;
   const isNoState = repoRelayEose && repoState === null;
