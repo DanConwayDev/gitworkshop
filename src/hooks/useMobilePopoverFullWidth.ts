@@ -4,8 +4,8 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 /**
  * Alignment of the popover relative to its trigger, matching the values
  * accepted by Radix's `<PopoverContent align>`. The hook needs this to
- * compute the correct `marginLeft` shift, since Radix positions the popover
- * differently depending on alignment.
+ * compute the correct shift, since Radix anchors the popover wrapper to a
+ * different edge of the trigger depending on alignment.
  */
 export type PopoverAlign = "start" | "end" | "center";
 
@@ -17,11 +17,13 @@ export interface UseMobilePopoverFullWidthOptions {
   open: boolean;
   /**
    * The `align` prop you intend to pass to `<PopoverContent>`. Required
-   * because Radix positions a popover differently depending on alignment —
-   * `start` anchors its left edge to the trigger's left edge, `end` anchors
-   * its right edge to the trigger's right edge, `center` centres it. The
-   * hook needs to know this to compute the correct `marginLeft` shift that
-   * pushes the popover flush against the viewport edges on mobile.
+   * because Radix anchors a popover differently depending on alignment:
+   * - `start` anchors its left edge to the trigger's left
+   * - `end` anchors its right edge to the trigger's right
+   * - `center` centres it on the trigger
+   *
+   * The hook applies the shift in whichever direction will actually move
+   * the popover within Radix's anchored wrapper.
    *
    * Defaults to `"start"`.
    */
@@ -49,10 +51,10 @@ export interface UseMobilePopoverFullWidthResult<
   triggerRef: React.RefObject<TElement>;
   /**
    * Inline style to apply to the `<PopoverContent>`. On mobile this widens
-   * the popover to fill the viewport (minus the optional margin) and shifts
-   * it so both its left and right edges sit at the requested margin from
-   * the viewport — regardless of where the trigger is or which `align` was
-   * passed. On desktop returns an empty object.
+   * the popover to fill the viewport (minus the optional margin) and applies
+   * the negative `marginLeft` / `marginRight` shift required to push it to
+   * the viewport edges regardless of where the trigger is or which `align`
+   * was passed. On desktop returns an empty object.
    */
   popoverStyle: React.CSSProperties;
   /**
@@ -68,16 +70,33 @@ export interface UseMobilePopoverFullWidthResult<
 /**
  * Shared mobile-fullwidth popover sizing/positioning logic.
  *
- * On mobile, a popover anchored to a trigger near one side of the screen
- * (e.g. a right-aligned dropdown with `align="end"`) widens only as far as
- * its anchor edge before overflowing past the viewport — so the popover ends
- * up with very uneven left/right gaps. This hook computes an inline width
- * and a `marginLeft` shift so the popover is always full-viewport-wide and
- * has equal (or zero) margin on both sides, regardless of trigger position
- * or `align`.
+ * Radix anchors `<PopoverContent>` to its trigger and exposes an `align`
+ * prop that pins one edge of the popover wrapper to the corresponding edge
+ * of the trigger:
  *
- * Also (optionally) smoothly scrolls the trigger into view when the popover
- * opens on mobile, so the trigger and popover content stay visible together.
+ * - `align="start"` → wrapper.left = trigger.left
+ * - `align="end"`   → wrapper.right = trigger.right
+ * - `align="center"`→ wrapper.center = trigger.center
+ *
+ * On mobile we want the popover to span the full viewport (minus an
+ * optional inset) regardless of where the trigger sits, so the popover
+ * doesn't end up with very uneven left/right gaps. To do that we need to
+ * shift the popover *within* its anchored wrapper. Block-level margins on
+ * the content element are the only thing Radix doesn't overwrite, but the
+ * direction of the shift depends on alignment:
+ *
+ * - For `align="start"` we apply `marginLeft = margin - trigger.left` to
+ *   push the popover right (away from the wrapper's left-anchored edge).
+ * - For `align="end"` we apply `marginRight = trigger.right - (viewport -
+ *   margin)` (a negative number — the popover's right edge sits at
+ *   trigger.right by default, so we need a negative margin to "grow" it
+ *   rightwards past trigger.right and reach the viewport edge).
+ * - For `align="center"` we apply whichever margin produces the correct
+ *   shift direction.
+ *
+ * The hook also (optionally) smoothly scrolls the trigger into view when
+ * the popover opens on mobile, so the trigger and popover content stay
+ * visible together.
  *
  * Usage:
  *
@@ -125,33 +144,62 @@ export function useMobilePopoverFullWidth<
     const viewportWidth = window.innerWidth;
     const popoverWidth = viewportWidth - margin * 2;
 
-    // Radix positions `<PopoverContent>` such that:
-    //   align="start"  → popover.left  = trigger.left
-    //   align="end"    → popover.right = trigger.right
-    //                    → popover.left = trigger.right - popoverWidth
-    //   align="center" → popover.left = trigger.left + trigger.width/2 - popoverWidth/2
-    //
-    // We want popover.left = margin in viewport coords, so we add a
-    // `marginLeft` equal to (margin - naturalLeft).
-    let naturalLeft: number;
-    switch (align) {
-      case "end":
-        naturalLeft = rect.right - popoverWidth;
-        break;
-      case "center":
-        naturalLeft = rect.left + rect.width / 2 - popoverWidth / 2;
-        break;
-      case "start":
-      default:
-        naturalLeft = rect.left;
-        break;
-    }
-
-    setPopoverStyle({
+    const baseStyle: React.CSSProperties = {
       width: `${popoverWidth}px`,
       maxWidth: `${popoverWidth}px`,
-      marginLeft: `${margin - naturalLeft}px`,
-    });
+    };
+
+    switch (align) {
+      case "end": {
+        // Radix pins wrapper.right to trigger.right, so the popover's right
+        // edge is already at trigger.right by default. To push it to
+        // viewportWidth - margin we need a negative marginRight that grows
+        // the wrapper rightwards.
+        const marginRight = rect.right - (viewportWidth - margin);
+        setPopoverStyle({
+          ...baseStyle,
+          marginLeft: 0,
+          marginRight: `${marginRight}px`,
+        });
+        return;
+      }
+      case "center": {
+        // Radix centres the wrapper on the trigger. Compute the shift needed
+        // to centre on the viewport instead, and apply it as marginLeft
+        // (positive: shift right) or marginRight (negative: shift left).
+        const triggerCenter = rect.left + rect.width / 2;
+        const viewportCenter = viewportWidth / 2;
+        const shift = viewportCenter - triggerCenter;
+        if (shift >= 0) {
+          setPopoverStyle({
+            ...baseStyle,
+            marginLeft: `${shift}px`,
+            marginRight: 0,
+          });
+        } else {
+          setPopoverStyle({
+            ...baseStyle,
+            marginLeft: 0,
+            marginRight: `${shift}px`,
+          });
+        }
+        return;
+      }
+      case "start":
+      default: {
+        // Radix pins wrapper.left to trigger.left, so the popover's left
+        // edge sits at trigger.left by default. Apply a positive marginLeft
+        // (or negative if the trigger is past the desired margin) to shift
+        // the popover to viewport-left + margin.
+        const marginLeft = margin - rect.left;
+        setPopoverStyle({
+          ...baseStyle,
+          marginLeft: `${marginLeft}px`,
+          marginRight: 0,
+        });
+        return;
+      }
+    }
   }, [isMobile, margin, align]);
 
   // Recompute on open and on resize while open.
