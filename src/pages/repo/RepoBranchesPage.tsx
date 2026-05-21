@@ -301,10 +301,9 @@ export default function RepoBranchesPage() {
               const fullName = `refs/heads/${branch.name}`;
               // The default branch is intentionally absent from the
               // divergence map (divergence vs itself is always 0). Pass a
-              // virtual `up to date` entry so the row still renders the
-              // text-label badge alongside the rest of the list — matching
-              // GitHub's branches page where master/main shows "default"
-              // and "up to date" side by side.
+              // virtual entry so the row still has a `divergence` prop and
+              // renders consistently — `BranchDivergenceBadges` suppresses
+              // the badge for the default branch automatically.
               const div: BranchDivergence | undefined = branch.isDefault
                 ? {
                     ahead: 0,

@@ -38,6 +38,8 @@ import {
   Minus,
   GitMerge,
   Unlink,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
@@ -503,8 +505,6 @@ function ExpandedRefRow({
   // render the trailing branch badges when `divergence` is supplied.
   const hasBranchBadges = !!divergence;
   const hasAnnotatedBadge = annotated === true;
-  const hasDivergenceBadges = hasBranchBadges || hasAnnotatedBadge;
-
   const statusIconWithTooltip = showTooltip ? (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -576,7 +576,7 @@ function ExpandedRefRow({
           {statusIconWithTooltip}
         </div>
 
-        {/* Line 2: hash · message · time */}
+        {/* Line 2: hash · message · time · ahead/behind badges */}
         <div className="flex items-baseline gap-1.5 text-xs text-muted-foreground min-w-0">
           <code className="font-mono text-[11px] bg-muted/50 px-1 rounded shrink-0">
             {sourceHash.slice(0, 8)}
@@ -597,28 +597,27 @@ function ExpandedRefRow({
               </span>
             </>
           )}
-        </div>
-      </div>
-
-      {/* Trailing: ahead/behind labels (branches) or annotated badge (tags) */}
-      {hasDivergenceBadges && (
-        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
           {hasBranchBadges && (
             <BranchDivergenceBadges
               ahead={ahead}
               behind={behind}
               noMergeBase={noMergeBase}
+              isDefault={refWithStatus.isDefault}
             />
           )}
-          {hasAnnotatedBadge && (
-            <Badge
-              variant="secondary"
-              className="text-[10px] h-5 px-1.5 font-normal"
-              title="Annotated tag"
-            >
-              annotated
-            </Badge>
-          )}
+        </div>
+      </div>
+
+      {/* Trailing: annotated badge (tags only) */}
+      {hasAnnotatedBadge && (
+        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+          <Badge
+            variant="secondary"
+            className="text-[10px] h-5 px-1.5 font-normal"
+            title="Annotated tag"
+          >
+            annotated
+          </Badge>
         </div>
       )}
     </Wrapper>
@@ -632,9 +631,13 @@ function ExpandedRefRow({
  * ref selector — text reads more naturally on a full-page comparison view
  * where we're not pushing/pulling, just comparing.
  *
+ * On mobile (< sm breakpoint) the text labels are replaced with up/down arrow
+ * icons + count to save horizontal space in the commit-details line.
+ *
  * State table:
  *   noMergeBase                   → "orphaned" (no shared ancestor)
  *   ahead === null && behind === null → nothing (still computing)
+ *   isDefault                     → nothing ("up to date" vs itself is noise)
  *   ahead === 0  && behind === 0   → "up to date"
  *   ahead === 0  && behind > 0     → "merged" + "{N} behind"
  *   ahead > 0   && behind === 0    → "{N} ahead"
@@ -644,10 +647,12 @@ function BranchDivergenceBadges({
   ahead,
   behind,
   noMergeBase,
+  isDefault = false,
 }: {
   ahead: number | null;
   behind: number | null;
   noMergeBase: boolean;
+  isDefault?: boolean;
 }) {
   if (noMergeBase) {
     return (
@@ -655,10 +660,10 @@ function BranchDivergenceBadges({
         <TooltipTrigger asChild>
           <Badge
             variant="outline"
-            className="text-[10px] h-5 px-1.5 font-normal gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400 cursor-default"
+            className="text-[10px] h-5 px-1.5 font-normal gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400 cursor-default shrink-0"
           >
             <Unlink className="h-3 w-3" />
-            orphaned
+            <span className="hidden sm:inline">orphaned</span>
           </Badge>
         </TooltipTrigger>
         <TooltipContent
@@ -676,11 +681,14 @@ function BranchDivergenceBadges({
 
   if (ahead === null || behind === null) return null;
 
+  // The default branch is always "up to date" vs itself — suppress the badge.
+  if (isDefault) return null;
+
   if (ahead === 0 && behind === 0) {
     return (
       <Badge
         variant="outline"
-        className="text-[10px] h-5 px-1.5 font-normal text-muted-foreground"
+        className="text-[10px] h-5 px-1.5 font-normal text-muted-foreground shrink-0"
         title="Branch tip matches the default branch"
       >
         up to date
@@ -693,29 +701,33 @@ function BranchDivergenceBadges({
       {ahead === 0 && behind > 0 && (
         <Badge
           variant="outline"
-          className="text-[10px] h-5 px-1.5 font-normal gap-1 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+          className="text-[10px] h-5 px-1.5 font-normal gap-1 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 shrink-0"
           title="All commits on this branch are reachable from the default branch"
         >
           <GitMerge className="h-3 w-3" />
-          merged
+          <span className="hidden sm:inline">merged</span>
         </Badge>
       )}
       {ahead > 0 && (
         <Badge
           variant="outline"
-          className="text-[10px] h-5 px-1.5 font-normal"
+          className="text-[10px] h-5 px-1.5 font-normal gap-0.5 shrink-0"
           title={`${ahead} commit${ahead === 1 ? "" : "s"} ahead of default`}
         >
-          {ahead} ahead
+          <ArrowUp className="h-3 w-3 sm:hidden" />
+          <span className="hidden sm:inline">{ahead} ahead</span>
+          <span className="sm:hidden">{ahead}</span>
         </Badge>
       )}
       {behind > 0 && (
         <Badge
           variant="outline"
-          className="text-[10px] h-5 px-1.5 font-normal"
+          className="text-[10px] h-5 px-1.5 font-normal gap-0.5 shrink-0"
           title={`${behind} commit${behind === 1 ? "" : "s"} behind default`}
         >
-          {behind} behind
+          <ArrowDown className="h-3 w-3 sm:hidden" />
+          <span className="hidden sm:inline">{behind} behind</span>
+          <span className="sm:hidden">{behind}</span>
         </Badge>
       )}
     </>
