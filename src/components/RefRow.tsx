@@ -576,7 +576,7 @@ function ExpandedRefRow({
           {statusIconWithTooltip}
         </div>
 
-        {/* Line 2: hash · message · time · ahead/behind badges */}
+        {/* Line 2: hash · message · time */}
         <div className="flex items-baseline gap-1.5 text-xs text-muted-foreground min-w-0">
           <code className="font-mono text-[11px] bg-muted/50 px-1 rounded shrink-0">
             {sourceHash.slice(0, 8)}
@@ -597,6 +597,12 @@ function ExpandedRefRow({
               </span>
             </>
           )}
+        </div>
+      </div>
+
+      {/* Trailing: ahead/behind badges (branches) or annotated badge (tags) */}
+      {(hasBranchBadges || hasAnnotatedBadge) && (
+        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
           {hasBranchBadges && (
             <BranchDivergenceBadges
               ahead={ahead}
@@ -605,19 +611,15 @@ function ExpandedRefRow({
               isDefault={refWithStatus.isDefault}
             />
           )}
-        </div>
-      </div>
-
-      {/* Trailing: annotated badge (tags only) */}
-      {hasAnnotatedBadge && (
-        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-          <Badge
-            variant="secondary"
-            className="text-[10px] h-5 px-1.5 font-normal"
-            title="Annotated tag"
-          >
-            annotated
-          </Badge>
+          {hasAnnotatedBadge && (
+            <Badge
+              variant="secondary"
+              className="text-[10px] h-5 px-1.5 font-normal"
+              title="Annotated tag"
+            >
+              annotated
+            </Badge>
+          )}
         </div>
       )}
     </Wrapper>
