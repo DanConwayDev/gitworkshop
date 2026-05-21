@@ -550,7 +550,7 @@ function ExpandedRefRow({
       <Icon className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
 
       <div className="flex-1 min-w-0 space-y-1">
-        {/* Line 1: name + default badge + status icon */}
+        {/* Line 1: name + default badge + status icon + ahead/behind badges (right-aligned) */}
         <div className="flex items-center gap-2 min-w-0">
           <span
             className={cn(
@@ -574,6 +574,16 @@ function ExpandedRefRow({
             </Badge>
           )}
           {statusIconWithTooltip}
+          {hasBranchBadges && (
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+              <BranchDivergenceBadges
+                ahead={ahead}
+                behind={behind}
+                noMergeBase={noMergeBase}
+                isDefault={refWithStatus.isDefault}
+              />
+            </div>
+          )}
         </div>
 
         {/* Line 2: hash · message · time */}
@@ -600,26 +610,16 @@ function ExpandedRefRow({
         </div>
       </div>
 
-      {/* Trailing: ahead/behind badges (branches) or annotated badge (tags) */}
-      {(hasBranchBadges || hasAnnotatedBadge) && (
+      {/* Trailing: annotated badge (tags only) */}
+      {hasAnnotatedBadge && (
         <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-          {hasBranchBadges && (
-            <BranchDivergenceBadges
-              ahead={ahead}
-              behind={behind}
-              noMergeBase={noMergeBase}
-              isDefault={refWithStatus.isDefault}
-            />
-          )}
-          {hasAnnotatedBadge && (
-            <Badge
-              variant="secondary"
-              className="text-[10px] h-5 px-1.5 font-normal"
-              title="Annotated tag"
-            >
-              annotated
-            </Badge>
-          )}
+          <Badge
+            variant="secondary"
+            className="text-[10px] h-5 px-1.5 font-normal"
+            title="Annotated tag"
+          >
+            annotated
+          </Badge>
         </div>
       )}
     </Wrapper>
