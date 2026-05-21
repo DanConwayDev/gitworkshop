@@ -61,6 +61,12 @@ export interface RepoContextValue {
    * Set whenever a PR sub-page is active. Used to build PR-scoped commit links.
    */
   prBasePath?: string;
+  /**
+   * The canonical base path for the repo (no trailing sub-path), built from
+   * the splat by stripping any known sub-path keyword. Use this when building
+   * intra-repo links rather than recomputing from `window.location.pathname`.
+   */
+  basePath: string;
 }
 
 export const RepoContext = createContext<RepoContextValue | null>(null);

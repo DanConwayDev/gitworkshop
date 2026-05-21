@@ -179,6 +179,8 @@ const REPO_SUB_PATHS = [
   "commits",
   "commit",
   "tree",
+  "branches",
+  "tags",
 ];
 
 /**

@@ -10,6 +10,8 @@ import RepoEditPage from "./RepoEditPage";
 import RepoSettingsPage from "./RepoSettingsPage";
 import RepoCommitsPage from "./RepoCommitsPage";
 import RepoCommitPage from "./RepoCommitPage";
+import RepoBranchesPage from "./RepoBranchesPage";
+import RepoTagsPage from "./RepoTagsPage";
 import IssuePage from "@/pages/IssuePage";
 import PRPage from "@/pages/PRPage";
 import { useIssues } from "@/hooks/useIssues";
@@ -282,6 +284,8 @@ function RepoLayoutResolved({
       "/tree",
       "/commit",
       "/commits",
+      "/branches",
+      "/tags",
     ]) {
       const idx = full.indexOf(keyword);
       if (idx !== -1) return full.slice(0, idx);
@@ -316,6 +320,8 @@ function RepoLayoutResolved({
       | "pr-commit"
       | "commits"
       | "commit"
+      | "branches"
+      | "tags"
       | "about"
       | "edit"
       | "settings";
@@ -389,6 +395,16 @@ function RepoLayoutResolved({
       };
     }
 
+    const branchesIdx = segments.indexOf("branches");
+    if (branchesIdx !== -1) {
+      return { subPage: "branches" };
+    }
+
+    const tagsIdx = segments.indexOf("tags");
+    if (tagsIdx !== -1) {
+      return { subPage: "tags" };
+    }
+
     const issuesIdx = segments.indexOf("issues");
     if (issuesIdx !== -1) {
       if (segments.length > issuesIdx + 1) {
@@ -456,6 +472,7 @@ function RepoLayoutResolved({
           commitsRef,
           prCommitId,
           prBasePath,
+          basePath,
         }
       : null;
 
@@ -604,6 +621,10 @@ function RepoLayoutResolved({
                 <RepoCommitsPage />
               ) : subPage === "commit" ? (
                 <RepoCommitPage />
+              ) : subPage === "branches" ? (
+                <RepoBranchesPage />
+              ) : subPage === "tags" ? (
+                <RepoTagsPage />
               ) : subPage === "issue" ? (
                 <IssuePage />
               ) : subPage === "issues" ? (

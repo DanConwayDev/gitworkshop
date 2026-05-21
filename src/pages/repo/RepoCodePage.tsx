@@ -51,6 +51,8 @@ import {
   Download,
   History,
   Search,
+  GitBranch,
+  Tag,
 } from "lucide-react";
 import { getFileMediaType, toDataUri } from "@/lib/fileMediaType";
 import { cn, safeFormatDistanceToNow } from "@/lib/utils";
@@ -1255,6 +1257,19 @@ function CodeBar({
   winnerUrl: string | null;
   fullFileTree: FullFileTreeState & { triggerFetch: () => void };
 }) {
+  // Preserve the active `?source=` selection on cross-page nav links so the
+  // commit history / branches / tags views stay on the same source the user
+  // is browsing here.
+  const [searchParams] = useSearchParams();
+  const sourceParam = searchParams.get("source");
+  const sourceQs = sourceParam
+    ? `?source=${encodeURIComponent(sourceParam)}`
+    : "";
+
+  // On mobile, the Commits / Branches / Tags trio collapses to icon-only so
+  // the commit summary row can fit alongside the commit message + hash.
+  const isMobile = useIsMobile();
+
   // Compute the full ref name for the pool's refStatus lookup
   const currentRefObj = refs.find((r) => r.name === currentRef);
   const currentRefFull = currentRefObj
@@ -1393,16 +1408,35 @@ function CodeBar({
             </code>
           </Link>
           <Link
-            to={
+            to={`${
               currentRef
                 ? `${basePath}/commits/${currentRef}`
                 : `${basePath}/commits`
-            }
+            }${sourceQs}`}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0 whitespace-nowrap"
             title="View commit history"
+            aria-label="View commit history"
           >
             <History className="h-3.5 w-3.5" />
-            <span>Commits</span>
+            {!isMobile && <span>Commits</span>}
+          </Link>
+          <Link
+            to={`${basePath}/branches${sourceQs}`}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0 whitespace-nowrap"
+            title="View branches"
+            aria-label="View branches"
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            {!isMobile && <span>Branches</span>}
+          </Link>
+          <Link
+            to={`${basePath}/tags${sourceQs}`}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0 whitespace-nowrap"
+            title="View tags"
+            aria-label="View tags"
+          >
+            <Tag className="h-3.5 w-3.5" />
+            {!isMobile && <span>Tags</span>}
           </Link>
         </div>
       ) : loading || commitHash ? (
