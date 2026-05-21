@@ -61,11 +61,9 @@ import {
   type RefStatus,
   type RefWithStatus,
   findOlderStateEvent,
-  getRefStatus,
-  getRefStatusForServer,
-  countMismatches,
   compareTagsNewestFirst,
 } from "@/lib/refStatus";
+import { useRefsWithStatus } from "@/hooks/useRefsWithStatus";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -2417,23 +2415,26 @@ export function RefSelector({
   const selectedSource = selectedSourceProp ?? "default";
   const setSelectedSource = (src: string) => onSourceChange?.(src);
 
-  // Resolve "default" → "nostr" or a concrete git server URL so all downstream
-  // display and data logic works with a real value rather than re-deriving it.
-  // Must be computed before refsWithStatus.
+  // Resolve effective source and compute per-ref status against it.
+  const {
+    effectiveSource,
+    refsWithStatus,
+    branches,
+    tags: tagsUnsorted,
+    mismatchCount,
+  } = useRefsWithStatus({
+    refs,
+    selectedSource,
+    repoState,
+    repoRelayEose,
+    relayStateMap,
+    stateBehindGit,
+    poolWarning,
+    winnerUrl,
+    urlStates,
+    cloneUrls,
+  });
   const isNoState = repoRelayEose && repoState === null;
-  const aheadServerUrl =
-    poolWarning?.kind === "state-behind-git" ? poolWarning.gitServerUrl : null;
-  const effectiveSource = useMemo(
-    () =>
-      deriveEffectiveSource(
-        selectedSource,
-        stateBehindGit,
-        isNoState,
-        winnerUrl,
-        aheadServerUrl,
-      ),
-    [selectedSource, stateBehindGit, isNoState, winnerUrl, aheadServerUrl],
-  );
 
   const isMobile = useIsMobile();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -2480,76 +2481,11 @@ export function RefSelector({
     return () => clearTimeout(id);
   }, [open, isMobile]);
 
-  // Compute status for each ref — against effectiveSource.
-  // effectiveSource is always "nostr" or a concrete clone URL (never "default").
-  const refsWithStatus: RefWithStatus[] = useMemo(() => {
-    if (effectiveSource === "nostr") {
-      // "nostr" (whether explicit or resolved from "default") compares directly
-      // against the signed Nostr state. When the user explicitly selected
-      // "nostr" (overriding a git-ahead situation), pass stateBehindGit=false
-      // so refs are compared against the state even when the server is ahead.
-      const behindGit = selectedSource === "nostr" ? false : stateBehindGit;
-      return refs.map((ref) => ({
-        ...ref,
-        ...getRefStatus(
-          ref,
-          repoState,
-          repoRelayEose,
-          behindGit,
-          urlStates,
-          cloneUrls,
-        ),
-      }));
-    }
-    // A specific git server URL (explicit selection or resolved from "default")
-    const serverUrlState = urlStates[effectiveSource];
-    if (!serverUrlState?.infoRefs) {
-      // Server not ready — fall back to nostr-state comparison
-      return refs.map((ref) => ({
-        ...ref,
-        ...getRefStatus(
-          ref,
-          repoState,
-          repoRelayEose,
-          stateBehindGit,
-          urlStates,
-          cloneUrls,
-        ),
-      }));
-    }
-    return refs.map((ref) => ({
-      ...ref,
-      ...getRefStatusForServer(
-        ref,
-        serverUrlState,
-        repoState,
-        repoRelayEose,
-        relayStateMap,
-      ),
-    }));
-  }, [
-    refs,
-    repoState,
-    repoRelayEose,
-    stateBehindGit,
-    urlStates,
-    cloneUrls,
-    effectiveSource,
-    selectedSource,
-    relayStateMap,
-  ]);
-
-  // Split into branches and tags
-  const branches = useMemo(
-    () => refsWithStatus.filter((r) => r.isBranch),
-    [refsWithStatus],
-  );
+  // Tags in the popover are sorted newest-first by version.
   const tags = useMemo(
     () =>
-      refsWithStatus
-        .filter((r) => r.isTag)
-        .sort((a, b) => compareTagsNewestFirst(a.name, b.name)),
-    [refsWithStatus],
+      [...tagsUnsorted].sort((a, b) => compareTagsNewestFirst(a.name, b.name)),
+    [tagsUnsorted],
   );
 
   // Filter by search
@@ -2560,9 +2496,6 @@ export function RefSelector({
   const filteredTags = search
     ? tags.filter((t) => t.name.toLowerCase().includes(lowerSearch))
     : tags;
-
-  // Only count genuine mismatches (not state-behind) for the issues row
-  const mismatchCount = countMismatches(refsWithStatus);
 
   // Hide search when all refs fit comfortably in the dropdown
   const totalRefs = branches.length + tags.length;
