@@ -37,10 +37,25 @@ export function applySignerNudge<T extends IAccount>(account: T): T {
     // unreachable for NIP-46 purposes.
     const isBunkerConnected = () =>
       nostrConnectSigner.listening && nostrConnectSigner.isConnected;
-    account.signer = signerWithNudge(
-      nostrConnectSigner,
-      isBunkerConnected,
-    ) as typeof account.signer;
+    const wrapped = signerWithNudge(nostrConnectSigner, isBunkerConnected);
+    // Use a Proxy so that NostrConnectAccount.toJSON() can still access
+    // .remote, .signer, .relays etc. on the original NostrConnectSigner
+    // (needed to serialise the account to localStorage). Without this the
+    // signerWithNudge wrapper — a plain ISigner object — would shadow those
+    // properties, causing toJSON() to throw and the session to be lost on
+    // every page refresh.
+    account.signer = new Proxy(nostrConnectSigner, {
+      get(target, prop, receiver) {
+        // Route ISigner interface calls through the nudge wrapper.
+        if (Object.prototype.hasOwnProperty.call(wrapped, prop)) {
+          return (wrapped as Record<string | symbol, unknown>)[prop];
+        }
+        // Everything else (remote, signer, relays, listening, isConnected,
+        // open, etc.) falls through to the real NostrConnectSigner.
+        const val = Reflect.get(target, prop, receiver);
+        return typeof val === "function" ? val.bind(target) : val;
+      },
+    }) as typeof account.signer;
   } else if (account instanceof Accounts.ExtensionAccount) {
     // Extension signers benefit from the nudge (user may dismiss or ignore the
     // browser popup) but have no relay connectivity to check.
