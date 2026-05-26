@@ -419,7 +419,7 @@ function buildComponents(
     // must derive display text from the decoded pointer rather than relying on
     // {children}.
     // remarkCommitLinks produces link nodes with href="commit:<hash>".
-    a: ({ href, children, ...props }) => {
+    a: ({ href, children, className: propsClassName, ...props }) => {
       if (href?.startsWith("commit:")) {
         const hash = href.slice(7);
         return <CommitLink hash={hash} />;
@@ -456,7 +456,16 @@ function buildComponents(
         );
       }
       return (
-        <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(
+            "text-primary underline underline-offset-4 decoration-primary/50 hover:decoration-primary transition-colors",
+            propsClassName,
+          )}
+          {...props}
+        >
           {children}
         </a>
       );
