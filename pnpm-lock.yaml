@@ -22,9 +22,6 @@ importers:
       "@hookform/resolvers":
         specifier: ^3.10.0
         version: 3.10.0(react-hook-form@7.71.2(react@18.3.1))
-      "@libs/qrcode":
-        specifier: jsr:^3.0.1
-        version: "@jsr/libs__qrcode@3.0.1"
       "@noble/hashes":
         specifier: ^2.0.1
         version: 2.0.1
@@ -965,13 +962,6 @@ packages:
     resolution:
       {
         integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==,
-      }
-
-  "@jsr/libs__qrcode@3.0.1":
-    resolution:
-      {
-        integrity: sha512-kmB/aAUr55cB4h5+UHmig9Cx8UWEckpEBYdgmKIP1qaEZU3EpLQZHs4GL/78c+WVAdC9H6Gx+JwjX3g6GvsB2Q==,
-        tarball: https://npm.jsr.io/~/11/@jsr/libs__qrcode/3.0.1.tgz,
       }
 
   "@modelcontextprotocol/sdk@1.27.1":
@@ -7060,8 +7050,6 @@ snapshots:
     dependencies:
       "@jridgewell/resolve-uri": 3.1.2
       "@jridgewell/sourcemap-codec": 1.5.5
-
-  "@jsr/libs__qrcode@3.0.1": {}
 
   "@modelcontextprotocol/sdk@1.27.1(zod@3.25.76)":
     dependencies:
