@@ -7,8 +7,9 @@
  * The default (compact={false}) is the full notifications-page layout.
  */
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { nip19 } from "nostr-tools";
 import {
   CircleDot,
   GitPullRequest,
@@ -39,6 +40,7 @@ import {
   buildNotificationLink,
 } from "@/lib/notificationUtils";
 import { eventIdToNevent } from "@/lib/routeUtils";
+import { REPO_KIND } from "@/lib/nip34";
 import { StatusIcon } from "@/components/StatusIcon";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 import type { NotificationActions } from "@/hooks/useNotifications";
@@ -48,6 +50,60 @@ import type {
   RepoZapNotificationItem,
 } from "@/lib/notifications";
 import type { ResolvedIssueLite } from "@/lib/nip34";
+
+function repoCoordToNaddrPath(coord: string): string | undefined {
+  const [kind, pubkey, ...identifierParts] = coord.split(":");
+  const identifier = identifierParts.join(":");
+
+  if (
+    kind !== String(REPO_KIND) ||
+    !/^[0-9a-f]{64}$/.test(pubkey) ||
+    !identifier
+  ) {
+    return undefined;
+  }
+
+  return `/${nip19.naddrEncode({
+    kind: REPO_KIND,
+    pubkey,
+    identifier,
+  })}`;
+}
+
+function RepoNotificationLink({
+  to,
+  rootId,
+  actions,
+  children,
+}: {
+  to: string | undefined;
+  rootId: string;
+  actions: NotificationActions;
+  children: ReactNode;
+}) {
+  const className = "flex items-start gap-3 min-w-0 flex-1 px-3 py-3";
+
+  if (!to) {
+    return (
+      <div
+        className={cn(className, "cursor-default")}
+        onClick={() => actions.markAsRead(rootId)}
+      >
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      to={to}
+      className={cn(className, "cursor-pointer")}
+      onClick={() => actions.markAsRead(rootId)}
+    >
+      {children}
+    </Link>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // ViewTab — only relevant for the full layout's action buttons
@@ -329,6 +385,7 @@ function SocialNotificationRow({
 }) {
   const actorPubkeys = useMemo(() => getActorPubkeys(item), [item]);
   const lastActive = useRelativeTime(item.latestActivity);
+  const linkPath = repoCoordToNaddrPath(item.repoCoord);
 
   return (
     <li
@@ -340,9 +397,10 @@ function SocialNotificationRow({
       )}
     >
       <div className="flex items-start">
-        <div
-          className="flex items-start gap-3 min-w-0 cursor-default flex-1 px-3 py-3"
-          onClick={() => actions.markAsRead(item.rootId)}
+        <RepoNotificationLink
+          to={linkPath}
+          rootId={item.rootId}
+          actions={actions}
         >
           {/* Unread dot */}
           <div className="w-2 pt-1.5 shrink-0">
@@ -397,7 +455,7 @@ function SocialNotificationRow({
               )}
             </div>
           </div>
-        </div>
+        </RepoNotificationLink>
 
         {/* Action buttons — icon-only when compact */}
         <div className="hidden md:group-hover:flex items-center gap-1 self-center pr-3 shrink-0">
@@ -471,6 +529,7 @@ function RepoZapNotificationRow({
 }) {
   const actorPubkeys = useMemo(() => getActorPubkeys(item), [item]);
   const lastActive = useRelativeTime(item.latestActivity);
+  const linkPath = repoCoordToNaddrPath(item.repoCoord);
 
   // Format sats compactly for display
   const satsLabel =
@@ -490,9 +549,10 @@ function RepoZapNotificationRow({
       )}
     >
       <div className="flex items-start">
-        <div
-          className="flex items-start gap-3 min-w-0 cursor-default flex-1 px-3 py-3"
-          onClick={() => actions.markAsRead(item.rootId)}
+        <RepoNotificationLink
+          to={linkPath}
+          rootId={item.rootId}
+          actions={actions}
         >
           {/* Unread dot */}
           <div className="w-2 pt-1.5 shrink-0">
@@ -552,7 +612,7 @@ function RepoZapNotificationRow({
               )}
             </div>
           </div>
-        </div>
+        </RepoNotificationLink>
 
         {/* Action buttons — icon-only when compact */}
         <div className="hidden md:group-hover:flex items-center gap-1 self-center pr-3 shrink-0">
