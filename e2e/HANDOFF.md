@@ -27,9 +27,28 @@
   from `services/nostr.ts`. Contexts that never register a store (the e2e
   harness) get `undefined` hints — the documented fallback — so production
   behaviour is unchanged.
-- **Step 3b (merge.e2e.test.ts): WRITTEN BUT SKIPPED.** The test is complete
-  end-to-end (`e2e/merge.e2e.test.ts`) but currently `describe.skip` so
-  `pnpm test:e2e` stays green. It fails at one specific point — see below.
+- **Step 3b (merge.e2e.test.ts): DONE — ENABLED AND PASSING.** The test is
+  complete end-to-end (`e2e/merge.e2e.test.ts`) and now runs whenever the
+  ngit-grasp binary is available (it skips cleanly otherwise). With the
+  indexedDB-in-node fix (below) the full merge path is green:
+  `NGIT_GRASP_BIN=… pnpm test:e2e` → 6 passed (merge + file-explorer +
+  4 hello-world).
+
+  It proves, against a live grasp server:
+  - The contributor's kind:1617 patch commit hash re-derives and verifies
+    (`allHashesVerified`).
+  - A **kind:30618 state event signed by the maintainer — the same npub that
+    published the original kind:30617 announcement** — names the merge commit
+    as the branch tip.
+  - The packfile push is **accepted into purgatory**: grasp's `git-receive-pack`
+    only accepts a ref update matching a purgatory entry from a valid state
+    event, and `getReceivePackRefs()[refs/heads/main]` equals the merge commit,
+    so a successful push is direct evidence of purgatory acceptance.
+  - The kind:1631 merged status (with the `merge-commit` tag) is queryable.
+
+  **Remaining gap (negative test, not yet written):** the suite proves the
+  maintainer's state+push is _accepted_; it does not yet prove grasp _rejects_
+  the same state/push from a non-maintainer npub. That's the natural next test.
 
 ## The blocker — RESOLVED
 
@@ -61,23 +80,29 @@ default-branch tip, populates `latestCommit`/`readmeContent`/`defaultBranch`,
 then `getInfoRefs()` + `getTree()` + `getObjectByPath()`/`getBlob()` return the
 file list and README bytes. All assertions pass against live grasp.
 
-## The actual Merge-button bug (Step "The actual bug")
+## The Merge-button path (was "The actual bug")
 
-**Not yet characterised** — blocked by the pool fetch above. The test was
-supposed to reproduce it. Hypotheses to keep in mind while finishing:
+**No reproducible bug in the merge orchestration itself** — with the
+indexedDB-in-node pool fix the full path (`buildPatchChainObjects` →
+`performMerge` → kind:30618 state → packfile push into purgatory → kind:1631
+status) runs green against live grasp. The original blocker was the harness
+environment bug above (indexedDB undefined in node), not a production browser
+bug.
 
-- If `getFullTree` genuinely fails the same way against real grasp servers in
-  the browser, _that_ is the bug: the merge check (`usePatchMergeability`) would
-  land in `error`/`conflicts` and the green Merge button would never appear, or
-  `handleMerge`'s `buildResult` would be null and the click is a no-op. Worth
-  checking whether the production failure is "button does nothing" vs "push
-  rejected".
-- Otherwise the failure is downstream: purgatory/auth on the kind:30618 push
-  (401/403 from `getReceivePackRefs`), wrong merge-base (timestamp guess), or
-  the status never landing.
+If a Merge-button problem resurfaces in the browser, candidates to investigate
+next (none currently reproduced):
 
-Report the root cause to the user and only fix it if they confirm they want the
-fix in this session (per the task rules).
+- `getFullTree` failing against a real grasp server in the browser would land
+  the merge check (`usePatchMergeability`) in `error`/`conflicts`, so the green
+  Merge button never appears, or `handleMerge`'s `buildResult` is null and the
+  click is a no-op. Distinguish "button does nothing" vs "push rejected".
+- Downstream: purgatory/auth on the kind:30618 push (401/403 from
+  `getReceivePackRefs`), wrong merge-base (timestamp guess), or the status
+  never landing.
+
+**Next test to write:** the negative purgatory authorization case — seed a repo
+as `maintainer`, then attempt a kind:30618 state + push signed by a _different_
+npub and assert grasp rejects it (push refused / ref unchanged).
 
 ## Rules reminder
 

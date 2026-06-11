@@ -61,12 +61,11 @@ import { STATUS_RESOLVED } from "@/lib/nip34";
 
 const describeIfGrasp = graspBinaryAvailable() ? describe : describe.skip;
 
-// The GitGraspPool fetch blocker (`indexedDB is not defined` in node — see
-// e2e/HANDOFF.md) is FIXED in src/lib/git-grasp-pool/cache.ts, and this test
-// passes end-to-end when un-skipped. It is left `.skip` only so the
-// merge-button investigation is owned by a separate change; flip
-// `describeIfGrasp.skip` → `describeIfGrasp` to enable it.
-const describeMerge = describeIfGrasp.skip;
+// Runs whenever the ngit-grasp binary is available (NGIT_GRASP_BIN or a sibling
+// clone); skips cleanly otherwise. The earlier GitGraspPool fetch blocker
+// (`indexedDB is not defined` in node — see e2e/HANDOFF.md) is fixed in
+// src/lib/git-grasp-pool/cache.ts, so the full merge path runs end-to-end here.
+const describeMerge = describeIfGrasp;
 
 describeMerge("e2e — Merge button (merge strategy)", () => {
   let server: GraspServer;
