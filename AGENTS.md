@@ -70,6 +70,16 @@ If you don't have a git pre-commit hook installed (fresh clone), copy this into 
 pnpm pre-commit
 ```
 
+### End-to-end tests (`e2e/`) — opt-in, not part of pre-commit
+
+`e2e/` holds integration tests that drive the app's real git + Nostr libraries against a live [`ngit-grasp`][grasp] server (push, packed refs, GRASP purgatory/state). They are **deliberately excluded** from `pnpm test` / `pnpm pre-commit` and run only via `pnpm test:e2e` (`vitest.e2e.config.ts`).
+
+- They run headless in the Node environment, but **require the `ngit-grasp` binary and a Node runtime** — they **cannot** run in a browser-only environment or anywhere the binary is unavailable. The Nix devShell provides a pinned binary (`nix develop`, sets `$NGIT_GRASP_BIN`); without a binary every suite **skips cleanly** rather than failing.
+- **Run them (if your environment can) whenever you change git/relay integration code — especially `src/lib/git-grasp-pool/`, `src/lib/git-*`, `src/lib/perform-merge.ts`, or the merge flow** — since those paths are not covered by the default unit run. `pnpm pre-commit` won't catch regressions there.
+- See `e2e/README.md` for the harness, invariants (never import `src/services/nostr.ts` singletons), and the degrade-don't-stub rule for browser-only globals in Node.
+
+[grasp]: https://github.com/ — see `../ngit-grasp`
+
 ## Nostr Protocol Integration
 
 ### Choosing kinds, designing tags, content vs. tags
@@ -173,6 +183,7 @@ The active account is exposed via `useAccount()` (returns `{ pubkey, signer } | 
 - **Read APIs on the pool** (all cache-first, all accept an optional `fallbackUrls` for one-off URLs like a PR author's fork): `getSingleCommit`, `getCommitHistory`, `getTree`, `getFullTree`, `getBlob`, `getObjectByPath`, `findMergeBase`, `countCommitsBehind`, `findCommitBeforeTimestamp`. For diffs, fetch two `getFullTree` results, walk them with `diffTrees`, fetch only the changed blobs, then `generateUnifiedDiff` (all exported from the barrel).
 - **State event integration is automatic** when you pass `knownHeadCommit` / `stateRefs` / `stateCreatedAt` — the pool computes `state-behind-git` / `state-commit-unavailable` warnings, per-URL `UrlRefStatus`, and `crossRefDiscrepancies` for the multi-server status UI; it also schedules backoff re-fetches when the signed Nostr state is ahead of every git server.
 - **Don't:** import from `@fiatjaf/git-natural-api` outside `git-grasp-pool/git-http.ts`, construct `GitGraspPool` yourself, add a parallel cache, or fan out `Promise.any(cloneUrls.map(fetch...))` in a hook. The deep details (cache layout, packfile parsing, error classification, eviction) live in the source — read `src/lib/git-grasp-pool/` when you need them.
+- **Testing:** this code is **not** exercised by the default unit run. If your environment can (Node + the `ngit-grasp` binary), run `pnpm test:e2e` after changing anything here — see the "End-to-end tests" section above.
 
 ## Routing
 
