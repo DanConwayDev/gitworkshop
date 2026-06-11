@@ -43,6 +43,16 @@ export default tseslint.config(
     },
   },
   {
+    // E2E harness + tests run under Node (vitest.e2e.config.ts), so they use
+    // Node globals (process, Buffer, NodeJS namespace) alongside the
+    // Web-standard ones (fetch, WebSocket). Type-checking for these files is
+    // handled by the e2e run, not the default `tsc --noEmit` over `src`.
+    files: ["e2e/**/*.{ts,tsx}"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
+  {
     files: ["**/*.html"],
     plugins: {
       "@html-eslint": htmlEslint,

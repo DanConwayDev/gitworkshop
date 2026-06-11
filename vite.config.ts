@@ -130,6 +130,10 @@ export default defineConfig(() => ({
     globals: true,
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
+    // Unit tests live under src/. End-to-end tests (e2e/**/*.e2e.test.ts) need
+    // a real ngit-grasp server and run via a separate config
+    // (vitest.e2e.config.ts / `pnpm test:e2e`), so they are excluded here.
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
     onConsoleLog(log) {
       return !log.includes("React Router Future Flag Warning");
     },

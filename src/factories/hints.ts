@@ -15,24 +15,50 @@
  *
  * Both functions are async to satisfy the resolver signature
  * `(id: string) => Promise<string | undefined>` expected by the tag helpers.
+ *
+ * ## Why the EventStore is injected, not imported
+ *
+ * Importing `@/services/nostr` for its `eventStore` singleton at module-eval
+ * time would drag the whole service graph (RelayPool, IndexedDB cache, settings)
+ * into anything that touches a factory — including node-side e2e tests and any
+ * non-browser context. Those modules connect to production relays and touch
+ * browser-only globals on load.
+ *
+ * Instead `services/nostr.ts` calls `setHintEventStore(eventStore)` once at
+ * startup. Contexts that never register a store (e.g. the e2e harness) simply
+ * get `undefined` hints — which is the documented fallback for these resolvers
+ * anyway, so production behaviour is unchanged.
  */
 
 import { getSeenRelays } from "applesauce-core/helpers/relays";
 import { MailboxesModel } from "applesauce-core/models";
 import { firstValueFrom, of, timeout } from "rxjs";
-import { eventStore } from "@/services/nostr";
+import type { EventStore } from "applesauce-core";
+
+/**
+ * The EventStore used to resolve relay hints. Registered lazily by
+ * `services/nostr.ts` so this module has no static dependency on the service
+ * graph. `undefined` until registered → hints resolve to `undefined`.
+ */
+let hintEventStore: EventStore | undefined;
+
+/** Register the EventStore used for relay-hint lookups. Called once at startup. */
+export function setHintEventStore(store: EventStore): void {
+  hintEventStore = store;
+}
 
 /**
  * Resolve a relay hint for an event id by looking it up in the EventStore
  * and picking the first relay that delivered it.
  *
- * Returns `undefined` when the event isn't in the store or has no
- * "seen on" metadata.
+ * Returns `undefined` when no store is registered, the event isn't in the
+ * store, or it has no "seen on" metadata.
  */
 export async function getEventRelayHint(
   id: string,
 ): Promise<string | undefined> {
-  const event = eventStore.getEvent(id);
+  if (!hintEventStore) return undefined;
+  const event = hintEventStore.getEvent(id);
   if (!event) return undefined;
   const seen = getSeenRelays(event);
   if (!seen) return undefined;
@@ -46,15 +72,16 @@ export async function getEventRelayHint(
  * relay.
  *
  * The mailbox model is reactive, but we want a snapshot — so we take the
- * first emission with a short timeout. Returns `undefined` if the user has
- * no mailboxes in the store or the model doesn't emit within the timeout.
+ * first emission with a short timeout. Returns `undefined` if no store is
+ * registered, the user has no mailboxes, or the model doesn't emit in time.
  */
 export async function getPubkeyRelayHint(
   pubkey: string,
 ): Promise<string | undefined> {
+  if (!hintEventStore) return undefined;
   try {
     const mailboxes = await firstValueFrom(
-      eventStore
+      hintEventStore
         .model(MailboxesModel, pubkey)
         .pipe(timeout({ first: 250, with: () => of(undefined) })),
     );

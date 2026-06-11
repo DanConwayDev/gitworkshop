@@ -74,9 +74,9 @@ import {
   usePRMergeability,
   type PRMergeabilityStatus,
 } from "@/hooks/usePRMergeability";
-import { createMergeCommitObject } from "@/lib/patch-merge";
 import { createPackfile, type PackableObject } from "@/lib/git-packfile";
 import { pushToGitServer, type RefUpdate } from "@/lib/git-push";
+import { performMerge } from "@/lib/perform-merge";
 import { pool as relayPool, eventStore } from "@/services/nostr";
 import { outboxStore } from "@/services/outbox";
 
@@ -357,7 +357,7 @@ export function MergePanel({
     setMergeError(null);
 
     try {
-      // ── Step 1: Build merge commit ────────────────────────────────────
+      // ── Build the committer identity for the merge commit ──────────────
       const committerName =
         profile?.displayName || profile?.name || "Anonymous";
       const committerEmail =
@@ -389,84 +389,49 @@ export function MergePanel({
       // original PR body.
       const prDescription = pr.coverNote?.content || pr.body || undefined;
 
-      const mergeCommitObj = await createMergeCommitObject(
-        mergeability.buildResult.finalTreeHash,
+      const { mergeCommit } = await performMerge({
+        signer: account.signer,
+        signerPubkey: account.pubkey,
+        chainObjects: mergeability.buildResult.objects,
+        finalTreeHash: mergeability.buildResult.finalTreeHash,
+        tipCommitHash: mergeability.buildResult.tipCommitHash,
+        dTag: repo.dTag,
+        defaultBranchName,
         defaultBranchHead,
-        mergeability.buildResult.tipCommitHash,
-        committer,
-        pr.currentSubject || pr.originalSubject,
-        pr.itemType,
+        repoCoords: pr.repoCoords,
+        rootEventId: pr.rootEvent.id,
+        rootAuthorPubkey: pr.pubkey,
+        subject: pr.currentSubject || pr.originalSubject,
+        itemType: pr.itemType,
         prNevent,
         prDescription,
-      );
-
-      const allObjects: PackableObject[] = [
-        ...mergeability.buildResult.objects,
-        mergeCommitObj,
-      ];
-
-      // ── Step 2+3: Publish state + push ────────────────────────────────
-      const signedState = await RepoStateFactory.create(
-        repo.dTag,
-        mergeCommitObj.hash,
-        defaultBranchName,
-      ).sign(account.signer);
-
-      setMergeStep("publishing-state");
-      await publishToGraspRelays(signedState, graspRelayUrls);
-      eventStore.add(signedState);
-
-      setMergeStep("pushing");
-      await pushObjects(allObjects, {
-        oldHash: defaultBranchHead,
-        newHash: mergeCommitObj.hash,
-        refName: defaultBranchRef,
+        committer,
+        patchEventIds: (patchChain ?? []).map((patch) => ({
+          id: patch.event.id,
+          pubkey: patch.pubkey,
+        })),
+        publishStateToGrasp: (state) =>
+          publishToGraspRelays(state, graspRelayUrls),
+        pushObjects,
+        publishStatusBroadly: (status) =>
+          outboxStore.publish(status, [
+            `outbox:${account.pubkey}`,
+            ...repo.allCoordinates,
+            ...(pr.pubkey !== account.pubkey ? [`inbox:${pr.pubkey}`] : []),
+          ]),
+        broadcastStateBroadly: (state) =>
+          outboxStore.publish(state, [
+            `outbox:${account.pubkey}`,
+            ...repo.allCoordinates,
+            "fallback-relays",
+          ]),
+        onEvent: (event) => eventStore.add(event),
+        onStep: (step) => setMergeStep(step),
       });
 
-      // ── Step 4+5: Status + broadcast ──────────────────────────────────
-      setMergeStep("publishing-status");
-
-      const statusKind = STATUS_KIND_MAP["resolved"];
-      const patchQuoteTags = (patchChain ?? []).map((patch) => [
-        "q",
-        patch.event.id,
-        "",
-        patch.pubkey,
-      ]);
-
-      const signedStatus = await StatusChangeFactory.create(
-        statusKind,
-        pr.rootEvent.id,
-        pr.repoCoords,
-        pr.pubkey,
-        account.pubkey,
-      )
-        .modifyPublicTags((tags) => [
-          ...tags,
-          ["merge-commit", mergeCommitObj.hash],
-          ["r", mergeCommitObj.hash],
-          ...patchQuoteTags,
-        ])
-        .sign(account.signer);
-
-      await outboxStore.publish(signedStatus, [
-        `outbox:${account.pubkey}`,
-        ...repo.allCoordinates,
-        ...(pr.pubkey !== account.pubkey ? [`inbox:${pr.pubkey}`] : []),
-      ]);
-      eventStore.add(signedStatus);
-
-      setMergeStep("broadcasting-state");
-      await outboxStore.publish(signedState, [
-        `outbox:${account.pubkey}`,
-        ...repo.allCoordinates,
-        "fallback-relays",
-      ]);
-
-      setMergeStep("done");
       toast({
         title: "Patch merged",
-        description: `Merge commit ${mergeCommitObj.hash.slice(0, 8)} pushed to ${defaultBranchName}.`,
+        description: `Merge commit ${mergeCommit.hash.slice(0, 8)} pushed to ${defaultBranchName}.`,
       });
     } catch (err) {
       const message =
@@ -484,7 +449,6 @@ export function MergePanel({
     mergeability.buildResult,
     defaultBranchHead,
     defaultBranchName,
-    defaultBranchRef,
     gitPool,
     profile,
     pr,

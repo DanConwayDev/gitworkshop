@@ -84,6 +84,16 @@ interface CommitHistoryRecord {
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
+/**
+ * Whether IndexedDB is available in the current environment.
+ *
+ * It is absent in non-browser runtimes (Node, SSR, the e2e test harness).
+ * When unavailable, the L2 (IDB) tier silently degrades to a no-op and the
+ * cache operates L1-only — every git operation still works, just without
+ * cross-session persistence.
+ */
+const idbAvailable = typeof indexedDB !== "undefined";
+
 function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
@@ -111,6 +121,7 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 function idbGet<T>(storeName: string, key: string): Promise<T | undefined> {
+  if (!idbAvailable) return Promise.resolve(undefined);
   return openDB().then(
     (db) =>
       new Promise((resolve, reject) => {
@@ -123,6 +134,7 @@ function idbGet<T>(storeName: string, key: string): Promise<T | undefined> {
 }
 
 function idbPut(storeName: string, value: unknown): Promise<void> {
+  if (!idbAvailable) return Promise.resolve();
   return openDB().then(
     (db) =>
       new Promise((resolve, reject) => {
