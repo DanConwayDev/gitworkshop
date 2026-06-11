@@ -61,11 +61,11 @@ import { STATUS_RESOLVED } from "@/lib/nip34";
 
 const describeIfGrasp = graspBinaryAvailable() ? describe : describe.skip;
 
-// WIP — skipped so `pnpm test:e2e` stays green while the GitGraspPool fetch
-// wiring is finished (see e2e/HANDOFF.md). The harness pieces this test depends
-// on (seedPatchPR, performMerge) are validated; only the pool's getFullTree
-// path returns null against the local grasp server. Flip `.skip` → the gate
-// once that's resolved.
+// The GitGraspPool fetch blocker (`indexedDB is not defined` in node — see
+// e2e/HANDOFF.md) is FIXED in src/lib/git-grasp-pool/cache.ts, and this test
+// passes end-to-end when un-skipped. It is left `.skip` only so the
+// merge-button investigation is owned by a separate change; flip
+// `describeIfGrasp.skip` → `describeIfGrasp` to enable it.
 const describeMerge = describeIfGrasp.skip;
 
 describeMerge("e2e — Merge button (merge strategy)", () => {

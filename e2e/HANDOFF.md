@@ -31,54 +31,35 @@
   end-to-end (`e2e/merge.e2e.test.ts`) but currently `describe.skip` so
   `pnpm test:e2e` stays green. It fails at one specific point — see below.
 
-## The blocker (where to pick up)
+## The blocker — RESOLVED
 
-`buildPatchChainObjects([patchCast], pool, …)` returns
-`{ reason: "Could not fetch base commit <8hex> from git server" }`.
+`buildPatchChainObjects([patchCast], pool, …)` returned
+`{ reason: "Could not fetch base commit <8hex> from git server" }` because
+`pool.getFullTree(baseCommitId)` returned `null`.
 
-That error comes from `pool.getFullTree(baseCommitId)` returning `null`
-(`src/lib/patch-merge.ts:387`). The base commit IS the current
-`refs/heads/main` tip on the grasp server, so it should be fetchable.
+**Root cause (found via `e2e/file-explorer.e2e.test.ts`):** the GitGraspPool L2
+cache (`src/lib/git-grasp-pool/cache.ts`) called `indexedDB.open(...)`
+unconditionally. `indexedDB` is **undefined in node**, so every cache read
+(`idbGet`, awaited at the top of `GitHttpClient.fetchInfoRefs` before the
+network fetch) threw `ReferenceError: indexedDB is not defined`. That rejection
+propagated up, the URL was recorded as a permanent failure, and the pool ended
+in "Could not reach any clone URL" — which `getFullTree`/`withFallback` then
+surfaced as `null`. It was an **environment bug in the harness path, not a
+production browser bug.**
 
-**Confirmed working** (via a throwaway debug test, since deleted): the
-low-level vendored path against the _same_ grasp URL succeeds —
-`getInfoRefs(repo.cloneUrl)` advertises `filter`, `side-band-64k`, `ofs-delta`,
-etc., and `fetchPackfile(url, createWantRequest(headCommit, caps, 1, "blob:none"))`
-returns objects. So the protocol + server are fine; the failure is in the
-**GitGraspPool layer**, which swallows the real error in
-`GitHttpClient.fetchFullTree`'s `catch { return null }`
-(`src/lib/git-grasp-pool/git-http.ts` ~line 930) and again in `withFallback`
-(`pool.ts` ~line 1683).
+**Fix (committed):** `cache.ts` now detects `typeof indexedDB === "undefined"`
+once (`idbAvailable`) and makes `idbGet`/`idbPut` resolve to no-ops in that
+case, so the cache degrades cleanly to L1-only. Production (browser) behaviour
+is unchanged. With this fix the merge test passes end-to-end when un-skipped
+(verified locally, then re-skipped per the task split).
 
-### Next diagnostic step
+## Verifying the file-list / README path — DONE
 
-Temporarily surface the swallowed error. Either:
-
-1. Edit `fetchFullTree`'s `catch` to `console.error(err)` (revert after), or
-2. In the test, call the vendored `fetchPackfile`/`loadTree` path directly the
-   way `fetchFullTree` does and compare.
-
-Likely suspects, in order:
-
-- **`getServerCaps` / `fetchInfoRefs` caching in the pool** — the pool fetches
-  its own info/refs via `this.fetchInfoRefs(url)`. Check it isn't being routed
-  through a CORS proxy (we pass `corsProxyBase: null`, but confirm
-  `cors.resolveUrl(url)` returns the bare URL and `fetchInfoRefs` doesn't 404).
-- **`selectCapabilities`** throwing on a `NECESSARY_CAPS`/`REQUIRED_CAPS` the
-  test server doesn't advertise under a slightly different name.
-- **`loadTree` with `parseDepth=undefined`** on the blob:none packfile — the
-  root tree must be present; verify `result.objects.get(rootTreeHash)` is set
-  (it was in the low-level debug run).
-- Pool **URL health gating** — a brand-new pool's URL may start in a state
-  `getOrderedUrls()` excludes. Unlikely (withFallback still tries it) but check
-  `getOrderedUrls()` returns the URL for a fresh pool with no subscribers.
-
-Once `getFullTree` returns the tree, `buildPatchChainObjects` should verify the
-commit hash (the patch was built with the same `@/lib/git-*` primitives, so
-`allHashesVerified` must be `true`), and the rest of the test (performMerge →
-push → assert tip via `getReceivePackRefs` → assert kind:30618/1631 on the
-relay) should pass. Then flip `describeMerge` back to `describeIfGrasp` in
-`e2e/merge.e2e.test.ts`.
+`e2e/file-explorer.e2e.test.ts` drives the REAL `GitGraspPool` read path the
+repo landing page + `useGitExplorer` use: `pool.subscribe()` resolves the
+default-branch tip, populates `latestCommit`/`readmeContent`/`defaultBranch`,
+then `getInfoRefs()` + `getTree()` + `getObjectByPath()`/`getBlob()` return the
+file list and README bytes. All assertions pass against live grasp.
 
 ## The actual Merge-button bug (Step "The actual bug")
 
