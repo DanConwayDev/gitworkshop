@@ -346,13 +346,3 @@ export function cycleThemeMode() {
     themeMode.next(osDark ? "system" : "light");
   }
 }
-
-// ---------------------------------------------------------------------------
-// Beta banner dismissal
-// ---------------------------------------------------------------------------
-
-export const betaBannerDismissed = new BehaviorSubject<boolean>(false);
-
-persist(betaBannerDismissed, "betaBannerDismissed", {
-  defaultValue: false,
-});
