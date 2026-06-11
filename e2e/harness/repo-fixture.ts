@@ -81,6 +81,8 @@ export interface SeededRepo {
   state: NostrEvent;
   /** Hex SHA-1 of the root commit now at refs/heads/<branch>. */
   headCommit: string;
+  /** Unix-second timestamp used for the root commit's author/committer. */
+  headCommitTimestamp: number;
   /** Hex SHA-1 of the root tree. */
   rootTree: string;
   /** Map of file path → blob hash for the seeded files. */
@@ -261,6 +263,7 @@ export async function seedRepo(
     announcement,
     state,
     headCommit: commit.hash,
+    headCommitTimestamp: timestamp,
     rootTree: tree.hash,
     blobHashes,
   };

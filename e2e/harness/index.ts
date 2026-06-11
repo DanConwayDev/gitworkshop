@@ -27,3 +27,8 @@ export {
   type SeedRepoOptions,
   type SeededRepo,
 } from "./repo-fixture";
+export {
+  seedPatchPR,
+  type SeedPatchPROptions,
+  type SeededPatchPR,
+} from "./seed-patch-pr";

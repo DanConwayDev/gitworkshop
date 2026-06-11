@@ -26,6 +26,7 @@ import { filter, map, take, timeout } from "rxjs/operators";
 import { MailboxesModel } from "applesauce-core/models";
 import { cacheRequest, saveEvents } from "./cache";
 import { nip05IdbCache, loadAllNip05FromIdb } from "./nip05IdbCache";
+import { setHintEventStore } from "@/factories/hints";
 import {
   fallbackRelays,
   lookupRelays,
@@ -64,6 +65,11 @@ eventStore.verifyEvent = verifyEvent;
 
 // Persist events to the local nostrdb
 persistEventsToCache(eventStore, saveEvents);
+
+// Register this store as the source for factory relay-hint resolution. Done
+// here (rather than `hints.ts` importing this module) so the factory layer has
+// no static dependency on the service graph — see src/factories/hints.ts.
+setHintEventStore(eventStore);
 
 /**
  * Global RelayPool instance for all relay connections.
