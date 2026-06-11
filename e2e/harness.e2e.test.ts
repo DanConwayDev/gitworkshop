@@ -1,5 +1,5 @@
 /**
- * hello-world e2e smoke test.
+ * Harness smoke test.
  *
  * Validates the harness foundation end to end, in escalating steps:
  *
@@ -30,12 +30,12 @@ import { getReceivePackRefs } from "@/lib/git-push";
 // Skip the entire suite (cleanly) when there's no ngit-grasp binary.
 const describeIfGrasp = graspBinaryAvailable() ? describe : describe.skip;
 
-describeIfGrasp("e2e harness — hello world", () => {
+describeIfGrasp("e2e harness — smoke test", () => {
   let server: GraspServer;
   let relay: RelayClient;
 
   beforeAll(async () => {
-    server = await GraspServer.start({ role: "hello" });
+    server = await GraspServer.start({ role: "harness" });
     relay = await RelayClient.connect(server.relayUrl);
   });
 
@@ -81,9 +81,9 @@ describeIfGrasp("e2e harness — hello world", () => {
   it("step 4: seedRepo announces, pushes, and the commit lands on the git server", async () => {
     const maintainer = new TestSigner();
     const repo = await seedRepo(server, relay, maintainer, {
-      identifier: "hello-world",
-      name: "Hello World",
-      files: { "README.md": "# hello world\n" },
+      identifier: "harness-smoke",
+      name: "Harness Smoke",
+      files: { "README.md": "# harness smoke\n" },
     });
 
     // The announcement is queryable from the relay.
@@ -91,7 +91,7 @@ describeIfGrasp("e2e harness — hello world", () => {
       {
         kinds: [REPO_KIND],
         authors: [maintainer.pubkey],
-        "#d": ["hello-world"],
+        "#d": ["harness-smoke"],
       },
     ]);
     expect(announcements.map((e) => e.id)).toContain(repo.announcement.id);
@@ -101,7 +101,7 @@ describeIfGrasp("e2e harness — hello world", () => {
       {
         kinds: [REPO_STATE_KIND],
         authors: [maintainer.pubkey],
-        "#d": ["hello-world"],
+        "#d": ["harness-smoke"],
       },
     ]);
     expect(states.length).toBeGreaterThan(0);

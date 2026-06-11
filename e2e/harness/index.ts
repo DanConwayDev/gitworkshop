@@ -6,7 +6,7 @@
  * client talks to a raw WebSocket URL only). Use them to write end-to-end tests
  * for flows that genuinely need a git server — most notably the Merge button.
  *
- * See `e2e/README.md` for the rationale and `e2e/hello-world.e2e.test.ts` for a
+ * See `e2e/README.md` for the rationale and `e2e/harness.e2e.test.ts` for a
  * minimal smoke test.
  */
 
