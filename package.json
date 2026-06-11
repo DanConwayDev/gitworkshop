@@ -8,7 +8,8 @@
     "build": "vite build -l error && cp dist/index.html dist/404.html && echo 'Project built successfully!'",
     "test": "tsc --noEmit && eslint && prettier --check --log-level warn . && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
     "pre-commit": "tsc --noEmit && eslint && prettier --write --log-level warn . && git update-index --again && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'Pre-commit OK'",
-    "format": "prettier -w ."
+    "format": "prettier -w .",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
