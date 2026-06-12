@@ -268,6 +268,124 @@ A PR review groups one or more inline comments (kind:1111) under a single verdic
 
 ---
 
+## Shared Issue / Patch / PR Metadata
+
+The following features apply uniformly to all three NIP-34 root item kinds — issues (kind:1621), patches (kind:1617), and pull requests (kind:1618). They let an item be re-tagged, re-titled, or annotated **after the fact**, without modifying (or being able to modify — these are regular, immutable events) the original root event.
+
+### Authorisation
+
+All three features share the same authorisation rule: an event is only **authoritative** if its author is either
+
+1. the **root item author** (the pubkey that published the issue/patch/PR), or
+2. a **confirmed maintainer** of the repository (a pubkey in the repo's transitive maintainer set — see the "Repository authorization model" in `AGENTS.md`).
+
+Events from any other pubkey are ignored when deriving the item's effective state. Because the maintainer set is only known once the repo announcements load, clients MAY treat the root author as authorised before maintainers resolve to avoid a flash of missing metadata.
+
+### After-the-fact Labels (NIP-32, kind:1985)
+
+Labels are attached to an item with a [NIP-32](https://github.com/nostr-protocol/nips/blob/master/32.md) label event. The label namespace is `#t` (the same convention NIP-34 root items use for inline `t` tags), declared with an `L` tag and carried in one or more `l` tags.
+
+```jsonc
+{
+  "kind": 1985,
+  "content": "",
+  "tags": [
+    // root item being labelled (NIP-10 root pointer)
+    ["e", "<issue-patch-or-pr-event-id>", "<relay>", "root"],
+
+    // namespace declaration
+    ["L", "#t"],
+
+    // one l tag per label, all in the #t namespace
+    ["l", "bug", "#t"],
+    ["l", "needs-triage", "#t"],
+  ],
+}
+```
+
+An item's effective label set is the union of:
+
+- the root event's own inline `t` tags, and
+- every `l` tag (namespace `#t`) from **authorised** kind:1985 events referencing it,
+
+deduplicated and sorted. Labels are additive across multiple label events; a label event is itself a regular event and can be removed with a NIP-09 deletion (kind:5) by its author. Label events are fetched as part of the per-item "essentials" loader (`#e` fan-out).
+
+### Subject Edits (NIP-32, kind:1985 with `#subject` namespace)
+
+A subject (title) edit reuses the same kind:1985 label event but with the dedicated namespace `#subject`. The label value is the new subject string.
+
+```jsonc
+{
+  "kind": 1985,
+  "content": "",
+  "tags": [
+    // root item being re-titled (NIP-10 root pointer)
+    ["e", "<issue-patch-or-pr-event-id>", "<relay>", "root"],
+
+    // subject-rename namespace
+    ["L", "#subject"],
+
+    // the new subject/title
+    ["l", "Fix race condition in the merge queue", "#subject"],
+  ],
+}
+```
+
+The item's **effective subject** is the value of the latest authorised `#subject` rename event by `created_at` (ties broken by event ID); if no authorised rename exists, the subject falls back to the root event's original `subject` tag. Clients SHOULD render renames as timeline entries distinct from `#t` labels so the edit history is visible.
+
+### Cover Notes (kind:1624)
+
+A cover note is a pinned, editable note posted by the item author or a maintainer that renders **above** the item's first description card — useful for status banners, summaries, or "blocked on X" context. Unlike the root event, a cover note can be superseded at any time by publishing a newer one.
+
+```jsonc
+{
+  "kind": 1624,
+  "content": "<markdown body>",
+  "tags": [
+    // root item being annotated (NIP-10 #e with "root" marker)
+    ["e", "<issue-patch-or-pr-event-id>", "<relay>", "root"],
+    ["p", "<root-item-author-pubkey>"],
+    ["k", "<1621-1617-or-1618>"],
+
+    // optional NIP-94 imeta tags for embedded Blossom uploads
+    ["imeta", "url https://...", "..."],
+
+    // NIP-31 alt tag for clients that don't understand kind:1624
+    ["alt", "Cover note for a git issue or PR"],
+  ],
+}
+```
+
+Resolution rules:
+
+- Only **authorised** cover notes (root author or maintainer) are considered.
+- The **latest** authorised cover note by `created_at` (ties broken by event ID, descending) is the one displayed.
+- All authorised cover notes are retained so clients MAY surface edit history; older notes by other authorised authors remain queryable.
+
+Cover notes reference the root via **lowercase** NIP-10 `#e` (not the uppercase NIP-22 `#E`), so they thread alongside legacy NIP-34 replies and are fetched by the repo-level cover-note loader.
+
+### Relay Queries
+
+```jsonc
+// all labels and subject renames on an item (both are kind:1985)
+{ "kinds": [1985], "#e": ["<item-event-id>"] }
+
+// every item in a repo carrying a specific label
+{ "kinds": [1985], "#l": ["bug"] }
+
+// cover notes on an item
+{ "kinds": [1624], "#e": ["<item-event-id>"] }
+```
+
+### Design Rationale
+
+- **Regular, immutable events**: the root issue/patch/PR is never mutated. Labels, renames, and cover notes are separate events whose authority is decided by the author + maintainer rule, so anyone can _propose_ but only authorised pubkeys _affect state_.
+- **NIP-32 for labels and subjects**: reuses a standard kind rather than minting a custom one; the `#subject` namespace cleanly separates renames from `#t` categorisation while sharing the same event shape and loader.
+- **`#t` namespace alignment**: matches the inline `t` tags on root items so the union of both sources is the natural label set.
+- **Cover note as kind:1624 with lowercase `#e`**: mirrors gitworkshop's CoverNote feature and keeps cover notes inside the NIP-10 thread the repo loader already fetches.
+
+---
+
 ### Notification Events
 
 The following events are considered "notifications" for a user with pubkey `P`:
