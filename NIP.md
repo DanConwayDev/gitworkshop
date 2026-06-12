@@ -370,9 +370,6 @@ Cover notes reference the root via **lowercase** NIP-10 `#e` (not the uppercase 
 // all labels and subject renames on an item (both are kind:1985)
 { "kinds": [1985], "#e": ["<item-event-id>"] }
 
-// every item in a repo carrying a specific label
-{ "kinds": [1985], "#l": ["bug"] }
-
 // cover notes on an item
 { "kinds": [1624], "#e": ["<item-event-id>"] }
 ```
@@ -383,20 +380,3 @@ Cover notes reference the root via **lowercase** NIP-10 `#e` (not the uppercase 
 - **NIP-32 for labels and subjects**: reuses a standard kind rather than minting a custom one; the `#subject` namespace cleanly separates renames from `#t` categorisation while sharing the same event shape and loader.
 - **`#t` namespace alignment**: matches the inline `t` tags on root items so the union of both sources is the natural label set.
 - **Cover note as kind:1624 with lowercase `#e`**: mirrors gitworkshop's CoverNote feature and keeps cover notes inside the NIP-10 thread the repo loader already fetches.
-
----
-
-### Notification Events
-
-The following events are considered "notifications" for a user with pubkey `P`:
-
-1. **NIP-22 comments** (kind 1111) on NIP-34 issues/PRs/patches authored by `P`:
-   - Filter: `{ kinds: [1111], "#P": [P], "#K": ["1617", "1618", "1621"] }`
-
-2. **New issues/PRs/patches** that tag `P` directly:
-   - Filter: `{ kinds: [1621, 1618, 1617, 1, 1622], "#p": [P] }`
-
-3. **PR reviews** (kind 7321) on PRs authored by `P`:
-   - Filter: `{ kinds: [7321], "#p": [P] }`
-
-Events authored by `P` themselves are excluded from the notification list.
