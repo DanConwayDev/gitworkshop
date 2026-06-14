@@ -19,6 +19,15 @@
  *   Results are pushed into a per-session BehaviorSubject so the UI always
  *   updates even when eventStore.add() is a no-op (dedup case).
  *
+ *   Pubkey-query short-circuit: when the query decodes to a pubkey (raw 64-char
+ *   hex or `npub1…`), NIP-50 over kind:0 content won't match — the pubkey is
+ *   a top-level event field, not inside `content`. In that case we skip the
+ *   kind:0 NIP-50 search entirely, treat the decoded pubkey as the matched
+ *   user, and immediately fan out `{ kinds: [REPO_KIND], authors: [hex] }`
+ *   against the gitIndexRelays. We still fire a fire-and-forget
+ *   `{ kinds: [0], authors: [hex] }` against the user-search relay and the
+ *   gitIndex relays so the matched-user badge has profile metadata to render.
+ *
  *   Query cache: completed sessions are stored in a Map keyed by
  *   "trimmedQuery|relayKey". On a cache hit the previous BehaviorSubject
  *   (already populated) is reused immediately — no relay request is made.
@@ -49,6 +58,7 @@ import {
   resilientSubscription,
   resilientRequest,
 } from "@/lib/resilientSubscription";
+import { decodePubkeyIdentifier } from "@/lib/routeUtils";
 
 // NIP-50 user resolution relay — supports kind:0 search
 const USER_SEARCH_RELAY = "wss://relay.ditto.pub";
@@ -135,6 +145,12 @@ export function useRepositorySearch(
 
   const trimmedQuery = query.trim();
   const isSearchMode = trimmedQuery.length > 0;
+  // When the query is a raw hex pubkey or `npub1…` bech32, decode it once
+  // here so the search effect can short-circuit the kind:0 NIP-50 search
+  // (which doesn't index pubkey fields, only content).
+  const pubkeyHexFromQuery = isSearchMode
+    ? decodePubkeyIdentifier(trimmedQuery)
+    : undefined;
 
   // ── Shared state ───────────────────────────────────────────────────────────
 
@@ -482,33 +498,62 @@ export function useRepositorySearch(
       });
     };
 
-    userSub = resilientRequest(
-      pool,
-      [USER_SEARCH_RELAY],
-      [{ kinds: [0], search: trimmedQuery, limit: 10 } as Filter],
-    ).subscribe({
-      next: (msg) => {
-        if (msg === "EOSE") {
+    if (pubkeyHexFromQuery) {
+      // Pubkey-query short-circuit. NIP-50 `search:` indexes the kind:0
+      // content blob, which does not contain the author's pubkey. Searching
+      // for the pubkey string against any relay returns zero kind:0 events,
+      // so the matched-user path never fires and the search appears broken.
+      //
+      // Instead: treat the decoded pubkey as the matched user immediately
+      // (no kind:0 round-trip needed), and fetch profile metadata via an
+      // `authors:` filter so the UserLink badge can render the name/avatar.
+      // The metadata fetch is fire-and-forget — clearInitialLoading() is
+      // driven by the repo search EOSE as usual.
+      userPubkeys.add(pubkeyHexFromQuery);
+      const pubkeySet = new Set(userPubkeys);
+      cacheEntry.matchedUserPubkeys = pubkeySet;
+      setMatchedUserPubkeys(pubkeySet);
+      // Fetch profile metadata from the user-search relay AND the gitIndex
+      // relays — profile events are commonly carried by both.
+      const profileRelays = Array.from(new Set([USER_SEARCH_RELAY, ...relays]));
+      userSub = resilientRequest(pool, profileRelays, [
+        { kinds: [0], authors: [pubkeyHexFromQuery] } as Filter,
+      ]).subscribe({
+        next: (msg) => {
+          if (msg === "EOSE") return;
+          eventStore.add(msg as NostrEvent);
+        },
+      });
+      startUserRepoFetch();
+    } else {
+      userSub = resilientRequest(
+        pool,
+        [USER_SEARCH_RELAY],
+        [{ kinds: [0], search: trimmedQuery, limit: 10 } as Filter],
+      ).subscribe({
+        next: (msg) => {
+          if (msg === "EOSE") {
+            clearInitialLoading();
+            const pubkeySet = new Set(userPubkeys);
+            cacheEntry.matchedUserPubkeys = pubkeySet;
+            setMatchedUserPubkeys(pubkeySet);
+            startUserRepoFetch();
+            return;
+          }
+          const ev = msg as NostrEvent;
+          userPubkeys.add(ev.pubkey);
+          eventStore.add(ev);
+        },
+        error: clearInitialLoading,
+        complete: () => {
           clearInitialLoading();
           const pubkeySet = new Set(userPubkeys);
           cacheEntry.matchedUserPubkeys = pubkeySet;
           setMatchedUserPubkeys(pubkeySet);
           startUserRepoFetch();
-          return;
-        }
-        const ev = msg as NostrEvent;
-        userPubkeys.add(ev.pubkey);
-        eventStore.add(ev);
-      },
-      error: clearInitialLoading,
-      complete: () => {
-        clearInitialLoading();
-        const pubkeySet = new Set(userPubkeys);
-        cacheEntry.matchedUserPubkeys = pubkeySet;
-        setMatchedUserPubkeys(pubkeySet);
-        startUserRepoFetch();
-      },
-    });
+        },
+      });
+    }
 
     return () => {
       repoSub?.unsubscribe();
@@ -525,6 +570,7 @@ export function useRepositorySearch(
     trimmedQuery,
     relayKey,
     isSearchMode,
+    pubkeyHexFromQuery,
     armPageSettleTimer,
     clearPageSettleTimer,
   ]);
