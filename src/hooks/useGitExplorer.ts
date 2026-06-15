@@ -631,6 +631,12 @@ export function useGitExplorer(
     let commitHash: string;
     let resolvedRef: string;
     let path: string;
+    // When the preferred commit is the Nostr state HEAD and it isn't a known
+    // branch/tag tip, it may be unavailable on every git server
+    // (state-commit-unavailable). Remember the default branch's actual tip so
+    // we can fall back to "the latest available commit" if the tree fetch for
+    // the preferred commit fails, instead of surfacing a hard error.
+    let fallbackCommitHash: string | undefined;
 
     if (refAndPath) {
       const resolved = resolveRefAndPath(refAndPath, info);
@@ -658,6 +664,14 @@ export function useGitExplorer(
       const defaultRef = parsedRefs.find((r) => r.isDefault && r.isBranch);
       resolvedRef = matchingRef?.name ?? defaultRef?.name ?? knownHeadCommit;
       path = "";
+      // The Nostr commit isn't a current branch/tag tip. It might be an
+      // ancestor that's still reachable on the server, but it could also be
+      // entirely absent (the maintainer announced a commit no git server has
+      // yet). resolvedRef already points at the default branch, so fall back
+      // to its real tip commit if fetching the Nostr commit's tree fails.
+      if (!matchingRef && defaultRef) {
+        fallbackCommitHash = defaultRef.hash;
+      }
     } else {
       // Use the default branch
       const headRef = info.symrefs["HEAD"]; // e.g. "refs/heads/main"
@@ -695,8 +709,22 @@ export function useGitExplorer(
     const nestLimit = pathSegments.length + 1;
 
     // pool.getTree() checks L1 memory then IDB then fetches — all in one call.
-    const tree = await pool.getTree(commitHash, nestLimit, signal);
+    let tree = await pool.getTree(commitHash, nestLimit, signal);
     if (signal.aborted) return;
+
+    // The preferred commit (Nostr state HEAD) wasn't found on any git server.
+    // Fall back to the default branch's latest available commit so the user
+    // sees the most recent available state rather than a hard error — this is
+    // what the "state-commit-unavailable" warning banner promises.
+    if (!tree && fallbackCommitHash && fallbackCommitHash !== commitHash) {
+      tree = await pool.getTree(fallbackCommitHash, nestLimit, signal);
+      if (signal.aborted) return;
+      if (tree) {
+        commitHash = fallbackCommitHash;
+        setState((prev) => ({ ...prev, commitHash }));
+      }
+    }
+
     if (!tree) {
       setState((prev) => ({
         ...prev,
