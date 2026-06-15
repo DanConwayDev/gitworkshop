@@ -65,12 +65,17 @@ export function decodePubkeyIdentifier(s: string): string | undefined {
  *   user@domain.com  OR  domain.com  (bare domain → _@domain.com)
  */
 export function isNip05(s: string): boolean {
+  // Domain: one or more labels (each alphanumeric, hyphens allowed internally,
+  // up to 63 chars and not starting/ending with a hyphen) followed by an
+  // alphabetic TLD of 2+ chars. Intermediate labels may contain digits
+  // (e.g. "goskatespots.nostr1.com").
+  const domain =
+    "(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,}";
   // Standardised form: user@domain.com
-  const emailRegex =
-    /^(?!.*\.\.)([a-zA-Z0-9._%+-]+)@(?!(?:-)[A-Za-z0-9-]{1,63})([A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z]{2,})+)$/;
+  const emailRegex = new RegExp(`^(?!.*\\.\\.)[A-Za-z0-9._%+-]+@${domain}$`);
   if (emailRegex.test(s)) return true;
   // Bare domain form: domain.com or sub.domain.com
-  const domainRegex = /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z]{2,})+$/;
+  const domainRegex = new RegExp(`^${domain}$`);
   return domainRegex.test(s);
 }
 
