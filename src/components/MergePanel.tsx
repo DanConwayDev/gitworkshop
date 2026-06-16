@@ -65,7 +65,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/useToast";
-import { useMyProfile } from "@/hooks/useProfile";
+import { useMyProfile, useProfile } from "@/hooks/useProfile";
 import {
   usePatchMergeability,
   type MergeabilityStatus,
@@ -207,6 +207,13 @@ export function MergePanel({
   const profile = useMyProfile();
   const { toast } = useToast();
 
+  // The PR/patch author's profile — used for the `PR-Author:` trailer in the
+  // merge commit message. Only a real human name is surfaced (matching
+  // `ngit merge`); when none is known the trailer carries just the npub.
+  const authorProfile = useProfile(pr.pubkey);
+  const rootAuthorName =
+    authorProfile?.displayName || authorProfile?.name || undefined;
+
   // Merge step tracking
   const [mergeStep, setMergeStep] = useState<MergeStep>("idle");
   const [mergeError, setMergeError] = useState<string | null>(null);
@@ -243,14 +250,19 @@ export function MergePanel({
   );
 
   // PR-type mergeability: fetch tip tree and pre-build merge commit
-  const prDescription = pr.coverNote?.content || pr.body || undefined;
+  const coverNoteBody = pr.coverNote?.content || undefined;
+  const prBody = pr.body || undefined;
   const prMergeability = usePRMergeability(
     isPRType ? pr.tip.commitId : undefined,
     defaultBranchHead,
     maintainerCommitter,
+    pr.rootEvent.id,
     pr.currentSubject || pr.originalSubject,
     prNevent ?? "",
-    prDescription,
+    pr.pubkey,
+    rootAuthorName,
+    coverNoteBody,
+    prBody,
     gitPool,
     effectiveCloneUrls,
     isPRType,
@@ -395,9 +407,10 @@ export function MergePanel({
         relays: repo.relays.slice(0, 3),
       });
 
-      // Use the latest cover note body if present, otherwise fall back to the
-      // original PR body.
-      const prDescription = pr.coverNote?.content || pr.body || undefined;
+      // Cover note takes precedence over the PR body in the merge commit
+      // message (recorded under different headings — see buildMergeCommitMessage).
+      const coverNote = pr.coverNote?.content || undefined;
+      const prDescription = pr.body || undefined;
 
       const { mergeCommit } = await performMerge({
         signer: account.signer,
@@ -412,8 +425,9 @@ export function MergePanel({
         rootEventId: pr.rootEvent.id,
         rootAuthorPubkey: pr.pubkey,
         subject: pr.currentSubject || pr.originalSubject,
-        itemType: pr.itemType,
         prNevent,
+        rootAuthorName,
+        coverNote,
         prDescription,
         committer,
         patchEventIds: (patchChain ?? []).map((patch) => ({
@@ -467,6 +481,7 @@ export function MergePanel({
     repo,
     graspRelayUrls,
     toast,
+    rootAuthorName,
   ]);
 
   // ── Apply-to-tip orchestration ────────────────────────────────────────────

@@ -161,7 +161,6 @@ describeMerge("e2e — Merge button (merge strategy)", () => {
       rootEventId: seeded.patch.id,
       rootAuthorPubkey: contributor.pubkey,
       subject: patchCast.subject,
-      itemType: "patch",
       prNevent: "nevent1test",
       committer,
       patchEventIds: [{ id: seeded.patch.id, pubkey: contributor.pubkey }],

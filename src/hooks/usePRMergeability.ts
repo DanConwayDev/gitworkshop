@@ -27,7 +27,7 @@
 import { useEffect, useRef, useState } from "react";
 import { packCommit, type PackableObject } from "@/lib/git-packfile";
 import type { CommitData, CommitPerson } from "@/lib/git-objects";
-import { mergeThreeWayTree } from "@/lib/patch-merge";
+import { mergeThreeWayTree, buildMergeCommitMessage } from "@/lib/patch-merge";
 import type { MergeConflict } from "@/lib/patch-merge";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 
@@ -94,10 +94,13 @@ export interface PRMergeability {
  * @param tipCommitId       - The PR's tip commit ID (from pr.tip.commitId)
  * @param defaultBranchHead - Current HEAD of the default branch
  * @param committer         - The maintainer's CommitPerson
+ * @param rootEventId       - The PR root event id (for the `#<hex8>` shorthand)
  * @param subject           - PR subject for the merge commit message
- * @param itemType          - Always "pr" for this hook
  * @param nevent            - NIP-19 nevent identifier for the PR event
- * @param description       - Cover note or PR body (optional)
+ * @param authorPubkey      - PR author pubkey (hex) for the PR-Author trailer
+ * @param authorName        - PR author display name (optional, kind-0 metadata)
+ * @param coverNote         - Cover note body (kind:1624), optional
+ * @param description       - PR body, used when no cover note is present
  * @param gitPool           - GitGraspPool for fetching the tip tree
  * @param fallbackUrls      - Extra clone URLs (e.g. PR author's fork)
  * @param enabled           - Set to false to skip the check entirely
@@ -109,8 +112,12 @@ export function usePRMergeability(
   tipCommitId: string | undefined,
   defaultBranchHead: string | undefined,
   committer: CommitPerson | undefined,
+  rootEventId: string,
   subject: string,
   nevent: string,
+  authorPubkey: string,
+  authorName: string | undefined,
+  coverNote: string | undefined,
   description: string | undefined,
   gitPool: GitGraspPool | null,
   fallbackUrls: string[] | undefined,
@@ -171,13 +178,16 @@ export function usePRMergeability(
         return;
       }
 
-      // Build the merge commit message
-      const label = "PR";
-      let message = `Merge ${label} '${subject}'`;
-      if (description && description.trim()) {
-        message += `\n\n${description.trim()}`;
-      }
-      message += `\n\nNostr-PR: ${nevent}`;
+      // Build the merge commit message (ngit merge format).
+      const message = buildMergeCommitMessage({
+        rootEventId,
+        title: subject,
+        nevent,
+        authorPubkey,
+        authorName,
+        coverNote,
+        description,
+      });
 
       // Compute the REAL merge base from git history (NOT the PR's claimed
       // merge-base tag, which may be wrong). This is the common ancestor of the
@@ -299,8 +309,12 @@ export function usePRMergeability(
     defaultBranchHead,
     gitPool,
     recheckCounter,
+    rootEventId,
     subject,
     nevent,
+    authorPubkey,
+    authorName,
+    coverNote,
     description,
     claimedMergeBase,
     // committer and fallbackUrls intentionally excluded — stable proxies above cover them

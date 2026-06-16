@@ -82,13 +82,25 @@ export interface PerformMergeParams {
   rootEventId: string;
   /** The PR/patch author pubkey. */
   rootAuthorPubkey: string;
-  /** Subject used in the merge commit message. */
+  /** Effective (latest) PR/patch title used in the merge commit subject. */
   subject: string;
-  /** "patch" or "pr" — affects the merge commit message wording. */
-  itemType: "patch" | "pr";
-  /** NIP-19 nevent for the merge commit message's `Nostr-PR:` trailer. */
+  /** NIP-19 nevent for the merge commit message's `nostr:` line. */
   prNevent: string;
-  /** Optional cover-note / body text included in the merge commit message. */
+  /**
+   * Optional display name for the PR author (from kind-0 metadata) used in the
+   * `PR-Author:` trailer. Omitted when no human-readable name is known.
+   */
+  rootAuthorName?: string;
+  /**
+   * Cover note body (kind:1624), when present. Recorded in the merge commit
+   * message under a `CoverNote:` heading and takes precedence over
+   * `prDescription`.
+   */
+  coverNote?: string;
+  /**
+   * PR description / patch body, recorded under a `PR description:` heading
+   * when no cover note is present.
+   */
   prDescription?: string;
   /** Committer identity for the merge commit. */
   committer: CommitPerson;
@@ -153,8 +165,9 @@ export async function performMerge(
     rootEventId,
     rootAuthorPubkey,
     subject,
-    itemType,
     prNevent,
+    rootAuthorName,
+    coverNote,
     prDescription,
     committer,
     patchEventIds = [],
@@ -175,10 +188,15 @@ export async function performMerge(
     defaultBranchHead,
     tipCommitHash,
     committer,
-    subject,
-    itemType,
-    prNevent,
-    prDescription,
+    {
+      rootEventId,
+      title: subject,
+      nevent: prNevent,
+      authorPubkey: rootAuthorPubkey,
+      authorName: rootAuthorName,
+      coverNote,
+      description: prDescription,
+    },
   );
 
   const allObjects: PackableObject[] = [...chainObjects, mergeCommit];

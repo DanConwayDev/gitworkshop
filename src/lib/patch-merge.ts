@@ -18,6 +18,7 @@
 
 import parseDiff from "parse-diff";
 import { applyPatch, createTwoFilesPatch } from "diff";
+import { nip19 } from "nostr-tools";
 import {
   gitObjectBytes,
   sha1hex,
@@ -905,6 +906,150 @@ export async function applyPatchChainToTip(
 }
 
 // ---------------------------------------------------------------------------
+// Merge commit message
+// ---------------------------------------------------------------------------
+
+/** git/gitlint's hard limit for a commit subject line. */
+const MAX_SUBJECT_LEN = 72;
+
+/**
+ * Build the merge commit subject `Merge #<hex8>: <title>`, truncating the
+ * title with an ellipsis so the whole line stays within git/gitlint's 72-char
+ * subject limit. The first 8 hex chars of the event id mirror the web UI's
+ * `#e2df2001` shorthand.
+ *
+ * Returns `{ subject, truncated }` where `truncated` is `true` when the title
+ * did not fit and was shortened — the caller then preserves the full title on
+ * the first body line so it is not lost.
+ *
+ * Mirrors `build_subject` in ngit's `sub_commands/merge.rs`.
+ */
+export function buildMergeSubject(
+  eventIdHex: string,
+  title: string,
+): { subject: string; truncated: boolean } {
+  const shorthand = eventIdHex.slice(0, Math.min(8, eventIdHex.length));
+  const prefix = `Merge #${shorthand}: `;
+  const trimmed = title.trim();
+
+  // Characters available for the title after the prefix. Count by code points
+  // (not UTF-16 units / bytes) to avoid splitting multi-byte characters.
+  const prefixChars = [...prefix].length;
+  const budget = Math.max(0, MAX_SUBJECT_LEN - prefixChars);
+  const titleChars = [...trimmed];
+
+  if (titleChars.length <= budget) {
+    return { subject: `${prefix}${trimmed}`, truncated: false };
+  }
+
+  // Reserve one char for the ellipsis.
+  const keep = Math.max(0, budget - 1);
+  const kept = titleChars.slice(0, keep).join("").trimEnd();
+  return { subject: `${prefix}${kept}\u2026`, truncated: true };
+}
+
+/** Inputs for {@link buildMergeCommitMessage}. */
+export interface MergeCommitMessageParams {
+  /** Hex event id of the root PR/patch event (for the `#<hex8>` shorthand). */
+  rootEventId: string;
+  /** The effective (latest) PR/patch title. */
+  title: string;
+  /** NIP-19 nevent identifier for the root PR/patch event. */
+  nevent: string;
+  /** PR/patch author pubkey (hex) — emitted as an npub in the PR-Author trailer. */
+  authorPubkey: string;
+  /**
+   * Optional display name for the PR author (from kind-0 metadata). Only
+   * surfaced when a human-readable name is actually known.
+   */
+  authorName?: string;
+  /**
+   * Cover note body (kind:1624), when present. Takes precedence over
+   * `description` and is recorded under a `CoverNote:` heading.
+   */
+  coverNote?: string;
+  /**
+   * PR description / patch body, used under a `PR description:` heading when no
+   * cover note is present.
+   */
+  description?: string;
+}
+
+/**
+ * Compose the full merge commit message, replicating the format produced by
+ * `ngit merge` (`src/bin/ngit/sub_commands/merge.rs`):
+ *
+ * ```
+ * Merge #<hex8>: <title>
+ *
+ * <full title, only when the subject was truncated>
+ *
+ * nostr:<nevent>
+ *
+ * PR-Author: <name>
+ * nostr:<npub>
+ *
+ * CoverNote:            (or `PR description:` when there is no cover note)
+ *
+ * <body>
+ * ```
+ *
+ * The `nostr:` lines are emitted bare so git/gitlint recognises them as nostr
+ * URIs and exempts them from body line-length linting (see ngit's `.gitlint`).
+ */
+export function buildMergeCommitMessage(
+  params: MergeCommitMessageParams,
+): string {
+  const {
+    rootEventId,
+    title,
+    nevent,
+    authorPubkey,
+    authorName,
+    coverNote,
+    description,
+  } = params;
+
+  const { subject, truncated } = buildMergeSubject(rootEventId, title);
+
+  let message = subject;
+
+  // Preserve the full title on the first body line when the subject was
+  // shortened so nothing is lost in `git log`.
+  if (truncated) {
+    message += `\n\n${title.trim()}`;
+  }
+
+  // The nevent on its own bare `nostr:` line.
+  message += `\n\nnostr:${nevent}`;
+
+  // `PR-Author:` trailer — the npub always on its own bare `nostr:` line, the
+  // display name appended to the label only when one is actually known.
+  let npub: string;
+  try {
+    npub = nip19.npubEncode(authorPubkey);
+  } catch {
+    npub = authorPubkey;
+  }
+  const name = authorName?.trim();
+  message += name ? `\n\nPR-Author: ${name}` : `\n\nPR-Author:`;
+  message += `\nnostr:${npub}`;
+
+  // Append the cover note when present, otherwise the PR description.
+  const cover = coverNote?.trim();
+  if (cover) {
+    message += `\n\nCoverNote:\n\n${cover}`;
+  } else {
+    const body = description?.trim();
+    if (body) {
+      message += `\n\nPR description:\n\n${body}`;
+    }
+  }
+
+  return message;
+}
+
+// ---------------------------------------------------------------------------
 // Merge commit creation
 // ---------------------------------------------------------------------------
 
@@ -914,44 +1059,29 @@ export async function applyPatchChainToTip(
  * The merge commit has:
  *   - tree = finalTreeHash (the tree after all patches applied)
  *   - parents = [defaultBranchHead, patchTipCommitHash]
- *   - author = patch author (from the root patch)
- *   - committer = the logged-in maintainer
- *   - message = "Merge patch '<subject>' from <author-name>\n\n<description>\n\nNostr-PR: <nevent>"
+ *   - author = the maintainer performing the merge
+ *   - committer = the maintainer performing the merge
+ *   - message = {@link buildMergeCommitMessage} (the `ngit merge` format)
  *
  * @param finalTreeHash       - Tree hash from buildPatchChainObjects
  * @param defaultBranchHead   - Current HEAD of the default branch
  * @param patchTipCommitHash  - Tip commit hash of the patch chain
  * @param committer           - The maintainer performing the merge
- * @param subject             - The PR/patch subject for the merge message
- * @param itemType            - Whether this is a "patch" (kind:1617) or "pr" (kind:1618)
- * @param nevent              - NIP-19 nevent identifier for the PR/patch event
- * @param description         - Cover note content or original PR body (optional)
+ * @param message             - Structured inputs for the merge commit message
  */
 export async function createMergeCommitObject(
   finalTreeHash: string,
   defaultBranchHead: string,
   patchTipCommitHash: string,
   committer: CommitPerson,
-  subject: string,
-  itemType: "patch" | "pr",
-  nevent: string,
-  description?: string,
+  message: MergeCommitMessageParams,
 ): Promise<PackableObject> {
-  const label = itemType === "pr" ? "PR" : "patch";
-  let message = `Merge ${label} '${subject}'`;
-
-  if (description && description.trim()) {
-    message += `\n\n${description.trim()}`;
-  }
-
-  message += `\n\nNostr-PR: ${nevent}`;
-
   const commitData: CommitData = {
     treeHash: finalTreeHash,
     parentHashes: [defaultBranchHead, patchTipCommitHash],
     author: committer,
     committer,
-    message,
+    message: buildMergeCommitMessage(message),
   };
 
   return packCommit(commitData);
