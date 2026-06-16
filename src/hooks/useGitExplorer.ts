@@ -45,9 +45,37 @@ export interface FileEntry {
   type: "file" | "directory";
 }
 
+/**
+ * Structured reason for why the file tree couldn't be loaded, used by the UI
+ * to render a high-level message plus a per-git-server breakdown (instead of a
+ * single generic error string).
+ *
+ *   - "no-servers"     : no reachable git server is serving any code.
+ *   - "no-branches"    : servers are reachable but advertise no branches.
+ *   - "commit-missing" : branches exist, but the requested commit's objects
+ *                        aren't served by any reachable server.
+ */
+export type GitExplorerErrorKind =
+  | "no-servers"
+  | "no-branches"
+  | "commit-missing";
+
+export interface GitExplorerErrorDetail {
+  kind: GitExplorerErrorKind;
+  /** The ref/branch name the user was trying to view, if known. */
+  requestedRef?: string;
+  /** The commit hash whose objects couldn't be loaded, if known. */
+  requestedCommit?: string;
+}
+
 export interface GitExplorerState {
   loading: boolean;
   error: string | null;
+  /**
+   * Structured detail for "no code available" errors, enabling the per-server
+   * breakdown UI. Null for generic errors (e.g. an unknown ref) and on success.
+   */
+  errorDetail: GitExplorerErrorDetail | null;
   /** Available refs (branches + tags) from getInfoRefs */
   refs: GitRef[];
   /** The resolved ref name being viewed (e.g. "main", "feat/foo") */
@@ -300,8 +328,8 @@ function getInfoRefsFromState(
 function describeMissingCode(
   state: PoolState,
   parsedRefs: GitRef[],
-  commitHash?: string,
-): string {
+  opts: { commitHash?: string; resolvedRef?: string } = {},
+): { message: string; detail: GitExplorerErrorDetail } {
   const reachable = Object.values(state.urls).filter(
     (u) => u.status === "ok" && u.infoRefs !== null,
   );
@@ -309,16 +337,31 @@ function describeMissingCode(
 
   if (!hasBranches) {
     if (reachable.length === 0) {
-      return "No git server is currently serving this repository's code. It may not have been pushed yet, or the clone URLs may be unreachable.";
+      return {
+        message:
+          "No git server is currently serving this repository's code. It may not have been pushed yet, or the clone URLs may be unreachable.",
+        detail: { kind: "no-servers", requestedCommit: opts.commitHash },
+      };
     }
-    return "No code found: the connected git server(s) aren't serving any branches for this repository yet.";
+    return {
+      message:
+        "No code found: the connected git server(s) aren't serving any branches for this repository yet.",
+      detail: { kind: "no-branches", requestedCommit: opts.commitHash },
+    };
   }
 
   // Branches exist, but the objects for the requested commit aren't available
   // on any reachable server.
-  return commitHash
-    ? `The connected git server(s) don't have the code for commit ${commitHash.slice(0, 8)} yet.`
-    : "The connected git server(s) don't have the code for this commit yet.";
+  return {
+    message: opts.commitHash
+      ? `The connected git server(s) don't have the code for commit ${opts.commitHash.slice(0, 8)} yet.`
+      : "The connected git server(s) don't have the code for this commit yet.",
+    detail: {
+      kind: "commit-missing",
+      requestedRef: opts.resolvedRef,
+      requestedCommit: opts.commitHash,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +402,7 @@ export function useGitExplorer(
   const [state, setState] = useState<GitExplorerState>({
     loading: false,
     error: null,
+    errorDetail: null,
     refs: [],
     resolvedRef: null,
     resolvedPath: null,
@@ -453,6 +497,7 @@ export function useGitExplorer(
             setState({
               loading: false,
               error: null,
+              errorDetail: null,
               refs: fastParsedRefs,
               resolvedRef: fastResolvedRef,
               resolvedPath: fastResolvedPath,
@@ -477,6 +522,7 @@ export function useGitExplorer(
               setState({
                 loading: false,
                 error: null,
+                errorDetail: null,
                 refs: fastParsedRefs,
                 resolvedRef: fastResolvedRef,
                 resolvedPath: fastResolvedPath,
@@ -514,6 +560,7 @@ export function useGitExplorer(
                   setState({
                     loading: false,
                     error: null,
+                    errorDetail: null,
                     refs: fastParsedRefs,
                     resolvedRef: fastResolvedRef,
                     resolvedPath: fastResolvedPath,
@@ -538,6 +585,7 @@ export function useGitExplorer(
                   setState({
                     loading: false,
                     error: null,
+                    errorDetail: null,
                     refs: fastParsedRefs,
                     resolvedRef: fastResolvedRef,
                     resolvedPath: fastResolvedPath,
@@ -569,6 +617,7 @@ export function useGitExplorer(
       setState({
         loading: true,
         error: null,
+        errorDetail: null,
         refs: [],
         resolvedRef: null,
         resolvedPath: null,
@@ -650,10 +699,12 @@ export function useGitExplorer(
     if (signal.aborted) return;
 
     if (!info) {
+      const { message, detail } = describeMissingCode(pool.getState(), []);
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: describeMissingCode(pool.getState(), []),
+        error: message,
+        errorDetail: detail,
       }));
       return;
     }
@@ -684,6 +735,7 @@ export function useGitExplorer(
           ...prev,
           loading: false,
           error: `No ref found matching "${refAndPath}"`,
+          errorDetail: null,
         }));
         return;
       }
@@ -724,10 +776,15 @@ export function useGitExplorer(
         parsedRefs.find((r) => r.isBranch);
       if (!defaultRef) {
         if (signal.aborted) return;
+        const { message, detail } = describeMissingCode(
+          pool.getState(),
+          parsedRefs,
+        );
         setState((prev) => ({
           ...prev,
           loading: false,
-          error: describeMissingCode(pool.getState(), parsedRefs),
+          error: message,
+          errorDetail: detail,
         }));
         return;
       }
@@ -772,10 +829,16 @@ export function useGitExplorer(
     }
 
     if (!tree) {
+      const { message, detail } = describeMissingCode(
+        pool.getState(),
+        parsedRefs,
+        { commitHash, resolvedRef },
+      );
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: describeMissingCode(pool.getState(), parsedRefs, commitHash),
+        error: message,
+        errorDetail: detail,
       }));
       return;
     }

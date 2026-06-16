@@ -22,6 +22,7 @@ import {
 } from "@/hooks/useGitExplorer";
 import { RefSelector } from "@/components/RefSelector";
 import { GitServerStatus } from "@/components/GitServerStatus";
+import { CodeUnavailable } from "@/components/CodeUnavailable";
 import { RepoAboutPanel } from "@/components/RepoAboutPanel";
 import type { RepositoryState } from "@/casts/RepositoryState";
 import type { GitGraspPool, PoolWarning, UrlState } from "@/lib/git-grasp-pool";
@@ -408,16 +409,25 @@ export default function RepoCodePage() {
           )}
 
           {/* Error state */}
-          {activeExplorer.error && (
-            <Card className="border-destructive/30">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>{activeExplorer.error}</span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {activeExplorer.error &&
+            (activeExplorer.errorDetail ? (
+              <CodeUnavailable
+                detail={activeExplorer.errorDetail}
+                urls={poolState.urls}
+                cloneUrls={cloneUrls}
+                graspCloneUrls={repo?.graspCloneUrls ?? []}
+                onReload={activeExplorer.reload}
+              />
+            ) : (
+              <Card className="border-destructive/30">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{activeExplorer.error}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
 
           {/* Path not found */}
           {!activeExplorer.loading &&
