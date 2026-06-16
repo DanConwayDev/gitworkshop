@@ -283,6 +283,44 @@ function getInfoRefsFromState(
   return null;
 }
 
+/**
+ * Build a specific, human-readable message for when the file tree can't be
+ * loaded, used instead of the generic "Failed to load file tree".
+ *
+ * Distinguishes the common "there is no code anywhere" situations from the
+ * "this particular commit's objects are missing" case by inspecting the live
+ * per-URL pool state and the merged ref list:
+ *
+ *   - No reachable server at all (every clone URL 404'd / errored).
+ *   - Reachable servers exist but advertise no branches (empty repo or a
+ *     partial mirror that hasn't received a push yet).
+ *   - Branches exist, but the requested commit's objects aren't served by any
+ *     reachable server (e.g. a partial mirror missing this commit).
+ */
+function describeMissingCode(
+  state: PoolState,
+  parsedRefs: GitRef[],
+  commitHash?: string,
+): string {
+  const reachable = Object.values(state.urls).filter(
+    (u) => u.status === "ok" && u.infoRefs !== null,
+  );
+  const hasBranches = parsedRefs.some((r) => r.isBranch);
+
+  if (!hasBranches) {
+    if (reachable.length === 0) {
+      return "No git server is currently serving this repository's code. It may not have been pushed yet, or the clone URLs may be unreachable.";
+    }
+    return "No code found: the connected git server(s) aren't serving any branches for this repository yet.";
+  }
+
+  // Branches exist, but the objects for the requested commit aren't available
+  // on any reachable server.
+  return commitHash
+    ? `The connected git server(s) don't have the code for commit ${commitHash.slice(0, 8)} yet.`
+    : "The connected git server(s) don't have the code for this commit yet.";
+}
+
 // ---------------------------------------------------------------------------
 // Main hook
 // ---------------------------------------------------------------------------
@@ -615,7 +653,7 @@ export function useGitExplorer(
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: "Could not reach any clone URL",
+        error: describeMissingCode(pool.getState(), []),
       }));
       return;
     }
@@ -660,14 +698,18 @@ export function useGitExplorer(
       );
       // Fall back to the default branch name when no ref matches the known
       // head commit (e.g. git server is ahead of the Nostr state — the
-      // Nostr commit doesn't match any current branch tip).
-      const defaultRef = parsedRefs.find((r) => r.isDefault && r.isBranch);
+      // Nostr commit doesn't match any current branch tip). When no server
+      // advertises a HEAD symref (e.g. a partial mirror), fall back to the
+      // first available branch so the repo is still browsable.
+      const defaultRef =
+        parsedRefs.find((r) => r.isDefault && r.isBranch) ??
+        parsedRefs.find((r) => r.isBranch);
       resolvedRef = matchingRef?.name ?? defaultRef?.name ?? knownHeadCommit;
       path = "";
       // The Nostr commit isn't a current branch/tag tip. It might be an
       // ancestor that's still reachable on the server, but it could also be
       // entirely absent (the maintainer announced a commit no git server has
-      // yet). resolvedRef already points at the default branch, so fall back
+      // yet). resolvedRef already points at the fallback branch, so fall back
       // to its real tip commit if fetching the Nostr commit's tree fails.
       if (!matchingRef && defaultRef) {
         fallbackCommitHash = defaultRef.hash;
@@ -675,13 +717,17 @@ export function useGitExplorer(
     } else {
       // Use the default branch
       const headRef = info.symrefs["HEAD"]; // e.g. "refs/heads/main"
-      const defaultRef = parsedRefs.find((r) => r.isDefault && r.isBranch);
+      // Fall back to the first available branch when no HEAD symref is
+      // advertised (e.g. a partial mirror) so the repo stays browsable.
+      const defaultRef =
+        parsedRefs.find((r) => r.isDefault && r.isBranch) ??
+        parsedRefs.find((r) => r.isBranch);
       if (!defaultRef) {
         if (signal.aborted) return;
         setState((prev) => ({
           ...prev,
           loading: false,
-          error: "No default branch found",
+          error: describeMissingCode(pool.getState(), parsedRefs),
         }));
         return;
       }
@@ -729,7 +775,7 @@ export function useGitExplorer(
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: "Failed to load file tree",
+        error: describeMissingCode(pool.getState(), parsedRefs, commitHash),
       }));
       return;
     }

@@ -362,6 +362,7 @@ export default function RepoCodePage() {
           {/* CodeBar: branch selector + breadcrumb + commit info */}
           <CodeBar
             loading={activeExplorer.loading}
+            error={activeExplorer.error}
             refs={activeExplorer.refs}
             currentRef={currentRef}
             pathSegments={pathSegments}
@@ -1200,6 +1201,7 @@ function GoToFileSearch({
 
 function CodeBar({
   loading,
+  error,
   refs,
   currentRef,
   pathSegments,
@@ -1229,6 +1231,7 @@ function CodeBar({
   fullFileTree,
 }: {
   loading: boolean;
+  error: string | null;
   refs: ReturnType<typeof useGitExplorer>["refs"];
   currentRef: string;
   pathSegments: string[];
@@ -1439,7 +1442,7 @@ function CodeBar({
             {!isMobile && <span>Tags</span>}
           </Link>
         </div>
-      ) : loading || commitHash ? (
+      ) : !error && (loading || commitHash) ? (
         <div className="flex items-center gap-3 px-3 py-2.5 border-t border-border/40">
           <Skeleton className="h-7 w-7 rounded-full" />
           <div className="flex-1 space-y-1">
