@@ -77,6 +77,7 @@ import {
 import { createPackfile, type PackableObject } from "@/lib/git-packfile";
 import { pushToGitServer, type RefUpdate } from "@/lib/git-push";
 import { performMerge } from "@/lib/perform-merge";
+import { assertFastForwardSafe } from "@/lib/patch-merge";
 import { pool as relayPool, eventStore } from "@/services/nostr";
 import { outboxStore } from "@/services/outbox";
 
@@ -303,6 +304,12 @@ export function MergePanel({
       allObjects: PackableObject[],
       refUpdate: RefUpdate,
     ): Promise<void> => {
+      // Safety guard at the single push choke point: never advance a branch to
+      // a tip that does not descend from its current tip. A non-fast-forward
+      // push orphans commits already on the branch — the disaster an incorrect
+      // merge base can cause. Throw before sending anything to the git server.
+      assertFastForwardSafe(allObjects, refUpdate.oldHash, refUpdate.newHash);
+
       const packfile = await createPackfile(allObjects);
       let pushSucceeded = false;
       let lastPushError = "";

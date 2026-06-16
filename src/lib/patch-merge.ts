@@ -22,6 +22,7 @@ import {
   gitObjectBytes,
   sha1hex,
   serializeTreeContent,
+  parseCommitParentHashes,
   type TreeEntry,
   type CommitData,
   type CommitPerson,
@@ -896,4 +897,78 @@ export async function createMergeCommitObject(
   };
 
   return packCommit(commitData);
+}
+
+// ---------------------------------------------------------------------------
+// Fast-forward safety guard
+// ---------------------------------------------------------------------------
+
+/** A 40-char all-zero hash denotes "no previous value" (branch creation). */
+const ZERO_HASH = "0".repeat(40);
+
+/**
+ * Safety guard run immediately before pushing a branch update.
+ *
+ * Refuse to advance a branch unless the new tip provably descends from the
+ * current tip — i.e. the update is a fast-forward. A non-fast-forward push
+ * rewrites the branch and silently ORPHANS every commit that was reachable
+ * from the old tip but not the new one. For a merge this is the disaster the
+ * guard exists to prevent: if the merge base is computed incorrectly (e.g. the
+ * patch tree was built against a stale or unrelated base, dragging commits that
+ * are already on the branch into the "PR"), the resulting merge commit may not
+ * list the current branch tip among its parents, and pushing it would drop
+ * real history.
+ *
+ * The check walks the new tip's ancestry through the parent links of the
+ * commits being pushed, looking for `oldHash`. This works for every merge
+ * strategy in the app:
+ *   - **merge / PR merge**: `oldHash` is a direct parent of the merge commit.
+ *   - **apply-to-tip**: `oldHash` is the parent of the first replayed commit,
+ *     reached by following the linear chain of pushed commits.
+ *
+ * We can only traverse the commits included in `objects`, but for all of the
+ * above the entire path from the new tip back to `oldHash` lies within the
+ * pushed set, so reaching `oldHash` confirms the fast-forward. Branch creation
+ * (`oldHash` empty or all-zero) and no-op updates are always allowed.
+ *
+ * @throws Error when the new tip does not descend from the current tip.
+ */
+export function assertFastForwardSafe(
+  objects: PackableObject[],
+  oldHash: string,
+  newHash: string,
+): void {
+  // Creating a brand-new branch has no previous tip to preserve.
+  if (!oldHash || oldHash === ZERO_HASH) return;
+  // No-op update (or already-at-target) is trivially safe.
+  if (oldHash === newHash) return;
+
+  const commitsByHash = new Map<string, PackableObject>();
+  for (const obj of objects) {
+    if (obj.type === "commit") commitsByHash.set(obj.hash, obj);
+  }
+
+  // Breadth-first walk of the new tip's ancestry within the pushed commits,
+  // searching for the previous tip.
+  const visited = new Set<string>();
+  const queue: string[] = [newHash];
+  while (queue.length > 0) {
+    const hash = queue.shift()!;
+    if (hash === oldHash) return; // reachable → fast-forward safe
+    if (visited.has(hash)) continue;
+    visited.add(hash);
+    const commit = commitsByHash.get(hash);
+    if (!commit) continue; // outside the pushed set — can't traverse further
+    for (const parent of parseCommitParentHashes(commit.data)) {
+      queue.push(parent);
+    }
+  }
+
+  throw new Error(
+    `Refusing to push: the new tip ${newHash.slice(0, 8)} does not descend from ` +
+      `the current branch tip ${oldHash.slice(0, 8)} (it is not in the new tip's ` +
+      `ancestry). Pushing it would orphan commits on the branch — a ` +
+      `non-fast-forward update. This usually indicates an incorrect merge base; ` +
+      `aborting before any history is lost.`,
+  );
 }

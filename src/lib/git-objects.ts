@@ -286,3 +286,34 @@ export async function gitCommitHash(data: CommitData): Promise<string> {
   const content = serializeCommitContent(data);
   return sha1hex(gitObjectBytes("commit", content));
 }
+
+const decoder = new TextDecoder();
+
+/**
+ * Parse the parent commit hashes from a serialized git commit object's content
+ * bytes — i.e. the content portion produced by {@link serializeCommitContent}
+ * (WITHOUT the `commit <size>\0` header), exactly as stored in a
+ * `PackableObject.data` for a commit.
+ *
+ * Commit headers run until the first blank line that separates them from the
+ * message; every `parent <hash>` header line is collected in order. The
+ * space-indented continuation lines of a multi-line `gpgsig` header are skipped
+ * because they begin with a space rather than `parent `.
+ *
+ * @param content - The commit object's content bytes (no header)
+ * @returns Parent commit hashes in the order they appear (first parent first)
+ */
+export function parseCommitParentHashes(content: Uint8Array): string[] {
+  const text = decoder.decode(content);
+  const parents: string[] = [];
+  for (const line of text.split("\n")) {
+    // Headers end at the first blank line; the message follows.
+    if (line === "") break;
+    // Skip continuation lines (e.g. gpgsig), which are space-indented.
+    if (line.startsWith(" ")) continue;
+    if (line.startsWith("parent ")) {
+      parents.push(line.slice("parent ".length).trim());
+    }
+  }
+  return parents;
+}

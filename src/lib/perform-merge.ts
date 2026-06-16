@@ -22,7 +22,10 @@
  */
 
 import { nip19, type EventTemplate, type NostrEvent } from "nostr-tools";
-import { createMergeCommitObject } from "@/lib/patch-merge";
+import {
+  createMergeCommitObject,
+  assertFastForwardSafe,
+} from "@/lib/patch-merge";
 import type { PackableObject } from "@/lib/git-packfile";
 import { RepoStateFactory } from "@/factories/RepoStateFactory";
 import {
@@ -179,6 +182,14 @@ export async function performMerge(
   );
 
   const allObjects: PackableObject[] = [...chainObjects, mergeCommit];
+
+  // Safety guard: the merge commit MUST have the current branch tip as a parent
+  // (i.e. advancing the branch to it is a fast-forward). Pushing a merge commit
+  // that does not descend from the current tip would orphan commits already on
+  // the branch — the non-fast-forward disaster an incorrect merge base can
+  // cause. Abort here, BEFORE any state event is published to purgatory or any
+  // object is pushed.
+  assertFastForwardSafe(allObjects, defaultBranchHead, mergeCommit.hash);
 
   // ── Step 2: Publish state to Grasp (purgatory) ──────────────────────────
   const state = await RepoStateFactory.create(
