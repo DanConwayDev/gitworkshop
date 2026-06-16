@@ -1398,6 +1398,59 @@ export class GitGraspPool {
   }
 
   /**
+   * Find the merge base (lowest common ancestor) between two explicit commits.
+   *
+   * Unlike {@link findMergeBase}, this does NOT consult `infoRefs` for the
+   * "other" side — both endpoints are passed in. This matters for merging:
+   * the merge tree MUST be computed against the real common ancestor of the
+   * branch we are advancing (`commitA`, the current default-branch tip) and
+   * the commit we are merging in (`commitB`, the PR/patch tip), regardless of
+   * any `merge-base` tag the PR event claims (which may be wrong — that is
+   * exactly the bug an incorrect ngit merge base introduced).
+   *
+   * Strategy: walk `commitB`'s ancestry newest-first and return the first
+   * commit that also appears in `commitA`'s ancestry. For the linear +
+   * single-merge histories these repos produce this is the correct merge base.
+   *
+   * Returns the merge-base commit hash, or null if none is found within
+   * `maxDepth` commits on either side.
+   *
+   * @param commitA      - Current default-branch tip ("ours").
+   * @param commitB      - The commit being merged in ("theirs", e.g. PR tip).
+   * @param fallbackUrls - Extra clone URLs to try (e.g. PR author's fork).
+   * @param maxDepth     - How many commits to walk in each chain (default 200).
+   */
+  async findMergeBaseBetween(
+    commitA: string,
+    commitB: string,
+    signal: AbortSignal,
+    fallbackUrls?: string[],
+    maxDepth = 200,
+  ): Promise<string | null> {
+    if (commitA === commitB) return commitA;
+
+    const [chainA, chainB] = await Promise.all([
+      this.getCommitHistory(commitA, maxDepth, signal),
+      this.getCommitHistory(commitB, maxDepth, signal, fallbackUrls),
+    ]);
+
+    if (signal.aborted) return null;
+    if (!chainA || chainA.length === 0 || !chainB || chainB.length === 0) {
+      return null;
+    }
+
+    const ancestorsA = new Set(chainA.map((c) => c.hash));
+
+    // Walk B's chain newest-first; the first commit present in A's ancestry is
+    // the merge base.
+    for (const commit of chainB) {
+      if (ancestorsA.has(commit.hash)) return commit.hash;
+    }
+
+    return null;
+  }
+
+  /**
    * Count how many commits the default branch is ahead of `mergeBase`.
    *
    * Fast path: reuses the default-branch history already cached by

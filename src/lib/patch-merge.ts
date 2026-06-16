@@ -17,7 +17,7 @@
  */
 
 import parseDiff from "parse-diff";
-import { applyPatch } from "diff";
+import { applyPatch, createTwoFilesPatch } from "diff";
 import {
   gitObjectBytes,
   sha1hex,
@@ -32,7 +32,7 @@ import { extractPatchDiff } from "@/lib/nip34";
 import { normalizeDiffPrefix } from "@/lib/patch-verify";
 import { formatTimezone, extractGpgSignature } from "@/lib/patch-commits";
 import type { Patch } from "@/casts/Patch";
-import type { GitGraspPool } from "@/lib/git-grasp-pool";
+import { diffTrees, type GitGraspPool } from "@/lib/git-grasp-pool";
 import type { Tree } from "@/lib/vendored/git-natural-api";
 
 // ---------------------------------------------------------------------------
@@ -360,6 +360,14 @@ function buildNewDirTree(
  * @param fallbackUrls       - Extra clone URLs to try
  * @param guessedBaseCommitId - Fallback base commit when the first patch has no
  *                              `parent-commit` tag (e.g. from the timestamp heuristic).
+ * @param defaultBranchHead  - Current HEAD of the default branch. When supplied
+ *                              and the branch has advanced past the patch base,
+ *                              the returned `finalTreeHash` is a real three-way
+ *                              merge of the patch result into the branch tip
+ *                              (preserving the branch's own changes) instead of
+ *                              the raw patch-tip tree. A conflict here is
+ *                              returned as an error so the caller can fall back
+ *                              to apply-to-tip.
  * @returns Either a successful build result or an error with conflicts
  */
 export async function buildPatchChainObjects(
@@ -368,6 +376,7 @@ export async function buildPatchChainObjects(
   signal: AbortSignal,
   fallbackUrls?: string[],
   guessedBaseCommitId?: string,
+  defaultBranchHead?: string,
 ): Promise<PatchChainBuildResult | PatchChainBuildError> {
   if (chain.length === 0) {
     return { reason: "Empty patch chain", conflicts: [] };
@@ -574,10 +583,59 @@ export async function buildPatchChainObjects(
     currentParentCommitId = claimedHash;
   }
 
+  const patchTipTreeHash =
+    objects.filter((o) => o.type === "tree").slice(-1)[0]?.hash ?? "";
+
+  let finalTreeHash = patchTipTreeHash;
+
+  // Three-way merge against the current default-branch tip when it has advanced
+  // past the patch base. Without this the merge commit would adopt the patch
+  // result tree verbatim and silently revert every change made on the branch
+  // since the base — the same data-loss disaster as the PR path. A conflict is
+  // returned as an error so the caller can fall back to apply-to-tip.
+  if (defaultBranchHead && defaultBranchHead !== baseCommitId) {
+    const oursData = await pool.getFullTree(
+      defaultBranchHead,
+      signal,
+      fallbackUrls,
+    );
+    if (signal.aborted) return { reason: "Aborted", conflicts: [] };
+    if (!oursData) {
+      return {
+        reason: `Could not fetch default branch commit ${defaultBranchHead.slice(
+          0,
+          8,
+        )} for three-way merge`,
+        conflicts: [],
+      };
+    }
+
+    // The patch chain's "theirs" blobs only exist locally (built above, not yet
+    // pushed), so the three-way merge must read their content from here.
+    const localBlobs = new Map<string, Uint8Array>();
+    for (const o of objects) {
+      if (o.type === "blob") localBlobs.set(o.hash, o.data);
+    }
+
+    const merged = await mergeThreeWayTree(
+      pool,
+      signal,
+      baseData.tree,
+      oursData.tree,
+      currentTree,
+      fallbackUrls,
+      localBlobs,
+    );
+    if (signal.aborted) return { reason: "Aborted", conflicts: [] };
+    if ("reason" in merged) return merged;
+
+    finalTreeHash = merged.mergeTreeHash;
+    objects.push(...merged.objects);
+  }
+
   return {
     objects,
-    finalTreeHash:
-      objects.filter((o) => o.type === "tree").slice(-1)[0]?.hash ?? "",
+    finalTreeHash,
     tipCommitHash: currentParentCommitId,
     allHashesVerified,
     hashResults,
@@ -897,6 +955,177 @@ export async function createMergeCommitObject(
   };
 
   return packCommit(commitData);
+}
+
+// ---------------------------------------------------------------------------
+// Three-way merge tree
+// ---------------------------------------------------------------------------
+
+/** Successful result of {@link mergeThreeWayTree}. */
+export interface ThreeWayMergeResult {
+  /**
+   * NEW git objects produced by the merge that must be packed and pushed:
+   * the rebuilt tree objects plus any blobs created by an auto-merge. Blobs
+   * taken verbatim from either side are referenced by hash but NOT included
+   * (they already exist wherever their side's objects live).
+   */
+  objects: PackableObject[];
+  /** Tree hash of the merged result (the merge commit's tree). */
+  mergeTreeHash: string;
+}
+
+const textDecoder = new TextDecoder();
+
+/**
+ * Compute the tree for a real three-way merge of `theirs` into `ours`.
+ *
+ * This is what makes a merge SAFE when the default branch has advanced past
+ * the merge base: instead of blindly adopting the incoming tip's tree (which
+ * silently reverts every change made on the default branch since the base —
+ * the data-loss disaster an incorrect merge base triggers), we combine both
+ * sides' changes relative to their common ancestor.
+ *
+ * For every path:
+ *   - changed only on theirs → take theirs.
+ *   - changed only on ours   → keep ours (it is already in `oursTree`).
+ *   - changed on both to the same result → keep it.
+ *   - modified on both differently → generate the base→theirs patch and apply
+ *     it on top of ours' content; clean apply → merged blob, otherwise a
+ *     conflict.
+ *   - delete vs. modify, or add vs. add with different content → conflict.
+ *
+ * The merged tree is rebuilt from `oursTree` with theirs' deltas layered on
+ * top, so files only ours touched are preserved.
+ *
+ * @param pool         - GitGraspPool for fetching blob content.
+ * @param signal       - AbortSignal for cancellation.
+ * @param baseTree     - Tree at the merge base (common ancestor).
+ * @param oursTree     - Tree at the current default-branch tip ("ours").
+ * @param theirsTree   - Tree at the incoming PR/patch tip ("theirs").
+ * @param fallbackUrls - Extra clone URLs to try when fetching blobs.
+ * @param localBlobs   - Optional hash→content map consulted before the pool.
+ *                       Required for the patch path, whose "theirs" blobs only
+ *                       exist locally (built from patch events, not yet pushed).
+ * @returns The merged tree + new objects, or a {@link PatchChainBuildError}
+ *          listing the conflicting paths.
+ */
+export async function mergeThreeWayTree(
+  pool: GitGraspPool,
+  signal: AbortSignal,
+  baseTree: Tree,
+  oursTree: Tree,
+  theirsTree: Tree,
+  fallbackUrls?: string[],
+  localBlobs?: Map<string, Uint8Array>,
+): Promise<ThreeWayMergeResult | PatchChainBuildError> {
+  const theirsChanges = diffTrees(theirsTree, baseTree);
+  const oursChanges = diffTrees(oursTree, baseTree);
+  const oursByPath = new Map(oursChanges.map((c) => [c.path, c]));
+
+  const objects: PackableObject[] = [];
+  const changedBlobs = new Map<string, string>();
+  const deletedPaths = new Set<string>();
+  const conflicts: MergeConflict[] = [];
+
+  const fetchText = async (hash: string): Promise<string | null> => {
+    const local = localBlobs?.get(hash);
+    if (local) return textDecoder.decode(local);
+    const data = await pool.getBlob(hash, signal, fallbackUrls);
+    return data ? textDecoder.decode(data) : null;
+  };
+
+  for (const tc of theirsChanges) {
+    if (signal.aborted) return { reason: "Aborted", conflicts: [] };
+
+    const oc = oursByPath.get(tc.path);
+
+    // ── Path touched only by theirs → take theirs verbatim ───────────────
+    if (!oc) {
+      if (tc.status === "deleted") {
+        deletedPaths.add(tc.path);
+      } else if (tc.tipHash) {
+        changedBlobs.set(tc.path, tc.tipHash);
+      }
+      continue;
+    }
+
+    // ── Path touched by both sides ───────────────────────────────────────
+    if (tc.status === "deleted" && oc.status === "deleted") {
+      deletedPaths.add(tc.path); // both removed it
+      continue;
+    }
+    if (tc.status === "deleted" || oc.status === "deleted") {
+      conflicts.push({
+        path: tc.path,
+        reason: "Modified on one side and deleted on the other",
+        patchIndex: 0,
+      });
+      continue;
+    }
+    // Both produced the same blob → already correct in oursTree.
+    if (tc.tipHash && oc.tipHash && tc.tipHash === oc.tipHash) continue;
+
+    // Different content on both sides → attempt an automatic 3-way content merge.
+    const baseContent = tc.baseHash ? await fetchText(tc.baseHash) : "";
+    const theirsContent = tc.tipHash ? await fetchText(tc.tipHash) : null;
+    const oursContent = oc.tipHash ? await fetchText(oc.tipHash) : null;
+    if (signal.aborted) return { reason: "Aborted", conflicts: [] };
+
+    if (theirsContent === null || oursContent === null) {
+      conflicts.push({
+        path: tc.path,
+        reason: "Could not fetch file content for three-way merge",
+        patchIndex: 0,
+      });
+      continue;
+    }
+
+    if (oursContent === theirsContent) continue; // identical result, keep ours
+
+    // Apply theirs' delta (base → theirs) on top of ours' content.
+    const patch = createTwoFilesPatch(
+      `a/${tc.path}`,
+      `b/${tc.path}`,
+      baseContent ?? "",
+      theirsContent,
+      "",
+      "",
+      { context: 3 },
+    );
+    let merged = applyPatch(oursContent, patch);
+    if (merged === false)
+      merged = applyPatch(oursContent, patch, { fuzzFactor: 3 });
+    if (merged === false) {
+      conflicts.push({
+        path: tc.path,
+        reason: "Conflicting changes — could not auto-merge",
+        patchIndex: 0,
+      });
+      continue;
+    }
+
+    const blob = await packBlob(encoder.encode(merged));
+    objects.push(blob);
+    changedBlobs.set(tc.path, blob.hash);
+  }
+
+  if (conflicts.length > 0) {
+    return {
+      reason: `Three-way merge produced ${conflicts.length} conflict${
+        conflicts.length === 1 ? "" : "s"
+      }`,
+      conflicts,
+    };
+  }
+
+  const mergeTreeHash = await rebuildTreeCollecting(
+    oursTree,
+    changedBlobs,
+    deletedPaths,
+    objects,
+  );
+
+  return { objects, mergeTreeHash };
 }
 
 // ---------------------------------------------------------------------------

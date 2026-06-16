@@ -160,6 +160,7 @@ export function usePatchMergeability(
               abort.signal,
               fallbackUrls,
               guessedBaseCommitId,
+              defaultBranchHead,
             )
           : null;
 

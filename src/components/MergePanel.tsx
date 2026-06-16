@@ -254,6 +254,7 @@ export function MergePanel({
     gitPool,
     effectiveCloneUrls,
     isPRType,
+    pr.tip.explicitMergeBase,
   );
 
   // Unified mergeability view for the render logic
@@ -264,9 +265,10 @@ export function MergePanel({
           | PRMergeabilityStatus,
         buildResult: null,
         applyResult: null,
-        conflicts: [] as import("@/lib/patch-merge").MergeConflict[],
+        conflicts: prMergeability.conflicts,
         errorMessage: prMergeability.errorMessage,
         mergeStrategyError: null,
+        mergeBaseMismatch: prMergeability.mergeBaseMismatch,
         recheck: prMergeability.recheck,
       }
     : {
@@ -274,6 +276,7 @@ export function MergePanel({
         status: patchMergeability.status as
           | MergeabilityStatus
           | PRMergeabilityStatus,
+        mergeBaseMismatch: null,
       };
 
   const defaultBranchRef = `refs/heads/${defaultBranchName}`;
@@ -600,11 +603,17 @@ export function MergePanel({
       eventStore.add(signedState);
 
       setMergeStep("pushing");
-      await pushObjects([mergeCommitObj], {
-        oldHash: defaultBranchHead,
-        newHash: mergeCommitObj.hash,
-        refName: defaultBranchRef,
-      });
+      // Push the merge commit PLUS any new objects a three-way merge produced
+      // (rebuilt trees + auto-merged blobs). For the fast path extraObjects is
+      // empty and the PR tip's tree already exists on the server.
+      await pushObjects(
+        [mergeCommitObj, ...prMergeability.result.extraObjects],
+        {
+          oldHash: defaultBranchHead,
+          newHash: mergeCommitObj.hash,
+          refName: defaultBranchRef,
+        },
+      );
 
       // ── Step 4+5: Status + broadcast ──────────────────────────────────
       setMergeStep("publishing-status");
@@ -858,6 +867,39 @@ export function MergePanel({
                 )}
               </div>
             </div>
+
+            {/* Stale claimed merge-base warning */}
+            {mergeability.mergeBaseMismatch && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <p>
+                      <span className="font-medium">
+                        Incorrect merge base in PR.
+                      </span>{" "}
+                      The PR's recorded{" "}
+                      <code className="rounded bg-muted px-0.5 font-mono text-[10px]">
+                        merge-base
+                      </code>{" "}
+                      does not match the common ancestor computed from git
+                      history. The PR author's tooling likely miscalculated it —
+                      treat the PR's metadata with caution.
+                    </p>
+                    <p className="font-mono text-[10px] text-muted-foreground">
+                      claimed{" "}
+                      {mergeability.mergeBaseMismatch.claimed.slice(0, 8)} ·
+                      computed{" "}
+                      {mergeability.mergeBaseMismatch.computed.slice(0, 8)}
+                    </p>
+                    <p>
+                      This merge uses the computed base, so no commits will be
+                      orphaned.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Apply-to-tip warning banner */}
             {mergeability.status === "ready-apply-only" &&

@@ -2,46 +2,84 @@
  * usePRMergeability — checks whether a PR-type item (kind:1618) can be merged.
  *
  * For PR-type items the commits already exist on the git server — the PR
- * author pushed a branch. Merging is therefore much simpler than for
- * patch-type items: we just need to:
+ * author pushed a branch. The merge:
  *
- *   1. Confirm the tip commit exists and fetch its tree.
- *   2. Create a merge commit with [defaultBranchHead, tipCommitId] as parents,
- *      using the tip's tree.
+ *   1. Confirms the tip commit exists and fetches its tree.
+ *   2. Computes the REAL merge base between the current default-branch tip and
+ *      the PR tip from git history — NOT the PR event's claimed `merge-base`
+ *      tag, which may be wrong (an incorrect ngit merge base is exactly the
+ *      bug that caused a non-fast-forward, history-losing merge).
+ *   3. If the default branch has not advanced past the merge base (merge base
+ *      === default-branch tip), the PR tip's tree is correct as-is — the
+ *      classic fast path.
+ *   4. Otherwise it performs a real three-way merge of the PR tip into the
+ *      default branch tip over their common ancestor, so changes made on the
+ *      default branch since the base are preserved instead of being silently
+ *      reverted. Auto-merge conflicts are surfaced as `conflicts`.
+ *   5. Builds a merge commit with [defaultBranchHead, tipCommitId] as parents
+ *      and the (possibly three-way-merged) tree.
  *
- * Conflict detection note: using the tip's tree as the merge tree is correct
- * when the PR branch is up to date with the default branch (i.e. the merge
- * base is an ancestor of both). When the PR is behind, the maintainer should
- * rebase/update the PR first. We surface the `behindCount` so the UI can warn.
- *
- * The pre-built merge commit object is returned so the merge button can
- * proceed immediately without waiting.
+ * The pre-built merge commit object plus any NEW objects the three-way merge
+ * produced (rebuilt trees, auto-merged blobs) are returned so the merge button
+ * can push immediately without waiting.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { packCommit, type PackableObject } from "@/lib/git-packfile";
 import type { CommitData, CommitPerson } from "@/lib/git-objects";
+import { mergeThreeWayTree } from "@/lib/patch-merge";
+import type { MergeConflict } from "@/lib/patch-merge";
 import type { GitGraspPool } from "@/lib/git-grasp-pool";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type PRMergeabilityStatus = "idle" | "loading" | "ready" | "error";
+export type PRMergeabilityStatus =
+  | "idle"
+  | "loading"
+  | "ready"
+  | "conflicts"
+  | "error";
 
 export interface PRMergeResult {
   /** The pre-built merge commit PackableObject */
   mergeCommitObj: PackableObject;
   /** The merge commit hash */
   mergeCommitHash: string;
+  /**
+   * NEW git objects (rebuilt trees + auto-merged blobs) produced by a
+   * three-way merge that MUST be pushed alongside the merge commit. Empty for
+   * the fast path (PR tip tree adopted verbatim — those objects already exist
+   * on the server).
+   */
+  extraObjects: PackableObject[];
+}
+
+export interface MergeBaseMismatch {
+  /** The merge base the PR event's `merge-base` tag claims. */
+  claimed: string;
+  /** The merge base actually computed from git history. */
+  computed: string;
 }
 
 export interface PRMergeability {
   status: PRMergeabilityStatus;
   /** Pre-built merge commit, present when status === "ready" */
   result: PRMergeResult | null;
+  /** File-level conflicts when status === "conflicts" */
+  conflicts: MergeConflict[];
   /** Human-readable error when status === "error" */
   errorMessage: string | null;
+  /**
+   * Set when the PR event's claimed `merge-base` tag disagrees with the merge
+   * base computed from git history. A mismatch means the PR author's tooling
+   * (e.g. ngit) recorded a stale/incorrect merge base — the exact condition
+   * that can drag unrelated commits into the PR or produce a history-losing
+   * merge. The merge itself always uses the computed base (so it stays safe),
+   * but the maintainer should be warned that the PR metadata is untrustworthy.
+   */
+  mergeBaseMismatch: MergeBaseMismatch | null;
   /** Re-run the check */
   recheck: () => void;
 }
@@ -63,6 +101,9 @@ export interface PRMergeability {
  * @param gitPool           - GitGraspPool for fetching the tip tree
  * @param fallbackUrls      - Extra clone URLs (e.g. PR author's fork)
  * @param enabled           - Set to false to skip the check entirely
+ * @param claimedMergeBase  - The PR event's `merge-base` tag (if present), used
+ *                            only to detect and warn about a mismatch with the
+ *                            merge base computed from git history.
  */
 export function usePRMergeability(
   tipCommitId: string | undefined,
@@ -74,10 +115,14 @@ export function usePRMergeability(
   gitPool: GitGraspPool | null,
   fallbackUrls: string[] | undefined,
   enabled: boolean,
+  claimedMergeBase?: string,
 ): PRMergeability {
   const [status, setStatus] = useState<PRMergeabilityStatus>("idle");
   const [result, setResult] = useState<PRMergeResult | null>(null);
+  const [conflicts, setConflicts] = useState<MergeConflict[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [mergeBaseMismatch, setMergeBaseMismatch] =
+    useState<MergeBaseMismatch | null>(null);
   const [recheckCounter, setRecheckCounter] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -85,7 +130,9 @@ export function usePRMergeability(
 
   useEffect(() => {
     setResult(null);
+    setConflicts([]);
     setErrorMessage(null);
+    setMergeBaseMismatch(null);
 
     if (
       !enabled ||
@@ -132,11 +179,92 @@ export function usePRMergeability(
       }
       message += `\n\nNostr-PR: ${nevent}`;
 
-      // The merge commit tree is the tip's tree (correct when the PR branch
-      // is up to date with the default branch, i.e. merge base is an ancestor
-      // of both). If the PR is behind, the maintainer should update it first.
+      // Compute the REAL merge base from git history (NOT the PR's claimed
+      // merge-base tag, which may be wrong). This is the common ancestor of the
+      // default-branch tip and the PR tip.
+      const mergeBase = await gitPool!.findMergeBaseBetween(
+        defaultBranchHead!,
+        tipCommitId!,
+        abort.signal,
+        fallbackUrls,
+      );
+
+      if (abort.signal.aborted) return;
+
+      if (!mergeBase) {
+        setStatus("error");
+        setErrorMessage(
+          "Could not determine the merge base between the default branch and " +
+            "the PR tip from git history. Refusing to merge — adopting the PR " +
+            "tree blindly could orphan commits on the default branch.",
+        );
+        return;
+      }
+
+      // Detect a stale/incorrect claimed merge base. The PR event's
+      // `merge-base` tag should equal the common ancestor of the default
+      // branch and the PR tip — advancing the default branch forward does NOT
+      // change that ancestor. So when the claimed tag disagrees with the
+      // computed base, the PR author's tooling miscalculated (or the branch was
+      // rewritten): a red flag worth surfacing even though the merge below
+      // uses the computed base and stays safe.
+      if (claimedMergeBase && claimedMergeBase !== mergeBase) {
+        setMergeBaseMismatch({
+          claimed: claimedMergeBase,
+          computed: mergeBase,
+        });
+      }
+
+      // Decide the merge tree.
+      //   Fast path: the default branch has NOT advanced past the merge base,
+      //   so the PR tip's tree already incorporates everything on the branch —
+      //   adopt it verbatim (its objects already exist on the server).
+      //   Diverged: perform a real three-way merge so changes made on the
+      //   default branch since the base are preserved.
+      let mergeTreeHash = tipData.commit.tree;
+      let extraObjects: PackableObject[] = [];
+
+      if (mergeBase !== defaultBranchHead) {
+        const [baseData, oursData] = await Promise.all([
+          gitPool!.getFullTree(mergeBase, abort.signal, fallbackUrls),
+          gitPool!.getFullTree(defaultBranchHead!, abort.signal, fallbackUrls),
+        ]);
+
+        if (abort.signal.aborted) return;
+
+        if (!baseData || !oursData) {
+          setStatus("error");
+          setErrorMessage(
+            "Could not fetch the merge-base or default-branch tree from the " +
+              "git server — cannot compute a safe three-way merge.",
+          );
+          return;
+        }
+
+        const merged = await mergeThreeWayTree(
+          gitPool!,
+          abort.signal,
+          baseData.tree,
+          oursData.tree,
+          tipData.tree,
+          fallbackUrls,
+        );
+
+        if (abort.signal.aborted) return;
+
+        if ("reason" in merged) {
+          setStatus("conflicts");
+          setConflicts(merged.conflicts);
+          setErrorMessage(merged.reason);
+          return;
+        }
+
+        mergeTreeHash = merged.mergeTreeHash;
+        extraObjects = merged.objects;
+      }
+
       const commitData: CommitData = {
-        treeHash: tipData.commit.tree,
+        treeHash: mergeTreeHash,
         parentHashes: [defaultBranchHead!, tipCommitId!],
         author: committer!,
         committer: committer!,
@@ -150,6 +278,7 @@ export function usePRMergeability(
       setResult({
         mergeCommitObj,
         mergeCommitHash: mergeCommitObj.hash,
+        extraObjects,
       });
       setStatus("ready");
     }
@@ -173,8 +302,16 @@ export function usePRMergeability(
     subject,
     nevent,
     description,
+    claimedMergeBase,
     // committer and fallbackUrls intentionally excluded — stable proxies above cover them
   ]);
 
-  return { status, result, errorMessage, recheck };
+  return {
+    status,
+    result,
+    conflicts,
+    errorMessage,
+    mergeBaseMismatch,
+    recheck,
+  };
 }
