@@ -1,6 +1,11 @@
 /**
  * Vendored from @fiatjaf/git-natural-api v0.2.4
  * https://jsr.io/@fiatjaf/git-natural-api
+ *
+ * Local modifications (already applied):
+ *  - fetchPackfile: read the response body via `arrayBuffer()` instead of the
+ *    newer `Response.prototype.bytes()` (Chrome 121+/Firefox 133+/Safari 18.2+)
+ *    so packfile fetches work on older Chromium builds.
  */
 
 import { type PackfileResult, parsePackfile } from "./parse-packfile.ts";
@@ -46,7 +51,15 @@ export async function fetchPackfile(
     throw new Error(`failed to call git-upload-pack: ${await resp.text()}`);
   }
 
-  const data = await resp.bytes();
+  // NOTE: use arrayBuffer() rather than Response.prototype.bytes(). The latter
+  // only shipped in Chrome 121 / Firefox 133 / Safari 18.2, so on older
+  // Chromium builds `resp.bytes` is undefined and every packfile fetch throws
+  // `resp.bytes is not a function`. Because info/refs is parsed via .text()
+  // (universally supported), the symptom was the git-server-status dropdown
+  // showing every server green while the file explorer reported "missing
+  // objects" for every server — only on older Chrome. arrayBuffer() has been
+  // supported for years across all browsers.
+  const data = new Uint8Array(await resp.arrayBuffer());
 
   if (data.length === 0) {
     throw new Error("empty response");
