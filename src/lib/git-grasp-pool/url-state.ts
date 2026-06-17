@@ -15,6 +15,7 @@ import type {
   UrlConnectionStatus,
   UrlRefStatus,
   UrlErrorKind,
+  ObjectFetchResult,
   InfoRefsUploadPackResponse,
 } from "./types";
 import type { CorsProxyManager } from "./cors-proxy";
@@ -49,6 +50,7 @@ export class UrlTracker {
       lastSuccessAt: null,
       refStatus: {},
       refCommits: {},
+      lastObjectFetch: null,
     };
   }
 
@@ -132,6 +134,31 @@ export class UrlTracker {
       lastError: null,
       lastErrorKind: null,
       lastSuccessAt: Date.now(),
+    };
+  }
+
+  /**
+   * Record the outcome of an attempt to fetch a commit's git objects
+   * (tree/packfile) from this server.
+   *
+   * This is tracked separately from the connection `status` (which reflects
+   * infoRefs reachability) so that the UI can distinguish a server that
+   * genuinely lacks the commit's objects from one whose packfile transport
+   * failed — without flipping an otherwise-reachable server to "error" in the
+   * connection/dropdown view.
+   */
+  recordObjectFetch(
+    commitHash: string,
+    result: ObjectFetchResult,
+    errorKind: UrlErrorKind | null = null,
+  ): void {
+    this._state = {
+      ...this._state,
+      lastObjectFetch: {
+        commitHash,
+        result,
+        errorKind: result === "fetch-error" ? errorKind : null,
+      },
     };
   }
 

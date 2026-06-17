@@ -123,6 +123,41 @@ export interface UrlState {
    * Keys are full ref names. Only populated for refs in infoRefs.
    */
   refCommits: Record<string, string>;
+  /**
+   * Outcome of the most recent attempt to fetch a commit's git objects
+   * (tree/packfile) from this server, recorded independently of the
+   * infoRefs-based connection `status`.
+   *
+   * This lets the UI distinguish a server that returned a valid response
+   * genuinely lacking the requested commit's objects ("object-missing")
+   * from one where the git-upload-pack call or packfile transport/parse
+   * itself failed ("fetch-error") — the latter is NOT evidence that the
+   * server lacks the objects. null until an object fetch is attempted.
+   */
+  lastObjectFetch: ObjectFetchOutcome | null;
+}
+
+/**
+ * Result of attempting to fetch a commit's git objects from a single server.
+ *
+ * - "ok"             : the objects were fetched successfully.
+ * - "object-missing" : the server returned a valid response (or explicitly
+ *                      said "not our ref") but did not have the commit/tree
+ *                      objects. Genuine missing-objects evidence.
+ * - "fetch-error"    : the git-upload-pack request or packfile transport/parse
+ *                      failed before a valid response could be read. NOT
+ *                      evidence the server lacks the objects.
+ */
+export type ObjectFetchResult = "ok" | "object-missing" | "fetch-error";
+
+/** Per-URL record of the last object-fetch attempt. */
+export interface ObjectFetchOutcome {
+  /** The commit hash whose objects were requested. */
+  commitHash: string;
+  /** What happened on the most recent attempt. */
+  result: ObjectFetchResult;
+  /** Structured error kind when `result` is "fetch-error". */
+  errorKind: UrlErrorKind | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -341,6 +376,11 @@ export type ErrorClass = "permanent" | "transient";
  * - "not-http"         : URL uses a non-HTTP scheme (ssh://, git://, file://, etc.)
  * - "network"          : network-level failure (DNS, TCP, TLS — server unreachable)
  * - "http-error"       : server returned an HTTP error status (4xx/5xx)
+ * - "packfile-error"   : git-upload-pack call failed or the packfile could not
+ *                        be transported/parsed (e.g. unsupported Response API,
+ *                        truncated body, decompression failure). NOT evidence
+ *                        that the server lacks the objects — the fetch itself
+ *                        broke before we could read a valid response.
  * - "transient"        : temporary failure, will be retried
  */
 export type UrlErrorKind =
@@ -350,4 +390,5 @@ export type UrlErrorKind =
   | "not-http"
   | "network"
   | "http-error"
+  | "packfile-error"
   | "transient";

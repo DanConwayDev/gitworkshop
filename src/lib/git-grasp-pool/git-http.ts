@@ -21,6 +21,7 @@
 import {
   getInfoRefs as libGetInfoRefs,
   fetchPackfile,
+  MissingRef,
   createWantRequest,
   loadTree,
   parseCommit,
@@ -61,6 +62,73 @@ export class PermanentFetchError extends GitFetchError {
     super(message, kind, true);
     this.name = "PermanentFetchError";
   }
+}
+
+/**
+ * Thrown (internally) when a server returned a valid response but genuinely
+ * did not contain the requested commit/tree objects — including the explicit
+ * "not our ref" (MissingRef) signal and the "commit/root tree object not
+ * found in packfile" cases.
+ *
+ * This is the ONLY condition that constitutes evidence a server is missing the
+ * objects. Every other thrown error (HTTP failure, transport, decompression,
+ * unsupported Response API, etc.) is a fetch error and must NOT be reported as
+ * "missing objects".
+ */
+export class GitObjectMissingError extends Error {
+  constructor(message = "git server does not have the requested objects") {
+    super(message);
+    this.name = "GitObjectMissingError";
+  }
+}
+
+/**
+ * Sentinel message used by the low-level tree/commit helpers when an expected
+ * object is absent from an otherwise-valid packfile response.
+ */
+const OBJECT_NOT_FOUND_RE = /object not found/i;
+
+/**
+ * Classify an error thrown while fetching a commit's git objects
+ * (tree/packfile) into "the server genuinely lacks the objects" vs. "the
+ * fetch itself failed".
+ *
+ * Returns `{ missing: true }` only when we have positive evidence the server
+ * returned a valid response without the objects (MissingRef / object-not-found
+ * in the packfile). Otherwise the error is a transport/parse failure and is
+ * classified via {@link classifyFetchError}, defaulting to a transient
+ * "packfile-error" so the server is not blamed for missing objects.
+ */
+export function classifyObjectFetchError(
+  err: unknown,
+): { missing: true } | { missing: false; kind: UrlErrorKind } {
+  if (err instanceof GitObjectMissingError || err instanceof MissingRef) {
+    return { missing: true };
+  }
+  if (
+    err instanceof Error &&
+    OBJECT_NOT_FOUND_RE.test(err.message) &&
+    !(err instanceof GitFetchError)
+  ) {
+    return { missing: true };
+  }
+  // Aborts are not fetch failures — surface them so callers can short-circuit.
+  if (err instanceof DOMException && err.name === "AbortError") {
+    return { missing: false, kind: "transient" };
+  }
+  if (err instanceof GitFetchError) {
+    return { missing: false, kind: err.kind };
+  }
+  // Anything else is a transport/parse failure. classifyFetchError separates
+  // genuine HTTP/network errors from generic packfile transport breakage.
+  const { kind } = classifyFetchError(err);
+  // A generic/unclassified failure here means the git-upload-pack call or
+  // packfile parse broke — label it packfile-error rather than transient so
+  // the UI can say "couldn't fetch from this server".
+  return {
+    missing: false,
+    kind: kind === "transient" ? "packfile-error" : kind,
+  };
 }
 
 /**
@@ -838,26 +906,27 @@ export class GitHttpClient {
     const serverCaps = await this.getServerCaps(url, signal);
     if (signal.aborted) return null;
 
-    try {
-      const rawEntry = await this.getRawObjects(
-        effectiveUrl,
-        commitHash,
-        serverCaps,
-        signal,
+    const rawEntry = await this.getRawObjects(
+      effectiveUrl,
+      commitHash,
+      serverCaps,
+      signal,
+    );
+    if (signal.aborted) return null;
+
+    const rootObj = rawEntry.objects.get(rawEntry.rootTreeHash);
+    if (!rootObj) {
+      // The packfile arrived but lacked the root tree object — genuine
+      // missing objects for this commit on this server.
+      throw new GitObjectMissingError(
+        `root tree object not found for commit ${commitHash}`,
       );
-      if (signal.aborted) return null;
-
-      const rootObj = rawEntry.objects.get(rawEntry.rootTreeHash);
-      if (!rootObj) return null;
-
-      const tree = loadTree(rootObj, rawEntry.objects, nestLimit);
-      this.cache.putTree(commitHash, nestLimit, tree);
-      this.scheduleBackgroundFullParse(commitHash, rawEntry);
-      return tree;
-    } catch {
-      if (signal.aborted) return null;
-      return null;
     }
+
+    const tree = loadTree(rootObj, rawEntry.objects, nestLimit);
+    this.cache.putTree(commitHash, nestLimit, tree);
+    this.scheduleBackgroundFullParse(commitHash, rawEntry);
+    return tree;
   }
 
   /**

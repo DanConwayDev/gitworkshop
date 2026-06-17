@@ -30,6 +30,8 @@ export type {
   UrlConnectionStatus,
   UrlRefStatus,
   UrlErrorKind,
+  ObjectFetchOutcome,
+  ObjectFetchResult,
   // State event
   StateEvent,
   StateEventInput,

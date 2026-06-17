@@ -34,7 +34,12 @@ import type {
 } from "./types";
 import { CorsProxyManager } from "./cors-proxy";
 import { GitObjectCache } from "./cache";
-import { GitHttpClient, classifyFetchError, isNonHttpUrl } from "./git-http";
+import {
+  GitHttpClient,
+  classifyFetchError,
+  classifyObjectFetchError,
+  isNonHttpUrl,
+} from "./git-http";
 import { UrlStateManager, UrlTracker } from "./url-state";
 import { StateEventManager } from "./state-event";
 
@@ -1120,17 +1125,62 @@ export class GitGraspPool {
       signal,
       async (url) => {
         const start = Date.now();
-        const result = await this.http.fetchTree(
-          url,
-          commitHash,
-          nestLimit,
-          signal,
-        );
-        if (result) {
+        const isPoolUrl = this.urlManager.get(url) !== undefined;
+        try {
+          const result = await this.http.fetchTree(
+            url,
+            commitHash,
+            nestLimit,
+            signal,
+          );
           const tracker = this.urlManager.get(url);
-          tracker?.recordOperationSuccess(Date.now() - start);
+          if (result) {
+            tracker?.recordOperationSuccess(Date.now() - start);
+            tracker?.recordObjectFetch(commitHash, "ok");
+          } else {
+            // fetchTree returned null without throwing — the server's response
+            // genuinely lacked the objects for this commit.
+            tracker?.recordObjectFetch(commitHash, "object-missing");
+          }
+          if (!result && isPoolUrl) {
+            this.setState((prev) => ({
+              ...prev,
+              urls: this.urlManager.toStateRecord(),
+            }));
+          }
+          return result;
+        } catch (err) {
+          if (signal.aborted) throw err;
+          const classified = classifyObjectFetchError(err);
+          const tracker = this.urlManager.get(url);
+          if (classified.missing) {
+            // The server returned a valid response (or "not our ref") without
+            // the commit's objects — genuine missing objects.
+            tracker?.recordObjectFetch(commitHash, "object-missing");
+          } else {
+            // The git-upload-pack call or packfile transport/parse failed.
+            // This is NOT evidence the server lacks the objects. Record it as
+            // a fetch error against the object-fetch outcome WITHOUT flipping
+            // the infoRefs-based connection status (the server may still be
+            // perfectly reachable for infoRefs).
+            tracker?.recordObjectFetch(
+              commitHash,
+              "fetch-error",
+              classified.kind,
+            );
+          }
+          if (isPoolUrl) {
+            this.setState((prev) => ({
+              ...prev,
+              urls: this.urlManager.toStateRecord(),
+            }));
+          }
+          // Move on to the next URL. We've already recorded the per-URL
+          // outcome ourselves, so return null instead of rethrowing to avoid
+          // withFallback recording a connection-level failure for what may be
+          // a transport-only object-fetch error.
+          return null;
         }
-        return result;
       },
       fallbackUrls,
     );
