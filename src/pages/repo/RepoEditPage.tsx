@@ -1014,20 +1014,15 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
             </div>
 
             <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    {isMultiMaintainer ? "Confirmed maintainers" : "Maintainer"}
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  {isMultiMaintainer ? "Confirmed maintainers" : "Maintainer"}
+                </p>
+                {isMultiMaintainer ? (
+                  <p className="text-xs text-muted-foreground/80 mt-0.5">
+                    Resolved from the current recursive maintainer graph.
                   </p>
-                  {isMultiMaintainer ? (
-                    <p className="text-xs text-muted-foreground/80 mt-0.5">
-                      Resolved from the current recursive maintainer graph.
-                    </p>
-                  ) : null}
-                </div>
-                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
-                  {repo.maintainerSet.length}
-                </Badge>
+                ) : null}
               </div>
 
               <div className="space-y-2">
