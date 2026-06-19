@@ -155,6 +155,26 @@ function LeadMaintainerSummary({
   );
 }
 
+function LeadBadge() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex cursor-help">
+          <Badge
+            variant="outline"
+            className="h-4 px-1.5 py-0 text-[10px] text-pink-600 border-pink-500/40 dark:text-pink-400"
+          >
+            lead
+          </Badge>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-64 text-xs leading-relaxed">
+        {LEAD_MAINTAINER_HELP_TEXT}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
@@ -1012,14 +1032,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                       {isMultiMaintainer ? (
                         <MaintainerListedBy pubkeys={listedBy} />
                       ) : null}
-                      {isLead && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1.5 py-0 h-4 text-pink-600 border-pink-500/40 dark:text-pink-400"
-                        >
-                          lead
-                        </Badge>
-                      )}
+                      {isLead && <LeadBadge />}
                     </div>
                   );
                 })}
@@ -2056,14 +2069,7 @@ function MockMaintainerRow({
       {showListedBy ? (
         <MockMaintainerListedBy maintainers={maintainer.listedBy} />
       ) : null}
-      {maintainer.isLead && (
-        <Badge
-          variant="outline"
-          className="text-[10px] px-1.5 py-0 h-4 text-pink-600 border-pink-500/40 dark:text-pink-400"
-        >
-          lead
-        </Badge>
-      )}
+      {maintainer.isLead && <LeadBadge />}
     </div>
   );
 }
