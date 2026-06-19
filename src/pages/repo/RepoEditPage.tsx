@@ -15,7 +15,14 @@
  * Only accessible when the logged-in user is the selected maintainer.
  */
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+} from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useActiveAccount } from "applesauce-react/hooks";
 import {
@@ -46,7 +53,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { UserLink, UserName } from "@/components/UserAvatar";
-import { UserAutocompleteDropdown } from "@/components/MentionAutocomplete";
+import { UserAutocompleteDropdown } from "@/components/UserAutocompleteDropdown";
 
 import { useRepoContext } from "./RepoContext";
 import {
@@ -91,7 +98,7 @@ const KNOWN_TAG_NAMES = new Set([
   "t",
 ]);
 
-const HEX_PUBKEY_INPUT_RE = /^[0-9a-fA-F]{16,64}$/;
+const HEX_PUBKEY_INPUT_RE = /^[0-9a-fA-F]{64}$/;
 
 function looksLikeDirectPubkeyInput(value: string): boolean {
   const trimmed = value.trim();
@@ -606,7 +613,9 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
         return;
       }
 
-      setEditedMaintainers((prev) => [...prev, pubkey]);
+      setEditedMaintainers((prev) =>
+        prev.includes(pubkey) ? prev : [...prev, pubkey],
+      );
       setMaintainerInput("");
       setMaintainerInputError(undefined);
     },
@@ -1052,8 +1061,8 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                   <MaintainerUserInput
                     placeholder="@name, npub1…, or hex pubkey"
                     value={maintainerInput}
-                    onChange={(e) => {
-                      setMaintainerInput(e.target.value);
+                    onValueChange={(value) => {
+                      setMaintainerInput(value);
                       setMaintainerInputError(undefined);
                     }}
                     onAdd={handleAddMaintainer}
@@ -1567,7 +1576,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
 
 function MaintainerUserInput({
   value,
-  onChange,
+  onValueChange,
   onAdd,
   onSelectPubkey,
   priorityPubkeys,
@@ -1576,7 +1585,7 @@ function MaintainerUserInput({
   className,
 }: {
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onValueChange: (value: string) => void;
   onAdd: () => void;
   onSelectPubkey: (pubkey: string) => void;
   priorityPubkeys: string[];
@@ -1584,8 +1593,12 @@ function MaintainerUserInput({
   placeholder?: string;
   className?: string;
 }) {
+  const listboxId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [activeDescendantId, setActiveDescendantId] = useState<
+    string | undefined
+  >();
   const [dropdownPos, setDropdownPos] = useState<{
     top: number;
     left: number;
@@ -1636,7 +1649,7 @@ function MaintainerUserInput({
         placeholder={placeholder}
         value={value}
         onChange={(e) => {
-          onChange(e);
+          onValueChange(e.target.value);
           updateDropdownPosition();
         }}
         onFocus={() => {
@@ -1650,6 +1663,13 @@ function MaintainerUserInput({
             onAdd();
           }
         }}
+        aria-autocomplete="list"
+        aria-haspopup="listbox"
+        aria-expanded={shouldSearch}
+        aria-controls={shouldSearch ? listboxId : undefined}
+        aria-activedescendant={
+          shouldSearch && activeDescendantId ? activeDescendantId : undefined
+        }
         className={className}
       />
       <UserAutocompleteDropdown
@@ -1661,6 +1681,8 @@ function MaintainerUserInput({
         keyboardTargetRef={inputRef}
         priorityPubkeys={priorityPubkeys}
         excludePubkeys={excludePubkeys}
+        listboxId={listboxId}
+        onActiveDescendantChange={setActiveDescendantId}
       />
     </div>
   );

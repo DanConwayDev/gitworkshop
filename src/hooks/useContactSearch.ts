@@ -157,8 +157,9 @@ export function useContactSearch(
   // ── 5. Snapshot profiles for local candidates from the EventStore cache ────
   // We read synchronously from the store rather than opening a subscription
   // over potentially thousands of pubkeys. The actual network fetch for
-  // rendered items is handled by MentionAutocomplete via useProfilesForPubkeys,
-  // which targets only the small set of pubkeys visible in the dropdown.
+  // rendered items is handled by UserAutocompleteDropdown via
+  // useProfilesForPubkeys, which targets only the small set of pubkeys visible
+  // in the dropdown.
   const localProfileMap = useMemo(() => {
     const profileMap = new Map<string, ProfileContent>();
     for (const pubkey of localPubkeys) {
