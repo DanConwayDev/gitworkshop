@@ -703,6 +703,15 @@ export interface ResolvedRepo {
   descriptionSource: FieldProvenance;
 }
 
+function selectRepoLeadAnchor(resolved: ResolvedRepo): string {
+  return (
+    computeMaintainerLeadership(
+      resolved.maintainerSet,
+      resolved.maintainerEdges,
+    ).leadMaintainer ?? resolved.selectedMaintainer
+  );
+}
+
 // ---------------------------------------------------------------------------
 // ResolvedIssueLite — lightweight summary for list pages
 // ---------------------------------------------------------------------------
@@ -2423,12 +2432,18 @@ export function groupIntoResolvedRepos(
         const resolved = resolveChain(events, startPubkey, dTag);
         if (!resolved) continue;
 
+        const leadAnchor = selectRepoLeadAnchor(resolved);
+        const anchored =
+          leadAnchor === resolved.selectedMaintainer
+            ? resolved
+            : (resolveChain(events, leadAnchor, dTag) ?? resolved);
+
         // Mark all members of this component as processed
-        for (const pk of resolved.maintainerSet) {
+        for (const pk of anchored.maintainerSet) {
           processedComponents.add(`${pk}:${dTag}`);
         }
 
-        results.push(resolved);
+        results.push(anchored);
       }
     }
   }
