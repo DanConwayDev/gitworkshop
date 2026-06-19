@@ -55,10 +55,10 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { UserAvatar, UserLink, UserName } from "@/components/UserAvatar";
 import { UserAutocompleteDropdown } from "@/components/UserAutocompleteDropdown";
 
@@ -119,21 +119,30 @@ function looksLikeDirectPubkeyInput(value: string): boolean {
 }
 
 function LeadMaintainerHelp() {
+  const [open, setOpen] = useState(false);
+
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <button
           type="button"
           className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/80 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           aria-label="How lead maintainers are chosen"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
         >
           <CircleHelp className="h-3.5 w-3.5" />
         </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-64 text-xs leading-relaxed">
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        className="w-64 text-xs leading-relaxed"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
         {LEAD_MAINTAINER_HELP_TEXT}
-      </TooltipContent>
-    </Tooltip>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -156,22 +165,30 @@ function LeadMaintainerSummary({
 }
 
 function LeadBadge() {
+  const [open, setOpen] = useState(false);
+
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex cursor-help">
-          <Badge
-            variant="outline"
-            className="h-4 px-1.5 py-0 text-[10px] text-pink-600 border-pink-500/40 dark:text-pink-400"
-          >
-            lead
-          </Badge>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-64 text-xs leading-relaxed">
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-4 items-center rounded-full border border-pink-500/40 px-1.5 py-0 text-[10px] font-semibold text-pink-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:text-pink-400"
+          aria-label="How lead maintainers are chosen"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+        >
+          lead
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        className="w-64 text-xs leading-relaxed"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
         {LEAD_MAINTAINER_HELP_TEXT}
-      </TooltipContent>
-    </Tooltip>
+      </PopoverContent>
+    </Popover>
   );
 }
 
