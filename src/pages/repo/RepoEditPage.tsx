@@ -771,6 +771,12 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
       const graspRelayUrls = selectedDomains.map((domain) => `wss://${domain}`);
       const allRelayUrls = [...graspRelayUrls, ...otherRelays];
 
+      // Match ngit init behavior: seed maintainers with the selected maintainer
+      // (self), then append any co-maintainers listed in this form.
+      const maintainersTagValues = Array.from(
+        new Set([repo.selectedMaintainer, ...editedMaintainers]),
+      );
+
       const template: EventTemplate = {
         kind: REPO_KIND,
         content: "",
@@ -787,8 +793,8 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
             : []),
           ["alt", `git repository: ${name.trim()}`],
           ...(eucHash.trim() ? [["r", eucHash.trim(), "euc"] as string[]] : []),
-          ...(editedMaintainers.length > 0
-            ? [["maintainers", ...editedMaintainers] as string[]]
+          ...(maintainersTagValues.length > 0
+            ? [["maintainers", ...maintainersTagValues] as string[]]
             : []),
           ...webUrls.map((u) => ["web", u] as string[]),
           ...topics.map((t) => ["t", t] as string[]),
@@ -1116,7 +1122,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                 {isMultiMaintainer ? (
                   <p className="text-xs text-muted-foreground mt-0.5">
                     These are saved as the co-maintainers you list for this
-                    repo.
+                    repo. Your own pubkey is included automatically.
                   </p>
                 ) : null}
               </div>
