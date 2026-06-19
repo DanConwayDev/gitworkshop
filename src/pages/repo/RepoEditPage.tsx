@@ -99,6 +99,7 @@ const KNOWN_TAG_NAMES = new Set([
 ]);
 
 const HEX_PUBKEY_INPUT_RE = /^[0-9a-fA-F]{64}$/;
+const SHOW_MAINTAINERS_SCENARIO_MOCKUPS = true;
 
 function looksLikeDirectPubkeyInput(value: string): boolean {
   const trimmed = value.trim();
@@ -1088,6 +1089,8 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                 )}
               </div>
             </div>
+
+            {SHOW_MAINTAINERS_SCENARIO_MOCKUPS && <MaintainerScenarioMockups />}
           </section>
 
           <Separator />
@@ -1684,6 +1687,310 @@ function MaintainerUserInput({
         listboxId={listboxId}
         onActiveDescendantChange={setActiveDescendantId}
       />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MaintainerScenarioMockups — temporary design preview for maintainer states
+// ---------------------------------------------------------------------------
+
+interface MockMaintainer {
+  name: string;
+  handle: string;
+  listingCount: number;
+  isLead?: boolean;
+}
+
+interface MockMaintainerScenario {
+  title: string;
+  description: string;
+  confirmed: MockMaintainer[];
+  requested: Array<Pick<MockMaintainer, "name" | "handle">>;
+  listedByYou: Array<Pick<MockMaintainer, "name" | "handle">>;
+  leadLabel?: string;
+}
+
+const MOCK_MAINTAINER_SCENARIOS: MockMaintainerScenario[] = [
+  {
+    title: "Solo maintainer",
+    description: "No reciprocal co-maintainer graph yet.",
+    confirmed: [
+      {
+        name: "You",
+        handle: "npub1main…",
+        listingCount: 0,
+        isLead: true,
+      },
+    ],
+    requested: [],
+    listedByYou: [],
+    leadLabel: "You",
+  },
+  {
+    title: "Two confirmed maintainers",
+    description: "Both announcements list each other, so both are trusted.",
+    confirmed: [
+      {
+        name: "You",
+        handle: "npub1main…",
+        listingCount: 1,
+        isLead: true,
+      },
+      { name: "Ada", handle: "npub1ada…", listingCount: 1 },
+    ],
+    requested: [],
+    listedByYou: [{ name: "Ada", handle: "npub1ada…" }],
+    leadLabel: "You",
+  },
+  {
+    title: "Team with pending invite",
+    description: "A requested maintainer has not reciprocated yet.",
+    confirmed: [
+      {
+        name: "You",
+        handle: "npub1main…",
+        listingCount: 2,
+        isLead: true,
+      },
+      { name: "Ada", handle: "npub1ada…", listingCount: 2 },
+      { name: "Linus", handle: "npub1linus…", listingCount: 1 },
+    ],
+    requested: [{ name: "Grace", handle: "npub1grace…" }],
+    listedByYou: [
+      { name: "Ada", handle: "npub1ada…" },
+      { name: "Grace", handle: "npub1grace…" },
+    ],
+    leadLabel: "You",
+  },
+  {
+    title: "No lead maintainer",
+    description: "Listing counts are tied, so the graph has no single lead.",
+    confirmed: [
+      { name: "You", handle: "npub1main…", listingCount: 1 },
+      { name: "Ada", handle: "npub1ada…", listingCount: 1 },
+      { name: "Grace", handle: "npub1grace…", listingCount: 1 },
+    ],
+    requested: [],
+    listedByYou: [
+      { name: "Ada", handle: "npub1ada…" },
+      { name: "Grace", handle: "npub1grace…" },
+    ],
+  },
+];
+
+function MaintainerScenarioMockups() {
+  return (
+    <section className="space-y-3 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold flex items-center gap-1.5 text-amber-700 dark:text-amber-300">
+            <Users className="h-4 w-4" />
+            Temporary maintainer mockups
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+            Preview-only examples for comparing maintainer graph states. Remove
+            this section after choosing the preferred layout.
+          </p>
+        </div>
+        <Badge
+          variant="outline"
+          className="text-[10px] border-amber-500/40 text-amber-700 dark:text-amber-300"
+        >
+          mock data
+        </Badge>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        {MOCK_MAINTAINER_SCENARIOS.map((scenario) => (
+          <MaintainerScenarioCard key={scenario.title} scenario={scenario} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MaintainerScenarioCard({
+  scenario,
+}: {
+  scenario: MockMaintainerScenario;
+}) {
+  const isMultiMaintainer = scenario.confirmed.length > 1;
+
+  return (
+    <div className="rounded-lg border border-border/60 bg-background/80 p-3 space-y-3 shadow-sm">
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-medium">{scenario.title}</h3>
+          <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+            {scenario.confirmed.length}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {scenario.description}
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-3">
+        <div className="space-y-0.5">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            {isMultiMaintainer ? "Confirmed maintainers" : "Maintainer"}
+          </p>
+          {isMultiMaintainer ? (
+            <p className="text-xs text-muted-foreground/80">
+              Resolved from the recursive graph.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
+          {scenario.confirmed.map((maintainer) => (
+            <MockMaintainerRow
+              key={maintainer.handle}
+              maintainer={maintainer}
+              showListingCount={isMultiMaintainer}
+            />
+          ))}
+        </div>
+
+        {isMultiMaintainer ? (
+          <div className="rounded-md border border-border/40 bg-background/40 px-2.5 py-2 text-xs text-muted-foreground">
+            {scenario.leadLabel ? (
+              <span>Lead maintainer: {scenario.leadLabel}</span>
+            ) : (
+              <span>No lead maintainer (tie)</span>
+            )}
+          </div>
+        ) : null}
+
+        {scenario.requested.length > 0 && (
+          <div className="space-y-2 border-t border-border/50 pt-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Requested / unconfirmed
+            </p>
+            <div className="space-y-1.5">
+              {scenario.requested.map((maintainer) => (
+                <MockRequestedMaintainerRow
+                  key={maintainer.handle}
+                  maintainer={maintainer}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs">
+          {isMultiMaintainer
+            ? "Co-maintainers listed by your announcement"
+            : "Add co-maintainers"}
+        </Label>
+        {scenario.listedByYou.length > 0 ? (
+          <div className="space-y-1.5">
+            {scenario.listedByYou.map((maintainer) => (
+              <MockEditableMaintainerRow
+                key={maintainer.handle}
+                maintainer={maintainer}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border border-dashed border-border/70 bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
+            Your announcement does not list any co-maintainers.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MockMaintainerRow({
+  maintainer,
+  showListingCount,
+}: {
+  maintainer: MockMaintainer;
+  showListingCount: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/50 bg-background/60 px-2.5 py-2">
+      <MockUserIdentity maintainer={maintainer} className="flex-1" />
+      {showListingCount ? (
+        <span className="text-[11px] text-muted-foreground shrink-0">
+          Listed by {maintainer.listingCount} maintainer
+          {maintainer.listingCount === 1 ? "" : "s"}
+        </span>
+      ) : null}
+      {maintainer.isLead && (
+        <Badge
+          variant="outline"
+          className="text-[10px] px-1.5 py-0 h-4 text-pink-600 border-pink-500/40 dark:text-pink-400"
+        >
+          lead
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+function MockRequestedMaintainerRow({
+  maintainer,
+}: {
+  maintainer: Pick<MockMaintainer, "name" | "handle">;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-dashed border-border/60 bg-muted/10 px-2.5 py-1.5">
+      <MockUserIdentity maintainer={maintainer} className="flex-1" small />
+      <Badge
+        variant="outline"
+        className="text-[10px] h-4 px-1.5 text-muted-foreground"
+      >
+        unconfirmed
+      </Badge>
+    </div>
+  );
+}
+
+function MockEditableMaintainerRow({
+  maintainer,
+}: {
+  maintainer: Pick<MockMaintainer, "name" | "handle">;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-1.5">
+      <MockUserIdentity maintainer={maintainer} className="flex-1" small />
+      <X className="h-3.5 w-3.5 text-muted-foreground" />
+    </div>
+  );
+}
+
+function MockUserIdentity({
+  maintainer,
+  className,
+  small = false,
+}: {
+  maintainer: Pick<MockMaintainer, "name" | "handle">;
+  className?: string;
+  small?: boolean;
+}) {
+  return (
+    <div className={cn("flex min-w-0 items-center gap-2", className)}>
+      <div
+        className={cn(
+          "shrink-0 rounded-full bg-gradient-to-br from-pink-500/80 to-purple-500/80",
+          small ? "h-5 w-5" : "h-6 w-6",
+        )}
+      />
+      <div className="min-w-0">
+        <p
+          className={cn("truncate font-medium", small ? "text-xs" : "text-sm")}
+        >
+          {maintainer.name}
+        </p>
+        <p className="truncate text-[10px] text-muted-foreground">
+          {maintainer.handle}
+        </p>
+      </div>
     </div>
   );
 }
