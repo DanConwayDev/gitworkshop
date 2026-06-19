@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import {
   graspCloneUrlNpub,
+  computeMaintainerLeadership,
   getRepoRelays,
   type ResolvedRepo,
 } from "@/lib/nip34";
@@ -312,6 +313,10 @@ function SidebarVariant({
     (a) => a.pubkey === repo.selectedMaintainer,
   );
   const isMultiAnnouncement = repo.announcements.length > 1;
+  const maintainerLeadership = useMemo(
+    () => computeMaintainerLeadership(repo.maintainerSet, repo.maintainerEdges),
+    [repo.maintainerSet, repo.maintainerEdges],
+  );
   const [multiModalOpen, setMultiModalOpen] = useState(false);
 
   return (
@@ -384,6 +389,14 @@ function SidebarVariant({
                         selected
                       </Badge>
                     )}
+                  {pk === maintainerLeadership.leadMaintainer && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 h-4 text-pink-600 border-pink-500/40 dark:text-pink-400"
+                    >
+                      lead
+                    </Badge>
+                  )}
                 </div>
               ))}
             </div>
@@ -521,6 +534,7 @@ function SidebarVariant({
                 <MultiAnnouncementsModal
                   announcements={repo.announcements}
                   selectedMaintainer={repo.selectedMaintainer}
+                  leadMaintainer={maintainerLeadership.leadMaintainer}
                   open={multiModalOpen}
                   onOpenChange={setMultiModalOpen}
                 />
@@ -562,6 +576,10 @@ function FullVariant({
     [repo],
   );
   const isMultiMaintainer = repo.announcements.length > 1;
+  const maintainerLeadership = useMemo(
+    () => computeMaintainerLeadership(repo.maintainerSet, repo.maintainerEdges),
+    [repo.maintainerSet, repo.maintainerEdges],
+  );
 
   // Relays in other maintainers' announcements but NOT in the selected maintainer's
   const unionOnlyRelayUrls = useMemo((): Set<string> => {
@@ -653,6 +671,14 @@ function FullVariant({
                     selected
                   </Badge>
                 )}
+              {pk === maintainerLeadership.leadMaintainer && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1.5 py-0 h-4 text-pink-600 border-pink-500/40 dark:text-pink-400"
+                >
+                  lead
+                </Badge>
+              )}
             </div>
           ))}
           {repo.requestedMaintainers.length > 0 && (
@@ -836,6 +862,7 @@ function FullVariant({
         <FullVariantActionBar
           announcements={repo.announcements}
           selectedMaintainer={repo.selectedMaintainer}
+          leadMaintainer={maintainerLeadership.leadMaintainer}
           editPath={isMaintainer ? editPath : undefined}
           repoCoords={isMaintainer ? repo.allCoordinates : undefined}
         />
@@ -1029,9 +1056,11 @@ function CloneServerRow({ url, isGrasp }: { url: string; isGrasp: boolean }) {
 function AnnouncementEventRows({
   announcements,
   selectedMaintainer,
+  leadMaintainer,
 }: {
   announcements: NostrEvent[];
   selectedMaintainer: string;
+  leadMaintainer?: string;
 }) {
   const [jsonEvent, setJsonEvent] = useState<NostrEvent | null>(null);
   const isMulti = announcements.length > 1;
@@ -1060,6 +1089,7 @@ function AnnouncementEventRows({
 
         {sorted.map((ev) => {
           const isSelected = ev.pubkey === selectedMaintainer;
+          const isLead = ev.pubkey === leadMaintainer;
           const updatedAt = format(
             new Date(ev.created_at * 1000),
             "MMM d, yyyy 'at' h:mm a",
@@ -1087,6 +1117,14 @@ function AnnouncementEventRows({
                     className="text-[10px] px-1.5 py-0 h-4 shrink-0 text-pink-600 border-pink-500/40 dark:text-pink-400"
                   >
                     selected
+                  </Badge>
+                )}
+                {isMulti && isLead && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 h-4 shrink-0 text-pink-600 border-pink-500/40 dark:text-pink-400"
+                  >
+                    lead
                   </Badge>
                 )}
               </div>
@@ -1136,11 +1174,13 @@ function AnnouncementEventRows({
 function FullVariantActionBar({
   announcements,
   selectedMaintainer,
+  leadMaintainer,
   editPath,
   repoCoords,
 }: {
   announcements: NostrEvent[];
   selectedMaintainer: string;
+  leadMaintainer?: string;
   editPath?: string;
   repoCoords?: string[];
 }) {
@@ -1225,6 +1265,7 @@ function FullVariantActionBar({
           <AnnouncementEventRows
             announcements={announcements}
             selectedMaintainer={selectedMaintainer}
+            leadMaintainer={leadMaintainer}
           />
         </div>
       )}
@@ -1569,11 +1610,13 @@ function RawEventJsonDialog({
 function MultiAnnouncementsModal({
   announcements,
   selectedMaintainer,
+  leadMaintainer,
   open,
   onOpenChange,
 }: {
   announcements: NostrEvent[];
   selectedMaintainer: string;
+  leadMaintainer?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -1590,6 +1633,7 @@ function MultiAnnouncementsModal({
           <AnnouncementEventRows
             announcements={announcements}
             selectedMaintainer={selectedMaintainer}
+            leadMaintainer={leadMaintainer}
           />
         </div>
       </DialogContent>

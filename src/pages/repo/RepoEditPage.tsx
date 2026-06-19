@@ -15,7 +15,15 @@
  * Only accessible when the logged-in user is the selected maintainer.
  */
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import {
+  type ReactNode,
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+} from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useActiveAccount } from "applesauce-react/hooks";
 import {
@@ -29,6 +37,7 @@ import {
   AlertTriangle,
   Users,
   Tag,
+  CircleHelp,
 } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import type { EventTemplate } from "nostr-tools";
@@ -45,7 +54,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { UserName } from "@/components/UserAvatar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { UserAvatar, UserLink, UserName } from "@/components/UserAvatar";
+import { UserAutocompleteDropdown } from "@/components/UserAutocompleteDropdown";
 
 import { useRepoContext } from "./RepoContext";
 import {
@@ -55,11 +70,13 @@ import {
   getRepoCloneUrls,
   getRepoRelays,
   getRepoWebUrls,
+  getRepoMaintainers,
   isGraspCloneUrl,
   graspCloneUrlDomain,
+  computeMaintainerLeadership,
   type ResolvedRepo,
 } from "@/lib/nip34";
-import { repoToPath } from "@/lib/routeUtils";
+import { decodePubkeyIdentifier, repoToPath } from "@/lib/routeUtils";
 import { validateGraspServer } from "@/lib/grasp";
 import { publish } from "@/services/nostr";
 import { useGraspServers } from "@/hooks/useGraspServers";
@@ -87,6 +104,92 @@ const KNOWN_TAG_NAMES = new Set([
   "web",
   "t",
 ]);
+
+const HEX_PUBKEY_INPUT_RE = /^[0-9a-fA-F]{64}$/;
+const LEAD_MAINTAINER_HELP_TEXT =
+  "The lead maintainer is the confirmed maintainer listed by more confirmed maintainers than anyone else. If the top listing count is tied, there is no single lead maintainer.";
+
+function looksLikeDirectPubkeyInput(value: string): boolean {
+  const trimmed = value.trim();
+  return (
+    trimmed.toLowerCase().startsWith("npub1") ||
+    HEX_PUBKEY_INPUT_RE.test(trimmed)
+  );
+}
+
+function LeadMaintainerHelp() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/80 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label="How lead maintainers are chosen"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+        >
+          <CircleHelp className="h-3.5 w-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        className="w-64 text-xs leading-relaxed"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
+        {LEAD_MAINTAINER_HELP_TEXT}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function LeadMaintainerSummary({
+  children,
+  hasLead,
+  className,
+}: {
+  children?: ReactNode;
+  hasLead: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
+      <span>{hasLead ? "Lead maintainer" : "No lead maintainer"}</span>
+      <LeadMaintainerHelp />
+      {hasLead ? children : null}
+    </div>
+  );
+}
+
+function LeadBadge() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-4 items-center rounded-full border border-pink-500/40 px-1.5 py-0 text-[10px] font-semibold text-pink-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:text-pink-400"
+          aria-label="How lead maintainers are chosen"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+        >
+          lead
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        className="w-64 text-xs leading-relaxed"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
+        {LEAD_MAINTAINER_HELP_TEXT}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Main page
@@ -217,6 +320,17 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
         .filter(Boolean) ?? [],
     [selectedAnnouncement],
   );
+  const currentMaintainers = useMemo(() => {
+    if (!selectedAnnouncement) return [];
+    return Array.from(
+      new Set(
+        getRepoMaintainers(selectedAnnouncement).flatMap((identifier) => {
+          const pubkey = decodePubkeyIdentifier(identifier);
+          return pubkey && pubkey !== repo.selectedMaintainer ? [pubkey] : [];
+        }),
+      ),
+    );
+  }, [selectedAnnouncement, repo.selectedMaintainer]);
   const currentEucHash = useMemo(
     () =>
       selectedAnnouncement?.tags.find(
@@ -239,6 +353,14 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   const [webInput, setWebInput] = useState("");
   const [topics, setTopics] = useState<string[]>(currentTopics);
   const [topicInput, setTopicInput] = useState("");
+
+  // Co-maintainers listed by this selected announcement.
+  const [editedMaintainers, setEditedMaintainers] =
+    useState<string[]>(currentMaintainers);
+  const [maintainerInput, setMaintainerInput] = useState("");
+  const [maintainerInputError, setMaintainerInputError] = useState<
+    string | undefined
+  >();
 
   // Grasp server selection
   const [selectedDomains, setSelectedDomains] =
@@ -321,6 +443,46 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   // ---------------------------------------------------------------------------
 
   const isMultiMaintainer = repo.maintainerSet.length > 1;
+
+  const maintainerLeadership = useMemo(
+    () => computeMaintainerLeadership(repo.maintainerSet, repo.maintainerEdges),
+    [repo.maintainerSet, repo.maintainerEdges],
+  );
+
+  const maintainerListers = useMemo(
+    () =>
+      computeMaintainerListers(
+        repo.maintainerSet,
+        repo.maintainerSet,
+        repo.maintainerEdges,
+      ),
+    [repo.maintainerSet, repo.maintainerEdges],
+  );
+
+  const requestedMaintainers = useMemo(
+    () => Array.from(new Set(repo.requestedMaintainers)),
+    [repo.requestedMaintainers],
+  );
+
+  const requestedMaintainerListers = useMemo(
+    () =>
+      computeMaintainerListers(
+        requestedMaintainers,
+        repo.maintainerSet,
+        repo.maintainerEdges,
+      ),
+    [requestedMaintainers, repo.maintainerSet, repo.maintainerEdges],
+  );
+
+  const maintainerPickerPriorityPubkeys = useMemo(
+    () => Array.from(new Set([...repo.maintainerSet, ...requestedMaintainers])),
+    [repo.maintainerSet, requestedMaintainers],
+  );
+
+  const maintainerPickerExcludePubkeys = useMemo(
+    () => [repo.selectedMaintainer, ...editedMaintainers],
+    [repo.selectedMaintainer, editedMaintainers],
+  );
 
   const unionOnlyRelays = useMemo((): Array<{
     url: string;
@@ -540,6 +702,46 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   }, [topicInput, topics]);
 
   // ---------------------------------------------------------------------------
+  // Maintainer actions
+  // ---------------------------------------------------------------------------
+
+  const addMaintainerPubkey = useCallback(
+    (pubkey: string) => {
+      if (pubkey === repo.selectedMaintainer) {
+        setMaintainerInputError("You cannot add yourself as a co-maintainer");
+        return;
+      }
+      if (editedMaintainers.includes(pubkey)) {
+        setMaintainerInputError("Already in the list");
+        return;
+      }
+
+      setEditedMaintainers((prev) =>
+        prev.includes(pubkey) ? prev : [...prev, pubkey],
+      );
+      setMaintainerInput("");
+      setMaintainerInputError(undefined);
+    },
+    [repo.selectedMaintainer, editedMaintainers],
+  );
+
+  const handleAddMaintainer = useCallback(() => {
+    const raw = maintainerInput.trim();
+    if (!raw) return;
+
+    const pubkey = decodePubkeyIdentifier(raw);
+    if (!pubkey) {
+      setMaintainerInputError("Enter a valid hex pubkey or npub");
+      return;
+    }
+    addMaintainerPubkey(pubkey);
+  }, [maintainerInput, addMaintainerPubkey]);
+
+  const handleRemoveMaintainer = useCallback((pubkey: string) => {
+    setEditedMaintainers((prev) => prev.filter((pk) => pk !== pubkey));
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // Save
   // ---------------------------------------------------------------------------
 
@@ -569,9 +771,10 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
       const graspRelayUrls = selectedDomains.map((domain) => `wss://${domain}`);
       const allRelayUrls = [...graspRelayUrls, ...otherRelays];
 
-      // Preserve maintainers tag
-      const maintainersTag = selectedAnnouncement.tags.find(
-        ([t]) => t === "maintainers",
+      // Match ngit init behavior: seed maintainers with the selected maintainer
+      // (self), then append any co-maintainers listed in this form.
+      const maintainersTagValues = Array.from(
+        new Set([repo.selectedMaintainer, ...editedMaintainers]),
       );
 
       const template: EventTemplate = {
@@ -590,7 +793,9 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
             : []),
           ["alt", `git repository: ${name.trim()}`],
           ...(eucHash.trim() ? [["r", eucHash.trim(), "euc"] as string[]] : []),
-          ...(maintainersTag ? [maintainersTag] : []),
+          ...(maintainersTagValues.length > 0
+            ? [["maintainers", ...maintainersTagValues] as string[]]
+            : []),
           ...webUrls.map((u) => ["web", u] as string[]),
           ...topics.map((t) => ["t", t] as string[]),
           // Preserve unknown/custom tags verbatim
@@ -625,6 +830,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
     description,
     webUrls,
     topics,
+    editedMaintainers,
     eucHash,
     unknownTags,
     basePath,
@@ -792,6 +998,196 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                 repository — used to track it across forks and renames. Set
                 automatically by <code className="font-mono">ngit push</code>.
               </p>
+            </div>
+          </section>
+
+          <Separator />
+
+          {/* ── Maintainers ─────────────────────────────────────────────── */}
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                <Users className="h-4 w-4" />
+                Maintainers
+              </h2>
+              {isMultiMaintainer ? (
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  You are editing only your selected announcement.
+                  Co-maintainers become confirmed when the recursive maintainer
+                  chain resolves them through reciprocal listings.
+                </p>
+              ) : null}
+            </div>
+
+            <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-3">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  {isMultiMaintainer ? "Confirmed maintainers" : "Maintainer"}
+                </p>
+                {isMultiMaintainer ? (
+                  <p className="text-xs text-muted-foreground/80 mt-0.5">
+                    Resolved from the current recursive maintainer graph.
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                {repo.maintainerSet.map((pubkey) => {
+                  const listedBy = maintainerListers.get(pubkey) ?? [];
+                  const isLead = maintainerLeadership.leadMaintainer === pubkey;
+                  return (
+                    <div
+                      key={pubkey}
+                      className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/50 bg-background/60 px-2.5 py-2"
+                    >
+                      <UserLink
+                        pubkey={pubkey}
+                        avatarSize="sm"
+                        nameClassName="text-sm whitespace-nowrap"
+                        className="min-w-fit flex-1"
+                      />
+                      {isMultiMaintainer ? (
+                        <MaintainerListedBy pubkeys={listedBy} />
+                      ) : null}
+                      {isLead && <LeadBadge />}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {isMultiMaintainer ? (
+                <div className="rounded-md border border-border/40 bg-background/40 px-2.5 py-2 text-xs">
+                  {maintainerLeadership.leadMaintainer ? (
+                    <LeadMaintainerSummary
+                      hasLead
+                      className="text-muted-foreground"
+                    >
+                      <UserName
+                        pubkey={maintainerLeadership.leadMaintainer}
+                        className="text-xs text-foreground"
+                        linkToProfile
+                      />
+                    </LeadMaintainerSummary>
+                  ) : (
+                    <LeadMaintainerSummary
+                      hasLead={false}
+                      className="text-muted-foreground"
+                    />
+                  )}
+                </div>
+              ) : null}
+
+              {requestedMaintainers.length > 0 && (
+                <div className="space-y-2 border-t border-border/50 pt-3">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Requested / unconfirmed
+                  </p>
+                  <div className="space-y-1.5">
+                    {requestedMaintainers.map((pubkey) => {
+                      const listedBy =
+                        requestedMaintainerListers.get(pubkey) ?? [];
+                      return (
+                        <div
+                          key={pubkey}
+                          className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-dashed border-border/60 bg-muted/10 px-2.5 py-1.5"
+                        >
+                          <UserLink
+                            pubkey={pubkey}
+                            avatarSize="xs"
+                            nameClassName="text-xs text-muted-foreground whitespace-nowrap"
+                            className="min-w-fit flex-1"
+                          />
+                          <MaintainerListedBy pubkeys={listedBy} />
+                          <Badge
+                            variant="outline"
+                            className="h-4 px-1.5 text-[10px] text-muted-foreground"
+                          >
+                            unconfirmed
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <Label>
+                  {isMultiMaintainer
+                    ? "Co-maintainers you have listed"
+                    : "Add co-maintainers"}
+                </Label>
+                {isMultiMaintainer ? (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    These are saved as the co-maintainers you list for this
+                    repo. Your own pubkey is included automatically.
+                  </p>
+                ) : null}
+              </div>
+
+              {editedMaintainers.length > 0 ? (
+                <div className="space-y-1.5">
+                  {editedMaintainers.map((pubkey) => (
+                    <div
+                      key={pubkey}
+                      className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-1.5"
+                    >
+                      <UserLink
+                        pubkey={pubkey}
+                        avatarSize="xs"
+                        nameClassName="text-sm"
+                        className="min-w-0 flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMaintainer(pubkey)}
+                        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                        aria-label={`Remove maintainer ${pubkey}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed border-border/70 bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
+                  You have not listed any co-maintainers.
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <MaintainerUserInput
+                    placeholder="@name, npub1…, or hex pubkey"
+                    value={maintainerInput}
+                    onValueChange={(value) => {
+                      setMaintainerInput(value);
+                      setMaintainerInputError(undefined);
+                    }}
+                    onAdd={handleAddMaintainer}
+                    onSelectPubkey={addMaintainerPubkey}
+                    priorityPubkeys={maintainerPickerPriorityPubkeys}
+                    excludePubkeys={maintainerPickerExcludePubkeys}
+                    className="h-8 text-sm font-mono"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddMaintainer}
+                    className="h-8 px-2.5 shrink-0"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {maintainerInputError && (
+                  <p className="text-xs text-red-500 px-0.5">
+                    {maintainerInputError}
+                  </p>
+                )}
+              </div>
             </div>
           </section>
 
@@ -1270,6 +1666,187 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
             </Button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MaintainerUserInput — single-line user finder for co-maintainers
+// ---------------------------------------------------------------------------
+
+function MaintainerUserInput({
+  value,
+  onValueChange,
+  onAdd,
+  onSelectPubkey,
+  priorityPubkeys,
+  excludePubkeys,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  onAdd: () => void;
+  onSelectPubkey: (pubkey: string) => void;
+  priorityPubkeys: string[];
+  excludePubkeys: string[];
+  placeholder?: string;
+  className?: string;
+}) {
+  const listboxId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const [activeDescendantId, setActiveDescendantId] = useState<
+    string | undefined
+  >();
+  const [dropdownPos, setDropdownPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+
+  const raw = value.trim();
+  const searchQuery = raw.startsWith("@") ? raw.slice(1) : raw;
+  const shouldSearch =
+    isFocused && raw.length > 0 && !looksLikeDirectPubkeyInput(raw);
+
+  const updateDropdownPosition = useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const rect = input.getBoundingClientRect();
+    setDropdownPos({
+      top: rect.bottom + 4,
+      left: Math.max(0, Math.min(rect.left, window.innerWidth - 280)),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!shouldSearch) return;
+    updateDropdownPosition();
+    window.addEventListener("resize", updateDropdownPosition);
+    return () => window.removeEventListener("resize", updateDropdownPosition);
+  }, [shouldSearch, updateDropdownPosition]);
+
+  const handleSelectPubkey = useCallback(
+    (pubkey: string) => {
+      onSelectPubkey(pubkey);
+
+      // UserAutocompleteDropdown closes itself after selection. Restore both
+      // DOM focus and our focus state on the next frame so the user can keep
+      // typing another maintainer name and immediately get suggestions.
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        setIsFocused(true);
+        updateDropdownPosition();
+      });
+    },
+    [onSelectPubkey, updateDropdownPosition],
+  );
+
+  return (
+    <div className="relative flex-1">
+      <Input
+        ref={inputRef}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => {
+          onValueChange(e.target.value);
+          updateDropdownPosition();
+        }}
+        onFocus={() => {
+          setIsFocused(true);
+          updateDropdownPosition();
+        }}
+        onBlur={() => setIsFocused(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !shouldSearch) {
+            e.preventDefault();
+            onAdd();
+          }
+        }}
+        aria-autocomplete="list"
+        aria-haspopup="listbox"
+        aria-expanded={shouldSearch}
+        aria-controls={shouldSearch ? listboxId : undefined}
+        aria-activedescendant={
+          shouldSearch && activeDescendantId ? activeDescendantId : undefined
+        }
+        className={className}
+      />
+      <UserAutocompleteDropdown
+        query={searchQuery}
+        isOpen={shouldSearch}
+        position={dropdownPos}
+        onSelectPubkey={handleSelectPubkey}
+        onClose={() => setIsFocused(false)}
+        keyboardTargetRef={inputRef}
+        priorityPubkeys={priorityPubkeys}
+        excludePubkeys={excludePubkeys}
+        listboxId={listboxId}
+        onActiveDescendantChange={setActiveDescendantId}
+      />
+    </div>
+  );
+}
+
+function computeMaintainerListers(
+  listedPubkeys: string[],
+  listerPubkeys: string[],
+  maintainerEdges: ResolvedRepo["maintainerEdges"],
+): Map<string, string[]> {
+  const listed = new Set(listedPubkeys);
+  const listers = new Set(listerPubkeys);
+  const listerOrder = new Map(
+    listerPubkeys.map((pubkey, index) => [pubkey, index]),
+  );
+  const listedByPubkey = new Map<string, string[]>();
+  const seenEdges = new Set<string>();
+
+  for (const pubkey of listedPubkeys) listedByPubkey.set(pubkey, []);
+
+  for (const { from, to } of maintainerEdges) {
+    if (!listers.has(from) || !listed.has(to)) continue;
+    if (from === to) continue;
+
+    const edgeKey = `${from}:${to}`;
+    if (seenEdges.has(edgeKey)) continue;
+    seenEdges.add(edgeKey);
+
+    listedByPubkey.get(to)?.push(from);
+  }
+
+  for (const listedBy of listedByPubkey.values()) {
+    listedBy.sort(
+      (a, b) => (listerOrder.get(a) ?? 0) - (listerOrder.get(b) ?? 0),
+    );
+  }
+
+  return listedByPubkey;
+}
+
+function MaintainerListedBy({ pubkeys }: { pubkeys: string[] }) {
+  if (pubkeys.length === 0) {
+    return (
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        Not listed yet
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 max-w-full shrink items-center gap-1.5 text-[11px] text-muted-foreground">
+      <span className="shrink-0">Listed by</span>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        {pubkeys.map((pubkey) => (
+          <span key={pubkey} className="inline-flex min-w-0 items-center gap-1">
+            <UserAvatar pubkey={pubkey} size="xs" linkToProfile />
+            <UserName
+              pubkey={pubkey}
+              className="hidden max-w-24 truncate text-[11px] text-foreground md:inline-block"
+              linkToProfile
+            />
+          </span>
+        ))}
       </div>
     </div>
   );

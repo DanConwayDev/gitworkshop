@@ -1,12 +1,11 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { createPortal } from "react-dom";
+import { useState, useEffect, useCallback, useId } from "react";
 import { nip19 } from "nostr-tools";
-import { UserAvatar } from "@/components/UserAvatar";
-import { useContactSearch } from "@/hooks/useContactSearch";
-import { useProfile } from "@/hooks/useProfile";
-import { useProfilesForPubkeys } from "@/hooks/useProfilesForPubkeys";
-import { useUserDisplayName } from "@/hooks/useUserDisplayName";
-import { cn } from "@/lib/utils";
+import { UserAutocompleteDropdown } from "@/components/UserAutocompleteDropdown";
+
+export {
+  UserAutocompleteDropdown,
+  type UserAutocompleteDropdownProps,
+} from "@/components/UserAutocompleteDropdown";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -130,30 +129,17 @@ export function MentionAutocomplete({
   onInsertMention,
   priorityPubkeys = [],
 }: MentionAutocompleteProps) {
+  const listboxId = useId();
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionStart, setMentionStart] = useState(-1);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
+  const [activeDescendantId, setActiveDescendantId] = useState<
+    string | undefined
+  >();
   const [dropdownPos, setDropdownPos] = useState<{
     top: number;
     left: number;
   } | null>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-
-  const contacts = useContactSearch(
-    isOpen ? mentionQuery : "",
-    priorityPubkeys,
-  );
-
-  // Fetch profiles for the pubkeys currently visible in the dropdown.
-  // This is intentionally targeted — only the rendered items, not the full
-  // follow list. useProfilesForPubkeys fires a single batched REQ to the
-  // lookup relays and updates MentionItem reactively as profiles arrive.
-  const renderedPubkeys = useMemo(
-    () => contacts.map((c) => c.pubkey),
-    [contacts],
-  );
-  useProfilesForPubkeys(renderedPubkeys);
 
   // Detect @mention query at cursor.
   const detectMention = useCallback(
@@ -199,7 +185,6 @@ export function MentionAutocomplete({
       setMentionQuery(query);
       setMentionStart(atPos);
       setIsOpen(true);
-      setSelectedIndex(0);
 
       // Position the dropdown below the @ character.
       // Use fixed (viewport) coordinates so the dropdown escapes any
@@ -253,70 +238,31 @@ export function MentionAutocomplete({
     detectMention(content, textarea.selectionStart);
   }, [content, detectMention, textareaRef]);
 
-  // Dismiss on any scroll outside the dropdown list so the fixed dropdown
-  // doesn't float away from the textarea. Scroll events originating inside
-  // the list itself (from keyboard navigation scrollIntoView) are ignored.
   useEffect(() => {
-    if (!isOpen) return;
-    const handleScroll = (e: Event) => {
-      if (listRef.current?.contains(e.target as Node)) return;
-      setIsOpen(false);
-    };
-    window.addEventListener("scroll", handleScroll, {
-      capture: true,
-      passive: true,
-    });
-    return () =>
-      window.removeEventListener("scroll", handleScroll, { capture: true });
-  }, [isOpen]);
-
-  // Handle keyboard navigation within the dropdown
-  useEffect(() => {
-    if (!isOpen || contacts.length === 0) return;
-
     const textarea = textareaRef.current;
     if (!textarea) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case "ArrowDown":
-          e.preventDefault();
-          setSelectedIndex((prev) =>
-            prev < contacts.length - 1 ? prev + 1 : 0,
-          );
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          setSelectedIndex((prev) =>
-            prev > 0 ? prev - 1 : contacts.length - 1,
-          );
-          break;
-        case "Enter":
-        case "Tab":
-          if (contacts.length > 0) {
-            e.preventDefault();
-            selectContact(contacts[selectedIndex].pubkey);
-          }
-          break;
-        case "Escape":
-          e.preventDefault();
-          setIsOpen(false);
-          break;
-      }
-    };
+    textarea.setAttribute("aria-autocomplete", "list");
+    textarea.setAttribute("aria-expanded", String(isOpen));
+    textarea.setAttribute("aria-haspopup", "listbox");
 
-    textarea.addEventListener("keydown", handleKeyDown);
-    return () => textarea.removeEventListener("keydown", handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, contacts, selectedIndex, textareaRef]);
+    if (isOpen) textarea.setAttribute("aria-controls", listboxId);
+    else textarea.removeAttribute("aria-controls");
 
-  // Scroll selected item into view
-  useEffect(() => {
-    if (selectedIndex >= 0 && listRef.current) {
-      const items = listRef.current.querySelectorAll("[data-mention-item]");
-      items[selectedIndex]?.scrollIntoView({ block: "nearest" });
+    if (isOpen && activeDescendantId) {
+      textarea.setAttribute("aria-activedescendant", activeDescendantId);
+    } else {
+      textarea.removeAttribute("aria-activedescendant");
     }
-  }, [selectedIndex]);
+
+    return () => {
+      textarea.removeAttribute("aria-autocomplete");
+      textarea.removeAttribute("aria-expanded");
+      textarea.removeAttribute("aria-haspopup");
+      textarea.removeAttribute("aria-controls");
+      textarea.removeAttribute("aria-activedescendant");
+    };
+  }, [activeDescendantId, isOpen, listboxId, textareaRef]);
 
   const selectContact = useCallback(
     (pubkey: string) => {
@@ -339,88 +285,17 @@ export function MentionAutocomplete({
     [mentionStart, mentionQuery, textareaRef, onInsertMention],
   );
 
-  if (!isOpen || !dropdownPos || contacts.length === 0) {
-    return null;
-  }
-
-  // Render via portal so the dropdown escapes any overflow:hidden or
-  // CSS-transform ancestor (e.g. Radix Dialog), while fixed coordinates
-  // keep it anchored to the correct viewport position.
-  return createPortal(
-    <div
-      className="fixed z-[100] w-[280px] rounded-xl border border-border bg-popover shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150"
-      style={{ top: dropdownPos.top, left: dropdownPos.left }}
-    >
-      <div
-        ref={listRef}
-        className="max-h-[240px] overflow-y-auto py-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border hover:[&::-webkit-scrollbar-thumb]:bg-border/80"
-        style={{
-          scrollbarWidth: "thin",
-          scrollbarColor: "hsl(var(--border)) transparent",
-        }}
-      >
-        {contacts.map(({ pubkey }, index) => (
-          <MentionItem
-            key={pubkey}
-            pubkey={pubkey}
-            isSelected={index === selectedIndex}
-            onClick={() => selectContact(contacts[index].pubkey)}
-          />
-        ))}
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// MentionItem
-// ---------------------------------------------------------------------------
-
-function MentionItem({
-  pubkey,
-  isSelected,
-  onClick,
-}: {
-  pubkey: string;
-  isSelected: boolean;
-  onClick: () => void;
-}) {
-  // useUserDisplayName subscribes reactively and updates when kind:0 lands.
-  const { name: displayName, isPlaceholder } = useUserDisplayName(pubkey);
-  const profile = useProfile(pubkey);
-  const nip05 = profile?.nip05;
-  const npub = nip19.npubEncode(pubkey);
-  const identifier = nip05 ?? `${npub.slice(0, 12)}…`;
-
   return (
-    <button
-      data-mention-item
-      type="button"
-      className={cn(
-        "w-full flex items-center gap-3 px-3 py-2 text-left transition-colors cursor-pointer",
-        isSelected
-          ? "bg-accent text-accent-foreground"
-          : "hover:bg-secondary/60",
-      )}
-      onClick={onClick}
-      onMouseDown={(e) => e.preventDefault()}
-    >
-      <UserAvatar pubkey={pubkey} size="md" className="shrink-0" />
-
-      <div className="flex-1 min-w-0">
-        <div
-          className={cn(
-            "font-semibold text-sm truncate font-mono",
-            isPlaceholder && "text-muted-foreground",
-          )}
-        >
-          {displayName}
-        </div>
-        <div className="text-xs text-muted-foreground truncate font-mono">
-          {identifier}
-        </div>
-      </div>
-    </button>
+    <UserAutocompleteDropdown
+      query={mentionQuery}
+      isOpen={isOpen}
+      position={dropdownPos}
+      onSelectPubkey={selectContact}
+      onClose={() => setIsOpen(false)}
+      keyboardTargetRef={textareaRef}
+      priorityPubkeys={priorityPubkeys}
+      listboxId={listboxId}
+      onActiveDescendantChange={setActiveDescendantId}
+    />
   );
 }

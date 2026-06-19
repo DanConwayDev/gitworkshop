@@ -573,6 +573,61 @@ export interface MaintainerEdge {
   to: string;
 }
 
+export interface MaintainerLeadership {
+  /** Maintainer with the unique highest confirmed in-degree, if one exists. */
+  leadMaintainer?: string;
+  /** Number of confirmed maintainers that list each confirmed maintainer. */
+  listingCounts: Map<string, number>;
+}
+
+/**
+ * Compute maintainer listing counts and a simple lead from the resolved graph.
+ *
+ * Only confirmed maintainers participate. Duplicate `from -> to` edges count
+ * once. A lead exists only when exactly one maintainer has the highest positive
+ * in-degree; ties and zero-count graphs intentionally have no lead.
+ */
+export function computeMaintainerLeadership(
+  maintainerSet: Iterable<string>,
+  maintainerEdges: MaintainerEdge[],
+): MaintainerLeadership {
+  const confirmed = new Set(maintainerSet);
+  const listingCounts = new Map<string, number>();
+  for (const pubkey of confirmed) listingCounts.set(pubkey, 0);
+
+  const seenEdges = new Set<string>();
+  for (const { from, to } of maintainerEdges) {
+    if (!confirmed.has(from) || !confirmed.has(to)) continue;
+    if (from === to) continue;
+
+    const edgeKey = `${from}:${to}`;
+    if (seenEdges.has(edgeKey)) continue;
+    seenEdges.add(edgeKey);
+
+    listingCounts.set(to, (listingCounts.get(to) ?? 0) + 1);
+  }
+
+  let highestCount = 0;
+  let leadMaintainer: string | undefined;
+  let leadersAtHighest = 0;
+
+  for (const [pubkey, count] of listingCounts) {
+    if (count > highestCount) {
+      highestCount = count;
+      leadMaintainer = pubkey;
+      leadersAtHighest = 1;
+    } else if (count === highestCount && count > 0) {
+      leadersAtHighest += 1;
+    }
+  }
+
+  return {
+    leadMaintainer:
+      highestCount > 0 && leadersAtHighest === 1 ? leadMaintainer : undefined,
+    listingCounts,
+  };
+}
+
 /**
  * The fully-resolved view of a repository after BFS chain resolution.
  *
@@ -646,6 +701,15 @@ export interface ResolvedRepo {
   nameSource: FieldProvenance;
   /** Which announcement's description won */
   descriptionSource: FieldProvenance;
+}
+
+function selectRepoLeadAnchor(resolved: ResolvedRepo): string {
+  return (
+    computeMaintainerLeadership(
+      resolved.maintainerSet,
+      resolved.maintainerEdges,
+    ).leadMaintainer ?? resolved.selectedMaintainer
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -2368,12 +2432,18 @@ export function groupIntoResolvedRepos(
         const resolved = resolveChain(events, startPubkey, dTag);
         if (!resolved) continue;
 
+        const leadAnchor = selectRepoLeadAnchor(resolved);
+        const anchored =
+          leadAnchor === resolved.selectedMaintainer
+            ? resolved
+            : (resolveChain(events, leadAnchor, dTag) ?? resolved);
+
         // Mark all members of this component as processed
-        for (const pk of resolved.maintainerSet) {
+        for (const pk of anchored.maintainerSet) {
           processedComponents.add(`${pk}:${dTag}`);
         }
 
-        results.push(resolved);
+        results.push(anchored);
       }
     }
   }
