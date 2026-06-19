@@ -368,13 +368,28 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   );
 
   const maintainerListers = useMemo(
-    () => computeMaintainerListers(repo.maintainerSet, repo.maintainerEdges),
+    () =>
+      computeMaintainerListers(
+        repo.maintainerSet,
+        repo.maintainerSet,
+        repo.maintainerEdges,
+      ),
     [repo.maintainerSet, repo.maintainerEdges],
   );
 
   const requestedMaintainers = useMemo(
     () => Array.from(new Set(repo.requestedMaintainers)),
     [repo.requestedMaintainers],
+  );
+
+  const requestedMaintainerListers = useMemo(
+    () =>
+      computeMaintainerListers(
+        requestedMaintainers,
+        repo.maintainerSet,
+        repo.maintainerEdges,
+      ),
+    [requestedMaintainers, repo.maintainerSet, repo.maintainerEdges],
   );
 
   const maintainerPickerPriorityPubkeys = useMemo(
@@ -989,25 +1004,30 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                     Requested / unconfirmed
                   </p>
                   <div className="space-y-1.5">
-                    {requestedMaintainers.map((pubkey) => (
-                      <div
-                        key={pubkey}
-                        className="flex items-center gap-2 rounded-md border border-dashed border-border/60 bg-muted/10 px-2.5 py-1.5"
-                      >
-                        <UserLink
-                          pubkey={pubkey}
-                          avatarSize="xs"
-                          nameClassName="text-xs text-muted-foreground"
-                          className="min-w-0 flex-1"
-                        />
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] h-4 px-1.5 text-muted-foreground"
+                    {requestedMaintainers.map((pubkey) => {
+                      const listedBy =
+                        requestedMaintainerListers.get(pubkey) ?? [];
+                      return (
+                        <div
+                          key={pubkey}
+                          className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-dashed border-border/60 bg-muted/10 px-2.5 py-1.5"
                         >
-                          unconfirmed
-                        </Badge>
-                      </div>
-                    ))}
+                          <UserLink
+                            pubkey={pubkey}
+                            avatarSize="xs"
+                            nameClassName="text-xs text-muted-foreground whitespace-nowrap"
+                            className="min-w-fit flex-1"
+                          />
+                          <MaintainerListedBy pubkeys={listedBy} />
+                          <Badge
+                            variant="outline"
+                            className="h-4 px-1.5 text-[10px] text-muted-foreground"
+                          >
+                            unconfirmed
+                          </Badge>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1693,36 +1713,38 @@ function MaintainerUserInput({
 }
 
 function computeMaintainerListers(
-  maintainerSet: string[],
+  listedPubkeys: string[],
+  listerPubkeys: string[],
   maintainerEdges: ResolvedRepo["maintainerEdges"],
 ): Map<string, string[]> {
-  const confirmed = new Set(maintainerSet);
-  const maintainerOrder = new Map(
-    maintainerSet.map((pubkey, index) => [pubkey, index]),
+  const listed = new Set(listedPubkeys);
+  const listers = new Set(listerPubkeys);
+  const listerOrder = new Map(
+    listerPubkeys.map((pubkey, index) => [pubkey, index]),
   );
-  const listers = new Map<string, string[]>();
+  const listedByPubkey = new Map<string, string[]>();
   const seenEdges = new Set<string>();
 
-  for (const pubkey of maintainerSet) listers.set(pubkey, []);
+  for (const pubkey of listedPubkeys) listedByPubkey.set(pubkey, []);
 
   for (const { from, to } of maintainerEdges) {
-    if (!confirmed.has(from) || !confirmed.has(to)) continue;
+    if (!listers.has(from) || !listed.has(to)) continue;
     if (from === to) continue;
 
     const edgeKey = `${from}:${to}`;
     if (seenEdges.has(edgeKey)) continue;
     seenEdges.add(edgeKey);
 
-    listers.get(to)?.push(from);
+    listedByPubkey.get(to)?.push(from);
   }
 
-  for (const listedBy of listers.values()) {
+  for (const listedBy of listedByPubkey.values()) {
     listedBy.sort(
-      (a, b) => (maintainerOrder.get(a) ?? 0) - (maintainerOrder.get(b) ?? 0),
+      (a, b) => (listerOrder.get(a) ?? 0) - (listerOrder.get(b) ?? 0),
     );
   }
 
-  return listers;
+  return listedByPubkey;
 }
 
 function MaintainerListedBy({ pubkeys }: { pubkeys: string[] }) {
@@ -1767,11 +1789,15 @@ interface MockMaintainer extends MockUser {
   isLead?: boolean;
 }
 
+interface MockRequestedMaintainer extends MockUser {
+  listedBy: MockUser[];
+}
+
 interface MockMaintainerScenario {
   title: string;
   description: string;
   confirmed: MockMaintainer[];
-  requested: MockUser[];
+  requested: MockRequestedMaintainer[];
   listedByYou: MockUser[];
   leadLabel?: string;
 }
@@ -1823,7 +1849,7 @@ const MOCK_MAINTAINER_SCENARIOS: MockMaintainerScenario[] = [
       { ...MOCK_ADA, listedBy: [MOCK_YOU, MOCK_LINUS] },
       { ...MOCK_LINUS, listedBy: [MOCK_YOU] },
     ],
-    requested: [MOCK_GRACE],
+    requested: [{ ...MOCK_GRACE, listedBy: [MOCK_YOU] }],
     listedByYou: [MOCK_ADA, MOCK_GRACE],
     leadLabel: "You",
   },
@@ -2023,10 +2049,19 @@ function MockCompactUser({ maintainer }: { maintainer: MockUser }) {
   );
 }
 
-function MockRequestedMaintainerRow({ maintainer }: { maintainer: MockUser }) {
+function MockRequestedMaintainerRow({
+  maintainer,
+}: {
+  maintainer: MockRequestedMaintainer;
+}) {
   return (
-    <div className="flex items-center gap-2 rounded-md border border-dashed border-border/60 bg-muted/10 px-2.5 py-1.5">
-      <MockUserIdentity maintainer={maintainer} className="flex-1" small />
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-dashed border-border/60 bg-muted/10 px-2.5 py-1.5">
+      <MockUserIdentity
+        maintainer={maintainer}
+        className="min-w-fit flex-1"
+        small
+      />
+      <MockMaintainerListedBy maintainers={maintainer.listedBy} />
       <Badge
         variant="outline"
         className="text-[10px] h-4 px-1.5 text-muted-foreground"
