@@ -2,6 +2,11 @@ import { useState, useEffect, useCallback, useId } from "react";
 import { nip19 } from "nostr-tools";
 import { UserAutocompleteDropdown } from "@/components/UserAutocompleteDropdown";
 
+export {
+  UserAutocompleteDropdown,
+  type UserAutocompleteDropdownProps,
+} from "@/components/UserAutocompleteDropdown";
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
