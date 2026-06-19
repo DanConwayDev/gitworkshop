@@ -15,7 +15,7 @@
  * Only accessible when the logged-in user is the selected maintainer.
  */
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useActiveAccount } from "applesauce-react/hooks";
 import {
@@ -46,6 +46,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { UserLink, UserName } from "@/components/UserAvatar";
+import { UserAutocompleteDropdown } from "@/components/MentionAutocomplete";
 
 import { useRepoContext } from "./RepoContext";
 import {
@@ -89,6 +90,16 @@ const KNOWN_TAG_NAMES = new Set([
   "web",
   "t",
 ]);
+
+const HEX_PUBKEY_INPUT_RE = /^[0-9a-fA-F]{16,64}$/;
+
+function looksLikeDirectPubkeyInput(value: string): boolean {
+  const trimmed = value.trim();
+  return (
+    trimmed.toLowerCase().startsWith("npub1") ||
+    HEX_PUBKEY_INPUT_RE.test(trimmed)
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Main page
@@ -353,6 +364,16 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
     [repo.requestedMaintainers],
   );
 
+  const maintainerPickerPriorityPubkeys = useMemo(
+    () => Array.from(new Set([...repo.maintainerSet, ...requestedMaintainers])),
+    [repo.maintainerSet, requestedMaintainers],
+  );
+
+  const maintainerPickerExcludePubkeys = useMemo(
+    () => [repo.selectedMaintainer, ...editedMaintainers],
+    [repo.selectedMaintainer, editedMaintainers],
+  );
+
   const unionOnlyRelays = useMemo((): Array<{
     url: string;
     contributorPubkey: string;
@@ -574,6 +595,24 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   // Maintainer actions
   // ---------------------------------------------------------------------------
 
+  const addMaintainerPubkey = useCallback(
+    (pubkey: string) => {
+      if (pubkey === repo.selectedMaintainer) {
+        setMaintainerInputError("You cannot add yourself as a co-maintainer");
+        return;
+      }
+      if (editedMaintainers.includes(pubkey)) {
+        setMaintainerInputError("Already in the list");
+        return;
+      }
+
+      setEditedMaintainers((prev) => [...prev, pubkey]);
+      setMaintainerInput("");
+      setMaintainerInputError(undefined);
+    },
+    [repo.selectedMaintainer, editedMaintainers],
+  );
+
   const handleAddMaintainer = useCallback(() => {
     const raw = maintainerInput.trim();
     if (!raw) return;
@@ -583,19 +622,8 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
       setMaintainerInputError("Enter a valid hex pubkey or npub");
       return;
     }
-    if (pubkey === repo.selectedMaintainer) {
-      setMaintainerInputError("You cannot add yourself as a co-maintainer");
-      return;
-    }
-    if (editedMaintainers.includes(pubkey)) {
-      setMaintainerInputError("Already in the list");
-      return;
-    }
-
-    setEditedMaintainers((prev) => [...prev, pubkey]);
-    setMaintainerInput("");
-    setMaintainerInputError(undefined);
-  }, [maintainerInput, repo.selectedMaintainer, editedMaintainers]);
+    addMaintainerPubkey(pubkey);
+  }, [maintainerInput, addMaintainerPubkey]);
 
   const handleRemoveMaintainer = useCallback((pubkey: string) => {
     setEditedMaintainers((prev) => prev.filter((pk) => pk !== pubkey));
@@ -1021,19 +1049,17 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
 
               <div className="space-y-1.5">
                 <div className="flex gap-2">
-                  <Input
-                    placeholder="hex pubkey or npub1…"
+                  <MaintainerUserInput
+                    placeholder="@name, npub1…, or hex pubkey"
                     value={maintainerInput}
                     onChange={(e) => {
                       setMaintainerInput(e.target.value);
                       setMaintainerInputError(undefined);
                     }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddMaintainer();
-                      }
-                    }}
+                    onAdd={handleAddMaintainer}
+                    onSelectPubkey={addMaintainerPubkey}
+                    priorityPubkeys={maintainerPickerPriorityPubkeys}
+                    excludePubkeys={maintainerPickerExcludePubkeys}
                     className="h-8 text-sm font-mono"
                   />
                   <Button
@@ -1531,6 +1557,95 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MaintainerUserInput — single-line user finder for co-maintainers
+// ---------------------------------------------------------------------------
+
+function MaintainerUserInput({
+  value,
+  onChange,
+  onAdd,
+  onSelectPubkey,
+  priorityPubkeys,
+  excludePubkeys,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onAdd: () => void;
+  onSelectPubkey: (pubkey: string) => void;
+  priorityPubkeys: string[];
+  excludePubkeys: string[];
+  placeholder?: string;
+  className?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+
+  const raw = value.trim();
+  const searchQuery = raw.startsWith("@") ? raw.slice(1) : raw;
+  const shouldSearch =
+    isFocused && raw.length > 0 && !looksLikeDirectPubkeyInput(raw);
+
+  const updateDropdownPosition = useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const rect = input.getBoundingClientRect();
+    setDropdownPos({
+      top: rect.bottom + 4,
+      left: Math.max(0, Math.min(rect.left, window.innerWidth - 280)),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!shouldSearch) return;
+    updateDropdownPosition();
+    window.addEventListener("resize", updateDropdownPosition);
+    return () => window.removeEventListener("resize", updateDropdownPosition);
+  }, [shouldSearch, updateDropdownPosition]);
+
+  return (
+    <div className="relative flex-1">
+      <Input
+        ref={inputRef}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => {
+          onChange(e);
+          updateDropdownPosition();
+        }}
+        onFocus={() => {
+          setIsFocused(true);
+          updateDropdownPosition();
+        }}
+        onBlur={() => setIsFocused(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !shouldSearch) {
+            e.preventDefault();
+            onAdd();
+          }
+        }}
+        className={className}
+      />
+      <UserAutocompleteDropdown
+        query={searchQuery}
+        isOpen={shouldSearch}
+        position={dropdownPos}
+        onSelectPubkey={onSelectPubkey}
+        onClose={() => setIsFocused(false)}
+        keyboardTargetRef={inputRef}
+        priorityPubkeys={priorityPubkeys}
+        excludePubkeys={excludePubkeys}
+      />
     </div>
   );
 }

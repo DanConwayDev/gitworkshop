@@ -24,6 +24,20 @@ export interface MentionAutocompleteProps {
   priorityPubkeys?: string[];
 }
 
+export interface UserAutocompleteDropdownProps {
+  query: string;
+  isOpen: boolean;
+  position: { top: number; left: number } | null;
+  onSelectPubkey: (pubkey: string) => void;
+  onClose: () => void;
+  /** Element that should receive Arrow/Enter/Escape handling while open */
+  keyboardTargetRef?: React.RefObject<HTMLElement | null>;
+  /** Pubkeys to surface first in results (e.g. repo maintainers, thread participants) */
+  priorityPubkeys?: string[];
+  /** Pubkeys to hide from results (e.g. already selected users) */
+  excludePubkeys?: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Mirror-div technique: compute caret pixel coordinates inside a textarea.
 // Adapted from /persistent/clones/ditto/src/components/MentionAutocomplete.tsx
@@ -132,28 +146,11 @@ export function MentionAutocomplete({
 }: MentionAutocompleteProps) {
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionStart, setMentionStart] = useState(-1);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{
     top: number;
     left: number;
   } | null>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-
-  const contacts = useContactSearch(
-    isOpen ? mentionQuery : "",
-    priorityPubkeys,
-  );
-
-  // Fetch profiles for the pubkeys currently visible in the dropdown.
-  // This is intentionally targeted — only the rendered items, not the full
-  // follow list. useProfilesForPubkeys fires a single batched REQ to the
-  // lookup relays and updates MentionItem reactively as profiles arrive.
-  const renderedPubkeys = useMemo(
-    () => contacts.map((c) => c.pubkey),
-    [contacts],
-  );
-  useProfilesForPubkeys(renderedPubkeys);
 
   // Detect @mention query at cursor.
   const detectMention = useCallback(
@@ -199,7 +196,6 @@ export function MentionAutocomplete({
       setMentionQuery(query);
       setMentionStart(atPos);
       setIsOpen(true);
-      setSelectedIndex(0);
 
       // Position the dropdown below the @ character.
       // Use fixed (viewport) coordinates so the dropdown escapes any
@@ -253,71 +249,6 @@ export function MentionAutocomplete({
     detectMention(content, textarea.selectionStart);
   }, [content, detectMention, textareaRef]);
 
-  // Dismiss on any scroll outside the dropdown list so the fixed dropdown
-  // doesn't float away from the textarea. Scroll events originating inside
-  // the list itself (from keyboard navigation scrollIntoView) are ignored.
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleScroll = (e: Event) => {
-      if (listRef.current?.contains(e.target as Node)) return;
-      setIsOpen(false);
-    };
-    window.addEventListener("scroll", handleScroll, {
-      capture: true,
-      passive: true,
-    });
-    return () =>
-      window.removeEventListener("scroll", handleScroll, { capture: true });
-  }, [isOpen]);
-
-  // Handle keyboard navigation within the dropdown
-  useEffect(() => {
-    if (!isOpen || contacts.length === 0) return;
-
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case "ArrowDown":
-          e.preventDefault();
-          setSelectedIndex((prev) =>
-            prev < contacts.length - 1 ? prev + 1 : 0,
-          );
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          setSelectedIndex((prev) =>
-            prev > 0 ? prev - 1 : contacts.length - 1,
-          );
-          break;
-        case "Enter":
-        case "Tab":
-          if (contacts.length > 0) {
-            e.preventDefault();
-            selectContact(contacts[selectedIndex].pubkey);
-          }
-          break;
-        case "Escape":
-          e.preventDefault();
-          setIsOpen(false);
-          break;
-      }
-    };
-
-    textarea.addEventListener("keydown", handleKeyDown);
-    return () => textarea.removeEventListener("keydown", handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, contacts, selectedIndex, textareaRef]);
-
-  // Scroll selected item into view
-  useEffect(() => {
-    if (selectedIndex >= 0 && listRef.current) {
-      const items = listRef.current.querySelectorAll("[data-mention-item]");
-      items[selectedIndex]?.scrollIntoView({ block: "nearest" });
-    }
-  }, [selectedIndex]);
-
   const selectContact = useCallback(
     (pubkey: string) => {
       const npub = nip19.npubEncode(pubkey);
@@ -339,7 +270,137 @@ export function MentionAutocomplete({
     [mentionStart, mentionQuery, textareaRef, onInsertMention],
   );
 
-  if (!isOpen || !dropdownPos || contacts.length === 0) {
+  return (
+    <UserAutocompleteDropdown
+      query={mentionQuery}
+      isOpen={isOpen}
+      position={dropdownPos}
+      onSelectPubkey={selectContact}
+      onClose={() => setIsOpen(false)}
+      keyboardTargetRef={textareaRef}
+      priorityPubkeys={priorityPubkeys}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// UserAutocompleteDropdown
+// ---------------------------------------------------------------------------
+
+export function UserAutocompleteDropdown({
+  query,
+  isOpen,
+  position,
+  onSelectPubkey,
+  onClose,
+  keyboardTargetRef,
+  priorityPubkeys = [],
+  excludePubkeys = [],
+}: UserAutocompleteDropdownProps) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const contacts = useContactSearch(isOpen ? query : "", priorityPubkeys);
+  const excludeSet = useMemo(() => new Set(excludePubkeys), [excludePubkeys]);
+  const filteredContacts = useMemo(
+    () => contacts.filter((contact) => !excludeSet.has(contact.pubkey)),
+    [contacts, excludeSet],
+  );
+
+  // Fetch profiles for the pubkeys currently visible in the dropdown.
+  // This is intentionally targeted — only the rendered items, not the full
+  // follow list. useProfilesForPubkeys fires a single batched REQ to the
+  // lookup relays and updates UserAutocompleteItem reactively as profiles arrive.
+  const renderedPubkeys = useMemo(
+    () => filteredContacts.map((c) => c.pubkey),
+    [filteredContacts],
+  );
+  useProfilesForPubkeys(renderedPubkeys);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [query, isOpen]);
+
+  // Dismiss on any scroll outside the dropdown list so the fixed dropdown
+  // doesn't float away from its anchor. Scroll events originating inside the
+  // list itself (from keyboard navigation scrollIntoView) are ignored.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleScroll = (e: Event) => {
+      if (listRef.current?.contains(e.target as Node)) return;
+      onClose();
+    };
+    window.addEventListener("scroll", handleScroll, {
+      capture: true,
+      passive: true,
+    });
+    return () =>
+      window.removeEventListener("scroll", handleScroll, { capture: true });
+  }, [isOpen, onClose]);
+
+  const selectContact = useCallback(
+    (pubkey: string) => {
+      onSelectPubkey(pubkey);
+      onClose();
+    },
+    [onSelectPubkey, onClose],
+  );
+
+  // Handle keyboard navigation within the dropdown
+  useEffect(() => {
+    if (!isOpen || filteredContacts.length === 0) return;
+
+    const target = keyboardTargetRef?.current;
+    if (!target) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case "ArrowDown":
+          e.preventDefault();
+          setSelectedIndex((prev) =>
+            prev < filteredContacts.length - 1 ? prev + 1 : 0,
+          );
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          setSelectedIndex((prev) =>
+            prev > 0 ? prev - 1 : filteredContacts.length - 1,
+          );
+          break;
+        case "Enter":
+        case "Tab":
+          e.preventDefault();
+          selectContact(filteredContacts[selectedIndex].pubkey);
+          break;
+        case "Escape":
+          e.preventDefault();
+          onClose();
+          break;
+      }
+    };
+
+    target.addEventListener("keydown", handleKeyDown);
+    return () => target.removeEventListener("keydown", handleKeyDown);
+  }, [
+    isOpen,
+    filteredContacts,
+    selectedIndex,
+    keyboardTargetRef,
+    selectContact,
+    onClose,
+  ]);
+
+  // Scroll selected item into view
+  useEffect(() => {
+    if (selectedIndex >= 0 && listRef.current) {
+      const items = listRef.current.querySelectorAll(
+        "[data-user-autocomplete-item]",
+      );
+      items[selectedIndex]?.scrollIntoView({ block: "nearest" });
+    }
+  }, [selectedIndex]);
+
+  if (!isOpen || !position || filteredContacts.length === 0) {
     return null;
   }
 
@@ -349,7 +410,7 @@ export function MentionAutocomplete({
   return createPortal(
     <div
       className="fixed z-[100] w-[280px] rounded-xl border border-border bg-popover shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150"
-      style={{ top: dropdownPos.top, left: dropdownPos.left }}
+      style={{ top: position.top, left: position.left }}
     >
       <div
         ref={listRef}
@@ -359,12 +420,12 @@ export function MentionAutocomplete({
           scrollbarColor: "hsl(var(--border)) transparent",
         }}
       >
-        {contacts.map(({ pubkey }, index) => (
-          <MentionItem
+        {filteredContacts.map(({ pubkey }, index) => (
+          <UserAutocompleteItem
             key={pubkey}
             pubkey={pubkey}
             isSelected={index === selectedIndex}
-            onClick={() => selectContact(contacts[index].pubkey)}
+            onClick={() => selectContact(pubkey)}
           />
         ))}
       </div>
@@ -374,10 +435,10 @@ export function MentionAutocomplete({
 }
 
 // ---------------------------------------------------------------------------
-// MentionItem
+// UserAutocompleteItem
 // ---------------------------------------------------------------------------
 
-function MentionItem({
+function UserAutocompleteItem({
   pubkey,
   isSelected,
   onClick,
@@ -395,7 +456,7 @@ function MentionItem({
 
   return (
     <button
-      data-mention-item
+      data-user-autocomplete-item
       type="button"
       className={cn(
         "w-full flex items-center gap-3 px-3 py-2 text-left transition-colors cursor-pointer",
