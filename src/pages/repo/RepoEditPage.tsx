@@ -864,22 +864,26 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                 <Users className="h-4 w-4" />
                 Maintainers
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                You are editing only your selected announcement. Co-maintainers
-                become confirmed when the recursive maintainer chain resolves
-                them through reciprocal listings.
-              </p>
+              {isMultiMaintainer ? (
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  You are editing only your selected announcement.
+                  Co-maintainers become confirmed when the recursive maintainer
+                  chain resolves them through reciprocal listings.
+                </p>
+              ) : null}
             </div>
 
             <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Confirmed maintainers
+                    {isMultiMaintainer ? "Confirmed maintainers" : "Maintainer"}
                   </p>
-                  <p className="text-xs text-muted-foreground/80 mt-0.5">
-                    Resolved from the current recursive maintainer graph.
-                  </p>
+                  {isMultiMaintainer ? (
+                    <p className="text-xs text-muted-foreground/80 mt-0.5">
+                      Resolved from the current recursive maintainer graph.
+                    </p>
+                  ) : null}
                 </div>
                 <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
                   {repo.maintainerSet.length}
@@ -902,10 +906,12 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                         nameClassName="text-sm"
                         className="min-w-0 flex-1"
                       />
-                      <span className="text-[11px] text-muted-foreground shrink-0">
-                        Listed by {listingCount} maintainer
-                        {listingCount === 1 ? "" : "s"}
-                      </span>
+                      {isMultiMaintainer ? (
+                        <span className="text-[11px] text-muted-foreground shrink-0">
+                          Listed by {listingCount} maintainer
+                          {listingCount === 1 ? "" : "s"}
+                        </span>
+                      ) : null}
                       {isLead && (
                         <Badge
                           variant="outline"
@@ -919,22 +925,24 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                 })}
               </div>
 
-              <div className="rounded-md border border-border/40 bg-background/40 px-2.5 py-2 text-xs">
-                {maintainerLeadership.leadMaintainer ? (
-                  <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                    <span>Lead maintainer:</span>
-                    <UserName
-                      pubkey={maintainerLeadership.leadMaintainer}
-                      className="text-xs text-foreground"
-                      linkToProfile
-                    />
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">
-                    No lead maintainer (tie)
-                  </p>
-                )}
-              </div>
+              {isMultiMaintainer ? (
+                <div className="rounded-md border border-border/40 bg-background/40 px-2.5 py-2 text-xs">
+                  {maintainerLeadership.leadMaintainer ? (
+                    <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                      <span>Lead maintainer:</span>
+                      <UserName
+                        pubkey={maintainerLeadership.leadMaintainer}
+                        className="text-xs text-foreground"
+                        linkToProfile
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      No lead maintainer (tie)
+                    </p>
+                  )}
+                </div>
+              ) : null}
 
               {requestedMaintainers.length > 0 && (
                 <div className="space-y-2 border-t border-border/50 pt-3">
@@ -968,11 +976,17 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
 
             <div className="space-y-2">
               <div>
-                <Label>Co-maintainers listed by your announcement</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  These are emitted as your announcement&apos;s maintainers tag
-                  on save.
-                </p>
+                <Label>
+                  {isMultiMaintainer
+                    ? "Co-maintainers listed by your announcement"
+                    : "Add co-maintainers"}
+                </Label>
+                {isMultiMaintainer ? (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    These are emitted as your announcement&apos;s maintainers
+                    tag on save.
+                  </p>
+                ) : null}
               </div>
 
               {editedMaintainers.length > 0 ? (
