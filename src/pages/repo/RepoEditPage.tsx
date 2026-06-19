@@ -945,8 +945,8 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                       <UserLink
                         pubkey={pubkey}
                         avatarSize="sm"
-                        nameClassName="text-sm"
-                        className="min-w-0 flex-1"
+                        nameClassName="text-sm whitespace-nowrap"
+                        className="min-w-fit flex-1"
                       />
                       {isMultiMaintainer ? (
                         <MaintainerListedBy pubkeys={listedBy} />
@@ -1735,7 +1735,7 @@ function MaintainerListedBy({ pubkeys }: { pubkeys: string[] }) {
   }
 
   return (
-    <div className="flex min-w-0 max-w-full shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground sm:shrink">
+    <div className="flex min-w-0 max-w-full shrink items-center gap-1.5 text-[11px] text-muted-foreground">
       <span className="shrink-0">Listed by</span>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         {pubkeys.map((pubkey) => (
@@ -1743,7 +1743,7 @@ function MaintainerListedBy({ pubkeys }: { pubkeys: string[] }) {
             <UserAvatar pubkey={pubkey} size="xs" linkToProfile />
             <UserName
               pubkey={pubkey}
-              className="hidden max-w-24 truncate text-[11px] text-foreground sm:inline-block"
+              className="hidden max-w-24 truncate text-[11px] text-foreground md:inline-block"
               linkToProfile
             />
           </span>
@@ -1975,7 +1975,7 @@ function MockMaintainerRow({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/50 bg-background/60 px-2.5 py-2">
-      <MockUserIdentity maintainer={maintainer} className="flex-1" />
+      <MockUserIdentity maintainer={maintainer} className="min-w-fit flex-1" />
       {showListedBy ? (
         <MockMaintainerListedBy maintainers={maintainer.listedBy} />
       ) : null}
@@ -2001,7 +2001,7 @@ function MockMaintainerListedBy({ maintainers }: { maintainers: MockUser[] }) {
   }
 
   return (
-    <div className="flex min-w-0 max-w-full shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground sm:shrink">
+    <div className="flex min-w-0 max-w-full shrink items-center gap-1.5 text-[11px] text-muted-foreground">
       <span className="shrink-0">Listed by</span>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         {maintainers.map((maintainer) => (
@@ -2016,7 +2016,7 @@ function MockCompactUser({ maintainer }: { maintainer: MockUser }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1">
       <span className="h-4 w-4 shrink-0 rounded-full bg-gradient-to-br from-pink-500/80 to-purple-500/80" />
-      <span className="hidden max-w-20 truncate text-[11px] font-medium text-foreground sm:inline-block">
+      <span className="hidden max-w-20 truncate text-[11px] font-medium text-foreground md:inline-block">
         {maintainer.name}
       </span>
     </span>
