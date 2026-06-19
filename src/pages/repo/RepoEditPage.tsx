@@ -1613,6 +1613,22 @@ function MaintainerUserInput({
     return () => window.removeEventListener("resize", updateDropdownPosition);
   }, [shouldSearch, updateDropdownPosition]);
 
+  const handleSelectPubkey = useCallback(
+    (pubkey: string) => {
+      onSelectPubkey(pubkey);
+
+      // UserAutocompleteDropdown closes itself after selection. Restore both
+      // DOM focus and our focus state on the next frame so the user can keep
+      // typing another maintainer name and immediately get suggestions.
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        setIsFocused(true);
+        updateDropdownPosition();
+      });
+    },
+    [onSelectPubkey, updateDropdownPosition],
+  );
+
   return (
     <div className="relative flex-1">
       <Input
@@ -1640,7 +1656,7 @@ function MaintainerUserInput({
         query={searchQuery}
         isOpen={shouldSearch}
         position={dropdownPos}
-        onSelectPubkey={onSelectPubkey}
+        onSelectPubkey={handleSelectPubkey}
         onClose={() => setIsFocused(false)}
         keyboardTargetRef={inputRef}
         priorityPubkeys={priorityPubkeys}
