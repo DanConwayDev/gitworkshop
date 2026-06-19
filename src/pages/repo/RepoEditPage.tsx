@@ -16,6 +16,7 @@
  */
 
 import {
+  type ReactNode,
   useState,
   useMemo,
   useCallback,
@@ -36,6 +37,7 @@ import {
   AlertTriangle,
   Users,
   Tag,
+  CircleHelp,
 } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import type { EventTemplate } from "nostr-tools";
@@ -52,6 +54,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { UserAvatar, UserLink, UserName } from "@/components/UserAvatar";
 import { UserAutocompleteDropdown } from "@/components/UserAutocompleteDropdown";
 
@@ -100,12 +107,51 @@ const KNOWN_TAG_NAMES = new Set([
 
 const HEX_PUBKEY_INPUT_RE = /^[0-9a-fA-F]{64}$/;
 const SHOW_MAINTAINERS_SCENARIO_MOCKUPS = true;
+const LEAD_MAINTAINER_HELP_TEXT =
+  "The lead maintainer is the confirmed maintainer listed by more confirmed maintainers than anyone else. If the top listing count is tied, there is no single lead maintainer.";
 
 function looksLikeDirectPubkeyInput(value: string): boolean {
   const trimmed = value.trim();
   return (
     trimmed.toLowerCase().startsWith("npub1") ||
     HEX_PUBKEY_INPUT_RE.test(trimmed)
+  );
+}
+
+function LeadMaintainerHelp() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/80 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label="How lead maintainers are chosen"
+        >
+          <CircleHelp className="h-3.5 w-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-64 text-xs leading-relaxed">
+        {LEAD_MAINTAINER_HELP_TEXT}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function LeadMaintainerSummary({
+  children,
+  hasLead,
+  className,
+}: {
+  children?: ReactNode;
+  hasLead: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
+      <span>{hasLead ? "Lead maintainer" : "No lead maintainer"}</span>
+      <LeadMaintainerHelp />
+      {hasLead ? children : null}
+    </div>
   );
 }
 
@@ -982,18 +1028,21 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
               {isMultiMaintainer ? (
                 <div className="rounded-md border border-border/40 bg-background/40 px-2.5 py-2 text-xs">
                   {maintainerLeadership.leadMaintainer ? (
-                    <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                      <span>Lead maintainer:</span>
+                    <LeadMaintainerSummary
+                      hasLead
+                      className="text-muted-foreground"
+                    >
                       <UserName
                         pubkey={maintainerLeadership.leadMaintainer}
                         className="text-xs text-foreground"
                         linkToProfile
                       />
-                    </div>
+                    </LeadMaintainerSummary>
                   ) : (
-                    <p className="text-muted-foreground">
-                      No lead maintainer (tie)
-                    </p>
+                    <LeadMaintainerSummary
+                      hasLead={false}
+                      className="text-muted-foreground"
+                    />
                   )}
                 </div>
               ) : null}
@@ -1943,9 +1992,11 @@ function MaintainerScenarioCard({
         {isMultiMaintainer ? (
           <div className="rounded-md border border-border/40 bg-background/40 px-2.5 py-2 text-xs text-muted-foreground">
             {scenario.leadLabel ? (
-              <span>Lead maintainer: {scenario.leadLabel}</span>
+              <LeadMaintainerSummary hasLead>
+                <span className="text-foreground">{scenario.leadLabel}</span>
+              </LeadMaintainerSummary>
             ) : (
-              <span>No lead maintainer (tie)</span>
+              <LeadMaintainerSummary hasLead={false} />
             )}
           </div>
         ) : null}
