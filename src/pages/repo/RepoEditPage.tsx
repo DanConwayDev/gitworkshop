@@ -45,7 +45,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { UserName } from "@/components/UserAvatar";
+import { UserLink, UserName } from "@/components/UserAvatar";
 
 import { useRepoContext } from "./RepoContext";
 import {
@@ -55,11 +55,13 @@ import {
   getRepoCloneUrls,
   getRepoRelays,
   getRepoWebUrls,
+  getRepoMaintainers,
   isGraspCloneUrl,
   graspCloneUrlDomain,
+  computeMaintainerLeadership,
   type ResolvedRepo,
 } from "@/lib/nip34";
-import { repoToPath } from "@/lib/routeUtils";
+import { decodePubkeyIdentifier, repoToPath } from "@/lib/routeUtils";
 import { validateGraspServer } from "@/lib/grasp";
 import { publish } from "@/services/nostr";
 import { useGraspServers } from "@/hooks/useGraspServers";
@@ -217,6 +219,17 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
         .filter(Boolean) ?? [],
     [selectedAnnouncement],
   );
+  const currentMaintainers = useMemo(() => {
+    if (!selectedAnnouncement) return [];
+    return Array.from(
+      new Set(
+        getRepoMaintainers(selectedAnnouncement).flatMap((identifier) => {
+          const pubkey = decodePubkeyIdentifier(identifier);
+          return pubkey && pubkey !== repo.selectedMaintainer ? [pubkey] : [];
+        }),
+      ),
+    );
+  }, [selectedAnnouncement, repo.selectedMaintainer]);
   const currentEucHash = useMemo(
     () =>
       selectedAnnouncement?.tags.find(
@@ -239,6 +252,14 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   const [webInput, setWebInput] = useState("");
   const [topics, setTopics] = useState<string[]>(currentTopics);
   const [topicInput, setTopicInput] = useState("");
+
+  // Co-maintainers listed by this selected announcement.
+  const [editedMaintainers, setEditedMaintainers] =
+    useState<string[]>(currentMaintainers);
+  const [maintainerInput, setMaintainerInput] = useState("");
+  const [maintainerInputError, setMaintainerInputError] = useState<
+    string | undefined
+  >();
 
   // Grasp server selection
   const [selectedDomains, setSelectedDomains] =
@@ -321,6 +342,16 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   // ---------------------------------------------------------------------------
 
   const isMultiMaintainer = repo.maintainerSet.length > 1;
+
+  const maintainerLeadership = useMemo(
+    () => computeMaintainerLeadership(repo.maintainerSet, repo.maintainerEdges),
+    [repo.maintainerSet, repo.maintainerEdges],
+  );
+
+  const requestedMaintainers = useMemo(
+    () => Array.from(new Set(repo.requestedMaintainers)),
+    [repo.requestedMaintainers],
+  );
 
   const unionOnlyRelays = useMemo((): Array<{
     url: string;
@@ -540,6 +571,37 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
   }, [topicInput, topics]);
 
   // ---------------------------------------------------------------------------
+  // Maintainer actions
+  // ---------------------------------------------------------------------------
+
+  const handleAddMaintainer = useCallback(() => {
+    const raw = maintainerInput.trim();
+    if (!raw) return;
+
+    const pubkey = decodePubkeyIdentifier(raw);
+    if (!pubkey) {
+      setMaintainerInputError("Enter a valid hex pubkey or npub");
+      return;
+    }
+    if (pubkey === repo.selectedMaintainer) {
+      setMaintainerInputError("You cannot add yourself as a co-maintainer");
+      return;
+    }
+    if (editedMaintainers.includes(pubkey)) {
+      setMaintainerInputError("Already in the list");
+      return;
+    }
+
+    setEditedMaintainers((prev) => [...prev, pubkey]);
+    setMaintainerInput("");
+    setMaintainerInputError(undefined);
+  }, [maintainerInput, repo.selectedMaintainer, editedMaintainers]);
+
+  const handleRemoveMaintainer = useCallback((pubkey: string) => {
+    setEditedMaintainers((prev) => prev.filter((pk) => pk !== pubkey));
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // Save
   // ---------------------------------------------------------------------------
 
@@ -569,11 +631,6 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
       const graspRelayUrls = selectedDomains.map((domain) => `wss://${domain}`);
       const allRelayUrls = [...graspRelayUrls, ...otherRelays];
 
-      // Preserve maintainers tag
-      const maintainersTag = selectedAnnouncement.tags.find(
-        ([t]) => t === "maintainers",
-      );
-
       const template: EventTemplate = {
         kind: REPO_KIND,
         content: "",
@@ -590,7 +647,9 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
             : []),
           ["alt", `git repository: ${name.trim()}`],
           ...(eucHash.trim() ? [["r", eucHash.trim(), "euc"] as string[]] : []),
-          ...(maintainersTag ? [maintainersTag] : []),
+          ...(editedMaintainers.length > 0
+            ? [["maintainers", ...editedMaintainers] as string[]]
+            : []),
           ...webUrls.map((u) => ["web", u] as string[]),
           ...topics.map((t) => ["t", t] as string[]),
           // Preserve unknown/custom tags verbatim
@@ -625,6 +684,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
     description,
     webUrls,
     topics,
+    editedMaintainers,
     eucHash,
     unknownTags,
     basePath,
@@ -792,6 +852,192 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                 repository — used to track it across forks and renames. Set
                 automatically by <code className="font-mono">ngit push</code>.
               </p>
+            </div>
+          </section>
+
+          <Separator />
+
+          {/* ── Maintainers ─────────────────────────────────────────────── */}
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                <Users className="h-4 w-4" />
+                Maintainers
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                You are editing only your selected announcement. Co-maintainers
+                become confirmed when the recursive maintainer chain resolves
+                them through reciprocal listings.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Confirmed maintainers
+                  </p>
+                  <p className="text-xs text-muted-foreground/80 mt-0.5">
+                    Resolved from the current recursive maintainer graph.
+                  </p>
+                </div>
+                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                  {repo.maintainerSet.length}
+                </Badge>
+              </div>
+
+              <div className="space-y-2">
+                {repo.maintainerSet.map((pubkey) => {
+                  const listingCount =
+                    maintainerLeadership.listingCounts.get(pubkey) ?? 0;
+                  const isLead = maintainerLeadership.leadMaintainer === pubkey;
+                  return (
+                    <div
+                      key={pubkey}
+                      className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/50 bg-background/60 px-2.5 py-2"
+                    >
+                      <UserLink
+                        pubkey={pubkey}
+                        avatarSize="sm"
+                        nameClassName="text-sm"
+                        className="min-w-0 flex-1"
+                      />
+                      <span className="text-[11px] text-muted-foreground shrink-0">
+                        Listed by {listingCount} maintainer
+                        {listingCount === 1 ? "" : "s"}
+                      </span>
+                      {isLead && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 h-4 text-pink-600 border-pink-500/40 dark:text-pink-400"
+                        >
+                          lead
+                        </Badge>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-md border border-border/40 bg-background/40 px-2.5 py-2 text-xs">
+                {maintainerLeadership.leadMaintainer ? (
+                  <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                    <span>Lead maintainer:</span>
+                    <UserName
+                      pubkey={maintainerLeadership.leadMaintainer}
+                      className="text-xs text-foreground"
+                      linkToProfile
+                    />
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">
+                    No lead maintainer (tie)
+                  </p>
+                )}
+              </div>
+
+              {requestedMaintainers.length > 0 && (
+                <div className="space-y-2 border-t border-border/50 pt-3">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Requested / unconfirmed
+                  </p>
+                  <div className="space-y-1.5">
+                    {requestedMaintainers.map((pubkey) => (
+                      <div
+                        key={pubkey}
+                        className="flex items-center gap-2 rounded-md border border-dashed border-border/60 bg-muted/10 px-2.5 py-1.5"
+                      >
+                        <UserLink
+                          pubkey={pubkey}
+                          avatarSize="xs"
+                          nameClassName="text-xs text-muted-foreground"
+                          className="min-w-0 flex-1"
+                        />
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] h-4 px-1.5 text-muted-foreground"
+                        >
+                          unconfirmed
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <Label>Co-maintainers listed by your announcement</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  These are emitted as your announcement&apos;s maintainers tag
+                  on save.
+                </p>
+              </div>
+
+              {editedMaintainers.length > 0 ? (
+                <div className="space-y-1.5">
+                  {editedMaintainers.map((pubkey) => (
+                    <div
+                      key={pubkey}
+                      className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-1.5"
+                    >
+                      <UserLink
+                        pubkey={pubkey}
+                        avatarSize="xs"
+                        nameClassName="text-sm"
+                        className="min-w-0 flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMaintainer(pubkey)}
+                        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                        aria-label={`Remove maintainer ${pubkey}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed border-border/70 bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
+                  Your announcement does not list any co-maintainers.
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="hex pubkey or npub1…"
+                    value={maintainerInput}
+                    onChange={(e) => {
+                      setMaintainerInput(e.target.value);
+                      setMaintainerInputError(undefined);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddMaintainer();
+                      }
+                    }}
+                    className="h-8 text-sm font-mono"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddMaintainer}
+                    className="h-8 px-2.5 shrink-0"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {maintainerInputError && (
+                  <p className="text-xs text-red-500 px-0.5">
+                    {maintainerInputError}
+                  </p>
+                )}
+              </div>
             </div>
           </section>
 
