@@ -1037,13 +1037,13 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
               <div>
                 <Label>
                   {isMultiMaintainer
-                    ? "Co-maintainers listed by your announcement"
+                    ? "Co-maintainers you have listed"
                     : "Add co-maintainers"}
                 </Label>
                 {isMultiMaintainer ? (
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    These are emitted as your announcement&apos;s maintainers
-                    tag on save.
+                    These are saved as the co-maintainers you list for this
+                    repo.
                   </p>
                 ) : null}
               </div>
@@ -1074,7 +1074,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                 </div>
               ) : (
                 <div className="rounded-md border border-dashed border-border/70 bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
-                  Your announcement does not list any co-maintainers.
+                  You have not listed any co-maintainers.
                 </div>
               )}
 
@@ -1970,7 +1970,7 @@ function MaintainerScenarioCard({
       <div className="space-y-2">
         <Label className="text-xs">
           {isMultiMaintainer
-            ? "Co-maintainers listed by your announcement"
+            ? "Co-maintainers you have listed"
             : "Add co-maintainers"}
         </Label>
         {scenario.listedByYou.length > 0 ? (
@@ -1984,7 +1984,7 @@ function MaintainerScenarioCard({
           </div>
         ) : (
           <div className="rounded-md border border-dashed border-border/70 bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
-            Your announcement does not list any co-maintainers.
+            You have not listed any co-maintainers.
           </div>
         )}
       </div>
