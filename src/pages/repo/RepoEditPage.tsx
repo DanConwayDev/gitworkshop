@@ -52,7 +52,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { UserLink, UserName } from "@/components/UserAvatar";
+import { UserAvatar, UserLink, UserName } from "@/components/UserAvatar";
 import { UserAutocompleteDropdown } from "@/components/UserAutocompleteDropdown";
 
 import { useRepoContext } from "./RepoContext";
@@ -364,6 +364,11 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
 
   const maintainerLeadership = useMemo(
     () => computeMaintainerLeadership(repo.maintainerSet, repo.maintainerEdges),
+    [repo.maintainerSet, repo.maintainerEdges],
+  );
+
+  const maintainerListers = useMemo(
+    () => computeMaintainerListers(repo.maintainerSet, repo.maintainerEdges),
     [repo.maintainerSet, repo.maintainerEdges],
   );
 
@@ -930,8 +935,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
 
               <div className="space-y-2">
                 {repo.maintainerSet.map((pubkey) => {
-                  const listingCount =
-                    maintainerLeadership.listingCounts.get(pubkey) ?? 0;
+                  const listedBy = maintainerListers.get(pubkey) ?? [];
                   const isLead = maintainerLeadership.leadMaintainer === pubkey;
                   return (
                     <div
@@ -945,10 +949,7 @@ function RepoEditForm({ repo, basePath }: RepoEditFormProps) {
                         className="min-w-0 flex-1"
                       />
                       {isMultiMaintainer ? (
-                        <span className="text-[11px] text-muted-foreground shrink-0">
-                          Listed by {listingCount} maintainer
-                          {listingCount === 1 ? "" : "s"}
-                        </span>
+                        <MaintainerListedBy pubkeys={listedBy} />
                       ) : null}
                       {isLead && (
                         <Badge
@@ -1691,14 +1692,78 @@ function MaintainerUserInput({
   );
 }
 
+function computeMaintainerListers(
+  maintainerSet: string[],
+  maintainerEdges: ResolvedRepo["maintainerEdges"],
+): Map<string, string[]> {
+  const confirmed = new Set(maintainerSet);
+  const maintainerOrder = new Map(
+    maintainerSet.map((pubkey, index) => [pubkey, index]),
+  );
+  const listers = new Map<string, string[]>();
+  const seenEdges = new Set<string>();
+
+  for (const pubkey of maintainerSet) listers.set(pubkey, []);
+
+  for (const { from, to } of maintainerEdges) {
+    if (!confirmed.has(from) || !confirmed.has(to)) continue;
+    if (from === to) continue;
+
+    const edgeKey = `${from}:${to}`;
+    if (seenEdges.has(edgeKey)) continue;
+    seenEdges.add(edgeKey);
+
+    listers.get(to)?.push(from);
+  }
+
+  for (const listedBy of listers.values()) {
+    listedBy.sort(
+      (a, b) => (maintainerOrder.get(a) ?? 0) - (maintainerOrder.get(b) ?? 0),
+    );
+  }
+
+  return listers;
+}
+
+function MaintainerListedBy({ pubkeys }: { pubkeys: string[] }) {
+  if (pubkeys.length === 0) {
+    return (
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        Not listed yet
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 max-w-full shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground sm:shrink">
+      <span className="shrink-0">Listed by</span>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        {pubkeys.map((pubkey) => (
+          <span key={pubkey} className="inline-flex min-w-0 items-center gap-1">
+            <UserAvatar pubkey={pubkey} size="xs" linkToProfile />
+            <UserName
+              pubkey={pubkey}
+              className="hidden max-w-24 truncate text-[11px] text-foreground sm:inline-block"
+              linkToProfile
+            />
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // MaintainerScenarioMockups — temporary design preview for maintainer states
 // ---------------------------------------------------------------------------
 
-interface MockMaintainer {
+interface MockUser {
   name: string;
   handle: string;
-  listingCount: number;
+}
+
+interface MockMaintainer extends MockUser {
+  listedBy: MockUser[];
   isLead?: boolean;
 }
 
@@ -1706,10 +1771,15 @@ interface MockMaintainerScenario {
   title: string;
   description: string;
   confirmed: MockMaintainer[];
-  requested: Array<Pick<MockMaintainer, "name" | "handle">>;
-  listedByYou: Array<Pick<MockMaintainer, "name" | "handle">>;
+  requested: MockUser[];
+  listedByYou: MockUser[];
   leadLabel?: string;
 }
+
+const MOCK_YOU: MockUser = { name: "You", handle: "npub1main…" };
+const MOCK_ADA: MockUser = { name: "Ada", handle: "npub1ada…" };
+const MOCK_LINUS: MockUser = { name: "Linus", handle: "npub1linus…" };
+const MOCK_GRACE: MockUser = { name: "Grace", handle: "npub1grace…" };
 
 const MOCK_MAINTAINER_SCENARIOS: MockMaintainerScenario[] = [
   {
@@ -1717,9 +1787,8 @@ const MOCK_MAINTAINER_SCENARIOS: MockMaintainerScenario[] = [
     description: "No reciprocal co-maintainer graph yet.",
     confirmed: [
       {
-        name: "You",
-        handle: "npub1main…",
-        listingCount: 0,
+        ...MOCK_YOU,
+        listedBy: [],
         isLead: true,
       },
     ],
@@ -1732,15 +1801,14 @@ const MOCK_MAINTAINER_SCENARIOS: MockMaintainerScenario[] = [
     description: "Both announcements list each other, so both are trusted.",
     confirmed: [
       {
-        name: "You",
-        handle: "npub1main…",
-        listingCount: 1,
+        ...MOCK_YOU,
+        listedBy: [MOCK_ADA],
         isLead: true,
       },
-      { name: "Ada", handle: "npub1ada…", listingCount: 1 },
+      { ...MOCK_ADA, listedBy: [MOCK_YOU] },
     ],
     requested: [],
-    listedByYou: [{ name: "Ada", handle: "npub1ada…" }],
+    listedByYou: [MOCK_ADA],
     leadLabel: "You",
   },
   {
@@ -1748,34 +1816,27 @@ const MOCK_MAINTAINER_SCENARIOS: MockMaintainerScenario[] = [
     description: "A requested maintainer has not reciprocated yet.",
     confirmed: [
       {
-        name: "You",
-        handle: "npub1main…",
-        listingCount: 2,
+        ...MOCK_YOU,
+        listedBy: [MOCK_ADA, MOCK_LINUS],
         isLead: true,
       },
-      { name: "Ada", handle: "npub1ada…", listingCount: 2 },
-      { name: "Linus", handle: "npub1linus…", listingCount: 1 },
+      { ...MOCK_ADA, listedBy: [MOCK_YOU, MOCK_LINUS] },
+      { ...MOCK_LINUS, listedBy: [MOCK_YOU] },
     ],
-    requested: [{ name: "Grace", handle: "npub1grace…" }],
-    listedByYou: [
-      { name: "Ada", handle: "npub1ada…" },
-      { name: "Grace", handle: "npub1grace…" },
-    ],
+    requested: [MOCK_GRACE],
+    listedByYou: [MOCK_ADA, MOCK_GRACE],
     leadLabel: "You",
   },
   {
     title: "No lead maintainer",
-    description: "Listing counts are tied, so the graph has no single lead.",
+    description: "Listing support is tied, so the graph has no single lead.",
     confirmed: [
-      { name: "You", handle: "npub1main…", listingCount: 1 },
-      { name: "Ada", handle: "npub1ada…", listingCount: 1 },
-      { name: "Grace", handle: "npub1grace…", listingCount: 1 },
+      { ...MOCK_YOU, listedBy: [MOCK_GRACE] },
+      { ...MOCK_ADA, listedBy: [MOCK_YOU] },
+      { ...MOCK_GRACE, listedBy: [MOCK_ADA] },
     ],
     requested: [],
-    listedByYou: [
-      { name: "Ada", handle: "npub1ada…" },
-      { name: "Grace", handle: "npub1grace…" },
-    ],
+    listedByYou: [MOCK_ADA, MOCK_GRACE],
   },
 ];
 
@@ -1848,7 +1909,7 @@ function MaintainerScenarioCard({
             <MockMaintainerRow
               key={maintainer.handle}
               maintainer={maintainer}
-              showListingCount={isMultiMaintainer}
+              showListedBy={isMultiMaintainer}
             />
           ))}
         </div>
@@ -1907,19 +1968,16 @@ function MaintainerScenarioCard({
 
 function MockMaintainerRow({
   maintainer,
-  showListingCount,
+  showListedBy,
 }: {
   maintainer: MockMaintainer;
-  showListingCount: boolean;
+  showListedBy: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/50 bg-background/60 px-2.5 py-2">
       <MockUserIdentity maintainer={maintainer} className="flex-1" />
-      {showListingCount ? (
-        <span className="text-[11px] text-muted-foreground shrink-0">
-          Listed by {maintainer.listingCount} maintainer
-          {maintainer.listingCount === 1 ? "" : "s"}
-        </span>
+      {showListedBy ? (
+        <MockMaintainerListedBy maintainers={maintainer.listedBy} />
       ) : null}
       {maintainer.isLead && (
         <Badge
@@ -1933,11 +1991,39 @@ function MockMaintainerRow({
   );
 }
 
-function MockRequestedMaintainerRow({
-  maintainer,
-}: {
-  maintainer: Pick<MockMaintainer, "name" | "handle">;
-}) {
+function MockMaintainerListedBy({ maintainers }: { maintainers: MockUser[] }) {
+  if (maintainers.length === 0) {
+    return (
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        Not listed yet
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 max-w-full shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground sm:shrink">
+      <span className="shrink-0">Listed by</span>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        {maintainers.map((maintainer) => (
+          <MockCompactUser key={maintainer.handle} maintainer={maintainer} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MockCompactUser({ maintainer }: { maintainer: MockUser }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1">
+      <span className="h-4 w-4 shrink-0 rounded-full bg-gradient-to-br from-pink-500/80 to-purple-500/80" />
+      <span className="hidden max-w-20 truncate text-[11px] font-medium text-foreground sm:inline-block">
+        {maintainer.name}
+      </span>
+    </span>
+  );
+}
+
+function MockRequestedMaintainerRow({ maintainer }: { maintainer: MockUser }) {
   return (
     <div className="flex items-center gap-2 rounded-md border border-dashed border-border/60 bg-muted/10 px-2.5 py-1.5">
       <MockUserIdentity maintainer={maintainer} className="flex-1" small />
@@ -1951,11 +2037,7 @@ function MockRequestedMaintainerRow({
   );
 }
 
-function MockEditableMaintainerRow({
-  maintainer,
-}: {
-  maintainer: Pick<MockMaintainer, "name" | "handle">;
-}) {
+function MockEditableMaintainerRow({ maintainer }: { maintainer: MockUser }) {
   return (
     <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-1.5">
       <MockUserIdentity maintainer={maintainer} className="flex-1" small />
@@ -1969,7 +2051,7 @@ function MockUserIdentity({
   className,
   small = false,
 }: {
-  maintainer: Pick<MockMaintainer, "name" | "handle">;
+  maintainer: MockUser;
   className?: string;
   small?: boolean;
 }) {
