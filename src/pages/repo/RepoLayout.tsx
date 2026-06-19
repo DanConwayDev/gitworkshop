@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, useLocation } from "react-router-dom";
+import { Link, Navigate, useParams, useLocation } from "react-router-dom";
 import { useActiveAccount } from "applesauce-react/hooks";
 import { useResolvedRepository } from "@/hooks/useResolvedRepository";
 import RepoIssuesPage from "./RepoIssuesPage";
 import RepoPRsPage from "./RepoPRsPage";
 import RepoCodePage from "./RepoCodePage";
 import RepoAboutPage from "./RepoAboutPage";
-import RepoEditPage from "./RepoEditPage";
 import RepoSettingsPage from "./RepoSettingsPage";
 import RepoCommitsPage from "./RepoCommitsPage";
 import RepoCommitPage from "./RepoCommitPage";
@@ -638,7 +637,7 @@ function RepoLayoutResolved({
               ) : subPage === "about" ? (
                 <RepoAboutPage />
               ) : subPage === "edit" ? (
-                <RepoEditPage />
+                <Navigate to={`${basePath}/settings`} replace />
               ) : subPage === "settings" ? (
                 <RepoSettingsPage />
               ) : null}

@@ -306,7 +306,7 @@ function SidebarVariant({
     nip05,
   );
   const aboutPath = `${repoBasePath}/about`;
-  const editPath = `${repoBasePath}/edit`;
+  const editPath = `${repoBasePath}/settings`;
   const isMaintainer =
     account?.pubkey && account.pubkey === repo.selectedMaintainer;
   const selectedAnnouncement = repo.announcements.find(
@@ -512,7 +512,7 @@ function SidebarVariant({
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6 text-muted-foreground/50 hover:text-foreground"
-                title="Edit repository"
+                title="Edit settings"
                 asChild
               >
                 <Link to={editPath}>
@@ -568,7 +568,7 @@ function FullVariant({
   const account = useActiveAccount();
   const isMaintainer =
     account?.pubkey && account.pubkey === repo.selectedMaintainer;
-  const editPath = `${repoToPath(repo.selectedMaintainer, repo.dTag, repo.relays, nip05)}/edit`;
+  const editPath = `${repoToPath(repo.selectedMaintainer, repo.dTag, repo.relays, nip05)}/settings`;
 
   // For union display: find which relays/clone URLs are from other maintainers
   const selectedAnnouncement = useMemo(
@@ -1207,7 +1207,7 @@ function FullVariantActionBar({
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             <Pencil className="h-3.5 w-3.5" />
-            Edit
+            Edit settings
           </Link>
         )}
 
