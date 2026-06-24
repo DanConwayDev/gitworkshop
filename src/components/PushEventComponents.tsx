@@ -112,7 +112,9 @@ function commitIsSuperseded(
   superseded: boolean,
   latestCommitIds?: ReadonlySet<string>,
 ) {
-  return superseded && !(latestCommitIds?.has(hash) ?? false);
+  return (
+    superseded && latestCommitIds !== undefined && !latestCommitIds.has(hash)
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ const STORE_BLOBS = "blobs";
 const STORE_INFO_REFS = "infoRefs";
 const STORE_TREES = "trees";
 const STORE_COMMIT_HISTORY = "commitHistory";
+const COMMIT_HISTORY_CACHE_VERSION = 2;
 
 /** Default TTL for infoRefs entries */
 export const DEFAULT_INFO_REFS_TTL_MS = 60_000; // 1 minute
@@ -74,8 +75,12 @@ interface TreeRecord {
 }
 
 interface CommitHistoryRecord {
-  key: string; // `${commitHash}:${maxCommits}`
+  key: string; // `v${COMMIT_HISTORY_CACHE_VERSION}:${commitHash}:${maxCommits}`
   commits: Commit[];
+}
+
+function commitHistoryKey(commitHash: string, maxCommits: number) {
+  return `v${COMMIT_HISTORY_CACHE_VERSION}:${commitHash}:${maxCommits}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -401,14 +406,14 @@ export class GitObjectCache {
     commitHash: string,
     maxCommits: number,
   ): Commit[] | undefined {
-    return memCommitHistory.get(`${commitHash}:${maxCommits}`);
+    return memCommitHistory.get(commitHistoryKey(commitHash, maxCommits));
   }
 
   async getCommitHistory(
     commitHash: string,
     maxCommits: number,
   ): Promise<Commit[] | undefined> {
-    const k = `${commitHash}:${maxCommits}`;
+    const k = commitHistoryKey(commitHash, maxCommits);
     const mem = memCommitHistory.get(k);
     if (mem) return mem;
     const record = await idbGet<CommitHistoryRecord>(STORE_COMMIT_HISTORY, k);
@@ -424,7 +429,7 @@ export class GitObjectCache {
     maxCommits: number,
     commits: Commit[],
   ): void {
-    const k = `${commitHash}:${maxCommits}`;
+    const k = commitHistoryKey(commitHash, maxCommits);
     memCommitHistory.set(k, commits);
     idbPut(STORE_COMMIT_HISTORY, { key: k, commits }).catch(() => {});
   }

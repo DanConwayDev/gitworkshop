@@ -90,6 +90,8 @@ import {
 import type { Filter } from "applesauce-core/helpers";
 import type { Patch } from "@/casts/Patch";
 
+const PR_RETAINED_COMMIT_CHECK_LIMIT = 1000;
+
 // ---------------------------------------------------------------------------
 // extractSnippetFromDiff — pull the relevant lines out of a unified diff
 // ---------------------------------------------------------------------------
@@ -398,13 +400,37 @@ export default function PRPage() {
     return [...trimmed].reverse();
   }, [prCommitHistory.commits, effectiveMergeBase]);
 
-  const latestPRCommitIds = useMemo(
-    () =>
-      prCommits.length > 0
-        ? new Set(prCommits.map((commit) => commit.hash))
-        : undefined,
-    [prCommits],
+  // Use a deeper history walk for retained-commit checks than the visible
+  // commits tab. Large PRs with merge commits can easily exceed the display
+  // limit, but retained commits should not be struck through just because they
+  // are older than the first visible page.
+  const prRetainedCommitHistory = useCommitHistory(
+    gitPool,
+    gitPoolState,
+    pr?.itemType === "pr" && pr.revisions.length > 0
+      ? pr?.tip.commitId
+      : undefined,
+    PR_RETAINED_COMMIT_CHECK_LIMIT,
+    effectiveCloneUrls,
+    effectiveMergeBase ?? undefined,
   );
+
+  const latestPRCommitIds = useMemo(() => {
+    if (prRetainedCommitHistory.commits.length === 0) return undefined;
+
+    const foundMergeBase = effectiveMergeBase
+      ? prRetainedCommitHistory.commits.some(
+          (commit) => commit.hash === effectiveMergeBase,
+        )
+      : false;
+    const reachedHistoryEnd =
+      prRetainedCommitHistory.commits.length < PR_RETAINED_COMMIT_CHECK_LIMIT;
+    if (!foundMergeBase && !reachedHistoryEnd) return undefined;
+
+    return new Set(
+      prRetainedCommitHistory.commits.map((commit) => commit.hash),
+    );
+  }, [effectiveMergeBase, prRetainedCommitHistory.commits]);
 
   // ── Original PR tip commit history (for the body card) ────────────────
   // When there are PR updates the body card should show the *original* tip
@@ -1224,7 +1250,7 @@ export default function PRPage() {
                               superseded:
                                 latestPRCommitIds !== undefined
                                   ? !latestPRCommitIds.has(c.hash)
-                                  : undefined,
+                                  : false,
                             }))
                           : originalPRTipCommitId
                             ? [
@@ -1239,7 +1265,7 @@ export default function PRPage() {
                                       ? !latestPRCommitIds.has(
                                           originalPRTipCommitId,
                                         )
-                                      : undefined,
+                                      : false,
                                 },
                               ]
                             : undefined

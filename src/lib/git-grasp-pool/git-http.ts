@@ -799,16 +799,21 @@ export class GitHttpClient {
     const serverCaps = await this.getServerCaps(url, signal);
     if (signal.aborted) return null;
 
-    // Fetch in small batches starting from the tip. Each subsequent batch
-    // starts from the oldest ancestor's first parent, so no commits are
-    // re-downloaded. Stop as soon as we find the merge base (untilHash),
-    // hit a root commit, or reach maxCommits.
+    // Fetch in small batches starting from the tip. Follow every parent
+    // frontier so merge-heavy PR histories include commits retained through
+    // second-parent side branches. Stop at the merge base (untilHash), root
+    // commits, or maxCommits.
     // On BigBatchError, halve the batch size and retry the same range.
     const allCommits: Commit[] = [];
-    let nextWant = commitHash;
+    const seen = new Set<string>();
+    const queued = new Set<string>([commitHash]);
+    const queue = [commitHash];
     let batchSize = Math.min(COMMIT_BATCH_SIZE, maxCommits);
 
-    while (allCommits.length < maxCommits) {
+    while (queue.length > 0 && allCommits.length < maxCommits) {
+      const nextWant = queue.shift();
+      if (!nextWant) break;
+
       const remaining = maxCommits - allCommits.length;
       const thisDepth = Math.min(batchSize, remaining);
 
@@ -822,33 +827,39 @@ export class GitHttpClient {
         );
         if (signal.aborted) return null;
 
-        // Empty response on the first batch means the server doesn't have
-        // this commit — return null so withFallback tries the next URL.
+        // Empty response on the first batch means the server doesn't have this
+        // commit — return null so withFallback tries the next URL. Empty later
+        // responses only mean this frontier was exhausted; keep trying any
+        // other queued parents.
         if (commits.length === 0) {
           if (allCommits.length === 0) return null;
-          break;
+          continue;
         }
 
-        for (const commit of commits) this.cache.putCommit(commit);
-        allCommits.push(...commits);
+        const batchHashes = new Set(commits.map((commit) => commit.hash));
+        const newCommits = commits.filter((commit) => !seen.has(commit.hash));
+        for (const commit of newCommits) {
+          this.cache.putCommit(commit);
+          seen.add(commit.hash);
+          allCommits.push(commit);
+        }
 
-        // Stop if we found the merge base.
-        if (untilHash && commits.some((c) => c.hash === untilHash)) break;
-
-        // Find the oldest commit in this batch.
-        const oldest = commits.reduce((a, b) =>
-          (a.committer?.timestamp ?? a.author.timestamp) <
-          (b.committer?.timestamp ?? b.author.timestamp)
-            ? a
-            : b,
-        );
-
-        // Stop if we hit a root commit or received fewer than requested
-        // (means there are no more ancestors).
-        if (oldest.parents.length === 0 || commits.length < thisDepth) break;
-
-        // Next batch starts from the oldest commit's first parent.
-        nextWant = oldest.parents[0];
+        // Continue every parent frontier, not just first-parent. Merge-heavy PRs
+        // can keep commits on second-parent side branches; a first-parent walk
+        // incorrectly treats those retained commits as outdated.
+        for (const commit of newCommits) {
+          if (commit.hash === untilHash) continue;
+          for (const parent of commit.parents) {
+            if (
+              !seen.has(parent) &&
+              !batchHashes.has(parent) &&
+              !queued.has(parent)
+            ) {
+              queued.add(parent);
+              queue.push(parent);
+            }
+          }
+        }
       } catch (err) {
         if (signal.aborted) return null;
         if (!isBigBatchError(err)) {
@@ -858,6 +869,7 @@ export class GitHttpClient {
         // BigBatchError: halve the batch size and retry the same range.
         if (batchSize <= 1) break;
         batchSize = Math.floor(batchSize / 2);
+        queue.unshift(nextWant);
       }
     }
 
