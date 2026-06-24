@@ -107,6 +107,14 @@ function CommitRow({
   );
 }
 
+function commitIsSuperseded(
+  hash: string,
+  superseded: boolean,
+  latestCommitIds?: ReadonlySet<string>,
+) {
+  return superseded && !(latestCommitIds?.has(hash) ?? false);
+}
+
 // ---------------------------------------------------------------------------
 // Shared constants
 // ---------------------------------------------------------------------------
@@ -357,11 +365,14 @@ export function PROpenPushEvent({
   commits,
   superseded,
   basePath,
+  latestCommitIds,
 }: {
   pr: PR;
   commits?: Array<{ hash: string; subject: string }>;
   superseded: boolean;
   basePath?: string;
+  /** Commit IDs present in the latest PR version. Used to avoid striking through retained commits. */
+  latestCommitIds?: ReadonlySet<string>;
 }) {
   const timeAgo = formatDistanceToNow(new Date(pr.event.created_at * 1000), {
     addSuffix: true,
@@ -431,7 +442,11 @@ export function PROpenPushEvent({
                 key={r.key}
                 shortHash={r.shortHash}
                 subject={r.subject}
-                superseded={superseded}
+                superseded={commitIsSuperseded(
+                  r.key,
+                  superseded,
+                  latestCommitIds,
+                )}
                 href={r.href}
               />
             ))}
@@ -487,6 +502,7 @@ export function PRUpdatePushEvent({
   mergeBase: mergeBaseProp,
   repoCoords,
   previousTipCommitId,
+  latestCommitIds,
 }: {
   update: PRUpdate | PRUpdateLike;
   superseded: boolean;
@@ -512,6 +528,8 @@ export function PRUpdatePushEvent({
    * of "force pushed".
    */
   previousTipCommitId?: string;
+  /** Commit IDs present in the latest PR version. Used to avoid striking through retained commits. */
+  latestCommitIds?: ReadonlySet<string>;
 }) {
   const timeAgo = formatDistanceToNow(
     new Date(update.event.created_at * 1000),
@@ -621,6 +639,7 @@ export function PRUpdatePushEvent({
     if (source) {
       return source.map((c) => ({
         key: c.hash,
+        hash: c.hash,
         shortHash: c.hash.slice(0, 7),
         subject: c.subject,
         href: basePath ? `${basePath}/commit/${c.hash}` : undefined,
@@ -631,6 +650,7 @@ export function PRUpdatePushEvent({
       return [
         {
           key: update.tipCommitId,
+          hash: update.tipCommitId,
           shortHash: update.tipCommitId.slice(0, 7),
           subject: commitHistory.loading
             ? "Loading commits…"
@@ -716,7 +736,11 @@ export function PRUpdatePushEvent({
                   key={r.key}
                   shortHash={r.shortHash}
                   subject={r.subject}
-                  superseded={superseded}
+                  superseded={commitIsSuperseded(
+                    r.hash,
+                    superseded,
+                    latestCommitIds,
+                  )}
                   href={r.href}
                 />
               ))}

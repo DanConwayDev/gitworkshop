@@ -86,6 +86,8 @@ interface CommitEntry {
   href?: string;
   /** When true, `hash` is a Nostr event ID fallback, not a real git commit hash. */
   noCommitId?: boolean;
+  /** Per-commit override for outdated styling. Defaults to commitsSuperseded. */
+  superseded?: boolean;
 }
 
 interface EventBodyCardProps {
@@ -232,13 +234,14 @@ export function EventBodyCard({
               </div>
               <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 divide-y divide-border/30">
                 {commits.map((c) => {
+                  const commitSuperseded = c.superseded ?? commitsSuperseded;
                   const inner = (
                     <>
                       <span
                         className={cn(
                           "text-[11px] shrink-0",
                           c.noCommitId ? "" : "font-mono",
-                          commitsSuperseded
+                          commitSuperseded
                             ? "line-through text-muted-foreground/50"
                             : c.noCommitId
                               ? "text-muted-foreground/50 italic"
@@ -250,7 +253,7 @@ export function EventBodyCard({
                       <span
                         className={cn(
                           "text-sm truncate",
-                          commitsSuperseded
+                          commitSuperseded
                             ? "line-through text-foreground/40"
                             : "text-foreground/80",
                         )}

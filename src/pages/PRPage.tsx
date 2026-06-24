@@ -398,6 +398,14 @@ export default function PRPage() {
     return [...trimmed].reverse();
   }, [prCommitHistory.commits, effectiveMergeBase]);
 
+  const latestPRCommitIds = useMemo(
+    () =>
+      prCommits.length > 0
+        ? new Set(prCommits.map((commit) => commit.hash))
+        : undefined,
+    [prCommits],
+  );
+
   // ── Original PR tip commit history (for the body card) ────────────────
   // When there are PR updates the body card should show the *original* tip
   // commits (from the root event's `c` tag), not the latest tip.
@@ -1213,6 +1221,10 @@ export default function PRPage() {
                               // Don't link to commit pages for superseded commits
                               // since those commits may not be on the current branch.
                               href: undefined,
+                              superseded:
+                                latestPRCommitIds !== undefined
+                                  ? !latestPRCommitIds.has(c.hash)
+                                  : undefined,
                             }))
                           : originalPRTipCommitId
                             ? [
@@ -1222,6 +1234,12 @@ export default function PRPage() {
                                     ? "Loading commits…"
                                     : "(commits not available)",
                                   href: undefined,
+                                  superseded:
+                                    latestPRCommitIds !== undefined
+                                      ? !latestPRCommitIds.has(
+                                          originalPRTipCommitId,
+                                        )
+                                      : undefined,
                                 },
                               ]
                             : undefined
@@ -1367,6 +1385,7 @@ export default function PRPage() {
                                   }
                                   repoCoords={repoAllCoords ?? pr.repoCoords}
                                   previousTipCommitId={prevTip}
+                                  latestCommitIds={latestPRCommitIds}
                                 />
                               );
                             }
