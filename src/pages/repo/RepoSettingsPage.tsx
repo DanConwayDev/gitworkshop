@@ -27,7 +27,6 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useActiveAccount } from "applesauce-react/hooks";
-import { IdentityStatus } from "applesauce-loaders/helpers";
 import {
   ArrowLeft,
   Plus,
@@ -83,6 +82,10 @@ import {
   getRepoWebUrls,
   getRepoMaintainers,
   getRepoUpstreams,
+  repoUpstreamsEqual,
+  repoUpstreamsToTags,
+  emptyRepoUpstream,
+  isRepoUpstreamSelfReference,
   isGraspCloneUrl,
   graspCloneUrlDomain,
   computeMaintainerLeadership,
@@ -90,18 +93,20 @@ import {
   type ResolvedRepo,
 } from "@/lib/nip34";
 import type { RepositoryState } from "@/casts/RepositoryState";
-import {
-  decodePubkeyIdentifier,
-  parseRepoRoute,
-  repoToPath,
-} from "@/lib/routeUtils";
+import { decodePubkeyIdentifier, repoToPath } from "@/lib/routeUtils";
 import { validateGraspServer } from "@/lib/grasp";
-import { dnsIdentityLoader, nip05WarmupReady, publish } from "@/services/nostr";
+import { publish } from "@/services/nostr";
 import { useGraspServers } from "@/hooks/useGraspServers";
 import { DEFAULT_GRASP_SERVERS } from "@/services/settings";
 import { GraspLogo } from "@/components/GraspLogo";
 import { cn } from "@/lib/utils";
 import { normalizeUrl } from "@/lib/url";
+import { SubordinateForkField } from "@/components/repo/SubordinateForkField";
+import {
+  formatUpstreamInput,
+  type PendingNip05Upstream,
+} from "@/lib/repoUpstreamInput";
+import { useResolvedUpstreamNip05 } from "@/hooks/useResolvedUpstreamNip05";
 
 // ---------------------------------------------------------------------------
 // Known tag names — tags that the settings form explicitly manages.
@@ -138,294 +143,8 @@ function tagArraysEqual(a: string[][], b: string[][]): boolean {
   );
 }
 
-function repoUpstreamsEqual(a: RepoUpstream[], b: RepoUpstream[]): boolean {
-  return tagArraysEqual(repoUpstreamsToTags(a), repoUpstreamsToTags(b));
-}
-
-function repoUpstreamsToTags(upstreams: RepoUpstream[]): string[][] {
-  return upstreams
-    .map((upstream) => {
-      const repository = upstream.repository?.trim() ?? "";
-      const gitUrl = upstream.gitUrl?.trim() ?? "";
-      const relayHint = upstream.relayHint?.trim() ?? "";
-      const authorPubkey = upstream.authorPubkey?.trim() ?? "";
-      const target = repository || gitUrl;
-      if (!target) return undefined;
-
-      const tag = ["u", target];
-      if (authorPubkey) tag.push(relayHint, authorPubkey);
-      else if (relayHint) tag.push(relayHint);
-      return tag;
-    })
-    .filter((tag): tag is string[] => tag !== undefined);
-}
-
-function emptyRepoUpstream(): RepoUpstream {
-  return { repository: "", gitUrl: "", relayHint: "", authorPubkey: "" };
-}
-
-function repoCoordinate(pubkey: string, identifier: string): string {
-  return `${REPO_KIND}:${pubkey}:${identifier}`;
-}
-
-interface PendingNip05Upstream {
-  nip05: string;
-  repoId: string;
-  relayHint: string;
-  gitUrl: string;
-}
-
-type ParsedRepoLink =
-  | { type: "resolved"; upstream: RepoUpstream }
-  | {
-      type: "nip05";
-      nip05: string;
-      repoId: string;
-      relayHint: string;
-    };
-
-interface ParsedUpstreamInput {
-  upstream: RepoUpstream;
-  pendingNip05?: Omit<PendingNip05Upstream, "gitUrl">;
-}
-
-function parseRepoCoordinate(
-  coordinate: string | undefined,
-): { pubkey: string; identifier: string } | undefined {
-  if (!coordinate?.startsWith(`${REPO_KIND}:`)) return undefined;
-  const rest = coordinate.slice(`${REPO_KIND}:`.length);
-  const separator = rest.indexOf(":");
-  if (separator === -1) return undefined;
-
-  const pubkey = rest.slice(0, separator);
-  const identifier = rest.slice(separator + 1);
-  const decodedPubkey = decodePubkeyIdentifier(pubkey);
-  if (!decodedPubkey || !identifier) return undefined;
-  return { pubkey: decodedPubkey, identifier };
-}
-
-function parseNaddrUpstream(input: string): RepoUpstream | undefined {
-  const match = input.match(/\b(naddr1[023456789acdefghjklmnpqrstuvwxyz]+)\b/i);
-  if (!match) return undefined;
-
-  try {
-    const decoded = nip19.decode(match[1].toLowerCase());
-    if (decoded.type !== "naddr" || decoded.data.kind !== REPO_KIND) {
-      return undefined;
-    }
-
-    return {
-      repository: repoCoordinate(decoded.data.pubkey, decoded.data.identifier),
-      relayHint: decoded.data.relays?.[0] ?? "",
-      authorPubkey: decoded.data.pubkey,
-      gitUrl: "",
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function parsedRouteToRepoLink(
-  parsed: ReturnType<typeof parseRepoRoute>,
-): ParsedRepoLink | undefined {
-  if (!parsed) return undefined;
-
-  if (parsed.type === "npub") {
-    return {
-      type: "resolved",
-      upstream: {
-        repository: repoCoordinate(parsed.pubkey, parsed.repoId),
-        relayHint: parsed.relayHints[0] ?? "",
-        authorPubkey: parsed.pubkey,
-        gitUrl: "",
-      },
-    };
-  }
-
-  return {
-    type: "nip05",
-    nip05: parsed.nip05,
-    repoId: parsed.repoId,
-    relayHint: parsed.relayHints[0] ?? "",
-  };
-}
-
-function parseRepoPathUpstream(path: string): ParsedRepoLink | undefined {
-  const segments = path.split("/").filter(Boolean);
-
-  for (let index = 0; index < segments.length - 1; index++) {
-    for (const width of [3, 2]) {
-      const candidate = segments.slice(index, index + width).join("/");
-      const parsed = parsedRouteToRepoLink(parseRepoRoute(candidate));
-      if (parsed) return parsed;
-    }
-  }
-
-  return undefined;
-}
-
-function parseNostrCloneUpstream(input: string): ParsedRepoLink | undefined {
-  const match = input.match(/\bnostr:\/\/\S+/i);
-  if (!match) return undefined;
-
-  try {
-    const url = new URL(match[0]);
-    return parseRepoPathUpstream(`${url.hostname}${url.pathname}`);
-  } catch {
-    return undefined;
-  }
-}
-
-function isGitworkshopHost(hostname: string): boolean {
-  const lower = hostname.toLowerCase();
-  return lower === "gitworkshop.dev" || lower === "www.gitworkshop.dev";
-}
-
-function normalizeGitworkshopRepoPath(path: string): string {
-  const segments = path.split("/").filter(Boolean);
-  const first = segments[0]?.toLowerCase();
-  const withoutHost =
-    first === "gitworkshop.dev" || first === "www.gitworkshop.dev"
-      ? segments.slice(1)
-      : segments;
-  const prefix = withoutHost[0];
-
-  if (prefix === "r" || prefix === "p") return withoutHost.slice(1).join("/");
-  return withoutHost.join("/");
-}
-
-function parseWebRepoPathUpstream(input: string): ParsedRepoLink | undefined {
-  try {
-    const url = new URL(input);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
-    if (url.pathname.endsWith(".git")) return undefined;
-    const path = isGitworkshopHost(url.hostname)
-      ? normalizeGitworkshopRepoPath(url.pathname)
-      : url.pathname;
-    return parseRepoPathUpstream(path);
-  } catch {
-    return parseRepoPathUpstream(normalizeGitworkshopRepoPath(input));
-  }
-}
-
-function parseCoordinateUpstream(input: string): RepoUpstream | undefined {
-  const target = input.split("|")[0]?.trim();
-  const parsed = parseRepoCoordinate(target);
-  if (!parsed || !target) return undefined;
-
-  return {
-    repository: target,
-    relayHint: "",
-    authorPubkey: parsed.pubkey,
-    gitUrl: "",
-  };
-}
-
-function extractGitUrl(input: string, hasRepoLink: boolean): string {
-  const match = input.match(/\b(?:https?|ssh|git):\/\/\S+|\bgit@\S+/i);
-  const raw = match?.[0]?.replace(/[),.;]+$/, "") ?? "";
-  if (!raw) return "";
-
-  if (!hasRepoLink) return raw;
-  if (raw.endsWith(".git") || raw.includes(".git?")) return raw;
-  return "";
-}
-
-function parseUpstreamInput(input: string): ParsedUpstreamInput {
-  const trimmed = input.trim();
-  if (!trimmed) return { upstream: emptyRepoUpstream() };
-
-  const repoLink =
-    (() => {
-      const naddr = parseNaddrUpstream(trimmed);
-      return naddr
-        ? ({ type: "resolved", upstream: naddr } as const)
-        : undefined;
-    })() ??
-    parseNostrCloneUpstream(trimmed) ??
-    (() => {
-      const coordinate = parseCoordinateUpstream(trimmed);
-      return coordinate
-        ? ({ type: "resolved", upstream: coordinate } as const)
-        : undefined;
-    })() ??
-    parseWebRepoPathUpstream(trimmed);
-  const gitUrl = extractGitUrl(trimmed, !!repoLink);
-
-  if (repoLink?.type === "resolved") {
-    return {
-      upstream: {
-        ...repoLink.upstream,
-        gitUrl,
-      },
-    };
-  }
-
-  if (repoLink?.type === "nip05") {
-    return {
-      upstream: {
-        repository: "",
-        relayHint: repoLink.relayHint,
-        authorPubkey: "",
-        gitUrl,
-      },
-      pendingNip05: repoLink,
-    };
-  }
-
-  return {
-    upstream: {
-      repository: "",
-      relayHint: "",
-      authorPubkey: "",
-      gitUrl,
-    },
-  };
-}
-
 function isValidRepoUpstream(upstream: RepoUpstream): boolean {
   return !!(upstream.repository?.trim() || upstream.gitUrl?.trim());
-}
-
-function isRepoUpstreamSelfReference(
-  upstream: RepoUpstream,
-  repoPubkey: string,
-  repoIdentifier: string,
-  repoCloneUrls: string[],
-): boolean {
-  const parsed = parseRepoCoordinate(upstream.repository);
-  if (parsed?.pubkey === repoPubkey && parsed.identifier === repoIdentifier) {
-    return true;
-  }
-
-  const gitUrl = upstream.gitUrl?.trim();
-  if (!gitUrl) return false;
-
-  const normalizedGitUrl = normalizeUrl(gitUrl);
-  return repoCloneUrls.some((url) => normalizeUrl(url) === normalizedGitUrl);
-}
-
-function formatUpstreamInput(upstream: RepoUpstream): string {
-  const parts: string[] = [];
-  const parsed = parseRepoCoordinate(upstream.repository);
-
-  if (parsed) {
-    const npub = nip19.npubEncode(parsed.pubkey);
-    const relayHint = upstream.relayHint
-      ?.replace(/^wss?:\/\//, "")
-      .replace(/\/$/, "");
-    const encodedIdentifier = encodeURIComponent(parsed.identifier);
-    parts.push(
-      relayHint
-        ? `nostr://${npub}/${relayHint}/${encodedIdentifier}`
-        : `nostr://${npub}/${encodedIdentifier}`,
-    );
-  } else if (upstream.repository) {
-    parts.push(upstream.repository);
-  }
-
-  if (upstream.gitUrl) parts.push(upstream.gitUrl);
-  return parts.join(" ");
 }
 
 function looksLikeDirectPubkeyInput(value: string): boolean {
@@ -507,40 +226,6 @@ function LeadBadge() {
         {LEAD_MAINTAINER_HELP_TEXT}
       </PopoverContent>
     </Popover>
-  );
-}
-
-function IdentifiedUpstreamBadge({ upstream }: { upstream: RepoUpstream }) {
-  const parsed = parseRepoCoordinate(upstream.repository);
-  if (!parsed) return null;
-
-  const repoPath = repoToPath(
-    parsed.pubkey,
-    parsed.identifier,
-    upstream.relayHint ? [upstream.relayHint] : [],
-  );
-
-  return (
-    <Link
-      to={repoPath}
-      className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background px-2 py-1 text-xs transition-colors hover:bg-muted/60"
-      title={upstream.repository}
-    >
-      <UserAvatar
-        pubkey={parsed.pubkey}
-        size="xs"
-        className="shrink-0"
-        noHoverCard
-      />
-      <UserName pubkey={parsed.pubkey} className="min-w-0 max-w-32 truncate" />
-      <span className="text-muted-foreground">/</span>
-      <Badge
-        variant="secondary"
-        className="max-w-40 truncate rounded-full px-1.5 py-0 font-mono text-[10px]"
-      >
-        {parsed.identifier}
-      </Badge>
-    </Link>
   );
 }
 
@@ -729,9 +414,6 @@ function RepoSettingsForm({
   );
   const [pendingUpstreamNip05, setPendingUpstreamNip05] =
     useState<PendingNip05Upstream>();
-  const [upstreamNip05Status, setUpstreamNip05Status] = useState<
-    "idle" | "loading" | "not-found" | "error"
-  >("idle");
   const [subordinateForkEditorOpen, setSubordinateForkEditorOpen] = useState(
     () => currentUpstreams.length > 0,
   );
@@ -739,7 +421,6 @@ function RepoSettingsForm({
     useState(false);
   const [subordinateForkFocusRequest, setSubordinateForkFocusRequest] =
     useState(0);
-  const upstreamInputRef = useRef<HTMLInputElement>(null);
 
   // Co-maintainers listed by this selected announcement.
   const [editedMaintainers, setEditedMaintainers] =
@@ -833,6 +514,11 @@ function RepoSettingsForm({
     otherGitServers,
   ]);
 
+  const {
+    status: upstreamNip05Status,
+    resolvedUpstream: resolvedNip05Upstream,
+  } = useResolvedUpstreamNip05(pendingUpstreamNip05);
+
   const hasValidUpstream = isValidRepoUpstream(upstream);
   const isSelfReferentialUpstream = isRepoUpstreamSelfReference(
     upstream,
@@ -847,22 +533,6 @@ function RepoSettingsForm({
     upstreamInput.trim().length > 0 &&
     !isResolvingUpstreamNip05 &&
     (!hasValidUpstream || isSelfReferentialUpstream);
-  const identifiedNostrUpstream = isSubordinateFork
-    ? parseRepoCoordinate(upstream.repository)
-    : undefined;
-  const showInvalidSubordinateForkInput =
-    subordinateForkEditorOpen &&
-    subordinateForkInputBlurred &&
-    hasInvalidSubordinateForkInput;
-  const upstreamInputErrorMessage = isSelfReferentialUpstream
-    ? "A repository cannot use itself as its upstream."
-    : pendingUpstreamNip05
-      ? upstreamNip05Status === "not-found"
-        ? `${pendingUpstreamNip05.nip05} could not be resolved.`
-        : upstreamNip05Status === "error"
-          ? `Failed to resolve ${pendingUpstreamNip05.nip05}.`
-          : "Invalid repository link or git URL."
-      : "Invalid repository link or git URL.";
 
   const effectiveUpstreams = useMemo(
     () => (isSubordinateFork ? [upstream] : []),
@@ -875,79 +545,20 @@ function RepoSettingsForm({
   }, []);
 
   useEffect(() => {
-    if (!subordinateForkEditorOpen || subordinateForkFocusRequest === 0) return;
-    upstreamInputRef.current?.focus();
-  }, [subordinateForkEditorOpen, subordinateForkFocusRequest]);
+    if (!resolvedNip05Upstream) return;
 
-  useEffect(() => {
-    if (!pendingUpstreamNip05) {
-      setUpstreamNip05Status("idle");
-      return;
-    }
-
-    const atIndex = pendingUpstreamNip05.nip05.indexOf("@");
-    if (atIndex === -1) {
-      setUpstreamNip05Status("error");
-      return;
-    }
-
-    const name = pendingUpstreamNip05.nip05.slice(0, atIndex);
-    const domain = pendingUpstreamNip05.nip05.slice(atIndex + 1);
-    let cancelled = false;
-
-    setUpstreamNip05Status("loading");
-
-    const resolveIdentity = async () => {
-      await nip05WarmupReady;
-
-      const cached = dnsIdentityLoader.getIdentity(name, domain);
-      const identity =
-        cached ?? (await dnsIdentityLoader.loadIdentity(name, domain));
-
-      dnsIdentityLoader.identities.set(`${name}@${domain}`, identity);
-      return identity;
-    };
-
-    resolveIdentity()
-      .then((identity) => {
-        if (cancelled) return;
-
-        if (identity.status !== IdentityStatus.Found) {
-          setUpstreamNip05Status("not-found");
-          return;
-        }
-
-        const resolvedUpstream: RepoUpstream = {
-          repository: repoCoordinate(
-            identity.pubkey,
-            pendingUpstreamNip05.repoId,
-          ),
-          relayHint: pendingUpstreamNip05.relayHint,
-          authorPubkey: identity.pubkey,
-          gitUrl: pendingUpstreamNip05.gitUrl,
-        };
-
-        setUpstream(resolvedUpstream);
-        setPendingUpstreamNip05(undefined);
-        setSubordinateForkInputBlurred(
-          isRepoUpstreamSelfReference(
-            resolvedUpstream,
-            repo.selectedMaintainer,
-            repo.dTag,
-            editedCloneUrls,
-          ),
-        );
-        setUpstreamNip05Status("idle");
-      })
-      .catch(() => {
-        if (!cancelled) setUpstreamNip05Status("error");
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    setUpstream(resolvedNip05Upstream);
+    setPendingUpstreamNip05(undefined);
+    setSubordinateForkInputBlurred(
+      isRepoUpstreamSelfReference(
+        resolvedNip05Upstream,
+        repo.selectedMaintainer,
+        repo.dTag,
+        editedCloneUrls,
+      ),
+    );
   }, [
-    pendingUpstreamNip05,
+    resolvedNip05Upstream,
     repo.selectedMaintainer,
     repo.dTag,
     editedCloneUrls,
@@ -1611,160 +1222,54 @@ function RepoSettingsForm({
             </div>
 
             {/* Subordinate fork upstreams */}
-            <div className="space-y-2">
-              <div
-                className={cn(
-                  "rounded-md border border-border/60 bg-muted/20 px-3 py-2 transition-colors hover:bg-muted/40",
-                  identifiedNostrUpstream
-                    ? "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-                    : "flex items-start gap-2.5",
-                )}
-              >
-                <div className="flex min-w-0 items-start gap-2.5">
-                  <Checkbox
-                    id="edit-subordinate-fork"
-                    checked={isSubordinateFork}
-                    onCheckedChange={(checked) => {
-                      if (checked === true) {
-                        focusSubordinateForkInput();
-                        return;
+            <SubordinateForkField
+              upstream={upstream}
+              upstreamInput={upstreamInput}
+              pendingNip05={pendingUpstreamNip05}
+              nip05Status={upstreamNip05Status}
+              editorOpen={subordinateForkEditorOpen}
+              inputBlurred={subordinateForkInputBlurred}
+              focusRequest={subordinateForkFocusRequest}
+              repoPubkey={repo.selectedMaintainer}
+              repoIdentifier={repo.dTag}
+              repoCloneUrls={editedCloneUrls}
+              onInputChange={(value, parsed) => {
+                const nextUpstream = parsed.upstream;
+                setUpstreamInput(value);
+                setUpstream(nextUpstream);
+                setPendingUpstreamNip05(
+                  parsed.pendingNip05
+                    ? {
+                        ...parsed.pendingNip05,
+                        gitUrl: nextUpstream.gitUrl ?? "",
                       }
-
-                      setSubordinateForkEditorOpen(false);
-                      setSubordinateForkInputBlurred(false);
-                      setUpstream(emptyRepoUpstream());
-                      setPendingUpstreamNip05(undefined);
-                      setUpstreamInput("");
-                    }}
-                    className="mt-0.5"
-                  />
-                  <label
-                    htmlFor="edit-subordinate-fork"
-                    className="cursor-pointer space-y-0.5"
-                  >
-                    <span className="block text-sm font-medium leading-none">
-                      subordinate fork
-                    </span>
-                    <span className="block text-xs leading-relaxed text-muted-foreground">
-                      this is not the repo for the primary project
-                    </span>
-                  </label>
-                </div>
-
-                {identifiedNostrUpstream ? (
-                  <span className="flex min-w-0 items-center gap-2 pl-7 sm:pl-0">
-                    <IdentifiedUpstreamBadge upstream={upstream} />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Clear subordinate fork"
-                      onClick={() => {
-                        setSubordinateForkEditorOpen(false);
-                        setSubordinateForkInputBlurred(false);
-                        setUpstream(emptyRepoUpstream());
-                        setPendingUpstreamNip05(undefined);
-                        setUpstreamInput("");
-                      }}
-                      className="h-7 w-7 shrink-0 text-muted-foreground"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </span>
-                ) : null}
-              </div>
-
-              {subordinateForkEditorOpen && !identifiedNostrUpstream ? (
-                <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Repository link or git URL
-                    </Label>
-                    <Input
-                      ref={upstreamInputRef}
-                      value={upstreamInput}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        const parsed = parseUpstreamInput(value);
-                        const nextUpstream = parsed.upstream;
-                        setUpstreamInput(value);
-                        setUpstream(nextUpstream);
-                        setPendingUpstreamNip05(
-                          parsed.pendingNip05
-                            ? {
-                                ...parsed.pendingNip05,
-                                gitUrl: nextUpstream.gitUrl ?? "",
-                              }
-                            : undefined,
-                        );
-                        if (
-                          isValidRepoUpstream(nextUpstream) &&
-                          !isRepoUpstreamSelfReference(
-                            nextUpstream,
-                            repo.selectedMaintainer,
-                            repo.dTag,
-                            editedCloneUrls,
-                          )
-                        ) {
-                          setSubordinateForkInputBlurred(false);
-                        }
-                      }}
-                      onBlur={() => setSubordinateForkInputBlurred(true)}
-                      placeholder='"nostr://..." or "https://github.com/org/repo.git"'
-                      aria-invalid={showInvalidSubordinateForkInput}
-                      className={cn(
-                        "h-8 text-xs font-mono",
-                        showInvalidSubordinateForkInput &&
-                          "border-destructive focus-visible:ring-destructive",
-                      )}
-                    />
-                    {showInvalidSubordinateForkInput ? (
-                      <p className="text-[11px] font-medium text-destructive">
-                        {upstreamInputErrorMessage}
-                      </p>
-                    ) : isResolvingUpstreamNip05 && pendingUpstreamNip05 ? (
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        Resolving{" "}
-                        <code className="font-mono">
-                          {pendingUpstreamNip05.nip05}
-                        </code>
-                        …
-                      </p>
-                    ) : (
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        Also accepts <code className="font-mono">naddr1…</code>,{" "}
-                        <code className="font-mono">nostr://npub1…/repo</code>,{" "}
-                        <code className="font-mono">
-                          nostr://nip05/relay/repo
-                        </code>
-                        , <code className="font-mono">gitworkshop.dev</code>{" "}
-                        repo URLs,{" "}
-                        <code className="font-mono">npub1…/repo</code>, and
-                        repository coordinates. The checkbox checks itself when
-                        a valid reference is detected.
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex justify-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setUpstream(emptyRepoUpstream());
-                        setPendingUpstreamNip05(undefined);
-                        setUpstreamInput("");
-                        setSubordinateForkInputBlurred(false);
-                      }}
-                      className="h-7 px-2 text-xs text-muted-foreground"
-                    >
-                      <X className="h-3 w-3 mr-1" />
-                      Clear
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
+                    : undefined,
+                );
+                if (
+                  isValidRepoUpstream(nextUpstream) &&
+                  !isRepoUpstreamSelfReference(
+                    nextUpstream,
+                    repo.selectedMaintainer,
+                    repo.dTag,
+                    editedCloneUrls,
+                  )
+                ) {
+                  setSubordinateForkInputBlurred(false);
+                }
+              }}
+              onInputBlur={() => setSubordinateForkInputBlurred(true)}
+              onOpenEditor={focusSubordinateForkInput}
+              onCloseEditor={() => {
+                setSubordinateForkEditorOpen(false);
+                setSubordinateForkInputBlurred(false);
+              }}
+              onClear={() => {
+                setUpstream(emptyRepoUpstream());
+                setPendingUpstreamNip05(undefined);
+                setUpstreamInput("");
+                setSubordinateForkInputBlurred(false);
+              }}
+            />
           </section>
 
           <Separator />

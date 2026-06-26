@@ -2,7 +2,7 @@
  * NIP-34 Git Stuff - Constants and helpers
  */
 
-import type { NostrEvent } from "nostr-tools";
+import { nip19, type NostrEvent } from "nostr-tools";
 import {
   getNip10References,
   getCommentRootPointer,
@@ -455,6 +455,44 @@ export function getRepoUpstreams(ev: NostrEvent): RepoUpstream[] {
   );
 }
 
+export function repoUpstreamsToTags(upstreams: RepoUpstream[]): string[][] {
+  return upstreams
+    .map((upstream) => {
+      const repository = upstream.repository?.trim() ?? "";
+      const gitUrl = upstream.gitUrl?.trim() ?? "";
+      const relayHint = upstream.relayHint?.trim() ?? "";
+      const authorPubkey = upstream.authorPubkey?.trim() ?? "";
+      const target = repository || gitUrl;
+      if (!target) return undefined;
+
+      const tag = ["u", target];
+      if (authorPubkey) tag.push(relayHint, authorPubkey);
+      else if (relayHint) tag.push(relayHint);
+      return tag;
+    })
+    .filter((tag): tag is string[] => tag !== undefined);
+}
+
+function stringArraysEqual(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+export function repoUpstreamsEqual(
+  a: RepoUpstream[],
+  b: RepoUpstream[],
+): boolean {
+  const aTags = repoUpstreamsToTags(a);
+  const bTags = repoUpstreamsToTags(b);
+  return (
+    aTags.length === bTags.length &&
+    aTags.every((tag, index) => stringArraysEqual(tag, bTags[index] ?? []))
+  );
+}
+
+export function emptyRepoUpstream(): RepoUpstream {
+  return { repository: "", gitUrl: "", relayHint: "", authorPubkey: "" };
+}
+
 // ---------------------------------------------------------------------------
 // Cached per-event tag extractors for kind:30618 state events
 // ---------------------------------------------------------------------------
@@ -571,8 +609,54 @@ export interface RepoQueryOptions {
  * Build an naddr-style coordinate string for a repo.
  * Format: "30617:<pubkey>:<d-tag>"
  */
-export function repoCoordinate(pubkey: string, dTag: string): string {
-  return `${REPO_KIND}:${pubkey}:${dTag}`;
+export function repoCoordinate(pubkey: string, identifier: string): string {
+  return `${REPO_KIND}:${pubkey}:${identifier}`;
+}
+
+function decodeRepoCoordinatePubkey(pubkey: string): string | undefined {
+  if (/^[0-9a-f]{64}$/i.test(pubkey)) return pubkey.toLowerCase();
+
+  try {
+    const decoded = nip19.decode(pubkey);
+    if (decoded.type === "npub") return decoded.data;
+  } catch {
+    // ignore malformed bech32 input
+  }
+
+  return undefined;
+}
+
+export function parseRepoCoordinate(
+  coordinate: string | undefined,
+): { pubkey: string; identifier: string } | undefined {
+  if (!coordinate?.startsWith(`${REPO_KIND}:`)) return undefined;
+  const rest = coordinate.slice(`${REPO_KIND}:`.length);
+  const separator = rest.indexOf(":");
+  if (separator === -1) return undefined;
+
+  const pubkey = rest.slice(0, separator);
+  const identifier = rest.slice(separator + 1);
+  const decodedPubkey = decodeRepoCoordinatePubkey(pubkey);
+  if (!decodedPubkey || !identifier) return undefined;
+  return { pubkey: decodedPubkey, identifier };
+}
+
+export function isRepoUpstreamSelfReference(
+  upstream: RepoUpstream,
+  repoPubkey: string,
+  repoIdentifier: string,
+  repoCloneUrls: string[],
+): boolean {
+  const parsed = parseRepoCoordinate(upstream.repository);
+  if (parsed?.pubkey === repoPubkey && parsed.identifier === repoIdentifier) {
+    return true;
+  }
+
+  const gitUrl = upstream.gitUrl?.trim();
+  if (!gitUrl) return false;
+
+  const normalizedGitUrl = normalizeUrl(gitUrl);
+  return repoCloneUrls.some((url) => normalizeUrl(url) === normalizedGitUrl);
 }
 
 /**
