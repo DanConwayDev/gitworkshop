@@ -217,7 +217,7 @@ export default function RepositoriesPage({
                 <RepoCard
                   key={`${repo.selectedMaintainer}:${repo.dTag}`}
                   repo={repo}
-                  isUserMatch={repo.maintainerSet.some((pk) =>
+                  isUserMatch={getVisibleMaintainers(repo).some((pk) =>
                     matchedUserPubkeys.has(pk),
                   )}
                 />
@@ -247,15 +247,23 @@ interface RepoCardProps {
   isUserMatch?: boolean;
 }
 
+function getVisibleMaintainers(repo: ResolvedRepo): string[] {
+  if (repo.requestedMaintainers.length === 0) return repo.maintainerSet;
+
+  const requested = new Set(repo.requestedMaintainers);
+  return repo.maintainerSet.filter((pk) => !requested.has(pk));
+}
+
 function RepoCard({ repo, isUserMatch }: RepoCardProps) {
   const repoPath = useRepoPath(repo.selectedMaintainer, repo.dTag, repo.relays);
+  const visibleMaintainers = getVisibleMaintainers(repo);
   const timeAgo = formatDistanceToNow(new Date(repo.updatedAt * 1000), {
     addSuffix: true,
   });
 
   // Prefetch NIP-05 identities for all maintainers. UserLink already subscribes
   // to each maintainer's User cast for the avatar, so this is effectively free.
-  usePrefetchNip05(repo.maintainerSet);
+  usePrefetchNip05(visibleMaintainers);
 
   return (
     <Link to={repoPath} className="group block">
@@ -289,7 +297,7 @@ function RepoCard({ repo, isUserMatch }: RepoCardProps) {
 
               <div className="flex items-center gap-3 ml-9 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {repo.maintainerSet.map((pk) => (
+                  {visibleMaintainers.map((pk) => (
                     <UserLink
                       key={pk}
                       pubkey={pk}
