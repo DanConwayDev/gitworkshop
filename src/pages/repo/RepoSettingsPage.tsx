@@ -148,7 +148,7 @@ function repoUpstreamsToTags(upstreams: RepoUpstream[]): string[][] {
       const gitUrl = upstream.gitUrl?.trim() ?? "";
       const relayHint = upstream.relayHint?.trim() ?? "";
       const authorPubkey = upstream.authorPubkey?.trim() ?? "";
-      const target = gitUrl ? `${repository}|${gitUrl}` : repository;
+      const target = repository || gitUrl;
       if (!target) return undefined;
 
       const tag = ["u", target];

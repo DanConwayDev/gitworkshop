@@ -427,7 +427,11 @@ export function getRepoMaintainers(ev: NostrEvent): string[] {
 
 /**
  * Extract subordinate-fork upstream metadata from NIP-34 `u` tags.
- * Format: ["u", "30617:<pubkey>:<identifier>|<git-url>", "<relay-hint>", "<author-pubkey>"]
+ * Format: ["u", "30617:<pubkey>:<identifier>", "<relay-hint>", "<author-pubkey>"]
+ * or ["u", "<git-url>"].
+ *
+ * Older draft events may contain "30617:<pubkey>:<identifier>|<git-url>";
+ * keep parsing that form for compatibility, but don't emit it.
  */
 export function getRepoUpstreams(ev: NostrEvent): RepoUpstream[] {
   return getOrComputeCachedValue(ev, RepoUpstreamsSymbol, () =>
