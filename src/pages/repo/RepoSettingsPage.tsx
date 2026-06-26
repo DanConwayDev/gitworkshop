@@ -387,6 +387,24 @@ function isValidRepoUpstream(upstream: RepoUpstream): boolean {
   return !!(upstream.repository?.trim() || upstream.gitUrl?.trim());
 }
 
+function isRepoUpstreamSelfReference(
+  upstream: RepoUpstream,
+  repoPubkey: string,
+  repoIdentifier: string,
+  repoCloneUrls: string[],
+): boolean {
+  const parsed = parseRepoCoordinate(upstream.repository);
+  if (parsed?.pubkey === repoPubkey && parsed.identifier === repoIdentifier) {
+    return true;
+  }
+
+  const gitUrl = upstream.gitUrl?.trim();
+  if (!gitUrl) return false;
+
+  const normalizedGitUrl = normalizeUrl(gitUrl);
+  return repoCloneUrls.some((url) => normalizeUrl(url) === normalizedGitUrl);
+}
+
 function formatUpstreamInput(upstream: RepoUpstream): string {
   const parts: string[] = [];
   const parsed = parseRepoCoordinate(upstream.repository);
@@ -797,21 +815,54 @@ function RepoSettingsForm({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | undefined>();
 
-  const isSubordinateFork = isValidRepoUpstream(upstream);
-  const identifiedNostrUpstream = parseRepoCoordinate(upstream.repository);
+  const editedCloneUrls = useMemo(() => {
+    const npub = nip19.npubEncode(repo.selectedMaintainer);
+    const encodedId = encodeURIComponent(repo.dTag);
+    const graspCloneUrls = selectedDomains.map(
+      (domain) => `https://${domain}/${npub}/${encodedId}.git`,
+    );
+
+    return Array.from(
+      new Set([...repo.cloneUrls, ...graspCloneUrls, ...otherGitServers]),
+    );
+  }, [
+    repo.selectedMaintainer,
+    repo.dTag,
+    repo.cloneUrls,
+    selectedDomains,
+    otherGitServers,
+  ]);
+
+  const hasValidUpstream = isValidRepoUpstream(upstream);
+  const isSelfReferentialUpstream = isRepoUpstreamSelfReference(
+    upstream,
+    repo.selectedMaintainer,
+    repo.dTag,
+    editedCloneUrls,
+  );
   const isResolvingUpstreamNip05 = upstreamNip05Status === "loading";
+  const isSubordinateFork = hasValidUpstream && !isSelfReferentialUpstream;
+  const hasInvalidSubordinateForkInput =
+    subordinateForkEditorOpen &&
+    upstreamInput.trim().length > 0 &&
+    !isResolvingUpstreamNip05 &&
+    (!hasValidUpstream || isSelfReferentialUpstream);
+  const identifiedNostrUpstream = isSubordinateFork
+    ? parseRepoCoordinate(upstream.repository)
+    : undefined;
   const showInvalidSubordinateForkInput =
     subordinateForkEditorOpen &&
     subordinateForkInputBlurred &&
-    !isResolvingUpstreamNip05 &&
-    !isSubordinateFork;
-  const upstreamInputErrorMessage = pendingUpstreamNip05
-    ? upstreamNip05Status === "not-found"
-      ? `${pendingUpstreamNip05.nip05} could not be resolved.`
-      : upstreamNip05Status === "error"
-        ? `Failed to resolve ${pendingUpstreamNip05.nip05}.`
-        : "Invalid repository link or git URL."
-    : "Invalid repository link or git URL.";
+    hasInvalidSubordinateForkInput;
+  const upstreamInputErrorMessage = isSelfReferentialUpstream
+    ? "A repository cannot use itself as its upstream."
+    : pendingUpstreamNip05
+      ? upstreamNip05Status === "not-found"
+        ? `${pendingUpstreamNip05.nip05} could not be resolved.`
+        : upstreamNip05Status === "error"
+          ? `Failed to resolve ${pendingUpstreamNip05.nip05}.`
+          : "Invalid repository link or git URL."
+      : "Invalid repository link or git URL.";
 
   const effectiveUpstreams = useMemo(
     () => (isSubordinateFork ? [upstream] : []),
@@ -866,7 +917,7 @@ function RepoSettingsForm({
           return;
         }
 
-        setUpstream({
+        const resolvedUpstream: RepoUpstream = {
           repository: repoCoordinate(
             identity.pubkey,
             pendingUpstreamNip05.repoId,
@@ -874,9 +925,18 @@ function RepoSettingsForm({
           relayHint: pendingUpstreamNip05.relayHint,
           authorPubkey: identity.pubkey,
           gitUrl: pendingUpstreamNip05.gitUrl,
-        });
+        };
+
+        setUpstream(resolvedUpstream);
         setPendingUpstreamNip05(undefined);
-        setSubordinateForkInputBlurred(false);
+        setSubordinateForkInputBlurred(
+          isRepoUpstreamSelfReference(
+            resolvedUpstream,
+            repo.selectedMaintainer,
+            repo.dTag,
+            editedCloneUrls,
+          ),
+        );
         setUpstreamNip05Status("idle");
       })
       .catch(() => {
@@ -886,7 +946,12 @@ function RepoSettingsForm({
     return () => {
       cancelled = true;
     };
-  }, [pendingUpstreamNip05]);
+  }, [
+    pendingUpstreamNip05,
+    repo.selectedMaintainer,
+    repo.dTag,
+    editedCloneUrls,
+  ]);
 
   // Sync selectedDomains with the current Grasp domains on first render
   useEffect(() => {
@@ -1256,6 +1321,7 @@ function RepoSettingsForm({
     hasInfrastructure &&
     hasChanges &&
     (!defaultBranchChanged || !!repoState) &&
+    !hasInvalidSubordinateForkInput &&
     !isResolvingUpstreamNip05 &&
     !isSaving;
 
@@ -1631,7 +1697,15 @@ function RepoSettingsForm({
                               }
                             : undefined,
                         );
-                        if (isValidRepoUpstream(nextUpstream)) {
+                        if (
+                          isValidRepoUpstream(nextUpstream) &&
+                          !isRepoUpstreamSelfReference(
+                            nextUpstream,
+                            repo.selectedMaintainer,
+                            repo.dTag,
+                            editedCloneUrls,
+                          )
+                        ) {
                           setSubordinateForkInputBlurred(false);
                         }
                       }}
