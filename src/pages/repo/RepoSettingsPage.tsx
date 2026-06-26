@@ -571,14 +571,11 @@ function RepoSettingsForm({
   const [webInput, setWebInput] = useState("");
   const [topics, setTopics] = useState<string[]>(currentTopics);
   const [topicInput, setTopicInput] = useState("");
-  const [upstreams, setUpstreams] = useState<RepoUpstream[]>(
-    currentUpstreams.length > 0 ? currentUpstreams : [emptyRepoUpstream()],
+  const [upstream, setUpstream] = useState<RepoUpstream>(
+    () => currentUpstreams[0] ?? emptyRepoUpstream(),
   );
-  const [upstreamInputs, setUpstreamInputs] = useState<string[]>(() =>
-    (currentUpstreams.length > 0
-      ? currentUpstreams
-      : [emptyRepoUpstream()]
-    ).map(formatUpstreamInput),
+  const [upstreamInput, setUpstreamInput] = useState<string>(() =>
+    formatUpstreamInput(currentUpstreams[0] ?? emptyRepoUpstream()),
   );
   const [isSubordinateFork, setIsSubordinateFork] = useState(
     () => currentUpstreams.length > 0,
@@ -659,8 +656,8 @@ function RepoSettingsForm({
   const [saveError, setSaveError] = useState<string | undefined>();
 
   const effectiveUpstreams = useMemo(
-    () => (isSubordinateFork ? upstreams : []),
-    [isSubordinateFork, upstreams],
+    () => (isSubordinateFork ? [upstream] : []),
+    [isSubordinateFork, upstream],
   );
 
   // Sync selectedDomains with the current Grasp domains on first render
@@ -1328,12 +1325,7 @@ function RepoSettingsForm({
                   id="edit-subordinate-fork"
                   checked={isSubordinateFork}
                   onCheckedChange={(checked) => {
-                    const enabled = checked === true;
-                    setIsSubordinateFork(enabled);
-                    if (enabled && upstreams.length === 0) {
-                      setUpstreams([emptyRepoUpstream()]);
-                      setUpstreamInputs([""]);
-                    }
+                    setIsSubordinateFork(checked === true);
                   }}
                   className="mt-0.5"
                 />
@@ -1349,94 +1341,42 @@ function RepoSettingsForm({
 
               {isSubordinateFork ? (
                 <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
-                  {upstreams.map((upstream, idx) => (
-                    <div key={idx} className="space-y-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">
-                          Repository link or git URL
-                        </Label>
-                        <Input
-                          value={
-                            upstreamInputs[idx] ?? formatUpstreamInput(upstream)
-                          }
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setUpstreamInputs((prev) =>
-                              prev.map((item, i) => (i === idx ? value : item)),
-                            );
-                            setUpstreams((prev) =>
-                              prev.map((item, i) =>
-                                i === idx ? parseUpstreamInput(value) : item,
-                              ),
-                            );
-                          }}
-                          placeholder='"nostr://..." or "https://github.com/org/repo.git"'
-                          className="h-8 text-xs font-mono"
-                        />
-                        <p className="text-[11px] text-muted-foreground leading-relaxed">
-                          Also accepts{" "}
-                          <code className="font-mono">naddr1…</code>,{" "}
-                          <code className="font-mono">nostr://npub1…/repo</code>
-                          , <code className="font-mono">npub1…/repo</code>, and
-                          repository coordinates.
-                        </p>
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        {upstreams.length > 1 ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setUpstreams((prev) =>
-                                prev.filter((_, i) => i !== idx),
-                              );
-                              setUpstreamInputs((prev) =>
-                                prev.filter((_, i) => i !== idx),
-                              );
-                            }}
-                            className="h-7 px-2 text-xs text-muted-foreground"
-                          >
-                            <X className="h-3 w-3 mr-1" />
-                            Remove
-                          </Button>
-                        ) : null}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setUpstreams((prev) =>
-                              prev.map((item, i) =>
-                                i === idx ? emptyRepoUpstream() : item,
-                              ),
-                            );
-                            setUpstreamInputs((prev) =>
-                              prev.map((item, i) => (i === idx ? "" : item)),
-                            );
-                          }}
-                          className="h-7 px-2 text-xs text-muted-foreground"
-                        >
-                          <X className="h-3 w-3 mr-1" />
-                          Clear
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setUpstreams((prev) => [...prev, emptyRepoUpstream()]);
-                      setUpstreamInputs((prev) => [...prev, ""]);
-                    }}
-                    className="h-8 px-2.5 text-xs"
-                  >
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    Add upstream
-                  </Button>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">
+                      Repository link or git URL
+                    </Label>
+                    <Input
+                      value={upstreamInput}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setUpstreamInput(value);
+                        setUpstream(parseUpstreamInput(value));
+                      }}
+                      placeholder='"nostr://..." or "https://github.com/org/repo.git"'
+                      className="h-8 text-xs font-mono"
+                    />
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Also accepts <code className="font-mono">naddr1…</code>,{" "}
+                      <code className="font-mono">nostr://npub1…/repo</code>,{" "}
+                      <code className="font-mono">npub1…/repo</code>, and
+                      repository coordinates.
+                    </p>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setUpstream(emptyRepoUpstream());
+                        setUpstreamInput("");
+                      }}
+                      className="h-7 px-2 text-xs text-muted-foreground"
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Clear
+                    </Button>
+                  </div>
                 </div>
               ) : null}
             </div>
