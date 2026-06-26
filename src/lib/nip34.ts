@@ -426,6 +426,35 @@ export function getRepoMaintainers(ev: NostrEvent): string[] {
   });
 }
 
+const GIT_CLONE_URL_SCHEME_PATTERN = /^(?:https?|ssh|git|file|nostr):\/\//i;
+const SCP_LIKE_GIT_URL_PATTERN = /^[^@\s]+@[^:\s]+:.+$/;
+
+function isGitCloneUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || /\s/.test(trimmed)) return false;
+  if (SCP_LIKE_GIT_URL_PATTERN.test(trimmed)) return true;
+  if (!GIT_CLONE_URL_SCHEME_PATTERN.test(trimmed)) return false;
+
+  try {
+    new URL(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseRepoUpstreamTarget(
+  target: string | undefined,
+): Pick<RepoUpstream, "repository" | "gitUrl"> | undefined {
+  const trimmed = target?.trim();
+  if (!trimmed) return undefined;
+
+  if (parseRepoCoordinate(trimmed)) return { repository: trimmed };
+  if (isGitCloneUrl(trimmed)) return { gitUrl: trimmed };
+
+  return undefined;
+}
+
 /**
  * Extract subordinate-fork upstream metadata from NIP-34 `u` tags.
  * Format: ["u", "30617:<pubkey>:<identifier>", "<relay-hint>", "<author-pubkey>"]
@@ -435,20 +464,18 @@ export function getRepoUpstreams(ev: NostrEvent): RepoUpstream[] {
   return getOrComputeCachedValue(ev, RepoUpstreamsSymbol, () =>
     ev.tags
       .filter(([t]) => t === "u")
-      .map(([, target, relayHint, authorPubkey]) => {
-        const rawTarget = target ?? "";
-        const [repository, gitUrl] =
-          rawTarget.startsWith("http://") || rawTarget.startsWith("https://")
-            ? ["", rawTarget]
-            : [rawTarget, ""];
-        return {
-          repository: repository || undefined,
-          gitUrl: gitUrl || undefined,
-          relayHint: relayHint || undefined,
-          authorPubkey: authorPubkey || undefined,
-        } satisfies RepoUpstream;
-      })
-      .filter((upstream) => upstream.repository || upstream.gitUrl),
+      .flatMap(([, target, relayHint, authorPubkey]) => {
+        const upstreamTarget = parseRepoUpstreamTarget(target);
+        if (!upstreamTarget) return [];
+
+        const upstream: RepoUpstream = {
+          ...upstreamTarget,
+        };
+        if (relayHint) upstream.relayHint = relayHint;
+        if (authorPubkey) upstream.authorPubkey = authorPubkey;
+
+        return [upstream];
+      }),
   );
 }
 
