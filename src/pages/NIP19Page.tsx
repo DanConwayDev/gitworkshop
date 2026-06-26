@@ -7,8 +7,8 @@ import { use$ } from "applesauce-react/hooks";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import { useEffect, useMemo, useState } from "react";
-import { of } from "rxjs";
-import { eventStore } from "../services/nostr";
+import { catchError, filter, map, of, startWith, tap } from "rxjs";
+import { eventStore, pool } from "../services/nostr";
 import {
   REPO_KIND,
   ISSUE_KIND,
@@ -22,6 +22,8 @@ import {
   isHexPubkey,
   standardizeNip05,
 } from "../lib/routeUtils";
+import { resilientRequest } from "@/lib/resilientSubscription";
+import { normalizeUrl } from "@/lib/url";
 import { useRepoPath } from "../hooks/useRepoPath";
 import UserPage from "./UserPage";
 import NotFound from "./NotFound";
@@ -36,6 +38,7 @@ import { gitIndexRelays, fallbackRelays } from "../services/settings";
 import { useDnsIdentity } from "../hooks/useDnsIdentity";
 import type { NostrEvent } from "nostr-tools";
 import type { Observable } from "rxjs";
+import type { Filter } from "applesauce-core/helpers";
 import { getReplaceableIdentifier } from "applesauce-core/helpers";
 import { getNip10References } from "applesauce-common/helpers";
 
@@ -43,9 +46,44 @@ import { getNip10References } from "applesauce-common/helpers";
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Extract the first `a` tag value from an event (repo coordinate). */
-function getRepoCoord(event: NostrEvent): string | undefined {
-  return event.tags.find(([t]) => t === "a")?.[1];
+/** Extract repository coordinates from `a` tags, preserving tag order. */
+function getRepoCoords(event: NostrEvent): string[] {
+  const seen = new Set<string>();
+  const coords: string[] = [];
+
+  for (const [, coord] of event.tags.filter(([t]) => t === "a")) {
+    if (!coord || seen.has(coord)) continue;
+    const parsed = parseRepoCoord(coord);
+    if (parsed?.kind !== REPO_KIND || !isHexPubkey(parsed.pubkey)) continue;
+    seen.add(coord);
+    coords.push(coord);
+  }
+
+  return coords;
+}
+
+/** Extract relay hints from repository `a` tags. */
+function getRepoCoordRelayHints(event: NostrEvent): string[] {
+  return dedupeRelays(
+    event.tags
+      .filter(([t]) => t === "a")
+      .map(([, , relay]) => relay)
+      .filter((relay): relay is string => !!relay),
+  );
+}
+
+function dedupeRelays(relays: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+
+  for (const relay of relays) {
+    const normalized = normalizeUrl(relay);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    unique.push(normalized);
+  }
+
+  return unique;
 }
 
 /**
@@ -62,6 +100,42 @@ function parseRepoCoord(
   const dTag = parts.slice(2).join(":");
   if (isNaN(kind) || !pubkey || !dTag) return undefined;
   return { kind, pubkey, dTag };
+}
+
+function getRepoCoordFilters(coords: string[]): Filter[] {
+  return coords
+    .map(parseRepoCoord)
+    .filter(
+      (coord): coord is { kind: number; pubkey: string; dTag: string } =>
+        !!coord && coord.kind === REPO_KIND && isHexPubkey(coord.pubkey),
+    )
+    .map(
+      ({ pubkey, dTag }) =>
+        ({
+          kinds: [REPO_KIND],
+          authors: [pubkey],
+          "#d": [dTag],
+          limit: 1,
+        }) as Filter,
+    );
+}
+
+function firstCoordWithAnnouncement(
+  coords: string[],
+  announcements: NostrEvent[],
+): string | undefined {
+  const announced = new Set(
+    announcements
+      .map((event) => {
+        const dTag = getReplaceableIdentifier(event);
+        return dTag && event.kind === REPO_KIND
+          ? `${REPO_KIND}:${event.pubkey}:${dTag}`
+          : undefined;
+      })
+      .filter((coord): coord is string => !!coord),
+  );
+
+  return coords.find((coord) => announced.has(coord));
 }
 
 /**
@@ -94,6 +168,99 @@ function RepoCoordRedirect({
       stargazerPubkey={stargazerPubkey}
     />
   );
+}
+
+function RepoCoordsRedirect({
+  coords,
+  hintRelays,
+  subPath,
+  stargazerPubkey,
+}: {
+  coords: string[];
+  hintRelays: string[];
+  /** Path segment appended after the repo root, e.g. "/issues/nevent1..." */
+  subPath: string;
+  /** When set, appends ?stargazer=<pubkey> to open the stargazers popover. */
+  stargazerPubkey?: string;
+}) {
+  const coordsKey = coords.join("\u0000");
+  const relaysKey = hintRelays.join("\u0000");
+  const candidateCoords = useMemo(() => {
+    const seen = new Set<string>();
+    return coords.filter((coord) => {
+      if (seen.has(coord)) return false;
+      const parsed = parseRepoCoord(coord);
+      if (parsed?.kind !== REPO_KIND || !isHexPubkey(parsed.pubkey)) {
+        return false;
+      }
+      seen.add(coord);
+      return true;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coordsKey]);
+
+  const filters = useMemo(
+    () => getRepoCoordFilters(candidateCoords),
+    [candidateCoords],
+  );
+
+  const lookupComplete =
+    use$(() => {
+      if (candidateCoords.length === 0 || filters.length === 0) return of(true);
+
+      const relays = dedupeRelays([
+        ...hintRelays,
+        ...gitIndexRelays.getValue(),
+        ...fallbackRelays.getValue(),
+      ]);
+
+      if (relays.length === 0) return of(true);
+
+      return resilientRequest(pool, relays, filters).pipe(
+        tap((response) => {
+          if (response !== "EOSE") eventStore.add(response);
+        }),
+        filter((response) => response === "EOSE"),
+        map(() => true),
+        startWith(false),
+        catchError(() => of(true)),
+      ) as Observable<boolean>;
+    }, [coordsKey, relaysKey]) ?? false;
+
+  const bestCoord = use$(() => {
+    if (candidateCoords.length === 0 || filters.length === 0) {
+      return of(undefined);
+    }
+
+    return eventStore
+      .timeline(filters)
+      .pipe(
+        map((events) =>
+          firstCoordWithAnnouncement(
+            candidateCoords,
+            events as unknown as NostrEvent[],
+          ),
+        ),
+      ) as Observable<string | undefined>;
+  }, [coordsKey]);
+
+  const primaryCoord = candidateCoords[0];
+  const canRedirect =
+    bestCoord && (bestCoord === primaryCoord || lookupComplete);
+
+  if (canRedirect) {
+    return (
+      <RepoCoordRedirect
+        coord={bestCoord}
+        hintRelays={hintRelays}
+        subPath={subPath}
+        stargazerPubkey={stargazerPubkey}
+      />
+    );
+  }
+
+  if (lookupComplete) return <NotFound />;
+  return <LoadingState message="Resolving repository…" />;
 }
 
 /**
@@ -292,14 +459,18 @@ function EventRedirect({
 
   // Issue
   if (kind === ISSUE_KIND) {
-    const coord = getRepoCoord(event);
-    if (!coord) return <NotFound />;
+    const coords = getRepoCoords(event);
+    if (coords.length === 0) return <NotFound />;
+    const repoRelays = dedupeRelays([
+      ...getRepoCoordRelayHints(event),
+      ...hintRelays,
+    ]);
     const nevent = eventIdToNevent(eventId, hintRelays);
     const fragment = commentId ? `#${commentId.slice(0, 15)}` : "";
     return (
-      <RepoCoordRedirect
-        coord={coord}
-        hintRelays={hintRelays}
+      <RepoCoordsRedirect
+        coords={coords}
+        hintRelays={repoRelays}
         subPath={`/issues/${nevent}${fragment}`}
       />
     );
@@ -307,8 +478,12 @@ function EventRedirect({
 
   // PR or root patch
   if (kind === PR_KIND || kind === PATCH_KIND) {
-    const coord = getRepoCoord(event);
-    if (!coord) return <NotFound />;
+    const coords = getRepoCoords(event);
+    if (coords.length === 0) return <NotFound />;
+    const repoRelays = dedupeRelays([
+      ...getRepoCoordRelayHints(event),
+      ...hintRelays,
+    ]);
 
     // Sub-patch: a kind:1617 that has an #e tag pointing to the root patch.
     // Redirect directly to /prs/<root-nevent>/commit/<sub-patch-nevent> so
@@ -320,9 +495,9 @@ function EventRedirect({
         const subPatchNevent = eventIdToNevent(eventId, hintRelays);
         const rootNevent = eventIdToNevent(rootPatchId, hintRelays);
         return (
-          <RepoCoordRedirect
-            coord={coord}
-            hintRelays={hintRelays}
+          <RepoCoordsRedirect
+            coords={coords}
+            hintRelays={repoRelays}
             subPath={`/prs/${rootNevent}/commit/${subPatchNevent}`}
           />
         );
@@ -332,9 +507,9 @@ function EventRedirect({
     const nevent = eventIdToNevent(eventId, hintRelays);
     const fragment = commentId ? `#${commentId.slice(0, 15)}` : "";
     return (
-      <RepoCoordRedirect
-        coord={coord}
-        hintRelays={hintRelays}
+      <RepoCoordsRedirect
+        coords={coords}
+        hintRelays={repoRelays}
         subPath={`/prs/${nevent}${fragment}`}
       />
     );
