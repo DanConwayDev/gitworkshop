@@ -402,7 +402,7 @@ function SidebarVariant({
             </div>
             {repo.requestedMaintainers.length > 0 && (
               <div className="space-y-2 pt-1">
-                <p className="text-xs text-muted-foreground/70">Requested</p>
+                <p className="text-xs text-muted-foreground/70">Invited</p>
                 {repo.requestedMaintainers.map((pk) => (
                   <UserLink
                     key={pk}
@@ -684,7 +684,7 @@ function FullVariant({
           {repo.requestedMaintainers.length > 0 && (
             <>
               <Separator />
-              <p className="text-xs text-muted-foreground">Requested</p>
+              <p className="text-xs text-muted-foreground">Invited</p>
               {repo.requestedMaintainers.map((pk) => (
                 <UserLink
                   key={pk}

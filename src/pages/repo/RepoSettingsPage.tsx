@@ -1272,7 +1272,7 @@ function RepoSettingsForm({
               {requestedMaintainers.length > 0 && (
                 <div className="space-y-2 border-t border-border/50 pt-3">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Requested / unconfirmed
+                    Invited / unconfirmed
                   </p>
                   <div className="space-y-1.5">
                     {requestedMaintainers.map((pubkey) => {
