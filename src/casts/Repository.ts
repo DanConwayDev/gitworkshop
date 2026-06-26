@@ -17,6 +17,7 @@ import {
   getRepoWebUrls,
   getRepoMaintainers,
   getRepoRelays,
+  getRepoUpstreams,
 } from "@/lib/nip34";
 
 type RepositoryEvent = KnownEvent<typeof REPO_KIND>;
@@ -70,6 +71,10 @@ export class Repository extends EventCast<RepositoryEvent> {
 
   get webUrls(): string[] {
     return getRepoWebUrls(this.event);
+  }
+
+  get upstreams() {
+    return getRepoUpstreams(this.event);
   }
 
   get maintainers(): string[] {

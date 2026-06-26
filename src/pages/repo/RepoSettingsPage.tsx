@@ -81,9 +81,11 @@ import {
   getRepoRelays,
   getRepoWebUrls,
   getRepoMaintainers,
+  getRepoUpstreams,
   isGraspCloneUrl,
   graspCloneUrlDomain,
   computeMaintainerLeadership,
+  type RepoUpstream,
   type ResolvedRepo,
 } from "@/lib/nip34";
 import type { RepositoryState } from "@/casts/RepositoryState";
@@ -113,6 +115,7 @@ const KNOWN_TAG_NAMES = new Set([
   "maintainers",
   "web",
   "t",
+  "u",
 ]);
 
 const HEX_PUBKEY_INPUT_RE = /^[0-9a-fA-F]{64}$/;
@@ -128,6 +131,32 @@ function tagArraysEqual(a: string[][], b: string[][]): boolean {
     a.length === b.length &&
     a.every((tag, index) => stringArraysEqual(tag, b[index] ?? []))
   );
+}
+
+function repoUpstreamsEqual(a: RepoUpstream[], b: RepoUpstream[]): boolean {
+  return tagArraysEqual(repoUpstreamsToTags(a), repoUpstreamsToTags(b));
+}
+
+function repoUpstreamsToTags(upstreams: RepoUpstream[]): string[][] {
+  return upstreams
+    .map((upstream) => {
+      const repository = upstream.repository?.trim() ?? "";
+      const gitUrl = upstream.gitUrl?.trim() ?? "";
+      const relayHint = upstream.relayHint?.trim() ?? "";
+      const authorPubkey = upstream.authorPubkey?.trim() ?? "";
+      const target = gitUrl ? `${repository}|${gitUrl}` : repository;
+      if (!target) return undefined;
+
+      const tag = ["u", target];
+      if (authorPubkey) tag.push(relayHint, authorPubkey);
+      else if (relayHint) tag.push(relayHint);
+      return tag;
+    })
+    .filter((tag): tag is string[] => tag !== undefined);
+}
+
+function emptyRepoUpstream(): RepoUpstream {
+  return { repository: "", gitUrl: "", relayHint: "", authorPubkey: "" };
 }
 
 function looksLikeDirectPubkeyInput(value: string): boolean {
@@ -347,7 +376,13 @@ function RepoSettingsForm({
       selectedAnnouncement?.tags
         .filter(([t]) => t === "t")
         .map(([, v]) => v)
-        .filter(Boolean) ?? [],
+        .filter(
+          (value): value is string => !!value && value !== "personal-fork",
+        ) ?? [],
+    [selectedAnnouncement],
+  );
+  const currentUpstreams = useMemo(
+    () => (selectedAnnouncement ? getRepoUpstreams(selectedAnnouncement) : []),
     [selectedAnnouncement],
   );
   const currentMaintainers = useMemo(() => {
@@ -383,6 +418,9 @@ function RepoSettingsForm({
   const [webInput, setWebInput] = useState("");
   const [topics, setTopics] = useState<string[]>(currentTopics);
   const [topicInput, setTopicInput] = useState("");
+  const [upstreams, setUpstreams] = useState<RepoUpstream[]>(
+    currentUpstreams.length > 0 ? currentUpstreams : [emptyRepoUpstream()],
+  );
 
   // Co-maintainers listed by this selected announcement.
   const [editedMaintainers, setEditedMaintainers] =
@@ -803,6 +841,7 @@ function RepoSettingsForm({
       (selectedAnnouncement ? getRepoDescription(selectedAnnouncement) : "") ||
     !stringArraysEqual(webUrls, currentWebUrls) ||
     !stringArraysEqual(topics, currentTopics) ||
+    !repoUpstreamsEqual(upstreams, currentUpstreams) ||
     !stringArraysEqual(editedMaintainers, currentMaintainers) ||
     !stringArraysEqual(selectedDomains, currentGraspDomains) ||
     !stringArraysEqual(otherRelays, currentOtherRelays) ||
@@ -882,6 +921,7 @@ function RepoSettingsForm({
               : []),
             ...webUrls.map((u) => ["web", u] as string[]),
             ...topics.map((t) => ["t", t] as string[]),
+            ...repoUpstreamsToTags(upstreams),
             // Preserve unknown/custom tags verbatim
             ...unknownTags.filter((tag) => tag.length > 0 && tag[0]),
           ],
@@ -939,6 +979,7 @@ function RepoSettingsForm({
     description,
     webUrls,
     topics,
+    upstreams,
     editedMaintainers,
     eucHash,
     unknownTags,
@@ -1108,6 +1149,140 @@ function RepoSettingsForm({
                 repository — used to track it across forks and renames. Set
                 automatically by <code className="font-mono">ngit push</code>.
               </p>
+            </div>
+
+            {/* Subordinate fork upstreams */}
+            <div className="space-y-2">
+              <div>
+                <Label>Subordinate fork</Label>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  Add a NIP-34 <code className="font-mono">u</code> tag when
+                  this announcement is a subordinate fork of another repository
+                  rather than a primary project maintainer announcement.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                {upstreams.map((upstream, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 space-y-2"
+                  >
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Upstream coordinate
+                        </Label>
+                        <Input
+                          value={upstream.repository ?? ""}
+                          onChange={(e) =>
+                            setUpstreams((prev) =>
+                              prev.map((item, i) =>
+                                i === idx
+                                  ? { ...item, repository: e.target.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                          placeholder="30617:<pubkey>:<identifier>"
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Preferred git URL
+                        </Label>
+                        <Input
+                          value={upstream.gitUrl ?? ""}
+                          onChange={(e) =>
+                            setUpstreams((prev) =>
+                              prev.map((item, i) =>
+                                i === idx
+                                  ? { ...item, gitUrl: e.target.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                          placeholder="https://example.com/upstream.git"
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Relay hint
+                        </Label>
+                        <Input
+                          value={upstream.relayHint ?? ""}
+                          onChange={(e) =>
+                            setUpstreams((prev) =>
+                              prev.map((item, i) =>
+                                i === idx
+                                  ? { ...item, relayHint: e.target.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                          placeholder="wss://relay.example.com"
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Author pubkey
+                        </Label>
+                        <Input
+                          value={upstream.authorPubkey ?? ""}
+                          onChange={(e) =>
+                            setUpstreams((prev) =>
+                              prev.map((item, i) =>
+                                i === idx
+                                  ? { ...item, authorPubkey: e.target.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                          placeholder="64-character pubkey"
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setUpstreams((prev) => {
+                            const next = prev.filter((_, i) => i !== idx);
+                            return next.length > 0
+                              ? next
+                              : [emptyRepoUpstream()];
+                          })
+                        }
+                        className="h-7 px-2 text-xs text-muted-foreground"
+                      >
+                        <X className="h-3 w-3 mr-1" />
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setUpstreams((prev) => [...prev, emptyRepoUpstream()])
+                }
+                className="h-8 px-2.5 text-xs"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add upstream
+              </Button>
             </div>
           </section>
 

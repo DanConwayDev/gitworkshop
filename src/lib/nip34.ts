@@ -274,6 +274,18 @@ const RepoCloneUrlsSymbol = Symbol.for("repo-ev-clone-urls");
 const RepoWebUrlsSymbol = Symbol.for("repo-ev-web-urls");
 const RepoRelaysSymbol = Symbol.for("repo-ev-relays");
 const RepoMaintainersSymbol = Symbol.for("repo-ev-maintainers");
+const RepoUpstreamsSymbol = Symbol.for("repo-ev-upstreams");
+
+export interface RepoUpstream {
+  /** Upstream repository coordinate, e.g. "30617:<pubkey>:<identifier>". */
+  repository?: string;
+  /** Preferred HTTPS git URL for the upstream, when supplied. */
+  gitUrl?: string;
+  /** Relay hint for the upstream repository coordinate. */
+  relayHint?: string;
+  /** Upstream repository announcement author pubkey, when supplied. */
+  authorPubkey?: string;
+}
 
 /** Extract the human-readable name from a kind:30617 event. Falls back to the d-tag. */
 export function getRepoName(ev: NostrEvent): string {
@@ -411,6 +423,32 @@ export function getRepoMaintainers(ev: NostrEvent): string[] {
     const tag = ev.tags.find(([t]) => t === "maintainers");
     return tag ? tag.slice(1).filter(Boolean) : [];
   });
+}
+
+/**
+ * Extract subordinate-fork upstream metadata from NIP-34 `u` tags.
+ * Format: ["u", "30617:<pubkey>:<identifier>|<git-url>", "<relay-hint>", "<author-pubkey>"]
+ */
+export function getRepoUpstreams(ev: NostrEvent): RepoUpstream[] {
+  return getOrComputeCachedValue(ev, RepoUpstreamsSymbol, () =>
+    ev.tags
+      .filter(([t]) => t === "u")
+      .map(([, target, relayHint, authorPubkey]) => {
+        const rawTarget = target ?? "";
+        const [repository, gitUrl] = rawTarget.includes("|")
+          ? rawTarget.split("|", 2)
+          : rawTarget.startsWith("http://") || rawTarget.startsWith("https://")
+            ? ["", rawTarget]
+            : [rawTarget, ""];
+        return {
+          repository: repository || undefined,
+          gitUrl: gitUrl || undefined,
+          relayHint: relayHint || undefined,
+          authorPubkey: authorPubkey || undefined,
+        } satisfies RepoUpstream;
+      })
+      .filter((upstream) => upstream.repository || upstream.gitUrl),
+  );
 }
 
 // ---------------------------------------------------------------------------
