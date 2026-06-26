@@ -699,6 +699,7 @@ function RepoSettingsForm({
   const [saveError, setSaveError] = useState<string | undefined>();
 
   const isSubordinateFork = isValidRepoUpstream(upstream);
+  const identifiedNostrUpstream = parseRepoCoordinate(upstream.repository);
   const showInvalidSubordinateForkInput =
     subordinateForkEditorOpen &&
     subordinateForkInputBlurred &&
@@ -1376,37 +1377,67 @@ function RepoSettingsForm({
 
             {/* Subordinate fork upstreams */}
             <div className="space-y-2">
-              <label
-                htmlFor="edit-subordinate-fork"
-                className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border/60 bg-muted/20 px-3 py-2 transition-colors hover:bg-muted/40"
+              <div
+                className={cn(
+                  "rounded-md border border-border/60 bg-muted/20 px-3 py-2 transition-colors hover:bg-muted/40",
+                  identifiedNostrUpstream
+                    ? "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                    : "flex items-start gap-2.5",
+                )}
               >
-                <Checkbox
-                  id="edit-subordinate-fork"
-                  checked={isSubordinateFork}
-                  onCheckedChange={(checked) => {
-                    if (checked === true) {
-                      focusSubordinateForkInput();
-                      return;
-                    }
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <Checkbox
+                    id="edit-subordinate-fork"
+                    checked={isSubordinateFork}
+                    onCheckedChange={(checked) => {
+                      if (checked === true) {
+                        focusSubordinateForkInput();
+                        return;
+                      }
 
-                    setSubordinateForkEditorOpen(false);
-                    setSubordinateForkInputBlurred(false);
-                    setUpstream(emptyRepoUpstream());
-                    setUpstreamInput("");
-                  }}
-                  className="mt-0.5"
-                />
-                <span className="space-y-0.5">
-                  <span className="block text-sm font-medium leading-none">
-                    subordinate fork
-                  </span>
-                  <span className="block text-xs leading-relaxed text-muted-foreground">
-                    this is not the repo for the primary project
-                  </span>
-                </span>
-              </label>
+                      setSubordinateForkEditorOpen(false);
+                      setSubordinateForkInputBlurred(false);
+                      setUpstream(emptyRepoUpstream());
+                      setUpstreamInput("");
+                    }}
+                    className="mt-0.5"
+                  />
+                  <label
+                    htmlFor="edit-subordinate-fork"
+                    className="cursor-pointer space-y-0.5"
+                  >
+                    <span className="block text-sm font-medium leading-none">
+                      subordinate fork
+                    </span>
+                    <span className="block text-xs leading-relaxed text-muted-foreground">
+                      this is not the repo for the primary project
+                    </span>
+                  </label>
+                </div>
 
-              {subordinateForkEditorOpen ? (
+                {identifiedNostrUpstream ? (
+                  <span className="flex min-w-0 items-center gap-2 pl-7 sm:pl-0">
+                    <IdentifiedUpstreamBadge upstream={upstream} />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Clear subordinate fork"
+                      onClick={() => {
+                        setSubordinateForkEditorOpen(false);
+                        setSubordinateForkInputBlurred(false);
+                        setUpstream(emptyRepoUpstream());
+                        setUpstreamInput("");
+                      }}
+                      className="h-7 w-7 shrink-0 text-muted-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </span>
+                ) : null}
+              </div>
+
+              {subordinateForkEditorOpen && !identifiedNostrUpstream ? (
                 <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">
@@ -1437,10 +1468,6 @@ function RepoSettingsForm({
                       <p className="text-[11px] font-medium text-destructive">
                         Invalid repository link or git URL.
                       </p>
-                    ) : parseRepoCoordinate(upstream.repository) ? (
-                      <div className="pt-0.5">
-                        <IdentifiedUpstreamBadge upstream={upstream} />
-                      </div>
                     ) : (
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
                         Also accepts <code className="font-mono">naddr1…</code>,{" "}
