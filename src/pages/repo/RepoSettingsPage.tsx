@@ -89,7 +89,11 @@ import {
   type ResolvedRepo,
 } from "@/lib/nip34";
 import type { RepositoryState } from "@/casts/RepositoryState";
-import { decodePubkeyIdentifier, repoToPath } from "@/lib/routeUtils";
+import {
+  decodePubkeyIdentifier,
+  parseRepoRoute,
+  repoToPath,
+} from "@/lib/routeUtils";
 import { validateGraspServer } from "@/lib/grasp";
 import { publish } from "@/services/nostr";
 import { useGraspServers } from "@/hooks/useGraspServers";
@@ -157,6 +161,155 @@ function repoUpstreamsToTags(upstreams: RepoUpstream[]): string[][] {
 
 function emptyRepoUpstream(): RepoUpstream {
   return { repository: "", gitUrl: "", relayHint: "", authorPubkey: "" };
+}
+
+function repoCoordinate(pubkey: string, identifier: string): string {
+  return `${REPO_KIND}:${pubkey}:${identifier}`;
+}
+
+function parseRepoCoordinate(
+  coordinate: string | undefined,
+): { pubkey: string; identifier: string } | undefined {
+  if (!coordinate?.startsWith(`${REPO_KIND}:`)) return undefined;
+  const rest = coordinate.slice(`${REPO_KIND}:`.length);
+  const separator = rest.indexOf(":");
+  if (separator === -1) return undefined;
+
+  const pubkey = rest.slice(0, separator);
+  const identifier = rest.slice(separator + 1);
+  const decodedPubkey = decodePubkeyIdentifier(pubkey);
+  if (!decodedPubkey || !identifier) return undefined;
+  return { pubkey: decodedPubkey, identifier };
+}
+
+function parseNaddrUpstream(input: string): RepoUpstream | undefined {
+  const match = input.match(/\b(naddr1[023456789acdefghjklmnpqrstuvwxyz]+)\b/i);
+  if (!match) return undefined;
+
+  try {
+    const decoded = nip19.decode(match[1].toLowerCase());
+    if (decoded.type !== "naddr" || decoded.data.kind !== REPO_KIND) {
+      return undefined;
+    }
+
+    return {
+      repository: repoCoordinate(decoded.data.pubkey, decoded.data.identifier),
+      relayHint: decoded.data.relays?.[0] ?? "",
+      authorPubkey: decoded.data.pubkey,
+      gitUrl: "",
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function parseRepoPathUpstream(path: string): RepoUpstream | undefined {
+  const segments = path.split("/").filter(Boolean);
+
+  for (let index = 0; index < segments.length - 1; index++) {
+    for (const width of [3, 2]) {
+      const candidate = segments.slice(index, index + width).join("/");
+      const parsed = parseRepoRoute(candidate);
+      if (parsed?.type !== "npub") continue;
+
+      return {
+        repository: repoCoordinate(parsed.pubkey, parsed.repoId),
+        relayHint: parsed.relayHints[0] ?? "",
+        authorPubkey: parsed.pubkey,
+        gitUrl: "",
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function parseNostrCloneUpstream(input: string): RepoUpstream | undefined {
+  const match = input.match(/\bnostr:\/\/\S+/i);
+  if (!match) return undefined;
+
+  try {
+    const url = new URL(match[0]);
+    return parseRepoPathUpstream(`${url.hostname}${url.pathname}`);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseWebRepoPathUpstream(input: string): RepoUpstream | undefined {
+  try {
+    const url = new URL(input);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    if (url.pathname.endsWith(".git")) return undefined;
+    return parseRepoPathUpstream(url.pathname);
+  } catch {
+    return parseRepoPathUpstream(input);
+  }
+}
+
+function parseCoordinateUpstream(input: string): RepoUpstream | undefined {
+  const target = input.split("|")[0]?.trim();
+  const parsed = parseRepoCoordinate(target);
+  if (!parsed || !target) return undefined;
+
+  return {
+    repository: target,
+    relayHint: "",
+    authorPubkey: parsed.pubkey,
+    gitUrl: "",
+  };
+}
+
+function extractGitUrl(input: string, hasRepoLink: boolean): string {
+  const match = input.match(/\b(?:https?|ssh|git):\/\/\S+|\bgit@\S+/i);
+  const raw = match?.[0]?.replace(/[),.;]+$/, "") ?? "";
+  if (!raw) return "";
+
+  if (!hasRepoLink) return raw;
+  if (raw.endsWith(".git") || raw.includes(".git?")) return raw;
+  return "";
+}
+
+function parseUpstreamInput(input: string): RepoUpstream {
+  const trimmed = input.trim();
+  if (!trimmed) return emptyRepoUpstream();
+
+  const repoLink =
+    parseNaddrUpstream(trimmed) ??
+    parseNostrCloneUpstream(trimmed) ??
+    parseCoordinateUpstream(trimmed) ??
+    parseWebRepoPathUpstream(trimmed);
+  const gitUrl = extractGitUrl(trimmed, !!repoLink);
+
+  return {
+    repository: repoLink?.repository ?? "",
+    relayHint: repoLink?.relayHint ?? "",
+    authorPubkey: repoLink?.authorPubkey ?? "",
+    gitUrl,
+  };
+}
+
+function formatUpstreamInput(upstream: RepoUpstream): string {
+  const parts: string[] = [];
+  const parsed = parseRepoCoordinate(upstream.repository);
+
+  if (parsed) {
+    const npub = nip19.npubEncode(parsed.pubkey);
+    const relayHint = upstream.relayHint
+      ?.replace(/^wss?:\/\//, "")
+      .replace(/\/$/, "");
+    const encodedIdentifier = encodeURIComponent(parsed.identifier);
+    parts.push(
+      relayHint
+        ? `nostr://${npub}/${relayHint}/${encodedIdentifier}`
+        : `nostr://${npub}/${encodedIdentifier}`,
+    );
+  } else if (upstream.repository) {
+    parts.push(upstream.repository);
+  }
+
+  if (upstream.gitUrl) parts.push(upstream.gitUrl);
+  return parts.join(" ");
 }
 
 function looksLikeDirectPubkeyInput(value: string): boolean {
@@ -420,6 +573,12 @@ function RepoSettingsForm({
   const [topicInput, setTopicInput] = useState("");
   const [upstreams, setUpstreams] = useState<RepoUpstream[]>(
     currentUpstreams.length > 0 ? currentUpstreams : [emptyRepoUpstream()],
+  );
+  const [upstreamInputs, setUpstreamInputs] = useState<string[]>(() =>
+    (currentUpstreams.length > 0
+      ? currentUpstreams
+      : [emptyRepoUpstream()]
+    ).map(formatUpstreamInput),
   );
 
   // Co-maintainers listed by this selected announcement.
@@ -1156,9 +1315,13 @@ function RepoSettingsForm({
               <div>
                 <Label>Subordinate fork</Label>
                 <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                  Add a NIP-34 <code className="font-mono">u</code> tag when
-                  this announcement is a subordinate fork of another repository
-                  rather than a primary project maintainer announcement.
+                  Use this only when this announcement is a subordinate fork of
+                  another repository, not the primary maintainer announcement.
+                  Paste either a git repository URL or a Nostr repository link;
+                  links can include an <code className="font-mono">naddr</code>,
+                  a <code className="font-mono">nostr://</code> clone URL, or an{" "}
+                  <code className="font-mono">npub/repo</code> path with an
+                  optional relay hint.
                 </p>
               </div>
 
@@ -1168,99 +1331,52 @@ function RepoSettingsForm({
                     key={idx}
                     className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 space-y-2"
                   >
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">
-                          Upstream coordinate
-                        </Label>
-                        <Input
-                          value={upstream.repository ?? ""}
-                          onChange={(e) =>
-                            setUpstreams((prev) =>
-                              prev.map((item, i) =>
-                                i === idx
-                                  ? { ...item, repository: e.target.value }
-                                  : item,
-                              ),
-                            )
-                          }
-                          placeholder="30617:<pubkey>:<identifier>"
-                          className="h-8 text-xs font-mono"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">
-                          Preferred git URL
-                        </Label>
-                        <Input
-                          value={upstream.gitUrl ?? ""}
-                          onChange={(e) =>
-                            setUpstreams((prev) =>
-                              prev.map((item, i) =>
-                                i === idx
-                                  ? { ...item, gitUrl: e.target.value }
-                                  : item,
-                              ),
-                            )
-                          }
-                          placeholder="https://example.com/upstream.git"
-                          className="h-8 text-xs font-mono"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">
-                          Relay hint
-                        </Label>
-                        <Input
-                          value={upstream.relayHint ?? ""}
-                          onChange={(e) =>
-                            setUpstreams((prev) =>
-                              prev.map((item, i) =>
-                                i === idx
-                                  ? { ...item, relayHint: e.target.value }
-                                  : item,
-                              ),
-                            )
-                          }
-                          placeholder="wss://relay.example.com"
-                          className="h-8 text-xs font-mono"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">
-                          Author pubkey
-                        </Label>
-                        <Input
-                          value={upstream.authorPubkey ?? ""}
-                          onChange={(e) =>
-                            setUpstreams((prev) =>
-                              prev.map((item, i) =>
-                                i === idx
-                                  ? { ...item, authorPubkey: e.target.value }
-                                  : item,
-                              ),
-                            )
-                          }
-                          placeholder="64-character pubkey"
-                          className="h-8 text-xs font-mono"
-                        />
-                      </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">
+                        Repository link or git URL
+                      </Label>
+                      <Input
+                        value={
+                          upstreamInputs[idx] ?? formatUpstreamInput(upstream)
+                        }
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setUpstreamInputs((prev) =>
+                            prev.map((item, i) => (i === idx ? value : item)),
+                          );
+                          setUpstreams((prev) =>
+                            prev.map((item, i) =>
+                              i === idx ? parseUpstreamInput(value) : item,
+                            ),
+                          );
+                        }}
+                        placeholder="nostr://npub1…/relay.example.com/repo or https://example.com/repo.git"
+                        className="h-8 text-xs font-mono"
+                      />
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Examples: <code className="font-mono">naddr1…</code>,{" "}
+                        <code className="font-mono">nostr://npub1…/repo</code>,{" "}
+                        <code className="font-mono">npub1…/repo</code>, or a git
+                        clone URL.
+                      </p>
                     </div>
                     <div className="flex justify-end">
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() =>
+                        onClick={() => {
                           setUpstreams((prev) => {
                             const next = prev.filter((_, i) => i !== idx);
                             return next.length > 0
                               ? next
                               : [emptyRepoUpstream()];
-                          })
-                        }
+                          });
+                          setUpstreamInputs((prev) => {
+                            const next = prev.filter((_, i) => i !== idx);
+                            return next.length > 0 ? next : [""];
+                          });
+                        }}
                         className="h-7 px-2 text-xs text-muted-foreground"
                       >
                         <X className="h-3 w-3 mr-1" />
@@ -1275,9 +1391,10 @@ function RepoSettingsForm({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  setUpstreams((prev) => [...prev, emptyRepoUpstream()])
-                }
+                onClick={() => {
+                  setUpstreams((prev) => [...prev, emptyRepoUpstream()]);
+                  setUpstreamInputs((prev) => [...prev, ""]);
+                }}
                 className="h-8 px-2.5 text-xs"
               >
                 <Plus className="h-3.5 w-3.5 mr-1" />
