@@ -13,6 +13,7 @@ import {
 import {
   getReplaceableIdentifier,
   getOrComputeCachedValue,
+  parseReplaceableAddress,
 } from "applesauce-core/helpers";
 import { ISSUE_LABEL_NAMESPACE } from "@/factories/IssueLabelFactory";
 import { getThreadTree } from "@/lib/threadTree";
@@ -274,6 +275,18 @@ const RepoCloneUrlsSymbol = Symbol.for("repo-ev-clone-urls");
 const RepoWebUrlsSymbol = Symbol.for("repo-ev-web-urls");
 const RepoRelaysSymbol = Symbol.for("repo-ev-relays");
 const RepoMaintainersSymbol = Symbol.for("repo-ev-maintainers");
+const RepoUpstreamsSymbol = Symbol.for("repo-ev-upstreams");
+
+export interface RepoUpstream {
+  /** Upstream repository coordinate, e.g. "30617:<pubkey>:<identifier>". */
+  repository?: string;
+  /** Preferred HTTPS git URL for the upstream, when supplied. */
+  gitUrl?: string;
+  /** Relay hint for the upstream repository coordinate. */
+  relayHint?: string;
+  /** Upstream repository announcement author pubkey, when supplied. */
+  authorPubkey?: string;
+}
 
 /** Extract the human-readable name from a kind:30617 event. Falls back to the d-tag. */
 export function getRepoName(ev: NostrEvent): string {
@@ -413,6 +426,97 @@ export function getRepoMaintainers(ev: NostrEvent): string[] {
   });
 }
 
+const GIT_CLONE_URL_SCHEME_PATTERN = /^(?:https?|ssh|git|file|nostr):\/\//i;
+const SCP_LIKE_GIT_URL_PATTERN = /^[^@\s]+@[^:\s]+:.+$/;
+
+function isGitCloneUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || /\s/.test(trimmed)) return false;
+  if (SCP_LIKE_GIT_URL_PATTERN.test(trimmed)) return true;
+  if (!GIT_CLONE_URL_SCHEME_PATTERN.test(trimmed)) return false;
+
+  try {
+    new URL(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseRepoUpstreamTarget(
+  target: string | undefined,
+): Pick<RepoUpstream, "repository" | "gitUrl"> | undefined {
+  const trimmed = target?.trim();
+  if (!trimmed) return undefined;
+
+  if (parseRepoCoordinate(trimmed)) return { repository: trimmed };
+  if (isGitCloneUrl(trimmed)) return { gitUrl: trimmed };
+
+  return undefined;
+}
+
+/**
+ * Extract subordinate-fork upstream metadata from NIP-34 `u` tags.
+ * Format: ["u", "30617:<pubkey>:<identifier>", "<relay-hint>", "<author-pubkey>"]
+ * or ["u", "<git-url>"].
+ */
+export function getRepoUpstreams(ev: NostrEvent): RepoUpstream[] {
+  return getOrComputeCachedValue(ev, RepoUpstreamsSymbol, () =>
+    ev.tags
+      .filter(([t]) => t === "u")
+      .flatMap(([, target, relayHint, authorPubkey]) => {
+        const upstreamTarget = parseRepoUpstreamTarget(target);
+        if (!upstreamTarget) return [];
+
+        const upstream: RepoUpstream = {
+          ...upstreamTarget,
+        };
+        if (relayHint) upstream.relayHint = relayHint;
+        if (authorPubkey) upstream.authorPubkey = authorPubkey;
+
+        return [upstream];
+      }),
+  );
+}
+
+export function repoUpstreamsToTags(upstreams: RepoUpstream[]): string[][] {
+  return upstreams
+    .map((upstream) => {
+      const repository = upstream.repository?.trim() ?? "";
+      const gitUrl = upstream.gitUrl?.trim() ?? "";
+      const relayHint = upstream.relayHint?.trim() ?? "";
+      const authorPubkey = upstream.authorPubkey?.trim() ?? "";
+      const target = repository || gitUrl;
+      if (!target) return undefined;
+
+      const tag = ["u", target];
+      if (authorPubkey) tag.push(relayHint, authorPubkey);
+      else if (relayHint) tag.push(relayHint);
+      return tag;
+    })
+    .filter((tag): tag is string[] => tag !== undefined);
+}
+
+function stringArraysEqual(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+export function repoUpstreamsEqual(
+  a: RepoUpstream[],
+  b: RepoUpstream[],
+): boolean {
+  const aTags = repoUpstreamsToTags(a);
+  const bTags = repoUpstreamsToTags(b);
+  return (
+    aTags.length === bTags.length &&
+    aTags.every((tag, index) => stringArraysEqual(tag, bTags[index] ?? []))
+  );
+}
+
+export function emptyRepoUpstream(): RepoUpstream {
+  return { repository: "", gitUrl: "", relayHint: "", authorPubkey: "" };
+}
+
 // ---------------------------------------------------------------------------
 // Cached per-event tag extractors for kind:30618 state events
 // ---------------------------------------------------------------------------
@@ -529,8 +633,37 @@ export interface RepoQueryOptions {
  * Build an naddr-style coordinate string for a repo.
  * Format: "30617:<pubkey>:<d-tag>"
  */
-export function repoCoordinate(pubkey: string, dTag: string): string {
-  return `${REPO_KIND}:${pubkey}:${dTag}`;
+export function repoCoordinate(pubkey: string, identifier: string): string {
+  return `${REPO_KIND}:${pubkey}:${identifier}`;
+}
+
+export function parseRepoCoordinate(
+  coordinate: string | undefined,
+): { pubkey: string; identifier: string } | undefined {
+  if (!coordinate) return undefined;
+
+  const pointer = parseReplaceableAddress(coordinate, true);
+  if (!pointer || pointer.kind !== REPO_KIND) return undefined;
+
+  return { pubkey: pointer.pubkey, identifier: pointer.identifier };
+}
+
+export function isRepoUpstreamSelfReference(
+  upstream: RepoUpstream,
+  repoPubkey: string,
+  repoIdentifier: string,
+  repoCloneUrls: string[],
+): boolean {
+  const parsed = parseRepoCoordinate(upstream.repository);
+  if (parsed?.pubkey === repoPubkey && parsed.identifier === repoIdentifier) {
+    return true;
+  }
+
+  const gitUrl = upstream.gitUrl?.trim();
+  if (!gitUrl) return false;
+
+  const normalizedGitUrl = normalizeUrl(gitUrl);
+  return repoCloneUrls.some((url) => normalizeUrl(url) === normalizedGitUrl);
 }
 
 /**
@@ -685,7 +818,7 @@ export interface ResolvedRepo {
    * Neither case should be displayed in repo cards.
    */
   requestedMaintainers: string[];
-  /** Union of `t` tags across all announcements (excluding "personal-fork") */
+  /** Union of `t` tags across all announcements */
   labels: string[];
 
   // --- Graph / provenance data (for detailed view) ---
@@ -2300,7 +2433,7 @@ export function resolveChain(
       }
     }
     for (const [t, v] of ev.tags) {
-      if (t === "t" && v && v !== "personal-fork" && !seenLabel.has(v)) {
+      if (t === "t" && v && !seenLabel.has(v)) {
         seenLabel.add(v);
         labels.push(v);
       }

@@ -81,9 +81,15 @@ import {
   getRepoRelays,
   getRepoWebUrls,
   getRepoMaintainers,
+  getRepoUpstreams,
+  repoUpstreamsEqual,
+  repoUpstreamsToTags,
+  emptyRepoUpstream,
+  isRepoUpstreamSelfReference,
   isGraspCloneUrl,
   graspCloneUrlDomain,
   computeMaintainerLeadership,
+  type RepoUpstream,
   type ResolvedRepo,
 } from "@/lib/nip34";
 import type { RepositoryState } from "@/casts/RepositoryState";
@@ -95,6 +101,12 @@ import { DEFAULT_GRASP_SERVERS } from "@/services/settings";
 import { GraspLogo } from "@/components/GraspLogo";
 import { cn } from "@/lib/utils";
 import { normalizeUrl } from "@/lib/url";
+import { SubordinateForkField } from "@/components/repo/SubordinateForkField";
+import {
+  formatUpstreamInput,
+  type PendingNip05Upstream,
+} from "@/lib/repoUpstreamInput";
+import { useResolvedUpstreamNip05 } from "@/hooks/useResolvedUpstreamNip05";
 
 // ---------------------------------------------------------------------------
 // Known tag names — tags that the settings form explicitly manages.
@@ -113,6 +125,7 @@ const KNOWN_TAG_NAMES = new Set([
   "maintainers",
   "web",
   "t",
+  "u",
 ]);
 
 const HEX_PUBKEY_INPUT_RE = /^[0-9a-fA-F]{64}$/;
@@ -128,6 +141,10 @@ function tagArraysEqual(a: string[][], b: string[][]): boolean {
     a.length === b.length &&
     a.every((tag, index) => stringArraysEqual(tag, b[index] ?? []))
   );
+}
+
+function isValidRepoUpstream(upstream: RepoUpstream): boolean {
+  return !!(upstream.repository?.trim() || upstream.gitUrl?.trim());
 }
 
 function looksLikeDirectPubkeyInput(value: string): boolean {
@@ -347,7 +364,11 @@ function RepoSettingsForm({
       selectedAnnouncement?.tags
         .filter(([t]) => t === "t")
         .map(([, v]) => v)
-        .filter(Boolean) ?? [],
+        .filter((value): value is string => !!value) ?? [],
+    [selectedAnnouncement],
+  );
+  const currentUpstreams = useMemo(
+    () => (selectedAnnouncement ? getRepoUpstreams(selectedAnnouncement) : []),
     [selectedAnnouncement],
   );
   const currentMaintainers = useMemo(() => {
@@ -383,6 +404,21 @@ function RepoSettingsForm({
   const [webInput, setWebInput] = useState("");
   const [topics, setTopics] = useState<string[]>(currentTopics);
   const [topicInput, setTopicInput] = useState("");
+  const [upstream, setUpstream] = useState<RepoUpstream>(
+    () => currentUpstreams[0] ?? emptyRepoUpstream(),
+  );
+  const [upstreamInput, setUpstreamInput] = useState<string>(() =>
+    formatUpstreamInput(currentUpstreams[0] ?? emptyRepoUpstream()),
+  );
+  const [pendingUpstreamNip05, setPendingUpstreamNip05] =
+    useState<PendingNip05Upstream>();
+  const [subordinateForkEditorOpen, setSubordinateForkEditorOpen] = useState(
+    () => currentUpstreams.length > 0,
+  );
+  const [subordinateForkInputBlurred, setSubordinateForkInputBlurred] =
+    useState(false);
+  const [subordinateForkFocusRequest, setSubordinateForkFocusRequest] =
+    useState(0);
 
   // Co-maintainers listed by this selected announcement.
   const [editedMaintainers, setEditedMaintainers] =
@@ -457,6 +493,74 @@ function RepoSettingsForm({
   // Submit state
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | undefined>();
+
+  const editedCloneUrls = useMemo(() => {
+    const npub = nip19.npubEncode(repo.selectedMaintainer);
+    const encodedId = encodeURIComponent(repo.dTag);
+    const graspCloneUrls = selectedDomains.map(
+      (domain) => `https://${domain}/${npub}/${encodedId}.git`,
+    );
+
+    return Array.from(
+      new Set([...repo.cloneUrls, ...graspCloneUrls, ...otherGitServers]),
+    );
+  }, [
+    repo.selectedMaintainer,
+    repo.dTag,
+    repo.cloneUrls,
+    selectedDomains,
+    otherGitServers,
+  ]);
+
+  const {
+    status: upstreamNip05Status,
+    resolvedUpstream: resolvedNip05Upstream,
+  } = useResolvedUpstreamNip05(pendingUpstreamNip05);
+
+  const hasValidUpstream = isValidRepoUpstream(upstream);
+  const isSelfReferentialUpstream = isRepoUpstreamSelfReference(
+    upstream,
+    repo.selectedMaintainer,
+    repo.dTag,
+    editedCloneUrls,
+  );
+  const isResolvingUpstreamNip05 = upstreamNip05Status === "loading";
+  const isSubordinateFork = hasValidUpstream && !isSelfReferentialUpstream;
+  const hasInvalidSubordinateForkInput =
+    subordinateForkEditorOpen &&
+    upstreamInput.trim().length > 0 &&
+    !isResolvingUpstreamNip05 &&
+    (!hasValidUpstream || isSelfReferentialUpstream);
+
+  const effectiveUpstreams = useMemo(
+    () => (isSubordinateFork ? [upstream] : []),
+    [isSubordinateFork, upstream],
+  );
+
+  const focusSubordinateForkInput = useCallback(() => {
+    setSubordinateForkEditorOpen(true);
+    setSubordinateForkFocusRequest((request) => request + 1);
+  }, []);
+
+  useEffect(() => {
+    if (!resolvedNip05Upstream) return;
+
+    setUpstream(resolvedNip05Upstream);
+    setPendingUpstreamNip05(undefined);
+    setSubordinateForkInputBlurred(
+      isRepoUpstreamSelfReference(
+        resolvedNip05Upstream,
+        repo.selectedMaintainer,
+        repo.dTag,
+        editedCloneUrls,
+      ),
+    );
+  }, [
+    resolvedNip05Upstream,
+    repo.selectedMaintainer,
+    repo.dTag,
+    editedCloneUrls,
+  ]);
 
   // Sync selectedDomains with the current Grasp domains on first render
   useEffect(() => {
@@ -803,6 +907,7 @@ function RepoSettingsForm({
       (selectedAnnouncement ? getRepoDescription(selectedAnnouncement) : "") ||
     !stringArraysEqual(webUrls, currentWebUrls) ||
     !stringArraysEqual(topics, currentTopics) ||
+    !repoUpstreamsEqual(effectiveUpstreams, currentUpstreams) ||
     !stringArraysEqual(editedMaintainers, currentMaintainers) ||
     !stringArraysEqual(selectedDomains, currentGraspDomains) ||
     !stringArraysEqual(otherRelays, currentOtherRelays) ||
@@ -825,6 +930,8 @@ function RepoSettingsForm({
     hasInfrastructure &&
     hasChanges &&
     (!defaultBranchChanged || !!repoState) &&
+    !hasInvalidSubordinateForkInput &&
+    !isResolvingUpstreamNip05 &&
     !isSaving;
 
   const handleSave = useCallback(async () => {
@@ -882,6 +989,7 @@ function RepoSettingsForm({
               : []),
             ...webUrls.map((u) => ["web", u] as string[]),
             ...topics.map((t) => ["t", t] as string[]),
+            ...repoUpstreamsToTags(effectiveUpstreams),
             // Preserve unknown/custom tags verbatim
             ...unknownTags.filter((tag) => tag.length > 0 && tag[0]),
           ],
@@ -939,6 +1047,7 @@ function RepoSettingsForm({
     description,
     webUrls,
     topics,
+    effectiveUpstreams,
     editedMaintainers,
     eucHash,
     unknownTags,
@@ -1109,6 +1218,56 @@ function RepoSettingsForm({
                 automatically by <code className="font-mono">ngit push</code>.
               </p>
             </div>
+
+            {/* Subordinate fork upstreams */}
+            <SubordinateForkField
+              upstream={upstream}
+              upstreamInput={upstreamInput}
+              pendingNip05={pendingUpstreamNip05}
+              nip05Status={upstreamNip05Status}
+              editorOpen={subordinateForkEditorOpen}
+              inputBlurred={subordinateForkInputBlurred}
+              focusRequest={subordinateForkFocusRequest}
+              repoPubkey={repo.selectedMaintainer}
+              repoIdentifier={repo.dTag}
+              repoCloneUrls={editedCloneUrls}
+              onInputChange={(value, parsed) => {
+                const nextUpstream = parsed.upstream;
+                setUpstreamInput(value);
+                setUpstream(nextUpstream);
+                setPendingUpstreamNip05(
+                  parsed.pendingNip05
+                    ? {
+                        ...parsed.pendingNip05,
+                        gitUrl: nextUpstream.gitUrl ?? "",
+                      }
+                    : undefined,
+                );
+                if (
+                  isValidRepoUpstream(nextUpstream) &&
+                  !isRepoUpstreamSelfReference(
+                    nextUpstream,
+                    repo.selectedMaintainer,
+                    repo.dTag,
+                    editedCloneUrls,
+                  )
+                ) {
+                  setSubordinateForkInputBlurred(false);
+                }
+              }}
+              onInputBlur={() => setSubordinateForkInputBlurred(true)}
+              onOpenEditor={focusSubordinateForkInput}
+              onCloseEditor={() => {
+                setSubordinateForkEditorOpen(false);
+                setSubordinateForkInputBlurred(false);
+              }}
+              onClear={() => {
+                setUpstream(emptyRepoUpstream());
+                setPendingUpstreamNip05(undefined);
+                setUpstreamInput("");
+                setSubordinateForkInputBlurred(false);
+              }}
+            />
           </section>
 
           <Separator />

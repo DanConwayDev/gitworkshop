@@ -17,6 +17,7 @@ import {
   getRepoWebUrls,
   getRepoMaintainers,
   getRepoRelays,
+  getRepoUpstreams,
 } from "@/lib/nip34";
 
 type RepositoryEvent = KnownEvent<typeof REPO_KIND>;
@@ -72,6 +73,10 @@ export class Repository extends EventCast<RepositoryEvent> {
     return getRepoWebUrls(this.event);
   }
 
+  get upstreams() {
+    return getRepoUpstreams(this.event);
+  }
+
   get maintainers(): string[] {
     const listed = getRepoMaintainers(this.event);
     return listed.length > 0 ? listed : [this.event.pubkey];
@@ -82,7 +87,7 @@ export class Repository extends EventCast<RepositoryEvent> {
       this.event.tags
         .filter(([t]) => t === "t")
         .map(([, v]) => v)
-        .filter((v) => v !== "personal-fork"),
+        .filter((v): v is string => !!v),
     );
   }
 

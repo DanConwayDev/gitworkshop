@@ -56,8 +56,11 @@ import {
   graspCloneUrlNpub,
   computeMaintainerLeadership,
   getRepoRelays,
+  getRepoUpstreams,
+  REPO_KIND,
   type ResolvedRepo,
 } from "@/lib/nip34";
+import { RepoUpstreamSection } from "@/components/repo/RepoUpstreamSection";
 import { GraspLogo } from "@/components/GraspLogo";
 import type { NostrEvent } from "nostr-tools";
 import { nip19 } from "nostr-tools";
@@ -76,7 +79,6 @@ import { useActiveAccount } from "applesauce-react/hooks";
 import { DeleteRepo } from "@/actions/nip34";
 import { runner } from "@/services/actions";
 import { useToast } from "@/hooks/useToast";
-import { REPO_KIND } from "@/lib/nip34";
 import { useNavigate } from "react-router-dom";
 import { useUserPath } from "@/hooks/useUserPath";
 import { normalizeUrl } from "@/lib/url";
@@ -312,6 +314,9 @@ function SidebarVariant({
   const selectedAnnouncement = repo.announcements.find(
     (a) => a.pubkey === repo.selectedMaintainer,
   );
+  const upstreams = selectedAnnouncement
+    ? getRepoUpstreams(selectedAnnouncement)
+    : [];
   const isMultiAnnouncement = repo.announcements.length > 1;
   const maintainerLeadership = useMemo(
     () => computeMaintainerLeadership(repo.maintainerSet, repo.maintainerEdges),
@@ -347,6 +352,8 @@ function SidebarVariant({
               {repo.description}
             </p>
           )}
+
+          <RepoUpstreamSection upstreams={upstreams} compact />
 
           {/* Web URLs */}
           {repo.webUrls.length > 0 && (
@@ -575,6 +582,10 @@ function FullVariant({
     () => repo.announcements.find((a) => a.pubkey === repo.selectedMaintainer),
     [repo],
   );
+  const upstreams = useMemo(
+    () => (selectedAnnouncement ? getRepoUpstreams(selectedAnnouncement) : []),
+    [selectedAnnouncement],
+  );
   const isMultiMaintainer = repo.announcements.length > 1;
   const maintainerLeadership = useMemo(
     () => computeMaintainerLeadership(repo.maintainerSet, repo.maintainerEdges),
@@ -609,6 +620,8 @@ function FullVariant({
           {repo.description}
         </p>
       )}
+
+      <RepoUpstreamSection upstreams={upstreams} />
 
       {/* Topics */}
       {repo.labels.length > 0 && (
