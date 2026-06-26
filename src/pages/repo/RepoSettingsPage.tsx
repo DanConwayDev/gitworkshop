@@ -584,6 +584,8 @@ function RepoSettingsForm({
   const [subordinateForkEditorOpen, setSubordinateForkEditorOpen] = useState(
     () => currentUpstreams.length > 0,
   );
+  const [subordinateForkInputBlurred, setSubordinateForkInputBlurred] =
+    useState(false);
   const [subordinateForkFocusRequest, setSubordinateForkFocusRequest] =
     useState(0);
   const upstreamInputRef = useRef<HTMLInputElement>(null);
@@ -663,6 +665,10 @@ function RepoSettingsForm({
   const [saveError, setSaveError] = useState<string | undefined>();
 
   const isSubordinateFork = isValidRepoUpstream(upstream);
+  const showInvalidSubordinateForkInput =
+    subordinateForkEditorOpen &&
+    subordinateForkInputBlurred &&
+    !isSubordinateFork;
 
   const effectiveUpstreams = useMemo(
     () => (isSubordinateFork ? [upstream] : []),
@@ -1350,6 +1356,7 @@ function RepoSettingsForm({
                     }
 
                     setSubordinateForkEditorOpen(false);
+                    setSubordinateForkInputBlurred(false);
                     setUpstream(emptyRepoUpstream());
                     setUpstreamInput("");
                   }}
@@ -1376,19 +1383,35 @@ function RepoSettingsForm({
                       value={upstreamInput}
                       onChange={(e) => {
                         const value = e.target.value;
+                        const nextUpstream = parseUpstreamInput(value);
                         setUpstreamInput(value);
-                        setUpstream(parseUpstreamInput(value));
+                        setUpstream(nextUpstream);
+                        if (isValidRepoUpstream(nextUpstream)) {
+                          setSubordinateForkInputBlurred(false);
+                        }
                       }}
+                      onBlur={() => setSubordinateForkInputBlurred(true)}
                       placeholder='"nostr://..." or "https://github.com/org/repo.git"'
-                      className="h-8 text-xs font-mono"
+                      aria-invalid={showInvalidSubordinateForkInput}
+                      className={cn(
+                        "h-8 text-xs font-mono",
+                        showInvalidSubordinateForkInput &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
                     />
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Also accepts <code className="font-mono">naddr1…</code>,{" "}
-                      <code className="font-mono">nostr://npub1…/repo</code>,{" "}
-                      <code className="font-mono">npub1…/repo</code>, and
-                      repository coordinates. The checkbox checks itself when a
-                      valid reference is detected.
-                    </p>
+                    {showInvalidSubordinateForkInput ? (
+                      <p className="text-[11px] font-medium text-destructive">
+                        Invalid repository link or git URL.
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Also accepts <code className="font-mono">naddr1…</code>,{" "}
+                        <code className="font-mono">nostr://npub1…/repo</code>,{" "}
+                        <code className="font-mono">npub1…/repo</code>, and
+                        repository coordinates. The checkbox checks itself when
+                        a valid reference is detected.
+                      </p>
+                    )}
                   </div>
                   <div className="flex justify-end">
                     <Button
@@ -1398,6 +1421,7 @@ function RepoSettingsForm({
                       onClick={() => {
                         setUpstream(emptyRepoUpstream());
                         setUpstreamInput("");
+                        setSubordinateForkInputBlurred(false);
                       }}
                       className="h-7 px-2 text-xs text-muted-foreground"
                     >
