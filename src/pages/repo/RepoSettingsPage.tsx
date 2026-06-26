@@ -289,6 +289,10 @@ function parseUpstreamInput(input: string): RepoUpstream {
   };
 }
 
+function isValidRepoUpstream(upstream: RepoUpstream): boolean {
+  return !!(upstream.repository?.trim() || upstream.gitUrl?.trim());
+}
+
 function formatUpstreamInput(upstream: RepoUpstream): string {
   const parts: string[] = [];
   const parsed = parseRepoCoordinate(upstream.repository);
@@ -577,9 +581,12 @@ function RepoSettingsForm({
   const [upstreamInput, setUpstreamInput] = useState<string>(() =>
     formatUpstreamInput(currentUpstreams[0] ?? emptyRepoUpstream()),
   );
-  const [isSubordinateFork, setIsSubordinateFork] = useState(
+  const [subordinateForkEditorOpen, setSubordinateForkEditorOpen] = useState(
     () => currentUpstreams.length > 0,
   );
+  const [subordinateForkFocusRequest, setSubordinateForkFocusRequest] =
+    useState(0);
+  const upstreamInputRef = useRef<HTMLInputElement>(null);
 
   // Co-maintainers listed by this selected announcement.
   const [editedMaintainers, setEditedMaintainers] =
@@ -655,10 +662,22 @@ function RepoSettingsForm({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | undefined>();
 
+  const isSubordinateFork = isValidRepoUpstream(upstream);
+
   const effectiveUpstreams = useMemo(
     () => (isSubordinateFork ? [upstream] : []),
     [isSubordinateFork, upstream],
   );
+
+  const focusSubordinateForkInput = useCallback(() => {
+    setSubordinateForkEditorOpen(true);
+    setSubordinateForkFocusRequest((request) => request + 1);
+  }, []);
+
+  useEffect(() => {
+    if (!subordinateForkEditorOpen || subordinateForkFocusRequest === 0) return;
+    upstreamInputRef.current?.focus();
+  }, [subordinateForkEditorOpen, subordinateForkFocusRequest]);
 
   // Sync selectedDomains with the current Grasp domains on first render
   useEffect(() => {
@@ -1325,7 +1344,14 @@ function RepoSettingsForm({
                   id="edit-subordinate-fork"
                   checked={isSubordinateFork}
                   onCheckedChange={(checked) => {
-                    setIsSubordinateFork(checked === true);
+                    if (checked === true) {
+                      focusSubordinateForkInput();
+                      return;
+                    }
+
+                    setSubordinateForkEditorOpen(false);
+                    setUpstream(emptyRepoUpstream());
+                    setUpstreamInput("");
                   }}
                   className="mt-0.5"
                 />
@@ -1339,13 +1365,14 @@ function RepoSettingsForm({
                 </span>
               </label>
 
-              {isSubordinateFork ? (
+              {subordinateForkEditorOpen ? (
                 <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">
                       Repository link or git URL
                     </Label>
                     <Input
+                      ref={upstreamInputRef}
                       value={upstreamInput}
                       onChange={(e) => {
                         const value = e.target.value;
@@ -1359,7 +1386,8 @@ function RepoSettingsForm({
                       Also accepts <code className="font-mono">naddr1…</code>,{" "}
                       <code className="font-mono">nostr://npub1…/repo</code>,{" "}
                       <code className="font-mono">npub1…/repo</code>, and
-                      repository coordinates.
+                      repository coordinates. The checkbox checks itself when a
+                      valid reference is detected.
                     </p>
                   </div>
                   <div className="flex justify-end">
