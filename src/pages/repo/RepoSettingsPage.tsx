@@ -398,6 +398,40 @@ function LeadBadge() {
   );
 }
 
+function IdentifiedUpstreamBadge({ upstream }: { upstream: RepoUpstream }) {
+  const parsed = parseRepoCoordinate(upstream.repository);
+  if (!parsed) return null;
+
+  const repoPath = repoToPath(
+    parsed.pubkey,
+    parsed.identifier,
+    upstream.relayHint ? [upstream.relayHint] : [],
+  );
+
+  return (
+    <Link
+      to={repoPath}
+      className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background px-2 py-1 text-xs transition-colors hover:bg-muted/60"
+      title={upstream.repository}
+    >
+      <UserAvatar
+        pubkey={parsed.pubkey}
+        size="xs"
+        className="shrink-0"
+        noHoverCard
+      />
+      <UserName pubkey={parsed.pubkey} className="min-w-0 max-w-32 truncate" />
+      <span className="text-muted-foreground">/</span>
+      <Badge
+        variant="secondary"
+        className="max-w-40 truncate rounded-full px-1.5 py-0 font-mono text-[10px]"
+      >
+        {parsed.identifier}
+      </Badge>
+    </Link>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
@@ -1403,6 +1437,10 @@ function RepoSettingsForm({
                       <p className="text-[11px] font-medium text-destructive">
                         Invalid repository link or git URL.
                       </p>
+                    ) : parseRepoCoordinate(upstream.repository) ? (
+                      <div className="pt-0.5">
+                        <IdentifiedUpstreamBadge upstream={upstream} />
+                      </div>
                     ) : (
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
                         Also accepts <code className="font-mono">naddr1…</code>,{" "}
