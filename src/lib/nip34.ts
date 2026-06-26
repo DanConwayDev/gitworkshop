@@ -2,7 +2,7 @@
  * NIP-34 Git Stuff - Constants and helpers
  */
 
-import { nip19, type NostrEvent } from "nostr-tools";
+import type { NostrEvent } from "nostr-tools";
 import {
   getNip10References,
   getCommentRootPointer,
@@ -13,6 +13,7 @@ import {
 import {
   getReplaceableIdentifier,
   getOrComputeCachedValue,
+  parseReplaceableAddress,
 } from "applesauce-core/helpers";
 import { ISSUE_LABEL_NAMESPACE } from "@/factories/IssueLabelFactory";
 import { getThreadTree } from "@/lib/threadTree";
@@ -429,9 +430,6 @@ export function getRepoMaintainers(ev: NostrEvent): string[] {
  * Extract subordinate-fork upstream metadata from NIP-34 `u` tags.
  * Format: ["u", "30617:<pubkey>:<identifier>", "<relay-hint>", "<author-pubkey>"]
  * or ["u", "<git-url>"].
- *
- * Older draft events may contain "30617:<pubkey>:<identifier>|<git-url>";
- * keep parsing that form for compatibility, but don't emit it.
  */
 export function getRepoUpstreams(ev: NostrEvent): RepoUpstream[] {
   return getOrComputeCachedValue(ev, RepoUpstreamsSymbol, () =>
@@ -439,9 +437,8 @@ export function getRepoUpstreams(ev: NostrEvent): RepoUpstream[] {
       .filter(([t]) => t === "u")
       .map(([, target, relayHint, authorPubkey]) => {
         const rawTarget = target ?? "";
-        const [repository, gitUrl] = rawTarget.includes("|")
-          ? rawTarget.split("|", 2)
-          : rawTarget.startsWith("http://") || rawTarget.startsWith("https://")
+        const [repository, gitUrl] =
+          rawTarget.startsWith("http://") || rawTarget.startsWith("https://")
             ? ["", rawTarget]
             : [rawTarget, ""];
         return {
@@ -613,32 +610,15 @@ export function repoCoordinate(pubkey: string, identifier: string): string {
   return `${REPO_KIND}:${pubkey}:${identifier}`;
 }
 
-function decodeRepoCoordinatePubkey(pubkey: string): string | undefined {
-  if (/^[0-9a-f]{64}$/i.test(pubkey)) return pubkey.toLowerCase();
-
-  try {
-    const decoded = nip19.decode(pubkey);
-    if (decoded.type === "npub") return decoded.data;
-  } catch {
-    // ignore malformed bech32 input
-  }
-
-  return undefined;
-}
-
 export function parseRepoCoordinate(
   coordinate: string | undefined,
 ): { pubkey: string; identifier: string } | undefined {
-  if (!coordinate?.startsWith(`${REPO_KIND}:`)) return undefined;
-  const rest = coordinate.slice(`${REPO_KIND}:`.length);
-  const separator = rest.indexOf(":");
-  if (separator === -1) return undefined;
+  if (!coordinate) return undefined;
 
-  const pubkey = rest.slice(0, separator);
-  const identifier = rest.slice(separator + 1);
-  const decodedPubkey = decodeRepoCoordinatePubkey(pubkey);
-  if (!decodedPubkey || !identifier) return undefined;
-  return { pubkey: decodedPubkey, identifier };
+  const pointer = parseReplaceableAddress(coordinate, true);
+  if (!pointer || pointer.kind !== REPO_KIND) return undefined;
+
+  return { pubkey: pointer.pubkey, identifier: pointer.identifier };
 }
 
 export function isRepoUpstreamSelfReference(
