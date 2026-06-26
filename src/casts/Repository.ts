@@ -87,7 +87,7 @@ export class Repository extends EventCast<RepositoryEvent> {
       this.event.tags
         .filter(([t]) => t === "t")
         .map(([, v]) => v)
-        .filter((v) => v !== "personal-fork"),
+        .filter((v): v is string => !!v),
     );
   }
 

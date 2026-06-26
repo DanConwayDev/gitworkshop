@@ -364,9 +364,7 @@ function RepoSettingsForm({
       selectedAnnouncement?.tags
         .filter(([t]) => t === "t")
         .map(([, v]) => v)
-        .filter(
-          (value): value is string => !!value && value !== "personal-fork",
-        ) ?? [],
+        .filter((value): value is string => !!value) ?? [],
     [selectedAnnouncement],
   );
   const currentUpstreams = useMemo(

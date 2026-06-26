@@ -818,7 +818,7 @@ export interface ResolvedRepo {
    * Neither case should be displayed in repo cards.
    */
   requestedMaintainers: string[];
-  /** Union of `t` tags across all announcements (excluding "personal-fork") */
+  /** Union of `t` tags across all announcements */
   labels: string[];
 
   // --- Graph / provenance data (for detailed view) ---
@@ -2433,7 +2433,7 @@ export function resolveChain(
       }
     }
     for (const [t, v] of ev.tags) {
-      if (t === "t" && v && v !== "personal-fork" && !seenLabel.has(v)) {
+      if (t === "t" && v && !seenLabel.has(v)) {
         seenLabel.add(v);
         labels.push(v);
       }
