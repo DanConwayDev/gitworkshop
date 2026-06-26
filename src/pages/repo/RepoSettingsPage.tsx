@@ -27,6 +27,7 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useActiveAccount } from "applesauce-react/hooks";
+import { IdentityStatus } from "applesauce-loaders/helpers";
 import {
   ArrowLeft,
   Plus,
@@ -95,7 +96,7 @@ import {
   repoToPath,
 } from "@/lib/routeUtils";
 import { validateGraspServer } from "@/lib/grasp";
-import { publish } from "@/services/nostr";
+import { dnsIdentityLoader, nip05WarmupReady, publish } from "@/services/nostr";
 import { useGraspServers } from "@/hooks/useGraspServers";
 import { DEFAULT_GRASP_SERVERS } from "@/services/settings";
 import { GraspLogo } from "@/components/GraspLogo";
@@ -167,6 +168,27 @@ function repoCoordinate(pubkey: string, identifier: string): string {
   return `${REPO_KIND}:${pubkey}:${identifier}`;
 }
 
+interface PendingNip05Upstream {
+  nip05: string;
+  repoId: string;
+  relayHint: string;
+  gitUrl: string;
+}
+
+type ParsedRepoLink =
+  | { type: "resolved"; upstream: RepoUpstream }
+  | {
+      type: "nip05";
+      nip05: string;
+      repoId: string;
+      relayHint: string;
+    };
+
+interface ParsedUpstreamInput {
+  upstream: RepoUpstream;
+  pendingNip05?: Omit<PendingNip05Upstream, "gitUrl">;
+}
+
 function parseRepoCoordinate(
   coordinate: string | undefined,
 ): { pubkey: string; identifier: string } | undefined {
@@ -203,28 +225,46 @@ function parseNaddrUpstream(input: string): RepoUpstream | undefined {
   }
 }
 
-function parseRepoPathUpstream(path: string): RepoUpstream | undefined {
+function parsedRouteToRepoLink(
+  parsed: ReturnType<typeof parseRepoRoute>,
+): ParsedRepoLink | undefined {
+  if (!parsed) return undefined;
+
+  if (parsed.type === "npub") {
+    return {
+      type: "resolved",
+      upstream: {
+        repository: repoCoordinate(parsed.pubkey, parsed.repoId),
+        relayHint: parsed.relayHints[0] ?? "",
+        authorPubkey: parsed.pubkey,
+        gitUrl: "",
+      },
+    };
+  }
+
+  return {
+    type: "nip05",
+    nip05: parsed.nip05,
+    repoId: parsed.repoId,
+    relayHint: parsed.relayHints[0] ?? "",
+  };
+}
+
+function parseRepoPathUpstream(path: string): ParsedRepoLink | undefined {
   const segments = path.split("/").filter(Boolean);
 
   for (let index = 0; index < segments.length - 1; index++) {
     for (const width of [3, 2]) {
       const candidate = segments.slice(index, index + width).join("/");
-      const parsed = parseRepoRoute(candidate);
-      if (parsed?.type !== "npub") continue;
-
-      return {
-        repository: repoCoordinate(parsed.pubkey, parsed.repoId),
-        relayHint: parsed.relayHints[0] ?? "",
-        authorPubkey: parsed.pubkey,
-        gitUrl: "",
-      };
+      const parsed = parsedRouteToRepoLink(parseRepoRoute(candidate));
+      if (parsed) return parsed;
     }
   }
 
   return undefined;
 }
 
-function parseNostrCloneUpstream(input: string): RepoUpstream | undefined {
+function parseNostrCloneUpstream(input: string): ParsedRepoLink | undefined {
   const match = input.match(/\bnostr:\/\/\S+/i);
   if (!match) return undefined;
 
@@ -236,14 +276,35 @@ function parseNostrCloneUpstream(input: string): RepoUpstream | undefined {
   }
 }
 
-function parseWebRepoPathUpstream(input: string): RepoUpstream | undefined {
+function isGitworkshopHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+  return lower === "gitworkshop.dev" || lower === "www.gitworkshop.dev";
+}
+
+function normalizeGitworkshopRepoPath(path: string): string {
+  const segments = path.split("/").filter(Boolean);
+  const first = segments[0]?.toLowerCase();
+  const withoutHost =
+    first === "gitworkshop.dev" || first === "www.gitworkshop.dev"
+      ? segments.slice(1)
+      : segments;
+  const prefix = withoutHost[0];
+
+  if (prefix === "r" || prefix === "p") return withoutHost.slice(1).join("/");
+  return withoutHost.join("/");
+}
+
+function parseWebRepoPathUpstream(input: string): ParsedRepoLink | undefined {
   try {
     const url = new URL(input);
     if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
     if (url.pathname.endsWith(".git")) return undefined;
-    return parseRepoPathUpstream(url.pathname);
+    const path = isGitworkshopHost(url.hostname)
+      ? normalizeGitworkshopRepoPath(url.pathname)
+      : url.pathname;
+    return parseRepoPathUpstream(path);
   } catch {
-    return parseRepoPathUpstream(input);
+    return parseRepoPathUpstream(normalizeGitworkshopRepoPath(input));
   }
 }
 
@@ -270,22 +331,55 @@ function extractGitUrl(input: string, hasRepoLink: boolean): string {
   return "";
 }
 
-function parseUpstreamInput(input: string): RepoUpstream {
+function parseUpstreamInput(input: string): ParsedUpstreamInput {
   const trimmed = input.trim();
-  if (!trimmed) return emptyRepoUpstream();
+  if (!trimmed) return { upstream: emptyRepoUpstream() };
 
   const repoLink =
-    parseNaddrUpstream(trimmed) ??
+    (() => {
+      const naddr = parseNaddrUpstream(trimmed);
+      return naddr
+        ? ({ type: "resolved", upstream: naddr } as const)
+        : undefined;
+    })() ??
     parseNostrCloneUpstream(trimmed) ??
-    parseCoordinateUpstream(trimmed) ??
+    (() => {
+      const coordinate = parseCoordinateUpstream(trimmed);
+      return coordinate
+        ? ({ type: "resolved", upstream: coordinate } as const)
+        : undefined;
+    })() ??
     parseWebRepoPathUpstream(trimmed);
   const gitUrl = extractGitUrl(trimmed, !!repoLink);
 
+  if (repoLink?.type === "resolved") {
+    return {
+      upstream: {
+        ...repoLink.upstream,
+        gitUrl,
+      },
+    };
+  }
+
+  if (repoLink?.type === "nip05") {
+    return {
+      upstream: {
+        repository: "",
+        relayHint: repoLink.relayHint,
+        authorPubkey: "",
+        gitUrl,
+      },
+      pendingNip05: repoLink,
+    };
+  }
+
   return {
-    repository: repoLink?.repository ?? "",
-    relayHint: repoLink?.relayHint ?? "",
-    authorPubkey: repoLink?.authorPubkey ?? "",
-    gitUrl,
+    upstream: {
+      repository: "",
+      relayHint: "",
+      authorPubkey: "",
+      gitUrl,
+    },
   };
 }
 
@@ -615,6 +709,11 @@ function RepoSettingsForm({
   const [upstreamInput, setUpstreamInput] = useState<string>(() =>
     formatUpstreamInput(currentUpstreams[0] ?? emptyRepoUpstream()),
   );
+  const [pendingUpstreamNip05, setPendingUpstreamNip05] =
+    useState<PendingNip05Upstream>();
+  const [upstreamNip05Status, setUpstreamNip05Status] = useState<
+    "idle" | "loading" | "not-found" | "error"
+  >("idle");
   const [subordinateForkEditorOpen, setSubordinateForkEditorOpen] = useState(
     () => currentUpstreams.length > 0,
   );
@@ -700,10 +799,19 @@ function RepoSettingsForm({
 
   const isSubordinateFork = isValidRepoUpstream(upstream);
   const identifiedNostrUpstream = parseRepoCoordinate(upstream.repository);
+  const isResolvingUpstreamNip05 = upstreamNip05Status === "loading";
   const showInvalidSubordinateForkInput =
     subordinateForkEditorOpen &&
     subordinateForkInputBlurred &&
+    !isResolvingUpstreamNip05 &&
     !isSubordinateFork;
+  const upstreamInputErrorMessage = pendingUpstreamNip05
+    ? upstreamNip05Status === "not-found"
+      ? `${pendingUpstreamNip05.nip05} could not be resolved.`
+      : upstreamNip05Status === "error"
+        ? `Failed to resolve ${pendingUpstreamNip05.nip05}.`
+        : "Invalid repository link or git URL."
+    : "Invalid repository link or git URL.";
 
   const effectiveUpstreams = useMemo(
     () => (isSubordinateFork ? [upstream] : []),
@@ -719,6 +827,66 @@ function RepoSettingsForm({
     if (!subordinateForkEditorOpen || subordinateForkFocusRequest === 0) return;
     upstreamInputRef.current?.focus();
   }, [subordinateForkEditorOpen, subordinateForkFocusRequest]);
+
+  useEffect(() => {
+    if (!pendingUpstreamNip05) {
+      setUpstreamNip05Status("idle");
+      return;
+    }
+
+    const atIndex = pendingUpstreamNip05.nip05.indexOf("@");
+    if (atIndex === -1) {
+      setUpstreamNip05Status("error");
+      return;
+    }
+
+    const name = pendingUpstreamNip05.nip05.slice(0, atIndex);
+    const domain = pendingUpstreamNip05.nip05.slice(atIndex + 1);
+    let cancelled = false;
+
+    setUpstreamNip05Status("loading");
+
+    const resolveIdentity = async () => {
+      await nip05WarmupReady;
+
+      const cached = dnsIdentityLoader.getIdentity(name, domain);
+      const identity =
+        cached ?? (await dnsIdentityLoader.loadIdentity(name, domain));
+
+      dnsIdentityLoader.identities.set(`${name}@${domain}`, identity);
+      return identity;
+    };
+
+    resolveIdentity()
+      .then((identity) => {
+        if (cancelled) return;
+
+        if (identity.status !== IdentityStatus.Found) {
+          setUpstreamNip05Status("not-found");
+          return;
+        }
+
+        setUpstream({
+          repository: repoCoordinate(
+            identity.pubkey,
+            pendingUpstreamNip05.repoId,
+          ),
+          relayHint: pendingUpstreamNip05.relayHint,
+          authorPubkey: identity.pubkey,
+          gitUrl: pendingUpstreamNip05.gitUrl,
+        });
+        setPendingUpstreamNip05(undefined);
+        setSubordinateForkInputBlurred(false);
+        setUpstreamNip05Status("idle");
+      })
+      .catch(() => {
+        if (!cancelled) setUpstreamNip05Status("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingUpstreamNip05]);
 
   // Sync selectedDomains with the current Grasp domains on first render
   useEffect(() => {
@@ -1088,6 +1256,7 @@ function RepoSettingsForm({
     hasInfrastructure &&
     hasChanges &&
     (!defaultBranchChanged || !!repoState) &&
+    !isResolvingUpstreamNip05 &&
     !isSaving;
 
   const handleSave = useCallback(async () => {
@@ -1398,6 +1567,7 @@ function RepoSettingsForm({
                       setSubordinateForkEditorOpen(false);
                       setSubordinateForkInputBlurred(false);
                       setUpstream(emptyRepoUpstream());
+                      setPendingUpstreamNip05(undefined);
                       setUpstreamInput("");
                     }}
                     className="mt-0.5"
@@ -1427,6 +1597,7 @@ function RepoSettingsForm({
                         setSubordinateForkEditorOpen(false);
                         setSubordinateForkInputBlurred(false);
                         setUpstream(emptyRepoUpstream());
+                        setPendingUpstreamNip05(undefined);
                         setUpstreamInput("");
                       }}
                       className="h-7 w-7 shrink-0 text-muted-foreground"
@@ -1448,9 +1619,18 @@ function RepoSettingsForm({
                       value={upstreamInput}
                       onChange={(e) => {
                         const value = e.target.value;
-                        const nextUpstream = parseUpstreamInput(value);
+                        const parsed = parseUpstreamInput(value);
+                        const nextUpstream = parsed.upstream;
                         setUpstreamInput(value);
                         setUpstream(nextUpstream);
+                        setPendingUpstreamNip05(
+                          parsed.pendingNip05
+                            ? {
+                                ...parsed.pendingNip05,
+                                gitUrl: nextUpstream.gitUrl ?? "",
+                              }
+                            : undefined,
+                        );
                         if (isValidRepoUpstream(nextUpstream)) {
                           setSubordinateForkInputBlurred(false);
                         }
@@ -1466,12 +1646,25 @@ function RepoSettingsForm({
                     />
                     {showInvalidSubordinateForkInput ? (
                       <p className="text-[11px] font-medium text-destructive">
-                        Invalid repository link or git URL.
+                        {upstreamInputErrorMessage}
+                      </p>
+                    ) : isResolvingUpstreamNip05 && pendingUpstreamNip05 ? (
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Resolving{" "}
+                        <code className="font-mono">
+                          {pendingUpstreamNip05.nip05}
+                        </code>
+                        …
                       </p>
                     ) : (
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
                         Also accepts <code className="font-mono">naddr1…</code>,{" "}
                         <code className="font-mono">nostr://npub1…/repo</code>,{" "}
+                        <code className="font-mono">
+                          nostr://nip05/relay/repo
+                        </code>
+                        , <code className="font-mono">gitworkshop.dev</code>{" "}
+                        repo URLs,{" "}
                         <code className="font-mono">npub1…/repo</code>, and
                         repository coordinates. The checkbox checks itself when
                         a valid reference is detected.
@@ -1485,6 +1678,7 @@ function RepoSettingsForm({
                       size="sm"
                       onClick={() => {
                         setUpstream(emptyRepoUpstream());
+                        setPendingUpstreamNip05(undefined);
                         setUpstreamInput("");
                         setSubordinateForkInputBlurred(false);
                       }}
