@@ -81,7 +81,11 @@ import {
   type PRMergeabilityStatus,
 } from "@/hooks/usePRMergeability";
 import { createPackfile, type PackableObject } from "@/lib/git-packfile";
-import { pushToGitServer, type RefUpdate } from "@/lib/git-push";
+import {
+  getReceivePackRefs,
+  pushToGitServer,
+  type RefUpdate,
+} from "@/lib/git-push";
 import { performMerge } from "@/lib/perform-merge";
 import { assertFastForwardSafe } from "@/lib/patch-merge";
 import { pool as relayPool, eventStore } from "@/services/nostr";
@@ -144,6 +148,18 @@ type MergeStep =
   | "done"
   | "failed";
 
+interface PushDeliveryOutcome {
+  cloneUrl: string;
+  ok: boolean;
+  message: string;
+}
+
+interface PushDeliverySummary {
+  outcomes: PushDeliveryOutcome[];
+  successCount: number;
+  totalCount: number;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -193,6 +209,93 @@ function formatGitServerName(cloneUrls: string[]): string {
   }
 
   return hostname;
+}
+
+function formatCloneUrlHost(cloneUrl: string): string {
+  return getGitRemoteHostname(cloneUrl) ?? cloneUrl;
+}
+
+function summarizePushDelivery(summary: PushDeliverySummary): string {
+  return `Pushed to ${summary.successCount}/${summary.totalCount} Grasp server${summary.totalCount !== 1 ? "s" : ""}.`;
+}
+
+async function serverRefMatches(
+  cloneUrl: string,
+  refUpdate: RefUpdate,
+): Promise<boolean> {
+  try {
+    const refs = await getReceivePackRefs(cloneUrl);
+    return refs.refs[refUpdate.refName] === refUpdate.newHash;
+  } catch {
+    return false;
+  }
+}
+
+async function pushToGraspServer(
+  cloneUrl: string,
+  refUpdate: RefUpdate,
+  packfile: Uint8Array,
+): Promise<PushDeliveryOutcome> {
+  if (await serverRefMatches(cloneUrl, refUpdate)) {
+    return {
+      cloneUrl,
+      ok: true,
+      message: "already has the new commit",
+    };
+  }
+
+  try {
+    const result = await pushToGitServer(cloneUrl, [refUpdate], packfile);
+    const refFailures = result.refResults.filter((r) => !r.ok);
+
+    if (result.unpackOk && refFailures.length === 0) {
+      return {
+        cloneUrl,
+        ok: true,
+        message: "accepted",
+      };
+    }
+
+    if (await serverRefMatches(cloneUrl, refUpdate)) {
+      return {
+        cloneUrl,
+        ok: true,
+        message: "accepted; server reported a stale failure",
+      };
+    }
+
+    if (!result.unpackOk) {
+      return {
+        cloneUrl,
+        ok: false,
+        message: "unpack failed",
+      };
+    }
+
+    const failures = refFailures
+      .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
+      .join("; ");
+
+    return {
+      cloneUrl,
+      ok: false,
+      message: failures || "ref update rejected",
+    };
+  } catch (err) {
+    if (await serverRefMatches(cloneUrl, refUpdate)) {
+      return {
+        cloneUrl,
+        ok: true,
+        message: "accepted; confirmation failed",
+      };
+    }
+
+    return {
+      cloneUrl,
+      ok: false,
+      message: err instanceof Error ? err.message : "push failed",
+    };
+  }
 }
 
 /**
@@ -257,6 +360,9 @@ export function MergePanel({
   // Merge step tracking
   const [mergeStep, setMergeStep] = useState<MergeStep>("idle");
   const [mergeError, setMergeError] = useState<string | null>(null);
+  const [pushDelivery, setPushDelivery] = useState<PushDeliverySummary | null>(
+    null,
+  );
 
   const supportsBrowserMerge = repo.graspCloneUrls.length > 0;
   const localMergeCommand = `ngit merge ${pr.rootEvent.id.slice(0, 8)} && git push`;
@@ -382,7 +488,7 @@ export function MergePanel({
     async (
       allObjects: PackableObject[],
       refUpdate: RefUpdate,
-    ): Promise<void> => {
+    ): Promise<PushDeliverySummary> => {
       // Safety guard at the single push choke point: never advance a branch to
       // a tip that does not descend from its current tip. A non-fast-forward
       // push orphans commits already on the branch — the disaster an incorrect
@@ -390,39 +496,32 @@ export function MergePanel({
       assertFastForwardSafe(allObjects, refUpdate.oldHash, refUpdate.newHash);
 
       const packfile = await createPackfile(allObjects);
-      let pushSucceeded = false;
-      let lastPushError = "";
+      const outcomes = await Promise.all(
+        repo.graspCloneUrls.map((cloneUrl) =>
+          pushToGraspServer(cloneUrl, refUpdate, packfile),
+        ),
+      );
+      const successCount = outcomes.filter((outcome) => outcome.ok).length;
+      const summary: PushDeliverySummary = {
+        outcomes,
+        successCount,
+        totalCount: outcomes.length,
+      };
 
-      for (const cloneUrl of repo.graspCloneUrls) {
-        try {
-          const result = await pushToGitServer(cloneUrl, [refUpdate], packfile);
-          if (result.unpackOk) {
-            const refOk = result.refResults.every((r) => r.ok);
-            if (refOk) {
-              pushSucceeded = true;
-              break;
-            } else {
-              const failures = result.refResults
-                .filter((r) => !r.ok)
-                .map((r) => `${r.refName}: ${r.reason ?? "unknown"}`)
-                .join("; ");
-              lastPushError = `Ref update rejected: ${failures}`;
-            }
-          } else {
-            lastPushError = `Unpack failed on ${cloneUrl}`;
-          }
-        } catch (err) {
-          lastPushError =
-            err instanceof Error ? err.message : `Push failed to ${cloneUrl}`;
-        }
-      }
-
-      if (!pushSucceeded) {
+      if (successCount === 0) {
+        const reasons = outcomes
+          .map(
+            (outcome) =>
+              `${formatCloneUrlHost(outcome.cloneUrl)}: ${outcome.message}`,
+          )
+          .join("; ");
         throw new Error(
-          `Push failed to all Grasp servers. ${lastPushError}. ` +
+          `Push failed to all Grasp servers. ${reasons}. ` +
             "The state event will expire from purgatory in 30 minutes.",
         );
       }
+
+      return summary;
     },
     [repo.graspCloneUrls],
   );
@@ -441,8 +540,10 @@ export function MergePanel({
 
     setMergeStep("building");
     setMergeError(null);
+    setPushDelivery(null);
 
     try {
+      let pushSummary: PushDeliverySummary | null = null;
       // ── Build the committer identity for the merge commit ──────────────
       const committerName =
         profile?.displayName || profile?.name || "Anonymous";
@@ -500,7 +601,10 @@ export function MergePanel({
         })),
         publishStateToGrasp: (state) =>
           publishToGraspRelays(state, graspRelayUrls),
-        pushObjects,
+        pushObjects: async (objects, refUpdate) => {
+          pushSummary = await pushObjects(objects, refUpdate);
+          setPushDelivery(pushSummary);
+        },
         publishStatusBroadly: (status) =>
           outboxStore.publish(status, [
             `outbox:${account.pubkey}`,
@@ -519,7 +623,7 @@ export function MergePanel({
 
       toast({
         title: "Patch merged",
-        description: `Merge commit ${mergeCommit.hash.slice(0, 8)} pushed to ${defaultBranchName}.`,
+        description: `Merge commit ${mergeCommit.hash.slice(0, 8)} pushed to ${defaultBranchName}. ${pushSummary ? summarizePushDelivery(pushSummary) : ""}`,
       });
     } catch (err) {
       const message =
@@ -562,6 +666,7 @@ export function MergePanel({
 
     setMergeStep("building");
     setMergeError(null);
+    setPushDelivery(null);
 
     try {
       const { objects, newTipCommitHash } = mergeability.applyResult;
@@ -579,11 +684,12 @@ export function MergePanel({
 
       // Push the linear commits
       setMergeStep("pushing");
-      await pushObjects(objects, {
+      const pushSummary = await pushObjects(objects, {
         oldHash: defaultBranchHead,
         newHash: newTipCommitHash,
         refName: defaultBranchRef,
       });
+      setPushDelivery(pushSummary);
 
       // Publish status + broadcast
       setMergeStep("publishing-status");
@@ -629,7 +735,7 @@ export function MergePanel({
       const patchCount = patchChain?.length ?? 0;
       toast({
         title: "Patch applied",
-        description: `${patchCount} commit${patchCount !== 1 ? "s" : ""} applied to ${defaultBranchName} (tip: ${newTipCommitHash.slice(0, 8)}).`,
+        description: `${patchCount} commit${patchCount !== 1 ? "s" : ""} applied to ${defaultBranchName} (tip: ${newTipCommitHash.slice(0, 8)}). ${summarizePushDelivery(pushSummary)}`,
       });
     } catch (err) {
       const message =
@@ -666,6 +772,7 @@ export function MergePanel({
 
     setMergeStep("building");
     setMergeError(null);
+    setPushDelivery(null);
 
     try {
       const { mergeCommitObj } = prMergeability.result;
@@ -685,7 +792,7 @@ export function MergePanel({
       // Push the merge commit PLUS any new objects a three-way merge produced
       // (rebuilt trees + auto-merged blobs). For the fast path extraObjects is
       // empty and the PR tip's tree already exists on the server.
-      await pushObjects(
+      const pushSummary = await pushObjects(
         [mergeCommitObj, ...prMergeability.result.extraObjects],
         {
           oldHash: defaultBranchHead,
@@ -693,6 +800,7 @@ export function MergePanel({
           refName: defaultBranchRef,
         },
       );
+      setPushDelivery(pushSummary);
 
       // ── Step 4+5: Status + broadcast ──────────────────────────────────
       setMergeStep("publishing-status");
@@ -729,7 +837,7 @@ export function MergePanel({
       setMergeStep("done");
       toast({
         title: "PR merged",
-        description: `Merge commit ${mergeCommitObj.hash.slice(0, 8)} pushed to ${defaultBranchName}.`,
+        description: `Merge commit ${mergeCommitObj.hash.slice(0, 8)} pushed to ${defaultBranchName}. ${summarizePushDelivery(pushSummary)}`,
       });
     } catch (err) {
       const message =
@@ -806,6 +914,7 @@ export function MergePanel({
                     onClick={() => {
                       setMergeStep("idle");
                       setMergeError(null);
+                      setPushDelivery(null);
                       mergeability.recheck();
                     }}
                   >
@@ -999,6 +1108,11 @@ export function MergePanel({
               </div>
             )}
 
+            {/* GRASP push delivery summary */}
+            {mergeStep === "done" && pushDelivery && (
+              <PushDeliverySummaryView summary={pushDelivery} />
+            )}
+
             {/* Local merge guidance for non-GRASP git servers */}
             {canShowLocalMerge && (
               <div className="rounded-md border border-muted bg-muted/30 px-3 py-2 text-sm">
@@ -1076,6 +1190,45 @@ export function MergePanel({
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
+
+function PushDeliverySummaryView({
+  summary,
+}: {
+  summary: PushDeliverySummary;
+}) {
+  return (
+    <div className="rounded-md border border-green-600/30 bg-green-600/5 px-3 py-2 text-sm">
+      <div className="flex items-start gap-2">
+        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-600" />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <p className="font-medium text-green-700 dark:text-green-400">
+            {summarizePushDelivery(summary)}
+          </p>
+          <ul className="space-y-1 text-xs">
+            {summary.outcomes.map((outcome) => (
+              <li
+                key={outcome.cloneUrl}
+                className="flex items-start gap-2 text-muted-foreground"
+              >
+                {outcome.ok ? (
+                  <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-green-600" />
+                ) : (
+                  <XCircle className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="font-medium text-foreground">
+                    {formatCloneUrlHost(outcome.cloneUrl)}
+                  </span>
+                  : {outcome.message}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function StatusIcon({
   status,
