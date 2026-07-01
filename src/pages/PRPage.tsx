@@ -318,6 +318,21 @@ export default function PRPage() {
     retryKey,
   );
 
+  // Once this tab successfully pushes a merge, keep the merge panel mounted
+  // until navigation. The newly published merged-status event flips pr.status
+  // to resolved immediately, but the local delivery summary should remain
+  // visible for the operator who just merged it.
+  const [locallyMergedPrId, setLocallyMergedPrId] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    setLocallyMergedPrId(null);
+  }, [prId]);
+  const keepMergePanelVisible = !!pr && locallyMergedPrId === pr.rootEvent.id;
+  const handleSuccessfulPush = useCallback(() => {
+    if (pr?.rootEvent.id) setLocallyMergedPrId(pr.rootEvent.id);
+  }, [pr?.rootEvent.id]);
+
   // Ordered priority pubkeys for @ mention autocomplete:
   // parent author first, then participants, then maintainers (deduped).
   const mentionPriorityPubkeys = useMemo<string[]>(() => {
@@ -1498,7 +1513,9 @@ export default function PRPage() {
                   (repo.graspCloneUrls.length > 0 ||
                     repo.additionalGitServerUrls.length > 0) &&
                   isMaintainer &&
-                  (pr.status === "open" || pr.status === "draft") &&
+                  (pr.status === "open" ||
+                    pr.status === "draft" ||
+                    keepMergePanelVisible) &&
                   (pr.itemType === "pr"
                     ? !!pr.tip.commitId
                     : patchChain && patchChain.length > 0) && (
@@ -1529,6 +1546,7 @@ export default function PRPage() {
                             })
                           : undefined
                       }
+                      onSuccessfulPush={handleSuccessfulPush}
                     />
                   )}
 

@@ -136,6 +136,12 @@ interface MergePanelProps {
    * Required for PR-type items (used in the merge commit message).
    */
   prNevent?: string;
+  /**
+   * Called after at least one Grasp server accepted the git push. Lets the
+   * parent keep this panel mounted after the merged status event changes the PR
+   * status to resolved.
+   */
+  onSuccessfulPush?: () => void;
 }
 
 type MergeStep =
@@ -345,6 +351,7 @@ export function MergePanel({
   defaultBranchHead,
   guessedBaseCommitId,
   prNevent,
+  onSuccessfulPush,
 }: MergePanelProps) {
   const account = useActiveAccount();
   const profile = useMyProfile();
@@ -604,6 +611,7 @@ export function MergePanel({
         pushObjects: async (objects, refUpdate) => {
           pushSummary = await pushObjects(objects, refUpdate);
           setPushDelivery(pushSummary);
+          onSuccessfulPush?.();
         },
         publishStatusBroadly: (status) =>
           outboxStore.publish(status, [
@@ -650,6 +658,7 @@ export function MergePanel({
     graspRelayUrls,
     toast,
     rootAuthorName,
+    onSuccessfulPush,
   ]);
 
   // ── Apply-to-tip orchestration ────────────────────────────────────────────
@@ -690,6 +699,7 @@ export function MergePanel({
         refName: defaultBranchRef,
       });
       setPushDelivery(pushSummary);
+      onSuccessfulPush?.();
 
       // Publish status + broadcast
       setMergeStep("publishing-status");
@@ -761,6 +771,7 @@ export function MergePanel({
     repo,
     graspRelayUrls,
     toast,
+    onSuccessfulPush,
   ]);
 
   // ── PR merge orchestration ────────────────────────────────────────────────
@@ -801,6 +812,7 @@ export function MergePanel({
         },
       );
       setPushDelivery(pushSummary);
+      onSuccessfulPush?.();
 
       // ── Step 4+5: Status + broadcast ──────────────────────────────────
       setMergeStep("publishing-status");
@@ -861,6 +873,7 @@ export function MergePanel({
     repo,
     graspRelayUrls,
     toast,
+    onSuccessfulPush,
   ]);
 
   // ── Render ──────────────────────────────────────────────────────────────
