@@ -72,6 +72,34 @@ function makeInitialState(): PoolState {
   };
 }
 
+function ancestryDistances(
+  startHash: string,
+  commits: Map<string, Commit>,
+): Map<string, number> {
+  const distances = new Map<string, number>();
+  const queue: Array<{ hash: string; distance: number }> = [
+    { hash: startHash, distance: 0 },
+  ];
+
+  while (queue.length > 0) {
+    const next = queue.shift();
+    if (!next) break;
+
+    const existing = distances.get(next.hash);
+    if (existing !== undefined && existing <= next.distance) continue;
+    distances.set(next.hash, next.distance);
+
+    const commit = commits.get(next.hash);
+    if (!commit) continue;
+
+    for (const parent of commit.parents) {
+      queue.push({ hash: parent, distance: next.distance + 1 });
+    }
+  }
+
+  return distances;
+}
+
 // ---------------------------------------------------------------------------
 // Ref status computation helpers
 // ---------------------------------------------------------------------------
@@ -285,11 +313,21 @@ export class GitGraspPool {
     this.urlManager.addUrls(options.cloneUrls);
 
     // Subscribe to state event observable if provided
-    if (options.stateEvent$) {
-      this.stateEventSub = options.stateEvent$.subscribe((stateEvent) => {
-        this.onStateEventChange(stateEvent);
-      });
-    }
+    if (options.stateEvent$) this.setStateEventSource(options.stateEvent$);
+  }
+
+  /**
+   * Attach or replace the repository state event source for this pool.
+   *
+   * Pools are shared by clone URL, so the first consumer to create a pool may
+   * not have repo-state context. Later consumers can provide it here without
+   * forcing a separate pool for the same git server.
+   */
+  setStateEventSource(stateEvent$: Observable<StateEventInput>): void {
+    this.stateEventSub?.unsubscribe();
+    this.stateEventSub = stateEvent$.subscribe((stateEvent) => {
+      this.onStateEventChange(stateEvent);
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -1489,13 +1527,27 @@ export class GitGraspPool {
       return null;
     }
 
-    const ancestorsA = new Set(chainA.map((c) => c.hash));
+    const byHash = new Map([...chainA, ...chainB].map((c) => [c.hash, c]));
+    const distancesFromA = ancestryDistances(commitA, byHash);
+    const distancesFromB = ancestryDistances(commitB, byHash);
 
-    // Walk B's chain newest-first; the first commit present in A's ancestry is
-    // the merge base.
-    for (const commit of chainB) {
-      if (ancestorsA.has(commit.hash)) return commit.hash;
+    let bestHash: string | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (const [hash, distanceA] of distancesFromA) {
+      const distanceB = distancesFromB.get(hash);
+      if (distanceB === undefined) continue;
+
+      // Pick the nearest common ancestor in the graph, not the first common
+      // commit in the timestamp-sorted history returned by getCommitHistory().
+      const score = distanceA + distanceB;
+      if (score < bestScore) {
+        bestScore = score;
+        bestHash = hash;
+      }
     }
+
+    if (bestHash) return bestHash;
 
     return null;
   }

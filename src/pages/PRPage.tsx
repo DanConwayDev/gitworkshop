@@ -352,7 +352,11 @@ export default function PRPage() {
   }, [pr, repo?.maintainerSet]);
 
   // Git pool — uses the repo's clone URLs (same as RepoCodePage).
-  const { pool: gitPool, poolState: gitPoolState } = useGitPool(cloneUrls);
+  const { pool: gitPool, poolState: gitPoolState } = useGitPool(cloneUrls, {
+    knownHeadCommit: repoState?.headCommitId,
+    stateRefs: repoState?.refs,
+    stateCreatedAt: repoState ? repoState.event.created_at : undefined,
+  });
 
   // Derive the active tab from the URL.
   // Also returns "commits" when on a commit detail sub-path.
@@ -1529,9 +1533,7 @@ export default function PRPage() {
                       effectiveCloneUrls={effectiveCloneUrls}
                       behindCount={behindCount}
                       defaultBranchName={defaultBranchName ?? "main"}
-                      defaultBranchHead={
-                        defaultBranchHead ?? repoState?.headCommitId
-                      }
+                      defaultBranchHead={defaultBranchHead}
                       guessedBaseCommitId={
                         pr.itemType === "patch" && patchMergeBase.isGuessed
                           ? patchMergeBase.baseCommitId

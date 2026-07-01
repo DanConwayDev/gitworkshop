@@ -95,6 +95,7 @@ export function getOrCreatePool(options: GetPoolOptions): GitGraspPool {
   // Exact match
   const existing = registry.get(key);
   if (existing && !existing.isDisposed) {
+    if (rest.stateEvent$) existing.setStateEventSource(rest.stateEvent$);
     return existing;
   }
 
@@ -103,6 +104,8 @@ export function getOrCreatePool(options: GetPoolOptions): GitGraspPool {
   if (overlapping) {
     // Add new URLs to the existing pool
     overlapping.pool.addUrls(cloneUrls);
+    if (rest.stateEvent$)
+      overlapping.pool.setStateEventSource(rest.stateEvent$);
 
     // Re-key the registry if the key changed
     if (overlapping.key !== key) {
