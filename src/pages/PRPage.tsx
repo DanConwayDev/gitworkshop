@@ -1492,10 +1492,11 @@ export default function PRPage() {
                   )}
                 </div>
 
-                {/* Merge panel — shown for PRs and patches on Grasp repos, for maintainers */}
+                {/* Merge panel — shown for PRs and patches on git-backed repos, for maintainers */}
                 {pr &&
                   repo &&
-                  repo.graspCloneUrls.length > 0 &&
+                  (repo.graspCloneUrls.length > 0 ||
+                    repo.additionalGitServerUrls.length > 0) &&
                   isMaintainer &&
                   (pr.status === "open" || pr.status === "draft") &&
                   (pr.itemType === "pr"

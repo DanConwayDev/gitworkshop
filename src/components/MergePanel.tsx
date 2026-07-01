@@ -50,9 +50,15 @@ import {
   XCircle,
   RefreshCw,
   Info,
+  Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -156,6 +162,40 @@ function isGraspRelay(relayUrl: string, graspDomains: string[]): boolean {
 }
 
 /**
+ * Extract a hostname from common HTTP(S), SSH, and scp-style git remote URLs.
+ */
+function getGitRemoteHostname(cloneUrl: string): string | undefined {
+  try {
+    return new URL(cloneUrl).hostname;
+  } catch {
+    const sshMatch = cloneUrl.match(/^(?:[^@\s]+@)?([^:\s]+):/);
+    if (sshMatch?.[1]) return sshMatch[1];
+
+    const schemeMatch = cloneUrl.match(/^[a-z][a-z0-9+.-]*:\/\/([^/]+)/i);
+    return schemeMatch?.[1];
+  }
+}
+
+function formatGitServerName(cloneUrls: string[]): string {
+  const hostname = cloneUrls
+    .map(getGitRemoteHostname)
+    .find((host): host is string => !!host);
+
+  if (!hostname) return "a non-GRASP git server";
+
+  const lowerHost = hostname.toLowerCase();
+  if (lowerHost.includes("gitlab")) return "GitLab";
+  if (lowerHost.includes("github")) return "GitHub";
+  if (lowerHost.includes("bitbucket")) return "Bitbucket";
+  if (lowerHost.includes("codeberg")) return "Codeberg";
+  if (lowerHost.includes("sr.ht") || lowerHost.includes("sourcehut")) {
+    return "SourceHut";
+  }
+
+  return hostname;
+}
+
+/**
  * Publish an event to Grasp relays only and await at least one acceptance.
  */
 async function publishToGraspRelays(
@@ -217,6 +257,10 @@ export function MergePanel({
   // Merge step tracking
   const [mergeStep, setMergeStep] = useState<MergeStep>("idle");
   const [mergeError, setMergeError] = useState<string | null>(null);
+
+  const supportsBrowserMerge = repo.graspCloneUrls.length > 0;
+  const localMergeCommand = `ngit merge ${pr.rootEvent.id.slice(0, 8)} && git push`;
+  const gitServerName = formatGitServerName(repo.additionalGitServerUrls);
 
   // Build the maintainer CommitPerson for the apply-to-tip path
   const maintainerCommitter: CommitPerson | undefined = useMemo(() => {
@@ -301,16 +345,36 @@ export function MergePanel({
 
   // Can we show the merge button?
   const canMerge =
+    supportsBrowserMerge &&
     mergeability.status === "ready" &&
     defaultBranchHead &&
     mergeStep === "idle";
 
   // Can we show the apply-to-tip button? (patch-type only)
   const canApplyToTip =
+    supportsBrowserMerge &&
     !isPRType &&
     mergeability.status === "ready-apply-only" &&
     defaultBranchHead &&
     mergeStep === "idle";
+
+  const canShowLocalMerge = !supportsBrowserMerge && mergeStep === "idle";
+
+  const copyLocalMergeCommand = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(localMergeCommand);
+      toast({
+        title: "Local merge command copied",
+        description: localMergeCommand,
+      });
+    } catch {
+      toast({
+        title: "Could not copy command",
+        description: localMergeCommand,
+        variant: "destructive",
+      });
+    }
+  }, [localMergeCommand, toast]);
 
   // ── Push helper ──────────────────────────────────────────────────────────
 
@@ -807,6 +871,25 @@ export function MergePanel({
                   </AlertDialog>
                 )}
 
+                {canShowLocalMerge && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 border-muted-foreground/30 text-muted-foreground hover:text-foreground"
+                        onClick={copyLocalMergeCommand}
+                      >
+                        <Terminal className="h-3.5 w-3.5 mr-1.5" />
+                        Local merge only
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      Copy local merge command
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+
                 {canApplyToTip && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -913,6 +996,24 @@ export function MergePanel({
                     </p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Local merge guidance for non-GRASP git servers */}
+            {canShowLocalMerge && (
+              <div className="rounded-md border border-muted bg-muted/30 px-3 py-2 text-sm">
+                <p className="text-muted-foreground">
+                  This repository uses {gitServerName}, so merging directly from
+                  gitworkshop isn't supported. To merge, run this from your
+                  local repo:
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 block w-full rounded-md bg-background px-3 py-2 text-left font-mono text-xs text-foreground ring-1 ring-border transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={copyLocalMergeCommand}
+                >
+                  {localMergeCommand}
+                </button>
               </div>
             )}
 
