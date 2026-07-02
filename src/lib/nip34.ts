@@ -1769,6 +1769,8 @@ export interface BuildIssueTimelineArgs extends BuildTimelineBaseArgs {
 
 export interface BuildPRTimelineArgs extends BuildTimelineBaseArgs {
   itemType: "pr" | "patch";
+  /** Effective repository maintainer set. Required for PR/patch merge status auth. */
+  maintainers: Set<string>;
   /** Ordered revisions (oldest first). */
   revisions: PRRevision[];
   /**
@@ -1807,6 +1809,16 @@ export function buildTimelineNodes(
   const { rootEvent, comments, essentials, authorisedUsers } = args;
   const rootId = rootEvent.id;
 
+  const isStatusAuthorised = (ev: NostrEvent): boolean => {
+    if (args.itemType !== "issue" && ev.kind === STATUS_RESOLVED) {
+      return args.maintainers.has(ev.pubkey);
+    }
+
+    // authorisedUsers.size === 0 means maintainers not yet loaded — treat as
+    // authorised to avoid a flash of "proposed" on initial load.
+    return authorisedUsers.size === 0 || authorisedUsers.has(ev.pubkey);
+  };
+
   // ── Status nodes ──────────────────────────────────────────────────────────
   // Show all status events regardless of auth; flag unauthorised ones so the
   // UI can render "proposed status" vs "set status".
@@ -1816,9 +1828,7 @@ export function buildTimelineNodes(
       type: "status" as const,
       event: ev,
       status: kindToStatus(ev.kind),
-      // authorisedUsers.size === 0 means maintainers not yet loaded — treat as
-      // authorised to avoid a flash of "proposed" on initial load.
-      authorised: authorisedUsers.size === 0 || authorisedUsers.has(ev.pubkey),
+      authorised: isStatusAuthorised(ev),
       ts: ev.created_at,
     }));
 

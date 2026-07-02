@@ -29,7 +29,10 @@ import { useRepoContext } from "@/pages/repo/RepoContext";
 import { gitIndexRelays, fallbackRelays } from "@/services/settings";
 import { useGitPool } from "@/hooks/useGitPool";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
-import { StatusDropdownBadge } from "@/components/StatusDropdownBadge";
+import {
+  StatusDropdownBadge,
+  type StatusOption,
+} from "@/components/StatusDropdownBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { ManageLabels, type LabelEventEntry } from "@/components/ManageLabels";
 import { ReplyBox } from "@/components/ReplyBox";
@@ -759,6 +762,19 @@ export default function PRPage() {
     return pr.maintainers.has(activeAccount.pubkey);
   }, [activeAccount, pr]);
 
+  const prStatusOptions = useMemo<StatusOption[]>(() => {
+    const options: StatusOption[] = [
+      { value: "open", label: "Open" },
+      { value: "resolved", label: "Merged" },
+      { value: "closed", label: "Closed" },
+      { value: "draft", label: "Draft" },
+    ];
+
+    return isMaintainer
+      ? options
+      : options.filter((option) => option.value !== "resolved");
+  }, [isMaintainer]);
+
   // ── Label event map — maps each deletable label to its source event ─────────
   const labelEventMap = useMemo<Map<string, LabelEventEntry>>(() => {
     if (!pr) return new Map();
@@ -1132,12 +1148,7 @@ export default function PRPage() {
                     itemId={pr.rootEvent.id}
                     itemAuthorPubkey={pr.pubkey}
                     repoCoords={repoAllCoords ?? pr.repoCoords}
-                    options={[
-                      { value: "open", label: "Open" },
-                      { value: "resolved", label: "Merged" },
-                      { value: "closed", label: "Closed" },
-                      { value: "draft", label: "Draft" },
-                    ]}
+                    options={prStatusOptions}
                   />
                   <EditableSubject
                     issueId={pr.rootEvent.id}
@@ -1690,12 +1701,7 @@ export default function PRPage() {
                       itemId={pr?.rootEvent.id}
                       itemAuthorPubkey={pr?.pubkey}
                       repoCoords={repoAllCoords ?? pr?.repoCoords}
-                      options={[
-                        { value: "open", label: "Open" },
-                        { value: "resolved", label: "Merged" },
-                        { value: "closed", label: "Closed" },
-                        { value: "draft", label: "Draft" },
-                      ]}
+                      options={prStatusOptions}
                     />
                   </div>
 
