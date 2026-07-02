@@ -186,6 +186,7 @@ const REPO_SUB_PATHS = [
   "tree",
   "branches",
   "tags",
+  "actions",
 ];
 
 /**
@@ -198,6 +199,7 @@ const REPO_SUB_PATHS = [
  *   "npub1abc/relay/repo/tree/main/src/foo.ts"   → "npub1abc/relay/repo"
  *   "npub1abc/relay/repo/commit/abc123"          → "npub1abc/relay/repo"
  *   "npub1abc/relay/repo/commits"                → "npub1abc/relay/repo"
+ *   "npub1abc/relay/repo/actions"                → "npub1abc/relay/repo"
  *   "npub1abc/relay/repo"                        → "npub1abc/relay/repo"
  */
 function stripSubPaths(splat: string): string {
