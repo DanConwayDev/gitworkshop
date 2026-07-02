@@ -29,7 +29,10 @@ import { useRepoContext } from "@/pages/repo/RepoContext";
 import { gitIndexRelays, fallbackRelays } from "@/services/settings";
 import { useGitPool } from "@/hooks/useGitPool";
 import { UserAvatar, UserLink } from "@/components/UserAvatar";
-import { StatusDropdownBadge } from "@/components/StatusDropdownBadge";
+import {
+  StatusDropdownBadge,
+  type StatusOption,
+} from "@/components/StatusDropdownBadge";
 import { LabelBadge } from "@/components/LabelBadge";
 import { ManageLabels, type LabelEventEntry } from "@/components/ManageLabels";
 import { ReplyBox } from "@/components/ReplyBox";
@@ -318,6 +321,21 @@ export default function PRPage() {
     retryKey,
   );
 
+  // Once this tab successfully pushes a merge, keep the merge panel mounted
+  // until navigation. The newly published merged-status event flips pr.status
+  // to resolved immediately, but the local delivery summary should remain
+  // visible for the operator who just merged it.
+  const [locallyMergedPrId, setLocallyMergedPrId] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    setLocallyMergedPrId(null);
+  }, [prId]);
+  const keepMergePanelVisible = !!pr && locallyMergedPrId === pr.rootEvent.id;
+  const handleSuccessfulPush = useCallback(() => {
+    if (pr?.rootEvent.id) setLocallyMergedPrId(pr.rootEvent.id);
+  }, [pr?.rootEvent.id]);
+
   // Ordered priority pubkeys for @ mention autocomplete:
   // parent author first, then participants, then maintainers (deduped).
   const mentionPriorityPubkeys = useMemo<string[]>(() => {
@@ -337,7 +355,11 @@ export default function PRPage() {
   }, [pr, repo?.maintainerSet]);
 
   // Git pool — uses the repo's clone URLs (same as RepoCodePage).
-  const { pool: gitPool, poolState: gitPoolState } = useGitPool(cloneUrls);
+  const { pool: gitPool, poolState: gitPoolState } = useGitPool(cloneUrls, {
+    knownHeadCommit: repoState?.headCommitId,
+    stateRefs: repoState?.refs,
+    stateCreatedAt: repoState ? repoState.event.created_at : undefined,
+  });
 
   // Derive the active tab from the URL.
   // Also returns "commits" when on a commit detail sub-path.
@@ -740,6 +762,19 @@ export default function PRPage() {
     return pr.maintainers.has(activeAccount.pubkey);
   }, [activeAccount, pr]);
 
+  const prStatusOptions = useMemo<StatusOption[]>(() => {
+    const options: StatusOption[] = [
+      { value: "open", label: "Open" },
+      { value: "resolved", label: "Merged" },
+      { value: "closed", label: "Closed" },
+      { value: "draft", label: "Draft" },
+    ];
+
+    return isMaintainer
+      ? options
+      : options.filter((option) => option.value !== "resolved");
+  }, [isMaintainer]);
+
   // ── Label event map — maps each deletable label to its source event ─────────
   const labelEventMap = useMemo<Map<string, LabelEventEntry>>(() => {
     if (!pr) return new Map();
@@ -1113,12 +1148,7 @@ export default function PRPage() {
                     itemId={pr.rootEvent.id}
                     itemAuthorPubkey={pr.pubkey}
                     repoCoords={repoAllCoords ?? pr.repoCoords}
-                    options={[
-                      { value: "open", label: "Open" },
-                      { value: "resolved", label: "Merged" },
-                      { value: "closed", label: "Closed" },
-                      { value: "draft", label: "Draft" },
-                    ]}
+                    options={prStatusOptions}
                   />
                   <EditableSubject
                     issueId={pr.rootEvent.id}
@@ -1492,12 +1522,15 @@ export default function PRPage() {
                   )}
                 </div>
 
-                {/* Merge panel — shown for PRs and patches on Grasp repos, for maintainers */}
+                {/* Merge panel — shown for PRs and patches on git-backed repos, for maintainers */}
                 {pr &&
                   repo &&
-                  repo.graspCloneUrls.length > 0 &&
+                  (repo.graspCloneUrls.length > 0 ||
+                    repo.additionalGitServerUrls.length > 0) &&
                   isMaintainer &&
-                  (pr.status === "open" || pr.status === "draft") &&
+                  (pr.status === "open" ||
+                    pr.status === "draft" ||
+                    keepMergePanelVisible) &&
                   (pr.itemType === "pr"
                     ? !!pr.tip.commitId
                     : patchChain && patchChain.length > 0) && (
@@ -1511,9 +1544,7 @@ export default function PRPage() {
                       effectiveCloneUrls={effectiveCloneUrls}
                       behindCount={behindCount}
                       defaultBranchName={defaultBranchName ?? "main"}
-                      defaultBranchHead={
-                        defaultBranchHead ?? repoState?.headCommitId
-                      }
+                      defaultBranchHead={defaultBranchHead}
                       guessedBaseCommitId={
                         pr.itemType === "patch" && patchMergeBase.isGuessed
                           ? patchMergeBase.baseCommitId
@@ -1528,6 +1559,7 @@ export default function PRPage() {
                             })
                           : undefined
                       }
+                      onSuccessfulPush={handleSuccessfulPush}
                     />
                   )}
 
@@ -1669,12 +1701,7 @@ export default function PRPage() {
                       itemId={pr?.rootEvent.id}
                       itemAuthorPubkey={pr?.pubkey}
                       repoCoords={repoAllCoords ?? pr?.repoCoords}
-                      options={[
-                        { value: "open", label: "Open" },
-                        { value: "resolved", label: "Merged" },
-                        { value: "closed", label: "Closed" },
-                        { value: "draft", label: "Draft" },
-                      ]}
+                      options={prStatusOptions}
                     />
                   </div>
 
