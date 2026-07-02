@@ -64,6 +64,9 @@ import {
 } from "@/lib/sourceUtils";
 import { isNonHttpUrl } from "@/lib/git-grasp-pool";
 import { IncompatibleProtocolError } from "@/components/IncompatibleProtocolError";
+import { useCIForCommit } from "@/hooks/useCI";
+import { CIStatusIcon } from "@/components/ci/CIStatusIcon";
+import { summarizeRuns } from "@/lib/ci";
 
 const MarkdownContent = lazy(() => import("@/components/MarkdownContent"));
 import { CodeBlock } from "@/components/CodeBlock";
@@ -1283,6 +1286,14 @@ function CodeBar({
   // the commit summary row can fit alongside the commit message + hash.
   const isMobile = useIsMobile();
 
+  // CI checks (ngit-ci kinds 9841/9842) for the displayed head commit —
+  // renders a status tick next to the commit id in the summary row.
+  const { resolved } = useRepoContext();
+  const headCommitCI = useCIForCommit(
+    commitHash ?? undefined,
+    resolved?.repoRelayGroup,
+  );
+
   // Compute the full ref name for the pool's refStatus lookup
   const currentRefObj = refs.find((r) => r.name === currentRef);
   const currentRefFull = currentRefObj
@@ -1416,6 +1427,17 @@ function CodeBar({
                 )}
               </p>
             </div>
+            {headCommitCI?.status && (
+              <span
+                className="shrink-0 flex items-center"
+                title={`CI: ${summarizeRuns(headCommitCI.runs)}`}
+              >
+                <CIStatusIcon
+                  status={headCommitCI.status}
+                  className="h-3.5 w-3.5"
+                />
+              </span>
+            )}
             <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground shrink-0">
               {commitHash?.slice(0, 8)}
             </code>

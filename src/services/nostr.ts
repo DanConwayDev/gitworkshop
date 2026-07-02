@@ -566,6 +566,9 @@ const NIP34_COMMENTS_BUFFER = 500;
 const NIP34_THREAD_BUFFER = 500;
 /** Longer buffer for deletion-of-essentials loader — less time-critical. */
 const NIP34_ESSENTIAL_DELETIONS_BUFFER = 2000;
+/** Buffer for the CI results-by-commit loader — a page of commits batches
+ *  into one REQ per relay within this window. */
+const CI_COMMIT_RESULTS_BUFFER = 500;
 
 /**
  * Essentials loader (#e tag).
@@ -641,6 +644,32 @@ export const nip34EssentialDeletionsLoader = createPaginatedTagValueLoader(
     eventStore,
     kinds: [5],
     bufferTime: NIP34_ESSENTIAL_DELETIONS_BUFFER,
+  },
+);
+
+/**
+ * CI results-by-commit loader (#c tag).
+ *
+ * Fetches kind:9842 ngit-ci workflow results for specific commits — powers
+ * the commit status ticks in the CodeBar commit summary row, the commit
+ * history list, and the commit detail page. Callers fire it once per commit
+ * they are about to display; calls within the buffer window are batched into
+ * a single REQ per relay, so fetching CI for a page of commits costs one
+ * subscription.
+ *
+ * Kind:9841 running markers are NOT fetched here — they arrive repo-wide via
+ * the #a coordinate filter in nip34RepoLoader's repo meta subscription (their
+ * NIP-40 expiration keeps that set small) and are read back from the store
+ * by #c when rolling up a commit's status.
+ */
+export const ciResultsByCommitLoader = createPaginatedTagValueLoader(
+  pool,
+  "c",
+  {
+    cacheRequest,
+    eventStore,
+    kinds: [CI_RESULT_KIND],
+    bufferTime: CI_COMMIT_RESULTS_BUFFER,
   },
 );
 

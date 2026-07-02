@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import { useGitPool } from "@/hooks/useGitPool";
 import { CommitDetailView } from "@/components/CommitDetailView";
+import { useCIForCommit } from "@/hooks/useCI";
+import { CIChecksPanel } from "@/components/ci/CIChecksPanel";
 import { isNonHttpUrl } from "@/lib/git-grasp-pool";
 import { IncompatibleProtocolError } from "@/components/IncompatibleProtocolError";
 
@@ -31,6 +33,10 @@ export default function RepoCommitPage() {
   }, []);
 
   const { pool } = useGitPool(cloneUrls);
+
+  // CI checks (ngit-ci kinds 9841/9842) for this commit — shown between the
+  // commit header and the diff.
+  const ci = useCIForCommit(commitId, resolved?.repoRelayGroup);
 
   if (!commitId) {
     return (
@@ -69,6 +75,18 @@ export default function RepoCommitPage() {
         pool={pool}
         basePath={basePath}
         backTo={`${basePath}/commits`}
+        headerExtra={
+          ci && ci.runs.length > 0 ? (
+            <CIChecksPanel
+              checks={{
+                runs: ci.runs,
+                currentRuns: ci.runs,
+                olderRuns: [],
+                status: ci.status,
+              }}
+            />
+          ) : undefined
+        }
       />
     </div>
   );

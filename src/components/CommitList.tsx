@@ -13,6 +13,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, GitCommit, User, Clock, Loader2 } from "lucide-react";
 import { safeFormatDistanceToNow, safeFormat } from "@/lib/utils";
 import type { Commit } from "@/lib/vendored/git-natural-api";
+import { CIStatusIcon } from "@/components/ci/CIStatusIcon";
+import { summarizeRuns } from "@/lib/ci";
+import type { CommitCIChecks } from "@/hooks/useCI";
 
 // ---------------------------------------------------------------------------
 // CommitList — grouped by date
@@ -24,6 +27,7 @@ export function CommitList({
   hasMore = false,
   loadingMore = false,
   onLoadMore,
+  ciChecks,
 }: {
   commits: Commit[];
   /** Prefix for commit links — links become `<basePath>/commit/<hash>`. */
@@ -34,6 +38,8 @@ export function CommitList({
   loadingMore?: boolean;
   /** Called when the sentinel scrolls into view. */
   onLoadMore?: () => void;
+  /** CI checks per commit hash (from useCIForCommits) — shows a status tick. */
+  ciChecks?: Map<string, CommitCIChecks>;
 }) {
   const grouped = useMemo(() => {
     const groups: { date: string; commits: Commit[] }[] = [];
@@ -89,6 +95,7 @@ export function CommitList({
                   key={commit.hash}
                   commit={commit}
                   basePath={basePath}
+                  ci={ciChecks?.get(commit.hash)}
                 />
               ))}
             </div>
@@ -118,9 +125,12 @@ export function CommitList({
 export function CommitRow({
   commit,
   basePath,
+  ci,
 }: {
   commit: Commit;
   basePath: string;
+  /** CI checks for this commit — shows a status tick next to the hash. */
+  ci?: CommitCIChecks;
 }) {
   const subject = commit.message.split("\n")[0];
   const body = commit.message.split("\n").slice(1).join("\n").trim();
@@ -163,8 +173,12 @@ export function CommitRow({
         </div>
         <Link
           to={`${basePath}/commit/${commit.hash}`}
-          className="shrink-0 font-mono text-xs bg-muted hover:bg-muted/70 px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+          className="shrink-0 flex items-center gap-1.5 font-mono text-xs bg-muted hover:bg-muted/70 px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+          title={ci?.status ? `CI: ${summarizeRuns(ci.runs)}` : undefined}
         >
+          {ci?.status && (
+            <CIStatusIcon status={ci.status} className="h-3.5 w-3.5" />
+          )}
           {shortHash}
         </Link>
       </div>

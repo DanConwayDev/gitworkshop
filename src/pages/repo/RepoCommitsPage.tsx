@@ -18,6 +18,7 @@ import {
   CommitListEmpty,
   CommitListError,
 } from "@/components/CommitList";
+import { useCIForCommits } from "@/hooks/useCI";
 import { AlertCircle, GitCommit, Loader2 } from "lucide-react";
 import { safeFormatDistanceToNow } from "@/lib/utils";
 import {
@@ -169,6 +170,14 @@ export default function RepoCommitsPage() {
   ]);
 
   const history = useInfiniteCommitHistory(pool, poolState, historyCommit);
+
+  // CI checks (ngit-ci kinds 9841/9842) for the commits being displayed —
+  // the singleton #c loader batches the whole page into one REQ per relay.
+  const commitIds = useMemo(
+    () => history.commits.map((c) => c.hash),
+    [history.commits],
+  );
+  const ciChecks = useCIForCommits(commitIds, resolved?.repoRelayGroup);
 
   useSeoMeta({
     title: repo
@@ -338,6 +347,7 @@ export default function RepoCommitsPage() {
           hasMore={history.hasMore}
           loadingMore={history.loadingMore}
           onLoadMore={history.loadMore}
+          ciChecks={ciChecks}
         />
       )}
 

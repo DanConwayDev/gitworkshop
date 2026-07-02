@@ -380,3 +380,58 @@ Cover notes reference the root via **lowercase** NIP-10 `#e` (not the uppercase 
 - **NIP-32 for labels and subjects**: reuses a standard kind rather than minting a custom one; the `#subject` namespace cleanly separates renames from `#t` categorisation while sharing the same event shape and loader.
 - **`#t` namespace alignment**: matches the inline `t` tags on root items so the union of both sources is the natural label set.
 - **Cover note as kind:1624 with lowercase `#e`**: mirrors gitworkshop's CoverNote feature and keeps cover notes inside the NIP-10 thread the repo loader already fetches.
+
+---
+
+## CI Workflow Events (kinds 9841 and 9842) — consumed
+
+This project **consumes** (does not define) the experimental CI events published by [`ngit-ci`](https://github.com/DanConwayDev/ngit-ci) for NIP-34 repositories. The authoritative event shapes live in ngit-ci's `NIP.md`; this section documents the subset gitworkshop relies on and how it fetches and interprets them. The kind numbers are temporary while the shape is experimental and deliberately distinct from Hive CI's `5401`/`5402`.
+
+- **Kind 9841 — CI Workflow Started** (optional): a running indicator for a selected workflow. Carries a NIP-40 `expiration` tag so stale markers self-clear if the runner crashes before publishing a result.
+- **Kind 9842 — CI Workflow Result**: an independent attestation of a workflow/job outcome, signed by the runner/coordinator identity. `content` holds the captured log tail; an optional `log_url` tag points at the full log.
+
+Both kinds share the common context tags:
+
+```jsonc
+[
+  ["a", "30617:<repo-owner-pubkey>:<repo-id>"],
+  ["c", "<commit-id>"],
+  ["w", "<workflow-path>"],
+  ["x", "<push|pull_request|manual|schedule>"],
+
+  ["runner", "<runner-name>"], // optional
+  ["platform", "<github-actions|forgejo-actions|gitlab-ci>"], // optional
+]
+```
+
+PR-triggered workflows additionally carry NIP-22-style trigger tags — uppercase `E`/`K`/`P` for the root PR (kind:1618) and lowercase `e`/`k`/`p` for the concrete trigger (the PR itself, or a kind:1619 PR Update). Push-triggered workflows carry `["r", "refs/heads/<branch>"]` instead.
+
+Result-specific tags on kind:9842: `job` (job identity, falls back to the workflow path), `status` (`success` | `failure` | `error` | `skipped`), `duration` (seconds), and optionally `exit_code`, `duration_ms`, `log_url`, `stage`.
+
+### Fetching strategy
+
+```jsonc
+// PR checks — results ride the #E comments fan-out for every repo item
+{ "kinds": [1111, 1619, 9842], "#E": ["<pr-or-patch-event-id>"] }
+
+// Running markers — fetched repo-wide; NIP-40 expiry keeps the set small
+{ "kinds": [9841], "#a": ["30617:<owner-pubkey>:<repo-id>"] }
+
+// Commit status ticks — batched per page of displayed commits
+{ "kinds": [9842], "#c": ["<commit-id>", "<commit-id>", "..."] }
+```
+
+- **PR / patch pages and lists**: kind:9842 is fetched alongside NIP-22 comments via the `#E` root-tag loader, so PR list rows and detail pages get results with no extra subscriptions. The no-kind thread loader on detail pages also picks up both kinds.
+- **Kind:9841** is fetched once per repo via the `#a` coordinate filter in the repo meta subscription — because markers expire (NIP-40), the live set stays small. Expired markers are dropped at display time and re-checked periodically so pending spinners clear without a new event.
+- **Commit ticks** (CodeBar head commit, commit history rows, commit detail page) fetch kind:9842 by `#c` for exactly the commits being displayed; a singleton batched loader collapses a page of commits into one REQ per relay.
+
+### Interpretation rules
+
+- Events are grouped into **workflow runs** by `(runner pubkey, commit, workflow path)`; within a run only the **latest kind:9842 per `job`** counts.
+- An unexpired kind:9841 marker counts as **pending** only when it is newer than every result in its group (a marker newer than existing results indicates a re-run).
+- Roll-up precedence across jobs/runs: `error` > `failure` > `pending` > `success` > `skipped`. Unknown `status` values are treated as `error`.
+- Clients MUST NOT require a kind:9842 to be preceded by a kind:9841 — results are independent attestations.
+
+### Trust model
+
+**None yet, by design.** Any pubkey can publish CI events for any repository; gitworkshop displays all of them and always renders the signing runner identity next to each result so users can judge for themselves. If spam appears, a trust model (maintainer-designated runners, follow-based filtering) will be layered on without changing the event shapes.

@@ -56,6 +56,11 @@ export interface CommitDetailViewProps {
    * URLs when viewing a commit scoped to a PR.
    */
   fallbackUrls?: string[];
+  /**
+   * Optional node rendered between the commit header card and the diff —
+   * used for the CI checks panel on the repo commit page.
+   */
+  headerExtra?: React.ReactNode;
   // ── Inline comment props ──────────────────────────────────────────────────
   /** Root PR event — enables inline code review comments when set */
   rootEvent?: NostrEvent;
@@ -85,6 +90,7 @@ export function CommitDetailView({
   backTo,
   backLabel = "All commits",
   fallbackUrls,
+  headerExtra,
   rootEvent,
   parentEvent,
   commentMap,
@@ -157,6 +163,7 @@ export function CommitDetailView({
           basePath={basePath}
           pool={pool}
           fallbackUrls={fallbackUrls}
+          headerExtra={headerExtra}
           rootEvent={rootEvent}
           parentEvent={parentEvent}
           commentMap={commentMap}
@@ -178,6 +185,7 @@ function CommitDetail({
   basePath,
   pool,
   fallbackUrls,
+  headerExtra,
   rootEvent,
   parentEvent,
   commentMap,
@@ -189,6 +197,7 @@ function CommitDetail({
   basePath: string;
   pool: GitGraspPool;
   fallbackUrls?: string[];
+  headerExtra?: React.ReactNode;
   rootEvent?: NostrEvent;
   parentEvent?: NostrEvent;
   commentMap?: InlineCommentMap;
@@ -319,6 +328,9 @@ function CommitDetail({
           </div>
         </CardContent>
       </Card>
+
+      {/* Extra content between header and diff (e.g. CI checks panel) */}
+      {headerExtra}
 
       {/* Diff */}
       {parentHash ? (

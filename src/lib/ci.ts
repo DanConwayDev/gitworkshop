@@ -9,7 +9,9 @@
  * job outcome, signed by the runner/coordinator identity. For PR-triggered
  * workflows both kinds carry NIP-22-style #E (PR root) and #e (PR or PR
  * Update trigger) tags, so results for a PR are fetched via #E alongside
- * comments.
+ * comments. For commit status ticks (CodeBar, commit history, commit page)
+ * results are fetched by #c for the commits being displayed via the batched
+ * ciResultsByCommitLoader singleton.
  *
  * Trust model: none yet — all CI events are displayed regardless of signer.
  * The runner identity is always shown next to results so users can judge for
