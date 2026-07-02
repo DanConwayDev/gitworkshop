@@ -181,11 +181,14 @@ interface PushDeliverySummary {
 // ---------------------------------------------------------------------------
 
 /**
- * Shallow recent-history scan; avoids walking hundreds/thousands of commits.
- * Matches git-grasp-pool's default merge-base/count batch size so this usually
- * reuses history already fetched for PR mergeability and behind-count checks.
+ * Commit-history batch size. Matches git-grasp-pool's default merge-base/count
+ * batch size so this usually reuses history already fetched for PR mergeability
+ * and behind-count checks.
  */
-const DETECTED_MERGE_HISTORY_LIMIT = 200;
+const DETECTED_MERGE_HISTORY_BATCH_SIZE = 200;
+
+/** Hard cap when an explicit base lets us safely walk deeper in batches. */
+const DETECTED_MERGE_HISTORY_MAX_WITH_BASE = 5000;
 
 function firstCommitSubject(message: string): string {
   return message.split("\n", 1)[0]?.trim() ?? "";
@@ -230,6 +233,59 @@ function findDetectedNgitMergeCommit(
     if (referencesRoot) {
       return { hash: commit.hash, subject };
     }
+  }
+
+  return null;
+}
+
+async function findDetectedNgitMergeCommitInHistory(
+  gitPool: GitGraspPool,
+  defaultBranchHead: string,
+  rootEventId: string,
+  signal: AbortSignal,
+  fallbackUrls: string[],
+  tipCommitId?: string,
+  stopAtCommitHash?: string,
+): Promise<DetectedMergeCommit | null> {
+  let offset = 0;
+  let batchStart = defaultBranchHead;
+  const maxTotal = stopAtCommitHash
+    ? DETECTED_MERGE_HISTORY_MAX_WITH_BASE
+    : DETECTED_MERGE_HISTORY_BATCH_SIZE;
+
+  while (offset < maxTotal) {
+    if (signal.aborted) return null;
+
+    const remaining = maxTotal - offset;
+    const batchSize = Math.min(DETECTED_MERGE_HISTORY_BATCH_SIZE, remaining);
+    const batch = await gitPool.getCommitHistory(
+      batchStart,
+      batchSize,
+      signal,
+      fallbackUrls,
+    );
+
+    if (!batch || batch.length === 0 || signal.aborted) return null;
+
+    const stopIdx = stopAtCommitHash
+      ? batch.findIndex((commit) => commit.hash === stopAtCommitHash)
+      : -1;
+    const searchableBatch =
+      stopIdx === -1 ? batch : batch.slice(0, stopIdx + 1);
+    const detected = findDetectedNgitMergeCommit(
+      searchableBatch,
+      rootEventId,
+      tipCommitId,
+    );
+    if (detected) return detected;
+
+    if (!stopAtCommitHash || stopIdx !== -1) return null;
+
+    offset += batch.length;
+
+    const tail = batch[batch.length - 1];
+    if (tail.parents.length === 0) return null;
+    batchStart = tail.parents[0];
   }
 
   return null;
@@ -469,6 +525,9 @@ export function MergePanel({
   }, [isPRType, patchChain]);
 
   const detectionTipCommitId = isPRType ? pr.tip.commitId : patchTipCommitId;
+  const detectionStopCommitId = isPRType
+    ? pr.tip.explicitMergeBase
+    : patchChain?.[0]?.parentCommitId;
 
   useEffect(() => {
     setDetectedMergeCommit(null);
@@ -486,24 +545,18 @@ export function MergePanel({
     const abort = new AbortController();
     setDetectingMergeCommit(true);
 
-    gitPool
-      .getCommitHistory(
-        defaultBranchHead,
-        DETECTED_MERGE_HISTORY_LIMIT,
-        abort.signal,
-        effectiveCloneUrls,
-      )
-      .then((commits) => {
+    findDetectedNgitMergeCommitInHistory(
+      gitPool,
+      defaultBranchHead,
+      pr.rootEvent.id,
+      abort.signal,
+      effectiveCloneUrls,
+      detectionTipCommitId,
+      detectionStopCommitId,
+    )
+      .then((detected) => {
         if (abort.signal.aborted) return;
-        setDetectedMergeCommit(
-          commits
-            ? findDetectedNgitMergeCommit(
-                commits,
-                pr.rootEvent.id,
-                detectionTipCommitId,
-              )
-            : null,
-        );
+        setDetectedMergeCommit(detected);
       })
       .catch(() => {
         if (!abort.signal.aborted) setDetectedMergeCommit(null);
@@ -521,6 +574,7 @@ export function MergePanel({
     pr.rootEvent.id,
     pr.status,
     detectionTipCommitId,
+    detectionStopCommitId,
   ]);
 
   // Eagerly check mergeability — both strategies in parallel (patch-type only)
