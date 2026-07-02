@@ -164,6 +164,15 @@ interface DetectedMergeCommit {
   subject: string;
 }
 
+interface DetectedMergeScanResult {
+  commit: DetectedMergeCommit | null;
+  scannedCount: number;
+  reachedStopCommit: boolean;
+  reachedHistoryRoot: boolean;
+  hitLimit: boolean;
+  maxTotal: number;
+}
+
 interface PushDeliveryOutcome {
   cloneUrl: string;
   ok: boolean;
@@ -187,8 +196,14 @@ interface PushDeliverySummary {
  */
 const DETECTED_MERGE_HISTORY_BATCH_SIZE = 200;
 
-/** Hard cap when an explicit base lets us safely walk deeper in batches. */
-const DETECTED_MERGE_HISTORY_MAX_WITH_BASE = 5000;
+/** Default cap when no explicit base bounds the search. */
+const DETECTED_MERGE_HISTORY_MAX_WITHOUT_BASE = 500;
+
+/** Default cap when an explicit base lets us safely walk deeper. */
+const DETECTED_MERGE_HISTORY_MAX_WITH_BASE = 1000;
+
+/** Extra commits scanned each time the user opts into a deeper look-back. */
+const DETECTED_MERGE_HISTORY_LOOKBACK_STEP = 1000;
 
 function firstCommitSubject(message: string): string {
   return message.split("\n", 1)[0]?.trim() ?? "";
@@ -244,17 +259,24 @@ async function findDetectedNgitMergeCommitInHistory(
   rootEventId: string,
   signal: AbortSignal,
   fallbackUrls: string[],
+  maxTotal: number,
   tipCommitId?: string,
   stopAtCommitHash?: string,
-): Promise<DetectedMergeCommit | null> {
+): Promise<DetectedMergeScanResult> {
   let offset = 0;
   let batchStart = defaultBranchHead;
-  const maxTotal = stopAtCommitHash
-    ? DETECTED_MERGE_HISTORY_MAX_WITH_BASE
-    : DETECTED_MERGE_HISTORY_BATCH_SIZE;
 
   while (offset < maxTotal) {
-    if (signal.aborted) return null;
+    if (signal.aborted) {
+      return {
+        commit: null,
+        scannedCount: offset,
+        reachedStopCommit: false,
+        reachedHistoryRoot: false,
+        hitLimit: false,
+        maxTotal,
+      };
+    }
 
     const remaining = maxTotal - offset;
     const batchSize = Math.min(DETECTED_MERGE_HISTORY_BATCH_SIZE, remaining);
@@ -265,30 +287,74 @@ async function findDetectedNgitMergeCommitInHistory(
       fallbackUrls,
     );
 
-    if (!batch || batch.length === 0 || signal.aborted) return null;
+    if (!batch || batch.length === 0 || signal.aborted) {
+      return {
+        commit: null,
+        scannedCount: offset,
+        reachedStopCommit: false,
+        reachedHistoryRoot: false,
+        hitLimit: false,
+        maxTotal,
+      };
+    }
 
     const stopIdx = stopAtCommitHash
       ? batch.findIndex((commit) => commit.hash === stopAtCommitHash)
       : -1;
     const searchableBatch =
       stopIdx === -1 ? batch : batch.slice(0, stopIdx + 1);
+    const scannedCount = offset + searchableBatch.length;
     const detected = findDetectedNgitMergeCommit(
       searchableBatch,
       rootEventId,
       tipCommitId,
     );
-    if (detected) return detected;
+    if (detected) {
+      return {
+        commit: detected,
+        scannedCount,
+        reachedStopCommit: stopIdx !== -1,
+        reachedHistoryRoot: false,
+        hitLimit: false,
+        maxTotal,
+      };
+    }
 
-    if (!stopAtCommitHash || stopIdx !== -1) return null;
+    if (stopIdx !== -1) {
+      return {
+        commit: null,
+        scannedCount,
+        reachedStopCommit: true,
+        reachedHistoryRoot: false,
+        hitLimit: false,
+        maxTotal,
+      };
+    }
 
     offset += batch.length;
 
     const tail = batch[batch.length - 1];
-    if (tail.parents.length === 0) return null;
+    if (tail.parents.length === 0) {
+      return {
+        commit: null,
+        scannedCount: offset,
+        reachedStopCommit: false,
+        reachedHistoryRoot: true,
+        hitLimit: false,
+        maxTotal,
+      };
+    }
     batchStart = tail.parents[0];
   }
 
-  return null;
+  return {
+    commit: null,
+    scannedCount: offset,
+    reachedStopCommit: false,
+    reachedHistoryRoot: false,
+    hitLimit: true,
+    maxTotal,
+  };
 }
 
 /**
@@ -493,7 +559,11 @@ export function MergePanel({
   );
   const [detectedMergeCommit, setDetectedMergeCommit] =
     useState<DetectedMergeCommit | null>(null);
+  const [detectedMergeScanResult, setDetectedMergeScanResult] =
+    useState<DetectedMergeScanResult | null>(null);
   const [detectingMergeCommit, setDetectingMergeCommit] = useState(false);
+  const [detectedMergeExtraLookback, setDetectedMergeExtraLookback] =
+    useState(0);
 
   const supportsBrowserMerge = repo.graspCloneUrls.length > 0;
   const localMergeCommand = `ngit merge ${pr.rootEvent.id.slice(0, 8)} && git push`;
@@ -528,9 +598,24 @@ export function MergePanel({
   const detectionStopCommitId = isPRType
     ? pr.tip.explicitMergeBase
     : patchChain?.[0]?.parentCommitId;
+  const detectionScanBaseLimit = detectionStopCommitId
+    ? DETECTED_MERGE_HISTORY_MAX_WITH_BASE
+    : DETECTED_MERGE_HISTORY_MAX_WITHOUT_BASE;
+  const detectionScanLimit =
+    detectionScanBaseLimit + detectedMergeExtraLookback;
+
+  useEffect(() => {
+    setDetectedMergeExtraLookback(0);
+  }, [
+    pr.rootEvent.id,
+    defaultBranchHead,
+    detectionTipCommitId,
+    detectionStopCommitId,
+  ]);
 
   useEffect(() => {
     setDetectedMergeCommit(null);
+    setDetectedMergeScanResult(null);
 
     if (
       !gitPool ||
@@ -551,15 +636,20 @@ export function MergePanel({
       pr.rootEvent.id,
       abort.signal,
       effectiveCloneUrls,
+      detectionScanLimit,
       detectionTipCommitId,
       detectionStopCommitId,
     )
-      .then((detected) => {
+      .then((result) => {
         if (abort.signal.aborted) return;
-        setDetectedMergeCommit(detected);
+        setDetectedMergeCommit(result.commit);
+        setDetectedMergeScanResult(result);
       })
       .catch(() => {
-        if (!abort.signal.aborted) setDetectedMergeCommit(null);
+        if (!abort.signal.aborted) {
+          setDetectedMergeCommit(null);
+          setDetectedMergeScanResult(null);
+        }
       })
       .finally(() => {
         if (!abort.signal.aborted) setDetectingMergeCommit(false);
@@ -575,6 +665,7 @@ export function MergePanel({
     pr.status,
     detectionTipCommitId,
     detectionStopCommitId,
+    detectionScanLimit,
   ]);
 
   // Eagerly check mergeability — both strategies in parallel (patch-type only)
@@ -1433,6 +1524,49 @@ export function MergePanel({
                 </div>
               </div>
             )}
+
+            {/* Already-merged detection hit its look-back cap */}
+            {!detectedMergeCommit &&
+              !detectingMergeCommit &&
+              detectedMergeScanResult?.hitLimit &&
+              mergeStep === "idle" && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <p>
+                        <span className="font-medium">
+                          Already-merged check stopped after{" "}
+                          {detectedMergeScanResult.scannedCount} commits.
+                        </span>{" "}
+                        {detectionStopCommitId
+                          ? "It did not reach the stated merge base, so this item may already be merged further back in history."
+                          : "Older merges are possible but unlikely unless this repository has very high activity."}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 border-amber-500/40 px-2 text-xs text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+                          onClick={() =>
+                            setDetectedMergeExtraLookback(
+                              (n) => n + DETECTED_MERGE_HISTORY_LOOKBACK_STEP,
+                            )
+                          }
+                        >
+                          Look back further
+                        </Button>
+                        <span className="text-[10px] text-muted-foreground">
+                          Next scan checks up to{" "}
+                          {detectedMergeScanResult.maxTotal +
+                            DETECTED_MERGE_HISTORY_LOOKBACK_STEP}{" "}
+                          commits.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
             {/* Best-effort already-merged detection */}
             {detectedMergeCommit && mergeStep === "idle" && (
